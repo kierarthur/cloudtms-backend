@@ -1,0 +1,89 @@
+create or replace function private.weekly_source_ordinary_projection_current_expenses_v1(
+  p_root_timesheet_id uuid,
+  p_through_final_revision_id uuid
+) returns jsonb
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with target as (
+    select revision.finalised_at_utc,revision.revision_number,
+           source_cycle.finalisation_week_ending,revision.id,revision.state,
+           revision.predecessor_revision_id
+    from public.weekly_source_final_revisions revision
+    join public.weekly_source_cycles source_cycle
+      on source_cycle.id=revision.source_cycle_id
+    where revision.id=p_through_final_revision_id
+  ), root_events as (
+    select distinct movement.work_event_id,movement.contract_id
+    from public.weekly_source_billing_movements movement
+    where movement.invoice_timesheet_id=p_root_timesheet_id
+      and movement.source_profile_kind<>'SELF_BILL_REPORT'
+      and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      and movement.pay_effect='NORMAL'
+  ), ranked as (
+    select expense.*,source_cycle.finalisation_week_ending,
+      revision.finalised_at_utc,revision.revision_number,
+      pg_catalog.row_number() over (
+        partition by expense.work_event_id
+        order by source_cycle.finalisation_week_ending desc,
+                 revision.finalised_at_utc desc,revision.revision_number desc,
+                 expense.generation desc,expense.id desc
+      ) as event_rank
+    from public.weekly_expense_authority_generations expense
+    join root_events root_event
+      on root_event.work_event_id=expense.work_event_id
+     and root_event.contract_id=expense.contract_id
+    join public.weekly_source_final_revisions revision
+      on revision.id=expense.final_revision_id
+    join public.weekly_source_cycles source_cycle
+      on source_cycle.id=revision.source_cycle_id
+    cross join target
+    where (revision.state='CURRENT' or revision.id=target.id)
+      and (
+        target.state<>'PREPARED'
+        or revision.id is distinct from target.predecessor_revision_id
+      )
+      and (source_cycle.finalisation_week_ending<target.finalisation_week_ending
+       or (
+         source_cycle.finalisation_week_ending=target.finalisation_week_ending
+         and revision.finalised_at_utc<target.finalised_at_utc
+       )
+       or (
+         source_cycle.finalisation_week_ending=target.finalisation_week_ending
+         and revision.finalised_at_utc=target.finalised_at_utc
+         and revision.revision_number<target.revision_number
+       )
+       or (
+         source_cycle.finalisation_week_ending=target.finalisation_week_ending
+         and revision.finalised_at_utc=target.finalised_at_utc
+         and revision.revision_number=target.revision_number
+         and revision.id::text<=target.id::text
+       )
+      )
+  )
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'expense_authority_generation_id',ranked.id,
+    'final_revision_id',ranked.final_revision_id,
+    'work_event_id',ranked.work_event_id,
+    'contract_id',ranked.contract_id,
+    'row_expense_policy_snapshot_id',ranked.row_expense_policy_snapshot_id,
+    'prior_expense_authority_generation_id',ranked.prior_expense_authority_generation_id,
+    'generation',ranked.generation,
+    'source_observation_kind',ranked.source_observation_kind,
+    'correction_presentation',ranked.correction_presentation,
+    'source_expense_pence',ranked.source_expense_pence::text,
+    'source_expense_vat_enabled',ranked.source_expense_vat_enabled,
+    'candidate_reimbursement_ex_vat',ranked.candidate_reimbursement_ex_vat::text,
+    'client_charge_ex_vat',ranked.client_charge_ex_vat::text,
+    'authority_hash',pg_catalog.encode(ranked.authority_hash,'hex')
+  ) order by ranked.work_event_id),'[]'::jsonb)
+  from ranked
+  -- Keep a zero authority in the ranking so it remains the newest immutable
+  -- observation and the superseded positive authority cannot reappear.  A
+  -- zero tombstone is not, however, a payable source expense and must not
+  -- produce Timesheet expense description or evidence.
+  where ranked.event_rank=1
+    and ranked.source_expense_pence>0;
+$function$;
+ALTER FUNCTION private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid) FROM public,anon,authenticated,service_role;

@@ -1,0 +1,46 @@
+{
+  "source_only": true,
+  "inputs": [
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "bytes": 184614,
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "bytes": 249666,
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    }
+  ],
+  "dependencies": [
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+      "artifact_count": 58,
+      "preserved": true
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "artifact_count": 26,
+      "preserved": true
+    },
+    {
+      "packet": "missing-default-current-native-proposal-20261014",
+      "manifest_sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73",
+      "artifact_count": 56,
+      "preserved": true
+    }
+  ],
+  "preserved_dependency_artifacts": 140,
+  "actual_native_before_definitions_checked": true,
+  "guarded_body_amendment_and_native_catalogue_closure": false
+}

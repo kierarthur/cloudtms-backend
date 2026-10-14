@@ -1,0 +1,107 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "input_bytes": 161809,
+      "input_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "native_definition_sha256": "bf629c7565943e1cb654949f4af34e67b1440527e4fb7120644c06ddb421f9c8",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "selected_input": "missing-default-current-native-proposal-20261014/forward/15_complete_prepared_context_missing_census.sqlinc",
+      "output": "02_complete_prepared_context.sqlinc",
+      "before_sha256": "23a0681163e4942f71fac7c9ff3eb275719cf1dafb39c2b817f0c3dba8d6a711",
+      "after_definition_sha256": "8506cf53dde00302c71303d691dedc81752fa276ca9f381fda0fefb8ba8daa51",
+      "after_leaf_sha256": "0d566c0a1bed1ce8f0b60d6edc2a14db0b8c7e78cf5ff5c80a0db4a37068cdb4",
+      "hunks": [
+        {
+          "name": "native payable replacement root discovery excludes NONE components",
+          "before": "      where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "      where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'"
+        },
+        {
+          "name": "prepared context contains actual rederived immutable choice census",
+          "before": "    'missing_cancel_basis_census',private.weekly_source_missing_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id)) end;",
+          "after": "    'missing_cancel_basis_census',private.weekly_source_missing_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id)) end\n    ||case when v_revision.paid_overlap_choice_census='{}'::jsonb then '{}'::jsonb else jsonb_build_object(\n      'paid_overlap_choice_census',private.weekly_source_paid_match_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id)) end;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "input_bytes": 184614,
+      "input_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "native_definition_sha256": "5c4a1e776f6682efcde73327fd913d2829f0f244f79a3dfd29c0280c3f7b1be7",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "selected_input": "missing-default-current-native-proposal-20261014/forward/16_complete_prepare_result_missing_census.sqlinc",
+      "output": "03_complete_prepare_result.sqlinc",
+      "before_sha256": "264922d32b47818ae8ad289d9b822bb4e9514803d35e409c977dfec8cac38125",
+      "after_definition_sha256": "c7823e594e609cc76e8cff59c6f508072050d667898538ebd7d5e506ad80ec41",
+      "after_leaf_sha256": "1065bbe0f7d302ca83a40d0fe06b1df12b13cedb0bd90d66c7de19d9e024a043",
+      "hunks": [
+        {
+          "name": "native full prepare result hash binds its real census",
+          "before": "    'missing_cancel_basis_census',v_context->'missing_cancel_basis_census') else '{}'::jsonb end;",
+          "after": "    'missing_cancel_basis_census',v_context->'missing_cancel_basis_census') else '{}'::jsonb end\n    ||case when v_context ? 'paid_overlap_choice_census' then jsonb_build_object(\n      'paid_overlap_choice_census',v_context->'paid_overlap_choice_census') else '{}'::jsonb end;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "input_bytes": 184614,
+      "input_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "native_definition_sha256": "ef469c9579eb0fc4c702ba9718cac942473d9bebf830aa35e457267d4b0a65e1",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "selected_input": "missing-default-current-native-proposal-20261014/forward/17_complete_apply_missing_census_recheck.sqlinc",
+      "output": "04_complete_apply_census_recheck.sqlinc",
+      "before_sha256": "cca64fd3d0f21814b5c7fa57f9c8958486b2d20740a4170d5e75c4be4d92925d",
+      "after_definition_sha256": "f3b6173edf87098edd2a133c8fb520c8c045d7d78bb64b38c8baf383dc92da87",
+      "after_leaf_sha256": "b3a09495e226fccc6320c9a1bdd9e58c170145c40a3e31e24a6dc62eaea70753",
+      "hunks": [
+        {
+          "name": "whole fresh prepared census must equal the native immutable prepare result",
+          "before": "      is distinct from coalesce(v_session.prepare_result_json->'missing_cancel_basis_census','{}'::jsonb) then",
+          "after": "      is distinct from coalesce(v_session.prepare_result_json->'missing_cancel_basis_census','{}'::jsonb)\n    or coalesce(v_prepared_context->'paid_overlap_choice_census','{}'::jsonb)\n      is distinct from coalesce(v_session.prepare_result_json->'paid_overlap_choice_census','{}'::jsonb) then"
+        },
+        {
+          "name": "real facts reproof after native complete root locks and before first own business writes",
+          "before": "  update public.weekly_final_source_correction_sessions\n  set state='COMMITTING',apply_idempotency_key=v_idempotency_key,",
+          "after": "  if v_prepared_revision.paid_overlap_choice_census<>'{}'::jsonb then\n    perform private.weekly_source_paid_match_prepared_census_recheck_v1(v_prepared_revision.id,v_actor);\n  end if;\n  update public.weekly_final_source_correction_sessions\n  set state='COMMITTING',apply_idempotency_key=v_idempotency_key,"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "input_bytes": 249666,
+      "input_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "signature": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "output": "05_complete_current_pay_expenses.sqlinc",
+      "before_sha256": "8359dd8ec61c8bffc1934377324053203ee88604ee8115eb472667bd494a0897",
+      "after_definition_sha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4",
+      "after_leaf_sha256": "5efdf54cb8bad539e0259e77fc34dfd5046496310463ca21b6e706f16d61df49",
+      "hunks": [
+        {
+          "name": "PAY expense roots come actual payable native movements only",
+          "before": "    where movement.invoice_timesheet_id=p_root_timesheet_id",
+          "after": "    where movement.invoice_timesheet_id=p_root_timesheet_id\n      and movement.source_profile_kind<>'SELF_BILL_REPORT'\n      and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n      and movement.pay_effect='NORMAL'"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "actual_current_native_prepared_owners_match": true,
+  "original_native_replay_actor_root_cash_guards_retained": true,
+  "financial_calculators_changed": false,
+  "new_public_signature": false,
+  "complete_pay_consumer_census": false,
+  "CorrectFinal_paid_choice_admission_complete": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false
+}

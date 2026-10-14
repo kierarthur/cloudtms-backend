@@ -1,0 +1,66 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "own_preceding_commit": "8db419193eb6faf08e3c5adb1d3205326b347d83",
+  "current_SQL_input_commit": "973625f17cd51a49803872a819638e10f13bbbff",
+  "preceding_frozen_dependencies": [
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+      "artifact_count": 58,
+      "preserved": true
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "artifact_count": 26,
+      "preserved": true
+    },
+    {
+      "packet": "missing-default-current-native-proposal-20261014",
+      "manifest_sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73",
+      "artifact_count": 56,
+      "preserved": true
+    }
+  ],
+  "selected_source_order": [
+    "forward/01_prepared_paid_choice_census.sqlinc",
+    "forward/02_complete_prepared_context.sqlinc",
+    "forward/03_complete_prepare_result.sqlinc",
+    "forward/04_complete_apply_census_recheck.sqlinc",
+    "forward/05_complete_current_pay_expenses.sqlinc"
+  ],
+  "excluded_complete_alternatives": [
+    "missing-default-current-native-proposal-20261014/forward/15_complete_prepared_context_missing_census.sqlinc",
+    "missing-default-current-native-proposal-20261014/forward/16_complete_prepare_result_missing_census.sqlinc",
+    "missing-default-current-native-proposal-20261014/forward/17_complete_apply_missing_census_recheck.sqlinc"
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)"
+  ],
+  "new_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "existing_service_signatures": [
+    "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_correct_final_apply_atomic_v1(jsonb)"
+  ],
+  "existing_service_acl": "logical postgres; PUBLIC/anon/authenticated revoked; service_role EXECUTE only",
+  "existing_private_signatures": [
+    "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+    "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)"
+  ],
+  "new_public_signatures": [],
+  "new_tables": 0,
+  "new_columns": 0,
+  "new_money_calculators": 0,
+  "source_replay_actor_root_preflight_cash_guards_unchanged": true,
+  "CorrectFinal_paid_choice_admission_complete": false,
+  "complete_pay_consumer_census": false,
+  "whole_prepared_ROOT_scope_proof": false,
+  "complete_Office_OFF_NHSP_protected_Legacy_Report": false,
+  "final_current_union_and_native_contract": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}
