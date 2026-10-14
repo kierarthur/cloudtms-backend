@@ -1,0 +1,2666 @@
+{
+  "schema": "AGENCY_REVIEWED_PAID_PURPOSE_STAGED_RAW_WHITESPACE_V1",
+  "source_only": true,
+  "native": false,
+  "source_choice": "COMMITTED_SAVED_EXACT",
+  "checked_files": 79,
+  "saved_git_raw_mismatches": 0,
+  "raw_whitespace_pass": false,
+  "findings": 530,
+  "inherited_findings": 530,
+  "introduced_findings": 0,
+  "provenance": "two full native runtime copies reverse to exact339; each hunk has no added trailing bytes; two primary excerpts retain exact source-evidence bytes",
+  "issues": [
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 27,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 629,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 6379,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56281,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56284,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56291,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56325,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56396,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56466,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56484,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56487,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56491,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56495,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56505,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56518,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56524,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56530,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56539,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56542,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56549,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56553,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56558,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56571,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56576,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56581,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56584,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56609,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56734,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56743,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56804,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56810,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56814,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56818,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56826,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56829,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56844,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56858,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56867,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56881,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56894,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56909,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56924,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56945,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56957,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56972,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56979,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 56990,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57001,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57009,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57023,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57026,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57030,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57036,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57039,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57042,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57049,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57058,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57069,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57088,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57154,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57196,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57199,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57224,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57302,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57489,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57498,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57503,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57513,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57522,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57530,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57538,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57550,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57563,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57566,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57584,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57586,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57609,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57620,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57623,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57630,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57636,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57639,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57650,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57657,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57669,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57671,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57682,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57685,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57691,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57696,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57701,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57703,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57716,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57820,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57832,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57853,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57855,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57864,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57874,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57882,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57885,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57897,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57902,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57905,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57908,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57913,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57923,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57932,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57942,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57952,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57955,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57960,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57963,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57966,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57970,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57985,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 57989,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58008,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58020,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58032,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58042,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58058,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58072,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58074,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58090,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58103,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58105,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58114,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58123,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58128,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58135,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58140,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58143,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58146,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58149,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58152,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58156,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58181,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58186,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58193,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58209,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58211,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58218,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58221,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58233,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58237,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58244,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58248,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58258,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58267,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58285,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58301,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58328,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58331,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58339,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58341,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58348,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58355,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58361,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58372,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58382,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58387,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58421,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58434,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58445,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58459,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58468,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58473,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58478,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58481,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58522,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58526,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58532,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58544,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58549,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58551,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58555,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58565,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58567,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58571,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58581,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58584,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58588,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58592,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58609,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58615,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58624,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58627,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58632,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58637,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58639,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58654,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58662,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58664,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58668,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58672,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58679,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58682,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58687,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58696,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58708,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58716,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58719,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58727,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58735,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58738,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58740,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58759,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58762,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58763,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58775,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58787,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58834,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58841,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58848,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58855,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58859,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58863,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58867,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58871,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58878,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58881,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58888,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58892,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58897,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58913,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 58931,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59018,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59033,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59105,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59199,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59240,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59276,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59316,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59332,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59344,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59370,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59389,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59430,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59506,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59509,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 59745,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 70019,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 106570,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 106571,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 110107,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 110108,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 135654,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 135681,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 152694,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 155679,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 198454,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 198639,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 199995,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 200559,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 200560,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 200746,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 200765,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 201147,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 201226,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 201278,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 201284,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 201297,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-forward/index.js",
+      "line": 201518,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 27,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 628,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 6378,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56280,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56283,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56290,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56324,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56395,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56465,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56483,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56486,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56490,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56494,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56504,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56517,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56523,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56529,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56538,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56541,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56548,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56552,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56557,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56570,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56575,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56580,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56583,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56608,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56733,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56742,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56803,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56809,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56813,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56817,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56825,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56828,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56843,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56857,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56866,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56880,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56893,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56908,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56923,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56944,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56956,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56971,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56978,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 56989,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57000,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57008,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57022,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57025,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57029,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57035,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57038,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57041,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57048,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57057,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57068,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57087,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57153,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57195,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57198,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57223,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57301,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57488,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57497,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57502,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57512,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57521,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57529,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57537,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57549,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57562,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57565,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57583,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57585,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57608,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57619,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57622,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57629,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57635,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57638,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57649,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57656,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57668,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57670,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57681,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57684,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57690,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57695,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57700,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57702,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57715,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57819,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57831,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57852,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57854,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57863,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57873,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57881,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57884,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57896,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57901,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57904,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57907,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57912,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57922,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57931,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57941,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57951,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57954,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57959,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57962,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57965,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57969,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57984,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 57988,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58007,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58019,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58031,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58041,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58057,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58071,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58073,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58089,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58102,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58104,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58113,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58122,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58127,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58134,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58139,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58142,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58145,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58148,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58151,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58155,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58180,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58185,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58192,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58208,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58210,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58217,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58220,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58232,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58236,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58243,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58247,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58257,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58266,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58284,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58300,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58327,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58330,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58338,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58340,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58347,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58354,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58360,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58371,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58381,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58386,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58420,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58433,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58444,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58458,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58467,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58472,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58477,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58480,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58521,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58525,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58531,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58543,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58548,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58550,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58554,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58564,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58566,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58570,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58580,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58583,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58587,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58591,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58608,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58614,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58623,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58626,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58631,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58636,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58638,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58653,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58661,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58663,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58667,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58671,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58678,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58681,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58686,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58695,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58707,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58715,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58718,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58726,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58734,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58737,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58739,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58758,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58761,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58762,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58774,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58786,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58833,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58840,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58847,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58854,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58858,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58862,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58866,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58870,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58877,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58880,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58887,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58891,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58896,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58912,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 58930,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59017,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59032,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59104,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59198,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59239,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59275,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59315,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59331,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59343,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59369,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59388,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59429,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59505,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59508,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 59744,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 70018,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 106569,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 106570,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 110106,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 110107,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 135653,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 135680,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 152693,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 155678,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 198399,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 198584,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 199940,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 200504,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 200505,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 200691,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 200710,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 201092,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 201171,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 201223,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 201229,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 201242,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "line": 201463,
+      "kind": "trailing whitespace."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/native-before/primary_25_2.md.txt",
+      "line": 32,
+      "kind": "new blank line at EOF."
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/native-before/primary_26_4.md.txt",
+      "line": 85,
+      "kind": "new blank line at EOF."
+    }
+  ],
+  "raw_check_sha256": "1b0da3c56c2732a1f3cda78f61d461e7ad637cf7fc0a7fe7b7af2681d836a112"
+}
