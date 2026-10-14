@@ -1,0 +1,201 @@
+{
+  "sourceOnly": true,
+  "currentRootCommit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "nativeRun": false,
+  "reversals": [
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "output": "sql/14102026_1216_05_native_creator_intents_and_triggers.complete-proposed.sqlinc",
+      "beforeBytes": 19166,
+      "beforeSha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "afterBytes": 21519,
+      "afterSha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75",
+      "byteReverseEqual": true,
+      "hunks": [
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor private.timesheet_correction_a0_reference_before_v1 complete current owner",
+          "before": "create or replace function private.timesheet_correction_a0_reference_before_v1()\nreturns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\nas $function$\ndeclare v_ids uuid[]; v_bookings text[];\nbegin\n  if tg_table_schema<>'public' or tg_table_name not in('timesheet_validations','invoice_lines') or tg_op not in('INSERT','UPDATE') then\n    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000'; end if;\n  if tg_table_name='invoice_lines' then\n    if tg_op='UPDATE' then\n      if new.timesheet_id is not distinct from old.timesheet_id and new.booking_id is not distinct from old.booking_id then return new; end if;\n      v_bookings:=array[old.booking_id,new.booking_id];\n    else v_bookings:=array[new.booking_id]; end if;\n  elsif tg_op='UPDATE' and new.timesheet_id is not distinct from old.timesheet_id then return new;\n  end if;\n  if tg_op='UPDATE' then\n    select array_agg(distinct x.id order by x.id) into v_ids from unnest(array[old.timesheet_id,new.timesheet_id]) x(id) where x.id is not null;\n  else v_ids:=case when new.timesheet_id is null then null else array[new.timesheet_id] end; end if;\n  if v_ids is not null or v_bookings is not null then perform private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,\n    case when tg_table_name='invoice_lines' then 'INVOICE_REFERENCE' else 'VALIDATION_REFERENCE' end); end if;\n  return new;\nend;\n$function$;",
+          "after": "create or replace function private.timesheet_correction_a0_reference_before_v1()\nreturns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\nas $function$\ndeclare v_ids uuid[];v_bookings text[];\nbegin\n  if tg_table_schema<>'public' or tg_table_name not in('timesheet_validations','invoice_lines','timesheets_financials') or tg_op not in('INSERT','UPDATE','DELETE') then\n    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000';end if;\n  if tg_op='DELETE' then v_ids:=array[old.timesheet_id];\n    if tg_table_name='invoice_lines' then v_bookings:=array[old.booking_id];end if;\n  elsif tg_op='UPDATE' then v_ids:=array[old.timesheet_id,new.timesheet_id];\n    if tg_table_name='invoice_lines' then v_bookings:=array[old.booking_id,new.booking_id];end if;\n  else v_ids:=array[new.timesheet_id];\n    if tg_table_name='invoice_lines' then v_bookings:=array[new.booking_id];end if;\n  end if;\n  select array_agg(distinct x.id order by x.id) into v_ids from unnest(v_ids) x(id) where x.id is not null;\n  -- Every actual reference mutation participates, including unchanged pointers\n  -- with changed validation/invoice facts and historical DELETE. No FK/lookup\n  -- is required for a raw future P0 UUID. NULL/no-identity keeps the native arm.\n  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(\n    null,v_ids,v_bookings,null,null),false);\n  -- FIN's native owners retain every financial rule/admission. The only added\n  -- fact is raw PHYSICAL_UUID serialization before native FIN/AFTER effects.\n  -- Existing T0 parent locks do not refresh an older RR snapshot.\n  if tg_table_name='timesheets_financials' then\n    if tg_op='DELETE' then return old;end if;return new;\n  end if;\n  if v_ids is not null or v_bookings is not null then\n    perform private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,\n      case when tg_table_name='invoice_lines' then 'INVOICE_REFERENCE' else 'VALIDATION_REFERENCE' end);\n  end if;\n  if tg_op='DELETE' then return old;end if;return new;\nend;\n$function$;"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor private.timesheet_correction_a0_booking_before_v1 complete current owner",
+          "before": "create or replace function private.timesheet_correction_a0_booking_before_v1()\nreturns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\nas $function$\ndeclare v_ids uuid[]; v_bookings text[]; v_admit jsonb; r record; v_match boolean;\nbegin\n  if tg_table_schema<>'public' or tg_table_name<>'timesheets' or tg_op not in('INSERT','UPDATE') then\n    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000'; end if;\n  if tg_op='UPDATE' then\n    if new.booking_id is not distinct from old.booking_id and new.contract_id is not distinct from old.contract_id then return new; end if;\n    v_ids:=array[old.timesheet_id,new.timesheet_id];v_bookings:=array[old.booking_id,new.booking_id];\n  else v_ids:=array[new.timesheet_id];v_bookings:=array[new.booking_id]; end if;\n  v_admit:=private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,'BOOKING_IDENTITY');\n  for r in select x.value from jsonb_array_elements(v_admit->'requests') x(value) loop\n    v_match:=btrim(new.booking_id) in(btrim(r.value->>'original_booking'),btrim(r.value->>'reversed_booking'),btrim(r.value->>'p0_booking'));\n    if v_match and (new.contract_id is distinct from (r.value->>'contract_id')::uuid\n      or new.booking_id not in(r.value->>'original_booking',r.value->>'reversed_booking',r.value->>'p0_booking')) then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000'; end if;\n    if new.timesheet_id=(r.value->>'p0')::uuid and (new.booking_id is distinct from r.value->>'p0_booking'\n      or new.contract_id is distinct from (r.value->>'contract_id')::uuid) then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000'; end if;\n    if new.timesheet_id=(r.value->>'original')::uuid and (new.booking_id is distinct from r.value->>'reversed_booking'\n      or new.contract_id is distinct from (r.value->>'contract_id')::uuid) then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000'; end if;\n    if new.timesheet_id=(r.value->>'root')::uuid and new.booking_id is distinct from r.value->>'original_booking' then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000'; end if;\n  end loop;\n  return new;\nend;\n$function$;",
+          "after": "create or replace function private.timesheet_correction_a0_booking_before_v1()\nreturns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\nas $function$\ndeclare v_ids uuid[];v_bookings text[];v_parents uuid[];v_keys text[];v_aliases jsonb[];v_admit jsonb;r record;v_match boolean;\nbegin\n  if tg_table_schema<>'public' or tg_table_name<>'timesheets' or tg_op not in('INSERT','UPDATE','DELETE') then\n    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000';end if;\n  if tg_op='DELETE' then\n    v_ids:=array[old.timesheet_id];v_bookings:=array[old.booking_id];v_parents:=array[old.parent_timesheet_id];\n    v_keys:=array[old.occupant_key_norm];\n  elsif tg_op='UPDATE' then\n    v_ids:=array[old.timesheet_id,new.timesheet_id];v_bookings:=array[old.booking_id,new.booking_id];\n    v_parents:=array[old.parent_timesheet_id,new.parent_timesheet_id];v_keys:=array[old.occupant_key_norm,new.occupant_key_norm];\n  else\n    v_ids:=array[new.timesheet_id];v_bookings:=array[new.booking_id];v_parents:=array[new.parent_timesheet_id];v_keys:=array[new.occupant_key_norm];\n  end if;\n  select array_agg(to_jsonb(array[k.value]::text[])) into v_aliases from unnest(v_keys) k(value);\n  -- Full Timesheet authority/signature/schedule/rank mutation coverage, not\n  -- merely booking/Contract changes. Parent is a native raw UUID, not a resolver.\n  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(\n    v_parents,v_ids||v_parents,v_bookings,v_keys,v_aliases),false);\n  v_admit:=private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,'BOOKING_IDENTITY');\n  if tg_op='DELETE' then return old;end if;\n  for r in select x.value from jsonb_array_elements(v_admit->'requests') x(value) loop\n    v_match:=btrim(new.booking_id) in(btrim(r.value->>'original_booking'),btrim(r.value->>'reversed_booking'),btrim(r.value->>'p0_booking'));\n    if v_match and (new.contract_id is distinct from (r.value->>'contract_id')::uuid\n      or new.booking_id not in(r.value->>'original_booking',r.value->>'reversed_booking',r.value->>'p0_booking')) then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;\n    if new.timesheet_id=(r.value->>'p0')::uuid and (new.booking_id is distinct from r.value->>'p0_booking'\n      or new.contract_id is distinct from (r.value->>'contract_id')::uuid) then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;\n    if new.timesheet_id=(r.value->>'original')::uuid and (new.booking_id is distinct from r.value->>'reversed_booking'\n      or new.contract_id is distinct from (r.value->>'contract_id')::uuid) then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;\n    if new.timesheet_id=(r.value->>'root')::uuid and new.booking_id is distinct from r.value->>'original_booking' then\n      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;\n  end loop;\n  return new;\nend;\n$function$;"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor Candidate raw intent before visible scan",
+          "before": "  -- Exact same equality/JSON containment as tsfin_load_context_batch; no",
+          "after": "  -- Raw OLD/NEW key/alias tokens precede every snapshot-visible classification.\n  -- Even a born-later physical family and unchanged foreign ranking alias\n  -- intersect the actual retained occupant-domain tokens.\n  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(\n    null,null,null,array[v_old_key,v_new_key],array[v_old_aliases,v_new_aliases]),false);\n  -- Exact same equality/JSON containment as tsfin_load_context_batch; no"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor Actual DELETE event timesheet_validations",
+          "before": "before insert or update on public.timesheet_validations",
+          "after": "before insert or update or delete on public.timesheet_validations"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor Actual DELETE event invoice_lines",
+          "before": "before insert or update on public.invoice_lines",
+          "after": "before insert or update or delete on public.invoice_lines"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor Actual DELETE event timesheets",
+          "before": "before insert or update on public.timesheets",
+          "after": "before insert or update or delete on public.timesheets"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "label": "Retained predecessor Native FIN raw physical guard",
+          "before": "-- No existing invoice BEFORE owner changes the reference;",
+          "after": "-- Native FIN direct writers and synchronous late hooks use this same raw\n-- physical fence. No Bank function or native financial decision is replaced.\ndrop trigger if exists aaa_healthroster_a0_financial_before_v1 on public.timesheets_financials;\ncreate trigger aaa_healthroster_a0_financial_before_v1 before insert or update or delete on public.timesheets_financials\nfor each row execute function private.timesheet_correction_a0_reference_before_v1();\n-- No existing invoice BEFORE owner changes the reference;"
+        }
+      ]
+    },
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "output": "sql/14102026_1216_06_send_family_fence.complete-proposed.sqlinc",
+      "beforeBytes": 5935,
+      "beforeSha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "afterBytes": 7165,
+      "afterSha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022",
+      "byteReverseEqual": true,
+      "hunks": [
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+          "label": "Retained predecessor SEND existing native token phase",
+          "before": "  select count(*),jsonb_agg(to_jsonb(ctx))->0 into v_context_count,v_context",
+          "after": "  -- Phase EXISTING follows the unchanged native Candidate then whole I1.\n  -- Acquire all actual existing family identities before canonical reread.\n  select array_agg(distinct s.family_timesheet_id order by s.family_timesheet_id) into v_ids\n    from public._pay_timesheet_rotation_scope(v_ids) s;\n  perform private.timesheet_correction_a0_family_tokens_retain_v1((v_chain->>'root_timesheet_id')::uuid,v_ids);\n  select count(*),jsonb_agg(to_jsonb(ctx))->0 into v_context_count,v_context"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+          "label": "SEND full native post-token CAS",
+          "before": "  select count(*),jsonb_agg(to_jsonb(ctx))->0 into v_context_count,v_context",
+          "after": "  -- Bound acquisition can resolve an already-running ordinary probe. Recheck\n  -- actual family/signature/chain after PHYSICAL and DEPENDENCY retention.\n  select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id)\n    into v_after from public._pay_timesheet_rotation_scope(array[t.timesheet_id,(v_chain->>'root_timesheet_id')::uuid]) s;\n  if v_after is distinct from v_before\n    or public.timesheet_correction_chain_scope_v1(t.timesheet_id,false,32,100) is distinct from v_chain\n    or private.timesheet_correction_signed_witness_v1(t.timesheet_id,false) is distinct from v_signed\n    or exists(select 1 from public.timesheets_financials f where f.timesheet_id=t.timesheet_id) then\n    raise exception 'CORRECTION_A0_TOKEN_DEPENDENCY_CHANGED' using errcode='40001';end if;\n  select count(*),jsonb_agg(to_jsonb(ctx))->0 into v_context_count,v_context"
+        }
+      ]
+    },
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "output": "sql/14102026_1216_08_complete_current_request.complete-proposed.sqlinc",
+      "beforeBytes": 23160,
+      "beforeSha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "afterBytes": 24480,
+      "afterSha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce",
+      "byteReverseEqual": true,
+      "hunks": [
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+          "label": "Retained predecessor Scoped SEND local intent",
+          "before": "  v_invoice uuid; v_invoice_status text; v_key text; v_hash text; v_leg jsonb; v_candidate uuid; v_client uuid; v_date date;",
+          "after": "  v_invoice uuid; v_invoice_status text; v_key text; v_hash text; v_leg jsonb; v_candidate uuid; v_client uuid; v_date date;\n  v_a0_transaction_fence boolean:=false;"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+          "label": "Retained predecessor Private native missing-A0 intent",
+          "before": "  perform private.timesheet_correction_a0_send_family_fence_v1(v_id);",
+          "after": "  perform private.timesheet_correction_a0_send_family_fence_v1(v_id);\n  v_a0_transaction_fence:=private.timesheet_correction_a0_signed_precursor_v1(v_id);"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+          "label": "Retained predecessor Genuine assigned request phase before first publication",
+          "before": "  v_req.created_by_user_id:=p_actor_user_id; v_req.created_at_utc:=v_now; v_req.updated_at_utc:=v_now;",
+          "after": "  v_req.created_by_user_id:=p_actor_user_id; v_req.created_at_utc:=v_now; v_req.updated_at_utc:=v_now;\n  -- Phase ALLOCATED uses the genuine owner-assigned P0/R0 UUIDs/bookings.\n  -- It precedes adjustment-week, WAITING and physical P0 publication.\n  if v_a0_transaction_fence then perform private.timesheet_correction_a0_request_tokens_retain_v1(v_req);end if;"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+          "label": "Post actual allocated P0-week retention and signed native CAS",
+          "before": "  -- The exact request exists before native overlap/derived triggers see P0.",
+          "after": "  -- P0 week is now genuinely allocated by the unchanged native owner. Retain\n  -- its actual UUID before WAITING/P0 publication; no fabricated early UUID.\n  if v_a0_transaction_fence then\n    perform private.timesheet_correction_a0_request_tokens_retain_v1(v_req);\n    if private.timesheet_correction_signed_witness_v1(v_id,false) is distinct from v_witness\n      or public.timesheet_correction_chain_scope_v1(v_id,false,32,100) is distinct from v_chain\n      or exists(select 1 from public.timesheets_financials f where f.timesheet_id=v_id)\n      or exists(select 1 from public.timesheets t where t.timesheet_id=v_id\n        and private.timesheet_correction_timesheet_authority_hash_v1(to_jsonb(t)) is distinct from\n          private.timesheet_correction_timesheet_authority_hash_v1(v_req.frozen_original_json->'timesheet')) then\n      raise exception 'CORRECTION_A0_TOKEN_DEPENDENCY_CHANGED' using errcode='40001';end if;\n  end if;\n  -- The exact request exists before native overlap/derived triggers see P0."
+        }
+      ]
+    },
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "output": "sql/14102026_1216_04_complete_native_lock_fence.complete-proposed.sqlinc",
+      "beforeBytes": 12314,
+      "beforeSha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "afterBytes": 12634,
+      "afterSha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c",
+      "byteReverseEqual": true,
+      "hunks": [
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+          "label": "Retained predecessor Atomic actual frame retain before native business writes",
+          "before": "  return jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_NATIVE_LOCK_FENCE_V1',",
+          "after": "  -- The exact owned frame/native CAS above supplies trusted intent. No new\n  -- token can authorize or replace that admission. This precedes materialisation.\n  perform private.timesheet_correction_a0_family_tokens_retain_v1(r.root_timesheet_id,v_members);\n  perform private.timesheet_correction_a0_request_tokens_retain_v1(r);\n  return jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_NATIVE_LOCK_FENCE_V1',"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+          "label": "Move final CAS after all exact token phases",
+          "before": "  -- The exact owned frame/native CAS above supplies trusted intent. No new\n  -- token can authorize or replace that admission. This precedes materialisation.\n  perform private.timesheet_correction_a0_family_tokens_retain_v1(r.root_timesheet_id,v_members);\n  perform private.timesheet_correction_a0_request_tokens_retain_v1(r);\n  return jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_NATIVE_LOCK_FENCE_V1',",
+          "after": "  return jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_NATIVE_LOCK_FENCE_V1',"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+          "label": "Atomic post-phase final native CAS",
+          "before": "  select array_agg(distinct gc.source_group_id order by gc.source_group_id) into v_groups_after",
+          "after": "  -- Native Candidate / complete I1 / existing row frame already obtained.\n  -- PHYSICAL -> DEPENDENCIES -> genuine ALLOCATED, then final current CAS.\n  perform private.timesheet_correction_a0_family_tokens_retain_v1(r.root_timesheet_id,v_members);\n  perform private.timesheet_correction_a0_request_tokens_retain_v1(r);\n  select array_agg(distinct gc.source_group_id order by gc.source_group_id) into v_groups_after"
+        }
+      ]
+    }
+  ],
+  "changedCurrentOwners": [
+    {
+      "id": "private.timesheet_correction_a0_reference_before_v1()",
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "beforeSha256": "f2d7da1041ce597b297db122d97ae80119191da3c9aacfe46fcf84c16520df6e",
+      "afterSha256": "04591a6453a57f3295cc5fdb9b423d137452c06a08971fd994aa9186925f3fe0"
+    },
+    {
+      "id": "private.timesheet_correction_a0_booking_before_v1()",
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "beforeSha256": "abf554cb4aa709e028058b06cfe00514acbdf9bd2da54ca11fa03d68c8c0f23b",
+      "afterSha256": "0b2514b060deb57dfd82b54cb8ed718db84e1b1784f3b0a2ec9e8a239359b91c"
+    },
+    {
+      "id": "private.timesheet_correction_a0_candidate_before_v1()",
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "beforeSha256": "56cf26fb2d5ec4a2fa746ba452c4ac494581327f46cdbc8749ca4161002c8be1",
+      "afterSha256": "0d6c0677bfbdf57d303fd6e5a79daf28b32b69fd8272a567d3f580ea79aa0364"
+    },
+    {
+      "id": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "beforeSha256": "390774562934db2f6d57194bdf44ecdca16c7b29251b06b78fc56ba183823960",
+      "afterSha256": "5538333c6d8dd9c9cec68d503e1b9322090a202149a0d6fa0698d58541557416"
+    },
+    {
+      "id": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "beforeSha256": "b4d90e94d55b16536f72f278bb8c6933a45f91638fa218423d0bab36735f35e7",
+      "afterSha256": "d5d3348bff46a80188789ea23f175486850855e6b785197df2fe819505a8f76e"
+    },
+    {
+      "id": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "beforeSha256": "d9979f3a2ee5bad9586311658ed96d8a916148243dfdf0396160338469e1ec79",
+      "afterSha256": "e761d968cc797386b694ea64f445fe10141c0212faa620012f05c57500b8f803"
+    }
+  ],
+  "newPrivateFunctions": [
+    "private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])",
+    "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])",
+    "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)",
+    "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])",
+    "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)",
+    "private.timesheet_correction_a0_child_reference_before_v1()"
+  ],
+  "newPublicOrServiceSignatures": [],
+  "newPrivateConcurrencyTables": [
+    "private.timesheet_correction_a0_transaction_fences"
+  ],
+  "existingPublicAndPrivateACLReassertionPreserved": true,
+  "nativeFinancialAuthorityChanged": false,
+  "ordinaryAUTHUNABodiesChanged": false,
+  "bankBodiesChanged": false
+}

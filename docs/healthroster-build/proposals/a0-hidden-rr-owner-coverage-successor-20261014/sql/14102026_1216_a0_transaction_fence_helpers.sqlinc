@@ -60,8 +60,12 @@ begin
     v_xid:=pg_current_xact_id()::text::numeric;v_span:=numrange(v_xid,v_xid+1,'[)');
   end if;
   begin
-    for t in select distinct x.value from jsonb_array_elements(p_tokens) x(value)
-      where not(x.value ? 'json') or octet_length(x.value->'json'#>>'{}')<=1536 order by x.value
+    -- One call orders PHYSICAL identities before parent/dependency identities.
+    -- Owner callers still supply Candidate/I1 -> existing family -> dependency
+    -- -> genuinely allocated phases, with the full native CAS after retention.
+    for t in select d.value from(select distinct x.value from jsonb_array_elements(p_tokens) x(value)
+      where not(x.value ? 'json') or octet_length(x.value->'json'#>>'{}')<=1536) d
+      order by case when d.value->>'kind' in('WORKFLOW_UUID','CONTRACT_WEEK_UUID','SOURCE_CYCLE_UUID') then 1 else 0 end,d.value
     loop
       k:=t->>'kind';u:=case when t ? 'uuid' then(t->>'uuid')::uuid end;
       s:=case when t ? 'json' then t->'json'#>>'{}' end;
@@ -160,7 +164,18 @@ begin
   v_before:=jsonb_build_object(
     'workflows',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.candidate_submission_workflows w where w.id=any(v_workflows)),'[]'::jsonb),
     'weeks',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.contract_weeks w where w.id=any(v_weeks)),'[]'::jsonb),
-    'cycles',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.weekly_source_cycles c where c.id=any(v_cycles)),'[]'::jsonb));
+    'cycles',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.weekly_source_cycles c where c.id=any(v_cycles)),'[]'::jsonb),
+    'approvals',coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from public.candidate_approval_requests a where a.workflow_id=any(v_workflows)),'[]'::jsonb),
+    'components',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c
+      where c.workflow_id=any(v_workflows) or c.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'expenses',coalesce((select jsonb_agg(to_jsonb(e) order by e.expense_component_id) from public.candidate_expense_components e
+      where e.workflow_id=any(v_workflows) or e.owning_timesheet_id=any(v_ids)),'[]'::jsonb),
+    'evidence',coalesce((select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'shifts',coalesce((select jsonb_agg(to_jsonb(s) order by s.id) from public.nhsp_shifts s where s.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'lineages',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'validations',coalesce((select jsonb_agg(to_jsonb(v) order by v.id) from public.timesheet_validations v where v.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'invoices',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'financials',coalesce((select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id=any(v_ids)),'[]'::jsonb));
   perform private.timesheet_correction_a0_fence_acquire_v1(
     private.timesheet_correction_a0_fence_tokens_v2(null,null,null,null,null,v_workflows,v_weeks,v_cycles),true);
   -- An ordinary dependency mutation that was already inside its probe can
@@ -173,7 +188,18 @@ begin
     'weeks',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.contract_weeks w
       where w.timesheet_id=any(v_ids) or w.id in(select f.contract_week_id from public.candidate_submission_workflows f where f.id=any(v_workflows))),'[]'::jsonb),
     'cycles',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.weekly_source_cycles c
-      where c.id in(select l.source_cycle_id from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids))),'[]'::jsonb));
+      where c.id in(select l.source_cycle_id from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids))),'[]'::jsonb),
+    'approvals',coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from public.candidate_approval_requests a where a.workflow_id=any(v_workflows)),'[]'::jsonb),
+    'components',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c
+      where c.workflow_id=any(v_workflows) or c.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'expenses',coalesce((select jsonb_agg(to_jsonb(e) order by e.expense_component_id) from public.candidate_expense_components e
+      where e.workflow_id=any(v_workflows) or e.owning_timesheet_id=any(v_ids)),'[]'::jsonb),
+    'evidence',coalesce((select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'shifts',coalesce((select jsonb_agg(to_jsonb(s) order by s.id) from public.nhsp_shifts s where s.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'lineages',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'validations',coalesce((select jsonb_agg(to_jsonb(v) order by v.id) from public.timesheet_validations v where v.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'invoices',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'financials',coalesce((select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id=any(v_ids)),'[]'::jsonb));
   if v_after is distinct from v_before then
     raise exception 'CORRECTION_A0_TOKEN_DEPENDENCY_CHANGED' using errcode='40001';end if;
 end;

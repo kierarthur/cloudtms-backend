@@ -1,0 +1,239 @@
+{
+  "schemaVersion": "A0_NATIVE_OWNER_COVERAGE_SOURCE_SUCCESSOR_FROZEN_V1",
+  "sourceOnly": true,
+  "status": "ADJACENT_REVIEW_PROPOSAL_NOT_NATIVE_QUALIFIED_OR_MOUNTABLE",
+  "currentRootCommit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "controllingPlanSha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+  "completeCurrentFileReversals": 4,
+  "changedCurrentOwners": 6,
+  "newPrivateFunctions": 6,
+  "newPrivateConcurrencyTables": 1,
+  "guardTables": 14,
+  "rawChildColumns": 19,
+  "writerDefinitions": 134,
+  "completePotentialCalleeDefinitions": 861,
+  "lexicalRoutineIdentities": 2676,
+  "unchangedCatalogueBeforeBindings": 31,
+  "sourceBodyExpectations": 41,
+  "localSourceAlgebraChecks": 47,
+  "fullSavedEqualsGitInputs": 1747,
+  "originalNEW174AndUPGRADE173Preserved": true,
+  "mandatoryOuterRRPreserved": true,
+  "nativeCompilationRun": false,
+  "nativeSchedulesRun": false,
+  "independentCritic": false,
+  "hiddenRRClosure": false,
+  "bankOrOrdinaryAUTHUNABodiesChanged": false,
+  "preserved": [
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-source-implementation-20261014/REVIEW_MANIFEST.json",
+      "bytes": 6547,
+      "sha256": "21a5d83ceb3d7137d944045eb8e317639b1bae2b3f46f0e2f904377d0b4dec4b",
+      "artifacts": 28,
+      "allMatch": true
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "bytes": 31493,
+      "sha256": "d6ef131d253c7e513c371168f0fe278fddb702e3f8de5d8b73509997d79a407e",
+      "artifacts": 108,
+      "allMatch": true
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/REVIEW_MANIFEST.json",
+      "bytes": 1829,
+      "sha256": "ea1aa874a943f7eb289cc666b290154fe3f82e1d88c11cd7dda77cb782834332",
+      "artifacts": 6,
+      "allMatch": true
+    }
+  ],
+  "external": [
+    {
+      "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/source-fence-reconciliation/CURRENT_SOURCE_WRITER_CENSUS.json",
+      "copy": "AGENCY_EXTERNAL_SOURCE_WRITER_CENSUS.json",
+      "bytes": 720960,
+      "sha256": "c1ceaec05e966340941106ab44e2265e7cea0580c16c678f23416bbf8bb2da66",
+      "sourceOnly": true,
+      "implementedOrAccepted": false
+    },
+    {
+      "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/source-fence-reconciliation/SOURCE_RAW_ID_DDL_MAPPING.json",
+      "copy": "AGENCY_EXTERNAL_SOURCE_RAW_ID_DDL_MAPPING.json",
+      "bytes": 325875,
+      "sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804",
+      "sourceOnly": true,
+      "implementedOrAccepted": false
+    },
+    {
+      "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/source-fence-reconciliation/SOURCE_RAW_ID_RECONCILIATION.md",
+      "copy": "AGENCY_EXTERNAL_SOURCE_RAW_ID_RECONCILIATION.md",
+      "bytes": 15246,
+      "sha256": "c9721a6bab490a2a11c36e5680d43fbc5fa9d464a02b3d1ab9a1ee90926583c5",
+      "sourceOnly": true,
+      "implementedOrAccepted": false
+    }
+  ],
+  "holds": [
+    "Complete native GiST/exclusion/equality/constraint/index/security/canonical compilation",
+    "Actual ordinary-ordinary absent shared-alias contention and disjoint negatives",
+    "Inserted/deleted dirty tuple and successful/aborted subtransaction top-level XID lifetime",
+    "Transaction-wide existing/physical/dependency/genuinely allocated native ordering and post-retention CAS",
+    "All five genuine native both-order schedules including older-RR new-child/late FIN/exception restoration",
+    "Agency38 Source raw parent/selectors/domain ABI/native adapter through SAME authority"
+  ],
+  "files": [
+    {
+      "file": "AGENCY_EXTERNAL_SOURCE_RAW_ID_DDL_MAPPING.json",
+      "bytes": 325875,
+      "sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804"
+    },
+    {
+      "file": "AGENCY_EXTERNAL_SOURCE_RAW_ID_RECONCILIATION.md",
+      "bytes": 15246,
+      "sha256": "c9721a6bab490a2a11c36e5680d43fbc5fa9d464a02b3d1ab9a1ee90926583c5"
+    },
+    {
+      "file": "AGENCY_EXTERNAL_SOURCE_WRITER_CENSUS.json",
+      "bytes": 720960,
+      "sha256": "c1ceaec05e966340941106ab44e2265e7cea0580c16c678f23416bbf8bb2da66"
+    },
+    {
+      "file": "build-owner-coverage.mjs",
+      "bytes": 7641,
+      "sha256": "505d8249a4a080e7da46f23bb86fe73f7bc7395e41f1fc7770b42f45a59f58cd"
+    },
+    {
+      "file": "build-review-composition.mjs",
+      "bytes": 18169,
+      "sha256": "d0f3adb4945bd8aaca5d04dc9b2657b07391c895c486875b1feb9aa4e2a99eda"
+    },
+    {
+      "file": "COMPLETE_CURRENT_FORWARD_AND_REVERSE.json",
+      "bytes": 25751,
+      "sha256": "bc250abfaa9a0f4208549ffbdff6bf174149f552e35fd30201ad7eda0d489426"
+    },
+    {
+      "file": "compose-current-owners.mjs",
+      "bytes": 7708,
+      "sha256": "b68ff727e65d1769739b45068f2c035647084cfd638ae55065079631cfd7dc0a"
+    },
+    {
+      "file": "CURRENT_EXCEPTION_HANDLER_SOURCE_EVIDENCE.json",
+      "bytes": 2866286,
+      "sha256": "c0e4283d5b9767a954525004eab6274c3818b62c18b0cafd32183bfee77b05b0"
+    },
+    {
+      "file": "CURRENT_NATIVE_OWNER_COVERAGE.json",
+      "bytes": 21794064,
+      "sha256": "8d81625785b548082fa16c5a90eea94221178f88545274bbb4304b5d37c63cd9"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 7771,
+      "sha256": "4fe295ea014d9e7716dc76369feb1f5220189add0834a7f80408eb974b9452ca"
+    },
+    {
+      "file": "NATIVE_ACCEPTANCE_RECIPES.md",
+      "bytes": 6613,
+      "sha256": "f89f849214f500f7aeb4dfc450d5d22a828ce25c7a34442598b5b5173b3dec57"
+    },
+    {
+      "file": "PRESERVED_INPUT_AND_RUNTIME_PROOF.json",
+      "bytes": 3466,
+      "sha256": "7f906520d855f1fc7584653489b44097ef2bf442195af46fa68c408e94a6fff8"
+    },
+    {
+      "file": "RELEASE_AND_REGISTRY_COMPOSITION.json",
+      "bytes": 48453,
+      "sha256": "737a884282212f592c0ae50825f2ea318009500b8b3a3e0a5ab55cd2f98b3f18"
+    },
+    {
+      "file": "release.current-release.complete-proposed.json",
+      "bytes": 35314,
+      "sha256": "fc3b870e51f710668a737d9a1654bc6b3fb031735fbf438a83d097a446e677c2"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 14053,
+      "sha256": "2bb1ef19235e7021d62c746996206ec0bdcdf07d926b638727eff4c33b81c1ea"
+    },
+    {
+      "file": "SOURCE_CHECKS.json",
+      "bytes": 3949,
+      "sha256": "50f85618dc05e2e9243148401b4240b2c4b675240d7e82246c3279da5ad6457b"
+    },
+    {
+      "file": "SOURCE_EXPECTED_BODY_HASHES.json",
+      "bytes": 13051,
+      "sha256": "0481e1f45ce06eb9daecbf0c0e21e4570dad80c279144e36078a6e0d3c06c8bf"
+    },
+    {
+      "file": "SOURCE_GUARD_AND_VERIFIER_COMPOSITION.json",
+      "bytes": 15040,
+      "sha256": "516691bff52f84b2394d6fec4b2a815b0c7839bc0a81fd6717c4b70a68fa91a1"
+    },
+    {
+      "file": "source-checks.mjs",
+      "bytes": 15032,
+      "sha256": "bbe41311f5fe427f139c83a0949f87d89545cfa891aee8ac5393e568bec69679"
+    },
+    {
+      "file": "sql/14102026_1216_04_complete_native_lock_fence.complete-proposed.sqlinc",
+      "bytes": 12634,
+      "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+    },
+    {
+      "file": "sql/14102026_1216_05_native_creator_intents_and_triggers.complete-proposed.sqlinc",
+      "bytes": 21519,
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "file": "sql/14102026_1216_06_send_family_fence.complete-proposed.sqlinc",
+      "bytes": 7165,
+      "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+    },
+    {
+      "file": "sql/14102026_1216_08_complete_current_request.complete-proposed.sqlinc",
+      "bytes": 24480,
+      "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+    },
+    {
+      "file": "sql/14102026_1216_a0_native_child_raw_intents.sqlinc",
+      "bytes": 6123,
+      "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+    },
+    {
+      "file": "sql/14102026_1216_a0_owner_coverage_successor_v1.sql",
+      "bytes": 7005,
+      "sha256": "6cf7f8a3597c380d8f86e25b31efbf4f000693f6e8e74675215b4acde09148e8"
+    },
+    {
+      "file": "sql/14102026_1216_a0_transaction_fence_helpers.sqlinc",
+      "bytes": 22486,
+      "sha256": "e2c00e0d87bd7e9e52d98c9a45441101ce6495831c93d0d55909482c00660c8e"
+    },
+    {
+      "file": "sql/14102026_1216_a0_transaction_fence_reviewed_bodies.sqlinc",
+      "bytes": 5867,
+      "sha256": "b4de17478597aa4dee40e847fe1de8a54236a40441e50c45f20acdf8d032db22"
+    },
+    {
+      "file": "sql/14102026_1216_a0_transaction_fence_schema.sql",
+      "bytes": 4793,
+      "sha256": "422c85b09b505a7900319c2b7fe059c20951e02b75b35908807a1887e77eaa41"
+    },
+    {
+      "file": "sql/14102026_1216_a0_transaction_fence_source_contract.sql",
+      "bytes": 25895,
+      "sha256": "c6b2ad962c62cbfe24b6c25bc2cfa9d2a1af79cadc30712fd6b50af573112783"
+    },
+    {
+      "file": "WIP_HANDOVER.md",
+      "bytes": 6727,
+      "sha256": "b9a791c9a0c3dde523292a73a5c405dd42d77e93e17d61a7af68f1ec491ff622"
+    }
+  ]
+}

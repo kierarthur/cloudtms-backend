@@ -14,13 +14,14 @@ begin
     join pg_catalog.pg_class t on t.oid=a.attrelid join pg_catalog.pg_namespace n on n.oid=t.relnamespace
     join pg_catalog.pg_collation c on c.oid=a.attcollation
     where n.nspname='public' and a.attnum>0 and not a.attisdropped and (t.relname,a.attname) in(values
-      ('timesheets','booking_id'),('invoice_lines','booking_id'),('timesheets','occupant_key_norm'),('candidates','key_norm'))
+      ('timesheets','booking_id'),('invoice_lines','booking_id'),('timesheets','occupant_key_norm'),('candidates','key_norm'),
+      ('weekly_source_row_timesheet_lineages','family_booking_id'))
   loop
     v_count:=v_count+1;
     if r.atttypid<>'text'::regtype or r.collisdeterministic is distinct from true then
       raise exception 'CORRECTION_A0_NATIVE_TEXT_EQUALITY_UNPROVED' using errcode='55000';end if;
   end loop;
-  if v_count<>4 or not exists(select 1 from pg_catalog.pg_attribute a where a.attrelid='public.candidates'::regclass
+  if v_count<>5 or not exists(select 1 from pg_catalog.pg_attribute a where a.attrelid='public.candidates'::regclass
     and a.attname='nhsp_hr_name_aliases' and not a.attisdropped and a.atttypid='jsonb'::regtype)
     or to_regclass('private.timesheet_correction_a0_transaction_fences') is not null then
     raise exception 'CORRECTION_A0_NATIVE_TOKEN_SCHEMA_UNPROVED' using errcode='55000';end if;

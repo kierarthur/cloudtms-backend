@@ -1,0 +1,78 @@
+{
+  "sourceOnly": true,
+  "currentRootCommit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "fullSavedEqualsGitInputs": 1747,
+  "preserved": [
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-source-implementation-20261014/REVIEW_MANIFEST.json",
+      "bytes": 6547,
+      "sha256": "21a5d83ceb3d7137d944045eb8e317639b1bae2b3f46f0e2f904377d0b4dec4b",
+      "artifacts": 28,
+      "allMatch": true
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "bytes": 31493,
+      "sha256": "d6ef131d253c7e513c371168f0fe278fddb702e3f8de5d8b73509997d79a407e",
+      "artifacts": 108,
+      "allMatch": true
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/REVIEW_MANIFEST.json",
+      "bytes": 1829,
+      "sha256": "ea1aa874a943f7eb289cc666b290154fe3f82e1d88c11cd7dda77cb782834332",
+      "artifacts": 6,
+      "allMatch": true
+    }
+  ],
+  "external": [
+    {
+      "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/source-fence-reconciliation/CURRENT_SOURCE_WRITER_CENSUS.json",
+      "copy": "AGENCY_EXTERNAL_SOURCE_WRITER_CENSUS.json",
+      "bytes": 720960,
+      "sha256": "c1ceaec05e966340941106ab44e2265e7cea0580c16c678f23416bbf8bb2da66",
+      "sourceOnly": true,
+      "implementedOrAccepted": false
+    },
+    {
+      "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/source-fence-reconciliation/SOURCE_RAW_ID_DDL_MAPPING.json",
+      "copy": "AGENCY_EXTERNAL_SOURCE_RAW_ID_DDL_MAPPING.json",
+      "bytes": 325875,
+      "sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804",
+      "sourceOnly": true,
+      "implementedOrAccepted": false
+    },
+    {
+      "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/source-fence-reconciliation/SOURCE_RAW_ID_RECONCILIATION.md",
+      "copy": "AGENCY_EXTERNAL_SOURCE_RAW_ID_RECONCILIATION.md",
+      "bytes": 15246,
+      "sha256": "c9721a6bab490a2a11c36e5680d43fbc5fa9d464a02b3d1ab9a1ee90926583c5",
+      "sourceOnly": true,
+      "implementedOrAccepted": false
+    }
+  ],
+  "controllingPlan": {
+    "file": "cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026/HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2/03_IMPLEMENTATION_PLAN.md",
+    "bytes": 563296,
+    "sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3"
+  },
+  "runtime": [
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8927507,
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "savedEqualsPublished": true
+    },
+    {
+      "file": "broker/src/weekly-source/guard-refusal-record.mjs",
+      "bytes": 8193,
+      "sha256": "85c7a7d2a5d43886ef1324fe0bc64628138ed2d9d02f250125815cd93da87979",
+      "savedEqualsPublished": true
+    }
+  ],
+  "ordinaryIsolationChanged": false,
+  "nativeRun": false
+}

@@ -1,4 +1,6 @@
-# Source WIP handover — 14 October 2026
+# Historical source WIP handover — 14 October 2026
+
+**Superseded by the completed adjacent source review proposal.** Current source status, complete forwards/reverses,14-guard owner coverage,47 local checks, exact preservation/registry/verifier/release composition and all true holds are in `REVIEW.md`, `NATIVE_ACCEPTANCE_RECIPES.md` and `REVIEW_MANIFEST.json`. No native qualification, mounting, installation or hidden-RR closure follows. The text below is preserved as the historical770 team-slot handover, not the present artifact census.
 
 Status: **UNREVIEWED SOURCE PROPOSAL WIP. NOT A FROZEN, MOUNTABLE OR QUALIFIED PACKET.** Saved for the owner's Install1 team-slot scheduling request. No SQL was executed, mounted, compiled or installed. No database, Docker, native, API, Bank or authoritative-root action was taken. Do not include these files in a release.
 

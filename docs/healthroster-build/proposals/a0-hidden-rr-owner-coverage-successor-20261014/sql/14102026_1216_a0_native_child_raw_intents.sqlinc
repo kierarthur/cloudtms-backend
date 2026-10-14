@@ -8,7 +8,7 @@ declare r jsonb;v_rows jsonb[];v_ids uuid[]:=array[]::uuid[];v_workflows uuid[]:
 begin
   if tg_table_schema<>'public' or tg_op not in('INSERT','UPDATE','DELETE') or tg_table_name not in(
     'candidate_submission_workflows','candidate_approval_requests','candidate_submission_components','candidate_expense_components',
-    'timesheet_evidence','nhsp_shifts','weekly_source_row_timesheet_lineages','contract_weeks') then
+    'timesheet_evidence','nhsp_shifts','weekly_source_row_timesheet_lineages','contract_weeks','weekly_source_cycles') then
     raise exception 'CORRECTION_A0_CHILD_TRIGGER_CONTEXT_INVALID' using errcode='55000';end if;
   if tg_op='INSERT' then v_rows:=array[to_jsonb(new)];elsif tg_op='DELETE' then v_rows:=array[to_jsonb(old)];
     else v_rows:=array[to_jsonb(old),to_jsonb(new)];end if;
@@ -28,6 +28,8 @@ begin
     elsif tg_table_name='weekly_source_row_timesheet_lineages' then
       v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];v_weeks:=v_weeks||array[(r->>'contract_week_id')::uuid];
       v_cycles:=v_cycles||array[(r->>'source_cycle_id')::uuid];v_bookings:=v_bookings||array[r->>'family_booking_id'];
+    elsif tg_table_name='weekly_source_cycles' then
+      v_cycles:=v_cycles||array[(r->>'id')::uuid];
     elsif tg_table_name='contract_weeks' then
       v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];v_weeks:=v_weeks||array[(r->>'id')::uuid];
     else v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];end if;
@@ -64,4 +66,8 @@ create trigger aaa_healthroster_a0_child_before_v1 before insert or update or de
   for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
 drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.contract_weeks;
 create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.contract_weeks
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.weekly_source_cycles;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.weekly_source_cycles
   for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
