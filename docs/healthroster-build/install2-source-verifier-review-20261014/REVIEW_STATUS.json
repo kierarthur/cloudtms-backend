@@ -1,0 +1,31 @@
+{
+  "status": "COMPLETE_CURRENT_STATIC_CENSUS_NOT_SAFETY_APPROVAL",
+  "sourcePin": "67223b5c8458eb3b9a769152a8eb554d29d1ed18",
+  "generatedAt": "2026-10-14T16:52:22.371Z",
+  "sourceCounts": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "verifiers": 173
+  },
+  "definitionNames": 2645,
+  "definitionVariants": 2686,
+  "calleeDictionaryVariants": 1806,
+  "verifiersWithChangedEffectGraph": 116,
+  "changedKnownProhibitedEffectSets": [],
+  "newVerifiersWithProhibitedPotentialEffects": [],
+  "unknownLexicalNames": [
+    "extensions.digest",
+    "extensions.gen_random_bytes",
+    "extensions.gen_random_uuid",
+    "pg_temp.tmp_pay_batch_finalize_economic_components",
+    "pg_temp.tmp_pay_batch_finalize_items",
+    "pg_temp.tmp_sync_sealed_finance_case_authority",
+    "pg_temp.tmp_sync_sealed_rate_projection",
+    "pg_temp.tmp_sync_sealed_reservation_items"
+  ],
+  "safetyReviewApproved": false,
+  "independentReviewComplete": false,
+  "nativeCatalogueBound": false,
+  "protectedOrFullRehearsalExecuted": false,
+  "requiredNext": "Review complete current bodies, changed transitive callees, trigger/dynamic effects and actual fixture identities against final mounted source. Preserve exact exclusions for real global queue/payment/external effects and genuine APPLYING requirements. Rebuild/review this census after later owner composition; this partial source pin is not the final Install2 commit."
+}
