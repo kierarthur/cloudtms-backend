@@ -1,0 +1,43 @@
+{
+  "checkedAt": "2026-10-14T12:05:09.273Z",
+  "rows": [
+    {
+      "url": "https://cloudtms-codex-poc-postgrest-kwtyn.eu-east-1.migetapp.com/",
+      "status": 200,
+      "bytes": 83430,
+      "sha256": "b467354ada2a06c06cda8baa91ec15af803f63feb1a6785db3b6aff3d1e13796"
+    },
+    {
+      "url": "https://codex-cloudtms-miget-gateway.kier-88a.workers.dev/rest/v1/",
+      "status": 200,
+      "bytes": 83430,
+      "sha256": "b467354ada2a06c06cda8baa91ec15af803f63feb1a6785db3b6aff3d1e13796"
+    },
+    {
+      "url": "https://test-cloudtms-backend.kier-88a.workers.dev/readyz",
+      "status": 200,
+      "bytes": 426,
+      "sha256": "fd964c5f00a7d90547ee426173c040ddc59310168c97a32bf3402898c6d09b7d",
+      "readiness": {
+        "ready": true,
+        "backend_ready": true,
+        "processor_ready": true,
+        "dispatcher_ready": true,
+        "interactive_async_ready": true,
+        "scheduled_async_ready": false,
+        "async_pipeline_enabled": true,
+        "scheduled_async_enabled": false,
+        "processor_enabled": true,
+        "invoice_access_mode": "AUTHENTICATED",
+        "access_configuration_ready": true,
+        "authenticated_user_access_enabled": true,
+        "controlled_cohort_enabled": false,
+        "allowed_user_count": 0,
+        "system_actor_valid": true
+      }
+    }
+  ],
+  "staleConnectionsObserved": false,
+  "hyperdriveRefreshed": false,
+  "fullRetryConsumed": false
+}

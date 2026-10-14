@@ -1,0 +1,30 @@
+{
+  "status": "SOURCE_REVIEW_ARCHIVE_PASS_NATIVE_IN_PROGRESS",
+  "recordedAt": "2026-10-14T12:10:42.562Z",
+  "candidate": "8ddd9c3b9fe100298c724fa5090f51550118493a",
+  "criticSha256": "4a37466d3f7a1a5aaaa1b7f517ccdee3bfa45dfc61c18c50b90612d6a584e60e",
+  "sourceAcceptanceOnly": true,
+  "fullRetryDispatchedAt": "2026-10-14T12:06:07Z",
+  "ownTurn": {
+    "pid": 9968,
+    "takenAt": "2026-10-14T12:06:10.557Z",
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "archive": {
+    "groups": 9,
+    "harnessTests": 114,
+    "removedTemporaryFolder": true
+  },
+  "normalRoutes": {
+    "directPostgrest": 200,
+    "gateway": 200,
+    "backendReadyz": 200,
+    "staleConnections": false,
+    "hyperdriveRefresh": false
+  },
+  "nativeFull": "INITIAL_READONLY_RESTORATION_SNAPSHOT_IN_PROGRESS",
+  "publication": null
+}
