@@ -1,0 +1,296 @@
+create or replace function private.weekly_source_correct_final_office_preview_v1(
+  p_correction_session_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_prior_revision public.weekly_source_final_revisions%rowtype;
+  v_prior_profile public.weekly_source_format_profiles%rowtype;
+  v_changes jsonb:='[]'::jsonb;
+  v_blockers jsonb:='[]'::jsonb;
+  v_confirmation text;
+  v_old_report text;
+  v_preview jsonb;
+begin
+  if exists(select 1 from public.weekly_final_source_correction_sessions c where c.id=p_correction_session_id and c.authority_scope_kind='SELF_BILL_REPORT_SCOPE') then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CORRECT_FINAL_UNSUPPORTED' using errcode='55000';
+  end if;
+  select * into v_session
+  from public.weekly_final_source_correction_sessions
+  where id=p_correction_session_id;
+  if not found or v_session.state not in ('READY','REVIEWED','PREPARING','PREPARED','COMMITTING','APPLIED')
+     or v_session.replacement_correction_upload_id is null
+     or v_session.replacement_projection_publication_id is null then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREVIEW_NOT_READY' using errcode='55000';
+  end if;
+  select * into strict v_publication
+  from public.weekly_source_projection_publications
+  where id=v_session.replacement_projection_publication_id;
+  select * into strict v_prior_revision
+  from public.weekly_source_final_revisions
+  where id=v_session.expected_current_final_revision_id;
+  select profile.* into strict v_prior_profile
+  from public.weekly_source_uploads upload_row
+  join public.weekly_source_format_profiles profile
+    on profile.id=upload_row.source_format_profile_id
+  where upload_row.id=v_prior_revision.upload_id;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'candidate',coalesce(candidate.display_name,source_row.source_candidate_identity,'Candidate'),
+    'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
+    'problem',case
+      when resolution.id is null then 'This row has not been linked yet'
+      when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'Candidate could not be found'
+      when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Client could not be found'
+      when resolution.mapping_state='NO_ELIGIBLE_CONTRACT' then 'No matching contract'
+      when resolution.mapping_state in ('AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED')
+        then 'More than one contract matches'
+      when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'This shift is not finalised'
+      when charge.phase_severity='FINALISATION_BLOCKER' then 'Check the charge for this shift'
+      else 'Check the hours for this shift' end,
+    'action',case
+      when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'Link candidate'
+      when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Link client'
+      when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED')
+        then 'Choose contract'
+      when charge.phase_severity='FINALISATION_BLOCKER' then 'Open charge details'
+      else 'View details' end
+  ) order by source_row.work_date,source_row.source_candidate_identity,source_row.source_row_ordinal),'[]'::jsonb)
+  into v_blockers
+  from public.weekly_source_upload_rows source_row
+  left join public.weekly_source_row_resolutions resolution
+    on resolution.upload_row_id=source_row.id
+   and resolution.generation=coalesce(
+     v_publication.projection_generation,
+     v_publication.authority_scope_version::integer
+   )
+  left join public.candidates candidate on candidate.id=resolution.candidate_id
+  left join public.weekly_source_charge_checks charge
+    on charge.upload_row_id=source_row.id
+   and charge.row_resolution_id=resolution.id
+   and charge.generation=coalesce(
+     v_publication.projection_generation,
+     v_publication.authority_scope_version::integer
+   )
+  where source_row.upload_id=v_session.replacement_correction_upload_id
+    and (
+      resolution.id is null or resolution.mapping_state<>'RESOLVED'
+      or source_row.row_finalisation_state in (
+        'SOURCE_UNFINALISED','BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE'
+      )
+      or charge.phase_severity='FINALISATION_BLOCKER'
+    );
+
+  if pg_catalog.jsonb_array_length(v_blockers)=0 then
+    if v_prior_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT' then
+      with prior_rows as (
+        select movement.work_event_id,movement.source_line_kind,movement.candidate_id,
+               movement.source_facts_json prior_facts,
+               -- WP-54.  The money this line currently puts on the self-bill.
+               -- Pack 14 section 4.3.1: for NHSP "The validated source total is
+               -- the invoice value", and that is what this column holds.
+               movement.invoice_presentation_charge_pence prior_charge_pence,
+               pg_catalog.row_number() over(
+                 partition by movement.work_event_id,movement.source_line_kind
+                 order by source_row.source_row_ordinal,movement.id
+               ) as row_number
+        from public.weekly_source_billing_movements movement
+        join public.weekly_source_upload_rows source_row
+          on source_row.id=movement.nhsp_upload_row_id
+        where movement.final_revision_id=v_session.expected_current_final_revision_id
+      ), replacement_rows as (
+        select resolution.work_event_id,
+               case when economic.row_sign=1 then 'NHSP_PHYSICAL_POSITIVE'
+                    else 'NHSP_PHYSICAL_FULL_NEGATIVE' end source_line_kind,
+               resolution.candidate_id,
+               pg_catalog.jsonb_build_object(
+                 'work_date',source_row.work_date,
+                 'start_at_local',source_row.start_at_local,
+                 'end_at_local',source_row.end_at_local,
+                 'break_minutes',source_row.break_minutes
+               ) replacement_facts,
+               -- WP-54.  The money the replacement line would put on the
+               -- self-bill: the signed Commission + Total Cost the replacement
+               -- report supplies, which pack 14 section 4.3.1 makes the invoice
+               -- value once the server's own comparison has passed.
+               source_row.source_shift_charge_pence replacement_charge_pence,
+               pg_catalog.row_number() over(
+                 partition by resolution.work_event_id,
+                   case when economic.row_sign=1 then 'NHSP_PHYSICAL_POSITIVE'
+                        else 'NHSP_PHYSICAL_FULL_NEGATIVE' end
+                 order by source_row.source_row_ordinal,resolution.id
+               ) as row_number
+        from public.weekly_source_upload_rows source_row
+        join public.weekly_source_row_resolutions resolution
+          on resolution.upload_row_id=source_row.id
+         and resolution.generation=coalesce(
+           v_publication.projection_generation,
+           v_publication.authority_scope_version::integer
+         )
+         and resolution.mapping_state='RESOLVED'
+        join public.weekly_source_row_economic_snapshots economic
+          on economic.row_resolution_id=resolution.id
+        where source_row.upload_id=v_session.replacement_correction_upload_id
+      ), paired as (
+        select coalesce(replacement.work_event_id,prior.work_event_id) work_event_id,
+               coalesce(replacement.source_line_kind,prior.source_line_kind) source_line_kind,
+               coalesce(replacement.candidate_id,prior.candidate_id) candidate_id,
+               prior.prior_facts,replacement.replacement_facts,
+               prior.prior_charge_pence,replacement.replacement_charge_pence
+        from prior_rows prior
+        full join replacement_rows replacement
+          on replacement.work_event_id=prior.work_event_id
+         and replacement.source_line_kind=prior.source_line_kind
+         and replacement.row_number=prior.row_number
+      ), presented as (
+        select paired.*,candidate.display_name,
+          coalesce(replacement_facts->>'work_date',prior_facts->>'work_date') work_date,
+          case when prior_facts is null then 'Not present' else
+            to_char((prior_facts->>'start_at_local')::timestamp,'HH24:MI')||'-'||
+            to_char((prior_facts->>'end_at_local')::timestamp,'HH24:MI')||' ('||
+            coalesce(prior_facts->>'break_minutes','0')||' min break)' end current_final,
+          case when replacement_facts is null then 'Not present' else
+            to_char((replacement_facts->>'start_at_local')::timestamp,'HH24:MI')||'-'||
+            to_char((replacement_facts->>'end_at_local')::timestamp,'HH24:MI')||' ('||
+            coalesce(replacement_facts->>'break_minutes','0')||' min break)' end replacement,
+          -- WP-54.  The same two lines expressed as money.  The preview
+          -- compared the formatted TIME only, so a report that repriced every
+          -- line produced changes=[] and the confirmation the Office signed --
+          -- and the preview_hash that binds it -- covered an empty list.
+          -- Pack 24 section 7 requires Office to see the exact consequence it
+          -- is confirming; pack 14 section 4.3.1 makes this figure the invoice
+          -- value.  The DECISION below compares exact signed pence; only the
+          -- display is formatted.
+          case when paired.prior_charge_pence is null then 'Not present'
+               else private.weekly_source_office_money_text_v1(paired.prior_charge_pence::numeric/100)
+          end current_final_amount,
+          case when paired.replacement_charge_pence is null then 'Not present'
+               else private.weekly_source_office_money_text_v1(paired.replacement_charge_pence::numeric/100)
+          end replacement_amount,
+          case when prior_facts is null then 'Added'
+               when replacement_facts is null then 'Removed'
+               else 'Changed' end result
+        from paired
+        left join public.candidates candidate on candidate.id=paired.candidate_id
+      )
+      select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'candidate',coalesce(display_name,'Candidate'),
+        'day_date',to_char(work_date::date,'Dy FMDD Mon YYYY'),
+        'current_final',current_final,'replacement',replacement,
+        'current_final_amount',current_final_amount,
+        'replacement_amount',replacement_amount,
+        'amount_changed',prior_charge_pence is distinct from replacement_charge_pence,
+        'result',result
+      ) order by work_date,coalesce(display_name,''),work_event_id),'[]'::jsonb)
+      into v_changes
+      from presented
+      where current_final is distinct from replacement
+         or prior_charge_pence is distinct from replacement_charge_pence;
+    else
+      with prior_rows as (
+        select snapshot.work_event_id,snapshot.candidate_id,snapshot.work_date,
+               snapshot.start_at_local,snapshot.end_at_local,snapshot.break_minutes,
+               -- WP-54.  The same blindness the NHSP branch had: this preview
+               -- compared work date, times and break only.  On this route the
+               -- money is the server's own calculation, so it moves when the
+               -- Contract or the rate policy behind the row moves even though
+               -- every displayed time is identical.  LEFT join: a row with no
+               -- economic snapshot keeps its place in the pairing and simply
+               -- carries no amount.
+               prior_economic.calculated_charge_pence prior_charge_pence
+        from public.weekly_source_final_snapshot_lines snapshot
+        left join public.weekly_source_row_economic_snapshots prior_economic
+          on prior_economic.row_resolution_id=snapshot.row_resolution_id
+        where snapshot.final_revision_id=v_session.expected_current_final_revision_id
+      ), replacement_rows as (
+        select resolution.work_event_id,resolution.candidate_id,source_row.work_date,
+               source_row.start_at_local,source_row.end_at_local,source_row.break_minutes,
+               replacement_economic.calculated_charge_pence replacement_charge_pence
+        from public.weekly_source_upload_rows source_row
+        join public.weekly_source_row_resolutions resolution
+          on resolution.upload_row_id=source_row.id
+         and resolution.generation=coalesce(
+           v_publication.projection_generation,
+           v_publication.authority_scope_version::integer
+         )
+         and resolution.mapping_state='RESOLVED'
+        left join public.weekly_source_row_economic_snapshots replacement_economic
+          on replacement_economic.row_resolution_id=resolution.id
+        where source_row.upload_id=v_session.replacement_correction_upload_id
+          and (
+            source_row.row_finalisation_state='SOURCE_WORKED'
+            or (v_prior_profile.final_authority_kind='GENERIC_COMPLETE_SNAPSHOT'
+                and source_row.row_finalisation_state='NOT_APPLICABLE')
+          )
+      ), paired as (
+        select coalesce(replacement.work_event_id,prior.work_event_id) work_event_id,
+               coalesce(replacement.candidate_id,prior.candidate_id) candidate_id,
+               prior.work_date prior_date,prior.start_at_local prior_start,
+               prior.end_at_local prior_end,prior.break_minutes prior_break,
+               prior.prior_charge_pence,
+               replacement.work_date replacement_date,
+               replacement.start_at_local replacement_start,
+               replacement.end_at_local replacement_end,
+               replacement.break_minutes replacement_break,
+               replacement.replacement_charge_pence
+        from prior_rows prior
+        full join replacement_rows replacement using(work_event_id)
+      )
+      select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'candidate',coalesce(candidate.display_name,'Candidate'),
+        'day_date',to_char(coalesce(paired.replacement_date,paired.prior_date),'Dy FMDD Mon YYYY'),
+        'current_final',case when paired.prior_date is null then 'Not present' else
+          to_char(paired.prior_start,'HH24:MI')||'-'||to_char(paired.prior_end,'HH24:MI')||
+          ' ('||paired.prior_break||' min break)' end,
+        'replacement',case when paired.replacement_date is null then 'Not present' else
+          to_char(paired.replacement_start,'HH24:MI')||'-'||to_char(paired.replacement_end,'HH24:MI')||
+          ' ('||paired.replacement_break||' min break)' end,
+        'current_final_amount',case when paired.prior_charge_pence is null then 'Not present'
+          else private.weekly_source_office_money_text_v1(
+            paired.prior_charge_pence::numeric/100) end,
+        'replacement_amount',case when paired.replacement_charge_pence is null then 'Not present'
+          else private.weekly_source_office_money_text_v1(
+            paired.replacement_charge_pence::numeric/100) end,
+        'amount_changed',paired.prior_charge_pence is distinct from paired.replacement_charge_pence,
+        'result',case when paired.prior_date is null then 'Added'
+          when paired.replacement_date is null then 'Removed' else 'Changed' end
+      ) order by coalesce(paired.replacement_date,paired.prior_date),
+        coalesce(candidate.display_name,''),paired.work_event_id),'[]'::jsonb)
+      into v_changes
+      from paired
+      left join public.candidates candidate on candidate.id=paired.candidate_id
+      -- WP-54: money joins date, times and break in the comparison, so a
+      -- correction that moves only the figure can no longer present the Office
+      -- with an empty change list.
+      where pg_catalog.jsonb_build_array(
+              paired.prior_date,paired.prior_start,paired.prior_end,paired.prior_break
+            ) is distinct from pg_catalog.jsonb_build_array(
+              paired.replacement_date,paired.replacement_start,
+              paired.replacement_end,paired.replacement_break
+            )
+         or paired.prior_charge_pence is distinct from paired.replacement_charge_pence;
+    end if;
+  end if;
+
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    select backing.backing_report_number into strict v_old_report
+    from public.weekly_source_nhsp_backing_reports backing
+    where backing.final_revision_id=v_session.expected_current_final_revision_id;
+    v_confirmation:='I understand this will replace report '||v_old_report||
+      ' as the final report for this Trust and cutoff.';
+  else
+    v_confirmation:='I understand this will replace the final version for this group and week.';
+  end if;
+  v_preview:=pg_catalog.jsonb_build_object(
+    'changes',v_changes,'blockers',v_blockers,'confirmation_text',v_confirmation
+  );
+  return v_preview||pg_catalog.jsonb_build_object(
+    'preview_hash',pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CORRECT_FINAL_OFFICE_PREVIEW_V1',v_preview
+    ),'hex')
+  );
+end;
+$function$;

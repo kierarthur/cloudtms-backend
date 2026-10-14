@@ -1,0 +1,3 @@
+-- Existing native preview remains logical-owner-only. No public/service grant.
+alter function private.weekly_source_correct_final_office_preview_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_correct_final_office_preview_v1(uuid) from public,anon,authenticated,service_role;

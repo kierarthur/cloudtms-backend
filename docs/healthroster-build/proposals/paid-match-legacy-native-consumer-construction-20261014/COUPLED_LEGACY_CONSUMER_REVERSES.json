@@ -1,0 +1,120 @@
+{
+  "source_only": true,
+  "unfinished": true,
+  "records": [
+    {
+      "source": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/01_work_event_payment_facts.sqlinc",
+      "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+      "file": "04_complete_payment_facts.sqlinc",
+      "before_bytes": 12479,
+      "before_sha256": "19619923daac1059be9d4ac719cbcf42b5721a08d4b39e82a79e187a537cc2d5",
+      "after_bytes": 14686,
+      "after_sha256": "1773bd2b9da8eb9ece206ac1228c92e4a106b1f645252dd59193339a2604f33f",
+      "hunks": [
+        {
+          "name": "private native Legacy member proof variables",
+          "before": "  v_matched_component_count integer;v_settlement jsonb;v_shift jsonb;",
+          "after": "  v_matched_component_count integer;v_settlement jsonb;v_shift jsonb;v_legacy jsonb;v_legacy_member jsonb;"
+        },
+        {
+          "name": "single paid fact owner delegates complete native terminal signed-membership current-financial proof",
+          "before": "      v_settlement:=private.weekly_source_settlement_allocation_v1(v_root);\n      v_paid_basis:=v_paid_basis||jsonb_build_array(v_settlement);\n      if v_settlement->>'state'='AVAILABLE' then\n        for v_shift in select value from jsonb_array_elements(v_settlement->'shifts') loop\n          if v_shift->>'segment_id'='weekly-source-event:'||v_event.id::text and (v_shift->>'hours')::numeric>0 then\n            v_paid:=true; v_paid_state:='SETTLED_SOURCE_SEGMENT'; end if;\n        end loop;\n      elsif v_settlement->>'state'<>'NO_SETTLEMENT' then v_paid:=null; v_paid_state:='UNKNOWN'; v_unknown:=true; end if;",
+          "after": "      if p_actor_user_id is null then\n        v_paid:=null;v_paid_state:='UNKNOWN';v_unknown:=true;\n      else\n        v_legacy:=private.weekly_source_legacy_signed_source_membership_v1(v_root,v_event.id,p_actor_user_id,v_cycle.id);\n        v_settlement:=v_legacy->'native_allocation';\n        v_paid_basis:=v_paid_basis||jsonb_build_array(v_legacy);\n        if v_legacy->>'state'='MEMBERSHIP_PRESENT' and jsonb_array_length(v_legacy->'signed_native_memberships')=1 then\n          v_legacy_member:=v_legacy#>'{signed_native_memberships,0}';\n          if jsonb_array_length(v_legacy_member->'native_current_financial_components')=1\n            and v_legacy_member#>>'{native_component,key_type}'='TS_DAY'\n            and v_legacy_member#>>'{native_component,key_value}'=v_event.work_date::text\n            and v_legacy_member#>>'{native_current_financial_components,0,timesheet_id}'=v_root::text\n            and v_legacy_member#>>'{native_current_financial_components,0,key_type}'='TS_DAY'\n            and v_legacy_member#>>'{native_current_financial_components,0,key_value}'=v_event.work_date::text\n            and coalesce(v_legacy_member#>>'{native_component,target_amount_ex_vat}','') ~ '^[0-9]+(\\.[0-9]+)?$'\n            and coalesce(v_legacy_member#>>'{native_current_financial_components,0,amount_ex_vat}','') ~ '^[0-9]+(\\.[0-9]+)?$'\n            and coalesce(v_legacy_member#>>'{signed_member,pay_amount}','') ~ '^[0-9]+(\\.[0-9]+)?$'\n            and (v_legacy_member#>>'{native_component,target_amount_ex_vat}')::numeric>0\n            and (v_legacy_member#>>'{signed_member,pay_amount}')::numeric>0\n            and (v_legacy_member#>>'{native_current_financial_components,0,amount_ex_vat}')::numeric\n              =(v_legacy_member#>>'{native_component,target_amount_ex_vat}')::numeric then\n            -- The native full day component is settled, its signed complete\n            -- Source membership contains this event, and the existing native\n            -- current financial position equals that full target. No cash is\n            -- divided among shifts and no new amount is calculated.\n            v_paid:=true;v_paid_state:='SETTLED_LEGACY_SOURCE_COMPONENT';\n          else v_paid:=null;v_paid_state:='UNKNOWN';v_unknown:=true;end if;\n        elsif v_settlement->>'state'='NO_SETTLEMENT'\n          and v_legacy#>>'{native_module,active_owner}'='LEGACY'\n          and v_legacy#>>'{native_terminal_census,result}'='RELEASABLE'\n          and v_legacy#>'{native_terminal_census,class_counts,SETTLED_TERMINAL}'='0'::jsonb then\n          -- Retain the existing native no-settlement disposition only when\n          -- the complete terminal census also has no settled item.\n          null;\n        else v_paid:=null;v_paid_state:='UNKNOWN';v_unknown:=true;end if;\n      end if;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/02_complete_overlap_inputs.sqlinc",
+      "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+      "file": "05_complete_overlap_inputs.sqlinc",
+      "before_bytes": 7753,
+      "before_sha256": "cac377125532997d5e050cb3ff0bb98a202546f363b9145c135296baf53d53a3",
+      "after_bytes": 7774,
+      "after_sha256": "ce5d7f6de4bd9e6db021ca9d74c3291ad087c9454450623e680a760ea53f17b1",
+      "hunks": [
+        {
+          "name": "actual cycle selects existing NEXT or one extracted native Source Legacy prior owner",
+          "before": "v_current_snapshot:=private.weekly_source_paid_overlap_current_snapshot_v1(v_event.id,v_movement.id,\n      p_candidate_id,p_client_id,v_movement.contract_id,v_cycle.source_group_id,\n      array(select value::uuid from jsonb_array_elements_text(v_payment->'root_timesheet_ids') value));",
+          "after": "v_current_snapshot:=private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(v_event.id,v_movement.id,\n      p_candidate_id,p_client_id,v_movement.contract_id,v_cycle.source_group_id,\n      array(select value::uuid from jsonb_array_elements_text(v_payment->'root_timesheet_ids') value),v_cycle.id);"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/03_complete_choice_admit.sqlinc",
+      "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+      "file": "06_complete_choice_admit.sqlinc",
+      "before_bytes": 10488,
+      "before_sha256": "7ffc41d4965ddba8b4184d5b4b80844e6fc71f05ec4ab3cfc758bea9ff4c41dd",
+      "after_bytes": 10567,
+      "after_sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3",
+      "hunks": [
+        {
+          "name": "existing actual paid fact owner may supply its complete native Legacy Source component state",
+          "before": "v_native_paid->>'paid_evidence_state' is distinct from 'SETTLED_ORIGINAL'",
+          "after": "(v_native_paid->>'paid_evidence_state') is null or (v_native_paid->>'paid_evidence_state') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/04_complete_choice_current.sqlinc",
+      "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+      "file": "07_complete_choice_current.sqlinc",
+      "before_bytes": 11850,
+      "before_sha256": "fb6b93bf0dcd7b5c7a5611778e5815e67d884b0556b9656874bfa4f365cacc7b",
+      "after_bytes": 11946,
+      "after_sha256": "6c1d9cc6990666228a61f993f58c46267d5bc045da30653ba61fc2160b90fc52",
+      "hunks": [
+        {
+          "name": "existing actual paid fact owner may supply its complete native Legacy Source component state",
+          "before": "v_match#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_ORIGINAL'",
+          "after": "(v_match#>>'{native_payment_facts,paid_evidence_state}') is null or (v_match#>>'{native_payment_facts,paid_evidence_state}') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/05_complete_office_question.sqlinc",
+      "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+      "file": "08_complete_office_question.sqlinc",
+      "before_bytes": 6681,
+      "before_sha256": "4e8320e0179565d406455226a4bea70b852c9418a2492d50fae6d05d7d4aa3ba",
+      "after_bytes": 6776,
+      "after_sha256": "ea7024cd4ba2cd52c01dd41a567d7b5dbad1fd0b14e407e3fbd8b6124d28f232",
+      "hunks": [
+        {
+          "name": "existing actual paid fact owner may supply its complete native Legacy Source component state",
+          "before": "v_item#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_ORIGINAL'",
+          "after": "(v_item#>>'{native_payment_facts,paid_evidence_state}') is null or (v_item#>>'{native_payment_facts,paid_evidence_state}') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/01_retained_paid_transition_assert.sqlinc",
+      "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+      "file": "09_complete_retained_transition_assert.sqlinc",
+      "before_bytes": 11373,
+      "before_sha256": "704ca55c8009a28b008be3a6ce87de5cd39f39b2fe24bbb6a712a28da65623d2",
+      "after_bytes": 11466,
+      "after_sha256": "376a27e2fa0a1648557699f7b9fd5bd422f4fe113f06bf93f8541706e9986e5f",
+      "hunks": [
+        {
+          "name": "existing actual paid fact owner may supply its complete native Legacy Source component state",
+          "before": "item#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_ORIGINAL'",
+          "after": "(item#>>'{native_payment_facts,paid_evidence_state}') is null or (item#>>'{native_payment_facts,paid_evidence_state}') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "single_existing_payment_fact_owner_retained": true,
+  "actual_Source_current_and_terminal_membership_delegated": true,
+  "complete_all_Legacy_grains": false,
+  "CorrectFinal_NHSP_protected_admission_complete": false,
+  "SQL_compiled": false,
+  "canonical_mounted": false,
+  "native_proof": false
+}

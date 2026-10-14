@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 13,
+  "pass": 13,
+  "fail": 0,
+  "syntax_pass": 3,
+  "whole_owner_reversals": 7,
+  "unique_hunks": 9,
+  "raw_native_input_pins": 5,
+  "preserved_dependency_artifacts": 181,
+  "new_private_signatures": 3,
+  "new_public_signatures": 0,
+  "new_store_column_calculator": 0,
+  "credential_findings": 0,
+  "whitespace_disposition": "EXACT PINNED SOURCE EXCEPTIONS RETAINED; NO BLANKET PASS",
+  "whitespace_exceptions": [
+    {
+      "file": "input/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "kind": "PRESERVED EOF BLANK LINES"
+    }
+  ],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

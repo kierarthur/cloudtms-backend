@@ -1,0 +1,162 @@
+{
+  "schema_version": "PAID_MATCH_LEGACY_NATIVE_CONSUMER_CONSTRUCTION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "all_Legacy_grains_complete": false,
+  "whole_primary_complete": false,
+  "artifact_count": 30,
+  "artifacts": [
+    {
+      "file": "CONSTRUCTION_SCOPE_AND_WITNESS.md",
+      "bytes": 4120,
+      "sha256": "c9c47c5dea4a61cd2c7c41f7b9124674f8b5dcb63fa44d6f9f5adb332cb6b512"
+    },
+    {
+      "file": "COUPLED_LEGACY_CONSUMER_REVERSES.json",
+      "bytes": 10373,
+      "sha256": "c4b5d644df591242584526ffc14ea26f4afbc7a0bd5186abd075698495b66118"
+    },
+    {
+      "file": "CURRENT_SELECTOR_EXTRACTION_PROOF.json",
+      "bytes": 8718,
+      "sha256": "a61db22814a0865cd2dea28f5c7d1b849840e945e50b7e6d1b7f0ae2a712165b"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 4397,
+      "sha256": "d2412c937f16f887ff7dcef2b1b098f7140c0eb23372129799061209b0b15cd6"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 793,
+      "sha256": "175b48b6245637d63802146f0d983e1b537ae281db457c11ecfbbfdbf6d50f51"
+    },
+    {
+      "file": "before/01_complete_fin4_prior_selector.sqlinc",
+      "bytes": 122604,
+      "sha256": "3e9693b1c001c0af06dc7915705ebea9cf2eb16991f16aca2d1986e5b085aa26"
+    },
+    {
+      "file": "before/04_complete_payment_facts.sqlinc",
+      "bytes": 12479,
+      "sha256": "19619923daac1059be9d4ac719cbcf42b5721a08d4b39e82a79e187a537cc2d5"
+    },
+    {
+      "file": "before/05_complete_overlap_inputs.sqlinc",
+      "bytes": 7753,
+      "sha256": "cac377125532997d5e050cb3ff0bb98a202546f363b9145c135296baf53d53a3"
+    },
+    {
+      "file": "before/06_complete_choice_admit.sqlinc",
+      "bytes": 10488,
+      "sha256": "7ffc41d4965ddba8b4184d5b4b80844e6fc71f05ec4ab3cfc758bea9ff4c41dd"
+    },
+    {
+      "file": "before/07_complete_choice_current.sqlinc",
+      "bytes": 11850,
+      "sha256": "fb6b93bf0dcd7b5c7a5611778e5815e67d884b0556b9656874bfa4f365cacc7b"
+    },
+    {
+      "file": "before/08_complete_office_question.sqlinc",
+      "bytes": 6681,
+      "sha256": "4e8320e0179565d406455226a4bea70b852c9418a2492d50fae6d05d7d4aa3ba"
+    },
+    {
+      "file": "before/09_complete_retained_transition_assert.sqlinc",
+      "bytes": 11373,
+      "sha256": "704ca55c8009a28b008be3a6ce87de5cd39f39b2fe24bbb6a712a28da65623d2"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 13799,
+      "sha256": "c6c5f023fbe7babced1a619cf9f0c6b2317cc1820c56dd37187e27dc62539b8c"
+    },
+    {
+      "file": "forward/00_roster_prior_states.sqlinc",
+      "bytes": 2277,
+      "sha256": "be7b89291c84f7332af666b93fb5c45d4909c4f778d29379d59e7cf5d1058ca9"
+    },
+    {
+      "file": "forward/01_complete_fin4_prior_selector.sqlinc",
+      "bytes": 120060,
+      "sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025"
+    },
+    {
+      "file": "forward/02_legacy_signed_source_membership.sqlinc",
+      "bytes": 13825,
+      "sha256": "60fe932ecc18a0d5ac0acfb0e56a2c09e2888ee9a5d59bab412f35667164a3df"
+    },
+    {
+      "file": "forward/03_current_snapshot_for_cycle.sqlinc",
+      "bytes": 6537,
+      "sha256": "77e8480af0105129ed717abc821faeb0c54113c820ae3a1a2a9e2d8a3b892ce9"
+    },
+    {
+      "file": "forward/04_complete_payment_facts.sqlinc",
+      "bytes": 14686,
+      "sha256": "1773bd2b9da8eb9ece206ac1228c92e4a106b1f645252dd59193339a2604f33f"
+    },
+    {
+      "file": "forward/05_complete_overlap_inputs.sqlinc",
+      "bytes": 7774,
+      "sha256": "ce5d7f6de4bd9e6db021ca9d74c3291ad087c9454450623e680a760ea53f17b1"
+    },
+    {
+      "file": "forward/06_complete_choice_admit.sqlinc",
+      "bytes": 10567,
+      "sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3"
+    },
+    {
+      "file": "forward/07_complete_choice_current.sqlinc",
+      "bytes": 11946,
+      "sha256": "6c1d9cc6990666228a61f993f58c46267d5bc045da30653ba61fc2160b90fc52"
+    },
+    {
+      "file": "forward/08_complete_office_question.sqlinc",
+      "bytes": 6776,
+      "sha256": "ea7024cd4ba2cd52c01dd41a567d7b5dbad1fd0b14e407e3fbd8b6124d28f232"
+    },
+    {
+      "file": "forward/09_complete_retained_transition_assert.sqlinc",
+      "bytes": 11466,
+      "sha256": "376a27e2fa0a1648557699f7b9fd5bd422f4fe113f06bf93f8541706e9986e5f"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 6328,
+      "sha256": "1ea6e2f8e47b759f7d4a57acc27c867a80fafdafc0ca746b1cb0dc696a634b9a"
+    },
+    {
+      "file": "input/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "bytes": 1085902,
+      "sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67"
+    },
+    {
+      "file": "input/04092026_1440_banking_pay_draft_snapshot_pagination_v8.sql",
+      "bytes": 24004,
+      "sha256": "c94a1449445c0f29dbea3c888b249a2aa4695e6420a646a0f23ac1aea4676c6a"
+    },
+    {
+      "file": "input/17092026_0400_weekly_source_freeze_census_v1.sql",
+      "bytes": 80909,
+      "sha256": "5e96a3735e364abb41f712f8ab162daa364893d6c3480b84075d9d63dd4d379f"
+    },
+    {
+      "file": "input/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "bytes": 70504,
+      "sha256": "e1a210e31046137b4f08c540cd1025674e0f3eaa57bf6a00978d8f0d0f31f447"
+    },
+    {
+      "file": "input/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "bytes": 128486,
+      "sha256": "fa841f3280c5548edba90ef9ceeb5ba186716d1e31bce91f9e734232d53b7c29"
+    },
+    {
+      "file": "legacy-construction-source.test.mjs",
+      "bytes": 10160,
+      "sha256": "4cb18f465d676aeb9a2b625bbf6d2a9de7584b904242d45b5d5f090dca8ad830"
+    }
+  ]
+}

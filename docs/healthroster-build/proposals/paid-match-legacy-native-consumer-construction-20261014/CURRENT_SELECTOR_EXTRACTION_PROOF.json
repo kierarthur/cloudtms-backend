@@ -1,0 +1,80 @@
+{
+  "source_only": true,
+  "unfinished": true,
+  "containing_checkpoint": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+  "source": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/07_complete_fin4_expense.sqlinc",
+  "before_bytes": 122604,
+  "before_sha256": "3e9693b1c001c0af06dc7915705ebea9cf2eb16991f16aca2d1986e5b085aa26",
+  "after_bytes": 120060,
+  "after_sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025",
+  "helper_sha256": "be7b89291c84f7332af666b93fb5c45d4909c4f778d29379d59e7cf5d1058ca9",
+  "signature": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+  "exact_original_query": "      with prior_states as (\n        select distinct on (prior_transition.work_event_id)\n               prior_transition.work_event_id,\n               coalesce(prior_transition.new_snapshot_line_id,\n                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)\n                 as new_snapshot_line_id\n        from public.weekly_source_state_transitions prior_transition\n        join public.weekly_source_final_revisions prior_revision\n          on prior_revision.id=prior_transition.final_revision_id\n         and prior_revision.state='CURRENT'\n        join public.weekly_source_cycles prior_cycle\n          on prior_cycle.id=prior_transition.finalisation_cycle_id\n        join public.weekly_source_client_manifests prior_manifest\n          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id\n         and prior_manifest.client_id=v_client_id\n        where prior_transition.source_profile_kind=v_source_profile_kind\n          and prior_cycle.source_group_id=v_group.id\n          and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending\n        order by prior_transition.work_event_id,\n                 prior_cycle.finalisation_week_ending desc,\n                 prior_revision.finalised_at_utc desc,\n                 prior_revision.revision_number desc,\n                 prior_transition.created_at_utc desc,\n                 prior_transition.id desc\n",
+  "original_identical_query_occurrences": 2,
+  "parameter_substitutions": [
+    "v_client_id=p_client_id",
+    "v_source_profile_kind=p_source_profile_kind",
+    "v_group.id=p_source_group_id",
+    "v_cycle.finalisation_week_ending=p_before_week_ending"
+  ],
+  "extra_returned_immutable_identity_fields_only": [
+    "transition_id",
+    "final_revision_id"
+  ],
+  "hunks": [
+    {
+      "name": "same extracted prior-state owner for actual v_missing_row loop",
+      "before": "    for v_missing_row in\n      with prior_states as (\n        select distinct on (prior_transition.work_event_id)\n               prior_transition.work_event_id,\n               coalesce(prior_transition.new_snapshot_line_id,\n                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)\n                 as new_snapshot_line_id\n        from public.weekly_source_state_transitions prior_transition\n        join public.weekly_source_final_revisions prior_revision\n          on prior_revision.id=prior_transition.final_revision_id\n         and prior_revision.state='CURRENT'\n        join public.weekly_source_cycles prior_cycle\n          on prior_cycle.id=prior_transition.finalisation_cycle_id\n        join public.weekly_source_client_manifests prior_manifest\n          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id\n         and prior_manifest.client_id=v_client_id\n        where prior_transition.source_profile_kind=v_source_profile_kind\n          and prior_cycle.source_group_id=v_group.id\n          and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending\n        order by prior_transition.work_event_id,\n                 prior_cycle.finalisation_week_ending desc,\n                 prior_revision.finalised_at_utc desc,\n                 prior_revision.revision_number desc,\n                 prior_transition.created_at_utc desc,\n                 prior_transition.id desc\n",
+      "after": "    for v_missing_row in\n      with prior_states as (\n        select prior.work_event_id,prior.snapshot_line_id as new_snapshot_line_id\n        from private.weekly_source_roster_prior_states_v1(\n          v_group.id,v_client_id,v_source_profile_kind,v_cycle.finalisation_week_ending) prior"
+    },
+    {
+      "name": "same extracted prior-state owner for actual v_transition loop",
+      "before": "    for v_transition in\n      with prior_states as (\n        select distinct on (prior_transition.work_event_id)\n               prior_transition.work_event_id,\n               coalesce(prior_transition.new_snapshot_line_id,\n                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)\n                 as new_snapshot_line_id\n        from public.weekly_source_state_transitions prior_transition\n        join public.weekly_source_final_revisions prior_revision\n          on prior_revision.id=prior_transition.final_revision_id\n         and prior_revision.state='CURRENT'\n        join public.weekly_source_cycles prior_cycle\n          on prior_cycle.id=prior_transition.finalisation_cycle_id\n        join public.weekly_source_client_manifests prior_manifest\n          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id\n         and prior_manifest.client_id=v_client_id\n        where prior_transition.source_profile_kind=v_source_profile_kind\n          and prior_cycle.source_group_id=v_group.id\n          and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending\n        order by prior_transition.work_event_id,\n                 prior_cycle.finalisation_week_ending desc,\n                 prior_revision.finalised_at_utc desc,\n                 prior_revision.revision_number desc,\n                 prior_transition.created_at_utc desc,\n                 prior_transition.id desc\n",
+      "after": "    for v_transition in\n      with prior_states as (\n        select prior.work_event_id,prior.snapshot_line_id as new_snapshot_line_id\n        from private.weekly_source_roster_prior_states_v1(\n          v_group.id,v_client_id,v_source_profile_kind,v_cycle.finalisation_week_ending) prior"
+    }
+  ],
+  "whole_reverse_verified": true,
+  "native_input_pins": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/17092026_0400_weekly_source_freeze_census_v1.sql",
+      "saved": "input/17092026_0400_weekly_source_freeze_census_v1.sql",
+      "bytes": 80909,
+      "sha256": "5e96a3735e364abb41f712f8ab162daa364893d6c3480b84075d9d63dd4d379f"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "saved": "input/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "bytes": 70504,
+      "sha256": "e1a210e31046137b4f08c540cd1025674e0f3eaa57bf6a00978d8f0d0f31f447"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04092026_1440_banking_pay_draft_snapshot_pagination_v8.sql",
+      "saved": "input/04092026_1440_banking_pay_draft_snapshot_pagination_v8.sql",
+      "bytes": 24004,
+      "sha256": "c94a1449445c0f29dbea3c888b249a2aa4695e6420a646a0f23ac1aea4676c6a"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "saved": "input/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "bytes": 128486,
+      "sha256": "fa841f3280c5548edba90ef9ceeb5ba186716d1e31bce91f9e734232d53b7c29"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "saved": "input/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "bytes": 1085902,
+      "sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67"
+    }
+  ],
+  "native_economic_prior_cutoff_order_and_excluded_CANCEL_unchanged": true,
+  "Legacy_paid_certificate_complete": false,
+  "Legacy_Same_Separate_admission_complete": false,
+  "SQL_compiled": false,
+  "canonical_mounted": false,
+  "native_proof": false
+}

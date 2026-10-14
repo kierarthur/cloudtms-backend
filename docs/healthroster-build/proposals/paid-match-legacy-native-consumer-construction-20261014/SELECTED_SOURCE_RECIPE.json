@@ -1,0 +1,85 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_prior_checkpoint": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+  "canonical_native_input_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "dependencies": [
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "manifest_sha256": "17fb14d164309dbc3c17895be10ae105ea6663e083d9a495112a50a92e6f0fd5",
+      "artifact_count": 15
+    },
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+      "artifact_count": 58
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "artifact_count": 26
+    },
+    {
+      "packet": "paid-match-prepared-pay-consumer-construction-20261014",
+      "manifest_sha256": "d26c0a2b3139e0eb471068ce938809e4acce169bd58afd79b414018cc42a80e4",
+      "artifact_count": 17
+    },
+    {
+      "packet": "paid-match-office-confirm-consumer-construction-20261014",
+      "manifest_sha256": "3d0560bef03c6f8ef0b01024a45581d7d163b32bccc121401e4f0cfc8052e69d",
+      "artifact_count": 28
+    },
+    {
+      "packet": "paid-match-retained-current-capture-construction-20261014",
+      "manifest_sha256": "59e80944ceb41c73b037a1fe0b6fbe1e43aafbeb6aa57345ea8c6c00fa521af7",
+      "artifact_count": 21
+    },
+    {
+      "packet": "paid-match-prepared-empty-census-successor-20261014",
+      "manifest_sha256": "21d298531038df238de4fd6fadd534459052c1d07598454f50c0475dc40056a5",
+      "artifact_count": 16
+    }
+  ],
+  "selected_source_order": [
+    "forward/00_roster_prior_states.sqlinc",
+    "forward/02_legacy_signed_source_membership.sqlinc",
+    "forward/03_current_snapshot_for_cycle.sqlinc",
+    "forward/01_complete_fin4_prior_selector.sqlinc",
+    "forward/04_complete_payment_facts.sqlinc",
+    "forward/05_complete_overlap_inputs.sqlinc",
+    "forward/06_complete_choice_admit.sqlinc",
+    "forward/07_complete_choice_current.sqlinc",
+    "forward/08_complete_office_question.sqlinc",
+    "forward/09_complete_retained_transition_assert.sqlinc"
+  ],
+  "replaced_complete_leaves": [
+    "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/07_complete_fin4_expense.sqlinc",
+    "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/01_work_event_payment_facts.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/02_complete_overlap_inputs.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/03_complete_choice_admit.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/04_complete_choice_current.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/05_complete_office_question.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/01_retained_paid_transition_assert.sqlinc"
+  ],
+  "new_owner_private_signatures": [
+    "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+    "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)"
+  ],
+  "owner_private_ACL": "logical postgres; PUBLIC/anon/authenticated/service_role revoked",
+  "new_public_signatures": [],
+  "new_store_column_calculator": 0,
+  "existing_one_payment_fact_owner_retained": true,
+  "native_settlement_freeze_economic_and_current_financial_kernels_call_only": true,
+  "finite_Legacy_source_day_code_implemented": true,
+  "all_Legacy_grains_complete": false,
+  "CorrectFinal_NHSP_protected_admission_complete": false,
+  "shared_Banking_owner_changed_in_this_packet": false,
+  "original_shared_capture_composition_still_required": true,
+  "original_Source39_recorder9_13_three_receipt_exceptions_PolicyX_retained": true,
+  "root_Report32_Money28_SESSION_NativeR254_union_required": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

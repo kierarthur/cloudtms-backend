@@ -1,0 +1,36 @@
+-- One extraction of the existing FIN4 prior-state selection. No new money rule.
+create or replace function private.weekly_source_roster_prior_states_v1(
+  p_source_group_id uuid,p_client_id uuid,p_source_profile_kind text,p_before_week_ending date
+) returns table(work_event_id uuid,snapshot_line_id uuid,transition_id uuid,final_revision_id uuid)
+language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+        select distinct on (prior_transition.work_event_id)
+               prior_transition.work_event_id,
+               coalesce(prior_transition.new_snapshot_line_id,
+                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)
+                 as snapshot_line_id,
+               prior_transition.id as transition_id,prior_transition.final_revision_id
+        from public.weekly_source_state_transitions prior_transition
+        join public.weekly_source_final_revisions prior_revision
+          on prior_revision.id=prior_transition.final_revision_id
+         and prior_revision.state='CURRENT'
+        join public.weekly_source_cycles prior_cycle
+          on prior_cycle.id=prior_transition.finalisation_cycle_id
+        join public.weekly_source_client_manifests prior_manifest
+          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id
+         and prior_manifest.client_id=p_client_id
+        where prior_transition.source_profile_kind=p_source_profile_kind
+          and prior_cycle.source_group_id=p_source_group_id
+          and prior_cycle.finalisation_week_ending<p_before_week_ending
+        order by prior_transition.work_event_id,
+                 prior_cycle.finalisation_week_ending desc,
+                 prior_revision.finalised_at_utc desc,
+                 prior_revision.revision_number desc,
+                 prior_transition.created_at_utc desc,
+                 prior_transition.id desc
+
+;
+$function$;
+alter function private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date) owner to postgres;
+revoke all on function private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date) from public,anon,authenticated,service_role;

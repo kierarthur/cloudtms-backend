@@ -1,0 +1,119 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "prior_own_checkpoint": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+  "dependencies": [
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "manifest_sha256": "17fb14d164309dbc3c17895be10ae105ea6663e083d9a495112a50a92e6f0fd5",
+      "artifacts": 15,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+      "artifacts": 58,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "artifacts": 26,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-match-prepared-pay-consumer-construction-20261014",
+      "manifest_sha256": "d26c0a2b3139e0eb471068ce938809e4acce169bd58afd79b414018cc42a80e4",
+      "artifacts": 17,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-match-office-confirm-consumer-construction-20261014",
+      "manifest_sha256": "3d0560bef03c6f8ef0b01024a45581d7d163b32bccc121401e4f0cfc8052e69d",
+      "artifacts": 28,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-match-retained-current-capture-construction-20261014",
+      "manifest_sha256": "59e80944ceb41c73b037a1fe0b6fbe1e43aafbeb6aa57345ea8c6c00fa521af7",
+      "artifacts": 21,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-match-prepared-empty-census-successor-20261014",
+      "manifest_sha256": "21d298531038df238de4fd6fadd534459052c1d07598454f50c0475dc40056a5",
+      "artifacts": 16,
+      "independent_review": "SEE_PARENT_BOUNDED_SOURCE_REPORT",
+      "published": true
+    },
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97",
+      "artifacts": 30,
+      "independent_review": "PENDING",
+      "published": false
+    }
+  ],
+  "selected_SQL_order": [
+    "forward/00_correction_choice_scope.sqlinc",
+    "forward/01_complete_overlap_inputs.sqlinc",
+    "forward/02_complete_upload_context.sqlinc",
+    "forward/03_complete_paid_match_question.sqlinc",
+    "forward/04_complete_office_recheck.sqlinc",
+    "forward/05_complete_correct_final_office_preview.sqlinc",
+    "forward/06_existing_preview_acl.sqlinc"
+  ],
+  "selected_runtime": [
+    {
+      "source": "forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "destination": "broker/src/weekly-source/correct-final-source-orchestrator.mjs"
+    },
+    {
+      "source": "forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "destination": "broker/src/weekly-source/upload-publication-owner.mjs"
+    },
+    {
+      "source": "forward/frontend/js/weekly-source/workspace-actions.js",
+      "destination": "js/weekly-source/workspace-actions.js"
+    }
+  ],
+  "before_after_reverse_proofs": [
+    "COMPLETE_CURRENT_REVERSES.json",
+    "COMPLETE_OFFICE_REVERSE.json"
+  ],
+  "new_owner_private_signatures": [
+    "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)"
+  ],
+  "existing_public_signatures": [
+    "public.weekly_source_upload_context_v1(jsonb)",
+    "public.weekly_source_office_recheck_begin_v1(jsonb)"
+  ],
+  "new_public_signatures": [],
+  "owner_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked",
+  "existing_public_acl": "retained service-only; final whole-owner ACL assembly still required",
+  "closed_correction_recheck_additional_keys": [
+    "correction_session_id",
+    "expected_correction_session_version",
+    "expected_comparison_manifest_hash",
+    "expected_issue_set_hash"
+  ],
+  "new_store_column_calculator": 0,
+  "existing_question_keys": 13,
+  "unchanged_native_correct_final_financial_guards": true,
+  "unchanged_native_rebuild_publisher_review_owners": true,
+  "root_Report32_Money28_NativeR254_SESSION_U3_Undo_whole_join_required": true,
+  "full_current_literal_private_service_table_verifier_union": false,
+  "all_CorrectFinal_paid_paths_qualified": false,
+  "all_Legacy_grains_complete": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

@@ -1,0 +1,34 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 19,
+  "pass": 19,
+  "fail": 0,
+  "syntax_pass": 12,
+  "complete_owner_reversals": 8,
+  "unique_hunks": 44,
+  "raw_native_pins": 4,
+  "extra_native_whole_definition_input_pins": 1,
+  "preserved_dependency_artifacts": 211,
+  "new_private_signatures": 1,
+  "new_public_signatures": 0,
+  "new_store_column_calculator": 0,
+  "credential_findings": 0,
+  "whitespace_disposition": "EXACT INPUT/DECLARED SOURCE EXCEPTIONS RETAINED; NO BLANKET PASS",
+  "whitespace_exceptions": [
+    {
+      "file": "before/04_complete_office_recheck.sqlinc",
+      "kind": "PRESERVED EOF BLANK LINES"
+    },
+    {
+      "file": "forward/04_complete_office_recheck.sqlinc",
+      "kind": "PRESERVED EOF BLANK LINES"
+    }
+  ],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

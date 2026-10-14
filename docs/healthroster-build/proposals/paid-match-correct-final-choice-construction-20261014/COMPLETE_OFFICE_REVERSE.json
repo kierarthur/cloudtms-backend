@@ -1,0 +1,75 @@
+{
+  "source_only": true,
+  "source": "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014/forward/frontend/js/weekly-source/workspace-actions.js",
+  "containing_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+  "file": "frontend/js/weekly-source/workspace-actions.js",
+  "before_bytes": 118582,
+  "before_sha256": "576dc06e0e88839f1c44c5e5e0c90d52567abe58e1b5eca3730b612b5fcc2948",
+  "after_bytes": 123746,
+  "after_sha256": "ae42130835822526809af80f0a471940af75dc24a9a9009ecbdc306a6be0e158",
+  "hunks": [
+    {
+      "name": "retain actual native monetary preview fields",
+      "before": "        result: plainMessage(row.result, 'Changed')",
+      "after": "        result: plainMessage(row.result, 'Changed'),\n        current_final_amount: plainMessage(row.current_final_amount, '—'),\n        replacement_amount: plainMessage(row.replacement_amount, '—'),\n        amount_changed: row.amount_changed === true"
+    },
+    {
+      "name": "actual native questions retained in correction model",
+      "before": "      changes,\n      blockers,\n      confirmation_text:",
+      "after": "      changes,\n      blockers,\n      paid_match_questions: asArray(raw.paid_match_questions),\n      confirmation_text:"
+    },
+    {
+      "name": "show native current and replacement amount labels without calculation",
+      "before": "<td>${escapeHtml(row.current_final)}</td><td>${escapeHtml(row.replacement)}</td>",
+      "after": "<td>${escapeHtml(row.current_final)}<br>${escapeHtml(row.current_final_amount)}</td><td>${escapeHtml(row.replacement)}<br>${escapeHtml(row.replacement_amount)}</td>"
+    },
+    {
+      "name": "existing blocked tab exposes genuine paid questions",
+      "before": "      return `<div class=\"ws-child-scroll\"><table class=\"grid mini ws-child-table\"><thead><tr><th>Candidate</th><th>Day/date</th><th>Problem</th><th>Action</th></tr></thead><tbody>${rows || '<tr><td colspan=\"4\" class=\"ws-empty\">Nothing is blocking this correction.</td></tr>'}</tbody></table></div>`;",
+      "after": "      const paid = asArray(model.paid_match_questions).map((item,index) => `<p>${escapeHtml(item.candidate)} · ${escapeHtml(item.shift)} <button type=\"button\" class=\"btn btn-outline\" data-wsa-correction-paid-match=\"${index}\">Compare paid shift</button></p>`).join('');\n      return `<div class=\"ws-child-scroll\"><table class=\"grid mini ws-child-table\"><thead><tr><th>Candidate</th><th>Day/date</th><th>Problem</th><th>Action</th></tr></thead><tbody>${rows || '<tr><td colspan=\"4\" class=\"ws-empty\">Nothing is blocking this correction.</td></tr>'}</tbody></table>${paid}</div>`;"
+    },
+    {
+      "name": "correction paid caller retained by exact session and role state",
+      "before": "    const kind = 'weekly-source-correct-final-v1';\n    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;\n    let initiatingFrame = null;\n    const callerCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();",
+      "after": "    const kind = 'weekly-source-correct-final-v1';\n    const initiatingSession = typeof SESSION !== 'undefined' ? SESSION : null;\n    const initiatingUser = initiatingSession?.user;\n    const initiatingActor = initiatingUser?.id;\n    const roles = () => JSON.stringify({role:initiatingUser?.role,roles:initiatingUser?.roles,active:initiatingUser?.active,\n      payment_authoriser:initiatingUser?.payment_authoriser,payment_golden_key:initiatingUser?.payment_golden_key});\n    const initialRoles = roles();\n    const initiatingAuthority = workspaceApi();\n    let initiatingFrame = null;\n    const callerCurrent = () => (typeof SESSION !== 'undefined' ? SESSION : null) === initiatingSession\n      && initiatingSession?.user === initiatingUser && roles() === initialRoles && workspaceApi() === initiatingAuthority\n      && protectedCaller(kind, initiatingActor, initiatingFrame)();"
+    },
+    {
+      "name": "actual reviewed correction child uses same existing paid dialog",
+      "before": "      host.querySelector('[data-wsa-review-correction]')?.addEventListener('click', review);",
+      "after": "      host.querySelector('[data-wsa-review-correction]')?.addEventListener('click', review);\n      host.querySelectorAll('[data-wsa-correction-paid-match]').forEach(button => button.addEventListener('click', () => {\n        if (!callerCurrent() || state.busy || state.pendingReview || state.pendingApply) return;\n        const index = Number(button.dataset.wsaCorrectionPaidMatch), item = state.preview?.paid_match_questions?.[index];\n        if (!Number.isSafeInteger(index) || index<0 || !item) return;\n        const context = state.preview.review_context, q = item.paid_match_question;\n        const payload = { ...item, upload_row_id:q.upload_row_id,contract_id:q.contract_id,\n          recheck_payload:{request_id:root.crypto.randomUUID(),upload_id:q.upload_id,upload_row_id:q.upload_row_id,\n            projection_publication_id:q.projection_publication_id,\n            expected_authority_scope_version:q.expected_authority_scope_version,expected_row_manifest_hash:q.expected_row_manifest_hash,\n            correction_session_id:context.correction_session_id,expected_correction_session_version:context.expected_session_version,\n            expected_comparison_manifest_hash:context.expected_comparison_manifest_hash,expected_issue_set_hash:context.expected_issue_set_hash}};\n        openPaidMatch(payload, result => {\n          if (!callerCurrent()) return;\n          const reviewed=result?.correction_review;\n          if (reviewed?.correction_session_id!==context.correction_session_id\n            || reviewed?.review_context?.replacement_upload_id!==q.upload_id\n            || reviewed?.review_context?.replacement_projection_publication_id!==result.publication_id) return;\n          state.preview=normaliseCorrectFinalPreview(reviewed);state.phase='reviewed';\n          state.active_tab=state.preview.blockers.length?'blocked':'changes';\n          state.pendingReview=null;state.pendingApply=null;state.confirmed=false;state.reason='';state.error='';\n          rerender(kind);\n        });\n      }));"
+    },
+    {
+      "name": "closed correction payload extends the six existing request keys only",
+      "before": "    const requestKeys = ['request_id','upload_id','upload_row_id','projection_publication_id',\n      'expected_authority_scope_version','expected_row_manifest_hash'];",
+      "after": "    const ordinaryRequestKeys = ['request_id','upload_id','upload_row_id','projection_publication_id',\n      'expected_authority_scope_version','expected_row_manifest_hash'];\n    const correction = Object.hasOwn(asObject(payload.recheck_payload),'correction_session_id');\n    const requestKeys = correction ? [...ordinaryRequestKeys,'correction_session_id','expected_correction_session_version',\n      'expected_comparison_manifest_hash','expected_issue_set_hash'] : ordinaryRequestKeys;"
+    },
+    {
+      "name": "correction request binds actual review context fields and all base question identities",
+      "before": "      || !requestKeys.slice(1).every(key => request[key] === question[key])\n      || payload.upload_row_id !== question.upload_row_id || payload.contract_id !== question.contract_id) invalid();",
+      "after": "      || !ordinaryRequestKeys.slice(1).every(key => request[key] === question[key])\n      || (correction && (!uuid(request.correction_session_id) || !Number.isSafeInteger(request.expected_correction_session_version)\n        || request.expected_correction_session_version<1 || !hash(request.expected_comparison_manifest_hash) || !hash(request.expected_issue_set_hash)))\n      || payload.upload_row_id !== question.upload_row_id || payload.contract_id !== question.contract_id) invalid();"
+    },
+    {
+      "name": "same dialog constructor accepts a finite correction completion consumer",
+      "before": "  function openPaidMatch(payloadValue) {",
+      "after": "  function openPaidMatch(payloadValue, onCorrectionConfirmed = null) {"
+    },
+    {
+      "name": "paid dialog keeps actual session/user and role state before and after awaits",
+      "before": "    const kind = 'weekly-source-paid-match-v1';\n    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;\n    let initiatingFrame = null;\n    const authority = workspaceApi();\n    const callerCurrent = () => workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();",
+      "after": "    const kind = 'weekly-source-paid-match-v1';\n    const initiatingSession = typeof SESSION !== 'undefined' ? SESSION : null;\n    const initiatingUser = initiatingSession?.user, initiatingActor = initiatingUser?.id;\n    const roles = () => JSON.stringify({role:initiatingUser?.role,roles:initiatingUser?.roles,active:initiatingUser?.active,\n      payment_authoriser:initiatingUser?.payment_authoriser,payment_golden_key:initiatingUser?.payment_golden_key});\n    const initialRoles = roles();\n    let initiatingFrame = null;\n    const authority = workspaceApi();\n    const callerCurrent = () => (typeof SESSION !== 'undefined' ? SESSION : null) === initiatingSession\n      && initiatingSession?.user === initiatingUser && roles() === initialRoles\n      && workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();"
+    },
+    {
+      "name": "genuine CORRECTION_READY receipt is not relabelled CURRENT",
+      "before": "          if (result?.ok !== true || result?.status !== 'CURRENT'\n            || result?.upload_id !== state.pending.upload_id",
+      "after": "          const correction = Object.hasOwn(state.pending,'correction_session_id');\n          if (result?.ok !== true || result?.status !== (correction ? 'CORRECTION_READY' : 'CURRENT')\n            || result?.upload_id !== state.pending.upload_id"
+    },
+    {
+      "name": "actual native review restores original parent child without an extra rebuild",
+      "before": "            || result.publication_id === state.pending.projection_publication_id) throw new Error('The saved comparison is not yet confirmed. Retry exact request.');\n          await finishAction(undefined, callerCurrent);",
+      "after": "            || result.publication_id === state.pending.projection_publication_id) throw new Error('The saved comparison is not yet confirmed. Retry exact request.');\n          if (correction) {\n            const reviewed=result.correction_review;\n            if (typeof onCorrectionConfirmed!=='function' || reviewed?.ok!==true\n              || !['BLOCKED','READY_FOR_CONFIRMATION'].includes(reviewed.status)\n              || reviewed.correction_session_id!==state.pending.correction_session_id\n              || reviewed.review_context?.replacement_projection_publication_id!==result.publication_id\n              || reviewed.review_context?.replacement_upload_id!==state.pending.upload_id)\n              throw new Error('The saved correction review is not yet confirmed. Retry exact request.');\n            markCompletedChildClean();closeChild();onCorrectionConfirmed(result);\n          } else await finishAction(undefined, callerCurrent);"
+    }
+  ],
+  "whole_reverse_verified": true,
+  "current_root_Report32_Money28_NativeR254_SESSION_union_must_be_preserved": true,
+  "native_proof": false
+}

@@ -1,0 +1,79 @@
+-- Presentation of the existing native overlap census only. This read cannot
+-- select a pay effect or authorise a payment/financial write.
+create or replace function private.weekly_source_paid_match_question_v1(
+  p_projection_publication_id uuid,p_upload_row_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;v_cycle public.weekly_source_cycles%rowtype;
+  v_row public.weekly_source_upload_rows%rowtype;v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_inputs jsonb;v_item jsonb;v_protected jsonb;v_choices jsonb:='[]'::jsonb;v_result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_projection_publication_id is null or p_upload_row_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_QUESTION_INVALID' using errcode='22023';end if;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_projection_publication_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
+  select * into strict v_row from public.weekly_source_upload_rows where id=p_upload_row_id and upload_id=v_upload.id;
+  select * into v_resolution from public.weekly_source_row_resolutions
+    where upload_row_id=v_row.id and generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)
+    order by id desc limit 1;
+  if not found or v_resolution.blocker_code is distinct from 'PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then return null;end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_QUESTION_V1',
+    'state','UNAVAILABLE','reason_code','WEEKLY_SOURCE_PAID_OVERLAP_SCOPE_UNAVAILABLE',
+    'upload_row_id',v_row.id,'upload_id',v_upload.id,'projection_publication_id',v_publication.id,
+    'candidate_id',v_resolution.candidate_id,'client_id',v_resolution.client_id,'contract_id',v_resolution.contract_id,
+    'expected_authority_scope_version',v_publication.authority_scope_version,
+    'expected_row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'),
+    'expected_paid_overlap_inputs_sha256',null,'choices','[]'::jsonb);
+  if v_publication.authority_scope_kind<>'CYCLE' or v_publication.report_scope_id is not null
+    or v_upload.report_scope_id is not null or v_upload.purpose<>'ORDINARY'
+    or v_cycle.state<>'OPEN' or v_resolution.candidate_id is null or v_resolution.client_id is null or v_resolution.contract_id is null then
+    return v_result;end if;
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    return v_result||jsonb_build_object('reason_code','WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED');end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',v_cycle.source_group_id,
+    v_resolution.client_id,v_cycle.finalisation_week_ending);
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'APPROVE_PROTECTED_PAY',v_cycle.source_group_id,
+    v_resolution.client_id,v_cycle.finalisation_week_ending);
+  -- Preserve canonical/alias and identical-rekey precedence. The real alias
+  -- owner censuses ALL same-namespace owners before Candidate/Client admission.
+  if private.weekly_source_known_source_key_v1(v_row.id,v_resolution.candidate_id,v_resolution.client_id) is not null
+    or private.weekly_source_identical_rekey_prior_v1(v_row.id) is not null then
+    return v_result||jsonb_build_object('reason_code','WEEKLY_SOURCE_PAID_OVERLAP_AUTOMATIC_REKEY');end if;
+  if not exists(select 1 from public.contracts contract where contract.id=v_resolution.contract_id
+    and contract.candidate_id=v_resolution.candidate_id and contract.client_id=v_resolution.client_id
+    and v_row.work_date between contract.start_date and coalesce(contract.end_date,'infinity'::date)) then
+    return v_result||jsonb_build_object('reason_code','WEEKLY_SOURCE_PAID_OVERLAP_CONTRACT_NOT_ELIGIBLE');end if;
+  v_inputs:=private.weekly_source_paid_overlap_candidates_v1(v_row.id,p_actor_user_id,v_resolution.candidate_id,v_resolution.client_id);
+  if jsonb_array_length(v_inputs->'overlaps')>100 then
+    return v_result||jsonb_build_object('reason_code','WEEKLY_SOURCE_PAID_MATCH_QUESTION_TOO_LARGE');end if;
+  v_protected:=private.weekly_source_protected_match_candidates_v1(v_row.id,v_resolution.candidate_id,v_resolution.client_id);
+  for v_item in select item from jsonb_array_elements(v_inputs->'overlaps') item order by item->>'work_event_id'
+  loop
+    -- Unknown/Legacy hours evidence is not a paid-write certificate. The
+    -- same existing writer independently rederives this proof under I-1.
+    if v_item#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'
+      or v_item#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from v_item->>'snapshot_line_id'
+      or v_item#>>'{current_pay_snapshot,movement_id}' is distinct from v_item->>'current_pay_head_movement_id'
+      or v_item#>'{native_payment_facts,paid}' is distinct from 'true'::jsonb
+      or (v_item#>>'{native_payment_facts,paid_evidence_state}') is null or (v_item#>>'{native_payment_facts,paid_evidence_state}') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')
+      or exists(select 1 from jsonb_array_elements(v_protected) protected
+        where protected->>'work_event_id'=v_item->>'work_event_id') then continue;end if;
+    v_choices:=v_choices||jsonb_build_array(jsonb_build_object('work_event_id',v_item->>'work_event_id',
+      'work_date',v_item->>'work_date','start',to_char((v_item->>'start_at_local')::timestamp,'HH24:MI'),
+      'end',to_char((v_item->>'end_at_local')::timestamp,'HH24:MI'),'break_minutes',v_item->'break_minutes',
+      'contract_id',v_item->>'contract_id','same_allowed',v_item->>'contract_id'=v_resolution.contract_id::text));
+  end loop;
+  if jsonb_array_length(v_choices)=0 then
+    return v_result||jsonb_build_object('reason_code','WEEKLY_SOURCE_PAID_OVERLAP_PAID_AUTHORITY_UNAVAILABLE');end if;
+  return v_result||jsonb_build_object('state','READY','reason_code',null,
+    'expected_paid_overlap_inputs_sha256',v_inputs->>'inputs_sha256','choices',v_choices);
+end;
+$function$;
+alter function private.weekly_source_paid_match_question_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_paid_match_question_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
