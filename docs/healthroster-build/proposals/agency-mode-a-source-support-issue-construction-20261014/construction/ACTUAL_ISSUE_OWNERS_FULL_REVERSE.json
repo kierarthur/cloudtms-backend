@@ -1,0 +1,50 @@
+{
+  "source_only": true,
+  "native": false,
+  "files": [
+    {
+      "input": "before/02_public_invoice_issue_one.sql.txt",
+      "input_sha256": "c35933482c037f7be42a3bd86d1ccf00d1033da6d0303614dce7fb59408db80c",
+      "output": "16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+      "forward_sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09",
+      "hunks": [
+        {
+          "before": "  -- ======================================================\n  -- DEBUG (optional): single audit row per RPC call",
+          "after": "  v_agency_issue_codes text[]:=array[]::text[];\n\n  -- ======================================================\n  -- DEBUG (optional): single audit row per RPC call"
+        },
+        {
+          "before": "  v_reasons := private.weekly_source_invoice_issue_reasons_v1(\n    v_weekly_source_issue, v_reasons\n  );",
+          "after": "  v_reasons := private.weekly_source_invoice_issue_reasons_v1(\n    v_weekly_source_issue, v_reasons\n  );\n  select coalesce(array_agg(code order by code),array[]::text[]) into v_agency_issue_codes\n  from private._invoice_issue_validate_batch(jsonb_build_array(jsonb_build_object(\n    'request_key',p_invoice_id::text,'invoice_id',p_invoice_id,\n    'expected_revision',(select i.document_revision from public.invoices i where i.id=p_invoice_id),\n    'allow_early',true,'deliver',false)),v_anchor_ymd) native_issue\n  cross join lateral jsonb_array_elements_text(native_issue.hard_blocker_codes) code\n  where code in ('HEALTHROSTER_VALIDATION_REQUIRED','AGENCY_INVOICE_CREDIT_NOTE_NOT_ISSUED','HEALTHROSTER_EVIDENCE_MISSING');\n  v_reasons:=array_cat(v_reasons,v_agency_issue_codes);"
+        },
+        {
+          "before": "    p_actor_user_id\n  );\n\n  status := 'ISSUED';",
+          "after": "    p_actor_user_id\n  );\n\n  -- Only after this owner's actual new ISSUE update and real native audit.\n  perform private.weekly_source_agency_issue_close_v1(p_invoice_id);\n\n  status := 'ISSUED';"
+        }
+      ],
+      "complete_reverse": true
+    },
+    {
+      "input": "before/03_private__invoice_issue_advance_core_v8.sql.txt",
+      "input_sha256": "ec8bc469e80722b414f22e58d6e809c0ebc568c0f29592180fe3a00066beac3a",
+      "output": "17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+      "forward_sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703",
+      "hunks": [
+        {
+          "before": "  v_part jsonb;",
+          "after": "  v_part jsonb;\n  v_agency_issued_ids uuid[];\n  v_agency_invoice_id uuid;"
+        },
+        {
+          "before": "      and c.payload_json->>'snapshot_hash'=v.snapshot_hash\n  ),\n  issued as (",
+          "after": "      and c.payload_json->>'snapshot_hash'=v.snapshot_hash\n      -- Recheck the same three planned codes after actual invoice retention,\n      -- immediately before the true transition; no second send/issue gate.\n      and not exists(select 1 from private._invoice_issue_validate_batch(jsonb_build_array(jsonb_build_object(\n        'request_key',i.id::text,'invoice_id',i.id,'expected_revision',i.document_revision,\n        'allow_early',true,'deliver',false)),v_now::date) native_issue\n        cross join lateral jsonb_array_elements_text(native_issue.hard_blocker_codes) code\n        where code in ('HEALTHROSTER_VALIDATION_REQUIRED','AGENCY_INVOICE_CREDIT_NOTE_NOT_ISSUED','HEALTHROSTER_EVIDENCE_MISSING'))\n  ),\n  issued as ("
+        },
+        {
+          "before": "    'result',result_json,'error',error_json)),'[]')\n    into v_part from outcomes;\n  v_result:=v_result||coalesce(v_part,'[]');\n\n  -- QUEUE_DELIVERY durably delegates",
+          "after": "    'result',result_json,'error',error_json)),'[]'),\n    (select coalesce(array_agg(id order by id),array[]::uuid[]) from issued)\n    into v_part,v_agency_issued_ids from outcomes;\n  v_result:=v_result||coalesce(v_part,'[]');\n  -- Data-modifying CTEs share their statement snapshot. The next command sees\n  -- the genuine issued RETURNING rows and native audits; only those new IDs\n  -- cause retirement. Replayed/already-issued or ineligible chunks do not.\n  foreach v_agency_invoice_id in array v_agency_issued_ids loop\n    perform private.weekly_source_agency_issue_close_v1(v_agency_invoice_id);\n  end loop;\n\n  -- QUEUE_DELIVERY durably delegates"
+        }
+      ],
+      "complete_reverse": true
+    }
+  ],
+  "independent_review_pending": true,
+  "mount_ready": false
+}

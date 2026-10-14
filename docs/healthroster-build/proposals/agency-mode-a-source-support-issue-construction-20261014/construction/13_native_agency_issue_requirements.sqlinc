@@ -1,0 +1,66 @@
+-- Read-only facts for the ONE existing issue/send validator. There is no new
+-- issue endpoint, amount calculation, invoice status writer or caller selector.
+create or replace function private.weekly_source_agency_issue_requirements_v1(p_invoice_id uuid)
+returns text[] language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.invoices%rowtype; target uuid; support jsonb; codes text[]:=array[]::text[];
+  native_message text; validation_required boolean:=false; evidence_missing boolean:=false; credit_unissued boolean:=false;
+  r private.timesheet_correction_requests%rowtype; chain jsonb;
+begin
+  select * into i from public.invoices where id=p_invoice_id;
+  -- Actual ordinary unissued INVOICE only. Historical delivery/paid invoices
+  -- and Credit Notes retain their existing native issue/delivery protocol.
+  if i.id is null or i.type::text<>'INVOICE' or i.status::text not in ('DRAFT','ON_HOLD') or i.issued_at_utc is not null then return codes;end if;
+  for target in select distinct l.timesheet_id from public.invoice_lines l where l.invoice_id=i.id
+    and l.timesheet_id is not null and private.weekly_source_agency_invoice_check_only_v1(l.timesheet_id) is true order by l.timesheet_id loop
+    support:=null;
+    begin
+      support:=private.weekly_source_agency_crosscheck_context_v1(target);
+    exception when sqlstate '55000' or sqlstate '40001' then
+      get stacked diagnostics native_message=message_text;
+      if native_message not like 'AGENCY_INVOICE_%' then raise;end if;
+      -- Genuine unavailable current Source/typed provenance is a validation
+      -- requirement, never a legacy override or readiness inference.
+      validation_required:=true;
+    end;
+    if support is not null then
+      if support->'is_agency_invoice' is distinct from 'true'::jsonb or support->'week_complete' is distinct from 'true'::jsonb
+        or support->>'validation_source_kind' is distinct from 'AGENCY_INVOICE_WEEK'
+        or support->>'validation_status' is distinct from 'VALIDATION_OK' then validation_required:=true;end if;
+      if not exists(select 1 from public.invoice_hr_source_rows hs where hs.invoice_id=i.id and hs.source_system='HEALTHROSTER'
+        and hs.import_id=(support->>'hr_import_id')::uuid and jsonb_typeof(hs.rows_json)='array' and jsonb_array_length(hs.rows_json)>0) then
+        evidence_missing:=true;
+      end if;
+    else
+      evidence_missing:=true;
+    end if;
+    for r in select request.* from private.timesheet_correction_requests request
+      where request.replacement_timesheet_id=target and request.state='APPLIED' order by request.id loop
+      chain:=public.timesheet_correction_chain_scope_v1(target,false,32,100);
+      if chain->'valid' is distinct from 'true'::jsonb or chain#>'{requested_correction_unit,valid}' is distinct from 'true'::jsonb
+        or not(chain#>'{requested_correction_unit,member_ids}' ? r.reversal_timesheet_id::text)
+        or not(chain#>'{requested_correction_unit,member_ids}' ? target::text) then
+        raise exception 'AGENCY_INVOICE_NATIVE_PAIR_UNAVAILABLE' using errcode='55000';end if;
+      -- The real R0 must belong to an actual issued Credit Note. Its existing
+      -- native correction validator certifies complete member/origin/balance
+      -- authority; this reader does not total, create or issue a credit.
+      if not exists(select 1 from public.invoices cn where cn.type::text='CREDIT_NOTE' and cn.status::text in ('ISSUED','PAID')
+        and cn.issued_at_utc is not null and cn.client_id=i.client_id
+        and exists(select 1 from public.invoice_lines l where l.invoice_id=cn.id and l.timesheet_id=r.reversal_timesheet_id)
+        and exists(select 1 from private._invoice_correction_validate_batch(jsonb_build_array(jsonb_build_object(
+          'request_key',cn.id::text,'scope_key',cn.id::text,'invoice_id',cn.id,'validation_purpose','CREDIT_SOURCE',
+          'expected_client_id',cn.client_id,'expected_invoice_stream','NORMAL',
+          'planned_members',coalesce((select jsonb_agg(jsonb_build_object('timesheet_id',l.timesheet_id,'vat_rate_pct',l.vat_rate_pct)
+            order by l.timesheet_id,l.id) from public.invoice_lines l where l.invoice_id=cn.id and l.timesheet_id is not null),'[]'::jsonb))),current_date) native_credit
+          where native_credit.valid and native_credit.timesheet_id=r.reversal_timesheet_id)) then credit_unissued:=true;end if;
+    end loop;
+  end loop;
+  if validation_required then codes:=array_append(codes,'HEALTHROSTER_VALIDATION_REQUIRED');end if;
+  if credit_unissued then codes:=array_append(codes,'AGENCY_INVOICE_CREDIT_NOTE_NOT_ISSUED');end if;
+  if evidence_missing then codes:=array_append(codes,'HEALTHROSTER_EVIDENCE_MISSING');end if;
+  return codes;
+end;
+$function$;
+alter function private.weekly_source_agency_issue_requirements_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_issue_requirements_v1(uuid) from public,anon,authenticated,service_role;

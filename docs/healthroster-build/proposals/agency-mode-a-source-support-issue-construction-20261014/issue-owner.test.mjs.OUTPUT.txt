@@ -1,0 +1,34 @@
+UNIT_ONLY issue source/reversal/predicate models. No native issue/audit/contact or financial effect executed.
+✔ existing validator and both real issue owners reverse to complete pinned current bodies (10.635ms)
+✔ only existing batch issue/send owner produces three added codes (0.1868ms)
+✔ delivery block arrays and issue/deliver eligibility all reflect same hard blocker authority (0.1212ms)
+✔ actual direct callback follows new ISSUE update and native audit, not replay return (0.2444ms)
+✔ async recheck occurs after native invoice retention and before actual UPDATE (0.2114ms)
+✔ async observation consumes issued RETURNING IDs only in a subsequent statement (0.1148ms)
+✔ ordinary/historical/credit invoice scopes keep native existing protocol (0.1022ms)
+✔ issued Credit Note proof uses current native CREDIT_SOURCE purpose, never DRAFT ISSUE append authority (0.0807ms)
+✔ retirement retains DB CANCELLED resolved-null invariant and existing contact owner (0.0949ms)
+✔ exact real worker/client/week/publication and noncarried event gate precede retirement (0.1905ms)
+✔ real manual review, signed/Agency pending request, protection and certified WAIT cannot be retired (0.105ms)
+✔ Source Missing/credit unknown remains open; no universal Agency pending/paid classifier (0.0947ms)
+✔ audit actor/time is actual native issue authority, not fabricated current-XID/PID (0.1443ms)
+✔ genuine uncarried clear Source subject may cancel once and replay has no second retirement (0.101ms)
+✔ retirement reference counterexample scope=false (0.0682ms)
+✔ retirement reference counterexample family=SOURCE_HOURS_DIFFER (0.0354ms)
+✔ retirement reference counterexample carried=true (0.1345ms)
+✔ retirement reference counterexample manual=true (0.112ms)
+✔ retirement reference counterexample p0=true (0.044ms)
+✔ retirement reference counterexample agency=true (0.0291ms)
+✔ retirement reference counterexample protection=true (0.0341ms)
+✔ retirement reference counterexample qualifiedWait=true (0.0357ms)
+✔ retirement reference counterexample sourceDecision=null (0.0325ms)
+✔ retirement reference counterexample sourceDecision=true (0.0277ms)
+✔ issue requirement known-unavailable contexts cannot clear validation or evidence authority (0.0576ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 161.2819

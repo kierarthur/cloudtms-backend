@@ -1,0 +1,81 @@
+{
+  "schema": "AGENCY_CURRENT_ISSUE_SUPPORT_OWNER_INPUTS_V1",
+  "source_only": true,
+  "native": false,
+  "consumed_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "observed_head": "3c5090a7bdd2f64ebcfb0810f86693f10a0295e9",
+  "input_count": 1722,
+  "source_census_ordered_occurrences": 2136,
+  "managed_ordered_occurrences": 2134,
+  "structural_baseline_inputs": [
+    "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+    "supabase/baseline/22082026_1501_cloudtms_test_structural_finishing.sql"
+  ],
+  "saved_git_mismatches": 0,
+  "selected": [
+    {
+      "signature": "private._invoice_issue_validate_batch(jsonb,date)",
+      "path": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+      "ordered_occurrence": 1344,
+      "source_sha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04",
+      "definition_sha256": "0e4c0edb61486c0b094dbea450a0d32ef16e656f0bfb9e59a9f3ec5353275a50",
+      "evidence_path": "before/01_private__invoice_issue_validate_batch.sql.txt"
+    },
+    {
+      "signature": "public.invoice_issue_one(uuid,uuid)",
+      "path": "supabase/repeatable/21072026_1235_59_invoice_issue_one.sql",
+      "ordered_occurrence": 503,
+      "source_sha256": "d821064b1906dda4b3bab856d0c2df7b319b032af269ce37c77d5aa2aa1efff2",
+      "definition_sha256": "c35933482c037f7be42a3bd86d1ccf00d1033da6d0303614dce7fb59408db80c",
+      "evidence_path": "before/02_public_invoice_issue_one.sql.txt"
+    },
+    {
+      "signature": "private._invoice_issue_advance_core_v8(jsonb,timestamptz)",
+      "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+      "ordered_occurrence": 660,
+      "source_sha256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25",
+      "definition_sha256": "ec8bc469e80722b414f22e58d6e809c0ebc568c0f29592180fe3a00066beac3a",
+      "evidence_path": "before/03_private__invoice_issue_advance_core_v8.sql.txt"
+    },
+    {
+      "signature": "private.weekly_source_incident_contact_retire_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+      "ordered_occurrence": 1899,
+      "source_sha256": "be0e4e6c9b1c48f21b59f45ca52843ef1fcff8bea612f9afee652a0789a489e6",
+      "definition_sha256": "e61d0df36ac476e30ff8e5c3aea5051e95f6627b8443dcd91e54391056e043d3",
+      "evidence_path": "before/04_private_weekly_source_incident_contact_retire_v1.sql.txt"
+    },
+    {
+      "signature": "public.weekly_source_mode_a_dispatch_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "ordered_occurrence": 1426,
+      "source_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+      "definition_sha256": "5cd589e5b903ad0dd2b09ecad1be083bff49af090042574c7a83c4289791e4ce",
+      "evidence_path": "before/05_public_weekly_source_mode_a_dispatch_atomic_v1.sql.txt"
+    },
+    {
+      "signature": "public.weekly_source_mode_a_reference_apply_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "ordered_occurrence": 1426,
+      "source_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+      "definition_sha256": "ffe342df0eefe945f9785fe6b8771a3ab8a9266279c6a11d17c6e167e195869e",
+      "evidence_path": "before/06_public_weekly_source_mode_a_reference_apply_atomic_v1.sql.txt"
+    },
+    {
+      "signature": "private.weekly_source_mode_a_operation_key_v1(uuid,uuid)",
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "ordered_occurrence": 1426,
+      "source_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+      "definition_sha256": "ecff9e98d9cf63dd4fcb8821afdcac45f265eb2a547c6be2323e205476cab14e",
+      "evidence_path": "before/07_private_weekly_source_mode_a_operation_key_v1.sql.txt"
+    }
+  ],
+  "canonical_amendment_census": {
+    "path": "docs/healthroster-build/proposals/root-effective-body-amendment-census-20261014/BODY_AMENDMENT_CENSUS.json",
+    "sha256": "cf7a493577f8d9f3a73a47a9095033659303b5446fef46d4bf3d1604262a53ca",
+    "do_reads": 22,
+    "selected_literal_or_catalogue_target_matches": 0,
+    "limits": "Seven selected raw source owners only. The separately inspected catalogue selectors/copy templates target other owners; actual compiled catalogue/config/ACL and all transitive amendment effects remain native gates."
+  },
+  "native_proof": null
+}

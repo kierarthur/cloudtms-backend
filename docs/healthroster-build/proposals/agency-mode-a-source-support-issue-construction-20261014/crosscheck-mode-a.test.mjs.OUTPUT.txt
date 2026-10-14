@@ -1,0 +1,40 @@
+UNIT_ONLY actual Worker function / source-bound native branch vectors; no native SQL, actor or import operation executed.
+✔ actual whole enrichment attaches real bridge support even when unsigned preset flags would clear it (4.9457ms)
+✔ native protection/query validation hold is not fabricated as a clinical hours mismatch (0.7912ms)
+✔ actual native HOURS_MISMATCH is copied separately from typed completeness (0.7577ms)
+✔ actual locked/paid early return preserves stored history without new read {"paid":true} (0.5838ms)
+✔ actual locked/paid early return preserves stored history without new read {"locked":true} (0.9038ms)
+✔ ordinary native false descriptor takes unchanged legacy clear branch (0.6958ms)
+✔ native read failure propagates in the actual enrichment rather than creating support (0.9466ms)
+✔ actual decoder refuses native source_cycle_id array coercion (0.7612ms)
+✔ actual decoder refuses native projection_publication_id array coercion (0.6866ms)
+✔ actual decoder refuses native upload_id array coercion (0.7054ms)
+✔ actual decoder refuses native hr_import_id array coercion (0.598ms)
+✔ actual decoder refuses native facts_sha256 array coercion (0.5345ms)
+✔ actual decoder refuses source-row date array coercion (1.1188ms)
+✔ actual decoder refuses source-row start array coercion (0.7122ms)
+✔ actual decoder refuses source-row end array coercion (0.5884ms)
+✔ actual decoder refuses invented NHSP shift identity and preserves real NULL (0.6403ms)
+✔ actual enrichment refuses foreign Timesheet (0.6989ms)
+✔ actual enrichment refuses stale physical version (0.5837ms)
+✔ actual enrichment refuses legacy marker (0.6056ms)
+✔ actual enrichment refuses override (0.5892ms)
+✔ actual enrichment refuses invented completion (0.6607ms)
+✔ actual enrichment refuses empty support (0.5898ms)
+✔ actual enrichment refuses unknown claim (0.5405ms)
+✔ actual enrichment refuses fabricated crosscheck (0.6304ms)
+✔ actual enrichment refuses invalid clinical scalar (1.0753ms)
+✔ actual enrichment refuses null source identity (0.6463ms)
+✔ complete Worker reverse restores exact accepted13; complete native ModeA reverse restores exact37/71 (76.9564ms)
+✔ actual native ModeA legacy upsert excludes only rederived preset target IDs (0.2736ms)
+✔ preset loop uses genuine native guard-selected rows, existing main week and sole typed writer (0.5397ms)
+✔ genuine bridge admission rechecks publication/pointer/content/coverage/actor and legacy refusal (0.3836ms)
+✔ native Source support reads actual finalised comparison/current generation/bridge row without mutation (0.4996ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 319.7844

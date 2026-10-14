@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "native": false,
+  "input": "before/01_private__invoice_issue_validate_batch.sql.txt",
+  "input_sha256": "0e4c0edb61486c0b094dbea450a0d32ef16e656f0bfb9e59a9f3ec5353275a50",
+  "output": "14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+  "forward_sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3",
+  "hunks": [
+    {
+      "before": "request_counts as materialized (",
+      "after": "agency_issue_requirements as materialized (\n  select s.invoice_id,private.weekly_source_agency_issue_requirements_v1(s.invoice_id) codes\n  from invoice_scope s\n),\nrequest_counts as materialized ("
+    },
+    {
+      "before": "    ],null)::text[]) blockers\n  from facts f",
+      "after": "    ],null)::text[])||coalesce(agency.codes,array[]::text[]) blockers\n  from facts f\n  left join agency_issue_requirements agency on agency.invoice_id=f.invoice_id"
+    },
+    {
+      "before": "  case when c.deliver\n    then coalesce(c.route_blockers,'[]'::jsonb) else '[]'::jsonb end,",
+      "after": "  case when c.deliver\n    then coalesce(c.route_blockers,'[]'::jsonb)||to_jsonb(coalesce((select a.codes from agency_issue_requirements a where a.invoice_id=c.invoice_id),array[]::text[])) else '[]'::jsonb end,"
+    },
+    {
+      "before": "    'delivery_blockers',case when c.deliver\n      then coalesce(c.route_blockers,'[]'::jsonb) else '[]'::jsonb end,",
+      "after": "    'delivery_blockers',case when c.deliver\n      then coalesce(c.route_blockers,'[]'::jsonb)||to_jsonb(coalesce((select a.codes from agency_issue_requirements a where a.invoice_id=c.invoice_id),array[]::text[])) else '[]'::jsonb end,"
+    }
+  ],
+  "complete_reverse": true,
+  "independent_review_pending": true,
+  "mount_ready": false
+}

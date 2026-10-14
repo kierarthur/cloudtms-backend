@@ -1,0 +1,15 @@
+create or replace function private.weekly_source_mode_a_operation_key_v1(
+  p_publication_id uuid,
+  p_client_id uuid
+) returns text
+language sql stable
+set search_path to 'public','pg_catalog','pg_temp'
+as $function$
+  select 'weekly-source-mode-a:'||public._import_review_hash_v1(
+    pg_catalog.jsonb_build_object(
+      'schema','WEEKLY_SOURCE_MODE_A_DISPATCH_V1',
+      'projection_publication_id',p_publication_id,
+      'client_id',p_client_id
+    )::text
+  );
+$function$;

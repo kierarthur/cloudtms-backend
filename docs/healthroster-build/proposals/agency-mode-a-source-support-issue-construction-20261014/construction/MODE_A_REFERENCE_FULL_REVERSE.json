@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "native": false,
+  "input": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/71_complete_current_mode_a_with_preset_refusal.sqlinc",
+  "input_sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0",
+  "output": "12_complete_native_mode_a_with_preset_reference_only.sqlinc",
+  "forward_sha256": "c31b9b9eaf8cb5e273ea3584da979b63f8240a1b40de7e409507a09ce27db831",
+  "hunks": [
+    {
+      "before": "  v_weekly_source_family record;",
+      "after": "  v_weekly_source_family record;\n  v_agency_reference_targets uuid[];\n  v_agency_main_id uuid;\n  v_agency_publication_id uuid;"
+    },
+    {
+      "before": "  -- Mode A/reference apply cannot feed a second validation writer for a preset.\n  perform private.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id);",
+      "after": "  -- The same native import-review guard and reference engine remain below.\n  -- A genuine Source bridge may carry preset reference-only work; all older\n  -- imports retain their actual legacy preset refusal. No caller mode flag.\n  v_agency_reference_targets:=private.weekly_source_agency_mode_a_reference_targets_v1(p_import_id,p_actor_user_id);\n  if cardinality(v_agency_reference_targets)>0 then\n    select (hi.parse_summary_json->>'weekly_source_projection_publication_id')::uuid into strict v_agency_publication_id\n      from public.hr_imports hi where hi.id=p_import_id;\n  end if;"
+    },
+    {
+      "before": "  where vm.mode = 'MODE_A'\n    and vr.timesheet_id is not null;\n\n  -- ✅ UPDATED: include pre_validated",
+      "after": "  where vm.mode = 'MODE_A'\n    and vr.timesheet_id is not null\n    and not(vr.timesheet_id=any(v_agency_reference_targets));\n\n  -- ✅ UPDATED: include pre_validated"
+    },
+    {
+      "before": "  get diagnostics v_validations_upserted = row_count;",
+      "after": "  get diagnostics v_validations_upserted = row_count;\n\n  -- Only native guard-selected units occur in tmp_val_rows. Preset rows never\n  -- enter the LEGACY upsert or its named auto-authorise list. One actual main\n  -- week is refreshed by the sole typed writer after genuine references.\n  for v_agency_main_id in\n    select distinct main_week.timesheet_id from tmp_val_rows vr\n    join tmp_val_mode vm on vm.timesheet_id=vr.timesheet_id and vm.mode='MODE_A'\n    join public.timesheets native_target on native_target.timesheet_id=vr.timesheet_id\n    join public.contract_weeks main_week on main_week.contract_id=native_target.contract_id\n      and main_week.week_ending_date=native_target.week_ending_date\n      and coalesce(main_week.additional_seq,0)=0 and not main_week.is_adjustment\n    where vr.timesheet_id=any(v_agency_reference_targets)\n    order by main_week.timesheet_id\n  loop\n    perform public.weekly_source_agency_week_validation_refresh_v1(v_agency_main_id,v_agency_publication_id);\n  end loop;"
+    }
+  ],
+  "complete_reverse": true,
+  "shared_native_references_and_financial_hooks_retained": true,
+  "independent_review_pending": true,
+  "mount_ready": false
+}

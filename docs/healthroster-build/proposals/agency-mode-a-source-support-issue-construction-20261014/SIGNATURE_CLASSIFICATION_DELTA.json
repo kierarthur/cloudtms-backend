@@ -1,0 +1,40 @@
+{
+  "source_only": true,
+  "native": false,
+  "additions": [
+    {
+      "signature": "private.weekly_source_agency_crosscheck_context_v1(uuid)",
+      "role": "OWNER_ONLY"
+    },
+    {
+      "signature": "public.weekly_source_agency_crosscheck_context_v1(uuid)",
+      "role": "SERVICE_ONLY"
+    },
+    {
+      "signature": "private.weekly_source_agency_mode_a_reference_targets_v1(uuid,uuid)",
+      "role": "OWNER_ONLY"
+    },
+    {
+      "signature": "private.weekly_source_agency_issue_requirements_v1(uuid)",
+      "role": "OWNER_ONLY"
+    },
+    {
+      "signature": "private.weekly_source_agency_issue_close_v1(uuid)",
+      "role": "OWNER_ONLY"
+    }
+  ],
+  "existing_replacements": [
+    "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+    "private._invoice_issue_validate_batch(jsonb,date)",
+    "public.invoice_issue_one(uuid,uuid)",
+    "private._invoice_issue_advance_core_v8(jsonb,timestamptz)"
+  ],
+  "tables_columns": [],
+  "browser_grants": [],
+  "recorder_slots_changed": false,
+  "source39_changed": false,
+  "three_bundles_changed": false,
+  "exact_tree_exceptions_changed": false,
+  "compiled_contract_sha256": null,
+  "verifier_union_pending": true
+}

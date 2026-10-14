@@ -1,0 +1,36 @@
+create or replace function private.weekly_source_incident_contact_retire_v1(p_incident_id uuid)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_episode integer; v_completed_generations uuid[];
+begin
+  select episode_number into strict v_episode from public.weekly_discrepancy_incidents
+    where id=p_incident_id for update;
+    update public.weekly_candidate_outreach_memberships membership set state='RESOLVED'
+      from public.weekly_candidate_outreach_generations generation
+      where membership.incident_id=p_incident_id and membership.state in ('ACTIONABLE','ANSWERED')
+        and generation.id=membership.candidate_generation_id
+        and generation.request_kind='CHECK_HOURS';
+    -- Reuse the existing answered-hours completion rule. Keep a mixed cohort
+    -- active while another question needs an answer; never finish the separate
+    -- missing-Timesheet request or rewrite accepted delivery history.
+    with completed as (
+      update public.weekly_candidate_outreach_generations generation set state='COMPLETE'
+      where generation.state='ACTIVE' and generation.request_kind='CHECK_HOURS'
+        and exists(select 1 from public.weekly_candidate_outreach_memberships membership
+          where membership.candidate_generation_id=generation.id
+            and membership.incident_id=p_incident_id and membership.state='RESOLVED')
+        and not exists(select 1 from public.weekly_candidate_outreach_memberships membership
+          where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE')
+      returning generation.id
+    ) select array_agg(id) into v_completed_generations from completed;
+    update public.weekly_message_intents set state='RETIRED'
+      where candidate_generation_id=any(v_completed_generations) and state in ('DUE','RENDERED');
+    update public.weekly_manager_review_items set response_state='FILTERED_RESOLVED'
+      where incident_id=p_incident_id and incident_episode=v_episode
+        and response_state='UNANSWERED';
+    update public.office_action_notifications set operational_state='RESOLVED',
+      resolved_at_utc=transaction_timestamp()
+      where issue_id=p_incident_id and operational_state='OPEN';
+end;
+$function$;

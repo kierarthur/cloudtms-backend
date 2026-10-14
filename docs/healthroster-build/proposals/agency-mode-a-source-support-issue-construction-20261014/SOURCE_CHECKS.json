@@ -1,0 +1,249 @@
+{
+  "schema": "AGENCY_MODE_A_SOURCE_SUPPORT_ISSUE_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "tests": [
+    {
+      "test": "crosscheck-mode-a.test.mjs",
+      "passed": 31,
+      "failed": 0,
+      "kind": "UNIT_ONLY actual Worker VM and explicit source/predicate/reversal models"
+    },
+    {
+      "test": "issue-owner.test.mjs",
+      "passed": 25,
+      "failed": 0,
+      "kind": "UNIT_ONLY actual Worker VM and explicit source/predicate/reversal models"
+    }
+  ],
+  "total_tests": 56,
+  "syntax": [
+    "construction/10_complete_worker_index_with_native_source_crosscheck.js",
+    "construction/crosscheck-mode-a.test.mjs",
+    "construction/issue-owner.test.mjs",
+    "generators/prepare-agency-crosscheck-worker-forward.mjs",
+    "generators/prepare-agency-mode-a-reference-forward.mjs",
+    "generators/prepare-agency-issue-validator-forward.mjs",
+    "generators/prepare-agency-actual-issue-owner-forwards.mjs"
+  ],
+  "lexical": [
+    {
+      "path": "construction/08_native_agency_crosscheck_context.sqlinc",
+      "statements": 7,
+      "bytes": 8564,
+      "sha256": "8e44513b98adbba92d9e9609596a7596d7fe9883b9a090d1069163ff13b3cec1"
+    },
+    {
+      "path": "construction/11_native_mode_a_preset_reference_admission.sqlinc",
+      "statements": 3,
+      "bytes": 5888,
+      "sha256": "b8b9c4864c1434c7f83acf2b041c7601f04ad64b67b33e6e76952b044dae9745"
+    },
+    {
+      "path": "construction/12_complete_native_mode_a_with_preset_reference_only.sqlinc",
+      "statements": 1,
+      "bytes": 144185,
+      "sha256": "c31b9b9eaf8cb5e273ea3584da979b63f8240a1b40de7e409507a09ce27db831"
+    },
+    {
+      "path": "construction/13_native_agency_issue_requirements.sqlinc",
+      "statements": 3,
+      "bytes": 5028,
+      "sha256": "1cebb076129f067754d8e899ea55b66836e8f24a3b08216bfbc163658c9cb756"
+    },
+    {
+      "path": "construction/14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+      "statements": 1,
+      "bytes": 31334,
+      "sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3"
+    },
+    {
+      "path": "construction/15_native_agency_issue_close.sqlinc",
+      "statements": 3,
+      "bytes": 9087,
+      "sha256": "fa222e70af038aa5744c1e36a730497f7b4fd24d41e65eb7e44bb4e782b31ee8"
+    },
+    {
+      "path": "construction/16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+      "statements": 1,
+      "bytes": 26969,
+      "sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09"
+    },
+    {
+      "path": "construction/17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+      "statements": 1,
+      "bytes": 39333,
+      "sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703"
+    }
+  ],
+  "selected_current_owner_pins": [
+    {
+      "signature": "private._invoice_issue_validate_batch(jsonb,date)",
+      "path": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+      "ordered_occurrence": 1344,
+      "source_sha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04",
+      "definition_sha256": "0e4c0edb61486c0b094dbea450a0d32ef16e656f0bfb9e59a9f3ec5353275a50",
+      "evidence_path": "before/01_private__invoice_issue_validate_batch.sql.txt"
+    },
+    {
+      "signature": "public.invoice_issue_one(uuid,uuid)",
+      "path": "supabase/repeatable/21072026_1235_59_invoice_issue_one.sql",
+      "ordered_occurrence": 503,
+      "source_sha256": "d821064b1906dda4b3bab856d0c2df7b319b032af269ce37c77d5aa2aa1efff2",
+      "definition_sha256": "c35933482c037f7be42a3bd86d1ccf00d1033da6d0303614dce7fb59408db80c",
+      "evidence_path": "before/02_public_invoice_issue_one.sql.txt"
+    },
+    {
+      "signature": "private._invoice_issue_advance_core_v8(jsonb,timestamptz)",
+      "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+      "ordered_occurrence": 660,
+      "source_sha256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25",
+      "definition_sha256": "ec8bc469e80722b414f22e58d6e809c0ebc568c0f29592180fe3a00066beac3a",
+      "evidence_path": "before/03_private__invoice_issue_advance_core_v8.sql.txt"
+    },
+    {
+      "signature": "private.weekly_source_incident_contact_retire_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+      "ordered_occurrence": 1899,
+      "source_sha256": "be0e4e6c9b1c48f21b59f45ca52843ef1fcff8bea612f9afee652a0789a489e6",
+      "definition_sha256": "e61d0df36ac476e30ff8e5c3aea5051e95f6627b8443dcd91e54391056e043d3",
+      "evidence_path": "before/04_private_weekly_source_incident_contact_retire_v1.sql.txt"
+    },
+    {
+      "signature": "public.weekly_source_mode_a_dispatch_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "ordered_occurrence": 1426,
+      "source_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+      "definition_sha256": "5cd589e5b903ad0dd2b09ecad1be083bff49af090042574c7a83c4289791e4ce",
+      "evidence_path": "before/05_public_weekly_source_mode_a_dispatch_atomic_v1.sql.txt"
+    },
+    {
+      "signature": "public.weekly_source_mode_a_reference_apply_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "ordered_occurrence": 1426,
+      "source_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+      "definition_sha256": "ffe342df0eefe945f9785fe6b8771a3ab8a9266279c6a11d17c6e167e195869e",
+      "evidence_path": "before/06_public_weekly_source_mode_a_reference_apply_atomic_v1.sql.txt"
+    },
+    {
+      "signature": "private.weekly_source_mode_a_operation_key_v1(uuid,uuid)",
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "ordered_occurrence": 1426,
+      "source_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+      "definition_sha256": "ecff9e98d9cf63dd4fcb8821afdcac45f265eb2a547c6be2323e205476cab14e",
+      "evidence_path": "before/07_private_weekly_source_mode_a_operation_key_v1.sql.txt"
+    }
+  ],
+  "selected_saved_git_mismatches": 0,
+  "complete_reversals": {
+    "worker": 1,
+    "mode_a": 4,
+    "validator": 4,
+    "direct": 3,
+    "async": 3
+  },
+  "new_signatures": [
+    {
+      "signature": "private.weekly_source_agency_crosscheck_context_v1(uuid)",
+      "role": "OWNER_ONLY"
+    },
+    {
+      "signature": "public.weekly_source_agency_crosscheck_context_v1(uuid)",
+      "role": "SERVICE_ONLY"
+    },
+    {
+      "signature": "private.weekly_source_agency_mode_a_reference_targets_v1(uuid,uuid)",
+      "role": "OWNER_ONLY"
+    },
+    {
+      "signature": "private.weekly_source_agency_issue_requirements_v1(uuid)",
+      "role": "OWNER_ONLY"
+    },
+    {
+      "signature": "private.weekly_source_agency_issue_close_v1(uuid)",
+      "role": "OWNER_ONLY"
+    }
+  ],
+  "dependencies": [
+    {
+      "repository": "Report",
+      "commit": "8f08aeac806454498c040925cf98b196970a3a2d",
+      "path": "docs/healthroster-build/proposals/agency-validation-marker-override-source-successor-20261014/construction/72_complete_worker_index_with_normal_typed_validation.js",
+      "packet_path": "accepted-predecessors/72_complete_worker_index_with_normal_typed_validation.js",
+      "bytes": 8935162,
+      "sha256": "8c3c73ca57bafb1ccd3a00c4b14bb63342e77784caf16dc2dcdcc5aca660e2e1"
+    },
+    {
+      "repository": "Report",
+      "commit": "8f08aeac806454498c040925cf98b196970a3a2d",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "packet_path": "accepted-predecessors/71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "bytes": 142656,
+      "sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0"
+    },
+    {
+      "repository": "Report",
+      "commit": "8f08aeac806454498c040925cf98b196970a3a2d",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/58_agency_native_week_facts.sqlinc",
+      "packet_path": "accepted-predecessors/58_agency_native_week_facts.sqlinc",
+      "bytes": 25348,
+      "sha256": "82f9c09645bc8eff619fa6b33c208e774ce4ff2758cb14241ae60657c89627ab"
+    },
+    {
+      "repository": "Report",
+      "commit": "8f08aeac806454498c040925cf98b196970a3a2d",
+      "path": "docs/healthroster-build/proposals/agency-validation-marker-override-source-successor-20261014/construction/73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "packet_path": "accepted-predecessors/73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "bytes": 16065,
+      "sha256": "2d76d3dd3f5f78ea5d08b6b7e8e22342c9c7947d4d22922d20af718448ebfaa0"
+    },
+    {
+      "repository": "Money",
+      "commit": "63b94142c3078ea39917bb680a6bc582ab05f1ec",
+      "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/02_complete_keep_context.sqlinc",
+      "packet_path": "reference/money15_source_missing_credit_context.sqlinc",
+      "bytes": 21427,
+      "sha256": "ea04c89d2854f9733bf52dda908a1e4887703f118288ee8411f421a0457630b4",
+      "purpose": "Narrow genuine Source Missing/credit pending fact only; NULL/unavailable retains query. Not universal Agency pending or writer authority."
+    },
+    {
+      "repository": "I2",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/baseline/22082026_1501_cloudtms_test_structural_finishing.sql",
+      "packet_path": "reference/22082026_1501_cloudtms_test_structural_finishing.sql",
+      "bytes": 802058,
+      "sha256": "367d70659e4ab05a7f18a86fd29b3d74d018d3f916a1e1e38f23e63243bfb304"
+    },
+    {
+      "repository": "I2",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "packet_path": "reference/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "bytes": 58216,
+      "sha256": "35da5d2c48d4c3aafa959d7bc5def789d21c5df50b49be57a3d815280c97c12a"
+    },
+    {
+      "repository": "I2",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+      "packet_path": "reference/23072026_2207_private_invoice_correction_validate_batch.sql",
+      "bytes": 46462,
+      "sha256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb"
+    },
+    {
+      "repository": "I2",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "packet_path": "reference/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    }
+  ],
+  "raw_whitespace": {
+    "pass": false,
+    "reason": "Complete source/evidence copies retained; no raw or inherited-whitespace certificate supplied."
+  },
+  "compiled_native_proof": null,
+  "mount_ready": false,
+  "independent_review_pending": true
+}
