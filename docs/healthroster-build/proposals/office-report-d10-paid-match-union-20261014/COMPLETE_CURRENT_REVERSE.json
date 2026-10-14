@@ -1,0 +1,48 @@
+{
+  "schema": "HEALTHROSTER_WHOLE_OWNER_COMPOSITION_V1",
+  "source_only": true,
+  "native": false,
+  "before_bytes": 129458,
+  "before_sha256": "e46d0fc92985d330fcf01d4464a327f169c98b33d99da8965443a52bc23fd9ef",
+  "after_bytes": 130958,
+  "after_sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2",
+  "hunks": [
+    {
+      "name": "native question status in existing blocked row",
+      "before": "        'text',case\n          when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'",
+      "after": "        'text',case\n          when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then 'Paid shift needs matching'\n          when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'",
+      "byte_offset": 80652
+    },
+    {
+      "name": "paid matching plain problem",
+      "before": "      'problem',case\n        when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'",
+      "after": "      'problem',case\n        when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then case\n          when paid_question.value->>'state'='READY' then 'Confirm whether this is the paid shift or separate work.'\n          else 'The paid-shift comparison is unavailable. Recheck the current payment and source authority.' end\n        when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'",
+      "byte_offset": 81672
+    },
+    {
+      "name": "finite distinct question action",
+      "before": "        'label',case when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm shift match'",
+      "after": "        'label',case when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then case\n            when paid_question.value->>'state'='READY' then 'Confirm paid shift match' else 'View details' end\n          when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm shift match'",
+      "byte_offset": 84007
+    },
+    {
+      "name": "bounded native DTO without raw paid facts",
+      "before": "          'match_choices',private.weekly_source_protected_match_candidates_v1(source_row.id,resolution.candidate_id,resolution.client_id),",
+      "after": "          'paid_match_question',paid_question.value,\n          'match_choices',private.weekly_source_protected_match_candidates_v1(source_row.id,resolution.candidate_id,resolution.client_id),",
+      "byte_offset": 85235
+    },
+    {
+      "name": "paid unavailable detail has no implied financial permission",
+      "before": "            'problem',case\n              when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'",
+      "after": "            'problem',case\n              when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then case\n                when paid_question.value->>'state'='READY' then 'Choose Same only for the work already paid. Earlier pay is retained; the imported row is invoiced. Choose Separate only for different work, then enter a reason. The saved comparison is rechecked before it can be used.'\n                else 'The native paid proof, current source or payment authority is unavailable. No Same or Separate choice can be saved from this screen. Recheck the workspace.' end\n              when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'",
+      "byte_offset": 88888
+    },
+    {
+      "name": "question derives once from actual current publication and current resolution",
+      "before": "    left join lateral (select latest.* from public.weekly_source_row_resolutions latest\n      where latest.upload_row_id=source_row.id order by latest.generation desc,latest.id desc limit 1) resolution on true\n    left join public.candidates candidate on candidate.id=resolution.candidate_id\n    left join lateral (select latest.* from public.weekly_source_charge_checks latest",
+      "after": "    left join lateral (select latest.* from public.weekly_source_row_resolutions latest\n      where latest.upload_row_id=source_row.id order by latest.generation desc,latest.id desc limit 1) resolution on true\n    left join lateral (select case when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED'\n      then private.weekly_source_paid_match_question_v1(v_publication.id,source_row.id,v_actor) else null end value) paid_question on true\n    left join public.candidates candidate on candidate.id=resolution.candidate_id\n    left join lateral (select latest.* from public.weekly_source_charge_checks latest",
+      "byte_offset": 96628
+    }
+  ],
+  "whole_reverse_verified": true
+}

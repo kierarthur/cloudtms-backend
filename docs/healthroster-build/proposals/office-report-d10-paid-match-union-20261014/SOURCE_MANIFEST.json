@@ -1,0 +1,53 @@
+{
+  "schema": "HEALTHROSTER_OFFICE_WORKSPACE_UNION_SOURCE_MANIFEST_V1",
+  "source_only": true,
+  "native": false,
+  "independent_review_pending": true,
+  "entries": [
+    {
+      "path": "forward/workspace.report-d10-paid-match.sqlinc",
+      "bytes": 130958,
+      "sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2"
+    },
+    {
+      "path": "forward/scopes.report-d10.sqlinc",
+      "bytes": 18701,
+      "sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    },
+    {
+      "path": "forward/paid-match-question.sqlinc",
+      "bytes": 6388,
+      "sha256": "4ea6f553ce20082f9f941a303869643c0cc2011cdcf97f03c7b34a629ce87aa2"
+    },
+    {
+      "path": "forward/workspace-acl.sqlinc",
+      "bytes": 307,
+      "sha256": "b224a8cab75c1b57e86702f4f0440f998d7674c53237a134d09172beefc96661"
+    },
+    {
+      "path": "reference/workspace.report-d10-before.sqlinc",
+      "bytes": 129458,
+      "sha256": "e46d0fc92985d330fcf01d4464a327f169c98b33d99da8965443a52bc23fd9ef"
+    },
+    {
+      "path": "reference/workspace.current-root-before.sqlinc",
+      "bytes": 117953,
+      "sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44"
+    },
+    {
+      "path": "COMPLETE_CURRENT_REVERSE.json",
+      "bytes": 4615,
+      "sha256": "d2b34381ece6e55f94de41122649655723c7114264b3886af798de33c77a721a"
+    },
+    {
+      "path": "SOURCE_INPUTS.json",
+      "bytes": 1106,
+      "sha256": "caf18eb271fbdf7314293ff9d628e9662ef50bdf302e808dc86cee1fb5f21c35"
+    },
+    {
+      "path": "README.md",
+      "bytes": 853,
+      "sha256": "45e9b745854a2d00b37ea0cde1ffb2bac9c042459b4e8cea5e882d6eb33fab4c"
+    }
+  ]
+}

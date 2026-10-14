@@ -1,0 +1,18 @@
+✔ real six-hunk shared owner composition reverses exactly to the complete reviewed Report and D10 input (6.3756ms)
+✔ complete Report query population, source selection proofs and PAY reduction remain unchanged by paid match (0.9181ms)
+✔ each current paid-match question edit is present exactly once in the composed owner (0.3066ms)
+✔ supporting scope, question helper and ACL files retain exact independently reviewed source identities (4.5189ms)
+✔ union introduces no schema-qualified PostgreSQL syntax constructs or parallel business store (1.9851ms)
+✔ whole-owner composition retains adjacent Unicode source and exactly reverses sequential overlapping anchors (1.5533ms)
+✔ stale whole-owner source is refused before applying any hunk (0.3988ms)
+✔ missing or ambiguous anchors cannot silently replace another owner (0.1817ms)
+✔ later conflicting edits are refused rather than using an older whole file (0.188ms)
+✔ replacement text containing JavaScript substitution tokens is literal (0.1936ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 173.2244

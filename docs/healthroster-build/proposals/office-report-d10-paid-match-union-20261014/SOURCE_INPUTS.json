@@ -1,0 +1,28 @@
+{
+  "source_only": true,
+  "native": false,
+  "provenance": [
+    {
+      "commit": "8f08aeac806454498c040925cf98b196970a3a2d",
+      "folder": "docs/healthroster-build/proposals/ppv2-report-d10-query-population-source-forward-20261014",
+      "manifest": "REVIEW_MANIFEST.json",
+      "manifest_sha256": "df75699198b4292a6cce0ace87d51da515e6f2df5101052442561fddd955da3b",
+      "checked_entries": 31,
+      "saved_git_mismatches": 0
+    },
+    {
+      "commit": "30a30f16b29d0b61c11fc91656fdc8abccb5ab64",
+      "folder": "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014",
+      "manifest": "FROZEN_ARTIFACT_MANIFEST.json",
+      "manifest_sha256": "3d0560bef03c6f8ef0b01024a45581d7d163b32bccc121401e4f0cfc8052e69d",
+      "checked_entries": 28,
+      "saved_git_mismatches": 0
+    }
+  ],
+  "common_root_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+  "independent_union_review_pending": true,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "source_only_reversal_proved": true
+}
