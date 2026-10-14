@@ -1,0 +1,123 @@
+-- Raw immutable selector extraction. No parent/request lookup precedes it.
+-- Same proposed A0 arbiter; no business pricing, publication or entitlement.
+create or replace function private.timesheet_correction_a0_source_raw_tokens_v1(p_relation text,p_row jsonb)
+returns jsonb language plpgsql immutable security definer set search_path to 'pg_catalog','pg_temp'
+as $source_raw$
+declare tokens jsonb:='[]'::jsonb; identity uuid; primary_key text; token jsonb; pair jsonb;
+ parent_relation text; parent_column text; scope_kind text; left_column text; right_column text;
+begin
+ if jsonb_typeof(p_row) is distinct from 'object' or p_relation is null
+  or p_relation not in('public.weekly_source_groups','public.weekly_source_cycles','public.weekly_source_uploads','public.weekly_source_upload_rows','public.weekly_source_projection_publications','public.weekly_source_row_resolutions','public.weekly_source_row_economic_snapshots','public.weekly_source_row_expense_policy_snapshots','public.weekly_expense_authority_generations','public.weekly_source_expense_cell_evidence','public.weekly_source_charge_checks','public.weekly_source_charge_acceptances','public.weekly_source_invoice_hold_releases','public.weekly_source_state_transitions','public.weekly_source_report_scopes','public.weekly_source_self_bill_reports','public.weekly_source_self_bill_report_line_bindings','public.weekly_work_events','public.weekly_source_final_revisions','public.weekly_source_final_snapshot_lines','public.weekly_source_row_timesheet_lineages','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_discrepancy_incidents','public.weekly_issue_comparison_revisions','public.weekly_source_billing_movements','public.weekly_source_group_clients','public.weekly_source_client_policies','public.weekly_source_contract_policies','public.weekly_source_group_rule_assignments','public.weekly_source_rule_set_versions','public.weekly_source_rule_sets','public.weekly_source_format_profiles','public.clients','public.client_settings','public.contracts','public.timesheets','public.timesheets_financials','public.weekly_source_global_settings') then
+  raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;
+ if p_relation='public.weekly_source_global_settings' then
+  if p_row->'singleton'='true'::jsonb then
+   return jsonb_build_array(jsonb_build_object('kind','SOURCE_GLOBAL_SETTINGS','json','true'));
+  end if;
+  return tokens;
+ end if;
+ primary_key:=case when p_relation='public.timesheets' then 'timesheet_id' else 'id' end;
+ identity:=(p_row->>primary_key)::uuid;
+ if identity is null then raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;
+ tokens:=jsonb_build_array(jsonb_build_object('kind','SOURCE_OBJECT',
+  'json',jsonb_build_array(p_relation,identity)::text));
+ -- These exact parent predicates select ALL child rows; another UUID column
+ -- on a child is never automatically a dependency/phantom token.
+ case p_relation
+ when 'public.weekly_source_upload_rows','public.weekly_source_expense_cell_evidence' then
+  parent_relation:='public.weekly_source_uploads';parent_column:='upload_id';
+ when 'public.weekly_source_row_economic_snapshots','public.weekly_source_row_expense_policy_snapshots',
+   'public.weekly_source_charge_checks','public.weekly_source_charge_acceptances' then
+  parent_relation:='public.weekly_source_row_resolutions';parent_column:='row_resolution_id';
+ when 'public.weekly_source_invoice_hold_releases' then
+  parent_relation:='public.weekly_source_upload_rows';parent_column:='upload_row_id';
+ when 'public.weekly_source_contract_policies' then
+  parent_relation:='public.contracts';parent_column:='contract_id';
+ when 'public.client_settings' then
+  parent_relation:='public.clients';parent_column:='client_id';
+ when 'public.weekly_source_group_rule_assignments' then
+  parent_relation:='public.weekly_source_groups';parent_column:='source_group_id';
+ when 'public.weekly_source_self_bill_report_line_bindings' then
+  if p_row->>'state'='CURRENT' then
+   parent_relation:='public.weekly_source_self_bill_reports';parent_column:='self_bill_report_id';
+  end if;
+ else null;
+ end case;
+ if parent_column is not null and p_row->>parent_column is not null then
+  tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_OBJECT',
+   'json',jsonb_build_array(parent_relation,(p_row->>parent_column)::uuid)::text));
+ end if;
+ if p_relation='public.weekly_source_row_resolutions' and p_row->>'upload_row_id' is not null
+  and p_row->>'generation' is not null and p_row->>'client_id' is not null then
+  -- Never broaden this AND slot to a raw-row/upload/Client object token.
+  pair:=jsonb_build_array((p_row->>'upload_row_id')::uuid,(p_row->>'generation')::integer,(p_row->>'client_id')::uuid);
+  tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_RESOLUTION_SLOT','json',pair::text));
+ end if;
+ case p_relation
+ when 'public.weekly_source_final_snapshot_lines','public.weekly_source_ordinary_pay_projection_receipts' then
+  scope_kind:='SOURCE_REVISION_CLIENT';left_column:='final_revision_id';right_column:='client_id';
+ when 'public.weekly_expense_authority_generations','public.weekly_source_state_transitions' then
+  scope_kind:='SOURCE_REVISION_EVENT';left_column:='final_revision_id';right_column:='work_event_id';
+ when 'public.weekly_source_group_clients','public.weekly_source_client_policies','public.weekly_source_self_bill_reports' then
+  scope_kind:='SOURCE_GROUP_CLIENT';left_column:='source_group_id';right_column:='client_id';
+ when 'public.weekly_source_report_scopes' then
+  if p_row->>'self_bill_report_id' is not null then
+   scope_kind:='SOURCE_GROUP_CLIENT';left_column:='source_group_id';right_column:='client_id';
+  end if;
+ when 'public.weekly_discrepancy_incidents' then
+  scope_kind:='SOURCE_CYCLE_CLIENT';left_column:='source_cycle_id';right_column:='client_id';
+ else null;
+ end case;
+ if scope_kind is not null and p_row->>left_column is not null and p_row->>right_column is not null then
+  tokens:=tokens||jsonb_build_array(jsonb_build_object('kind',scope_kind,
+   'json',jsonb_build_array((p_row->>left_column)::uuid,(p_row->>right_column)::uuid)::text));
+ end if;
+ if p_relation='public.weekly_source_row_timesheet_lineages' and p_row->>'client_id' is not null then
+  if p_row->>'row_resolution_id' is not null then
+   tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_LINEAGE_RESOLUTION_CLIENT',
+    'json',jsonb_build_array((p_row->>'row_resolution_id')::uuid,(p_row->>'client_id')::uuid)::text));
+  end if;
+  if p_row->>'work_event_id' is not null then
+   tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_LINEAGE_EVENT_CLIENT',
+    'json',jsonb_build_array((p_row->>'work_event_id')::uuid,(p_row->>'client_id')::uuid)::text));
+  end if;
+ end if;
+ if p_relation='public.contracts' and p_row->>'client_id' is not null
+  and p_row->>'start_date' is not null and p_row->>'end_date' is not null
+  and (p_row->>'start_date')::date<=(p_row->>'end_date')::date then
+  tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_CONTRACT_COVERAGE',
+   'uuid',(p_row->>'client_id')::uuid::text,'coverage',jsonb_build_array(p_row->>'start_date',p_row->>'end_date')));
+ end if;
+ for token in select value from jsonb_array_elements(tokens) loop
+  perform private.timesheet_correction_a0_source_token_assert_v1(token);
+ end loop;
+ select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into tokens
+  from(select distinct value from jsonb_array_elements(tokens)) complete;
+ return tokens;
+exception when invalid_text_representation or datetime_field_overflow then
+ raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';
+end;
+$source_raw$;
+alter function private.timesheet_correction_a0_source_raw_tokens_v1(text,jsonb) owner to postgres;
+revoke all on function private.timesheet_correction_a0_source_raw_tokens_v1(text,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_source_reference_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $source_reference$
+declare tokens jsonb:='[]'::jsonb;
+begin
+ if tg_table_schema<>'public' or tg_op not in('INSERT','UPDATE','DELETE') then
+  raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;
+ if tg_op in('UPDATE','DELETE') then
+  tokens:=tokens||private.timesheet_correction_a0_source_raw_tokens_v1('public.'||tg_table_name,to_jsonb(old));
+ end if;
+ if tg_op in('INSERT','UPDATE') then
+  tokens:=tokens||private.timesheet_correction_a0_source_raw_tokens_v1('public.'||tg_table_name,to_jsonb(new));
+ end if;
+ -- Only after the union of actual raw OLD/NEW may native fence inspection
+ -- occur. Existing business/immutable/state/financial owners remain intact.
+ perform private.timesheet_correction_a0_fence_acquire_v1(tokens,false);
+ if tg_op='DELETE' then return old;end if;return new;
+end;
+$source_reference$;
+alter function private.timesheet_correction_a0_source_reference_before_v1() owner to postgres;
+revoke all on function private.timesheet_correction_a0_source_reference_before_v1() from public,anon,authenticated,service_role;

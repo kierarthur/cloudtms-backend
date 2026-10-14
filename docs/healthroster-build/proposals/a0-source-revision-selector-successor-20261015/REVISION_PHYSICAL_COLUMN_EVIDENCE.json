@@ -1,0 +1,82 @@
+{
+  "source_only": true,
+  "native": false,
+  "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "source_path": "supabase/release/current-contract.json",
+  "source_sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "columns": [
+    {
+      "relation": "public.weekly_source_cycles",
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_cycles",
+      "name": "source_group_id",
+      "type": "uuid",
+      "default": null,
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "name": "source_cycle_id",
+      "type": "uuid",
+      "default": null,
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "name": "report_scope_id",
+      "type": "uuid",
+      "default": null,
+      "identity": "",
+      "not_null": false,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "name": "state",
+      "type": "text",
+      "default": null,
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "name": "final_revision_id",
+      "type": "uuid",
+      "default": null,
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "name": "work_event_id",
+      "type": "uuid",
+      "default": null,
+      "identity": "",
+      "not_null": true,
+      "generated": ""
+    }
+  ],
+  "hosted_catalogue_observed": false
+}

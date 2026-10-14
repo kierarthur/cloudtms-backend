@@ -1,0 +1,82 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 11720,
+      "sha256": "25a52aa2031eb651f8ffafc6c75b3fdff9dd9c4b7e4d9634b3afd97daeb9b564"
+    },
+    {
+      "file": "REVISION_PHYSICAL_COLUMN_EVIDENCE.json",
+      "bytes": 2034,
+      "sha256": "9f9c49ff35135243a4c0d2e1895c1db56bb5bba59ae2edbf5037459dccd2e49d"
+    },
+    {
+      "file": "SOURCE_BOUNDARY.md",
+      "bytes": 1277,
+      "sha256": "24fbcc78ef704a555402accb66c33b5d103be6ae8a5d3168623c8e1d69eca29c"
+    },
+    {
+      "file": "before/00_source_token_grammar.sqlinc",
+      "bytes": 5441,
+      "sha256": "fbd7ff1042b815cca549495c4e558846cdcd90c83a279b39f1deae2058323d4f"
+    },
+    {
+      "file": "before/01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 6335,
+      "sha256": "250f5d2c2282fbf3cffa863e7a0ba5736d7f56fe1a5ef037942b64f00cc8ebb4"
+    },
+    {
+      "file": "before/02_complete_scalar_helpers.sqlinc",
+      "bytes": 23203,
+      "sha256": "ff9fef95ed580a91212ba0576c597b229eb206c8d50d8e6934b8e28c87bc7fae"
+    },
+    {
+      "file": "before/03_coverage_and_compatibility_acquire.sqlinc",
+      "bytes": 6745,
+      "sha256": "fde7a033766fc373757e944d4ff5076809a176e6a035a23409a901a81b81ec0b"
+    },
+    {
+      "file": "before/04_native_source_footprint.sqlinc",
+      "bytes": 9300,
+      "sha256": "4d864c3759b07cec067edb8232807775d02f2d5f80b93f5be8945c1c2117ae0a"
+    },
+    {
+      "file": "before/05_raw_selector_helpers.sqlinc",
+      "bytes": 9256,
+      "sha256": "0ae595280aaf9156f9a2a47688a7da59be70e104db98d351d1ad9c2921831b23"
+    },
+    {
+      "file": "forward/00_source_token_grammar.sqlinc",
+      "bytes": 5502,
+      "sha256": "46d9d29656ae2158c056954163156c05d7add3479b834d45c65c729a7e368018"
+    },
+    {
+      "file": "forward/01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 6396,
+      "sha256": "6c65c6ff3c3b377628acb7c0f2b05c97a2055d7453f4833a31981e9a8d689c74"
+    },
+    {
+      "file": "forward/02_complete_scalar_helpers.sqlinc",
+      "bytes": 23386,
+      "sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "file": "forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "bytes": 6806,
+      "sha256": "da2969244917a2fa383d640754b5e89994e2cef737c6373f6ced9b0c13b11425"
+    },
+    {
+      "file": "forward/04_native_source_footprint.sqlinc",
+      "bytes": 10409,
+      "sha256": "bae96628383b3cfe6cef01547045e69b0c2a1cce9f4fa52edaf512ae583e42b3"
+    },
+    {
+      "file": "forward/05_raw_selector_helpers.sqlinc",
+      "bytes": 13244,
+      "sha256": "cf542ddbf992da40a5e0bcabc6cf2451d1d37b38abffa45764e1858a411b05f6"
+    }
+  ]
+}

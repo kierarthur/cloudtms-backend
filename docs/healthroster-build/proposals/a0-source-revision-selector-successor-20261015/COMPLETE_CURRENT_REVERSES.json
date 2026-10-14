@@ -1,0 +1,127 @@
+{
+  "source_only": true,
+  "native": false,
+  "records": [
+    {
+      "file": "00_source_token_grammar.sqlinc",
+      "source_commit": "a52538b17e234d76ac3cfc5f43165a3bfaa103e1",
+      "source_path": "docs/healthroster-build/proposals/a0-source-lineage-selector-successor-20261015/forward/00_source_token_grammar.sqlinc",
+      "before_bytes": 5441,
+      "before_sha256": "fbd7ff1042b815cca549495c4e558846cdcd90c83a279b39f1deae2058323d4f",
+      "after_bytes": 5502,
+      "after_sha256": "46d9d29656ae2158c056954163156c05d7add3479b834d45c65c729a7e368018",
+      "hunks": [
+        {
+          "label": "closed native group-conjoined revision selection",
+          "before": "'SOURCE_LINEAGE_EVENT_CLIENT') then",
+          "after": "'SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT') then"
+        }
+      ]
+    },
+    {
+      "file": "01_complete_same_arbiter_schema.sqlinc",
+      "source_commit": "a52538b17e234d76ac3cfc5f43165a3bfaa103e1",
+      "source_path": "docs/healthroster-build/proposals/a0-source-lineage-selector-successor-20261015/forward/01_complete_same_arbiter_schema.sqlinc",
+      "before_bytes": 6335,
+      "before_sha256": "250f5d2c2282fbf3cffa863e7a0ba5736d7f56fe1a5ef037942b64f00cc8ebb4",
+      "after_bytes": 6396,
+      "after_sha256": "6c65c6ff3c3b377628acb7c0f2b05c97a2055d7453f4833a31981e9a8d689c74",
+      "hunks": [
+        {
+          "label": "same scalar index native group revision domains",
+          "before": "'SOURCE_LINEAGE_EVENT_CLIENT') and uuid_identity is null",
+          "after": "'SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT') and uuid_identity is null"
+        }
+      ]
+    },
+    {
+      "file": "02_complete_scalar_helpers.sqlinc",
+      "source_commit": "a52538b17e234d76ac3cfc5f43165a3bfaa103e1",
+      "source_path": "docs/healthroster-build/proposals/a0-source-lineage-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "before_bytes": 23203,
+      "before_sha256": "ff9fef95ed580a91212ba0576c597b229eb206c8d50d8e6934b8e28c87bc7fae",
+      "after_bytes": 23386,
+      "after_sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653",
+      "hunks": [
+        {
+          "label": "closed new domain set",
+          "before": "'SOURCE_LINEAGE_EVENT_CLIENT')\n      or exists",
+          "after": "'SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT')\n      or exists"
+        },
+        {
+          "label": "canonical native UUID-pair scalar shape",
+          "before": "'SOURCE_LINEAGE_EVENT_CLIENT')\n        and(jsonb_typeof",
+          "after": "'SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT')\n        and(jsonb_typeof"
+        },
+        {
+          "label": "native group revision selection stays in dependency phase",
+          "before": "'SOURCE_LINEAGE_EVENT_CLIENT') then 1",
+          "after": "'SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT') then 1"
+        }
+      ]
+    },
+    {
+      "file": "03_coverage_and_compatibility_acquire.sqlinc",
+      "source_commit": "a52538b17e234d76ac3cfc5f43165a3bfaa103e1",
+      "source_path": "docs/healthroster-build/proposals/a0-source-lineage-selector-successor-20261015/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "before_bytes": 6745,
+      "before_sha256": "fde7a033766fc373757e944d4ff5076809a176e6a035a23409a901a81b81ec0b",
+      "after_bytes": 6806,
+      "after_sha256": "da2969244917a2fa383d640754b5e89994e2cef737c6373f6ced9b0c13b11425",
+      "hunks": [
+        {
+          "label": "preserved same acquire dispatch recognises group revision domains",
+          "before": "'SOURCE_LINEAGE_EVENT_CLIENT')) then",
+          "after": "'SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT')) then"
+        }
+      ]
+    },
+    {
+      "file": "04_native_source_footprint.sqlinc",
+      "source_commit": "a52538b17e234d76ac3cfc5f43165a3bfaa103e1",
+      "source_path": "docs/healthroster-build/proposals/a0-source-lineage-selector-successor-20261015/forward/04_native_source_footprint.sqlinc",
+      "before_bytes": 9300,
+      "before_sha256": "4d864c3759b07cec067edb8232807775d02f2d5f80b93f5be8945c1c2117ae0a",
+      "after_bytes": 10409,
+      "after_sha256": "bae96628383b3cfe6cef01547045e69b0c2a1cce9f4fa52edaf512ae583e42b3",
+      "hunks": [
+        {
+          "label": "exact nested revision predicate scopes",
+          "before": " -- Native lineage predicate: selected Client AND (selected resolution OR",
+          "after": " -- Revisions are selected in the actual Source group by the current cycle,\n -- a selected Report scope, or an existing snapshot of a selected event.\n -- Current-cycle identity is a genuine original SOURCE_CYCLE_UUID domain.\n tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_CYCLE_UUID','uuid',p_source_cycle_id::text));\n for field in select * from(values\n  ('public.weekly_source_report_scopes','SOURCE_GROUP_REPORT_REVISION'),\n  ('public.weekly_work_events','SOURCE_GROUP_REVISION_EVENT')\n ) revision_scope(relation_name,token_kind)\n loop\n  select value into strict relation from jsonb_array_elements(witness->'relations')\n   where value->>'relation'=field.relation_name;\n  select value into strict identity_key from jsonb_array_elements(relation->'keys')\n   where value->>'column'='id' and value->>'type'='UUID';\n  select coalesce(jsonb_agg(jsonb_build_object('kind',field.token_kind,\n   'json',jsonb_build_array((witness->>'source_group_id')::uuid,value::uuid)::text)),'[]'::jsonb) into item\n   from jsonb_array_elements_text(identity_key->'values');\n  tokens:=tokens||item;\n end loop;\n -- Native lineage predicate: selected Client AND (selected resolution OR"
+        }
+      ]
+    },
+    {
+      "file": "05_raw_selector_helpers.sqlinc",
+      "source_commit": "a52538b17e234d76ac3cfc5f43165a3bfaa103e1",
+      "source_path": "docs/healthroster-build/proposals/a0-source-lineage-selector-successor-20261015/forward/05_raw_selector_helpers.sqlinc",
+      "before_bytes": 9256,
+      "before_sha256": "0ae595280aaf9156f9a2a47688a7da59be70e104db98d351d1ad9c2921831b23",
+      "after_bytes": 13244,
+      "after_sha256": "cf542ddbf992da40a5e0bcabc6cf2451d1d37b38abffa45764e1858a411b05f6",
+      "hunks": [
+        {
+          "label": "actual current-cycle branch raw UUID before any parent lookup",
+          "before": " if p_relation='public.weekly_source_row_resolutions' and p_row->>'upload_row_id' is not null",
+          "after": " if p_relation='public.weekly_source_final_revisions' and p_row->>'state' in('CURRENT','PREPARED','SUPERSEDED')\n  and p_row->>'source_cycle_id' is not null then\n  tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_CYCLE_UUID','uuid',(p_row->>'source_cycle_id')::uuid::text));\n end if;\n if p_relation='public.weekly_source_row_resolutions' and p_row->>'upload_row_id' is not null"
+        },
+        {
+          "label": "one actual parent phase owner after the raw extractor",
+          "before": "create or replace function private.timesheet_correction_a0_source_reference_before_v1()",
+          "after": "-- Raw primary/conjunction acquisition in the trigger has already occurred.\n-- This subsequent phase reads the actual parent group. Missing RR parents\n-- refuse with a retryable error; they cannot silently erase a dependency.\ncreate or replace function private.timesheet_correction_a0_source_revision_tokens_v1(p_relation text,p_row jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\nas $source_revision$\ndeclare tokens jsonb:='[]'::jsonb; v_group_id uuid; v_state text; item jsonb; token jsonb;\nbegin\n if p_relation is null then raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;\n if p_relation not in('public.weekly_source_final_revisions','public.weekly_source_final_snapshot_lines') then return tokens;end if;\n if jsonb_typeof(p_row) is distinct from 'object' then\n  raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;\n if p_relation='public.weekly_source_final_revisions' then\n  if coalesce(p_row->>'state','') not in('CURRENT','PREPARED','SUPERSEDED') then return tokens;end if;\n  -- The direct actual cycle UUID was acquired in the preceding raw phase.\n  select cycle.source_group_id into strict v_group_id from public.weekly_source_cycles cycle\n   where cycle.id=(p_row->>'source_cycle_id')::uuid;\n  if p_row->>'report_scope_id' is not null then\n   tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_GROUP_REPORT_REVISION',\n    'json',jsonb_build_array(v_group_id,(p_row->>'report_scope_id')::uuid)::text));\n  end if;\n  select coalesce(jsonb_agg(jsonb_build_object('kind','SOURCE_GROUP_REVISION_EVENT',\n   'json',jsonb_build_array(v_group_id,snapshot.work_event_id)::text)),'[]'::jsonb) into item\n   from public.weekly_source_final_snapshot_lines snapshot where snapshot.final_revision_id=(p_row->>'id')::uuid\n    and snapshot.work_event_id is not null;\n  tokens:=tokens||item;\n else\n  select cycle.source_group_id,revision.state into strict v_group_id,v_state\n   from public.weekly_source_final_revisions revision join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id\n   where revision.id=(p_row->>'final_revision_id')::uuid;\n  if v_state in('CURRENT','PREPARED','SUPERSEDED') and p_row->>'work_event_id' is not null then\n   tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_GROUP_REVISION_EVENT',\n    'json',jsonb_build_array(v_group_id,(p_row->>'work_event_id')::uuid)::text));\n  end if;\n end if;\n for token in select value from jsonb_array_elements(tokens) loop\n  perform private.timesheet_correction_a0_source_token_assert_v1(token);\n end loop;\n select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into tokens\n  from(select distinct value from jsonb_array_elements(tokens)) complete;\n return tokens;\nexception when no_data_found or too_many_rows then\n raise exception 'CORRECTION_A0_SOURCE_PARENT_SNAPSHOT_UNAVAILABLE' using errcode='40001';\nend;\n$source_revision$;\nalter function private.timesheet_correction_a0_source_revision_tokens_v1(text,jsonb) owner to postgres;\nrevoke all on function private.timesheet_correction_a0_source_revision_tokens_v1(text,jsonb) from public,anon,authenticated,service_role;\n\ncreate or replace function private.timesheet_correction_a0_source_reference_before_v1()"
+        },
+        {
+          "label": "separate native nested phase union",
+          "before": "declare tokens jsonb:='[]'::jsonb;\nbegin\n if tg_table_schema",
+          "after": "declare tokens jsonb:='[]'::jsonb; nested_tokens jsonb:='[]'::jsonb;\nbegin\n if tg_table_schema"
+        },
+        {
+          "label": "raw OLD/NEW acquire precedes all real parent reads and nested acquire",
+          "before": " perform private.timesheet_correction_a0_fence_acquire_v1(tokens,false);\n if tg_op='DELETE'",
+          "after": " perform private.timesheet_correction_a0_fence_acquire_v1(tokens,false);\n if tg_op in('UPDATE','DELETE') then\n  nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(old));\n end if;\n if tg_op in('INSERT','UPDATE') then\n  nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(new));\n end if;\n perform private.timesheet_correction_a0_fence_acquire_v1(nested_tokens,false);\n if tg_op='DELETE'"
+        }
+      ]
+    }
+  ]
+}

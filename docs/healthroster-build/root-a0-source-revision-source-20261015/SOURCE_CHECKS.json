@@ -1,0 +1,27 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "source_cases": 49,
+  "new_cases": 8,
+  "whole_owner_reverses": 6,
+  "unique_hunks": 11,
+  "forward_lexical_statements": 43,
+  "new_private_signatures": [
+    "private.timesheet_correction_a0_source_revision_tokens_v1(text,jsonb)"
+  ],
+  "new_tables": 0,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "pre_freeze_notes": [
+    "closed NULL context/state before freeze",
+    "one ambiguous raw-cycle token edit refused before any disk write; scoped edit then full reverse verified"
+  ],
+  "unfinished": [
+    "parent/cycle/revision mutation and missing-parent RR visibility qualification",
+    "complete transitive policy/claim dependencies",
+    "raw source trigger registration/order",
+    "actual Agency phase/CAS/ACTIVE joint integration",
+    "native/registry/verifier/contract/full acceptance"
+  ]
+}
