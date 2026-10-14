@@ -1,0 +1,60 @@
+{
+  "sourceOnly": true,
+  "createdAt": "2026-10-14T11:12:16Z",
+  "sourceHeads": {
+    "install1": "f7526663331456358707c8bde8d4ad8acbbef359",
+    "install2": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+    "office": "b4c396a23f6989b68f43e647b62248035c4254cd",
+    "money": "b9505669927d86f843b376376033db0b87f169f2",
+    "report": "128d6e22ca0bdcd81bb5539d5b1d3d4669412cd2",
+    "a0": "9b706c5e153712fa0d44f80932bdea437e8c117a",
+    "mytms": "8e17d185087f577a80ed53373d39df2e5e081911"
+  },
+  "snapshots": [
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_REPORT_NATIVE_AB_SOURCE_CRITIC_14102026.md",
+      "copy": "docs\\healthroster-build\\source-critic-checkpoints-20261014T111216Z\\BUILD_REPORT_NATIVE_AB_SOURCE_CRITIC_14102026.md",
+      "bytes": 100892,
+      "sha256": "d953ebf9997f8211035ba2785191a554c165040690b688c0c0599e58634229ef",
+      "sourceVerdictOnly": true,
+      "finalPartB": false
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_MONEY_OFF_SOURCE_CRITIC_14102026.md",
+      "copy": "docs\\healthroster-build\\source-critic-checkpoints-20261014T111216Z\\BUILD_MONEY_OFF_SOURCE_CRITIC_14102026.md",
+      "bytes": 141481,
+      "sha256": "ba4fabf2b03d1cfddc551d4e39f30fa085612416cd4920401688dac7189bfc19",
+      "sourceVerdictOnly": true,
+      "finalPartB": false
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_INSTALL1_RECEIPT_FIX_CRITIC_14102026.md",
+      "copy": "docs\\healthroster-build\\source-critic-checkpoints-20261014T111216Z\\BUILD_INSTALL1_RECEIPT_FIX_CRITIC_14102026.md",
+      "bytes": 35365,
+      "sha256": "e23c433816831207e678cc7cbc0bfec1628a1473b258dd571a476ae6d57c6824",
+      "sourceVerdictOnly": true,
+      "finalPartB": false
+    }
+  ],
+  "finalPartB": false,
+  "native": false,
+  "installation": false,
+  "publication": false,
+  "exactHistoricalSnapshotWhitespace": {
+    "rawStagedPass": false,
+    "findings": [
+      {
+        "file": "BUILD_MONEY_OFF_SOURCE_CRITIC_14102026.md",
+        "line": 419,
+        "kind": "new blank line at EOF"
+      },
+      {
+        "file": "BUILD_REPORT_NATIVE_AB_SOURCE_CRITIC_14102026.md",
+        "line": 310,
+        "kind": "new blank line at EOF"
+      }
+    ],
+    "introducedExecutableWhitespace": 0,
+    "disposition": "Preserve byte-exact historical critic source; evidence-only inherited EOF blanks are recorded, not relabelled raw PASS."
+  }
+}
