@@ -1,0 +1,55 @@
+{
+  "schema_version": "MISSING_RETAINED_SNAPSHOT_MAPPING_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "shared_owner_approval": false,
+  "native_proof": false,
+  "artifact_count": 9,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE.json",
+      "bytes": 2115,
+      "sha256": "163f31af8362b379c60ad4e4ca018c4514dcac303e6275e03419cc26b9f1a2ab"
+    },
+    {
+      "file": "INPUT_PINS.json",
+      "bytes": 1369,
+      "sha256": "4ded7347cbb360c11741a9a08fb546fd3d9aea565c01805e64843d025c3f25fb"
+    },
+    {
+      "file": "REVIEW_SCOPE_AND_GAPS.md",
+      "bytes": 2420,
+      "sha256": "e61fe4763edc1360117a6d66b1552e32cd5bf6214a4cc7460d6f6e8548e11644"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 823,
+      "sha256": "779562b0bc8aa942c18058fd2da03bd3c6f70ebe3fe77ace28c5a058aade2bc4"
+    },
+    {
+      "file": "before/09_shared_current_capture_proposal.sqlinc",
+      "bytes": 6976,
+      "sha256": "4a8e8d7fb15392a897b65a0045bd93d4a835aa2cb32041b64ec2b71d83da53b4"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 4671,
+      "sha256": "6e819da89adda47d22dd8d4ade1edd5401a8885eb5f5437d58372b26a4a23868"
+    },
+    {
+      "file": "forward/09_complete_shared_current_capture_proposal.sqlinc",
+      "bytes": 7903,
+      "sha256": "31f088f054494565affc36b21d7a3d29972917f4ae89d3112d2c9e79a2a946b6"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2727,
+      "sha256": "5cac955d97b7f0a72bceba89fdb27dfc9c17dcc53c0fc26de0cbe100df06bc04"
+    },
+    {
+      "file": "retained-mapping-source.test.mjs",
+      "bytes": 5171,
+      "sha256": "1828b7cb078463b237a52b5921a592dd5bce6c4c3093d8e892a6abade30dc119"
+    }
+  ]
+}

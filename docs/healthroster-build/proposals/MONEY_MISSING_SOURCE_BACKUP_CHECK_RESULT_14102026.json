@@ -1,0 +1,54 @@
+{
+  "source_only": true,
+  "scope": "reviewed immutable source backup only",
+  "packets": [
+    {
+      "folder": "missing-default-current-native-proposal-20261014",
+      "manifest_sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73",
+      "artifact_count": 56
+    },
+    {
+      "folder": "missing-retained-snapshot-mapping-successor-20261014",
+      "manifest_sha256": "6fe840e0fdb7ca49a8875bac0fccd47dea05df9471991e651cff3c6d251f38fc",
+      "artifact_count": 9
+    },
+    {
+      "folder": "missing-correction-baseline-successor-20261014",
+      "manifest_sha256": "4cbdd40bffd1da5fbb1eb0200c315a30fc6180134af2d4ff53e96b353f8ff2c5",
+      "artifact_count": 12
+    },
+    {
+      "folder": "missing-correction-expanded-native-scope-successor-20261014",
+      "manifest_sha256": "367e86f958ef336a84e90f0c02b4fb1c527babd79867b67558ea6dd42bc33a38",
+      "artifact_count": 8
+    },
+    {
+      "folder": "missing-revision-census-guard-successor-20261014",
+      "manifest_sha256": "b163fccb2b97a3fad453fde9ac6f04bcd9e7cc5784c9af531797311bac345e2a",
+      "artifact_count": 6
+    }
+  ],
+  "listed_artifacts": 91,
+  "manifests": 5,
+  "source_files_scanned": 98,
+  "credential_rules": 4,
+  "credential_findings": 0,
+  "raw_hash_length_mismatches": 0,
+  "independent_critic_sha256": "51703a6bde417a644e8d222d39c3c00711328f59e69e1e0ee842c39e728491b3",
+  "effect_free_cases_independently_reviewed": 44,
+  "inert_syntax_checks_independently_reviewed": 17,
+  "canonical_mount": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "accept_construction_included": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "whitespace": {
+    "status": "RETAINED_RAW_ARCHIVE_EXCEPTIONS_NOT_PASS",
+    "exit_code": 2,
+    "findings": [
+      "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/00_target_publication_facts.sqlinc:225: new blank line at EOF.",
+      "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/01_target_publication_context.sqlinc:364: new blank line at EOF."
+    ]
+  }
+}

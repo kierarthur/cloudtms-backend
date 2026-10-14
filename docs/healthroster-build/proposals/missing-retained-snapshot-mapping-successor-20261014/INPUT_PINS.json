@@ -1,0 +1,38 @@
+{
+  "source_only": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "native_input_file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+  "prior_packet": "missing-default-current-native-proposal-20261014",
+  "inputs": [
+    {
+      "file": "FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 10975,
+      "sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1214,
+      "sha256": "d2e373e83914f1047ef4bef1637afbdace9fe192c03397f39fe34b7f218a6290"
+    },
+    {
+      "file": "SHARED_CAPTURE_PROPOSED_COMPLETE_REVERSE.json",
+      "bytes": 3763,
+      "sha256": "c8841da89657005a1f89c32ff20bf44dbdf8d1dd0322ca1e3afd53b3560f2d22"
+    },
+    {
+      "file": "before/private.bpay_next_source_current_capture_transition_v1_uuid_.sqlinc",
+      "bytes": 5892,
+      "sha256": "2fa0c952b3031e409a56800a78f44040b3cc966c4c4f57b4ed7dc7870f5127fc"
+    },
+    {
+      "file": "forward/02_missing_snapshot_movement.sqlinc",
+      "bytes": 12888,
+      "sha256": "fc2c59f744c650dba64998b1c4130beea73716cac9e1cbd76b941b04b1e18d12"
+    },
+    {
+      "file": "forward/07_missing_cancel_transition_assert.sqlinc",
+      "bytes": 6779,
+      "sha256": "efd68aac8729c17eff6b074a692d2b0c39f01e4ee99d850e5ec79c0c1598518e"
+    }
+  ]
+}

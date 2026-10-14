@@ -1,0 +1,18 @@
+{
+  "source_only": true,
+  "inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "bytes": 84832,
+      "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "bytes": 184614,
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    }
+  ],
+  "prior_missing56_manifest_sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73"
+}

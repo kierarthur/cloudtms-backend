@@ -1,0 +1,50 @@
+{
+  "source_only": true,
+  "proposal_only": true,
+  "shared_banking_owner_change_proposed": true,
+  "shared_owner_approval": false,
+  "canonical_modified": false,
+  "input_current_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "input_original_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "input_file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+  "owner": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+  "before_file": "before/private.bpay_next_source_current_capture_transition_v1_uuid_.sqlinc",
+  "before_bytes": 5892,
+  "before_sha256": "2fa0c952b3031e409a56800a78f44040b3cc966c4c4f57b4ed7dc7870f5127fc",
+  "forward_file": "forward/09_shared_current_capture_proposal.sqlinc",
+  "forward_bytes": 6976,
+  "forward_sha256": "4a8e8d7fb15392a897b65a0045bd93d4a835aa2cb32041b64ec2b71d83da53b4",
+  "unique_hunks": 4,
+  "hunks": [
+    {
+      "name": "native origin resolution local",
+      "before": "  v_lineage uuid;v_economic uuid;v_inserted boolean;v_reversal public.weekly_source_billing_movements%rowtype;",
+      "after": "  v_lineage uuid;v_economic uuid;v_inserted boolean;v_reversal public.weekly_source_billing_movements%rowtype;\n  v_origin_resolution uuid;v_missing_basis jsonb;"
+    },
+    {
+      "name": "preserve original normal resolution",
+      "before": "  if v_t.outcome in ('ADD','AMEND') then",
+      "after": "  v_origin_resolution:=v_line.row_resolution_id;\n  if v_t.outcome in ('ADD','AMEND') then"
+    },
+    {
+      "name": "exact excluded absent CANCEL native capture",
+      "before": "    if v_movement is null then raise exception 'BPAY_NEXT_SOURCE_PREVIOUS_SNAPSHOT_UNCAPTURED' using errcode='55000';end if;\n  end if;\n  if v_t.outcome in ('AMEND','CANCEL') then",
+      "after": "    if v_movement is null then raise exception 'BPAY_NEXT_SOURCE_PREVIOUS_SNAPSHOT_UNCAPTURED' using errcode='55000';end if;\n  elsif v_t.outcome='CANCEL' and v_t.exclude_cancel then\n    -- Shared Banking owner proposal, not approved or mounted. The real\n    -- Source transition stays absent: new_present=false and new snapshot=NULL.\n    -- Financial selection retains exactly its immutable original basis.\n    v_missing_basis:=private.weekly_source_missing_cancel_transition_assert_v1(v_t.id);\n    v_movement:=(v_missing_basis#>>'{original_basis,movement_id}')::uuid;\n    v_origin_resolution:=(v_missing_basis#>>'{original_basis,row_resolution_id}')::uuid;\n    v_lineage:=(v_missing_basis#>>'{original_basis,lineage_id}')::uuid;\n    v_economic:=(v_missing_basis#>>'{original_basis,economic_snapshot_id}')::uuid;\n    if private.bpay_next_source_current_scope_v1(v_origin_resolution,v_revision.source_group_id,v_t.work_event_id,v_line.contract_id)\n      is distinct from v_scope then\n      raise exception 'BPAY_NEXT_SOURCE_MISSING_CANCEL_SCOPE_CHANGED' using errcode='55000';\n    end if;\n  end if;\n  if v_t.outcome in ('AMEND','CANCEL') and not v_t.exclude_cancel then"
+    },
+    {
+      "name": "actual old resolution in retained financial origin",
+      "before": "      v_t.transition_fingerprint,v_line.row_resolution_id,v_lineage,v_economic,v_movement,v_t.new_snapshot_line_id,v_t.created_at_utc)",
+      "after": "      v_t.transition_fingerprint,v_origin_resolution,v_lineage,v_economic,v_movement,v_t.new_snapshot_line_id,v_t.created_at_utc)"
+    }
+  ],
+  "whole_reverse_verified": true,
+  "unchanged": [
+    "native refresh financial source_present semantics",
+    "native event/page ABI and original monetary queries",
+    "ordinary ADD/AMEND/NO_CHANGE/unexcluded CANCEL",
+    "original absence new_present=false/new_snapshot=NULL",
+    "original invoice/settlement/calculator authorities"
+  ],
+  "sql_compiled": false,
+  "native_proof": false
+}

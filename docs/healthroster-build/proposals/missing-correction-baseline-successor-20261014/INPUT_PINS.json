@@ -1,0 +1,68 @@
+{
+  "source_only": true,
+  "current_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "native_inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "bytes": 184614,
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/21072026_1235_06_import_timesheet_financial_preflight_v1.sql",
+      "bytes": 33198,
+      "sha256": "c25b6bb9c509e12f79efdf36cc227359b0546bdab91f2d9a29b6d3a3b9531e5e"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    }
+  ],
+  "prior_packet": "missing-default-current-native-proposal-20261014",
+  "prior_inputs": [
+    {
+      "file": "FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 10975,
+      "sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1214,
+      "sha256": "d2e373e83914f1047ef4bef1637afbdace9fe192c03397f39fe34b7f218a6290"
+    },
+    {
+      "file": "forward/03_missing_cancel_basis.sqlinc",
+      "bytes": 6891,
+      "sha256": "e05e9222c63380c739749a78ffb96651aec24cff369cd7b288a0796556e216a5"
+    },
+    {
+      "file": "forward/14_missing_prepared_census_recheck.sqlinc",
+      "bytes": 4198,
+      "sha256": "04b7d8627bc9fa05548c685ac89b20ab2dea0aa263307418900356cd76791fe3"
+    },
+    {
+      "file": "forward/06_complete_fin4_default_draft.sqlinc",
+      "bytes": 115717,
+      "sha256": "96838b0e1b34d81e2649df2f84191cea3277d81e123170091fc9ec25dced4db2"
+    },
+    {
+      "file": "forward/01_target_publication_context.sqlinc",
+      "bytes": 29129,
+      "sha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11"
+    },
+    {
+      "file": "before/private.weekly_source_ordinary_projection_active_movements_v1_uuid_uuid_.sqlinc",
+      "bytes": 12360,
+      "sha256": "47e534be7a621b29d92db76ba4a9ca229e812c1bb0e139ca45ae89014e1957fd"
+    }
+  ]
+}

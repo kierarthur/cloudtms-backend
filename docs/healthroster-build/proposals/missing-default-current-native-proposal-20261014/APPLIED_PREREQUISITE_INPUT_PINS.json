@@ -1,0 +1,22 @@
+{
+  "source_only": true,
+  "original_prototype_generators_not_selected": true,
+  "selected": [
+    {
+      "commit": "1be1b623eb6567d9fd483ae28e48b887dd2868bd",
+      "file": "docs/healthroster-build/proposals/kept-applied-correction-context-successor-20261014/forward/00_target_publication_facts.sqlinc",
+      "sha256": "3bb894d44140dc63f43947f5744ab9eeea55efba20ad62e3c728e2bf501c972e",
+      "bytes": 17456,
+      "forward_copy": "forward/00_target_publication_facts.sqlinc"
+    },
+    {
+      "commit": "1be1b623eb6567d9fd483ae28e48b887dd2868bd",
+      "file": "docs/healthroster-build/proposals/kept-applied-correction-context-successor-20261014/forward/01_target_publication_context.sqlinc",
+      "sha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11",
+      "bytes": 29129,
+      "forward_copy": "forward/01_target_publication_context.sqlinc"
+    }
+  ],
+  "canonical_changed": false,
+  "native_proof": false
+}

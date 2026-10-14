@@ -1,0 +1,125 @@
+create or replace function private.weekly_source_ordinary_projection_current_segments_v1(
+  p_root_timesheet_id uuid,
+  p_through_final_revision_id uuid
+) returns jsonb
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with root_scope as materialized (
+    select ts.booking_id,ts.contract_id,ts.week_ending_date,c.candidate_id,c.client_id,
+      coalesce(module.active_owner='NEXT' and exists(
+        select 1 from public.weekly_exceptional_pay_target_families f
+        where f.root_timesheet_id=ts.timesheet_id and f.root_family_booking_id=ts.booking_id
+          and pg_catalog.btrim(f.root_family_booking_id)=pg_catalog.btrim(ts.booking_id)
+          and private.bpay_next_protected_owner_route_v1(f.id)='NEXT'
+      ),false) as use_next
+    from public.timesheets ts join public.contracts c on c.id=ts.contract_id
+    left join private.bpay_next_module_control module on module.id=1
+    where ts.timesheet_id=p_root_timesheet_id
+  ), family as materialized (
+    -- WP-62: the live-position owner answers over the whole Timesheet family,
+    -- so the lineage a segment is composed from must be found over the same
+    -- family.  Keyed on the physical root alone, the composer dropped a live
+    -- position bound to an earlier member and the projection owner's
+    -- completeness check refused every rotated family that kept working
+    -- (executed: WEEKLY_SOURCE_ACTIVE_SEGMENT_MANIFEST_INCOMPLETE).  Same
+    -- adapter, resolved once; unrotated families are unchanged.
+    select root_scope.*,case when use_next then array[p_root_timesheet_id]
+      else private.weekly_source_invoice_family_timesheet_ids_v1(p_root_timesheet_id) end as timesheet_ids
+    from root_scope
+  ), active as (
+    select *
+    from private.weekly_source_ordinary_projection_active_movements_v1(
+      p_root_timesheet_id,p_through_final_revision_id
+    )
+  ), facts as (
+    select
+      active.*,
+      (active.source_facts_json->>'row_resolution_id')::uuid as row_resolution_id
+    from active
+    where coalesce(active.source_facts_json->>'row_resolution_id','')
+      ~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ), shaped as (
+    select
+      source_row.work_date,
+      source_row.start_at_local,
+      source_row.end_at_local,
+      source_row.break_minutes,
+      source_row.external_source_key,
+      facts.work_event_id,
+      facts.id as movement_id,
+      facts.final_revision_id,
+      facts.source_profile_kind,
+      facts.source_line_kind,
+      facts.movement_economic_hash,
+      facts.mapping_rate_policy_fingerprint,
+      facts.canonical_pay_vector_json,
+      facts.canonical_charge_vector_json,
+      facts.row_resolution_id,
+      economic.id as economic_snapshot_id,
+      economic.calculation_fingerprint,
+      lineage.lineage_fingerprint
+    from facts
+    cross join family
+    join public.weekly_source_row_resolutions resolution
+      on resolution.id=facts.row_resolution_id
+     and resolution.work_event_id=facts.work_event_id
+     and resolution.mapping_state='RESOLVED'
+    join public.weekly_source_upload_rows source_row
+      on source_row.id=resolution.upload_row_id
+    join public.weekly_source_row_economic_snapshots economic
+      on economic.row_resolution_id=resolution.id
+     and economic.work_event_id=facts.work_event_id
+    join public.weekly_source_row_timesheet_lineages lineage
+      on lineage.row_resolution_id=resolution.id
+     and ((not family.use_next and lineage.timesheet_id=any(family.timesheet_ids))
+       or (family.use_next and lineage.family_booking_id=family.booking_id
+         and lineage.work_event_id=facts.work_event_id and lineage.candidate_id=family.candidate_id
+         and lineage.client_id=family.client_id and lineage.contract_id=family.contract_id
+         and lineage.week_ending_date=family.week_ending_date
+         and facts.candidate_id=family.candidate_id and facts.actual_client_id=family.client_id
+         and facts.contract_id=family.contract_id))
+    where (facts.canonical_pay_vector_json->>'row_sign')::integer=1
+      and (facts.canonical_charge_vector_json->>'row_sign')::integer=1
+  )
+  select coalesce(pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'segment_id','weekly-source-event:'||shaped.work_event_id::text,
+      'date',shaped.work_date,
+      'start',pg_catalog.to_char(shaped.start_at_local,'HH24:MI'),
+      'end',pg_catalog.to_char(shaped.end_at_local,'HH24:MI'),
+      'overnight',shaped.end_at_local::date>shaped.start_at_local::date,
+      'break_mins',shaped.break_minutes,
+      'ref_num',nullif(pg_catalog.btrim(coalesce(shaped.external_source_key,'')),''),
+      'breaks','[]'::jsonb,
+      'hours_day',(shaped.canonical_pay_vector_json#>>'{hours,day}')::numeric,
+      'hours_night',(shaped.canonical_pay_vector_json#>>'{hours,night}')::numeric,
+      'hours_sat',(shaped.canonical_pay_vector_json#>>'{hours,sat}')::numeric,
+      'hours_sun',(shaped.canonical_pay_vector_json#>>'{hours,sun}')::numeric,
+      'hours_bh',(shaped.canonical_pay_vector_json#>>'{hours,bh}')::numeric,
+      'pay_amount',(shaped.canonical_pay_vector_json->>'total_pence')::numeric/100,
+      'charge_amount',(shaped.canonical_charge_vector_json->>'total_pence')::numeric/100,
+      'is_reversal',false,
+      'exclude_from_pay',false,
+      'weekly_source',pg_catalog.jsonb_build_object(
+        'schema_version','WEEKLY_SOURCE_SEGMENT_LINEAGE_V1',
+        'work_event_id',shaped.work_event_id,
+        'movement_id',shaped.movement_id,
+        'final_revision_id',shaped.final_revision_id,
+        'source_profile_kind',shaped.source_profile_kind,
+        'source_line_kind',shaped.source_line_kind,
+        'row_resolution_id',shaped.row_resolution_id,
+        'economic_snapshot_id',shaped.economic_snapshot_id,
+        'pay_vector',shaped.canonical_pay_vector_json,
+        'charge_vector',shaped.canonical_charge_vector_json,
+        'movement_economic_hash',pg_catalog.encode(shaped.movement_economic_hash,'hex'),
+        'mapping_rate_policy_fingerprint',
+          pg_catalog.encode(shaped.mapping_rate_policy_fingerprint,'hex'),
+        'calculation_fingerprint',pg_catalog.encode(shaped.calculation_fingerprint,'hex'),
+        'timesheet_lineage_fingerprint',pg_catalog.encode(shaped.lineage_fingerprint,'hex')
+      )
+    ) order by shaped.work_date,shaped.start_at_local,shaped.end_at_local,
+               shaped.work_event_id
+  ),'[]'::jsonb)
+  from shaped;
+$function$;

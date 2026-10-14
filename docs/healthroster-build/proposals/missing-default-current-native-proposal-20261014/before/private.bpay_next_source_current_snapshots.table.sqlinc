@@ -1,0 +1,8 @@
+
+
+create table private.bpay_next_source_current_snapshots (
+  snapshot_line_id uuid primary key references public.weekly_source_final_snapshot_lines(id),
+  scope_id uuid not null references private.bpay_next_source_current_scopes(id),
+  work_event_id uuid not null references public.weekly_work_events(id),
+  movement_id uuid not null references public.weekly_source_billing_movements(id)
+);

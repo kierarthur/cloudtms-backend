@@ -1,0 +1,37 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "artifact_count": 6,
+  "artifacts": [
+    {
+      "file": "INPUT_PINS.json",
+      "bytes": 786,
+      "sha256": "0b3c51a836ad47933421f32781f9e8bcc675aa3eaa8a195c32395e13548358ba"
+    },
+    {
+      "file": "REVIEW_SCOPE.md",
+      "bytes": 1909,
+      "sha256": "9cece3c8b5f95f816c5e9bcdef6542e7d5aca995f2daece94268cc045e4f6c2f"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 438,
+      "sha256": "d5fb08871b0d51fcbae538c422d2127c7eae497b9ac458464d034235199c4883"
+    },
+    {
+      "file": "census-guard-source.test.mjs",
+      "bytes": 4122,
+      "sha256": "ddbb2fd1727bca13718f8ab33102968b02ec813e7a4f0297f89fc45217e695f7"
+    },
+    {
+      "file": "forward/04_revision_census_guard.sqlinc",
+      "bytes": 2356,
+      "sha256": "4af429cea4eaaa4bd0d02e18f44b4fd80fd87658d0163411ec913efde8afc7e0"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2926,
+      "sha256": "5ea4bfc3d4107352a6699a28afbf763f94f9a37f3888908faafe46f52a44bf61"
+    }
+  ]
+}

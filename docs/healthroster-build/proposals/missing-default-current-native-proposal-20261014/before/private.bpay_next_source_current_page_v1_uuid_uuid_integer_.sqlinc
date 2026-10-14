@@ -1,0 +1,24 @@
+create or replace function private.bpay_next_source_current_page_v1(p_root uuid,p_after_event uuid,p_limit integer default 100)
+returns jsonb language plpgsql stable security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_scope uuid;v_row record;v_rows jsonb:='[]';v_last uuid;v_more boolean:=false;v_count integer:=0;
+begin
+  if p_limit is null or p_limit not between 1 and 100 or p_root is null then raise exception 'BPAY_NEXT_SOURCE_PAGE_INPUT_INVALID' using errcode='22023';end if;
+  select s.id into strict v_scope from private.bpay_next_source_current_scopes s where s.root_timesheet_id=p_root;
+  -- <=101 active SHIFT/positive EXPENSE keys, never all absent old events.
+  for v_row in select x.work_event_id from (
+    (select e.work_event_id from private.bpay_next_source_current_events e where e.scope_id=v_scope
+      and (e.source_present or e.ambiguous) and e.work_event_id>=coalesce(p_after_event,'00000000-0000-0000-0000-000000000000'::uuid)
+      and (p_after_event is null or e.work_event_id<>p_after_event)
+      order by e.work_event_id limit p_limit+1)
+    union
+    (select e.work_event_id from private.bpay_next_source_current_expenses e where e.scope_id=v_scope
+      and e.positive and e.work_event_id>=coalesce(p_after_event,'00000000-0000-0000-0000-000000000000'::uuid)
+      and (p_after_event is null or e.work_event_id<>p_after_event)
+      order by e.work_event_id limit p_limit+1)) x order by x.work_event_id limit p_limit+1 loop
+    v_count:=v_count+1;if v_count>p_limit then v_more:=true;exit;end if;
+    v_rows:=v_rows||jsonb_build_array(private.bpay_next_source_current_event_v1(p_root,v_row.work_event_id));v_last:=v_row.work_event_id;
+    if octet_length(v_rows::text)>122000 then raise exception 'BPAY_NEXT_SOURCE_CURRENT_BYTE_BOUND' using errcode='54000';end if;
+  end loop;
+  return jsonb_build_object('rows',v_rows,'complete',not v_more,'next_event_id',case when v_more then v_last else null end);
+end $f$;

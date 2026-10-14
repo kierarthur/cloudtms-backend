@@ -1,0 +1,15 @@
+
+
+create table private.bpay_next_source_current_events (
+  scope_id uuid not null references private.bpay_next_source_current_scopes(id),
+  work_event_id uuid not null references public.weekly_work_events(id),
+  source_kind text not null check(source_kind in ('NHSP','HR')),
+  source_present boolean not null,
+  ambiguous boolean not null default false,
+  selected_movement_id uuid references public.weekly_source_billing_movements(id),
+  selected_transition_id uuid references public.weekly_source_state_transitions(id),
+  selected_order_key bit(128),
+  primary key(scope_id,work_event_id),
+  check(not source_present or selected_movement_id is not null),
+  check(not ambiguous or not source_present)
+);

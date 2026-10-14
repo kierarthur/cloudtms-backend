@@ -1,0 +1,30 @@
+{
+  "schema_version": "MISSING_RETAINED_SNAPSHOT_MAPPING_SOURCE_CHECK_V1",
+  "source_only": true,
+  "tests": {
+    "effect_free_cases": 8,
+    "passed": 8,
+    "failed": 0
+  },
+  "syntax": {
+    "inert_scripts": 3,
+    "passed": 3
+  },
+  "whole_owner_reversals": 1,
+  "unique_hunks": 1,
+  "chained_native_reversals": 1,
+  "chained_native_hunks": 5,
+  "forward_sha256": "31f088f054494565affc36b21d7a3d29972917f4ae89d3112d2c9e79a2a946b6",
+  "old_missing56_preserved": true,
+  "new_signatures": 0,
+  "new_schema_objects": 0,
+  "shared_banking_owner_change_proposed": true,
+  "shared_owner_approval": false,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "real_database_calls": 0,
+  "scratch_created": false,
+  "remaining_gaps": "REVIEW_SCOPE_AND_GAPS.md"
+}

@@ -1,0 +1,20 @@
+{
+  "source_only": true,
+  "prior_manifest_sha256": "4cbdd40bffd1da5fbb1eb0200c315a30fc6180134af2d4ff53e96b353f8ff2c5",
+  "before_bytes": 10722,
+  "before_sha256": "6974e1fd126e3d04af262b8ff1a987b33697898cfe36793a843fda0368c45381",
+  "after_bytes": 10724,
+  "after_sha256": "2cb220bb04ea9802bc034f8c62b37f0511166c69dcd1f099d22d4942e219a0a7",
+  "hunks": [
+    {
+      "before": "'WEEKLY_SOURCE_CORRECT_FINAL_SOURCE',p_actor_user_id,'{}'::jsonb,false,1);",
+      "after": "'WEEKLY_SOURCE_CORRECT_FINAL_SOURCE',p_actor_user_id,'{}'::jsonb,false,100);"
+    }
+  ],
+  "unique_hunks": 1,
+  "whole_reverse_verified": true,
+  "signature": "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+  "new_signatures": 0,
+  "sql_compiled": false,
+  "native_proof": false
+}

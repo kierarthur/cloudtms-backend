@@ -1,0 +1,54 @@
+-- Source-only read DTO separates genuine raw export membership from the
+-- existing native financial-selection source_present contract. Native Bank
+-- refresh/event/page owners are not renamed, reclassified or duplicated.
+create or replace function private.weekly_source_missing_current_selection_v1(
+  p_work_event_id uuid,p_root_timesheet_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_context jsonb; v_native jsonb; v_basis jsonb;
+  v_transition public.weekly_source_state_transitions%rowtype;
+begin
+  v_context:=private.weekly_source_kept_as_paid_context_v1(p_work_event_id,p_actor_user_id);
+  if p_root_timesheet_id is null or not (v_context->'root_timesheet_ids') @> jsonb_build_array(p_root_timesheet_id) then
+    raise exception 'WEEKLY_SOURCE_MISSING_SELECTION_ROOT_OUTSIDE_SCOPE' using errcode='42501';
+  end if;
+  if not exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='NEXT') then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CURRENT_SELECTION_V1',
+      'work_event_id',p_work_event_id,'root_timesheet_id',p_root_timesheet_id,
+      'projection_publication_id',v_context->'projection_publication_id',
+      'raw_export_present',v_context->'source_present','financial_source_present',null,
+      'excluded_cancel_transition_id',null,'exclusion_target_matches_current_export',null,
+      'retained_financial_basis',null,'native_current_selection',null,'native_context',v_context,
+      'native_selection_availability','NEXT_OWNER_NOT_ACTIVE');
+  end if;
+  v_native:=private.bpay_next_source_current_event_v1(p_root_timesheet_id,p_work_event_id);
+  if v_native->>'work_event_id' is distinct from p_work_event_id::text
+    or v_native->>'root_timesheet_id' is distinct from p_root_timesheet_id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_SELECTION_NATIVE_UNBOUND' using errcode='55000';
+  end if;
+  if v_native->>'transition_id' is not null then
+    select * into strict v_transition from public.weekly_source_state_transitions where id=(v_native->>'transition_id')::uuid;
+    if v_transition.exclude_cancel then
+      v_basis:=private.weekly_source_missing_cancel_transition_assert_v1(v_transition.id);
+      if v_basis#>>'{original_basis,movement_id}' is distinct from v_native->>'movement_id'
+        or v_native->'source_present' is distinct from 'true'::jsonb
+        or v_transition.work_event_id is distinct from p_work_event_id then
+        raise exception 'WEEKLY_SOURCE_MISSING_SELECTION_RETAINED_UNBOUND' using errcode='55000';
+      end if;
+    end if;
+  end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CURRENT_SELECTION_V1',
+    'work_event_id',p_work_event_id,'root_timesheet_id',p_root_timesheet_id,
+    'projection_publication_id',v_context->'projection_publication_id',
+    'raw_export_present',v_context->'source_present','financial_source_present',v_native->'source_present',
+    'excluded_cancel_transition_id',case when v_basis is null then null else v_transition.id end,
+    'exclusion_target_matches_current_export',case when v_basis is null then null
+      else v_basis->>'projection_publication_id' is not distinct from v_context->>'projection_publication_id' end,
+    'retained_financial_basis',v_basis,'native_current_selection',v_native,'native_context',v_context,
+    'native_selection_availability','AVAILABLE');
+end;
+$function$;
+alter function private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

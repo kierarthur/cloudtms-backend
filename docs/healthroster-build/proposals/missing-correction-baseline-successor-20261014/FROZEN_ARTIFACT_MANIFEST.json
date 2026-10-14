@@ -1,0 +1,69 @@
+{
+  "schema_version": "MISSING_CORRECTION_BASELINE_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSES.json",
+      "bytes": 4026,
+      "sha256": "9f79f324066211e691bdee550dcf1dcdc1c052339ae2d2eae54eae76126e755f"
+    },
+    {
+      "file": "INPUT_PINS.json",
+      "bytes": 2657,
+      "sha256": "44ef2da28a2416e3f472dccd27d2721c6f90f7e1502ecb9e8951e3397b18acf2"
+    },
+    {
+      "file": "REVIEW_SCOPE_AND_GAPS.md",
+      "bytes": 3373,
+      "sha256": "43aedd7834cd921b07c8d31e02e375bd6cf1ee5a0c7f0c02f47047954c41a1bb"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 783,
+      "sha256": "1818edd3982514bfcdf9b86cb8f1515707c4da1aced69645d6747647825d408a"
+    },
+    {
+      "file": "before/03_missing_cancel_basis.sqlinc",
+      "bytes": 6891,
+      "sha256": "e05e9222c63380c739749a78ffb96651aec24cff369cd7b288a0796556e216a5"
+    },
+    {
+      "file": "before/14_missing_prepared_census_recheck.sqlinc",
+      "bytes": 4198,
+      "sha256": "04b7d8627bc9fa05548c685ac89b20ab2dea0aa263307418900356cd76791fe3"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 6203,
+      "sha256": "3e31890c04a0250a4d6feeeb1c9f462974835896960d9c9773a3a088a850f435"
+    },
+    {
+      "file": "correction-baseline-source.test.mjs",
+      "bytes": 8512,
+      "sha256": "af285cdc9dae2be2985f3c817f2844aa5bd765893e6ec177ae5b51bdde17ed9f"
+    },
+    {
+      "file": "forward/02_missing_correction_baseline.sqlinc",
+      "bytes": 10722,
+      "sha256": "6974e1fd126e3d04af262b8ff1a987b33697898cfe36793a843fda0368c45381"
+    },
+    {
+      "file": "forward/03_missing_cancel_basis.sqlinc",
+      "bytes": 7286,
+      "sha256": "d66b67b0ab278f90113c2f59d93f1a8dccbf89543b8d0c377dfa4b7afa54add7"
+    },
+    {
+      "file": "forward/14_missing_prepared_census_recheck.sqlinc",
+      "bytes": 4741,
+      "sha256": "077ddade56c51eaa1f8d8700672c8c5e28cdc5d706b8169f7e1668258615c07e"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2699,
+      "sha256": "262cc98c5b3a5f0417393004fc54ea2c2dbf8f7774216bba0239f6b27e92a967"
+    }
+  ]
+}

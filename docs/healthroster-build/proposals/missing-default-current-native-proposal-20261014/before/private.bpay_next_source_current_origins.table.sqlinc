@@ -1,0 +1,31 @@
+
+
+create table private.bpay_next_source_current_origins (
+  origin_kind text not null check(origin_kind in ('MOVEMENT','TRANSITION','EXPENSE')),
+  origin_id uuid not null,
+  movement_id uuid references public.weekly_source_billing_movements(id),
+  transition_id uuid references public.weekly_source_state_transitions(id),
+  expense_authority_id uuid references public.weekly_expense_authority_generations(id),
+  scope_id uuid not null references private.bpay_next_source_current_scopes(id),
+  work_event_id uuid not null references public.weekly_work_events(id),
+  final_revision_id uuid not null references public.weekly_source_final_revisions(id),
+  order_key bit(128) not null,
+  source_hash bytea not null check(octet_length(source_hash)=32),
+  row_resolution_id uuid references public.weekly_source_row_resolutions(id),
+  lineage_id uuid references public.weekly_source_row_timesheet_lineages(id),
+  economic_snapshot_id uuid references public.weekly_source_row_economic_snapshots(id),
+  selected_movement_id uuid references public.weekly_source_billing_movements(id),
+  snapshot_line_id uuid references public.weekly_source_final_snapshot_lines(id),
+  magnitude_hash bytea check(magnitude_hash is null or octet_length(magnitude_hash)=32),
+  contribution smallint check(contribution in (-1,1)),
+  representative_created_at timestamptz not null,
+  active boolean not null default false,
+  retracted_by_session_id uuid references public.weekly_final_source_correction_sessions(id),
+  primary key(origin_kind,origin_id),
+  check((origin_kind='MOVEMENT' and movement_id is not null and movement_id=origin_id and transition_id is null and expense_authority_id is null
+      and magnitude_hash is not null and contribution is not null)
+    or (origin_kind='TRANSITION' and transition_id is not null and transition_id=origin_id and movement_id is null and expense_authority_id is null
+      and magnitude_hash is null and contribution is null)
+    or (origin_kind='EXPENSE' and expense_authority_id is not null and expense_authority_id=origin_id and movement_id is null and transition_id is null
+      and magnitude_hash is null and contribution is null))
+);

@@ -1,0 +1,65 @@
+-- Prepared target read: genuine request actor, whole native context and actual
+-- stored immutable census are re-proved before CorrectFinal's existing CAS.
+-- This creates no proposal, receipt, payment or missing-source authority.
+create or replace function private.weekly_source_missing_prepared_census_recheck_v1(
+  p_final_revision_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_transition public.weekly_source_state_transitions%rowtype;
+  v_entry record; v_basis jsonb; v_context jsonb; v_original jsonb; v_ids uuid[];
+begin
+  select * into strict v_revision from public.weekly_source_final_revisions where id=p_final_revision_id;
+  if v_revision.missing_cancel_basis_census='{}'::jsonb then return '{}'::jsonb; end if;
+  if p_actor_user_id is null or v_revision.state is distinct from 'PREPARED'
+    or v_revision.reason is distinct from 'CORRECT_FINAL_SOURCE'
+    or v_revision.finalised_by_user_id is distinct from p_actor_user_id then
+    raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_NATIVE_ACTOR_REQUIRED' using errcode='42501';
+  end if;
+  for v_entry in select key,value from jsonb_each(v_revision.missing_cancel_basis_census) order by key loop
+    select array_agg(transition.id) into v_ids from public.weekly_source_state_transitions transition
+      where transition.final_revision_id=v_revision.id and transition.work_event_id=v_entry.key::uuid;
+    if coalesce(cardinality(v_ids),0)<>1 then
+      raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_TRANSITION_UNBOUND' using errcode='40001';
+    end if;
+    select * into strict v_transition from public.weekly_source_state_transitions where id=v_ids[1];
+    v_basis:=v_entry.value->'basis';
+    if v_basis is null or v_basis='null'::jsonb then
+      -- A raw-present non-absence result is never promoted into an absent
+      -- basis by this reader. Its distinct native path remains unchanged.
+      if v_entry.value->>'disposition' is distinct from 'NOT_GENUINELY_ABSENT'
+        or v_transition.exclude_cancel then
+        raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_BASIS_INVALID' using errcode='40001';
+      end if;
+      continue;
+    end if;
+    if v_basis->>'work_event_id' is distinct from v_transition.work_event_id::text
+      or v_basis->>'previous_snapshot_line_id' is distinct from v_transition.previous_snapshot_line_id::text
+      or v_basis->>'actor_user_id' is distinct from p_actor_user_id::text
+      or v_basis->>'basis_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',v_basis-'basis_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_BASIS_INVALID' using errcode='40001';
+    end if;
+    v_context:=private.weekly_source_kept_as_paid_context_for_publication_v1(
+      v_transition.work_event_id,p_actor_user_id,(v_basis->>'projection_publication_id')::uuid);
+    v_original:=private.weekly_source_missing_snapshot_movement_v1(v_transition.previous_snapshot_line_id);
+    if v_context is distinct from v_basis->'target_native_context'
+      or v_original is distinct from v_basis->'original_basis'
+      or v_context->'source_present' is distinct from 'false'::jsonb then
+      raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_FACTS_CHANGED' using errcode='40001';
+    end if;
+    if v_transition.exclude_cancel then
+      perform private.weekly_source_missing_cancel_transition_assert_v1(v_transition.id);
+    elsif v_entry.value->>'disposition' is distinct from 'CANCEL_NOT_PAID_OR_INVOICED'
+      or v_context->'paid' is distinct from 'false'::jsonb
+      or v_context->'invoiced' is distinct from 'false'::jsonb then
+      raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_DISPOSITION_CHANGED' using errcode='40001';
+    end if;
+  end loop;
+  return v_revision.missing_cancel_basis_census;
+end;
+$function$;
+alter function private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid) from public,anon,authenticated,service_role;

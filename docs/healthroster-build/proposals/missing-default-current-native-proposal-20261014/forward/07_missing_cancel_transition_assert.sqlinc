@@ -1,0 +1,90 @@
+-- Source authority for the proposed shared native capture arm. This validates
+-- real absent CANCEL provenance; it creates no movement or financial snapshot.
+create or replace function private.weekly_source_missing_cancel_transition_assert_v1(p_transition_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_t public.weekly_source_state_transitions%rowtype;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_snapshot public.weekly_source_final_snapshot_lines%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_basis jsonb; v_original jsonb; v_census jsonb; v_group uuid;
+begin
+  select * into strict v_t from public.weekly_source_state_transitions where id=p_transition_id;
+  if not v_t.exclude_cancel or v_t.outcome is distinct from 'CANCEL'
+    or not v_t.previous_present or v_t.new_present
+    or v_t.previous_snapshot_line_id is null or v_t.new_snapshot_line_id is not null
+    or v_t.new_state_fingerprint is not null or v_t.prior_state_fingerprint is null
+    or v_t.source_profile_kind not in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS') then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_TRANSITION_INVALID' using errcode='55000';
+  end if;
+  select * into strict v_revision from public.weekly_source_final_revisions where id=v_t.final_revision_id;
+  select * into strict v_snapshot from public.weekly_source_final_snapshot_lines where id=v_t.previous_snapshot_line_id;
+  select * into strict v_event from public.weekly_work_events where id=v_t.work_event_id;
+  select source_group_id into strict v_group from public.weekly_source_cycles where id=v_revision.source_cycle_id;
+  v_basis:=v_t.cancel_exclusion_basis;
+  v_census:=v_revision.missing_cancel_basis_census->v_t.work_event_id::text;
+  if v_revision.authority_scope_kind is distinct from 'CYCLE' or v_revision.report_scope_id is not null
+    or v_t.finalisation_cycle_id is distinct from v_revision.source_cycle_id
+    or v_event.first_source_group_id is distinct from v_group
+    or (v_snapshot.work_event_id,v_snapshot.candidate_id,v_snapshot.client_id,v_snapshot.work_date)
+      is distinct from (v_event.id,v_event.candidate_id,v_event.client_id,v_event.work_date)
+    or v_census->'exclude_cancel' is distinct from 'true'::jsonb
+    or v_census->'basis' is distinct from v_basis
+    or v_basis->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1'
+    or v_basis->>'work_event_id' is distinct from v_t.work_event_id::text
+    or v_basis->>'previous_snapshot_line_id' is distinct from v_snapshot.id::text
+    or v_basis->>'actor_user_id' is distinct from v_revision.finalised_by_user_id::text
+    or v_basis->>'candidate_id' is distinct from v_snapshot.candidate_id::text
+    or v_basis->>'client_id' is distinct from v_snapshot.client_id::text
+    or v_basis->>'contract_id' is distinct from v_snapshot.contract_id::text
+    or v_basis->>'basis_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',v_basis-'basis_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_BASIS_UNBOUND' using errcode='55000';
+  end if;
+  select * into strict v_publication from public.weekly_source_projection_publications
+    where id=(v_basis->>'projection_publication_id')::uuid;
+  if v_publication.upload_id is distinct from v_revision.upload_id
+    or v_basis->>'upload_id' is distinct from v_revision.upload_id::text
+    or v_basis->>'projection_generation' is distinct from coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)::text
+    or v_basis->>'comparison_manifest_hash' is distinct from encode(v_publication.comparison_manifest_hash,'hex')
+    or v_basis->>'issue_set_hash' is distinct from encode(v_publication.issue_set_hash,'hex')
+    or v_basis#>>'{target_native_context,projection_publication_id}' is distinct from v_publication.id::text
+    or v_basis#>>'{target_native_context,source_group_id}' is distinct from v_group::text
+    or v_basis#>'{target_native_context,source_present}' is distinct from 'false'::jsonb
+    or not coalesce(((v_basis->>'disposition'='KEEP_INVOICED'
+        and v_basis#>'{target_native_context,invoiced}'='true'::jsonb)
+      or (v_basis->>'disposition'='KEEP_PAID_NOT_INVOICED'
+        and v_basis#>'{target_native_context,paid}'='true'::jsonb)),false) then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_PUBLICATION_UNBOUND' using errcode='55000';
+  end if;
+  -- The real raw upload, including unresolved/unfinalised profile-key rows,
+  -- remains the sole export-membership authority. Retained money is separate.
+  if exists(select 1 from public.weekly_source_upload_rows source_row
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+      and resolution.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)
+    where source_row.upload_id=v_publication.upload_id and resolution.work_event_id=v_t.work_event_id)
+    or (v_event.identity_kind='PROFILE_EXTERNAL_KEY' and exists(
+      select 1 from public.weekly_source_upload_rows source_row where source_row.upload_id=v_publication.upload_id
+        and source_row.external_source_key=v_event.profile_external_key))
+    or exists(select 1 from public.weekly_source_billing_movements movement where movement.transition_id=v_t.id) then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_FINANCIAL_FOOTPRINT_INVALID' using errcode='55000';
+  end if;
+  v_original:=private.weekly_source_missing_snapshot_movement_v1(v_snapshot.id);
+  if v_original is distinct from v_basis->'original_basis'
+    or v_original->>'movement_id' is distinct from v_basis#>>'{target_native_context,current_pay_head_movement_id}'
+    or v_t.transition_fingerprint is distinct from private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_STATE_TRANSITION_V1',jsonb_build_object(
+        'final_revision_id',v_t.final_revision_id,'work_event_id',v_t.work_event_id,
+        'previous_snapshot_line_id',v_t.previous_snapshot_line_id,'new_snapshot_line_id',null,
+        'outcome','CANCEL','exclude_cancel',true,'cancel_exclusion_basis',v_basis,
+        'prior_state_fingerprint',encode(v_t.prior_state_fingerprint,'hex'),'new_state_fingerprint',null)) then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_ORIGINAL_CHANGED' using errcode='55000';
+  end if;
+  return v_basis;
+end;
+$function$;
+alter function private.weekly_source_missing_cancel_transition_assert_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_cancel_transition_assert_v1(uuid) from public,anon,authenticated,service_role;

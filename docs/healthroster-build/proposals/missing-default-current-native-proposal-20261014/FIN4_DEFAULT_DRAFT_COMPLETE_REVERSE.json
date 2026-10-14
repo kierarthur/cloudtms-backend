@@ -1,0 +1,122 @@
+{
+  "source_only": true,
+  "unfrozen_draft": true,
+  "input_current_native_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "input_file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+  "input_sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+  "input_bytes": 109850,
+  "output_file": "forward/06_complete_fin4_default_draft.sqlinc",
+  "output_sha256": "96838b0e1b34d81e2649df2f84191cea3277d81e123170091fc9ec25dced4db2",
+  "output_bytes": 115717,
+  "full_unique_reverse_verified": true,
+  "unique_hunks": 19,
+  "hunks": [
+    {
+      "name": "owned missing prewrite cache locals",
+      "before": "  v_prior_snapshot public.weekly_source_final_snapshot_lines%rowtype;",
+      "after": "  v_prior_snapshot public.weekly_source_final_snapshot_lines%rowtype;\n  v_missing_row record;\n  v_missing_candidate jsonb;\n  v_missing_cache jsonb:='{}'::jsonb;\n  v_prior_missing_cancel_frame text:=coalesce(current_setting('cloudtms.weekly_source_missing_cancel_frame',true),'');\n  v_cancel_basis jsonb;\n  v_exclude_cancel boolean;"
+    },
+    {
+      "name": "complete Legacy root discovery/recheck 2",
+      "before": "tion);\n    else\n  -- Review G2.  The set above was computed from an UNLOCKED read filtered on a\n  -- non-null Contract Week Timesheet id, so a root another owner commits between\n  -- that read and the loop would be locked later, in source-row order, out of\n  -- the sorted order proof/32 section 6 step 2 fixes.  Recompute it under the\n  -- family locks now held; if it grew, refuse retryably (40001) rather than take\n  -- a second lock set out of order.  A retry recomputes the larger set up front.\n  select pg_catalog.array_agg(distinct contract_week.timesheet_id order by contract_week.timesheet_id)\n  into v_finalisation_root_recheck\n  from public.weekly_source_upload_rows source_row\n  join public.weekly_source_row_resolutions resolution\n    on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n  join public.contract_weeks contract_week\n    on contract_week.contract_id=resolution.contract_id\n   and contract_week.additional_seq=0\n   and contract_week.week_ending_date=source_row.work_date+\n       ((coalesce((\n          select contract.week_ending_weekday_snapshot\n          from public.contracts contract where contract.id=resolution.contract_id\n        ),0)-extract(dow from source_row.work_date)::integer+7)%7)\n  where source_row.upload_id=v_upload.id\n    and contract_week.timesheet_id is not null;",
+      "after": "tion);\n    else\n  -- Review G2.  The set above was computed from an UNLOCKED read filtered on a\n  -- non-null Contract Week Timesheet id, so a root another owner commits between\n  -- that read and the loop would be locked later, in source-row order, out of\n  -- the sorted order proof/32 section 6 step 2 fixes.  Recompute it under the\n  -- family locks now held; if it grew, refuse retryably (40001) rather than take\n  -- a second lock set out of order.  A retry recomputes the larger set up front.\n  select pg_catalog.array_agg(inventory.root_timesheet_id order by inventory.root_timesheet_id)\n  into v_finalisation_root_recheck\n  from private.weekly_source_missing_finalisation_roots_v1(\n    v_upload.id,v_generation,case when p_prepare_only then v_correction.expected_current_final_revision_id else null end,\n    v_group.id,v_client_id,v_coverage_start,v_coverage_end\n  ) inventory;"
+    },
+    {
+      "name": "complete Legacy root discovery/recheck 1",
+      "before": " if;\n  end if;\n\n  -- Review G2.  The set above was computed from an UNLOCKED read filtered on a\n  -- non-null Contract Week Timesheet id, so a root another owner commits between\n  -- that read and the loop would be locked later, in source-row order, out of\n  -- the sorted order proof/32 section 6 step 2 fixes.  Recompute it under the\n  -- family locks now held; if it grew, refuse retryably (40001) rather than take\n  -- a second lock set out of order.  A retry recomputes the larger set up front.\n  select pg_catalog.array_agg(distinct contract_week.timesheet_id order by contract_week.timesheet_id)\n  into v_finalisation_root_recheck\n  from public.weekly_source_upload_rows source_row\n  join public.weekly_source_row_resolutions resolution\n    on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n  join public.contract_weeks contract_week\n    on contract_week.contract_id=resolution.contract_id\n   and contract_week.additional_seq=0\n   and contract_week.week_ending_date=source_row.work_date+\n       ((coalesce((\n          select contract.week_ending_weekday_snapshot\n          from public.contracts contract where contract.id=resolution.contract_id\n        ),0)-extract(dow from source_row.work_date)::integer+7)%7)\n  where source_row.upload_id=v_upload.id\n    and contract_week.timesheet_id is not null;",
+      "after": " if;\n  end if;\n\n  -- Review G2.  The set above was computed from an UNLOCKED read filtered on a\n  -- non-null Contract Week Timesheet id, so a root another owner commits between\n  -- that read and the loop would be locked later, in source-row order, out of\n  -- the sorted order proof/32 section 6 step 2 fixes.  Recompute it under the\n  -- family locks now held; if it grew, refuse retryably (40001) rather than take\n  -- a second lock set out of order.  A retry recomputes the larger set up front.\n  select pg_catalog.array_agg(inventory.root_timesheet_id order by inventory.root_timesheet_id)\n  into v_finalisation_root_recheck\n  from private.weekly_source_missing_finalisation_roots_v1(\n    v_upload.id,v_generation,case when p_prepare_only then v_correction.expected_current_final_revision_id else null end,\n    v_group.id,v_client_id,v_coverage_start,v_coverage_end\n  ) inventory;"
+    },
+    {
+      "name": "complete Legacy root discovery/recheck 0",
+      "before": "e);\n  perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_root_set','',true);\n  else\n  -- Retained default LEGACY / DISABLED Source path: no selector inventory,\n  -- no assumption that pre-existing Source facts have been bootstrapped.\n  select pg_catalog.array_agg(distinct contract_week.timesheet_id order by contract_week.timesheet_id)\n  into v_finalisation_root_ids\n  from public.weekly_source_upload_rows source_row\n  join public.weekly_source_row_resolutions resolution\n    on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n  join public.contract_weeks contract_week\n    on contract_week.contract_id=resolution.contract_id\n   and contract_week.additional_seq=0\n   and contract_week.week_ending_date=source_row.work_date+\n       ((coalesce((\n          select contract.week_ending_weekday_snapshot\n          from public.contracts contract where contract.id=resolution.contract_id\n        ),0)-extract(dow from source_row.work_date)::integer+7)%7)\n  where source_row.upload_id=v_upload.id\n    and contract_week.timesheet_id is not null;",
+      "after": "e);\n  perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_root_set','',true);\n  else\n  -- Retained default LEGACY / DISABLED Source path: no selector inventory,\n  -- no assumption that pre-existing Source facts have been bootstrapped.\n  select pg_catalog.array_agg(inventory.root_timesheet_id order by inventory.root_timesheet_id)\n  into v_finalisation_root_ids\n  from private.weekly_source_missing_finalisation_roots_v1(\n    v_upload.id,v_generation,case when p_prepare_only then v_correction.expected_current_final_revision_id else null end,\n    v_group.id,v_client_id,v_coverage_start,v_coverage_end\n  ) inventory;"
+    },
+    {
+      "name": "previous retained state inventory",
+      "before": "               prior_transition.new_snapshot_line_id",
+      "after": "               coalesce(prior_transition.new_snapshot_line_id,\n                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)\n                 as new_snapshot_line_id"
+    },
+    {
+      "name": "prewrite complete missing basis census",
+      "before": "  select coalesce(pg_catalog.max(revision.revision_number),0)+1 into v_revision_number",
+      "after": "  -- All genuinely missing dispositions share the retained native I-1/root\n  -- scope and one pre-write current financial observation. No own-mutation CAS.\n  if v_source_profile_kind in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS') then\n    for v_missing_row in\n      with prior_states as (\n        select distinct on (prior_transition.work_event_id)\n               prior_transition.work_event_id,\n               coalesce(prior_transition.new_snapshot_line_id,\n                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)\n                 as new_snapshot_line_id\n        from public.weekly_source_state_transitions prior_transition\n        join public.weekly_source_final_revisions prior_revision\n          on prior_revision.id=prior_transition.final_revision_id\n         and prior_revision.state='CURRENT'\n        join public.weekly_source_cycles prior_cycle\n          on prior_cycle.id=prior_transition.finalisation_cycle_id\n        join public.weekly_source_client_manifests prior_manifest\n          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id\n         and prior_manifest.client_id=v_client_id\n        where prior_transition.source_profile_kind=v_source_profile_kind\n          and prior_cycle.source_group_id=v_group.id\n          and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending\n        order by prior_transition.work_event_id,\n                 prior_cycle.finalisation_week_ending desc,\n                 prior_revision.finalised_at_utc desc,\n                 prior_revision.revision_number desc,\n                 prior_transition.created_at_utc desc,\n                 prior_transition.id desc\n      ), prior_lines as (\n        select prior_line.id,prior_state.work_event_id\n        from prior_states prior_state\n        join public.weekly_source_final_snapshot_lines prior_line\n          on prior_line.id=prior_state.new_snapshot_line_id\n        where prior_line.client_id=v_client_id\n          and not (v_rule_values is not null and v_rule_values->>'invoice_sender'='CLIENT_SELF_BILL' and v_rule_values->>'self_bill_source'='SAME_FILE'\n            and coalesce((private.weekly_source_shift_on_self_bill_v1(prior_line.work_event_id,v_cycle.id)->>'bound_to_finalised_export')::boolean,false)\n            and not coalesce((private.weekly_source_shift_on_self_bill_v1(prior_line.work_event_id,v_cycle.id)->>'s25_pay_selected')::boolean,false))\n          and (\n            prior_line.work_date between v_coverage_start and v_coverage_end\n            or exists(\n              select 1\n              from public.weekly_source_row_resolutions current_resolution\n              join public.weekly_source_upload_rows current_row\n                on current_row.id=current_resolution.upload_row_id\n              where current_row.upload_id=v_upload.id\n                and current_resolution.generation=v_generation\n                and current_resolution.work_event_id=prior_line.work_event_id\n            )\n          )\n      )\n      select prior_lines.id as previous_snapshot_line_id,prior_lines.work_event_id\n      from prior_lines join public.weekly_work_events event on event.id=prior_lines.work_event_id\n      where not exists(select 1 from public.weekly_source_upload_rows source_row\n        join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id\n          and resolution.generation=v_generation and resolution.mapping_state='RESOLVED'\n        where source_row.upload_id=v_upload.id and resolution.work_event_id=prior_lines.work_event_id)\n        and not (event.identity_kind='PROFILE_EXTERNAL_KEY' and exists(\n          select 1 from public.weekly_source_upload_rows source_row\n          where source_row.upload_id=v_upload.id and source_row.external_source_key=event.profile_external_key))\n      order by prior_lines.work_event_id\n    loop\n      v_missing_candidate:=private.weekly_source_missing_cancel_basis_v1(\n        v_publication.id,v_missing_row.previous_snapshot_line_id,v_actor);\n      v_missing_cache:=jsonb_set(v_missing_cache,array[v_missing_row.work_event_id::text],v_missing_candidate,true);\n    end loop;\n    perform set_config('cloudtms.weekly_source_missing_cancel_frame',jsonb_build_object(\n      'schema_version','WEEKLY_SOURCE_MISSING_CANCEL_OWNER_FRAME_V1',\n      'owner_transaction_id',pg_current_xact_id()::text,'owner_backend_pid',pg_backend_pid(),\n      'actor_user_id',v_actor,'projection_publication_id',v_publication.id,\n      'upload_id',v_upload.id,'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,\n      'client_id',v_client_id,'census',v_missing_cache,\n      'census_sha256',encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_MISSING_CANCEL_CENSUS_V1',v_missing_cache),'hex'))::text,true);\n  end if;\n\n  select coalesce(pg_catalog.max(revision.revision_number),0)+1 into v_revision_number"
+    },
+    {
+      "name": "basis in revision manifest only when a real census exists",
+      "before": "    )||case when v_rule_version is null then '{}'::jsonb else jsonb_build_object(",
+      "after": "    )||case when v_missing_cache='{}'::jsonb then '{}'::jsonb else jsonb_build_object(\n      'missing_cancel_basis_census',v_missing_cache) end\n    ||case when v_rule_version is null then '{}'::jsonb else jsonb_build_object("
+    },
+    {
+      "name": "literal retained revision census column",
+      "before": "finalised_at_utc,manifest_hash,policy_fingerprint,state,rule_set_version_id",
+      "after": "finalised_at_utc,manifest_hash,policy_fingerprint,state,rule_set_version_id,missing_cancel_basis_census"
+    },
+    {
+      "name": "literal retained revision census value",
+      "before": "v_revision_manifest_hash,v_policy_fingerprint,\n    case when p_prepare_only then 'PREPARED' else 'CURRENT' end,v_rule_version",
+      "after": "v_revision_manifest_hash,v_policy_fingerprint,\n    case when p_prepare_only then 'PREPARED' else 'CURRENT' end,v_rule_version,v_missing_cache"
+    },
+    {
+      "name": "real CANCEL exclusion from owned prewrite observation",
+      "before": "        else 'AMEND' end;\n      v_transition_fingerprint:=private.weekly_source_sha256_jsonb_v1(",
+      "after": "        else 'AMEND' end;\n      v_exclude_cancel:=v_outcome='CANCEL' and coalesce((v_missing_cache#>>array[v_transition.work_event_id::text,'exclude_cancel'])::boolean,false);\n      v_cancel_basis:=case when v_exclude_cancel then v_missing_cache#>array[v_transition.work_event_id::text,'basis'] else null end;\n      if v_exclude_cancel and (v_cancel_basis->>'previous_snapshot_line_id' is distinct from v_transition.prior_snapshot_id::text\n        or v_cancel_basis->>'work_event_id' is distinct from v_transition.work_event_id::text) then\n        raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_PREWRITE_CENSUS_CHANGED' using errcode='40001';\n      end if;\n      v_transition_fingerprint:=private.weekly_source_sha256_jsonb_v1("
+    },
+    {
+      "name": "basis in immutable transition fingerprint only for excluded CANCEL",
+      "before": "          'new_state_fingerprint',case when v_current_state is null then null\n            else pg_catalog.encode(v_current_state,'hex') end\n        )",
+      "after": "          'new_state_fingerprint',case when v_current_state is null then null\n            else pg_catalog.encode(v_current_state,'hex') end\n        )||case when v_exclude_cancel then jsonb_build_object(\n          'exclude_cancel',true,'cancel_exclusion_basis',v_cancel_basis) else '{}'::jsonb end"
+    },
+    {
+      "name": "literal Source transition columns",
+      "before": "        new_state_fingerprint,transition_fingerprint,\n        ordinary_source_entitlement_projection_state",
+      "after": "        new_state_fingerprint,transition_fingerprint,exclude_cancel,cancel_exclusion_basis,\n        ordinary_source_entitlement_projection_state"
+    },
+    {
+      "name": "literal owned Source transition values",
+      "before": "        v_prior_state,v_current_state,v_transition_fingerprint,\n        case when v_outcome='NO_CHANGE' then 'NOT_APPLICABLE' else 'PENDING' end",
+      "after": "        v_prior_state,v_current_state,v_transition_fingerprint,v_exclude_cancel,v_cancel_basis,\n        case when v_outcome='NO_CHANGE' or v_exclude_cancel then 'NOT_APPLICABLE' else 'PENDING' end"
+    },
+    {
+      "name": "exclude only genuine absent CANCEL reversal, keep all AMEND/native branches",
+      "before": "        if v_outcome in ('AMEND','CANCEL') then",
+      "after": "        if v_outcome in ('AMEND','CANCEL') and not v_exclude_cancel then"
+    },
+    {
+      "name": "retain real existing expense authority on excluded raw omission",
+      "before": "      loop\n        v_expense_policy_id:=v_expense_observation.expense_policy_snapshot_id;",
+      "after": "      loop\n        -- A kept genuinely absent worked event keeps its existing expense\n        -- authority too. No fabricated ROW_PRESENT or zero/recovery generation.\n        if v_expense_observation.expense_policy_snapshot_id is null\n          and coalesce((v_missing_cache#>>array[v_expense_observation.work_event_id::text,'exclude_cancel'])::boolean,false) then\n          continue;\n        end if;\n        v_expense_policy_id:=v_expense_observation.expense_policy_snapshot_id;"
+    },
+    {
+      "name": "restore missing frame before CURRENT return",
+      "before": "  return pg_catalog.jsonb_build_object(\n    'ok',true,'status',case when p_correction_session_id is null",
+      "after": "  perform set_config('cloudtms.weekly_source_missing_cancel_frame',v_prior_missing_cancel_frame,true);\n  return pg_catalog.jsonb_build_object(\n    'ok',true,'status',case when p_correction_session_id is null"
+    },
+    {
+      "name": "restore missing frame before PREPARED return",
+      "before": "    return pg_catalog.jsonb_build_object(\n      'ok',true,'status','PREPARED'",
+      "after": "    perform set_config('cloudtms.weekly_source_missing_cancel_frame',v_prior_missing_cancel_frame,true);\n    return pg_catalog.jsonb_build_object(\n      'ok',true,'status','PREPARED'"
+    },
+    {
+      "name": "restore missing frame on value error",
+      "before": "  when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then",
+      "after": "  when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then\n    perform set_config('cloudtms.weekly_source_missing_cancel_frame',v_prior_missing_cancel_frame,true);"
+    },
+    {
+      "name": "restore missing frame on native error",
+      "before": "  when others then\n    if v_finalisation_lock_context then",
+      "after": "  when others then\n    perform set_config('cloudtms.weekly_source_missing_cancel_frame',v_prior_missing_cancel_frame,true);\n    if v_finalisation_lock_context then"
+    }
+  ],
+  "shared_native_capture_composition_approved": false,
+  "canonical_changed": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "known_unfinished": [
+    "Native excluded CANCEL capture + explicit raw-export versus financial selection",
+    "Excluded source-fixed expense retention and correct-final baseline",
+    "Original immutable native insert/footprint assertions",
+    "Genuine accepted removal/full proposal/Gate5 and repeat omission after acceptance",
+    "Paid overlap choices/native empty-subject/ordinary-to-Source cash proof",
+    "Complete prepared/Office/mandatory verifier body-source coupling"
+  ]
+}

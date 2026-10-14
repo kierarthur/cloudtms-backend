@@ -1,0 +1,25 @@
+-- Proposed one-time Source transition footprint, not another money/process
+-- store. Must precede any owner using these fields. No migration was executed.
+alter table public.weekly_source_state_transitions
+  add column exclude_cancel boolean not null default false,
+  add column cancel_exclusion_basis jsonb;
+alter table public.weekly_source_state_transitions
+  add constraint weekly_source_cancel_exclusion_shape check (
+    (not exclude_cancel and cancel_exclusion_basis is null)
+    or (exclude_cancel and outcome='CANCEL' and previous_present and not new_present
+      and previous_snapshot_line_id is not null and new_snapshot_line_id is null
+      and jsonb_typeof(cancel_exclusion_basis) is not distinct from 'object'
+      and cancel_exclusion_basis->>'schema_version' is not distinct from 'WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1'
+      and cancel_exclusion_basis->>'work_event_id' is not distinct from work_event_id::text
+      and cancel_exclusion_basis->>'previous_snapshot_line_id' is not distinct from previous_snapshot_line_id::text
+      and coalesce(cancel_exclusion_basis->>'basis_sha256'~'^[0-9a-f]{64}$',false)));
+-- Existing IMMUTABLE_FACTS_WITH_LIFECYCLE guards compare the whole row after
+-- removing only declared lifecycle columns. Neither field is a new lifecycle
+-- exception. Full constructor/native insert/capture assertions remain needed.
+-- Actual revisions store a manifest HASH, not a manifest JSON object. Retain
+-- the exact new census in this existing immutable authority so replay/capture
+-- can prove membership without inventing a missing native schema column.
+alter table public.weekly_source_final_revisions
+  add column missing_cancel_basis_census jsonb not null default '{}'::jsonb,
+  add constraint weekly_source_missing_cancel_census_shape check (
+    jsonb_typeof(missing_cancel_basis_census) is not distinct from 'object');

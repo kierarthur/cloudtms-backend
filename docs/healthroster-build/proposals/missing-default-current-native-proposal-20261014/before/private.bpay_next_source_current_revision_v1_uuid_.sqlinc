@@ -1,0 +1,30 @@
+create or replace function private.bpay_next_source_current_revision_v1(p_revision uuid)
+returns table(order_key bit(128),is_current boolean,source_group_id uuid)
+language plpgsql stable security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_revision public.weekly_source_final_revisions%rowtype;v_cycle public.weekly_source_cycles%rowtype;
+begin
+  select r.* into v_revision from public.weekly_source_final_revisions r where r.id=p_revision;
+  if not found then raise exception 'BPAY_NEXT_SOURCE_ORIGIN_REVISION_MISSING' using errcode='55000';end if;
+  select c.* into strict v_cycle from public.weekly_source_cycles c where c.id=v_revision.source_cycle_id;
+  if v_revision.state='CURRENT' then
+    if (v_revision.authority_scope_kind='CYCLE' and v_cycle.current_final_revision_id is distinct from p_revision)
+      or (v_revision.authority_scope_kind='NHSP_REPORT_SCOPE' and not exists(
+        select 1 from public.weekly_source_report_scopes s where s.id=v_revision.report_scope_id
+          and s.source_cycle_id=v_cycle.id and s.current_final_revision_id=p_revision)) then
+      raise exception 'BPAY_NEXT_SOURCE_CURRENT_POINTER_MISMATCH' using errcode='55000';
+    end if;
+  elsif v_revision.state='PREPARED' then
+    if not exists(select 1 from public.weekly_final_source_correction_sessions s
+      where s.prepared_final_revision_id=p_revision and s.source_cycle_id=v_revision.source_cycle_id
+        and s.authority_scope_kind=v_revision.authority_scope_kind
+        and s.report_scope_id is not distinct from v_revision.report_scope_id
+        and coalesce(s.report_scope_id,'00000000-0000-0000-0000-000000000000'::uuid)
+          =coalesce(v_revision.report_scope_id,'00000000-0000-0000-0000-000000000000'::uuid)
+        and s.state in ('PREPARED','COMMITTING')) then
+      raise exception 'BPAY_NEXT_SOURCE_PREPARED_ORIGIN_UNBOUND' using errcode='55000';
+    end if;
+  else raise exception 'BPAY_NEXT_SOURCE_ORIGIN_NOT_CURRENT' using errcode='55000';end if;
+  return query select private.bpay_next_source_order_key_v1(v_cycle.finalisation_week_ending,
+    v_revision.finalised_at_utc,v_revision.revision_number),v_revision.state='CURRENT',v_cycle.source_group_id;
+end $f$;

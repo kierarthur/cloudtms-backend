@@ -1,0 +1,29 @@
+{
+  "schema_version": "MISSING_CORRECTION_BASELINE_SOURCE_CHECK_V1",
+  "source_only": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "tests": {
+    "effect_free_cases": 10,
+    "passed": 10,
+    "failed": 0
+  },
+  "syntax": {
+    "inert_scripts": 3,
+    "passed": 3
+  },
+  "complete_owner_reverses": 2,
+  "unique_hunks": 5,
+  "new_private_signatures": [
+    "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)"
+  ],
+  "new_public_signatures": 0,
+  "banking_owner_changed": false,
+  "old_missing56_preserved": true,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "real_database_calls": 0,
+  "scratch_created": false,
+  "remaining_gaps": "REVIEW_SCOPE_AND_GAPS.md"
+}

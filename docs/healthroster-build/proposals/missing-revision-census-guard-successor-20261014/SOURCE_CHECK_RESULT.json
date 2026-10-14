@@ -1,0 +1,18 @@
+{
+  "source_only": true,
+  "effect_free_tests": 6,
+  "passed": 6,
+  "syntax_passed": 2,
+  "new_private_signatures": [
+    "private.weekly_source_missing_revision_census_guard_v1()"
+  ],
+  "new_public_signatures": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "repeatable_named_triggers": 3,
+  "table_class_unchanged": true,
+  "old_missing56_preserved": true,
+  "sql_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false
+}

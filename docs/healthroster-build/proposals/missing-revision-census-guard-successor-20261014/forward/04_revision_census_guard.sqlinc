@@ -1,0 +1,41 @@
+-- Existing revisions remain STATEFUL_SERVER_OWNED. Protect only the new
+-- immutable census; retain the native revision lifecycle and empty history.
+create or replace function private.weekly_source_missing_revision_census_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if tg_table_schema is distinct from 'public' or tg_table_name is distinct from 'weekly_source_final_revisions' then
+    raise exception 'WEEKLY_SOURCE_MISSING_REVISION_GUARD_TARGET_INVALID' using errcode='55000';
+  end if;
+  if tg_op='UPDATE' then
+    if old.missing_cancel_basis_census is distinct from new.missing_cancel_basis_census then
+      raise exception 'WEEKLY_SOURCE_MISSING_REVISION_CENSUS_IMMUTABLE' using errcode='55000';
+    end if;
+    return new;
+  elsif tg_op='DELETE' then
+    if old.missing_cancel_basis_census is distinct from '{}'::jsonb then
+      raise exception 'WEEKLY_SOURCE_MISSING_REVISION_CENSUS_IMMUTABLE' using errcode='55000';
+    end if;
+    return old;
+  elsif tg_op='TRUNCATE' then
+    if exists(select 1 from public.weekly_source_final_revisions revision
+      where revision.missing_cancel_basis_census is distinct from '{}'::jsonb) then
+      raise exception 'WEEKLY_SOURCE_MISSING_REVISION_CENSUS_IMMUTABLE' using errcode='55000';
+    end if;
+    return null;
+  end if;
+  raise exception 'WEEKLY_SOURCE_MISSING_REVISION_GUARD_OPERATION_INVALID' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_missing_revision_census_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_missing_revision_census_guard_v1() from public,anon,authenticated,service_role;
+create or replace trigger weekly_source_missing_revision_census_update_guard
+before update on public.weekly_source_final_revisions for each row
+execute function private.weekly_source_missing_revision_census_guard_v1();
+create or replace trigger weekly_source_missing_revision_census_delete_guard
+before delete on public.weekly_source_final_revisions for each row
+execute function private.weekly_source_missing_revision_census_guard_v1();
+create or replace trigger weekly_source_missing_revision_census_truncate_guard
+before truncate on public.weekly_source_final_revisions for each statement
+execute function private.weekly_source_missing_revision_census_guard_v1();

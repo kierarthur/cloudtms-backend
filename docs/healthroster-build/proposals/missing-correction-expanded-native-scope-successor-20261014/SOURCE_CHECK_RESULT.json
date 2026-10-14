@@ -1,0 +1,12 @@
+{
+  "source_only": true,
+  "effect_free_tests": 4,
+  "passed": 4,
+  "syntax_passed": 3,
+  "whole_reverse": true,
+  "unique_hunks": 1,
+  "new_signatures": 0,
+  "sql_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false
+}

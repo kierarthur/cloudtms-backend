@@ -1,0 +1,140 @@
+-- Read-only proof of Correct Final's earlier baseline and actual mistaken
+-- CURRENT parent. This admits no protected/paid/invoiced cancellation and
+-- grants no write permission; the existing native Correct Final gates remain.
+create or replace function private.weekly_source_missing_correction_baseline_v1(
+  p_projection_publication_id uuid,p_previous_snapshot_line_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_parent public.weekly_source_final_revisions%rowtype;
+  v_parent_transition public.weekly_source_state_transitions%rowtype;
+  v_snapshot public.weekly_source_final_snapshot_lines%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_context jsonb; v_original jsonb; v_baseline uuid; v_ids uuid[];
+  v_root uuid; v_preflight jsonb; v_movements jsonb; v_parent_move uuid;
+  v_roots jsonb:='[]'::jsonb; v_result jsonb;
+begin
+  if p_projection_publication_id is null or p_previous_snapshot_line_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_BASELINE_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_projection_publication_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  select * into strict v_snapshot from public.weekly_source_final_snapshot_lines where id=p_previous_snapshot_line_id;
+  select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  select * into strict v_session from public.weekly_final_source_correction_sessions where id=v_upload.correction_session_id;
+  select * into strict v_parent from public.weekly_source_final_revisions where id=v_session.expected_current_final_revision_id;
+  if v_upload.purpose is distinct from 'FINAL_SOURCE_CORRECTION' or v_upload.state is distinct from 'CORRECTION_READY'
+    or v_publication.state is distinct from 'CORRECTION_READY'
+    or v_publication.correction_session_id is distinct from v_session.id
+    or v_session.state not in ('PREPARING','PREPARED','COMMITTING')
+    or v_session.actor_user_id is distinct from p_actor_user_id
+    or v_session.source_cycle_id is distinct from v_cycle.id
+    or v_session.authority_scope_kind is distinct from 'CYCLE' or v_session.report_scope_id is not null
+    or v_session.replacement_correction_upload_id is distinct from v_upload.id
+    or v_session.replacement_projection_publication_id is distinct from v_publication.id
+    or v_cycle.current_final_revision_id is distinct from v_parent.id
+    or v_parent.source_cycle_id is distinct from v_cycle.id or v_parent.state is distinct from 'CURRENT'
+    or v_parent.authority_scope_kind is distinct from 'CYCLE' or v_parent.report_scope_id is not null
+    or v_parent.manifest_hash is distinct from v_session.expected_final_manifest_hash
+    or v_session.review_result_hash is null
+    or v_session.review_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',v_session.review_result_json)
+    or v_profile.final_authority_kind not in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS') then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_PARENT_CHANGED' using errcode='40001';
+  end if;
+  v_context:=private.weekly_source_kept_as_paid_context_for_publication_v1(v_snapshot.work_event_id,p_actor_user_id,v_publication.id);
+  if v_context->'source_present' is distinct from 'false'::jsonb
+    or v_context->'paid' is distinct from 'false'::jsonb or v_context->'invoiced' is distinct from 'false'::jsonb
+    or v_context->>'source_group_id' is distinct from v_cycle.source_group_id::text
+    or v_context->>'candidate_id' is distinct from v_snapshot.candidate_id::text
+    or v_context->>'client_id' is distinct from v_snapshot.client_id::text
+    or v_context->>'contract_id' is distinct from v_snapshot.contract_id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_UNPROTECTED_SCOPE_REQUIRED' using errcode='55000';
+  end if;
+  -- Exact existing FIN4 prior_states order. The mistaken target week is
+  -- deliberately excluded, rather than replacing the native earlier baseline.
+  select coalesce(t.new_snapshot_line_id,case when t.exclude_cancel then t.previous_snapshot_line_id end)
+    into v_baseline
+  from public.weekly_source_state_transitions t
+  join public.weekly_source_final_revisions revision on revision.id=t.final_revision_id and revision.state='CURRENT'
+  join public.weekly_source_cycles prior_cycle on prior_cycle.id=t.finalisation_cycle_id
+  join public.weekly_source_client_manifests manifest
+    on coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)=manifest.source_cycle_id
+      and manifest.final_revision_id=revision.id and manifest.client_id=v_snapshot.client_id
+  where t.work_event_id=v_snapshot.work_event_id and t.source_profile_kind=v_profile.final_authority_kind
+    and prior_cycle.source_group_id=v_cycle.source_group_id
+    and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending
+  order by prior_cycle.finalisation_week_ending desc,revision.finalised_at_utc desc,
+    revision.revision_number desc,t.created_at_utc desc,t.id desc limit 1;
+  if v_baseline is distinct from v_snapshot.id then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_BASELINE_CHANGED' using errcode='40001';
+  end if;
+  v_original:=private.weekly_source_missing_snapshot_movement_v1(v_snapshot.id);
+  select array_agg(t.id) into v_ids from public.weekly_source_state_transitions t
+    where t.final_revision_id=v_parent.id and t.work_event_id=v_snapshot.work_event_id
+      and t.source_profile_kind=v_profile.final_authority_kind;
+  if coalesce(cardinality(v_ids),0)<>1 then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_PARENT_EVENT_UNBOUND' using errcode='40001';
+  end if;
+  select * into strict v_parent_transition from public.weekly_source_state_transitions where id=v_ids[1];
+  v_parent_move:=(v_context->>'current_pay_head_movement_id')::uuid;
+  if v_parent_move is not null and not exists(select 1 from public.weekly_source_billing_movements movement
+    join public.weekly_source_final_snapshot_lines line on line.id=v_parent_transition.new_snapshot_line_id
+    where movement.id=v_parent_move and movement.final_revision_id=v_parent.id
+      and movement.transition_id=v_parent_transition.id and movement.work_event_id=v_snapshot.work_event_id
+      and movement.candidate_id=v_snapshot.candidate_id and movement.actual_client_id=v_snapshot.client_id
+      and movement.contract_id=v_snapshot.contract_id and movement.movement_role in ('POSITIVE','REPLACEMENT')
+      and line.work_event_id=v_snapshot.work_event_id and line.candidate_id=v_snapshot.candidate_id
+      and line.client_id=v_snapshot.client_id and line.contract_id=v_snapshot.contract_id
+      and v_parent_transition.outcome in ('ADD','AMEND') and v_parent_transition.new_present)
+    or (v_parent_move is null and (v_parent_transition.outcome is distinct from 'CANCEL'
+      or v_parent_transition.new_present or v_parent_transition.new_snapshot_line_id is not null
+      or v_parent_transition.exclude_cancel)) then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_CURRENT_MOVEMENT_UNBOUND' using errcode='40001';
+  end if;
+  if jsonb_array_length(v_context->'root_timesheet_ids')=0 then
+    raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_ROOT_UNAVAILABLE' using errcode='55000';
+  end if;
+  for v_root in select value::uuid from jsonb_array_elements_text(v_context->'root_timesheet_ids') value order by value::uuid loop
+    -- Observe the existing native preflight under the caller's retained I-1
+    -- scope. Do not acquire a second family/row lock order inside this reader.
+    v_preflight:=public.import_timesheet_financial_preflight_v1(array[v_root],
+      'WEEKLY_SOURCE_CORRECT_FINAL_SOURCE',p_actor_user_id,'{}'::jsonb,false,1);
+    if v_preflight->'allowed' is distinct from 'true'::jsonb
+      or v_preflight->>'required_path' is distinct from 'DIRECT_AMEND_RECALCULATE'
+      or v_preflight->'authorised_count' is distinct from '0'::jsonb
+      or v_preflight->'paid_count' is distinct from '0'::jsonb
+      or v_preflight->'invoice_lined_count' is distinct from '0'::jsonb
+      or v_preflight->'blocking_batch_count' is distinct from '0'::jsonb then
+      raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_NATIVE_PATH_CHANGED' using errcode='40001';
+    end if;
+    select coalesce(jsonb_agg(to_jsonb(movement) order by movement.id),'[]'::jsonb) into v_movements
+      from private.weekly_source_ordinary_projection_active_movements_v1(v_root,v_parent.id) movement
+      where movement.work_event_id=v_snapshot.work_event_id;
+    if (v_parent_move is null and jsonb_array_length(v_movements)<>0)
+      or (v_parent_move is not null and (jsonb_array_length(v_movements)<>1
+        or v_movements->0->>'id' is distinct from v_parent_move::text)) then
+      raise exception 'WEEKLY_SOURCE_MISSING_CORRECTION_CURRENT_MOVEMENT_UNBOUND' using errcode='40001';
+    end if;
+    v_roots:=v_roots||jsonb_build_array(jsonb_build_object('root_timesheet_id',v_root,
+      'native_preflight',v_preflight,'current_parent_movements',v_movements));
+  end loop;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CORRECTION_BASELINE_V1',
+    'correction_session_id',v_session.id,'actor_user_id',p_actor_user_id,
+    'source_cycle_id',v_cycle.id,'projection_publication_id',v_publication.id,'upload_id',v_upload.id,
+    'review_result_hash',encode(v_session.review_result_hash,'hex'),
+    'current_parent_revision',to_jsonb(v_parent),'current_parent_transition',to_jsonb(v_parent_transition),
+    'earlier_baseline_snapshot_id',v_snapshot.id,'earlier_original_basis',v_original,
+    'current_parent_movement_id',v_parent_move,'root_observations',v_roots);
+  return v_result||jsonb_build_object('baseline_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_CORRECTION_BASELINE_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

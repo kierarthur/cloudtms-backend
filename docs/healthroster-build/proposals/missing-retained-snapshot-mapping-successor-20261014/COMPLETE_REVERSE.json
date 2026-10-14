@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "shared_banking_owner_change_proposed": true,
+  "shared_owner_approval": false,
+  "owner": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+  "before_file": "before/09_shared_current_capture_proposal.sqlinc",
+  "before_bytes": 6976,
+  "before_sha256": "4a8e8d7fb15392a897b65a0045bd93d4a835aa2cb32041b64ec2b71d83da53b4",
+  "forward_file": "forward/09_complete_shared_current_capture_proposal.sqlinc",
+  "forward_bytes": 7903,
+  "forward_sha256": "31f088f054494565affc36b21d7a3d29972917f4ae89d3112d2c9e79a2a946b6",
+  "hunks": [
+    {
+      "name": "admitted genuine retained previous snapshot provenance",
+      "before": "  if v_t.new_snapshot_line_id is not null then",
+      "after": "  if v_t.outcome='CANCEL' and v_t.exclude_cancel then\n    -- Record the genuine retained previous snapshot, including pre-NEXT\n    -- history. This is the existing native provenance map, not a new/current\n    -- snapshot or export-presence claim. The same original movement has just\n    -- passed the immutable Source basis, exact scope and subject checks.\n    insert into private.bpay_next_source_current_snapshots(snapshot_line_id,scope_id,work_event_id,movement_id)\n      values(v_t.previous_snapshot_line_id,v_scope,v_t.work_event_id,v_movement) on conflict do nothing;\n    if not exists(select 1 from private.bpay_next_source_current_snapshots s\n      where s.snapshot_line_id=v_t.previous_snapshot_line_id and s.scope_id=v_scope\n        and s.work_event_id=v_t.work_event_id and s.movement_id=v_movement) then\n      raise exception 'BPAY_NEXT_SOURCE_SNAPSHOT_MAPPING_CHANGED' using errcode='55000';\n    end if;\n  end if;\n  if v_t.new_snapshot_line_id is not null then"
+    }
+  ],
+  "unique_hunks": 1,
+  "whole_reverse_verified": true,
+  "chained_native_before_sha256": "2fa0c952b3031e409a56800a78f44040b3cc966c4c4f57b4ed7dc7870f5127fc",
+  "chained_native_before_bytes": 5892,
+  "chained_native_unique_hunks": 5,
+  "chained_native_whole_reverse_verified": true,
+  "no_new_signature": true,
+  "no_schema_change": true,
+  "sql_compiled": false,
+  "native_proof": false
+}

@@ -1,0 +1,24 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import {functionEvents,splitSqlStatements} from '../a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs';
+const dir=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(dir,'../../../..'),current='5db7abee7925fffbeaf7c4e885cce809980fa079';
+assert.ok(!fs.existsSync(path.join(dir,'FROZEN_ARTIFACT_MANIFEST.json')),'Separate unfinished construction, no frozen edits');fs.mkdirSync(path.join(dir,'before'),{recursive:true});
+const sha=b=>createHash('sha256').update(b).digest('hex'),index=JSON.parse(fs.readFileSync(path.join(dir,'../current-final-classification-union-20261014/CURRENT_FINAL_DECLARATION_OWNERS.json'),'utf8')),cache=new Map();
+const git=f=>{if(!cache.has(f))cache.set(f,execFileSync('git',['--no-replace-objects','show',current+':'+f],{cwd:root,maxBuffer:32*1024*1024}));return cache.get(f);};
+const ids=['private.bpay_next_source_current_capture_transition_v1(uuid)','private.bpay_next_source_current_refresh_v1(uuid,uuid)',
+ 'private.bpay_next_source_current_event_v1(uuid,uuid)','private.bpay_next_source_current_page_v1(uuid,uuid,integer)',
+ 'private.bpay_next_source_current_publish_revision_v1(uuid)','private.bpay_next_source_current_revision_v1(uuid)',
+ 'private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)','private.weekly_source_ordinary_projection_current_segments_v1(uuid,uuid)',
+ 'public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)','private.weekly_source_entitlement_proposal_request_v1(uuid,uuid,text,uuid,bigint,uuid,uuid,jsonb,text)',
+ 'private.weekly_source_entitlement_proposal_record_v1(jsonb,uuid,uuid,date,uuid)','public.weekly_source_later_change_decide_atomic_v1(jsonb)',
+ 'public.weekly_source_import_prepare_atomic_v1(jsonb)','private.weekly_source_correct_final_prepared_context_v1(uuid)',
+ 'public.weekly_source_correct_final_prepare_atomic_v1(jsonb)'];
+const owners=[];for(const id of ids){const pin=index.functions.find(x=>x.id===id);assert.ok(pin,id);const b=git(pin.file),e=functionEvents(b.toString('utf8')).events.filter(x=>x.kind==='CREATE'&&x.id===id).at(-1);assert.ok(e,id);assert.equal(sha(e.definition),pin.definition_sha256);
+ const leaf='before/'+id.replaceAll(/[^A-Za-z0-9_.]/g,'_')+'.sqlinc';fs.writeFileSync(path.join(dir,leaf),e.definition+'\n');owners.push({signature:id,commit:current,file:pin.file,input_bytes:b.length,input_sha256:sha(b),definition_sha256:sha(e.definition),body_sha256:sha(e.body),selected_before_file:leaf});}
+const finFile='supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc',finBytes=git(finFile);assert.equal(sha(finBytes),'762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62');fs.writeFileSync(path.join(dir,'before/actual_corrected_fin4.sqlinc'),finBytes);
+const schemaFile='supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql',schema=git(schemaFile),tables=[];
+for(const statement of splitSqlStatements(schema.toString('utf8')).statements){if(!/create table private[.]bpay_next_source_current_(origins|events|snapshots)\b/i.test(statement.text))continue;
+ const table=statement.text.match(/create table (private[.]bpay_next_source_current_\w+)/i)[1],leaf='before/'+table+'.table.sqlinc';fs.writeFileSync(path.join(dir,leaf),statement.text+'\n');tables.push({name:table,commit:current,file:schemaFile,input_bytes:schema.length,input_sha256:sha(schema),selected_statement_sha256:sha(statement.text),selected_before_file:leaf});}
+assert.equal(tables.length,3);
+fs.writeFileSync(path.join(dir,'EXACT_CURRENT_OWNER_AND_SCHEMA_INPUTS.json'),JSON.stringify({source_only:true,unfinished_construction:true,selected_current_commit:current,owners,corrected_fin4:{commit:current,file:finFile,bytes:finBytes.length,sha256:sha(finBytes),selected_before_file:'before/actual_corrected_fin4.sqlinc'},tables,
+ independent_keep32_manifest:'3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8',shared13_manifest:'159c60f9b685994729ca996db5314d05f0db02a2e8f9117cdf9fe4d71bf23345',shared_banking_owner_composition_approved:false,canonical_source_modified:false,selected_input_census_only:true,forward_functions_authored_as_unfrozen_drafts:fs.existsSync(path.join(dir,'forward/02_missing_snapshot_movement.sqlinc')),complete_default_and_accept_consumer_wiring:false,sql_compiled:false,native_proof:false,full_primary_implementation_complete:false},null,2)+'\n');
+console.log(JSON.stringify({source_only:true,unfinished:true,selected_owners:owners.length,corrected_fin4:true,selected_current_tables:tables.length,canonical_changed:false,native_proof:false}));

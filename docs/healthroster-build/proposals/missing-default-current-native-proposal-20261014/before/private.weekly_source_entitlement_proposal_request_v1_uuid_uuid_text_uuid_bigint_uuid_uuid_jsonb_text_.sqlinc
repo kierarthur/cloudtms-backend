@@ -1,0 +1,125 @@
+create or replace function private.weekly_source_entitlement_proposal_request_v1(
+  p_root_timesheet_id uuid,
+  p_final_revision_id uuid,
+  p_authority_kind text,
+  p_decision_bundle_id uuid,
+  p_bundle_revision bigint,
+  p_head_id uuid,
+  p_decision_id uuid,
+  p_components jsonb,
+  p_selection_method text default 'UNCHANGED'
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_identity jsonb;
+  v_timesheet public.timesheets%rowtype;
+  v_contract public.contracts%rowtype;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_expected_head_id uuid;
+  v_components jsonb:=coalesce(p_components,'[]'::jsonb);
+  v_count integer:=pg_catalog.jsonb_array_length(v_components);
+  v_before_ids jsonb:='[]'::jsonb;
+  v_before_digest text;
+  v_inventory jsonb;
+begin
+  if p_authority_kind not in ('PROTECTED','LOCKED_FINAL_SOURCE') then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_AUTHORITY_KIND_INVALID' using errcode='22023';
+  end if;
+  v_identity:=private.weekly_source_resolve_root_identity_v1(p_root_timesheet_id);
+  if coalesce((v_identity->>'ok')::boolean,false) is not true
+     or (v_identity->>'canonical_timesheet_id')::uuid is distinct from p_root_timesheet_id then
+    raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE'
+      using errcode='55000',detail=coalesce(v_identity,'{}'::jsonb)::text;
+  end if;
+  select * into strict v_timesheet from public.timesheets
+  where timesheet_id=p_root_timesheet_id;
+  -- public.timesheets carries no candidate_id: the Candidate reaches a Timesheet
+  -- through its Contract.  contracts.candidate_id is NULLABLE, and a null would
+  -- be carried into the I-3 request, cast by the coordinator and handed to the
+  -- Candidate serial gate and the I-1 lock set -- the very mechanism that stops
+  -- two concurrent publications for one Candidate.  So it fails closed here.
+  select * into strict v_contract from public.contracts
+  where id=v_timesheet.contract_id;
+  if v_contract.candidate_id is null then
+    raise exception 'WEEKLY_SOURCE_ROOT_CANDIDATE_MISSING'
+      using errcode='55000',
+            detail=pg_catalog.jsonb_build_object(
+              'root_timesheet_id',p_root_timesheet_id,
+              'contract_id',v_timesheet.contract_id)::text;
+  end if;
+  select * into strict v_revision from public.weekly_source_final_revisions
+  where id=p_final_revision_id;
+
+  -- Decision D9 / interface I-7.  The before-position is NEVER invented here
+  -- and never taken from a caller: it is read from the single committed
+  -- effective authority through the one named owner, which is the same function
+  -- the coordinator uses, so the two can never disagree.
+  v_inventory:=private.weekly_source_effective_inventory_v1(p_root_timesheet_id);
+  if coalesce((v_inventory->>'ok')::boolean,false) is not true then
+    raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE'
+      using errcode='55000',detail=coalesce(v_inventory,'{}'::jsonb)::text;
+  end if;
+  select coalesce(pg_catalog.jsonb_agg(component_element.value->'component_id'
+           order by component_element.value->>'component_id'),'[]'::jsonb)
+    into v_before_ids
+  from pg_catalog.jsonb_array_elements(v_inventory->'components') as component_element(value);
+  v_before_digest:=v_inventory->>'inventory_digest';
+  v_expected_head_id:=(v_inventory->>'head_id')::uuid;
+
+  return pg_catalog.jsonb_build_object(
+    'decision_bundle_id',p_decision_bundle_id,
+    'pending_bundle_id',null,
+    'bundle_revision',p_bundle_revision,
+    'candidate_id',v_contract.candidate_id,
+    'member_root_ids',pg_catalog.jsonb_build_array(p_root_timesheet_id),
+    'member_family_booking_ids',pg_catalog.jsonb_build_array(v_timesheet.booking_id),
+    'member_root_versions',pg_catalog.jsonb_build_array(v_timesheet.version),
+    'head_ids',pg_catalog.jsonb_build_array(p_head_id),
+    'decision_id',p_decision_id,
+    'publication_mode','IMMEDIATE',
+    'financial_request',pg_catalog.jsonb_build_object(
+      'source_revision',pg_catalog.jsonb_build_object(
+        'final_revision_id',v_revision.id,
+        'source_cycle_id',v_revision.source_cycle_id,
+        'revision_number',v_revision.revision_number,
+        'manifest_hash',pg_catalog.encode(v_revision.manifest_hash,'hex'),
+        'policy_fingerprint',pg_catalog.encode(v_revision.policy_fingerprint,'hex')
+      ),
+      'contract_choices',pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object(
+          'root_ordinal',1,
+          'contract_id',v_timesheet.contract_id,
+          'week_ending_date',v_timesheet.week_ending_date,
+          'selection_method',p_selection_method
+        )
+      ),
+      'member_entitlements',pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object(
+          'root_ordinal',1,
+          'authority_kind',p_authority_kind,
+          'certified_zero',v_count=0,
+          'component_count',v_count,
+          'components',v_components
+        )
+      )
+    ),
+    'control',pg_catalog.jsonb_build_object(
+      'bundle_kind','SINGLE_ROOT',
+      'reason','WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION',
+      'expected_current_head_ids',pg_catalog.jsonb_build_array(v_expected_head_id),
+      'before_positions',pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object(
+          'root_ordinal',1,
+          'component_ids',v_before_ids,
+          'inventory_digest',v_before_digest
+        )
+      ),
+      'moved_component_ids','[]'::jsonb,
+      'target_root_authorisation',null,
+      'whole_root_office_review',null
+    )
+  );
+end;
+$function$;

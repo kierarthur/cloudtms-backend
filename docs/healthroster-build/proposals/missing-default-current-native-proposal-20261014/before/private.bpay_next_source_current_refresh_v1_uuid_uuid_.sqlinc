@@ -1,0 +1,32 @@
+create or replace function private.bpay_next_source_current_refresh_v1(p_scope uuid,p_event uuid)
+returns void language plpgsql security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_heads record;v_first_key bit(128);v_movement uuid;v_transition uuid;v_source text;v_ambiguous boolean:=false;
+  v_count integer:=0;v_present boolean:=false;
+begin
+  select e.source_kind into v_source from private.bpay_next_source_current_events e
+    where e.scope_id=p_scope and e.work_event_id=p_event;
+  if v_source='NHSP' then
+    -- Global latest K FIRST; do not emit all independent magnitude survivors.
+    for v_heads in select m.surviving_order_key,m.selected_movement_id
+      from private.bpay_next_source_current_magnitudes m where m.scope_id=p_scope and m.work_event_id=p_event
+        and m.surviving_order_key is not null order by m.surviving_order_key desc,m.magnitude_hash limit 2 loop
+      v_count:=v_count+1;
+      if v_count=1 then v_first_key:=v_heads.surviving_order_key;v_movement:=v_heads.selected_movement_id;
+      elsif v_heads.surviving_order_key=v_first_key then v_ambiguous:=true;end if;
+    end loop;
+    v_present:=v_movement is not null and not v_ambiguous;
+  elsif v_source='HR' then
+    for v_heads in select o.order_key,o.selected_movement_id,o.transition_id
+      from private.bpay_next_source_current_origins o where o.scope_id=p_scope and o.work_event_id=p_event
+        and o.active and o.origin_kind='TRANSITION' order by o.order_key desc,o.origin_id::text desc limit 2 loop
+      v_count:=v_count+1;
+      if v_count=1 then v_first_key:=v_heads.order_key;v_movement:=v_heads.selected_movement_id;v_transition:=v_heads.transition_id;
+      elsif v_heads.order_key=v_first_key then v_ambiguous:=true;end if;
+    end loop;
+    v_present:=v_movement is not null and not v_ambiguous;
+  else raise exception 'BPAY_NEXT_SOURCE_EVENT_KIND_MISSING' using errcode='55000';end if;
+  update private.bpay_next_source_current_events e set source_present=v_present,ambiguous=v_ambiguous,
+    selected_movement_id=case when v_present then v_movement else null end,selected_transition_id=v_transition,selected_order_key=v_first_key
+    where e.scope_id=p_scope and e.work_event_id=p_event;
+end $f$;

@@ -1,0 +1,379 @@
+create or replace function private.weekly_source_entitlement_proposal_record_v1(
+  p_request jsonb,
+  p_agency_id uuid,
+  p_contract_id uuid,
+  p_week_ending_date date,
+  p_actor_user_id uuid
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_canonical jsonb;
+  v_digest bytea;
+  v_row public.weekly_source_entitlement_decision_bundles%rowtype;
+  v_financial jsonb;
+  v_head_ids uuid[];
+  v_member_count integer;
+  v_bundle_kind text;
+  v_declared_kind text;
+  v_target_family_booking_id text;
+  v_target_root_timesheet_id uuid;
+  v_target_contract_id uuid;
+  v_source_contract_id uuid;
+  v_choice_rows integer;
+  v_review jsonb;
+  v_review_required boolean:=false;
+  v_reviewed_by_user_id uuid;
+  v_reviewed_at_utc timestamptz;
+  v_week_mismatch integer;
+  v_revision_chain_rows integer;
+  v_revision_agency_id uuid;
+  v_local_context jsonb;
+  v_local_rebuilt jsonb;
+  v_i integer;
+begin
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(
+    p_request,'IMMEDIATE',null
+  );
+  v_digest:=private.weekly_source_publication_request_digest_v1(v_canonical);
+  -- Every identity below is taken from the CANONICAL request, so the row and
+  -- the digest can never describe two different decisions.
+  v_financial:=v_canonical->'financial_request';
+
+  -- WP-06c review finding F4 (pre-existing from WP-06).  `p_agency_id` was
+  -- written straight into the bundle row with no check at all: a null produced a
+  -- raw 23502 rather than a named refusal, and a WRONG non-null agency was not
+  -- detectable by anything installed (`public.timesheets` carries no agency).
+  -- The coordinator copies `bundle.agency_id` into every head it writes, so this
+  -- is the agency a published entitlement is filed under.  The request already
+  -- names the authority the agency can be derived from - the source revision -
+  -- so the declared value is checked against the revision's own chain,
+  -- `weekly_source_final_revisions` -> `weekly_source_cycles` ->
+  -- `weekly_source_groups.agency_id`, and a disagreement is refused by name.
+  if p_agency_id is null then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_AGENCY_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PROPOSAL_AGENCY_INVALID',
+              'field','p_agency_id','reason','NULL_NOT_ALLOWED')::text;
+  end if;
+  if v_financial#>>'{source_revision,origin_kind}'='PROTECTED_LOCAL_DECISION_V1' then
+    -- Local protection has its own actual Source cycle/family provenance. It
+    -- must not invent a Final revision merely to satisfy this recorder. Reuse
+    -- the sole qualified Local context and constructor, keeping all canonical
+    -- member/component/before-position facts exact before any proposal write.
+    if jsonb_array_length(v_canonical->'member_root_ids')<>1 then
+      raise exception 'WEEKLY_PROTECTED_LOCAL_PROPOSAL_UNQUALIFIED' using errcode='55000';
+    end if;
+    v_local_context:=private.weekly_source_local_publication_context_v2(
+      (v_financial#>>'{source_revision,publication_request_id}')::uuid,
+      (v_financial#>>'{source_revision,generation_id}')::uuid,
+      (v_canonical->'member_root_ids'->>0)::uuid);
+    if v_local_context is null
+       or v_local_context->>'actor_user_id' is distinct from p_actor_user_id::text then
+      raise exception 'WEEKLY_PROTECTED_LOCAL_PROPOSAL_UNQUALIFIED' using errcode='55000';
+    end if;
+    v_revision_agency_id:=(v_local_context->>'agency_id')::uuid;
+    v_local_rebuilt:=private.weekly_source_entitlement_proposal_request_v2(
+      (v_canonical->'member_root_ids'->>0)::uuid,v_financial->'source_revision','PROTECTED',
+      (v_canonical->>'decision_bundle_id')::uuid,(v_canonical->>'bundle_revision')::bigint,
+      (v_canonical->'head_ids'->>0)::uuid,(v_canonical->>'decision_id')::uuid,
+      v_financial#>'{member_entitlements,0,components}','UNCHANGED');
+    if private.weekly_source_publication_request_canonical_v1(v_local_rebuilt,'IMMEDIATE',null)
+         is distinct from v_canonical
+       or v_local_rebuilt->'control' is distinct from p_request->'control' then
+      raise exception 'WEEKLY_PROTECTED_LOCAL_PROPOSAL_UNQUALIFIED' using errcode='55000';
+    end if;
+  else
+  -- Never a `limit 1`: the chain is three primary keys, and a count that is not
+  -- exactly one means the source revision this bundle names cannot be anchored
+  -- to one agency, which is a refusal rather than a choice.
+  select pg_catalog.count(*)::integer into v_revision_chain_rows
+  from public.weekly_source_final_revisions revision_row
+  join public.weekly_source_cycles cycle_row
+    on cycle_row.id=revision_row.source_cycle_id
+  join public.weekly_source_groups group_row
+    on group_row.id=cycle_row.source_group_id
+  where revision_row.id=(v_financial->'source_revision'->>'final_revision_id')::uuid;
+  if v_revision_chain_rows<>1 then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_SOURCE_REVISION_AGENCY_UNRESOLVABLE'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PROPOSAL_SOURCE_REVISION_AGENCY_UNRESOLVABLE',
+              'final_revision_id',v_financial->'source_revision'->'final_revision_id',
+              'chain_rows',v_revision_chain_rows)::text;
+  end if;
+  select group_row.agency_id into strict v_revision_agency_id
+  from public.weekly_source_final_revisions revision_row
+  join public.weekly_source_cycles cycle_row
+    on cycle_row.id=revision_row.source_cycle_id
+  join public.weekly_source_groups group_row
+    on group_row.id=cycle_row.source_group_id
+  where revision_row.id=(v_financial->'source_revision'->>'final_revision_id')::uuid;
+  end if;
+  if p_agency_id is distinct from v_revision_agency_id then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_AGENCY_DISAGREES_WITH_SOURCE_REVISION'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PROPOSAL_AGENCY_DISAGREES_WITH_SOURCE_REVISION',
+              'declared_agency_id',p_agency_id,
+              'source_revision_agency_id',v_revision_agency_id,
+              'final_revision_id',v_financial->'source_revision'->'final_revision_id')::text;
+  end if;
+
+  -- 24 section 4.5: the approval is the BOUNDED A/B amendment, so one or two
+  -- members and nothing else.  The canonicaliser has already refused three, and
+  -- this is the same rule stated over what is about to be WRITTEN.  It is
+  -- derived from the CANONICAL request alone - no caller argument - so it is
+  -- taken here, before the idempotence lookup, where the whole-root review block
+  -- below needs the bundle kind.
+  v_member_count:=pg_catalog.jsonb_array_length(v_canonical->'member_root_ids');
+  if v_member_count not in (1,2) then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_BUNDLE_UNBOUNDED'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object('member_count',v_member_count)::text;
+  end if;
+  v_bundle_kind:=case when v_member_count=2 then 'CROSS_CONTRACT_A_B' else 'SINGLE_ROOT' end;
+  -- control.bundle_kind is a caller assertion; the member set is the fact.  A
+  -- disagreement is refused rather than reconciled, because the coordinator
+  -- cross-checks the two as well.
+  v_declared_kind:=p_request#>>'{control,bundle_kind}';
+  if v_declared_kind is distinct from v_bundle_kind then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_BUNDLE_KIND_DISAGREES_WITH_MEMBERS'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'declared_bundle_kind',v_declared_kind,
+              'member_count',v_member_count,
+              'bundle_kind_from_members',v_bundle_kind)::text;
+  end if;
+
+  -- Round-5 ruling, Part E: a PARTIAL Contract-to-Contract move is not in scope
+  -- for this release.  The builder refuses to compose one and the coordinator
+  -- refuses to publish one; this is the third point, and it is the one that stops
+  -- a hand-built partial request being RECORDED as an accepted decision that can
+  -- never be published - a stuck `PROPOSED` revision the operator was told had
+  -- been recorded.  The insert below is the proposal's first write, so this is
+  -- the point at which the request is validated.
+  --
+  -- Statement (iii) of the definition, which is the one the bundle row can be
+  -- held to: the source member is certified zero, i.e. it retains nothing.  The
+  -- coordinator proves the same thing from the component sets it has already
+  -- reconciled, and separately re-checks that `certified_zero` really does equal
+  -- `component_count = 0`, so the two readings cannot diverge.
+  if v_bundle_kind='CROSS_CONTRACT_A_B' then
+    if pg_catalog.jsonb_typeof(
+         coalesce(v_financial#>'{member_entitlements,0,certified_zero}','null'::jsonb))<>'boolean'
+       or (v_financial#>'{member_entitlements,0,certified_zero}')::boolean is not true
+       or coalesce((v_financial#>>'{member_entitlements,0,component_count}')::integer,-1)<>0 then
+      raise exception 'WEEKLY_SOURCE_PROPOSAL_PARTIAL_MOVE_UNSUPPORTED'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PROPOSAL_PARTIAL_MOVE_UNSUPPORTED',
+                'reason','ONLY_A_WHOLE_ENTITLEMENT_MOVE_IS_SUPPORTED_IN_THIS_RELEASE',
+                'message','This decision moves only part of the entitlement from one '
+                        ||'Contract to the other and leaves the rest behind. Moving part '
+                        ||'of an entitlement is not supported in this release: a '
+                        ||'Contract-to-Contract amendment must move the whole '
+                        ||'entitlement, so that the old Contract is left holding nothing. '
+                        ||'Nothing has been recorded. Either move every component of the '
+                        ||'old Contract''s entitlement, or leave the entitlement where it is.',
+                'definition','A move is WHOLE when the source root retains nothing after it.',
+                'source_member_certified_zero',
+                  coalesce(v_financial#>'{member_entitlements,0,certified_zero}','null'::jsonb),
+                'source_member_component_count',
+                  coalesce(v_financial#>'{member_entitlements,0,component_count}','null'::jsonb))::text;
+    end if;
+  end if;
+
+  -- I-3 section 5.5: the whole-root Office review is part of what Office
+  -- ACCEPTED, so it is written when the bundle revision is written and is
+  -- immutable afterwards.  A boolean read from JSON is three-valued: an absent
+  -- key and a JSON null both make `not value` evaluate to NULL, so absent,
+  -- null and non-boolean are all treated as "no review".
+  --
+  -- The whole block is read and validated BEFORE the idempotence lookup because
+  -- the idempotent branch has to compare it (finding F2 below).
+  v_review:=case when pg_catalog.jsonb_typeof(
+                        coalesce(p_request#>'{control,whole_root_office_review}','null'::jsonb))='object'
+                 then p_request#>'{control,whole_root_office_review}' end;
+  if v_review is not null then
+    if pg_catalog.jsonb_typeof(v_review->'reviewed')<>'boolean'
+       or (v_review->'reviewed')::boolean is not true
+       or (v_review->>'reviewed_by_user_id') is null
+       or (v_review->>'reviewed_at_utc') is null
+       or (v_review->>'decision_id') is null
+       or (v_review->>'decision_id')::uuid is distinct from (v_canonical->>'decision_id')::uuid then
+      raise exception 'WEEKLY_SOURCE_PROPOSAL_WHOLE_ROOT_REVIEW_MALFORMED'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object('review',v_review)::text;
+    end if;
+    -- Only a cross-Contract bundle can carry a whole-root review, because the
+    -- review is about the TARGET root.  The bundle relation's own
+    -- `check (not whole_root_review_required or bundle_kind='CROSS_CONTRACT_A_B')`
+    -- is the backstop.
+    if v_bundle_kind<>'CROSS_CONTRACT_A_B' then
+      raise exception 'WEEKLY_SOURCE_PROPOSAL_WHOLE_ROOT_REVIEW_NOT_APPLICABLE'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object('bundle_kind',v_bundle_kind)::text;
+    end if;
+    v_review_required:=true;
+    v_reviewed_by_user_id:=(v_review->>'reviewed_by_user_id')::uuid;
+    v_reviewed_at_utc:=(v_review->>'reviewed_at_utc')::timestamptz;
+  end if;
+
+  select * into v_row
+  from public.weekly_source_entitlement_decision_bundles bundle_row
+  where bundle_row.request_digest=v_digest;
+  if found then
+    -- WP-06c review finding F2 (MEDIUM).  Idempotence is keyed on
+    -- `request_digest`, and `control.whole_root_office_review` is CONTROL scope,
+    -- so it is deliberately not in the digest (I-3 section 0).  A request first
+    -- recorded WITHOUT a review and re-recorded WITH one therefore reached this
+    -- branch and returned `{ok:true, created:false}` while the bundle row kept
+    -- `whole_root_review_required=false`: the Office act that the whole
+    -- unauthorised-B path depends on was accepted and then did not exist.  The
+    -- system still failed closed - the coordinator later refuses
+    -- `THE_ACCEPTED_DECISION_CARRIES_NO_WHOLE_ROOT_OFFICE_REVIEW` - but the
+    -- operator was told the proposal was recorded and nobody was told the review
+    -- had been dropped.  The mirror case (recorded WITH a review, re-recorded
+    -- WITHOUT one) reported success just as silently.
+    --
+    -- I-3 section 5.5 already rules what to do: "a review taken after a bundle
+    -- was proposed is a NEW bundle revision, exactly as a changed request digest
+    -- is".  So a disagreement is refused BY NAME, and `created:false` is returned
+    -- only when the review facts are equal too.
+    if v_review_required is distinct from v_row.whole_root_review_required
+       or v_reviewed_by_user_id is distinct from v_row.whole_root_reviewed_by_user_id
+       or v_reviewed_at_utc is distinct from v_row.whole_root_reviewed_at_utc then
+      raise exception 'WEEKLY_SOURCE_PROPOSAL_REVIEW_DISAGREES_WITH_ACCEPTED_DECISION'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PROPOSAL_REVIEW_DISAGREES_WITH_ACCEPTED_DECISION',
+                'decision_bundle_id',v_row.decision_bundle_id,
+                'bundle_revision',v_row.bundle_revision,
+                'state',v_row.state,
+                'request_review',pg_catalog.jsonb_build_object(
+                  'whole_root_review_required',v_review_required,
+                  'reviewed_by_user_id',v_reviewed_by_user_id,
+                  'reviewed_at_utc',v_reviewed_at_utc),
+                'accepted_decision_review',pg_catalog.jsonb_build_object(
+                  'whole_root_review_required',v_row.whole_root_review_required,
+                  'reviewed_by_user_id',v_row.whole_root_reviewed_by_user_id,
+                  'reviewed_at_utc',v_row.whole_root_reviewed_at_utc),
+                'remedy','I-3 section 5.5: a review taken after a bundle was proposed is a NEW bundle revision')::text;
+    end if;
+    -- Re-composing the same proposal is idempotent, not an error.
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'created',false,
+      'decision_bundle_id',v_row.decision_bundle_id,
+      'bundle_revision',v_row.bundle_revision,
+      'state',v_row.state,
+      'bundle_kind',v_row.bundle_kind,
+      'proposed_head_ids',pg_catalog.to_jsonb(v_row.proposed_head_ids),
+      'request_digest',pg_catalog.encode(v_row.request_digest,'hex')
+    );
+  end if;
+
+  -- The Contract choices, by ordinal.  Never a `limit 1`: an ordinal that
+  -- appeared twice would otherwise pick an arbitrary Contract for a money row.
+  for v_i in 1..v_member_count loop
+    select pg_catalog.count(*)::integer into v_choice_rows
+    from pg_catalog.jsonb_array_elements(v_financial->'contract_choices') as choice_element(value)
+    where (choice_element.value->>'root_ordinal')::integer=v_i;
+    if v_choice_rows<>1 then
+      raise exception 'WEEKLY_SOURCE_PROPOSAL_CONTRACT_CHOICE_NOT_UNIQUE'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'root_ordinal',v_i,'rows',v_choice_rows)::text;
+    end if;
+  end loop;
+  select (choice_element.value->>'contract_id')::uuid into v_source_contract_id
+  from pg_catalog.jsonb_array_elements(v_financial->'contract_choices') as choice_element(value)
+  where (choice_element.value->>'root_ordinal')::integer=1;
+  -- The caller's declared Contract is the SOURCE root's, and it must be the one
+  -- the request itself carries, or the bundle row and the request would name
+  -- two different Contracts for member 1.
+  if p_contract_id is distinct from v_source_contract_id then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_SOURCE_CONTRACT_DISAGREES_WITH_REQUEST'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'declared_contract_id',p_contract_id,
+              'request_contract_id',v_source_contract_id)::text;
+  end if;
+  -- One bundle row carries ONE week, and the coordinator requires every
+  -- Contract choice to agree with it.
+  select pg_catalog.count(*)::integer into v_week_mismatch
+  from pg_catalog.jsonb_array_elements(v_financial->'contract_choices') as choice_element(value)
+  where (choice_element.value->>'week_ending_date')::date is distinct from p_week_ending_date;
+  if v_week_mismatch>0 then
+    raise exception 'WEEKLY_SOURCE_PROPOSAL_WEEK_DISAGREES_WITH_REQUEST'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'declared_week_ending_date',p_week_ending_date,
+              'disagreeing_contract_choices',v_week_mismatch)::text;
+  end if;
+
+  if v_member_count=2 then
+    v_target_family_booking_id:=v_canonical->'member_family_booking_ids'->>1;
+    v_target_root_timesheet_id:=(v_canonical->'member_root_ids'->>1)::uuid;
+    select (choice_element.value->>'contract_id')::uuid into v_target_contract_id
+    from pg_catalog.jsonb_array_elements(v_financial->'contract_choices') as choice_element(value)
+    where (choice_element.value->>'root_ordinal')::integer=2;
+  end if;
+
+  select coalesce(pg_catalog.array_agg(head_element.value::uuid
+           order by head_element.ordinality),array[]::uuid[])
+    into v_head_ids
+  from pg_catalog.jsonb_array_elements_text(v_canonical->'head_ids')
+       with ordinality as head_element(value,ordinality);
+
+  insert into public.weekly_source_entitlement_decision_bundles(
+    decision_bundle_id,bundle_revision,agency_id,candidate_id,week_ending_date,
+    bundle_kind,source_root_family_booking_id,source_root_timesheet_id,
+    source_contract_id,target_root_family_booking_id,target_root_timesheet_id,
+    target_contract_id,decision_id,decided_by_user_id,publication_mode,
+    request_digest,source_revision_digest,contract_choice_digest,
+    before_inventory_digest,proposed_head_ids,
+    whole_root_review_required,whole_root_reviewed_by_user_id,
+    whole_root_reviewed_at_utc,state
+  ) values (
+    (v_canonical->>'decision_bundle_id')::uuid,
+    (v_canonical->>'bundle_revision')::bigint,
+    p_agency_id,
+    (v_canonical->>'candidate_id')::uuid,
+    p_week_ending_date,
+    v_bundle_kind,
+    v_canonical->'member_family_booking_ids'->>0,
+    (v_canonical->'member_root_ids'->>0)::uuid,
+    p_contract_id,
+    v_target_family_booking_id,
+    v_target_root_timesheet_id,
+    v_target_contract_id,
+    (v_canonical->>'decision_id')::uuid,
+    p_actor_user_id,
+    'IMMEDIATE',
+    v_digest,
+    private.weekly_source_publication_request_digest_v1(v_financial->'source_revision'),
+    private.weekly_source_publication_request_digest_v1(v_financial->'contract_choices'),
+    private.weekly_source_publication_request_digest_v1(
+      private.weekly_source_publication_before_inventory_v1(
+        p_request->'control',v_member_count)),
+    v_head_ids,
+    v_review_required,
+    v_reviewed_by_user_id,
+    v_reviewed_at_utc,
+    'PROPOSED'
+  ) returning * into v_row;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'created',true,
+    'decision_bundle_id',v_row.decision_bundle_id,
+    'bundle_revision',v_row.bundle_revision,
+    'state',v_row.state,
+    'bundle_kind',v_row.bundle_kind,
+    'proposed_head_ids',pg_catalog.to_jsonb(v_row.proposed_head_ids),
+    'request_digest',pg_catalog.encode(v_row.request_digest,'hex')
+  );
+end;
+$function$;

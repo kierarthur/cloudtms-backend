@@ -1,0 +1,60 @@
+{
+  "source_only": true,
+  "prior_packet": "missing-default-current-native-proposal-20261014",
+  "complete_reverses": 2,
+  "unique_hunks": 5,
+  "proofs": [
+    {
+      "file": "03_missing_cancel_basis.sqlinc",
+      "before_bytes": 6891,
+      "before_sha256": "e05e9222c63380c739749a78ffb96651aec24cff369cd7b288a0796556e216a5",
+      "after_bytes": 7286,
+      "after_sha256": "d66b67b0ab278f90113c2f59d93f1a8dccbf89543b8d0c377dfa4b7afa54add7",
+      "hunks": [
+        {
+          "name": "correction proof local",
+          "before": "  v_context jsonb; v_original jsonb; v_result jsonb;",
+          "after": "  v_context jsonb; v_original jsonb; v_result jsonb; v_correction_baseline jsonb;"
+        },
+        {
+          "name": "retain strict ordinary/protected position while admitting actual unpaid correction baseline",
+          "before": "  v_original:=private.weekly_source_missing_snapshot_movement_v1(v_snapshot.id);\n  if v_original->>'movement_id' is distinct from v_context->>'current_pay_head_movement_id' then\n    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_NATIVE_POSITION_CHANGED' using errcode='40001';\n  end if;\n  v_disposition:=case",
+          "after": "  v_original:=private.weekly_source_missing_snapshot_movement_v1(v_snapshot.id);\n  v_disposition:=case"
+        },
+        {
+          "name": "native correction proof before existing basis",
+          "before": "  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',",
+          "after": "  if v_original->>'movement_id' is distinct from v_context->>'current_pay_head_movement_id' then\n    if v_disposition is distinct from 'CANCEL_NOT_PAID_OR_INVOICED' then\n      raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_NATIVE_POSITION_CHANGED' using errcode='40001';\n    end if;\n    v_correction_baseline:=private.weekly_source_missing_correction_baseline_v1(\n      v_publication.id,v_snapshot.id,p_actor_user_id);\n  end if;\n  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',"
+        },
+        {
+          "name": "freeze genuine proof only for correction mismatch",
+          "before": "  v_result:=v_result||jsonb_build_object('basis_sha256',encode(private.weekly_source_sha256_jsonb_v1(",
+          "after": "  if v_correction_baseline is not null then\n    v_result:=v_result||jsonb_build_object('correction_baseline',v_correction_baseline);\n  end if;\n  v_result:=v_result||jsonb_build_object('basis_sha256',encode(private.weekly_source_sha256_jsonb_v1("
+        }
+      ],
+      "unique_hunks": 4,
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "14_missing_prepared_census_recheck.sqlinc",
+      "before_bytes": 4198,
+      "before_sha256": "04b7d8627bc9fa05548c685ac89b20ab2dea0aa263307418900356cd76791fe3",
+      "after_bytes": 4741,
+      "after_sha256": "077ddade56c51eaa1f8d8700672c8c5e28cdc5d706b8169f7e1668258615c07e",
+      "hunks": [
+        {
+          "name": "reprove whole correction baseline/current-parent before existing prepared disposition",
+          "before": "    if v_transition.exclude_cancel then",
+          "after": "    if v_basis ? 'correction_baseline' then\n      if v_transition.exclude_cancel\n        or v_entry.value->>'disposition' is distinct from 'CANCEL_NOT_PAID_OR_INVOICED'\n        or private.weekly_source_missing_correction_baseline_v1(\n          (v_basis->>'projection_publication_id')::uuid,v_transition.previous_snapshot_line_id,p_actor_user_id)\n          is distinct from v_basis->'correction_baseline' then\n        raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_CORRECTION_BASELINE_CHANGED' using errcode='40001';\n      end if;\n    end if;\n    if v_transition.exclude_cancel then"
+        }
+      ],
+      "unique_hunks": 1,
+      "whole_reverse_verified": true
+    }
+  ],
+  "new_private_signature": "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+  "new_public_signatures": 0,
+  "banking_owner_changed": false,
+  "sql_compiled": false,
+  "native_proof": false
+}

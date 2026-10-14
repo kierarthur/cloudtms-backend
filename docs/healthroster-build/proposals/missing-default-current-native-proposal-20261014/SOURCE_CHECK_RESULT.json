@@ -1,0 +1,33 @@
+{
+  "schema_version": "MISSING_DEFAULT_SOURCE_PROPOSAL_CHECK_V1",
+  "source_only": true,
+  "scope": "bounded unfinished source-construction/shared-owner proposal",
+  "current_native_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "applied_prerequisite_commit": "1be1b623eb6567d9fd483ae28e48b887dd2868bd",
+  "tests": {
+    "effect_free_source_cases": 16,
+    "passed": 16,
+    "failed": 0
+  },
+  "syntax": {
+    "inert_scripts": 6,
+    "passed": 6
+  },
+  "complete_owner_reverses": 8,
+  "full_unique_hunks": 30,
+  "new_private_signatures": 7,
+  "existing_public_signatures_changed": 2,
+  "new_public_signatures": 0,
+  "shared_banking_owner_proposals": 2,
+  "shared_owner_approval": false,
+  "proposed_existing_schema_columns": 3,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_implementation_complete": false,
+  "remaining_source_gaps": "PROPOSAL_REVIEW_SCOPE_AND_GAPS.md",
+  "native_gates": "actual compile, current-role/table/verifier union, source/contract/catalogue/tool/installation seal, RC/RR/security/financial/overlap/document/API/UI/phone first use",
+  "real_database_or_lab_calls": 0,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

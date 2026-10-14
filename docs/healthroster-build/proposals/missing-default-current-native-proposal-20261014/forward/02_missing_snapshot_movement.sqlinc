@@ -1,0 +1,178 @@
+-- Exact immutable Source provenance only. Callers must independently admit
+-- the genuine target/actor and retain its complete native root/I-1 locks.
+-- No settled/paid flag, invoice permission, rate lookup or money calculation.
+create or replace function private.weekly_source_missing_snapshot_movement_v1(p_snapshot_line_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_requested public.weekly_source_final_snapshot_lines%rowtype;
+  v_line public.weekly_source_final_snapshot_lines%rowtype;
+  v_previous public.weekly_source_final_snapshot_lines%rowtype;
+  v_t public.weekly_source_state_transitions%rowtype;
+  v_m public.weekly_source_billing_movements%rowtype;
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_lineage public.weekly_source_row_timesheet_lineages%rowtype;
+  v_requested_lineage public.weekly_source_row_timesheet_lineages%rowtype;
+  v_economic public.weekly_source_row_economic_snapshots%rowtype;
+  v_group uuid; v_cursor uuid; v_seen uuid[]:='{}'::uuid[];
+  v_mapping uuid; v_ids uuid[]; v_cache_count integer;
+  v_prior_subset jsonb; v_current_subset jsonb;
+  v_prior_fingerprint bytea; v_current_fingerprint bytea;
+  v_result jsonb;
+begin
+  if p_snapshot_line_id is null then
+    raise exception 'WEEKLY_SOURCE_MISSING_BASIS_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_requested from public.weekly_source_final_snapshot_lines where id=p_snapshot_line_id;
+  select * into strict v_requested_lineage from public.weekly_source_row_timesheet_lineages where row_resolution_id=v_requested.row_resolution_id;
+  select cycle.source_group_id into strict v_group from public.weekly_source_final_revisions revision
+    join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+    where revision.id=v_requested.final_revision_id;
+  if not exists(select 1 from public.weekly_work_events event
+      join public.contracts contract on contract.id=v_requested.contract_id
+      where event.id=v_requested.work_event_id and event.first_source_group_id=v_group
+        and event.candidate_id=v_requested.candidate_id and event.client_id=v_requested.client_id
+        and event.work_date=v_requested.work_date
+        and contract.candidate_id=event.candidate_id and contract.client_id=event.client_id) then
+    raise exception 'WEEKLY_SOURCE_MISSING_BASIS_SCOPE_UNBOUND' using errcode='55000';
+  end if;
+
+  -- A captured snapshot mapping is the existing native producer's exact
+  -- original-movement identity. Scope/lineage is re-proved, not ranked.
+  select count(*),array_agg(mapping.movement_id) into v_cache_count,v_ids
+  from private.bpay_next_source_current_snapshots mapping
+  join private.bpay_next_source_current_scopes scope on scope.id=mapping.scope_id
+  join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=v_requested.row_resolution_id
+  where mapping.snapshot_line_id=v_requested.id and mapping.work_event_id=v_requested.work_event_id
+    and scope.source_group_id=v_group and scope.family_booking_id=lineage.family_booking_id
+    and scope.candidate_id=v_requested.candidate_id and scope.client_id=v_requested.client_id
+    and scope.contract_id=v_requested.contract_id and scope.week_ending_date=lineage.week_ending_date
+    and lineage.work_event_id=v_requested.work_event_id and lineage.candidate_id=v_requested.candidate_id
+    and lineage.client_id=v_requested.client_id and lineage.contract_id=v_requested.contract_id;
+  if v_cache_count>1 or (exists(select 1 from private.bpay_next_source_current_snapshots
+       where snapshot_line_id=v_requested.id) and v_cache_count<>1) then
+    raise exception 'WEEKLY_SOURCE_MISSING_BASIS_NATIVE_MAPPING_UNBOUND' using errcode='55000';
+  end if;
+  if v_cache_count=1 then v_mapping:=v_ids[1]; end if;
+
+  -- Retained Legacy may never have captured NEXT mappings. Follow only the
+  -- real immutable NO_CHANGE previous-snapshot edges to ADD/AMEND. The finite
+  -- actual ancestry is traversed completely; a cycle refuses. There is no
+  -- ledger timestamp/UUID order, economic tie-break or arbitrary depth limit.
+  v_cursor:=v_requested.id;
+  loop
+    if v_cursor=any(v_seen) then
+      raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ANCESTRY_CYCLE' using errcode='55000';
+    end if;
+    v_seen:=array_append(v_seen,v_cursor);
+    select * into strict v_line from public.weekly_source_final_snapshot_lines where id=v_cursor;
+    if (v_line.work_event_id,v_line.candidate_id,v_line.client_id,v_line.contract_id,
+        v_line.work_date,v_line.start_at_local,v_line.end_at_local,v_line.break_minutes)
+      is distinct from (v_requested.work_event_id,v_requested.candidate_id,v_requested.client_id,v_requested.contract_id,
+        v_requested.work_date,v_requested.start_at_local,v_requested.end_at_local,v_requested.break_minutes)
+      or not exists(select 1 from public.weekly_source_final_revisions revision
+        join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+        where revision.id=v_line.final_revision_id and cycle.source_group_id=v_group) then
+      raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ANCESTRY_SCOPE_CHANGED' using errcode='55000';
+    end if;
+    select array_agg(transition.id) into v_ids from public.weekly_source_state_transitions transition
+      where transition.new_snapshot_line_id=v_line.id and transition.final_revision_id=v_line.final_revision_id
+        and transition.work_event_id=v_line.work_event_id and transition.source_profile_kind=v_line.source_profile_kind
+        and transition.new_present;
+    if coalesce(cardinality(v_ids),0)<>1 then
+      raise exception 'WEEKLY_SOURCE_MISSING_BASIS_TRANSITION_UNBOUND' using errcode='55000';
+    end if;
+    select * into strict v_t from public.weekly_source_state_transitions where id=v_ids[1];
+    if v_t.outcome in ('ADD','AMEND') then
+      select array_agg(movement.id) into v_ids from public.weekly_source_billing_movements movement
+        where movement.transition_id=v_t.id and movement.final_revision_id=v_t.final_revision_id
+          and movement.work_event_id=v_t.work_event_id
+          and movement.source_profile_kind=v_t.source_profile_kind
+          and movement.movement_role=case when v_t.outcome='ADD' then 'POSITIVE' else 'REPLACEMENT' end
+          and movement.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT');
+      if coalesce(cardinality(v_ids),0)<>1 then
+        raise exception 'WEEKLY_SOURCE_MISSING_BASIS_MOVEMENT_UNBOUND' using errcode='55000';
+      end if;
+      select * into strict v_m from public.weekly_source_billing_movements where id=v_ids[1];
+      exit;
+    elsif v_t.outcome='NO_CHANGE' and v_t.previous_present and v_t.previous_snapshot_line_id is not null then
+      select * into strict v_previous from public.weekly_source_final_snapshot_lines where id=v_t.previous_snapshot_line_id;
+      v_prior_subset:=private.weekly_source_snapshot_authority_subset_v1(v_previous.id);
+      v_current_subset:=private.weekly_source_snapshot_authority_subset_v1(v_line.id);
+      -- Preserve FIN4's real pre-upgrade whole-hash compatibility arm.
+      if v_prior_subset is null and v_current_subset is not null then
+        if v_previous.policy_fingerprint is distinct from v_line.policy_fingerprint then
+          raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ANCESTRY_POLICY_CHANGED' using errcode='55000';
+        end if;
+        v_current_subset:=null;
+      end if;
+      v_prior_fingerprint:=private.weekly_source_snapshot_value_fingerprint_v1(v_previous.id,v_prior_subset);
+      v_current_fingerprint:=private.weekly_source_snapshot_value_fingerprint_v1(v_line.id,v_current_subset);
+      -- Earlier immutable NO_CHANGE records have no hash-version field.
+      -- Preserve their original equal/non-null hashes as recorded; do not
+      -- pretend they were encoded by today's F1 domain. Independently prove
+      -- equivalent stored values through the one current native value owner.
+      if v_t.prior_state_fingerprint is null or v_t.new_state_fingerprint is null
+        or v_t.prior_state_fingerprint is distinct from v_t.new_state_fingerprint
+        or v_prior_fingerprint is distinct from v_current_fingerprint then
+        raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ANCESTRY_VALUES_CHANGED' using errcode='55000';
+      end if;
+      v_cursor:=v_previous.id;
+    else
+      raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ANCESTRY_NOT_POSITIVE' using errcode='55000';
+    end if;
+  end loop;
+  if v_mapping is not null and v_mapping is distinct from v_m.id then
+    raise exception 'WEEKLY_SOURCE_MISSING_BASIS_NATIVE_MAPPING_CHANGED' using errcode='55000';
+  end if;
+  if v_m.placement_state='VOIDED_BY_CORRECT_FINAL'
+    or (v_m.work_event_id,v_m.candidate_id,v_m.actual_client_id,v_m.contract_id)
+      is distinct from (v_requested.work_event_id,v_requested.candidate_id,v_requested.client_id,v_requested.contract_id)
+    or v_m.source_facts_json->>'snapshot_line_id' is distinct from v_line.id::text
+    or v_m.source_facts_json->>'row_resolution_id' is distinct from v_line.row_resolution_id::text
+    or v_m.source_facts_json->>'upload_row_id' is distinct from v_line.upload_row_id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ORIGINAL_MOVEMENT_CHANGED' using errcode='55000';
+  end if;
+  select * into strict v_resolution from public.weekly_source_row_resolutions where id=v_line.row_resolution_id;
+  select * into strict v_lineage from public.weekly_source_row_timesheet_lineages where row_resolution_id=v_resolution.id;
+  select * into strict v_economic from public.weekly_source_row_economic_snapshots where row_resolution_id=v_resolution.id;
+  if v_resolution.mapping_state<>'RESOLVED'
+    or v_resolution.upload_row_id is distinct from v_line.upload_row_id
+    or v_economic.upload_row_id is distinct from v_line.upload_row_id
+    or (v_resolution.work_event_id,v_resolution.candidate_id,v_resolution.client_id,v_resolution.contract_id)
+      is distinct from (v_m.work_event_id,v_m.candidate_id,v_m.actual_client_id,v_m.contract_id)
+    or (v_lineage.work_event_id,v_lineage.candidate_id,v_lineage.client_id,v_lineage.contract_id)
+      is distinct from (v_m.work_event_id,v_m.candidate_id,v_m.actual_client_id,v_m.contract_id)
+    or (v_lineage.family_booking_id,v_lineage.week_ending_date,v_lineage.work_event_id,
+        v_lineage.candidate_id,v_lineage.client_id,v_lineage.contract_id)
+      is distinct from (v_requested_lineage.family_booking_id,v_requested_lineage.week_ending_date,v_requested_lineage.work_event_id,
+        v_requested_lineage.candidate_id,v_requested_lineage.client_id,v_requested_lineage.contract_id)
+    or (v_economic.work_event_id,v_economic.candidate_id,v_economic.client_id,v_economic.contract_id)
+      is distinct from (v_m.work_event_id,v_m.candidate_id,v_m.actual_client_id,v_m.contract_id)
+    or v_m.invoice_timesheet_id is distinct from v_lineage.timesheet_id
+    or not exists(select 1 from public.weekly_source_final_revisions revision
+      join public.weekly_source_upload_rows source_row on source_row.id=v_line.upload_row_id
+        and source_row.upload_id=revision.upload_id
+      join public.weekly_source_cycles cycle on cycle.id=v_lineage.source_cycle_id
+      where revision.id=v_line.final_revision_id and cycle.source_group_id=v_group) then
+    raise exception 'WEEKLY_SOURCE_MISSING_BASIS_ORIGINAL_FACTS_UNBOUND' using errcode='55000';
+  end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_SNAPSHOT_MOVEMENT_V1',
+    'requested_snapshot_line_id',v_requested.id,'original_snapshot_line_id',v_line.id,
+    'work_event_id',v_m.work_event_id,'source_group_id',v_group,'movement_id',v_m.id,
+    'candidate_id',v_m.candidate_id,'client_id',v_m.actual_client_id,'contract_id',v_m.contract_id,
+    'row_resolution_id',v_resolution.id,'lineage_id',v_lineage.id,'economic_snapshot_id',v_economic.id,
+    'original_snapshot_hash',encode(v_line.snapshot_line_hash,'hex'),
+    'movement_economic_hash',encode(v_m.movement_economic_hash,'hex'),
+    'mapping_rate_policy_fingerprint',encode(v_m.mapping_rate_policy_fingerprint,'hex'),
+    'timesheet_lineage_fingerprint',encode(v_lineage.lineage_fingerprint,'hex'),
+    'original_economic_snapshot',to_jsonb(v_economic),
+    'canonical_pay_vector',v_m.canonical_pay_vector_json,'canonical_charge_vector',v_m.canonical_charge_vector_json,
+    'source_facts',v_m.source_facts_json,'ancestry_snapshot_ids',to_jsonb(v_seen));
+  return v_result||jsonb_build_object('basis_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_SNAPSHOT_MOVEMENT_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_missing_snapshot_movement_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_snapshot_movement_v1(uuid) from public,anon,authenticated,service_role;

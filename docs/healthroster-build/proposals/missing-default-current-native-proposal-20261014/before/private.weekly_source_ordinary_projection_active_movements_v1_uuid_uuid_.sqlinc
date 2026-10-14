@@ -1,0 +1,229 @@
+create or replace function private.weekly_source_ordinary_projection_active_movements_v1(
+  p_root_timesheet_id uuid,
+  p_through_final_revision_id uuid
+) returns setof public.weekly_source_billing_movements
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with root_scope as materialized (
+    select ts.booking_id,ts.contract_id,ts.week_ending_date,c.candidate_id,c.client_id,
+      coalesce(module.active_owner='NEXT' and exists(
+        select 1 from public.weekly_exceptional_pay_target_families f
+        where f.root_timesheet_id=ts.timesheet_id and f.root_family_booking_id=ts.booking_id
+          and pg_catalog.btrim(f.root_family_booking_id)=pg_catalog.btrim(ts.booking_id)
+          and private.bpay_next_protected_owner_route_v1(f.id)='NEXT'
+      ),false) as use_next
+    from public.timesheets ts join public.contracts c on c.id=ts.contract_id
+    left join private.bpay_next_module_control module on module.id=1
+    where ts.timesheet_id=p_root_timesheet_id
+  ), family as materialized (
+    -- WP-62 (WP-57 handoff N1, executed): a Timesheet family can carry more
+    -- than one physical member after a rotation, and a movement keeps the
+    -- member that was current when its report was finalised.  Pairing a full
+    -- negative to its positive must therefore run over the WHOLE family, or a
+    -- reversal landing after a rotation never meets the positive it reverses
+    -- and the Candidate stays paid for a shift the Trust withdrew (executed:
+    -- 8.00 h / GBP 80.00 paid against a GBP 0.00 invoice).  The family is
+    -- resolved ONCE through the established adapter - the same one the
+    -- protected proposal owner and the invoice owners use - never by a second
+    -- resolver.  For an unrotated family it returns exactly
+    -- {p_root_timesheet_id}, so every decision below is unchanged there, and
+    -- the answer is the same whichever member of a family is asked.
+    -- NEXT uses the exact immutable Source lineage's raw family key; only
+    -- retained C1 invokes the old physical-family resolver. This changes
+    -- membership, NOT the Source revision-ladder cancellation calculation
+    -- below. It is not a maintained-current observation or bounded-history
+    -- claim; a separate real producer-owned current factual binding is next.
+    select root_scope.*,case when use_next then array[p_root_timesheet_id]
+      else private.weekly_source_invoice_family_timesheet_ids_v1(p_root_timesheet_id) end as timesheet_ids
+    from root_scope
+  ), target as (
+    select target_revision.finalised_at_utc,target_revision.revision_number,
+           target_cycle.finalisation_week_ending,target_revision.id,
+           target_revision.state,target_revision.predecessor_revision_id
+    from public.weekly_source_final_revisions target_revision
+    join public.weekly_source_cycles target_cycle
+      on target_cycle.id=target_revision.source_cycle_id
+    where target_revision.id=p_through_final_revision_id
+  ), scoped as (
+    select
+      movement.id,
+      movement.work_event_id,
+      movement.movement_role,
+      movement.source_line_kind,
+      movement.prior_movement_id,
+      movement.created_at_utc,
+      revision.finalised_at_utc,
+      revision.revision_number,
+      source_cycle.finalisation_week_ending,
+      pg_catalog.jsonb_build_object(
+        'work_date',movement.source_facts_json->>'work_date',
+        'start_at_local',movement.source_facts_json->>'start_at_local',
+        'end_at_local',movement.source_facts_json->>'end_at_local',
+        'break_minutes',movement.source_facts_json->>'break_minutes',
+        'hours_day',pg_catalog.round(pg_catalog.abs(
+          (movement.canonical_pay_vector_json#>>'{hours,day}')::numeric),2)::text,
+        'hours_night',pg_catalog.round(pg_catalog.abs(
+          (movement.canonical_pay_vector_json#>>'{hours,night}')::numeric),2)::text,
+        'hours_sat',pg_catalog.round(pg_catalog.abs(
+          (movement.canonical_pay_vector_json#>>'{hours,sat}')::numeric),2)::text,
+        'hours_sun',pg_catalog.round(pg_catalog.abs(
+          (movement.canonical_pay_vector_json#>>'{hours,sun}')::numeric),2)::text,
+        'hours_bh',pg_catalog.round(pg_catalog.abs(
+          (movement.canonical_pay_vector_json#>>'{hours,bh}')::numeric),2)::text,
+        'pay_pence',pg_catalog.abs(
+          (movement.canonical_pay_vector_json->>'total_pence')::bigint)::text,
+        'charge_pence',pg_catalog.abs(
+          (movement.canonical_charge_vector_json->>'total_pence')::bigint)::text
+      ) as economic_magnitude
+    from public.weekly_source_billing_movements movement
+    join public.weekly_source_final_revisions revision
+      on revision.id=movement.final_revision_id
+    join public.weekly_source_cycles source_cycle
+      on source_cycle.id=movement.finalisation_cycle_id
+    cross join target
+    cross join family
+    where ((not family.use_next and movement.invoice_timesheet_id=any(family.timesheet_ids))
+      or (family.use_next and exists(
+        select 1 from public.weekly_source_row_timesheet_lineages lineage
+        where lineage.row_resolution_id=case
+          when coalesce(movement.source_facts_json->>'row_resolution_id','')
+            ~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+            then (movement.source_facts_json->>'row_resolution_id')::uuid
+          else (select (prior.source_facts_json->>'row_resolution_id')::uuid
+            from public.weekly_source_billing_movements prior
+            where prior.source_profile_kind<>'SELF_BILL_REPORT' and prior.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      and prior.id=movement.prior_movement_id and prior.work_event_id=movement.work_event_id
+              and prior.candidate_id=movement.candidate_id and prior.contract_id=movement.contract_id
+              and prior.actual_client_id=movement.actual_client_id and prior.movement_role in ('POSITIVE','REPLACEMENT')
+              and coalesce(prior.source_facts_json->>'row_resolution_id','')
+                ~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') end
+          and lineage.family_booking_id=family.booking_id and lineage.work_event_id=movement.work_event_id
+          and lineage.candidate_id=family.candidate_id and lineage.client_id=family.client_id
+          and lineage.contract_id=family.contract_id and lineage.week_ending_date=family.week_ending_date
+          and movement.candidate_id=family.candidate_id and movement.actual_client_id=family.client_id
+          and movement.contract_id=family.contract_id)))
+      and movement.expense_authority_generation_id is null
+      and movement.source_line_kind<>'SOURCE_FIXED_EXPENSE'
+      and movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      and (revision.state='CURRENT' or revision.id=target.id)
+      and (
+        target.state<>'PREPARED'
+        or revision.id is distinct from target.predecessor_revision_id
+      )
+      and (
+        source_cycle.finalisation_week_ending<target.finalisation_week_ending
+        or (
+          source_cycle.finalisation_week_ending=target.finalisation_week_ending
+          and revision.finalised_at_utc<target.finalised_at_utc
+        )
+        or (
+          source_cycle.finalisation_week_ending=target.finalisation_week_ending
+          and revision.finalised_at_utc=target.finalised_at_utc
+          and revision.revision_number<target.revision_number
+        )
+        or (
+          source_cycle.finalisation_week_ending=target.finalisation_week_ending
+          and revision.finalised_at_utc=target.finalised_at_utc
+          and revision.revision_number=target.revision_number
+          and revision.id::text<=target.id::text
+        )
+      )
+  ), explicitly_superseded as (
+    select distinct scoped.prior_movement_id as movement_id
+    from scoped
+    where scoped.prior_movement_id is not null
+      and scoped.movement_role in ('REVERSAL','REPLACEMENT')
+  ), nhsp_physical as (
+    select scoped.*
+    from scoped
+    where scoped.source_line_kind in (
+        'NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE'
+      )
+      and scoped.prior_movement_id is null
+  ), nhsp_cancelled as (
+    -- A positive is bound by a full negative when, inside its own work event
+    -- and economic magnitude, the number of reversals standing at or after it
+    -- is at least the number of positives standing at or after it.  That is a
+    -- pure counting statement over the revision ladder: it is unchanged by any
+    -- permutation of the physical rows inside a report, and it is unchanged by
+    -- which report a row arrived in as long as the ladder order is the same.
+    select positive.id as movement_id
+    from nhsp_physical positive
+    where positive.movement_role in ('POSITIVE','REPLACEMENT')
+      and (
+        select pg_catalog.count(*)
+        from nhsp_physical reversal
+        where reversal.work_event_id=positive.work_event_id
+          and reversal.economic_magnitude=positive.economic_magnitude
+          and reversal.movement_role='REVERSAL'
+          and (reversal.finalisation_week_ending,reversal.finalised_at_utc,
+               reversal.revision_number)
+              >=(positive.finalisation_week_ending,positive.finalised_at_utc,
+                 positive.revision_number)
+      )>=(
+        select pg_catalog.count(*)
+        from nhsp_physical peer
+        where peer.work_event_id=positive.work_event_id
+          and peer.economic_magnitude=positive.economic_magnitude
+          and peer.movement_role in ('POSITIVE','REPLACEMENT')
+          and (peer.finalisation_week_ending,peer.finalised_at_utc,
+               peer.revision_number)
+              >=(positive.finalisation_week_ending,positive.finalised_at_utc,
+                 positive.revision_number)
+      )
+  ), live as (
+    select scoped.*
+    from scoped
+    where scoped.movement_role in ('POSITIVE','REPLACEMENT')
+      and not exists(
+        select 1 from explicitly_superseded
+        where explicitly_superseded.movement_id=scoped.id
+      )
+      and not exists(
+        select 1 from nhsp_cancelled
+        where nhsp_cancelled.movement_id=scoped.id
+      )
+  ), current_head as (
+    -- 14 s6.2.2: where no protected version exists, "the latest final source
+    -- position supplies the current entitlement".  Latest means latest on the
+    -- REVISION ladder - which report, which revision - and nothing else.  A
+    -- surviving position from an earlier report is history the later report
+    -- has restated; it is not a second shift.  Stated as "no live peer on this
+    -- work event stands later", so no `order by` decides it.
+    select live.*
+    from live
+    where not exists(
+      select 1
+      from live peer
+      where peer.work_event_id=live.work_event_id
+        and (peer.finalisation_week_ending,peer.finalised_at_utc,
+             peer.revision_number)
+            >(live.finalisation_week_ending,live.finalised_at_utc,
+              live.revision_number)
+    )
+  ), one_per_position as (
+    -- Inside that one latest revision, several live rows of the SAME economic
+    -- magnitude are one position stated more than once, so exactly one of them
+    -- represents it and the money is identical whichever it is.  The
+    -- comparison is a strict total order because id::text is unique, so
+    -- exactly one member of each group satisfies "no peer in this group stands
+    -- after me".  Rows of DIFFERENT magnitudes survive this step together and
+    -- the projection owner refuses them: inside one revision there is no
+    -- later-than relation to appeal to, and the only thing that could separate
+    -- them is the physical row order, which carries no financial meaning.
+    select current_head.id
+    from current_head
+    where not exists(
+      select 1
+      from current_head peer
+      where peer.work_event_id=current_head.work_event_id
+        and peer.economic_magnitude=current_head.economic_magnitude
+        and (peer.created_at_utc,peer.id::text)
+            >(current_head.created_at_utc,current_head.id::text)
+    )
+  )
+  select movement.*
+  from public.weekly_source_billing_movements movement
+  join one_per_position on one_per_position.id=movement.id;
+$function$;
