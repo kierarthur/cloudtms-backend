@@ -1,0 +1,4009 @@
+{
+  "schema": "AGENCY_AUTHORISE_RAW_STAGED_WHITESPACE_V1",
+  "source_only": true,
+  "native": false,
+  "staged_files": 35,
+  "saved_staged_raw_mismatches": 0,
+  "credential_findings": 0,
+  "raw_whitespace_pass": false,
+  "git_diff_check_exit": 2,
+  "inherited_trailing_findings": 792,
+  "inherited": [
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/49_complete_worker_index_with_native_authorise.js",
+      "sha256": "bee83545741ba4fced8d3be2910b605a73dfe4fcc16b3792b367eb768cc93755",
+      "inherited_findings": 264,
+      "source_before_path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "source_before_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "ordered_trailing_text_equal": true,
+      "line_correspondence": [
+        {
+          "after_line": 27,
+          "before_line": 27,
+          "text_sha256": "2d99c323f49ea49f130b6d9fb453c74d69f06f2eb7ffda015269d9256d09c8a1"
+        },
+        {
+          "after_line": 629,
+          "before_line": 628,
+          "text_sha256": "922d22729e68afb9a7478d69b10c22f6a67a419481ff9ff80e5eb733d845eb3d"
+        },
+        {
+          "after_line": 6379,
+          "before_line": 6378,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56281,
+          "before_line": 56280,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56284,
+          "before_line": 56283,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56291,
+          "before_line": 56290,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56325,
+          "before_line": 56324,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56396,
+          "before_line": 56395,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56466,
+          "before_line": 56465,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56484,
+          "before_line": 56483,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56487,
+          "before_line": 56486,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56491,
+          "before_line": 56490,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56495,
+          "before_line": 56494,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56505,
+          "before_line": 56504,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56518,
+          "before_line": 56517,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56524,
+          "before_line": 56523,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56530,
+          "before_line": 56529,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56539,
+          "before_line": 56538,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56542,
+          "before_line": 56541,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56549,
+          "before_line": 56548,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56553,
+          "before_line": 56552,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56558,
+          "before_line": 56557,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56571,
+          "before_line": 56570,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56576,
+          "before_line": 56575,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56581,
+          "before_line": 56580,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56584,
+          "before_line": 56583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56609,
+          "before_line": 56608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56734,
+          "before_line": 56733,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56743,
+          "before_line": 56742,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56804,
+          "before_line": 56803,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56810,
+          "before_line": 56809,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56814,
+          "before_line": 56813,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56818,
+          "before_line": 56817,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56826,
+          "before_line": 56825,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56829,
+          "before_line": 56828,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56844,
+          "before_line": 56843,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56858,
+          "before_line": 56857,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56867,
+          "before_line": 56866,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56881,
+          "before_line": 56880,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56894,
+          "before_line": 56893,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56909,
+          "before_line": 56908,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56924,
+          "before_line": 56923,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56945,
+          "before_line": 56944,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56957,
+          "before_line": 56956,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56972,
+          "before_line": 56971,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56979,
+          "before_line": 56978,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56990,
+          "before_line": 56989,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57001,
+          "before_line": 57000,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57009,
+          "before_line": 57008,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57023,
+          "before_line": 57022,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57026,
+          "before_line": 57025,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57030,
+          "before_line": 57029,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57036,
+          "before_line": 57035,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57039,
+          "before_line": 57038,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57042,
+          "before_line": 57041,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57049,
+          "before_line": 57048,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57058,
+          "before_line": 57057,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57069,
+          "before_line": 57068,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57088,
+          "before_line": 57087,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57154,
+          "before_line": 57153,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57196,
+          "before_line": 57195,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57199,
+          "before_line": 57198,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57224,
+          "before_line": 57223,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57302,
+          "before_line": 57301,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57489,
+          "before_line": 57488,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57498,
+          "before_line": 57497,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57503,
+          "before_line": 57502,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57513,
+          "before_line": 57512,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57522,
+          "before_line": 57521,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57530,
+          "before_line": 57529,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57538,
+          "before_line": 57537,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57550,
+          "before_line": 57549,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57563,
+          "before_line": 57562,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57566,
+          "before_line": 57565,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57584,
+          "before_line": 57583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57586,
+          "before_line": 57585,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57609,
+          "before_line": 57608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57620,
+          "before_line": 57619,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57623,
+          "before_line": 57622,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57630,
+          "before_line": 57629,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57636,
+          "before_line": 57635,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57639,
+          "before_line": 57638,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57650,
+          "before_line": 57649,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57657,
+          "before_line": 57656,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57669,
+          "before_line": 57668,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57671,
+          "before_line": 57670,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57682,
+          "before_line": 57681,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57685,
+          "before_line": 57684,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57691,
+          "before_line": 57690,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57696,
+          "before_line": 57695,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57701,
+          "before_line": 57700,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57703,
+          "before_line": 57702,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57716,
+          "before_line": 57715,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57820,
+          "before_line": 57819,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57832,
+          "before_line": 57831,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57853,
+          "before_line": 57852,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57855,
+          "before_line": 57854,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57864,
+          "before_line": 57863,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57874,
+          "before_line": 57873,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57882,
+          "before_line": 57881,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57885,
+          "before_line": 57884,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57897,
+          "before_line": 57896,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57902,
+          "before_line": 57901,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57905,
+          "before_line": 57904,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57908,
+          "before_line": 57907,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57913,
+          "before_line": 57912,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57923,
+          "before_line": 57922,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57932,
+          "before_line": 57931,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57942,
+          "before_line": 57941,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57952,
+          "before_line": 57951,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57955,
+          "before_line": 57954,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57960,
+          "before_line": 57959,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57963,
+          "before_line": 57962,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57966,
+          "before_line": 57965,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57970,
+          "before_line": 57969,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57985,
+          "before_line": 57984,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57989,
+          "before_line": 57988,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58008,
+          "before_line": 58007,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58020,
+          "before_line": 58019,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58032,
+          "before_line": 58031,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58042,
+          "before_line": 58041,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58058,
+          "before_line": 58057,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58072,
+          "before_line": 58071,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58074,
+          "before_line": 58073,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58090,
+          "before_line": 58089,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58103,
+          "before_line": 58102,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58105,
+          "before_line": 58104,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58114,
+          "before_line": 58113,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58123,
+          "before_line": 58122,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58128,
+          "before_line": 58127,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58135,
+          "before_line": 58134,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58140,
+          "before_line": 58139,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58143,
+          "before_line": 58142,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58146,
+          "before_line": 58145,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58149,
+          "before_line": 58148,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58152,
+          "before_line": 58151,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58156,
+          "before_line": 58155,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58181,
+          "before_line": 58180,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58186,
+          "before_line": 58185,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58193,
+          "before_line": 58192,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58209,
+          "before_line": 58208,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58211,
+          "before_line": 58210,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58218,
+          "before_line": 58217,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58221,
+          "before_line": 58220,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58233,
+          "before_line": 58232,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58237,
+          "before_line": 58236,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58244,
+          "before_line": 58243,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58248,
+          "before_line": 58247,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58258,
+          "before_line": 58257,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58267,
+          "before_line": 58266,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58285,
+          "before_line": 58284,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58301,
+          "before_line": 58300,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58328,
+          "before_line": 58327,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58331,
+          "before_line": 58330,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58339,
+          "before_line": 58338,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58341,
+          "before_line": 58340,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58348,
+          "before_line": 58347,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58355,
+          "before_line": 58354,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58361,
+          "before_line": 58360,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58372,
+          "before_line": 58371,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58382,
+          "before_line": 58381,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58387,
+          "before_line": 58386,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58421,
+          "before_line": 58420,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58434,
+          "before_line": 58433,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58445,
+          "before_line": 58444,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58459,
+          "before_line": 58458,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58468,
+          "before_line": 58467,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58473,
+          "before_line": 58472,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58478,
+          "before_line": 58477,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58481,
+          "before_line": 58480,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58522,
+          "before_line": 58521,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58526,
+          "before_line": 58525,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58532,
+          "before_line": 58531,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58544,
+          "before_line": 58543,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58549,
+          "before_line": 58548,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58551,
+          "before_line": 58550,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58555,
+          "before_line": 58554,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58565,
+          "before_line": 58564,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58567,
+          "before_line": 58566,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58571,
+          "before_line": 58570,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58581,
+          "before_line": 58580,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58584,
+          "before_line": 58583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58588,
+          "before_line": 58587,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58592,
+          "before_line": 58591,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58609,
+          "before_line": 58608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58615,
+          "before_line": 58614,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58624,
+          "before_line": 58623,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58627,
+          "before_line": 58626,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58632,
+          "before_line": 58631,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58637,
+          "before_line": 58636,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58639,
+          "before_line": 58638,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58654,
+          "before_line": 58653,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58662,
+          "before_line": 58661,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58664,
+          "before_line": 58663,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58668,
+          "before_line": 58667,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58672,
+          "before_line": 58671,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58679,
+          "before_line": 58678,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58682,
+          "before_line": 58681,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58687,
+          "before_line": 58686,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58696,
+          "before_line": 58695,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58708,
+          "before_line": 58707,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58716,
+          "before_line": 58715,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58719,
+          "before_line": 58718,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58727,
+          "before_line": 58726,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58735,
+          "before_line": 58734,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58738,
+          "before_line": 58737,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58740,
+          "before_line": 58739,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58759,
+          "before_line": 58758,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58762,
+          "before_line": 58761,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58763,
+          "before_line": 58762,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58775,
+          "before_line": 58774,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58787,
+          "before_line": 58786,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58834,
+          "before_line": 58833,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58841,
+          "before_line": 58840,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58848,
+          "before_line": 58847,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58855,
+          "before_line": 58854,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58859,
+          "before_line": 58858,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58863,
+          "before_line": 58862,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58867,
+          "before_line": 58866,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58871,
+          "before_line": 58870,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58878,
+          "before_line": 58877,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58881,
+          "before_line": 58880,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58888,
+          "before_line": 58887,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58892,
+          "before_line": 58891,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58897,
+          "before_line": 58896,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58913,
+          "before_line": 58912,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58931,
+          "before_line": 58930,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59018,
+          "before_line": 59017,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59033,
+          "before_line": 59032,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59105,
+          "before_line": 59104,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59199,
+          "before_line": 59198,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59240,
+          "before_line": 59239,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59276,
+          "before_line": 59275,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59316,
+          "before_line": 59315,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59332,
+          "before_line": 59331,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59344,
+          "before_line": 59343,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59370,
+          "before_line": 59369,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59389,
+          "before_line": 59388,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59430,
+          "before_line": 59429,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59506,
+          "before_line": 59505,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59509,
+          "before_line": 59508,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59745,
+          "before_line": 59744,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 70019,
+          "before_line": 70018,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 106570,
+          "before_line": 106569,
+          "text_sha256": "a1926b80a2d72224d3b3fe727d49ec14fd8b69a16e3bdfb7f91700f63625c923"
+        },
+        {
+          "after_line": 106571,
+          "before_line": 106570,
+          "text_sha256": "ddc5d0e3c38ef6fea201cdf7a6ff3556c1c7a1eb0b91094281d240365c62b9a5"
+        },
+        {
+          "after_line": 110107,
+          "before_line": 110106,
+          "text_sha256": "b3cebaccba475c2be356180982eaf87334b7f735dabd5b857f0f4eddf1dbca12"
+        },
+        {
+          "after_line": 110108,
+          "before_line": 110107,
+          "text_sha256": "cf77d66b0150d966dfbdb3ccb629cd1b3d0fedd44b5d69367fe6eb3f3d86c1a3"
+        },
+        {
+          "after_line": 135654,
+          "before_line": 135653,
+          "text_sha256": "bf2da9f08b8f9428bcfcec8033ff89d2eb0f14aba225059a401a2a3824b2fe26"
+        },
+        {
+          "after_line": 135681,
+          "before_line": 135680,
+          "text_sha256": "bf2da9f08b8f9428bcfcec8033ff89d2eb0f14aba225059a401a2a3824b2fe26"
+        },
+        {
+          "after_line": 152694,
+          "before_line": 152693,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 155679,
+          "before_line": 155678,
+          "text_sha256": "73db0c6d11af07e1ef0183371a67bf990a4398f49f14d77afa57239c54e3920b"
+        },
+        {
+          "after_line": 198473,
+          "before_line": 198399,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 198658,
+          "before_line": 198584,
+          "text_sha256": "bb367c15f569eb59c36067fb48ad8bf2c51a071c63c2cf57a95a1b3e8a436089"
+        },
+        {
+          "after_line": 200014,
+          "before_line": 199940,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 200578,
+          "before_line": 200504,
+          "text_sha256": "1a0f564ddc6039457b2fb26b3d6a316c15eba20a886449847c3210c35821a693"
+        },
+        {
+          "after_line": 200579,
+          "before_line": 200505,
+          "text_sha256": "1a0f564ddc6039457b2fb26b3d6a316c15eba20a886449847c3210c35821a693"
+        },
+        {
+          "after_line": 200765,
+          "before_line": 200691,
+          "text_sha256": "6c179f21e6f62b629055d8ab40f454ed02e48b68563913473b857d3638e23b28"
+        },
+        {
+          "after_line": 200784,
+          "before_line": 200710,
+          "text_sha256": "399141be1d30ac2656d89eedcf0d8dcedaa72d6c29bf959cae243dc7b1442cf6"
+        },
+        {
+          "after_line": 201166,
+          "before_line": 201092,
+          "text_sha256": "7879981d4f226a8f0191d36730c07205d7a5ff1c780fca9b2f905f25264cf636"
+        },
+        {
+          "after_line": 201245,
+          "before_line": 201171,
+          "text_sha256": "0aad7da77d2ed59c396c99a74e49f3a4524dcdbcb5163251b1433d640247aeb4"
+        },
+        {
+          "after_line": 201297,
+          "before_line": 201223,
+          "text_sha256": "399141be1d30ac2656d89eedcf0d8dcedaa72d6c29bf959cae243dc7b1442cf6"
+        },
+        {
+          "after_line": 201303,
+          "before_line": 201229,
+          "text_sha256": "5eb0d3c020877ee5a1d12bdbfd163d0c7aa7abeb55ed5f276d5cfdcffb298278"
+        },
+        {
+          "after_line": 201316,
+          "before_line": 201242,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 201537,
+          "before_line": 201463,
+          "text_sha256": "6c179f21e6f62b629055d8ab40f454ed02e48b68563913473b857d3638e23b28"
+        }
+      ]
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/runtime-forward/index.js",
+      "sha256": "ca30ea365f64c77d230821e5a7cdf89316133a085d6d03e08d6bc5e3f10d0a4f",
+      "inherited_findings": 264,
+      "source_before_path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "source_before_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "ordered_trailing_text_equal": true,
+      "line_correspondence": [
+        {
+          "after_line": 27,
+          "before_line": 27,
+          "text_sha256": "2d99c323f49ea49f130b6d9fb453c74d69f06f2eb7ffda015269d9256d09c8a1"
+        },
+        {
+          "after_line": 629,
+          "before_line": 628,
+          "text_sha256": "922d22729e68afb9a7478d69b10c22f6a67a419481ff9ff80e5eb733d845eb3d"
+        },
+        {
+          "after_line": 6379,
+          "before_line": 6378,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56281,
+          "before_line": 56280,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56284,
+          "before_line": 56283,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56291,
+          "before_line": 56290,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56325,
+          "before_line": 56324,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56396,
+          "before_line": 56395,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56466,
+          "before_line": 56465,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56484,
+          "before_line": 56483,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56487,
+          "before_line": 56486,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56491,
+          "before_line": 56490,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56495,
+          "before_line": 56494,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56505,
+          "before_line": 56504,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56518,
+          "before_line": 56517,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56524,
+          "before_line": 56523,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56530,
+          "before_line": 56529,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56539,
+          "before_line": 56538,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56542,
+          "before_line": 56541,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56549,
+          "before_line": 56548,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56553,
+          "before_line": 56552,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56558,
+          "before_line": 56557,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56571,
+          "before_line": 56570,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56576,
+          "before_line": 56575,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56581,
+          "before_line": 56580,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56584,
+          "before_line": 56583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56609,
+          "before_line": 56608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56734,
+          "before_line": 56733,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56743,
+          "before_line": 56742,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56804,
+          "before_line": 56803,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56810,
+          "before_line": 56809,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56814,
+          "before_line": 56813,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56818,
+          "before_line": 56817,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56826,
+          "before_line": 56825,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56829,
+          "before_line": 56828,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56844,
+          "before_line": 56843,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56858,
+          "before_line": 56857,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56867,
+          "before_line": 56866,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56881,
+          "before_line": 56880,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56894,
+          "before_line": 56893,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56909,
+          "before_line": 56908,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56924,
+          "before_line": 56923,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56945,
+          "before_line": 56944,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56957,
+          "before_line": 56956,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56972,
+          "before_line": 56971,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56979,
+          "before_line": 56978,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56990,
+          "before_line": 56989,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57001,
+          "before_line": 57000,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57009,
+          "before_line": 57008,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57023,
+          "before_line": 57022,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57026,
+          "before_line": 57025,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57030,
+          "before_line": 57029,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57036,
+          "before_line": 57035,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57039,
+          "before_line": 57038,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57042,
+          "before_line": 57041,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57049,
+          "before_line": 57048,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57058,
+          "before_line": 57057,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57069,
+          "before_line": 57068,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57088,
+          "before_line": 57087,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57154,
+          "before_line": 57153,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57196,
+          "before_line": 57195,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57199,
+          "before_line": 57198,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57224,
+          "before_line": 57223,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57302,
+          "before_line": 57301,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57489,
+          "before_line": 57488,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57498,
+          "before_line": 57497,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57503,
+          "before_line": 57502,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57513,
+          "before_line": 57512,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57522,
+          "before_line": 57521,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57530,
+          "before_line": 57529,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57538,
+          "before_line": 57537,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57550,
+          "before_line": 57549,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57563,
+          "before_line": 57562,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57566,
+          "before_line": 57565,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57584,
+          "before_line": 57583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57586,
+          "before_line": 57585,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57609,
+          "before_line": 57608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57620,
+          "before_line": 57619,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57623,
+          "before_line": 57622,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57630,
+          "before_line": 57629,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57636,
+          "before_line": 57635,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57639,
+          "before_line": 57638,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57650,
+          "before_line": 57649,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57657,
+          "before_line": 57656,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57669,
+          "before_line": 57668,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57671,
+          "before_line": 57670,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57682,
+          "before_line": 57681,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57685,
+          "before_line": 57684,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57691,
+          "before_line": 57690,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57696,
+          "before_line": 57695,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57701,
+          "before_line": 57700,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57703,
+          "before_line": 57702,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57716,
+          "before_line": 57715,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57820,
+          "before_line": 57819,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57832,
+          "before_line": 57831,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57853,
+          "before_line": 57852,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57855,
+          "before_line": 57854,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57864,
+          "before_line": 57863,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57874,
+          "before_line": 57873,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57882,
+          "before_line": 57881,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57885,
+          "before_line": 57884,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57897,
+          "before_line": 57896,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57902,
+          "before_line": 57901,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57905,
+          "before_line": 57904,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57908,
+          "before_line": 57907,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57913,
+          "before_line": 57912,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57923,
+          "before_line": 57922,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57932,
+          "before_line": 57931,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57942,
+          "before_line": 57941,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57952,
+          "before_line": 57951,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57955,
+          "before_line": 57954,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57960,
+          "before_line": 57959,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57963,
+          "before_line": 57962,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57966,
+          "before_line": 57965,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57970,
+          "before_line": 57969,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57985,
+          "before_line": 57984,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57989,
+          "before_line": 57988,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58008,
+          "before_line": 58007,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58020,
+          "before_line": 58019,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58032,
+          "before_line": 58031,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58042,
+          "before_line": 58041,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58058,
+          "before_line": 58057,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58072,
+          "before_line": 58071,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58074,
+          "before_line": 58073,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58090,
+          "before_line": 58089,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58103,
+          "before_line": 58102,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58105,
+          "before_line": 58104,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58114,
+          "before_line": 58113,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58123,
+          "before_line": 58122,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58128,
+          "before_line": 58127,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58135,
+          "before_line": 58134,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58140,
+          "before_line": 58139,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58143,
+          "before_line": 58142,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58146,
+          "before_line": 58145,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58149,
+          "before_line": 58148,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58152,
+          "before_line": 58151,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58156,
+          "before_line": 58155,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58181,
+          "before_line": 58180,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58186,
+          "before_line": 58185,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58193,
+          "before_line": 58192,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58209,
+          "before_line": 58208,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58211,
+          "before_line": 58210,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58218,
+          "before_line": 58217,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58221,
+          "before_line": 58220,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58233,
+          "before_line": 58232,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58237,
+          "before_line": 58236,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58244,
+          "before_line": 58243,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58248,
+          "before_line": 58247,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58258,
+          "before_line": 58257,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58267,
+          "before_line": 58266,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58285,
+          "before_line": 58284,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58301,
+          "before_line": 58300,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58328,
+          "before_line": 58327,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58331,
+          "before_line": 58330,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58339,
+          "before_line": 58338,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58341,
+          "before_line": 58340,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58348,
+          "before_line": 58347,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58355,
+          "before_line": 58354,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58361,
+          "before_line": 58360,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58372,
+          "before_line": 58371,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58382,
+          "before_line": 58381,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58387,
+          "before_line": 58386,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58421,
+          "before_line": 58420,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58434,
+          "before_line": 58433,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58445,
+          "before_line": 58444,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58459,
+          "before_line": 58458,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58468,
+          "before_line": 58467,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58473,
+          "before_line": 58472,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58478,
+          "before_line": 58477,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58481,
+          "before_line": 58480,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58522,
+          "before_line": 58521,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58526,
+          "before_line": 58525,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58532,
+          "before_line": 58531,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58544,
+          "before_line": 58543,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58549,
+          "before_line": 58548,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58551,
+          "before_line": 58550,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58555,
+          "before_line": 58554,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58565,
+          "before_line": 58564,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58567,
+          "before_line": 58566,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58571,
+          "before_line": 58570,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58581,
+          "before_line": 58580,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58584,
+          "before_line": 58583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58588,
+          "before_line": 58587,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58592,
+          "before_line": 58591,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58609,
+          "before_line": 58608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58615,
+          "before_line": 58614,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58624,
+          "before_line": 58623,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58627,
+          "before_line": 58626,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58632,
+          "before_line": 58631,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58637,
+          "before_line": 58636,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58639,
+          "before_line": 58638,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58654,
+          "before_line": 58653,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58662,
+          "before_line": 58661,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58664,
+          "before_line": 58663,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58668,
+          "before_line": 58667,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58672,
+          "before_line": 58671,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58679,
+          "before_line": 58678,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58682,
+          "before_line": 58681,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58687,
+          "before_line": 58686,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58696,
+          "before_line": 58695,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58708,
+          "before_line": 58707,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58716,
+          "before_line": 58715,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58719,
+          "before_line": 58718,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58727,
+          "before_line": 58726,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58735,
+          "before_line": 58734,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58738,
+          "before_line": 58737,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58740,
+          "before_line": 58739,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58759,
+          "before_line": 58758,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58762,
+          "before_line": 58761,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58763,
+          "before_line": 58762,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58775,
+          "before_line": 58774,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58787,
+          "before_line": 58786,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58834,
+          "before_line": 58833,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58841,
+          "before_line": 58840,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58848,
+          "before_line": 58847,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58855,
+          "before_line": 58854,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58859,
+          "before_line": 58858,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58863,
+          "before_line": 58862,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58867,
+          "before_line": 58866,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58871,
+          "before_line": 58870,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58878,
+          "before_line": 58877,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58881,
+          "before_line": 58880,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58888,
+          "before_line": 58887,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58892,
+          "before_line": 58891,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58897,
+          "before_line": 58896,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58913,
+          "before_line": 58912,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58931,
+          "before_line": 58930,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59018,
+          "before_line": 59017,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59033,
+          "before_line": 59032,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59105,
+          "before_line": 59104,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59199,
+          "before_line": 59198,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59240,
+          "before_line": 59239,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59276,
+          "before_line": 59275,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59316,
+          "before_line": 59315,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59332,
+          "before_line": 59331,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59344,
+          "before_line": 59343,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59370,
+          "before_line": 59369,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59389,
+          "before_line": 59388,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59430,
+          "before_line": 59429,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59506,
+          "before_line": 59505,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59509,
+          "before_line": 59508,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59745,
+          "before_line": 59744,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 70019,
+          "before_line": 70018,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 106570,
+          "before_line": 106569,
+          "text_sha256": "a1926b80a2d72224d3b3fe727d49ec14fd8b69a16e3bdfb7f91700f63625c923"
+        },
+        {
+          "after_line": 106571,
+          "before_line": 106570,
+          "text_sha256": "ddc5d0e3c38ef6fea201cdf7a6ff3556c1c7a1eb0b91094281d240365c62b9a5"
+        },
+        {
+          "after_line": 110107,
+          "before_line": 110106,
+          "text_sha256": "b3cebaccba475c2be356180982eaf87334b7f735dabd5b857f0f4eddf1dbca12"
+        },
+        {
+          "after_line": 110108,
+          "before_line": 110107,
+          "text_sha256": "cf77d66b0150d966dfbdb3ccb629cd1b3d0fedd44b5d69367fe6eb3f3d86c1a3"
+        },
+        {
+          "after_line": 135654,
+          "before_line": 135653,
+          "text_sha256": "bf2da9f08b8f9428bcfcec8033ff89d2eb0f14aba225059a401a2a3824b2fe26"
+        },
+        {
+          "after_line": 135681,
+          "before_line": 135680,
+          "text_sha256": "bf2da9f08b8f9428bcfcec8033ff89d2eb0f14aba225059a401a2a3824b2fe26"
+        },
+        {
+          "after_line": 152694,
+          "before_line": 152693,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 155679,
+          "before_line": 155678,
+          "text_sha256": "73db0c6d11af07e1ef0183371a67bf990a4398f49f14d77afa57239c54e3920b"
+        },
+        {
+          "after_line": 198454,
+          "before_line": 198399,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 198639,
+          "before_line": 198584,
+          "text_sha256": "bb367c15f569eb59c36067fb48ad8bf2c51a071c63c2cf57a95a1b3e8a436089"
+        },
+        {
+          "after_line": 199995,
+          "before_line": 199940,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 200559,
+          "before_line": 200504,
+          "text_sha256": "1a0f564ddc6039457b2fb26b3d6a316c15eba20a886449847c3210c35821a693"
+        },
+        {
+          "after_line": 200560,
+          "before_line": 200505,
+          "text_sha256": "1a0f564ddc6039457b2fb26b3d6a316c15eba20a886449847c3210c35821a693"
+        },
+        {
+          "after_line": 200746,
+          "before_line": 200691,
+          "text_sha256": "6c179f21e6f62b629055d8ab40f454ed02e48b68563913473b857d3638e23b28"
+        },
+        {
+          "after_line": 200765,
+          "before_line": 200710,
+          "text_sha256": "399141be1d30ac2656d89eedcf0d8dcedaa72d6c29bf959cae243dc7b1442cf6"
+        },
+        {
+          "after_line": 201147,
+          "before_line": 201092,
+          "text_sha256": "7879981d4f226a8f0191d36730c07205d7a5ff1c780fca9b2f905f25264cf636"
+        },
+        {
+          "after_line": 201226,
+          "before_line": 201171,
+          "text_sha256": "0aad7da77d2ed59c396c99a74e49f3a4524dcdbcb5163251b1433d640247aeb4"
+        },
+        {
+          "after_line": 201278,
+          "before_line": 201223,
+          "text_sha256": "399141be1d30ac2656d89eedcf0d8dcedaa72d6c29bf959cae243dc7b1442cf6"
+        },
+        {
+          "after_line": 201284,
+          "before_line": 201229,
+          "text_sha256": "5eb0d3c020877ee5a1d12bdbfd163d0c7aa7abeb55ed5f276d5cfdcffb298278"
+        },
+        {
+          "after_line": 201297,
+          "before_line": 201242,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 201518,
+          "before_line": 201463,
+          "text_sha256": "6c179f21e6f62b629055d8ab40f454ed02e48b68563913473b857d3638e23b28"
+        }
+      ]
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/runtime-reference/index.js",
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "inherited_findings": 264,
+      "source_before_path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/runtime-reference/index.js",
+      "source_before_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "ordered_trailing_text_equal": true,
+      "line_correspondence": [
+        {
+          "after_line": 27,
+          "before_line": 27,
+          "text_sha256": "2d99c323f49ea49f130b6d9fb453c74d69f06f2eb7ffda015269d9256d09c8a1"
+        },
+        {
+          "after_line": 628,
+          "before_line": 628,
+          "text_sha256": "922d22729e68afb9a7478d69b10c22f6a67a419481ff9ff80e5eb733d845eb3d"
+        },
+        {
+          "after_line": 6378,
+          "before_line": 6378,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56280,
+          "before_line": 56280,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56283,
+          "before_line": 56283,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56290,
+          "before_line": 56290,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56324,
+          "before_line": 56324,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56395,
+          "before_line": 56395,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56465,
+          "before_line": 56465,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56483,
+          "before_line": 56483,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56486,
+          "before_line": 56486,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56490,
+          "before_line": 56490,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56494,
+          "before_line": 56494,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56504,
+          "before_line": 56504,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56517,
+          "before_line": 56517,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56523,
+          "before_line": 56523,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56529,
+          "before_line": 56529,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56538,
+          "before_line": 56538,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56541,
+          "before_line": 56541,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56548,
+          "before_line": 56548,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56552,
+          "before_line": 56552,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56557,
+          "before_line": 56557,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56570,
+          "before_line": 56570,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56575,
+          "before_line": 56575,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56580,
+          "before_line": 56580,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56583,
+          "before_line": 56583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56608,
+          "before_line": 56608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56733,
+          "before_line": 56733,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56742,
+          "before_line": 56742,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56803,
+          "before_line": 56803,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56809,
+          "before_line": 56809,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56813,
+          "before_line": 56813,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56817,
+          "before_line": 56817,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56825,
+          "before_line": 56825,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56828,
+          "before_line": 56828,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56843,
+          "before_line": 56843,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56857,
+          "before_line": 56857,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56866,
+          "before_line": 56866,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56880,
+          "before_line": 56880,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56893,
+          "before_line": 56893,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56908,
+          "before_line": 56908,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56923,
+          "before_line": 56923,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56944,
+          "before_line": 56944,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56956,
+          "before_line": 56956,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56971,
+          "before_line": 56971,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56978,
+          "before_line": 56978,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 56989,
+          "before_line": 56989,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57000,
+          "before_line": 57000,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57008,
+          "before_line": 57008,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57022,
+          "before_line": 57022,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57025,
+          "before_line": 57025,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57029,
+          "before_line": 57029,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57035,
+          "before_line": 57035,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57038,
+          "before_line": 57038,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57041,
+          "before_line": 57041,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57048,
+          "before_line": 57048,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57057,
+          "before_line": 57057,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57068,
+          "before_line": 57068,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57087,
+          "before_line": 57087,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57153,
+          "before_line": 57153,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57195,
+          "before_line": 57195,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57198,
+          "before_line": 57198,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57223,
+          "before_line": 57223,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57301,
+          "before_line": 57301,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57488,
+          "before_line": 57488,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57497,
+          "before_line": 57497,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57502,
+          "before_line": 57502,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57512,
+          "before_line": 57512,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57521,
+          "before_line": 57521,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57529,
+          "before_line": 57529,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57537,
+          "before_line": 57537,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57549,
+          "before_line": 57549,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57562,
+          "before_line": 57562,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57565,
+          "before_line": 57565,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57583,
+          "before_line": 57583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57585,
+          "before_line": 57585,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57608,
+          "before_line": 57608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57619,
+          "before_line": 57619,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57622,
+          "before_line": 57622,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57629,
+          "before_line": 57629,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57635,
+          "before_line": 57635,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57638,
+          "before_line": 57638,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57649,
+          "before_line": 57649,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57656,
+          "before_line": 57656,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57668,
+          "before_line": 57668,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57670,
+          "before_line": 57670,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57681,
+          "before_line": 57681,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57684,
+          "before_line": 57684,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57690,
+          "before_line": 57690,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57695,
+          "before_line": 57695,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57700,
+          "before_line": 57700,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57702,
+          "before_line": 57702,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57715,
+          "before_line": 57715,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57819,
+          "before_line": 57819,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57831,
+          "before_line": 57831,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57852,
+          "before_line": 57852,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57854,
+          "before_line": 57854,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57863,
+          "before_line": 57863,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57873,
+          "before_line": 57873,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57881,
+          "before_line": 57881,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57884,
+          "before_line": 57884,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57896,
+          "before_line": 57896,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57901,
+          "before_line": 57901,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57904,
+          "before_line": 57904,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57907,
+          "before_line": 57907,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57912,
+          "before_line": 57912,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57922,
+          "before_line": 57922,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57931,
+          "before_line": 57931,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57941,
+          "before_line": 57941,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57951,
+          "before_line": 57951,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57954,
+          "before_line": 57954,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57959,
+          "before_line": 57959,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57962,
+          "before_line": 57962,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57965,
+          "before_line": 57965,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57969,
+          "before_line": 57969,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57984,
+          "before_line": 57984,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 57988,
+          "before_line": 57988,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58007,
+          "before_line": 58007,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58019,
+          "before_line": 58019,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58031,
+          "before_line": 58031,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58041,
+          "before_line": 58041,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58057,
+          "before_line": 58057,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58071,
+          "before_line": 58071,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58073,
+          "before_line": 58073,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58089,
+          "before_line": 58089,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58102,
+          "before_line": 58102,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58104,
+          "before_line": 58104,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58113,
+          "before_line": 58113,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58122,
+          "before_line": 58122,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58127,
+          "before_line": 58127,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58134,
+          "before_line": 58134,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58139,
+          "before_line": 58139,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58142,
+          "before_line": 58142,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58145,
+          "before_line": 58145,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58148,
+          "before_line": 58148,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58151,
+          "before_line": 58151,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58155,
+          "before_line": 58155,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58180,
+          "before_line": 58180,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58185,
+          "before_line": 58185,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58192,
+          "before_line": 58192,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58208,
+          "before_line": 58208,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58210,
+          "before_line": 58210,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58217,
+          "before_line": 58217,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58220,
+          "before_line": 58220,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58232,
+          "before_line": 58232,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58236,
+          "before_line": 58236,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58243,
+          "before_line": 58243,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58247,
+          "before_line": 58247,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58257,
+          "before_line": 58257,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58266,
+          "before_line": 58266,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58284,
+          "before_line": 58284,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58300,
+          "before_line": 58300,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58327,
+          "before_line": 58327,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58330,
+          "before_line": 58330,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58338,
+          "before_line": 58338,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58340,
+          "before_line": 58340,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58347,
+          "before_line": 58347,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58354,
+          "before_line": 58354,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58360,
+          "before_line": 58360,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58371,
+          "before_line": 58371,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58381,
+          "before_line": 58381,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58386,
+          "before_line": 58386,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58420,
+          "before_line": 58420,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58433,
+          "before_line": 58433,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58444,
+          "before_line": 58444,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58458,
+          "before_line": 58458,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58467,
+          "before_line": 58467,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58472,
+          "before_line": 58472,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58477,
+          "before_line": 58477,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58480,
+          "before_line": 58480,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58521,
+          "before_line": 58521,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58525,
+          "before_line": 58525,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58531,
+          "before_line": 58531,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58543,
+          "before_line": 58543,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58548,
+          "before_line": 58548,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58550,
+          "before_line": 58550,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58554,
+          "before_line": 58554,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58564,
+          "before_line": 58564,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58566,
+          "before_line": 58566,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58570,
+          "before_line": 58570,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58580,
+          "before_line": 58580,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58583,
+          "before_line": 58583,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58587,
+          "before_line": 58587,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58591,
+          "before_line": 58591,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58608,
+          "before_line": 58608,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58614,
+          "before_line": 58614,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58623,
+          "before_line": 58623,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58626,
+          "before_line": 58626,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58631,
+          "before_line": 58631,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58636,
+          "before_line": 58636,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58638,
+          "before_line": 58638,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58653,
+          "before_line": 58653,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58661,
+          "before_line": 58661,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58663,
+          "before_line": 58663,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58667,
+          "before_line": 58667,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58671,
+          "before_line": 58671,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58678,
+          "before_line": 58678,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58681,
+          "before_line": 58681,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58686,
+          "before_line": 58686,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58695,
+          "before_line": 58695,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58707,
+          "before_line": 58707,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58715,
+          "before_line": 58715,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58718,
+          "before_line": 58718,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58726,
+          "before_line": 58726,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58734,
+          "before_line": 58734,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58737,
+          "before_line": 58737,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58739,
+          "before_line": 58739,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58758,
+          "before_line": 58758,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58761,
+          "before_line": 58761,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58762,
+          "before_line": 58762,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58774,
+          "before_line": 58774,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58786,
+          "before_line": 58786,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58833,
+          "before_line": 58833,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58840,
+          "before_line": 58840,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58847,
+          "before_line": 58847,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58854,
+          "before_line": 58854,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58858,
+          "before_line": 58858,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58862,
+          "before_line": 58862,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58866,
+          "before_line": 58866,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58870,
+          "before_line": 58870,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58877,
+          "before_line": 58877,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58880,
+          "before_line": 58880,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58887,
+          "before_line": 58887,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58891,
+          "before_line": 58891,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58896,
+          "before_line": 58896,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58912,
+          "before_line": 58912,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 58930,
+          "before_line": 58930,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59017,
+          "before_line": 59017,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59032,
+          "before_line": 59032,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59104,
+          "before_line": 59104,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59198,
+          "before_line": 59198,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59239,
+          "before_line": 59239,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59275,
+          "before_line": 59275,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59315,
+          "before_line": 59315,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59331,
+          "before_line": 59331,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59343,
+          "before_line": 59343,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59369,
+          "before_line": 59369,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59388,
+          "before_line": 59388,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59429,
+          "before_line": 59429,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59505,
+          "before_line": 59505,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59508,
+          "before_line": 59508,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 59744,
+          "before_line": 59744,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 70018,
+          "before_line": 70018,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 106569,
+          "before_line": 106569,
+          "text_sha256": "a1926b80a2d72224d3b3fe727d49ec14fd8b69a16e3bdfb7f91700f63625c923"
+        },
+        {
+          "after_line": 106570,
+          "before_line": 106570,
+          "text_sha256": "ddc5d0e3c38ef6fea201cdf7a6ff3556c1c7a1eb0b91094281d240365c62b9a5"
+        },
+        {
+          "after_line": 110106,
+          "before_line": 110106,
+          "text_sha256": "b3cebaccba475c2be356180982eaf87334b7f735dabd5b857f0f4eddf1dbca12"
+        },
+        {
+          "after_line": 110107,
+          "before_line": 110107,
+          "text_sha256": "cf77d66b0150d966dfbdb3ccb629cd1b3d0fedd44b5d69367fe6eb3f3d86c1a3"
+        },
+        {
+          "after_line": 135653,
+          "before_line": 135653,
+          "text_sha256": "bf2da9f08b8f9428bcfcec8033ff89d2eb0f14aba225059a401a2a3824b2fe26"
+        },
+        {
+          "after_line": 135680,
+          "before_line": 135680,
+          "text_sha256": "bf2da9f08b8f9428bcfcec8033ff89d2eb0f14aba225059a401a2a3824b2fe26"
+        },
+        {
+          "after_line": 152693,
+          "before_line": 152693,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 155678,
+          "before_line": 155678,
+          "text_sha256": "73db0c6d11af07e1ef0183371a67bf990a4398f49f14d77afa57239c54e3920b"
+        },
+        {
+          "after_line": 198399,
+          "before_line": 198399,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 198584,
+          "before_line": 198584,
+          "text_sha256": "bb367c15f569eb59c36067fb48ad8bf2c51a071c63c2cf57a95a1b3e8a436089"
+        },
+        {
+          "after_line": 199940,
+          "before_line": 199940,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 200504,
+          "before_line": 200504,
+          "text_sha256": "1a0f564ddc6039457b2fb26b3d6a316c15eba20a886449847c3210c35821a693"
+        },
+        {
+          "after_line": 200505,
+          "before_line": 200505,
+          "text_sha256": "1a0f564ddc6039457b2fb26b3d6a316c15eba20a886449847c3210c35821a693"
+        },
+        {
+          "after_line": 200691,
+          "before_line": 200691,
+          "text_sha256": "6c179f21e6f62b629055d8ab40f454ed02e48b68563913473b857d3638e23b28"
+        },
+        {
+          "after_line": 200710,
+          "before_line": 200710,
+          "text_sha256": "399141be1d30ac2656d89eedcf0d8dcedaa72d6c29bf959cae243dc7b1442cf6"
+        },
+        {
+          "after_line": 201092,
+          "before_line": 201092,
+          "text_sha256": "7879981d4f226a8f0191d36730c07205d7a5ff1c780fca9b2f905f25264cf636"
+        },
+        {
+          "after_line": 201171,
+          "before_line": 201171,
+          "text_sha256": "0aad7da77d2ed59c396c99a74e49f3a4524dcdbcb5163251b1433d640247aeb4"
+        },
+        {
+          "after_line": 201223,
+          "before_line": 201223,
+          "text_sha256": "399141be1d30ac2656d89eedcf0d8dcedaa72d6c29bf959cae243dc7b1442cf6"
+        },
+        {
+          "after_line": 201229,
+          "before_line": 201229,
+          "text_sha256": "5eb0d3c020877ee5a1d12bdbfd163d0c7aa7abeb55ed5f276d5cfdcffb298278"
+        },
+        {
+          "after_line": 201242,
+          "before_line": 201242,
+          "text_sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+        },
+        {
+          "after_line": 201463,
+          "before_line": 201463,
+          "text_sha256": "6c179f21e6f62b629055d8ab40f454ed02e48b68563913473b857d3638e23b28"
+        }
+      ]
+    }
+  ],
+  "reviewed_nonsemantic_eof_findings": [
+    "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/48_agency_canonical_worker_with_authorise_codec.mjs:213: new blank line at EOF.",
+    "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/runtime/agency-canonical-worker.mjs:213: new blank line at EOF."
+  ],
+  "introduced_trailing_space_findings": 0,
+  "formatting_disposition": "Preserve exact independently reviewed frozen module bytes; two added EOF blank lines are recorded, not mislabeled inherited or whitespace PASS."
+}

@@ -1,0 +1,145 @@
+-- Concrete mechanical AUTHORISE phase of the SINGLE planned change owner.
+-- It calls the unchanged native authorise owner; it does not declare validation,
+-- Return, whole-week completeness, protected netting or the action COMPLETED.
+create or replace function private.weekly_source_agency_change_authorise_step_v1(
+ p_request_id uuid,p_actual_actor_user_id uuid
+) returns private.weekly_source_agency_timesheet_change_requests
+language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ before_ts public.timesheets%rowtype; after_ts public.timesheets%rowtype;
+ before_fin public.timesheets_financials%rowtype; after_fin public.timesheets_financials%rowtype;
+ actor public.tms_users%rowtype; result jsonb; signature jsonb; flags_receipt jsonb; pay_purpose jsonb; receipts jsonb;
+ actual_signature text; error_code text; error_state text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,
+  r.initial_row_signature,r.request_key,p_actual_actor_user_id);
+ select * into strict actor from public.tms_users where id=p_actual_actor_user_id and is_active;
+ if r.state='COMPLETED' then return r;end if;
+ if r.phase='AUTHORISED' then
+  select * into strict after_ts from public.timesheets where timesheet_id=r.current_timesheet_id;
+  select * into strict after_fin from public.timesheets_financials where id=r.current_financial_id and is_current;
+  if r.native_receipts#>>'{authorise,result,ok}' is distinct from 'true'
+   or r.native_receipts#>>'{authorise,result,operation}' is distinct from 'timesheet_authorise'
+   or r.native_receipts#>>'{authorise,result,timesheet_id}' is distinct from after_ts.timesheet_id::text
+   or r.native_receipts#>>'{authorise,financial_id}' is distinct from after_fin.id::text
+   or (r.native_receipts#>>'{authorise,authorised_at_server}')::timestamptz is distinct from after_ts.authorised_at_server
+   or after_fin.authorised_by_user_id::text is distinct from r.native_receipts#>>'{authorise,phase_actor_user_id}'
+   or after_ts.authorised_at_server is null or after_ts.revoked_at is not null then
+   raise exception 'AGENCY_CHANGE_GENUINE_AUTHORISE_RECEIPT_REQUIRED' using errcode='55000';end if;
+  -- A permitted current reader/resumer sees the original genuine phase actor.
+  -- Replay never rewrites who approved that native authorisation.
+  return r;
+ end if;
+ if r.phase<>'FINANCIAL_CURRENT' then raise exception 'AGENCY_CHANGE_AUTHORISE_PHASE_NOT_READY' using errcode='55000';end if;
+ begin
+  if r.updated_by_user_id is distinct from p_actual_actor_user_id then
+   update private.weekly_source_agency_timesheet_change_requests set updated_by_user_id=p_actual_actor_user_id,
+    version=version+1,updated_at_utc=transaction_timestamp() where id=r.id returning * into r;
+   insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)
+   values(gen_random_uuid(),transaction_timestamp(),p_actual_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,
+    'RESUME_CURRENT_SCOPED_ACTOR',jsonb_build_object('phase',r.phase,'original_creator_user_id',r.actor_user_id,
+      'current_resumer_user_id',p_actual_actor_user_id),r.reason,r.request_key);
+  end if;
+  select * into strict before_ts from public.timesheets where timesheet_id=r.current_timesheet_id for update;
+  select * into strict before_fin from public.timesheets_financials where id=r.current_financial_id and is_current for update;
+  if before_ts.timesheet_id is distinct from r.initial_timesheet_id or before_ts.version is distinct from r.initial_timesheet_version
+   or before_ts.authorised_at_server is not null or before_fin.is_stale is distinct from false
+   or before_fin.timesheet_version is distinct from before_ts.version
+   or before_fin.processing_status::text not in('PENDING_AUTH','READY_FOR_HR')
+   or before_fin.locked_by_invoice_id is not null or exists(select 1 from public.invoice_lines where timesheet_id=before_ts.timesheet_id)
+   or r.native_receipts#>>'{queue_completion,financial_id}' is distinct from before_fin.id::text
+   or r.native_receipts#>>'{queue_completion,native_ok_count}' is distinct from '1'
+   or r.native_receipts#>>'{queue_completion,native_fail_count}' is distinct from '0'
+   or r.native_receipts#>>'{recompute,financial_id}' is distinct from before_fin.id::text
+   or r.native_receipts#>>'{recompute,financial_row_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_AGENCY_RECOMPUTE_ROW_V1',to_jsonb(before_fin)),'hex') then
+   raise exception 'AGENCY_INVOICE_TSFIN_NOT_READY' using errcode='55000';end if;
+  pay_purpose:=private.weekly_source_agency_paid_write_purpose_v1(r.id);
+  flags_receipt:=private.weekly_source_agency_segment_flags_apply_v1(r.id);
+  select * into strict before_fin from public.timesheets_financials where id=r.current_financial_id and is_current;
+  signature:=public.timesheet_lifecycle_guard_signature_v1(r.current_timesheet_id,r.contract_week_id,false);
+  actual_signature:=nullif(btrim(coalesce(signature->>'backend_row_signature',signature->>'row_signature',signature->>'signature')),'');
+  if actual_signature is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE' using errcode='55000';end if;
+  receipts:=r.native_receipts||jsonb_build_object('segment_flags',flags_receipt);
+  update private.weekly_source_agency_timesheet_change_requests set native_receipts=receipts,current_row_signature=actual_signature,
+   version=version+1,updated_at_utc=transaction_timestamp() where id=r.id returning * into r;
+  result:=public.timesheet_authorise_generic_atomic(p_timesheet_id=>r.current_timesheet_id,
+   p_expected_timesheet_id=>r.current_timesheet_id,p_actor_user_id=>p_actual_actor_user_id,
+   p_now_utc=>transaction_timestamp(),p_expected_row_signature=>r.current_row_signature);
+  select * into strict after_ts from public.timesheets where timesheet_id=r.current_timesheet_id;
+  select * into strict after_fin from public.timesheets_financials where id=r.current_financial_id and is_current;
+  if result->>'ok' is distinct from 'true' or result->>'success' is distinct from 'true'
+   or result->>'operation' is distinct from 'timesheet_authorise'
+   or result->>'timesheet_id' is distinct from r.current_timesheet_id::text
+   or result->>'current_timesheet_id' is distinct from r.current_timesheet_id::text
+   or result->>'requested_timesheet_id' is distinct from r.current_timesheet_id::text
+   or result->>'contract_week_id' is distinct from r.contract_week_id::text
+   or result->>'candidate_id' is distinct from r.candidate_id::text
+   or result->>'was_stale' is distinct from 'false' or result->>'current_version' is distinct from r.current_timesheet_version::text
+   or after_ts.authorised_at_server is null or after_ts.authorised_at_server is distinct from after_fin.authorised_at_utc
+   or after_ts.revoked_at is not null or after_fin.authorised_by_user_id is distinct from p_actual_actor_user_id
+   or after_fin.processing_status::text not in('READY_FOR_HR','READY_FOR_INVOICE')
+   or to_jsonb(after_ts)-array['authorised_at_server','revoked_at','revoked_reason','revoked_by','updated_at']
+    is distinct from to_jsonb(before_ts)-array['authorised_at_server','revoked_at','revoked_reason','revoked_by','updated_at']
+   or to_jsonb(after_fin)-array['processing_status','authorised_by_user_id','authorised_at_utc','updated_at']
+    is distinct from to_jsonb(before_fin)-array['processing_status','authorised_by_user_id','authorised_at_utc','updated_at'] then
+   raise exception 'AGENCY_CHANGE_NATIVE_AUTHORISE_POSTCONDITION_UNPROVED' using errcode='55000';end if;
+  actual_signature:=nullif(btrim(result->>'backend_row_signature'),'');
+  signature:=public.timesheet_lifecycle_guard_signature_v1(r.current_timesheet_id,r.contract_week_id,false);
+  if actual_signature is null or actual_signature is distinct from
+    btrim(coalesce(signature->>'backend_row_signature',signature->>'row_signature',signature->>'signature')) then
+   raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE' using errcode='55000';end if;
+  receipts:=r.native_receipts||jsonb_build_object('authorise',jsonb_build_object(
+   'schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_AUTHORISE_V1','request_id',r.id,'phase_actor_user_id',p_actual_actor_user_id,
+   'timesheet_id',after_ts.timesheet_id,'timesheet_version',after_ts.version,'financial_id',after_fin.id,
+   'authorised_at_server',after_ts.authorised_at_server,'result',result,
+   'pay_purpose_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_PAID_WRITE_PURPOSE_V1',pay_purpose),'hex'),
+   'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()));
+  if octet_length(receipts::text)>65536 then raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED' using errcode='54000';end if;
+  update private.weekly_source_agency_timesheet_change_requests set phase='AUTHORISED',native_receipts=receipts,
+   current_row_signature=actual_signature,last_refusal_code=null,version=version+1,updated_at_utc=transaction_timestamp()
+   where id=r.id returning * into r;
+  insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)
+  values(gen_random_uuid(),transaction_timestamp(),p_actual_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,
+   'NATIVE_AUTHORISE_PHASE_COMPLETED',jsonb_build_object('phase',r.phase,'current_timesheet_id',r.current_timesheet_id,
+    'financial_id',r.current_financial_id,'original_creator_user_id',r.actor_user_id,'actual_phase_actor_user_id',p_actual_actor_user_id),r.reason,r.request_key);
+ exception when others then
+  get stacked diagnostics error_code=MESSAGE_TEXT,error_state=RETURNED_SQLSTATE;
+  if error_state='55P03' then raise;end if;
+  update private.weekly_source_agency_timesheet_change_requests set last_refusal_code=case
+   when error_code~'^[A-Z][A-Z0-9_]{0,199}$' then error_code else 'AGENCY_CHANGE_NATIVE_AUTHORISE_FAILED' end,
+   version=version+1,updated_at_utc=transaction_timestamp() where id=p_request_id returning * into r;
+ end;
+ return r;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_CHANGE_NATIVE_AUTHORISE_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_change_authorise_step_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_change_authorise_step_v1(uuid,uuid) from public,anon,authenticated,service_role;
+
+-- Finite mechanical Worker RPC; the single business request and actual actor
+-- have already been recorded/admitted. It exposes no T0/D1/segment choice.
+create or replace function public.weekly_source_agency_change_authorise_step_v1(p_request_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.weekly_source_agency_timesheet_change_requests%rowtype;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ r:=private.weekly_source_agency_change_authorise_step_v1(p_request_id,p_actor_user_id);
+ return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_AUTHORISE_STEP_RESULT_V1','request_id',r.id,
+  'request_version',r.version,'phase',r.phase,'view_actor_user_id',p_actor_user_id,
+  'timesheet_id',r.current_timesheet_id,'timesheet_version',r.current_timesheet_version,
+  'financial_id',r.current_financial_id,'last_refusal_code',r.last_refusal_code,
+  'authorise_receipt',r.native_receipts->'authorise','completed_receipt',r.completed_receipt);
+end;
+$function$;
+alter function public.weekly_source_agency_change_authorise_step_v1(uuid,uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_change_authorise_step_v1(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_change_authorise_step_v1(uuid,uuid) to service_role;

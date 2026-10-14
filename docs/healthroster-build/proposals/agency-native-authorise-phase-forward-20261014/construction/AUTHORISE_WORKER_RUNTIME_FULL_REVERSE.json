@@ -1,0 +1,42 @@
+{
+  "schema": "AGENCY_NATIVE_AUTHORISE_WORKER_RUNTIME_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "reviewed_predecessor_commit": "9f4a921b0fe423e6450ee362d76bd46dc3d4a638",
+  "full_forward_files": [
+    {
+      "before_path": "41_agency_canonical_worker_scalar.mjs",
+      "after_path": "48_agency_canonical_worker_with_authorise_codec.mjs",
+      "before_raw_sha256": "b0666380b031bf83c843bb9cb45e92440b962ca6250ed4b10a17fd7085cd18e7",
+      "after_raw_sha256": "a31f1a304fd47c5aea28c88162f5faba9bfe168b4cc3617db8b15871cca187f2",
+      "hunks": [
+        {
+          "before": "export const runAgencyLeasedCanonicalRecompute=options=>execute(options,'RECOMPUTE_PENDING');",
+          "after": "export const runAgencyLeasedCanonicalRecompute=options=>execute(options,'RECOMPUTE_PENDING');\n// Codec for one literal native phase RPC. It cannot qualify an economic gate.\nexport function decodeAgencyAuthoriseStepResult(value,prior){\n  const code='AGENCY_CHANGE_NATIVE_AUTHORISE_RESULT_UNCONFIRMED';\n  exact(value,['schema_version','request_id','request_version','phase','view_actor_user_id','timesheet_id',\n    'timesheet_version','financial_id','last_refusal_code','authorise_receipt','completed_receipt'],code);\n  bounded(value,32768,code);\n  if(!plain(prior)||value.schema_version!=='WEEKLY_SOURCE_AGENCY_NATIVE_AUTHORISE_STEP_RESULT_V1'\n    ||value.request_id!==prior.request_id||value.timesheet_id!==prior.timesheet_id\n    ||value.timesheet_version!==prior.timesheet_version||value.view_actor_user_id!==prior.phase_actor_user_id\n    ||!Number.isSafeInteger(value.request_version)||value.request_version<prior.request_version\n    ||!['FINANCIAL_CURRENT','AUTHORISED'].includes(value.phase)||value.completed_receipt!==null)fail(code);\n  id(value.financial_id,code);if(value.financial_id!==prior.current_financial_id)fail(code);\n  id(value.view_actor_user_id,code);\n  if(value.phase==='FINANCIAL_CURRENT'){\n    if(typeof value.last_refusal_code!=='string'||!/^[A-Z][A-Z0-9_]{0,199}$/.test(value.last_refusal_code)\n      ||value.authorise_receipt!==null)fail(code);\n    return clone(value); // Genuine causal hold; no Authorise/Return/completion assertion.\n  }\n  if(value.last_refusal_code!==null)fail(code);\n  const receipt=value.authorise_receipt;\n  exact(receipt,['schema_version','request_id','phase_actor_user_id','timesheet_id','timesheet_version','financial_id',\n    'authorised_at_server','result','pay_purpose_sha256','transaction_id','backend_pid'],code);\n  if(receipt.schema_version!=='WEEKLY_SOURCE_AGENCY_NATIVE_AUTHORISE_V1'||receipt.request_id!==value.request_id\n    ||receipt.timesheet_id!==value.timesheet_id||receipt.timesheet_version!==value.timesheet_version\n    ||receipt.financial_id!==value.financial_id||typeof receipt.pay_purpose_sha256!=='string'||!SHA.test(receipt.pay_purpose_sha256)\n    ||typeof receipt.authorised_at_server!=='string'||!Number.isFinite(Date.parse(receipt.authorised_at_server))\n    ||typeof receipt.transaction_id!=='string'||!/^[1-9][0-9]{0,19}$/.test(receipt.transaction_id)\n    ||!Number.isSafeInteger(receipt.backend_pid)||receipt.backend_pid<1||receipt.backend_pid>2147483647)fail(code);\n  id(receipt.phase_actor_user_id,code); // Stored real approval actor; replay does not relabel it to the reader.\n  const n=receipt.result;\n  exact(n,['ok','success','operation','timesheet_id','current_timesheet_id','requested_timesheet_id','contract_week_id',\n    'booking_id','candidate_id','authorised_at_server','revoked_at','authorised_at_utc','advance_state_refresh','current_version',\n    'was_stale','previous_processing_status','processing_status','new_processing_status','validation_status','validation_pre_validated',\n    'hr_validation_required_for_invoice','backend_row_signature','row_signature','affected_rows','cache_invalidation_hints'],code);\n  if(n.ok!==true||n.success!==true||n.operation!=='timesheet_authorise'||n.timesheet_id!==value.timesheet_id\n    ||n.current_timesheet_id!==value.timesheet_id||n.requested_timesheet_id!==value.timesheet_id\n    ||n.current_version!==value.timesheet_version||n.was_stale!==false||n.revoked_at!==null\n    ||n.authorised_at_server!==receipt.authorised_at_server||n.authorised_at_utc!==receipt.authorised_at_server\n    ||!['READY_FOR_HR','READY_FOR_INVOICE'].includes(n.processing_status)||n.new_processing_status!==n.processing_status\n    ||typeof n.backend_row_signature!=='string'||n.backend_row_signature.length<1||n.backend_row_signature.length>512\n    ||n.row_signature!==n.backend_row_signature||typeof n.booking_id!=='string'||n.booking_id.length<1||n.booking_id.length>200\n    ||typeof n.validation_pre_validated!=='boolean'||typeof n.hr_validation_required_for_invoice!=='boolean'\n    ||!plain(n.advance_state_refresh)||!plain(n.cache_invalidation_hints)||!Array.isArray(n.affected_rows)||n.affected_rows.length!==1)fail(code);\n  id(n.contract_week_id,code);id(n.candidate_id,code);\n  return clone(value);\n}\n",
+          "before_sha256": "c2dc09530d62ca1bb00b945642e4ca19a4a3aa389b41cc9a97c0dd7206141153",
+          "after_sha256": "cb09e8c98f61f7d845d161b4c29ed75559a52e9379dc9dfb22f7807395706c13"
+        }
+      ]
+    },
+    {
+      "before_path": "runtime-forward/index.js",
+      "after_path": "49_complete_worker_index_with_native_authorise.js",
+      "before_raw_sha256": "ca30ea365f64c77d230821e5a7cdf89316133a085d6d03e08d6bc5e3f10d0a4f",
+      "after_raw_sha256": "bee83545741ba4fced8d3be2910b605a73dfe4fcc16b3792b367eb768cc93755",
+      "hunks": [
+        {
+          "before": "import { decodeAgencyWorkerTargets, runAgencyLeasedCanonicalRecompute } from './weekly-source/agency-canonical-worker.mjs';",
+          "after": "import { decodeAgencyWorkerTargets, runAgencyLeasedCanonicalRecompute, decodeAgencyAuthoriseStepResult } from './weekly-source/agency-canonical-worker.mjs';",
+          "before_sha256": "9a3e798158366b0ab99da5cb01e67c7652b13a5a96f06d0a04cb10a3eab39420",
+          "after_sha256": "116c770ba897131c3f944c4a7e4156b4738398a133e9e35d9cae0f478aa6633c"
+        },
+        {
+          "before": "      completedPrimaryOutboxSet.add(receipt.outbox_id);\n      completedTimesheetIds.add(receipt.timesheet_id);\n      ok++;",
+          "after": "      completedPrimaryOutboxSet.add(receipt.outbox_id);\n      completedTimesheetIds.add(receipt.timesheet_id);\n      ok++;\n      // Continue only the genuine recorded Office click. The actor comes from\n      // the native request/queue receipt and is re-admitted by the literal RPC.\n      // This mechanical phase never asserts validation, Return or completion.\n      try {\n        const authorise = decodeAgencyAuthoriseStepResult(await sbRpcRecordingGuardRefusal(env,\n          'weekly_source_agency_change_authorise_step_v1', {\n            p_request_id: receipt.request_id, p_actor_user_id: receipt.phase_actor_user_id\n          }), receipt);\n        if (authorise.last_refusal_code) console.warn('Agency Authorise phase held', {\n          request_id: receipt.request_id, code: authorise.last_refusal_code\n        });\n      } catch (error) {\n        // The real queue is already completed. A later phase failure cannot\n        // relabel that write or delete another queue row; FINANCIAL_CURRENT\n        // remains resumable through the same native business request.\n        const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,199}$/.test(error.code)\n          ? error.code : 'AGENCY_CHANGE_NATIVE_AUTHORISE_DEPENDENCY_UNAVAILABLE';\n        console.warn('Agency Authorise phase held', { request_id: receipt.request_id, code });\n      }",
+          "before_sha256": "1485dc9277f0c378561d6525ba98a20b47d6eb7df47dbb85745178385abde76f",
+          "after_sha256": "d17317656cc2496344d3b99071a6b4f0df3c5525d2869283804cf300c56428bc"
+        }
+      ]
+    }
+  ]
+}

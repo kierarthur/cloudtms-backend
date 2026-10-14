@@ -1,0 +1,56 @@
+{
+  "source_only": true,
+  "current_i2_predecessor": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "saved_before_sources_identical": true,
+  "owners": [
+    {
+      "signature_owner": "public.timesheet_authorise_generic_atomic",
+      "source_path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "source_raw_sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+      "definition_raw_sha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3",
+      "evidence_path": "native-before/public_timesheet_authorise_generic_atomic.sql.txt"
+    },
+    {
+      "signature_owner": "public.tsfin_update_segments_locked",
+      "source_path": "supabase/repeatable/19012026_extras.sql",
+      "source_raw_sha256": "8c8dadbaaf5e45e377f4cee4586080677627236bda91aea423bac743c30a0c36",
+      "definition_raw_sha256": "25a257bd6837573d86f7e433dba4b0210978ce1c9d940d040b05501caae87a48",
+      "evidence_path": "native-before/public_tsfin_update_segments_locked.sql.txt"
+    },
+    {
+      "signature_owner": "private.weekly_source_pay_query_scope_v1",
+      "source_path": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "source_raw_sha256": "18317d4152fa8e8df4c17ac7895046453a3e26d534b10c45b1fafb50b91a983d",
+      "definition_raw_sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf",
+      "evidence_path": "native-before/private_weekly_source_pay_query_scope_v1.sql.txt"
+    },
+    {
+      "signature_owner": "private.weekly_source_resolve_root_identity_v1",
+      "source_path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "source_raw_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "definition_raw_sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6",
+      "evidence_path": "native-before/private_weekly_source_resolve_root_identity_v1.sql.txt"
+    },
+    {
+      "signature_owner": "private._candidate_expense_source_family_v1",
+      "source_path": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "source_raw_sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+      "definition_raw_sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d",
+      "evidence_path": "native-before/private__candidate_expense_source_family_v1.sql.txt"
+    },
+    {
+      "signature_owner": "public.pay_timesheet_summary_advance_state_refresh",
+      "source_path": "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql",
+      "source_raw_sha256": "eba6b3596434aa6eecf133594579fb7833a7e3acdbe7d6fbd3676fbfb913db86",
+      "definition_raw_sha256": "00514a89ea54bb7989d0a20d01ccf2a7aed97fe9884ae063564bb2e78a9fc8e5",
+      "evidence_path": "native-before/public_pay_timesheet_summary_advance_state_refresh.sql.txt"
+    },
+    {
+      "signature_owner": "private.weekly_source_pay_query_facts_v1",
+      "source_path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "source_raw_sha256": "202aee306e61e6150fa2978e8594c0aa38863b7d6f458888a59a99ce02702652",
+      "definition_raw_sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec",
+      "fact_body_reverse_exact": true
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+{
+  "schema": "AGENCY_NATIVE_AUTHORISE_REVIEWED_PUBLICATION_V1",
+  "source_only": true,
+  "native": false,
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "prior_own_commit": "9f4a921b0fe423e6450ee362d76bd46dc3d4a638",
+  "reviewed_packet": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014",
+  "manifest_sha256": "b2022bca8df516556d3641fa204d598bcb9b6065393d34299b162b896e7a772f",
+  "source_checks_sha256": "7efa5f638f0573e1abdb974de53a85f7074130f490400bf88982abe43a650fef",
+  "independent_critic_sha256": "2310ba4e6d9b2dc84a583956d4da80010043407a0120ea367cfa014447c5635f",
+  "frozen_files": 32,
+  "files": [
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/CURRENT_NATIVE_OWNER_PINS.json",
+      "bytes": 3389,
+      "sha256": "25bbc24fac36a77dff3ae3fac3307393112aecfa605023189ff70043ce6589b1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/SOURCE_CHECKS.json",
+      "bytes": 2276,
+      "sha256": "7efa5f638f0573e1abdb974de53a85f7074130f490400bf88982abe43a650fef"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/SOURCE_DISPOSITION.md",
+      "bytes": 2927,
+      "sha256": "1e9af786f2b2194122c80d9346c807373b586bc9f7267c3a2f37bd2612459607"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+      "bytes": 36923,
+      "sha256": "a48e15134fd61562f75e8a8f7c7d3912b06b87046ccd3a8417fa9f2f133b2162"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/31_complete_native_paid_financial_authority.sqlinc",
+      "bytes": 18192,
+      "sha256": "d3071353a62dd78152920d7f915acb50798607a5a651e02f99af8b631d550413"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/41_agency_canonical_worker_scalar.mjs",
+      "bytes": 12545,
+      "sha256": "b0666380b031bf83c843bb9cb45e92440b962ca6250ed4b10a17fd7085cd18e7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/43_agency_native_segment_flags.sqlinc",
+      "bytes": 15985,
+      "sha256": "6e8bce7229ef835636c714d7b4384db8d71271d73cb52098d8691f9665ca1538"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/44_agency_native_segment_flag_apply.sqlinc",
+      "bytes": 3880,
+      "sha256": "0a9dc6e31bdfe66b4031ea0f756ad4b5fb690e3a55c829cab45d5ee306c240b1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/45_complete_financial_observation_with_native_flags.sqlinc",
+      "bytes": 18868,
+      "sha256": "ea478004aa5f351491607b77b922fa3fd2c060d8bf9d48ebe0d722584ffca4d1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/46_agency_native_authorise_step.sqlinc",
+      "bytes": 12290,
+      "sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/47_complete_single_writer_current_native_flag_result.sqlinc",
+      "bytes": 37109,
+      "sha256": "f01351a16d6a078e69fafcf7dfe5330809f6bd8a87ec38729c52481ecc3705c9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/48_agency_canonical_worker_with_authorise_codec.mjs",
+      "bytes": 16668,
+      "sha256": "a31f1a304fd47c5aea28c88162f5faba9bfe168b4cc3617db8b15871cca187f2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/49_complete_worker_index_with_native_authorise.js",
+      "bytes": 8931605,
+      "sha256": "bee83545741ba4fced8d3be2910b605a73dfe4fcc16b3792b367eb768cc93755"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/50_complete_current_native_query_facts_kernel.sqlinc",
+      "bytes": 8376,
+      "sha256": "4b4bc07973e004a35a6e90ba7f7b5cc943875e92dc15c80417a5d8ed11c39fc7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/51_agency_owned_native_query_facts.sqlinc",
+      "bytes": 7337,
+      "sha256": "95b2cfccc2567c3dfd45ef7107e3b46a465afcf8b04b5c043c36c60c84495a8a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/AUTHORISE_SEGMENT_NATIVE_FULL_REVERSE.json",
+      "bytes": 3710,
+      "sha256": "f83d0131ab76324f4d05f04aa9f36f01b19e078019a09141be7e04c550b58c1c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/AUTHORISE_WORKER_RUNTIME_FULL_REVERSE.json",
+      "bytes": 7829,
+      "sha256": "ca2f0b9b058fff80bfa8264009d978203e94476ef19700becb55d45affb0b13a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/CURRENT_AUTHORISE_RUNTIME_IMPORT_CLOSURE.json",
+      "bytes": 67912,
+      "sha256": "aab770228c540f4c17e848ae5085b81e682722b9b176eb4aee83ca9b0683cf6f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/NATIVE_QUERY_FACTS_KERNEL_FULL_REVERSE.json",
+      "bytes": 26310,
+      "sha256": "149407e17d1f3cebe016577de1f107767e1d88eaeb1b4f7b59c8cf27d53fc551"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/WORKER_RUNTIME_FULL_REVERSE.json",
+      "bytes": 5901,
+      "sha256": "78b9e92bf2bc8f15520669a498df91eab43b8ad350bba41b41d488e2b6450a06"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/agency-authorise-phase.test.mjs",
+      "bytes": 11619,
+      "sha256": "5e6a3c9d0fadc42a5952bc0c32e26252a3a566b5cc2ef5530f1a761cef8a7d0e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/agency-canonical-worker.test.mjs",
+      "bytes": 14860,
+      "sha256": "de06618a49c0a0d31459c9ae87971e6db1b8f841deb75ca4a20fdb78f027d480"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/runtime/agency-canonical-worker.mjs",
+      "bytes": 16668,
+      "sha256": "a31f1a304fd47c5aea28c88162f5faba9bfe168b4cc3617db8b15871cca187f2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/runtime-forward/index.js",
+      "bytes": 8930341,
+      "sha256": "ca30ea365f64c77d230821e5a7cdf89316133a085d6d03e08d6bc5e3f10d0a4f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/runtime-reference/index.js",
+      "bytes": 8927507,
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/native-before/private__candidate_expense_source_family_v1.sql.txt",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/native-before/private_weekly_source_pay_query_scope_v1.sql.txt",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/native-before/private_weekly_source_resolve_root_identity_v1.sql.txt",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/native-before/public_pay_timesheet_summary_advance_state_refresh.sql.txt",
+      "bytes": 6001,
+      "sha256": "00514a89ea54bb7989d0a20d01ccf2a7aed97fe9884ae063564bb2e78a9fc8e5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/native-before/public_timesheet_authorise_generic_atomic.sql.txt",
+      "bytes": 36434,
+      "sha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/native-before/public_tsfin_update_segments_locked.sql.txt",
+      "bytes": 18963,
+      "sha256": "25a257bd6837573d86f7e433dba4b0210978ce1c9d940d040b05501caae87a48"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/REVIEW_MANIFEST.json",
+      "bytes": 6267,
+      "sha256": "b2022bca8df516556d3641fa204d598bcb9b6065393d34299b162b896e7a772f"
+    }
+  ],
+  "unit_only_tests": 70,
+  "static_objects": 137,
+  "static_edges": 219,
+  "reverse_hunks": 12,
+  "syntax_checks": 4,
+  "lexical_sql_pages": 7,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null,
+  "mount_ready": false,
+  "full_agency_complete": false,
+  "credential_findings": 0,
+  "remaining_engineering": [
+    "jointA0/38nativeAdmission",
+    "protectionActions/NXAI6",
+    "wholeWeek/typedSameStoreValidation",
+    "authorisedValidationWorkerMode",
+    "sameD1Return",
+    "singleBusiness/OfficeOriginalConsumers",
+    "issueRetirement",
+    "lastDefinitionPPv2Workspace"
+  ]
+}

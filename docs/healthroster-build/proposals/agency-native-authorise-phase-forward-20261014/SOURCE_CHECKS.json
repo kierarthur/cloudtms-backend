@@ -1,0 +1,69 @@
+{
+  "schema": "AGENCY_NATIVE_AUTHORISE_PHASE_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "database_calls": false,
+  "full_unique_reverse_hunks": 12,
+  "current_native_owner_inputs": 7,
+  "sql": [
+    {
+      "path": "construction/43_agency_native_segment_flags.sqlinc",
+      "raw_sha256": "6e8bce7229ef835636c714d7b4384db8d71271d73cb52098d8691f9665ca1538",
+      "statements": 3
+    },
+    {
+      "path": "construction/44_agency_native_segment_flag_apply.sqlinc",
+      "raw_sha256": "0a9dc6e31bdfe66b4031ea0f756ad4b5fb690e3a55c829cab45d5ee306c240b1",
+      "statements": 3
+    },
+    {
+      "path": "construction/45_complete_financial_observation_with_native_flags.sqlinc",
+      "raw_sha256": "ea478004aa5f351491607b77b922fa3fd2c060d8bf9d48ebe0d722584ffca4d1",
+      "statements": 10
+    },
+    {
+      "path": "construction/46_agency_native_authorise_step.sqlinc",
+      "raw_sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924",
+      "statements": 7
+    },
+    {
+      "path": "construction/47_complete_single_writer_current_native_flag_result.sqlinc",
+      "raw_sha256": "f01351a16d6a078e69fafcf7dfe5330809f6bd8a87ec38729c52481ecc3705c9",
+      "statements": 1
+    },
+    {
+      "path": "construction/50_complete_current_native_query_facts_kernel.sqlinc",
+      "raw_sha256": "4b4bc07973e004a35a6e90ba7f7b5cc943875e92dc15c80417a5d8ed11c39fc7",
+      "statements": 6
+    },
+    {
+      "path": "construction/51_agency_owned_native_query_facts.sqlinc",
+      "raw_sha256": "95b2cfccc2567c3dfd45ef7107e3b46a465afcf8b04b5c043c36c60c84495a8a",
+      "statements": 3
+    }
+  ],
+  "sql_check_scope": "transaction-neutral lexical envelopes only",
+  "tests": [
+    {
+      "file": "agency-authorise-phase.test.mjs",
+      "count": 33,
+      "unit_only": true
+    },
+    {
+      "file": "agency-canonical-worker.test.mjs",
+      "count": 37,
+      "unit_only": true
+    }
+  ],
+  "syntax_files": 4,
+  "static_objects": 137,
+  "current_runtime_objects_verified": 135,
+  "relative_edges": 219,
+  "full_agency_implementation_complete": false,
+  "nx_ai_6_complete": false,
+  "whole_week_validation_complete": false,
+  "return_complete": false,
+  "qualification_receipt": null,
+  "compiled_contract_sha256": null,
+  "mount_ready": false
+}

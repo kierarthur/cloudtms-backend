@@ -1,0 +1,148 @@
+CREATE OR REPLACE FUNCTION public.pay_timesheet_summary_advance_state_refresh(p_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_family_id uuid;
+  v_booking text;
+  v_canonical_timesheet_id uuid := NULL;
+  v_latest_override_created_at_utc timestamptz := NULL;
+  v_existing_consumed_at_utc timestamptz := NULL;
+  v_authorisation_event_at_utc timestamptz := NULL;
+  v_new_consumed_at_utc timestamptz := NULL;
+  v_active_advance boolean := false;
+  v_cache public.timesheet_summary_pay_state_cache%ROWTYPE;
+  v_new_badges text[] := ARRAY[]::text[];
+  v_summary_state_applies boolean := false;
+  v_cache_updated boolean := false;
+BEGIN
+  -- BEGIN A8 OWNER CALLBACK BOUNDARY
+  IF NOT private.bpay_next_legacy_callback_enabled_v1() THEN
+    RETURN jsonb_build_object(
+      'ok',true,'skipped',true,'reason','FINANCIAL_OWNER_NOT_LEGACY',
+      'requested_timesheet_id',p_timesheet_id,'timesheet_id',NULL::uuid,
+      'cache_updated',false);
+  END IF;
+  -- END A8 OWNER CALLBACK BOUNDARY
+  IF p_timesheet_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', 'INVALID_PAYLOAD',
+      'message', 'p_timesheet_id is required'
+    );
+  END IF;
+
+  SELECT t.booking_id INTO v_booking FROM public.timesheets t WHERE t.timesheet_id=p_timesheet_id;
+  SELECT t.timesheet_id INTO v_canonical_timesheet_id FROM public.timesheets t
+  WHERE t.booking_id=v_booking AND t.is_current AND btrim(t.booking_id)<>'';
+  SELECT id INTO v_family_id FROM private.bpay_clock_families_v1 WHERE booking_id=v_booking;
+
+  IF v_canonical_timesheet_id IS NULL THEN
+    v_canonical_timesheet_id := p_timesheet_id;
+  END IF;
+
+  SELECT o.created_at_utc INTO v_latest_override_created_at_utc
+  FROM public.timesheet_payment_overrides o WHERE o.bpay_clock_family_id_v1=v_family_id
+  AND o.cleared_at_utc IS NULL AND upper(btrim(coalesce(o.override_type,'')))='ADVANCE_THIS_PAYMENT'
+  ORDER BY o.created_at_utc DESC,o.id DESC LIMIT 1;
+
+  IF v_latest_override_created_at_utc IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'skipped', true,
+      'reason', 'NO_ACTIVE_ADVANCE_THIS_PAYMENT_OVERRIDE',
+      'timesheet_id', v_canonical_timesheet_id,
+      'cache_updated', false
+    );
+  END IF;
+
+  SELECT c.consumed_at INTO v_existing_consumed_at_utc FROM private.bpay_clock_rows_v1 c
+  WHERE c.family_id=v_family_id ORDER BY c.consumed_at DESC NULLS LAST LIMIT 1;
+  SELECT c.authorisation_at INTO v_authorisation_event_at_utc FROM private.bpay_clock_rows_v1 c
+  WHERE c.family_id=v_family_id ORDER BY c.authorisation_at DESC NULLS LAST LIMIT 1;
+
+  IF v_existing_consumed_at_utc IS NOT NULL
+     AND v_existing_consumed_at_utc >= v_latest_override_created_at_utc THEN
+    v_new_consumed_at_utc := v_existing_consumed_at_utc;
+  ELSIF v_authorisation_event_at_utc IS NOT NULL
+        AND v_authorisation_event_at_utc >= v_latest_override_created_at_utc THEN
+    v_new_consumed_at_utc := v_authorisation_event_at_utc;
+  ELSE
+    v_new_consumed_at_utc := NULL::timestamptz;
+  END IF;
+
+  v_active_advance := (
+    v_latest_override_created_at_utc IS NOT NULL
+    AND (
+      v_new_consumed_at_utc IS NULL
+      OR v_new_consumed_at_utc < v_latest_override_created_at_utc
+    )
+  );
+
+  SELECT c.*
+    INTO v_cache
+  FROM public.timesheet_summary_pay_state_cache AS c
+  WHERE c.timesheet_id = v_canonical_timesheet_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_cache.timesheet_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'skipped', true,
+      'reason', 'SUMMARY_PAY_STATE_CACHE_ROW_NOT_FOUND',
+      'timesheet_id', v_canonical_timesheet_id,
+      'active_advance', v_active_advance,
+      'advance_override_created_at_utc', v_latest_override_created_at_utc,
+      'advance_authorisation_consumed_at_utc', v_new_consumed_at_utc,
+      'cache_updated', false
+    );
+  END IF;
+
+  v_new_badges := COALESCE(v_cache.summary_badge_codes, ARRAY[]::text[]);
+  v_new_badges := ARRAY_REMOVE(v_new_badges, NULL);
+  v_new_badges := ARRAY_REMOVE(v_new_badges, '__PAY_BADGE_ADV__');
+  IF COALESCE(v_active_advance, false) THEN
+    v_new_badges := ARRAY_PREPEND('__PAY_BADGE_ADV__', v_new_badges);
+  END IF;
+
+  v_summary_state_applies := (
+    COALESCE(v_active_advance, false)
+    OR COALESCE(v_cache.active_processing, false)
+    OR ABS(COALESCE(v_cache.paid_to_date_ex_vat, 0)) > 0.005
+    OR ABS(COALESCE(v_cache.reserved_ex_vat, 0)) > 0.005
+    OR ABS(COALESCE(v_cache.outstanding_ex_vat, 0)) > 0.005
+    OR ABS(COALESCE(v_cache.net_delta_ex_vat, 0)) > 0.005
+    OR v_cache.last_paid_at_utc IS NOT NULL
+    OR UPPER(COALESCE(v_cache.summary_pay_status_code, '')) IN ('PAID', 'PARTIALLY_PAID', 'PROCESSING', 'OVERPAID')
+    OR COALESCE(ARRAY_LENGTH(v_new_badges, 1), 0) > 0
+  );
+
+  UPDATE public.timesheet_summary_pay_state_cache AS c
+     SET active_advance = COALESCE(v_active_advance, false),
+         advance_override_created_at_utc = v_latest_override_created_at_utc,
+         advance_authorisation_consumed_at_utc = v_new_consumed_at_utc,
+         summary_state_applies = COALESCE(v_summary_state_applies, false),
+         summary_badge_codes = COALESCE(v_new_badges, ARRAY[]::text[]),
+         refreshed_at_utc = now(),
+         refreshed_by_user_id = COALESCE(p_actor_user_id, c.refreshed_by_user_id)
+   WHERE c.timesheet_id = v_canonical_timesheet_id
+   RETURNING c.* INTO v_cache;
+
+  v_cache_updated := FOUND;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'timesheet_id', v_canonical_timesheet_id,
+    'requested_timesheet_id', p_timesheet_id,
+    'active_advance', COALESCE(v_active_advance, false),
+    'advance_override_created_at_utc', v_latest_override_created_at_utc,
+    'advance_authorisation_consumed_at_utc', v_new_consumed_at_utc,
+    'summary_badge_codes', TO_JSONB(COALESCE(v_new_badges, ARRAY[]::text[])),
+    'summary_state_applies', COALESCE(v_summary_state_applies, false),
+    'cache_updated', COALESCE(v_cache_updated, false)
+  );
+END;
+$function$;

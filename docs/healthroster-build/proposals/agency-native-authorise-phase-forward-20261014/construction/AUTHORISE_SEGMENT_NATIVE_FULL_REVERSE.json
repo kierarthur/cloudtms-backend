@@ -1,0 +1,48 @@
+{
+  "schema": "AGENCY_NATIVE_AUTHORISE_SEGMENT_FULL_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "reviewed_predecessor_commit": "9f4a921b0fe423e6450ee362d76bd46dc3d4a638",
+  "full_forward_files": [
+    {
+      "before_path": "31_complete_native_paid_financial_authority.sqlinc",
+      "after_path": "45_complete_financial_observation_with_native_flags.sqlinc",
+      "before_raw_sha256": "d3071353a62dd78152920d7f915acb50798607a5a651e02f99af8b631d550413",
+      "after_raw_sha256": "ea478004aa5f351491607b77b922fa3fd2c060d8bf9d48ebe0d722584ffca4d1",
+      "hunks": [
+        {
+          "before": " prior public.timesheets_financials%rowtype; frame jsonb; observation jsonb; receipts jsonb; signature jsonb;",
+          "after": " prior public.timesheets_financials%rowtype; frame jsonb; observation jsonb; receipts jsonb; signature jsonb; segment_flags_receipt jsonb;",
+          "before_sha256": "e8502755317737804afa0f4d4569585ecd40e0d3c64ade65380cd14dfb960d41",
+          "after_sha256": "2d83a3a4b23edd6340bc015ae7567a78a85bc59bb54b9f7d9c7a8a1779fa1476"
+        },
+        {
+          "before": " observation:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_FINANCIAL_WRITE_V1',",
+          "after": " -- Retain the genuine new row under the original native XID/PID frame before\n -- deriving its flags. The same existing segment writer runs after EVERY\n -- observed request recompute; its actual post-write row is what is hashed.\n update private.weekly_source_agency_timesheet_change_requests set current_financial_id=f.id,\n  version=version+1,updated_at_utc=transaction_timestamp() where id=r.id returning * into r;\n segment_flags_receipt:=private.weekly_source_agency_segment_flags_apply_v1(r.id);\n select * into strict f from public.timesheets_financials where id=r.current_financial_id and is_current;\n observation:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_FINANCIAL_WRITE_V1',",
+          "before_sha256": "1203c8d7ffcc9577e33020d277145aad05b03396ce1d368aef5ff2a3d18155c1",
+          "after_sha256": "c131b39dce14cce7da6f84668088c5357a8fb80bd706da0fcc227268e886cef8"
+        },
+        {
+          "before": "   case when p_outbox_id is null then 'manual_financial_write' else 'recompute' end,observation);",
+          "after": "   case when p_outbox_id is null then 'manual_financial_write' else 'recompute' end,observation,\n   'segment_flags',segment_flags_receipt);",
+          "before_sha256": "f03196769c514d5ba4144fc0d4406ba1295cce8dabac8c58b0ae6a2f54b51b1b",
+          "after_sha256": "ef2f727c5a21024c3bb00516b7943634add5ad2c6afda93e1703d6afdab2abfc"
+        }
+      ]
+    },
+    {
+      "before_path": "12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+      "after_path": "47_complete_single_writer_current_native_flag_result.sqlinc",
+      "before_raw_sha256": "a48e15134fd61562f75e8a8f7c7d3912b06b87046ccd3a8417fa9f2f133b2162",
+      "after_raw_sha256": "f01351a16d6a078e69fafcf7dfe5330809f6bd8a87ec38729c52481ecc3705c9",
+      "hunks": [
+        {
+          "before": "  PERFORM private.weekly_source_agency_financial_write_observe_v1(\n    p_timesheet_id,snap,null::uuid);",
+          "after": "  PERFORM private.weekly_source_agency_financial_write_observe_v1(\n    p_timesheet_id,snap,null::uuid);\n  IF v_agency_write_purpose IS NOT NULL THEN\n    SELECT tf.* INTO STRICT inserted_row FROM public.timesheets_financials tf\n      WHERE tf.id=inserted_row.id AND tf.is_current;\n  END IF;",
+          "before_sha256": "3e84f43ffcbfdd806c3ef2ce9420883e4c884efb3767fdb90b9fcef34e879ca4",
+          "after_sha256": "2590f6717cfd57844290f4b9fec415b9ea0f2581deb265bce22e5ec8214a5776"
+        }
+      ]
+    }
+  ]
+}

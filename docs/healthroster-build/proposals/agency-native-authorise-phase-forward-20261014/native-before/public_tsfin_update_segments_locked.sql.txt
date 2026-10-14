@@ -1,0 +1,548 @@
+create or replace function public.tsfin_update_segments_locked(
+  p_timesheet_id uuid,
+  p_segment_updates jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  -- locked row
+  v_tf_id uuid;
+  v_basis text;
+  v_breakdown jsonb;
+
+  -- stored totals (used to preserve non-segment totals if breakdown.additional is missing/incomplete)
+  v_total_pay_ex_vat numeric;
+  v_total_charge_ex_vat numeric;
+
+  -- ERNI / policy inputs (for margin accuracy)
+  v_policy jsonb;
+  v_pay_method_text text;
+  v_additional_pay_ex_vat numeric;
+  v_expenses_pay_ex_vat numeric;
+  v_mileage_pay_ex_vat numeric;
+
+  v_week_ending date;
+  v_natural_week_start date;
+
+  v_allow_invoice_target_change boolean := false;
+
+  -- updates map: { "<segment_id>": {exclude_from_pay:bool?, invoice_target_week_start:text?}, ... }
+  v_updates jsonb := '{}'::jsonb;
+  v_elem jsonb;
+  v_sid text;
+  v_entry jsonb;
+  v_req_target text;
+
+  -- apply loop
+  v_segments jsonb;
+  v_seg jsonb;
+  v_out_segments jsonb := '[]'::jsonb;
+
+  v_exclude boolean;
+  v_new_total_pay_segments numeric := 0;
+  v_new_total_charge_segments numeric := 0;
+
+  -- ✅ preserve "additional/expenses" totals from breakdown.additional (now includes expenses+mileage in TSFIN invariant)
+  v_add_pay numeric := 0;
+  v_add_charge numeric := 0;
+
+  -- ✅ if breakdown.additional is missing/incomplete, derive non-segment totals from stored totals minus ORIGINAL segment totals
+  v_old_total_pay_segments numeric := 0;
+  v_old_total_charge_segments numeric := 0;
+  v_use_breakdown_additional boolean := false;
+  v_add_text_pay text;
+  v_add_text_charge text;
+  v_add_units jsonb;
+
+  v_new_total_pay numeric := 0;
+  v_new_total_charge numeric := 0;
+  v_new_margin numeric := 0;
+
+  -- ✅ ERNI-aware margin (PAYE only; applies to wage pay only: segments pay + additional_pay_ex_vat; never to expenses/mileage)
+  v_apply_to text;
+  v_erni_pct_raw numeric := 0;
+  v_erni_mult numeric := 1;
+  v_pay_method_u text;
+  v_erni_applies boolean := false;
+
+  v_wage_pay numeric := 0;
+  v_reimb_pay numeric := 0;
+  v_wage_pay_cost numeric := 0;
+  v_pay_cost numeric := 0;
+
+  v_nonseg_wage_pay numeric := 0;
+  v_nonseg_reimb_pay numeric := 0;
+  v_nonseg_wage_pay_cost numeric := 0;
+  v_nonseg_pay_cost numeric := 0;
+  v_nonseg_margin numeric := 0;
+
+  -- validation helpers
+  v_locked_invoice_id_text text;
+  v_cur_target text;
+  v_cur_target_has boolean;
+  v_clear_requested boolean;
+
+  v_updated_row jsonb;
+begin
+  if p_timesheet_id is null then
+    raise exception 'timesheet_id required';
+  end if;
+
+  if p_segment_updates is null or jsonb_typeof(p_segment_updates) <> 'array' then
+    raise exception 'segment_updates must be a json array';
+  end if;
+
+  -- 1) Lock the current TSFIN row (critical: prevents lost-update corruption)
+  select
+    tf.id,
+    upper(coalesce(tf.basis::text, '')) as basis,
+    tf.invoice_breakdown_json,
+    coalesce(tf.total_pay_ex_vat, 0)::numeric as total_pay_ex_vat,
+    coalesce(tf.total_charge_ex_vat, 0)::numeric as total_charge_ex_vat,
+    ts.week_ending_date::date as week_ending_date,
+
+    -- ERNI/policy inputs for accurate margin recompute
+    coalesce(tf.policy_snapshot_json, '{}'::jsonb) as policy_snapshot_json,
+    coalesce(tf.pay_method::text, '') as pay_method_text,
+    coalesce(tf.additional_pay_ex_vat, 0)::numeric as additional_pay_ex_vat,
+    coalesce(tf.expenses_pay_ex_vat, 0)::numeric as expenses_pay_ex_vat,
+    coalesce(tf.mileage_pay_ex_vat, 0)::numeric as mileage_pay_ex_vat
+  into
+    v_tf_id,
+    v_basis,
+    v_breakdown,
+    v_total_pay_ex_vat,
+    v_total_charge_ex_vat,
+    v_week_ending,
+
+    v_policy,
+    v_pay_method_text,
+    v_additional_pay_ex_vat,
+    v_expenses_pay_ex_vat,
+    v_mileage_pay_ex_vat
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+  where tf.timesheet_id = p_timesheet_id
+    and tf.is_current = true
+  order by tf.created_at desc
+  limit 1
+  for update;
+
+  if not found then
+    raise exception 'Current financial snapshot not found for timesheet_id %', p_timesheet_id;
+  end if;
+
+  if v_breakdown is null or jsonb_typeof(v_breakdown) <> 'object' then
+    raise exception 'No invoice_breakdown_json present on snapshot';
+  end if;
+
+  if upper(coalesce(v_breakdown->>'mode','')) <> 'SEGMENTS'
+     or jsonb_typeof(v_breakdown->'segments') <> 'array' then
+    raise exception 'This snapshot is not SEGMENTS-based; cannot update per-line settings';
+  end if;
+
+  v_segments := v_breakdown->'segments';
+
+  -- Allowed bases (match Worker)
+  v_allow_invoice_target_change :=
+    v_basis in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT');
+
+  if v_week_ending is not null then
+    v_natural_week_start := (v_week_ending - 6);
+  else
+    v_natural_week_start := null;
+  end if;
+
+  -- 2) Build update map (last write wins)
+  for v_elem in
+    select value
+    from jsonb_array_elements(p_segment_updates) as t(value)
+  loop
+    if v_elem is null or jsonb_typeof(v_elem) <> 'object' then
+      continue;
+    end if;
+
+    v_sid := nullif(btrim(coalesce(v_elem->>'segment_id','')), '');
+    if v_sid is null then
+      continue;
+    end if;
+
+    v_entry := '{}'::jsonb;
+
+    if v_elem ? 'exclude_from_pay' then
+      v_entry := v_entry || jsonb_build_object('exclude_from_pay', v_elem->'exclude_from_pay');
+    end if;
+
+    -- ✅ FIX: support explicit clear (key present with null/blank) by carrying a json null in the update map
+    if (v_elem ? 'invoice_target_week_start') then
+      if nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '') is not null then
+        v_entry := v_entry || jsonb_build_object(
+          'invoice_target_week_start',
+          nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '')
+        );
+      else
+        v_entry := v_entry || jsonb_build_object('invoice_target_week_start', null);
+      end if;
+    end if;
+
+    -- merge into map
+    v_updates := v_updates || jsonb_build_object(v_sid, v_entry);
+  end loop;
+
+  if jsonb_typeof(v_updates) <> 'object' or v_updates = '{}'::jsonb then
+    raise exception 'No valid segment_id entries to update';
+  end if;
+
+  -- 3) Pre-validate invoice_target_week_start changes (match Worker semantics)
+  if not v_allow_invoice_target_change then
+    if exists (
+      select 1
+      from jsonb_each(v_updates) as e(key, value)
+      where (e.value ? 'invoice_target_week_start')
+    ) then
+      raise exception 'invoice_target_week_start cannot be changed for this snapshot basis';
+    end if;
+  else
+    for v_sid, v_entry in
+      select key, value
+      from jsonb_each(v_updates)
+    loop
+      if v_entry is null or jsonb_typeof(v_entry) <> 'object' then
+        continue;
+      end if;
+
+      if not (v_entry ? 'invoice_target_week_start') then
+        continue;
+      end if;
+
+      v_req_target := nullif(btrim(coalesce(v_entry->>'invoice_target_week_start','')), '');
+      v_clear_requested := (v_req_target is null);
+
+      -- Find the current segment (objects only; unknown ids are ignored like Worker)
+      select
+        nullif(btrim(coalesce(seg.value->>'invoice_locked_invoice_id','')), '') as locked_inv,
+        nullif(btrim(coalesce(seg.value->>'invoice_target_week_start','')), '') as cur_target,
+        (seg.value ? 'invoice_target_week_start') as has_target
+      into
+        v_locked_invoice_id_text,
+        v_cur_target,
+        v_cur_target_has
+      from jsonb_array_elements(v_segments) as seg(value)
+      where jsonb_typeof(seg.value) = 'object'
+        and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = v_sid
+      limit 1;
+
+      if v_locked_invoice_id_text is not null then
+        -- ✅ FIX: explicit clear must be treated as a change unless it is a no-op
+        if v_clear_requested then
+          if not (
+            (v_cur_target_has is not true) or
+            (v_cur_target is null) or
+            (v_natural_week_start is not null and v_cur_target = v_natural_week_start::text)
+          ) then
+            raise exception
+              'Segment % is attached to an invoice and cannot have invoice delay changed. Remove from invoice first.',
+              v_sid;
+          end if;
+          continue;
+        end if;
+
+        -- No-op tolerant rule (match Worker)
+        if not (
+          v_req_target = coalesce(v_cur_target, '')
+          or (v_cur_target is null and v_natural_week_start is not null and v_req_target = v_natural_week_start::text)
+        ) then
+          raise exception
+            'Segment % is attached to an invoice and cannot have invoice delay changed. Remove from invoice first.',
+            v_sid;
+        end if;
+        continue;
+      end if;
+
+      -- For unlocked segments: only validate when setting an actual date (clears skip validation)
+      if v_clear_requested then
+        continue;
+      end if;
+
+      if v_natural_week_start is not null then
+        begin
+          if (v_req_target::date < v_natural_week_start) then
+            raise exception
+              'invoice_target_week_start for segment % cannot be earlier than natural week start %',
+              v_sid, v_natural_week_start::text;
+          end if;
+        exception when others then
+          raise exception 'invoice_target_week_start for segment % is invalid: %', v_sid, v_req_target;
+        end;
+      end if;
+    end loop;
+  end if;
+
+  -- ✅ Preserve "additional/expenses" totals.
+  -- Prefer breakdown.additional if present & numeric; otherwise derive from stored totals minus ORIGINAL segment totals.
+  v_use_breakdown_additional := false;
+  v_add_pay := 0;
+  v_add_charge := 0;
+
+  if (v_breakdown ? 'additional') and jsonb_typeof(v_breakdown->'additional') = 'object' then
+    v_add_text_pay := nullif(btrim(coalesce(v_breakdown->'additional'->>'pay_ex_vat','')), '');
+    v_add_text_charge := nullif(btrim(coalesce(v_breakdown->'additional'->>'charge_ex_vat','')), '');
+
+    if v_add_text_pay is not null and v_add_text_charge is not null then
+      begin
+        v_add_pay := v_add_text_pay::numeric;
+        v_add_charge := v_add_text_charge::numeric;
+        v_use_breakdown_additional := true;
+      exception when others then
+        v_use_breakdown_additional := false;
+        v_add_pay := 0;
+        v_add_charge := 0;
+      end;
+    end if;
+  end if;
+
+  -- 4) Apply updates + recompute totals (segments pay) WITHOUT losing additional/expenses
+  v_old_total_pay_segments := 0;
+  v_old_total_charge_segments := 0;
+
+  v_new_total_pay_segments := 0;
+  v_new_total_charge_segments := 0;
+  v_out_segments := '[]'::jsonb;
+
+  for v_seg in
+    select value
+    from jsonb_array_elements(v_segments) as t(value)
+  loop
+    if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
+      v_out_segments := v_out_segments || jsonb_build_array(v_seg);
+      continue;
+    end if;
+
+    v_sid := nullif(btrim(coalesce(v_seg->>'segment_id','')), '');
+    if v_sid is null then
+      v_out_segments := v_out_segments || jsonb_build_array(v_seg);
+      continue;
+    end if;
+
+    v_entry := v_updates->v_sid;
+
+    -- ORIGINAL exclude_from_pay (for old totals)
+    begin
+      v_exclude := coalesce(nullif(btrim(coalesce(v_seg->>'exclude_from_pay','')), '')::boolean, false);
+    exception when others then
+      v_exclude := false;
+    end;
+
+    -- ORIGINAL totals
+    begin
+      v_old_total_charge_segments :=
+        v_old_total_charge_segments
+        + coalesce(nullif(btrim(coalesce(v_seg->>'charge_amount','')), '')::numeric, 0);
+    exception when others then
+      null;
+    end;
+
+    begin
+      if not v_exclude then
+        v_old_total_pay_segments :=
+          v_old_total_pay_segments
+          + coalesce(nullif(btrim(coalesce(v_seg->>'pay_amount','')), '')::numeric, 0);
+      end if;
+    exception when others then
+      null;
+    end;
+
+    -- UPDATED exclude_from_pay
+    if v_entry is not null and jsonb_typeof(v_entry) = 'object' and (v_entry ? 'exclude_from_pay') then
+      begin
+        v_exclude := coalesce(nullif(btrim(coalesce(v_entry->>'exclude_from_pay','')), '')::boolean, false);
+      exception when others then
+        v_exclude := false;
+      end;
+      v_seg := jsonb_set(v_seg, '{exclude_from_pay}', to_jsonb(v_exclude), true);
+    end if;
+
+    -- invoice_target_week_start (allowed bases only; unlocked segments only)
+    if v_allow_invoice_target_change
+       and v_entry is not null
+       and jsonb_typeof(v_entry) = 'object'
+       and (v_entry ? 'invoice_target_week_start') then
+      v_locked_invoice_id_text := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
+      if v_locked_invoice_id_text is null then
+        v_req_target := nullif(btrim(coalesce(v_entry->>'invoice_target_week_start','')), '');
+        if v_req_target is not null then
+          v_seg := jsonb_set(v_seg, '{invoice_target_week_start}', to_jsonb(v_req_target), true);
+        else
+          -- ✅ FIX: explicit clear removes the key entirely
+          v_seg := v_seg - 'invoice_target_week_start';
+        end if;
+      end if;
+    end if;
+
+    -- NEW totals
+    begin
+      v_new_total_charge_segments :=
+        v_new_total_charge_segments
+        + coalesce(nullif(btrim(coalesce(v_seg->>'charge_amount','')), '')::numeric, 0);
+    exception when others then
+      null;
+    end;
+
+    begin
+      if not v_exclude then
+        v_new_total_pay_segments :=
+          v_new_total_pay_segments
+          + coalesce(nullif(btrim(coalesce(v_seg->>'pay_amount','')), '')::numeric, 0);
+      end if;
+    exception when others then
+      null;
+    end;
+
+    v_out_segments := v_out_segments || jsonb_build_array(v_seg);
+  end loop;
+
+  v_old_total_pay_segments := round(coalesce(v_old_total_pay_segments, 0), 2);
+  v_old_total_charge_segments := round(coalesce(v_old_total_charge_segments, 0), 2);
+
+  -- If breakdown.additional missing/incomplete, derive non-segment totals from stored totals minus ORIGINAL segment totals
+  if v_use_breakdown_additional is not true then
+    v_add_pay := round(coalesce(v_total_pay_ex_vat, 0) - coalesce(v_old_total_pay_segments, 0), 2);
+    v_add_charge := round(coalesce(v_total_charge_ex_vat, 0) - coalesce(v_old_total_charge_segments, 0), 2);
+
+    -- Ensure breakdown.additional exists so future edits don't lose non-segment totals
+    if (v_breakdown ? 'additional') and jsonb_typeof(v_breakdown->'additional') = 'object' then
+      v_add_units := case
+        when (v_breakdown->'additional' ? 'units') and jsonb_typeof(v_breakdown->'additional'->'units') = 'object'
+          then v_breakdown->'additional'->'units'
+        else '{}'::jsonb
+      end;
+    else
+      v_add_units := '{}'::jsonb;
+    end if;
+
+    v_breakdown := jsonb_set(
+      v_breakdown,
+      '{additional}',
+      jsonb_build_object(
+        'units', v_add_units,
+        'pay_ex_vat', v_add_pay,
+        'charge_ex_vat', v_add_charge,
+        'margin_ex_vat', round(v_add_charge - v_add_pay, 2)
+      ),
+      true
+    );
+  else
+    v_add_pay := round(coalesce(v_add_pay, 0), 2);
+    v_add_charge := round(coalesce(v_add_charge, 0), 2);
+  end if;
+
+  -- ✅ totals (pure ex-VAT totals; NO ERNI in totals)
+  v_new_total_pay_segments := round(coalesce(v_new_total_pay_segments, 0), 2);
+  v_new_total_charge_segments := round(coalesce(v_new_total_charge_segments, 0), 2);
+
+  v_new_total_pay := round(v_new_total_pay_segments + coalesce(v_add_pay, 0), 2);
+  v_new_total_charge := round(v_new_total_charge_segments + coalesce(v_add_charge, 0), 2);
+
+  -- ✅ ERNI-aware margin recompute (PAYE only; wage pay only)
+  if v_policy is null or jsonb_typeof(v_policy) <> 'object' then
+    v_policy := '{}'::jsonb;
+  end if;
+
+  v_apply_to := upper(coalesce(nullif(btrim(coalesce(v_policy->>'apply_erni_to','')), ''), 'PAYE_ONLY'));
+
+  v_erni_pct_raw := 0;
+  begin
+    v_erni_pct_raw := coalesce(nullif(btrim(coalesce(v_policy->>'erni_pct','')), '')::numeric, 0);
+  exception when others then
+    v_erni_pct_raw := 0;
+  end;
+
+  v_erni_mult := 1;
+  if coalesce(v_erni_pct_raw,0) > 0 then
+    if v_erni_pct_raw > 1 then
+      v_erni_mult := 1 + (v_erni_pct_raw / 100);
+    else
+      v_erni_mult := 1 + v_erni_pct_raw;
+    end if;
+  end if;
+
+  v_pay_method_u := upper(coalesce(nullif(btrim(coalesce(v_pay_method_text,'')), ''), ''));
+
+  -- PAYE only (apply_erni_to never makes it apply to non-PAYE)
+  v_erni_applies :=
+    (v_pay_method_u = 'PAYE')
+    and (v_apply_to = 'ALL' or v_apply_to = 'PAYE_ONLY');
+
+  -- Wage-like pay: segments pay + additional pay (NOT expenses/mileage)
+  v_wage_pay := round(coalesce(v_new_total_pay_segments, 0) + coalesce(v_additional_pay_ex_vat, 0), 2);
+
+  -- Reimbursements: expenses + mileage (NEVER ERNI)
+  v_reimb_pay := round(coalesce(v_expenses_pay_ex_vat, 0) + coalesce(v_mileage_pay_ex_vat, 0), 2);
+
+  v_wage_pay_cost := v_wage_pay;
+  if v_erni_applies then
+    v_wage_pay_cost := round(v_wage_pay * v_erni_mult, 2);
+  end if;
+
+  v_pay_cost := round(v_wage_pay_cost + v_reimb_pay, 2);
+
+  v_new_margin := round(v_new_total_charge - v_pay_cost, 2);
+
+  -- Update breakdown segments
+  v_breakdown := jsonb_set(v_breakdown, '{segments}', v_out_segments, true);
+
+  -- ✅ Update breakdown.additional.margin_ex_vat to be ERNI-accurate:
+  -- Non-segment wage pay is additional_pay_ex_vat; reimbursements are expenses+mileage; ERNI applies only to PAYE wage pay.
+  v_nonseg_wage_pay := round(coalesce(v_additional_pay_ex_vat, 0), 2);
+  v_nonseg_reimb_pay := v_reimb_pay;
+
+  v_nonseg_wage_pay_cost := v_nonseg_wage_pay;
+  if v_erni_applies then
+    v_nonseg_wage_pay_cost := round(v_nonseg_wage_pay * v_erni_mult, 2);
+  end if;
+
+  v_nonseg_pay_cost := round(v_nonseg_wage_pay_cost + v_nonseg_reimb_pay, 2);
+  v_nonseg_margin := round(coalesce(v_add_charge, 0) - v_nonseg_pay_cost, 2);
+
+  if (v_breakdown ? 'additional') and jsonb_typeof(v_breakdown->'additional') = 'object' then
+    v_breakdown := jsonb_set(v_breakdown, '{additional,margin_ex_vat}', to_jsonb(v_nonseg_margin), true);
+  else
+    v_breakdown := jsonb_set(
+      v_breakdown,
+      '{additional}',
+      jsonb_build_object(
+        'units', '{}'::jsonb,
+        'pay_ex_vat', coalesce(v_add_pay, 0),
+        'charge_ex_vat', coalesce(v_add_charge, 0),
+        'margin_ex_vat', v_nonseg_margin
+      ),
+      true
+    );
+  end if;
+
+  -- ✅ keep breakdown.totals in sync
+  v_breakdown := jsonb_set(v_breakdown, '{totals,total_pay_ex_vat}', to_jsonb(v_new_total_pay), true);
+  v_breakdown := jsonb_set(v_breakdown, '{totals,total_charge_ex_vat}', to_jsonb(v_new_total_charge), true);
+  v_breakdown := jsonb_set(v_breakdown, '{totals,margin_ex_vat}', to_jsonb(v_new_margin), true);
+
+  update public.timesheets_financials tfu
+  set
+    invoice_breakdown_json = v_breakdown,
+    total_pay_ex_vat       = v_new_total_pay,
+    total_charge_ex_vat    = v_new_total_charge,
+    margin_ex_vat          = v_new_margin,
+    updated_at             = v_now
+  where tfu.id = v_tf_id
+  returning to_jsonb(tfu) into v_updated_row;
+
+  return jsonb_build_object('updated', v_updated_row);
+
+end;
+$$;
