@@ -105,11 +105,11 @@ function identity(record) { text(record.item_id ?? record.row_id, 512); bindScop
 /** Service-owned evidence already contains native labels and admissible subjects. */
 export function projectChecklistItem(item, actor) {
   closed(item, ['item_id', 'item_kind', 'scope', 'route', 'worker', 'work_date', 'sheet_scope', 'reason_code', 'status', 'hold', 'subject',
-    'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read']);
+    'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read', 'native_source_witness']);
   identity(item); text(item.worker, 250); text(item.reason_code, 200);
   if (typeof item.work_date !== 'string' || !DATE.test(item.work_date) || !['WEEKLY', 'DAILY'].includes(item.sheet_scope) ||
       !['PAY', 'PAY_AND_INVOICE', 'INVOICE_ONLY', 'INFORMATION'].includes(item.subject) ||
-      !ROUTES.has(item.route) || !['ACTUAL_TIMESHEET', 'SOURCE_INFORMATION'].includes(item.item_kind) ||
+      !ROUTES.has(item.route) || !['ACTUAL_TIMESHEET', 'SOURCE_INFORMATION', 'NATIVE_SOURCE'].includes(item.item_kind) ||
       typeof item.permitted_pay_subject !== 'boolean') fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   if (item.item_kind === 'SOURCE_INFORMATION') {
     const witness = item.source_information_witness;
@@ -117,12 +117,40 @@ export function projectChecklistItem(item, actor) {
     text(witness.native_action_id, 512); uuid(witness.import_id); uuid(witness.hr_row_id); text(witness.existing_row_id, 512);
     if (!witness.native_action_id || !witness.existing_row_id || typeof witness.evidence_fingerprint !== 'string' || !HASH.test(witness.evidence_fingerprint) ||
         witness.counts_for_row_admission !== false || item.item_id !== `native-action:${witness.native_action_id}` ||
-        item.counted_timesheet_id !== null || item.correction_binding !== null || item.action !== null ||
+        item.counted_timesheet_id !== null || item.correction_binding !== null ||
         item.subject !== 'INFORMATION' || item.permitted_pay_subject !== false) fail('CHECKLIST_SOURCE_INFORMATION_TARGET_FORBIDDEN');
+    // R-254 is a native informational row inside an already admitted week.
+    // Its one permitted action stays at the exact existing Queries identity.
+    if (item.action === undefined || (item.action !== null && (!['WEEKLY_TIMESHEET_NOT_SUBMITTED', 'DAILY_TIMESHEET_NOT_SUBMITTED'].includes(item.reason_code) ||
+        item.action.kind !== 'QUERIES' || item.action.target?.row_key !== witness.existing_row_id))) {
+      fail('CHECKLIST_SOURCE_INFORMATION_TARGET_FORBIDDEN');
+    }
+  } else if (item.item_kind === 'NATIVE_SOURCE') {
+    const witness = item.native_source_witness;
+    closed(witness, ['owner', 'projection_publication_id', 'work_event_id', 'upload_row_id', 'row_resolution_id',
+      'incident_id', 'comparison_revision_id', 'manual_review_id', 'native_row_key', 'evidence_fingerprint']);
+    if (witness.owner !== 'private.weekly_source_office_query_groups_v1' ||
+        !HASH.test(witness.evidence_fingerprint ?? '') || !['SELF_BILL', 'AGENCY_INVOICE', 'NATIVE'].includes(item.route) ||
+        item.counted_timesheet_id !== null || item.correction_binding !== null || item.submission_read != null ||
+        item.source_information_witness != null || item.action === undefined || item.action?.kind === 'TIMESHEET') fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
+    uuid(witness.projection_publication_id); uuid(witness.work_event_id);
+    for (const key of ['upload_row_id', 'row_resolution_id', 'incident_id', 'comparison_revision_id', 'manual_review_id']) {
+      if (witness[key] !== null) uuid(witness[key]);
+    }
+    const kind = witness.incident_id !== null ? 'incident' : witness.manual_review_id !== null ? 'manual' : 'missing';
+    const id = kind === 'incident' ? witness.incident_id : kind === 'manual' ? witness.manual_review_id : witness.upload_row_id;
+    if (!id || witness.native_row_key !== `${kind}-${id}` || item.item_id !== `native-source:${witness.native_row_key}` ||
+        (kind === 'incident' && (witness.comparison_revision_id === null || witness.manual_review_id !== null)) ||
+        (kind === 'manual' && (witness.upload_row_id === null || witness.comparison_revision_id !== null)) ||
+        (kind === 'missing' && witness.row_resolution_id === null) ||
+        (item.action !== null && (item.action.kind !== 'QUERIES' || item.action.target?.row_key !== witness.native_row_key))) {
+      fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
+    }
   } else {
     uuid(item.counted_timesheet_id);
     if (item.source_information_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   }
+  if (item.item_kind !== 'NATIVE_SOURCE' && item.native_source_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   if (item.submission_read != null) {
     const submitted=item.submission_read;
     closed(submitted, ['state', 'timesheet_id', 'client_id', 'candidate_id', 'work_date', 'workflow_id',
@@ -177,7 +205,7 @@ export function projectChecklistRow(row, actor) {
     for (const k of ['source_group_id', 'client_id', 'source_cycle_id']) {
       if (!same(a.payload[k], row.scope[k])) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');
     }
-    if (!Number.isSafeInteger(a.payload.expected_cycle_version) || a.payload.expected_cycle_version < 1) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');
+    if (!Number.isSafeInteger(a.payload.expected_cycle_version) || a.payload.expected_cycle_version < 0) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');
     if (a.payload.attestation_text != null) text(a.payload.attestation_text, 500);
     if (a.payload.completion_id != null) uuid(a.payload.completion_id);
     return copy(a);

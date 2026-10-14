@@ -1,0 +1,50 @@
+-- Root-only rollback fixture verifier. Fixtures must be genuine native
+-- submissions (and native negative states), supplied by the approved manifest.
+do $verify$
+declare fixture record; response jsonb; before_cycles bigint; after_cycles bigint;
+  observed_state text; observed_message text; actual public.weekly_source_cycles%rowtype;
+begin
+  if to_regclass('pg_temp.wp_u3_submission_cycle_fixtures') is null then
+    raise exception 'WP_U3_SUBMISSION_CYCLE_NATIVE_FIXTURES_REQUIRED';
+  end if;
+  if not exists(select 1 from pg_temp.wp_u3_submission_cycle_fixtures) then raise exception 'WP_U3_SUBMISSION_CYCLE_FIXTURES_EMPTY'; end if;
+  if exists(select required.kind from (values('VALID_VACANT'),('VALID_REPLAY'),('PLANNED'),('LOCAL_DRAFT'),('EXPENSE_ONLY'),
+    ('WAITING_P0_ONLY'),('INACTIVE_ACTOR'),('WRONG_MEMBERSHIP')) required(kind)
+    where not exists(select 1 from pg_temp.wp_u3_submission_cycle_fixtures f where f.fixture_kind=required.kind)) then
+    raise exception 'WP_U3_SUBMISSION_CYCLE_FIXTURE_CASE_MISSING';
+  end if;
+  for fixture in select * from pg_temp.wp_u3_submission_cycle_fixtures order by ordinal loop
+    select count(*) into before_cycles from public.weekly_source_cycles;
+    observed_state:=null; observed_message:=null; response:=null;
+    begin
+      if fixture.explicit_group_id is not null then
+        response:=jsonb_build_object('applies',true,'source_cycle_id',private._weekly_source_settings_ensure_open_cycle_v1(
+          fixture.explicit_group_id,fixture.timesheet_id,
+          private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_V1',
+            private.weekly_source_actual_timesheet_submission_v1(fixture.timesheet_id)),fixture.actor_user_id));
+      else
+        response:=private.weekly_source_checklist_submission_cycle_prepare_v1(fixture.timesheet_id,fixture.actor_user_id);
+      end if;
+    exception when others then get stacked diagnostics observed_state=returned_sqlstate,observed_message=message_text;
+    end;
+    if observed_state is distinct from fixture.expected_sqlstate or observed_message is distinct from fixture.expected_error
+      or (observed_state is null and (response->>'applies')::boolean is distinct from fixture.expected_applies) then
+      raise exception 'WP_U3_SUBMISSION_CYCLE_CASE_FAILED: %',fixture.fixture_kind;
+    end if;
+    select count(*) into after_cycles from public.weekly_source_cycles;
+    if after_cycles-before_cycles is distinct from fixture.expected_new_cycle_count then
+      raise exception 'WP_U3_SUBMISSION_CYCLE_MUTATION_COUNT_FAILED: %',fixture.fixture_kind;
+    end if;
+    if fixture.expected_applies then
+      select c.* into actual from public.weekly_source_cycles c where c.id=(response->>'source_cycle_id')::uuid;
+      if actual.id is null or actual.source_group_id is distinct from fixture.expected_group_id
+        or actual.finalisation_week_ending is distinct from fixture.expected_cycle_week
+        or actual.cutoff_at_utc is distinct from fixture.expected_cutoff_at_utc
+        or actual.created_at_utc is distinct from fixture.expected_created_at_utc
+        or actual.scope_client_id is distinct from fixture.expected_scope_client_id then
+        raise exception 'WP_U3_SUBMISSION_CYCLE_NATIVE_IDENTITY_FAILED: %',fixture.fixture_kind;
+      end if;
+    end if;
+  end loop;
+end;
+$verify$;
