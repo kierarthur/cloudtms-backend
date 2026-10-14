@@ -1,0 +1,33 @@
+create or replace function private.bpay_next_workbench_ensure_metadata_v1(p_candidate_id uuid)
+returns private.bpay_next_workbench_candidate_metadata
+language plpgsql security definer set search_path=pg_catalog,private
+as $function$
+declare v_metadata private.bpay_next_workbench_candidate_metadata%rowtype;
+begin
+  perform private.bpay_next_workbench_require_next_v1();
+  insert into private.bpay_next_workbench_candidate_metadata(candidate_id,candidate_sort_name,tms_ref,
+    target_pay_channel,target_umbrella_id,target_umbrella_vat_chargeable,target_umbrella_enabled,bank_warning_code)
+    select c.id,coalesce(nullif(btrim(c.display_name),''),nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),c.id::text),c.tms_ref,
+      case when c.pay_method in ('PAYE','UMBRELLA') then c.pay_method end,
+      case when c.pay_method='UMBRELLA' then c.umbrella_id end,
+      case when c.pay_method='UMBRELLA' then u.vat_chargeable end,
+      case when c.pay_method='UMBRELLA' then u.enabled end,
+      case when nullif(btrim(case when c.pay_method='UMBRELLA' then u.bank_details_hash else c.bank_details_hash end),'') is null
+        then 'BANK_DETAILS_MISSING' end
+    from public.candidates c left join public.umbrellas u on u.id=c.umbrella_id where c.id=p_candidate_id
+    on conflict(candidate_id) do nothing;
+  -- Initialise only the newly added mapping on a retained pre-WB44 row.
+  update private.bpay_next_workbench_candidate_metadata m set target_pay_channel=c.pay_method,
+    target_umbrella_id=case when c.pay_method='UMBRELLA' then c.umbrella_id end,
+    target_umbrella_vat_chargeable=case when c.pay_method='UMBRELLA' then u.vat_chargeable end,
+    target_umbrella_enabled=case when c.pay_method='UMBRELLA' then u.enabled end,
+    bank_warning_code=case when nullif(btrim(case when c.pay_method='UMBRELLA' then u.bank_details_hash else c.bank_details_hash end),'') is null
+      then 'BANK_DETAILS_MISSING' else m.bank_warning_code end
+    from public.candidates c left join public.umbrellas u on u.id=c.umbrella_id
+    where m.candidate_id=p_candidate_id and c.id=m.candidate_id and m.target_pay_channel is null
+      and c.pay_method in ('PAYE','UMBRELLA');
+  select m.* into strict v_metadata from private.bpay_next_workbench_candidate_metadata m
+    where m.candidate_id=p_candidate_id for update;
+  return v_metadata;
+end
+$function$;

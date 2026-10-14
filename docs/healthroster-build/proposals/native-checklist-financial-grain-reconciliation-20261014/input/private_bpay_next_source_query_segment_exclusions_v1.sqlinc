@@ -1,0 +1,52 @@
+create or replace function private.bpay_next_source_query_segment_exclusions_v1(p_revision_id uuid,p_gate jsonb)
+returns jsonb language plpgsql stable security invoker set search_path=pg_catalog,private,public
+as $function$
+declare v_revision private.bpay_next_work_revision%rowtype;v_work private.bpay_next_work%rowtype;
+ v_facts jsonb;v_item jsonb;v_result jsonb:='[]'::jsonb;v_key text;v_reason text;
+begin
+ select revision.* into v_revision from private.bpay_next_work_revision revision where id=p_revision_id;
+ if not found or v_revision.source_kind not in ('SOURCE','PROTECTED') then return null;end if;
+ select work.* into strict v_work from private.bpay_next_work work where id=v_revision.work_id;
+ if p_gate->'ok' is distinct from 'true'::jsonb or p_gate->>'code' is distinct from 'OK'
+  or jsonb_typeof(p_gate->'blocked') is distinct from 'boolean' then return null;end if;
+ v_facts:=private.weekly_source_pay_query_facts_v1(v_revision.physical_timesheet_id);
+ if v_facts->'ok' is distinct from 'true'::jsonb or v_facts->>'code' is distinct from 'OK'
+  or (v_facts->'scope',v_facts->'blocked',v_facts->'query_state_sha256')
+     is distinct from (p_gate->'scope',p_gate->'blocked',p_gate->'query_state_sha256')
+  or jsonb_typeof(v_facts->'hours_incidents') is distinct from 'array'
+  or jsonb_typeof(v_facts->'manual_reviews') is distinct from 'array'
+  or v_facts#>>'{scope,root_timesheet_id}' is distinct from v_revision.physical_timesheet_id::text
+  or v_facts#>>'{scope,root_version}' is distinct from v_revision.physical_timesheet_version::text
+  or v_facts#>>'{scope,candidate_id}' is distinct from v_work.candidate_id::text
+  or v_facts#>>'{scope,contract_id}' is distinct from v_work.contract_id::text
+  or v_facts#>>'{scope,week_ending_date}' is distinct from v_work.week_ending_date::text
+  or v_facts#>>'{scope,family_booking_id}' is distinct from v_work.booking_id then return null;end if;
+ -- A free-text manual reason cannot be guessed to mean hours differ.
+ -- It must have the actual same-event current typed hours-difference incident.
+ for v_item in select value from jsonb_array_elements(v_facts->'manual_reviews') loop
+  if not exists(select 1 from jsonb_array_elements(v_facts->'hours_incidents') i(value)
+   where i.value->>'work_event_id'=v_item->>'work_event_id'
+    and i.value->>'source_group_id'=v_item->>'source_group_id'
+    and i.value->>'candidate_id'=v_item->>'candidate_id'
+    and i.value->>'client_id'=v_item->>'client_id'
+    and i.value->>'comparison_contract_id'=v_item->>'contract_id'
+    and i.value->>'issue_family'='SOURCE_HOURS_DIFFER') then return null;end if;
+ end loop;
+ for v_item in select value from jsonb_array_elements(v_facts->'hours_incidents') loop
+  v_reason:=v_item->>'issue_family';
+  if v_reason='CANDIDATE_TIMESHEET_MISSING' then continue;end if;
+  if v_item->'latest_qualified_exception' is distinct from 'null'::jsonb
+    and not exists(select 1 from jsonb_array_elements(v_facts->'manual_reviews') m(value)
+      where m.value->>'work_event_id'=v_item->>'work_event_id') then continue;end if;
+  if v_reason not in ('HEALTHROSTER_NOT_FINALISED','SOURCE_MISSING_OR_NOT_AUTHORISED','SOURCE_HOURS_DIFFER')
+    or v_reason is null then return null;end if;
+  v_key:=v_item->>'work_event_id';
+  if v_key is null or not exists(select 1 from private.bpay_next_approved_segment s
+    where s.revision_id=p_revision_id and s.segment_key=v_key) then return null;end if;
+  v_result:=v_result||jsonb_build_array(jsonb_build_object('segment_key',v_key,'reason',v_reason));
+ end loop;
+ if p_gate->'blocked'='true'::jsonb and jsonb_array_length(v_result)=0 then return null;end if;
+ return (select coalesce(jsonb_agg(x.item order by x.item->>'segment_key',x.item->>'reason'),'[]'::jsonb)
+  from (select distinct value item from jsonb_array_elements(v_result)) x);
+end
+$function$;

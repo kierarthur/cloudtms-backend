@@ -1,0 +1,408 @@
+{
+  "source_only": true,
+  "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "casefold_SQL": true,
+  "roots": 1484,
+  "input_paths": 1745,
+  "include_occurrences": 2160,
+  "complete_literal_semantic_symbols": 2690,
+  "unresolved_dynamic_statements": 15,
+  "corrected_body_census_containing_commit": "973625f17cd51a49803872a819638e10f13bbbff",
+  "corrected_body_census_file": "docs/healthroster-build/proposals/root-effective-body-amendment-census-case-forward-20261014/BODY_AMENDMENT_CENSUS.json",
+  "corrected_body_census_sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+  "all_input_hashes_matched": true,
+  "ordered_occurrences_sha256": "9173f22040d3639365620027405565a152754556eddea52036f831b38665c4e3",
+  "selected_literal_owners": [
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_pay_query_facts_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_pay_query_facts_v1(uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_pay_query_facts_v1(p_root_timesheet_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "include_stack": [
+        "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+      ],
+      "order": 5799,
+      "source_file_sha256": "202aee306e61e6150fa2978e8594c0aa38863b7d6f458888a59a99ce02702652",
+      "definition_sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec",
+      "body_sha256": "989aa517ba80b4a2343e3ca047fda8c78bec97d3174d5575de43aa6326517380",
+      "saved": "input/private_weekly_source_pay_query_facts_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_first_authorise_core_v1",
+      "inputTypes": "uuid,text,uuid,jsonb",
+      "id": "private.weekly_source_first_authorise_core_v1(uuid,text,uuid,jsonb)",
+      "offset": 0,
+      "header": "private.weekly_source_first_authorise_core_v1(p_timesheet_id uuid, p_expected_row_signature text, p_actor_user_id uuid, p_lock_result jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'private', 'extensions', 'pg_catalog', 'pg_temp'",
+      "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "include_stack": [],
+      "order": 5285,
+      "source_file_sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+      "definition_sha256": "2a991225c83ac0de80b4084b0fb3aa201ba198015aa3620d98cf13c280beadd8",
+      "body_sha256": "15c52ea4c7ae4f38c6a991c468c8143d7a090bc50648f946d54d096dc256c10e",
+      "saved": "input/private_weekly_source_first_authorise_core_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_create_preparation_v1",
+      "inputTypes": "uuid,uuid,date",
+      "id": "private.bpay_next_create_preparation_v1(uuid,uuid,date)",
+      "offset": 0,
+      "header": "private.bpay_next_create_preparation_v1( p_run_id uuid,p_actor_user_id uuid,p_pay_date date ) returns jsonb language plpgsql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+      "include_stack": [],
+      "order": 4923,
+      "source_file_sha256": "e8415355b5a11f2e75e0bc532f5610b920d542799b89725bba25493d1f1af641",
+      "definition_sha256": "cdeccb1803e7c113ed756b1bbb152df2385a37563b89e6ff69798b0d20ae43bd",
+      "body_sha256": "ee84dbee0453b49e58a9d18dbe6d4b24ba4c0a1d02283d5de45ed118a590fe62",
+      "saved": "input/private_bpay_next_create_preparation_v1__3_args.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_pay_query_scope_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_pay_query_scope_v1( p_root_timesheet_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "include_stack": [],
+      "order": 4615,
+      "source_file_sha256": "18317d4152fa8e8df4c17ac7895046453a3e26d534b10c45b1fafb50b91a983d",
+      "definition_sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf",
+      "body_sha256": "cba37bff933fa1c1955da30404e82ec2d2161036771f3b6f46222c066cb07f5f",
+      "saved": "input/private_weekly_source_pay_query_scope_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_pay_query_gate_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_pay_query_gate_v1(uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_pay_query_gate_v1(p_root_timesheet_id uuid) returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql",
+      "include_stack": [],
+      "order": 4627,
+      "source_file_sha256": "fb70e23a80c7686606b5cbf8f17e2878ca37224f5752067d903e9a253a3cbfa8",
+      "definition_sha256": "31992d662b68652d1d32851110704a6d31c17cbb15f09a4e8d5e664afab17526",
+      "body_sha256": "27497d814f5c72b46bd6e2a935a1f0c8d314600501174e01967288e152ed9a0d",
+      "saved": "input/private_weekly_source_pay_query_gate_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_invoice_duty_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_invoice_duty_v1(uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "include_stack": [
+        "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql"
+      ],
+      "order": 5974,
+      "source_file_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "definition_sha256": "eca8d5720fd78c53c4d764aeea5b758b44e5ab3aa04cdc5b07b2969a9138b359",
+      "body_sha256": "f2da4aae5103bf4153561100f2b333285cc7abbbb0448dbb363c82f7691a6f7a",
+      "saved": "input/private_weekly_source_invoice_duty_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_require_next_v1",
+      "inputTypes": "",
+      "id": "private.bpay_next_workbench_require_next_v1()",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_require_next_v1() returns void language plpgsql stable security definer set search_path=pg_catalog,private",
+      "file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "include_stack": [],
+      "order": 4864,
+      "source_file_sha256": "2fe6c4c816613aaa554d012289124c47219fd228a2af229c2ceabdb8f0cc305b",
+      "definition_sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359",
+      "body_sha256": "b3774ed9e285800d0dd3e039e257bde879235fe705c652f4ec56cd952ceba1ea",
+      "saved": "input/private_bpay_next_workbench_require_next_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_ensure_metadata_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_workbench_ensure_metadata_v1(uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_ensure_metadata_v1(p_candidate_id uuid) returns private.bpay_next_workbench_candidate_metadata language plpgsql security definer set search_path=pg_catalog,private",
+      "file": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "include_stack": [],
+      "order": 4894,
+      "source_file_sha256": "dc539089fae0cd1a8baf4765a89cea9ff1d1e8039200ecda5d80371dda2335dd",
+      "definition_sha256": "552dc66c933018bf3b630333188b05206571a991c73e00e4cf84e7f3eacf3d9e",
+      "body_sha256": "8258acafe54f7a73ecaf33de0690b16f4a0d75f96a8e66235d783f0191a91a30",
+      "saved": "input/private_bpay_next_workbench_ensure_metadata_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_group_contribution_v1",
+      "inputTypes": "text",
+      "id": "private.bpay_next_workbench_group_contribution_v1(text)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_group_contribution_v1(p_group_key text) returns setof private.bpay_next_workbench_delta language plpgsql stable security definer set search_path=pg_catalog,private",
+      "file": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "include_stack": [],
+      "order": 4881,
+      "source_file_sha256": "9212749c48615fac296a1af071ad1b7bb187bfc19c92bcba5021bf4fdc602391",
+      "definition_sha256": "23f3d98d15fa09f4b5fb6c6216596b586f4c1331141570fb20d79b6db4ad701b",
+      "body_sha256": "16801cf535278c26b6a416d0ace41f75c3cd04ac655c702b4ad3a21338996ea8",
+      "saved": "input/private_bpay_next_workbench_group_contribution_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_work_members_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_work_members_v1(p_work_id uuid,p_revision_id uuid) returns table(component_key text,approved_line_id uuid,approved_segment_id uuid,segment_key text, component_kind text,tax_treatment text,work_date date,approved_quantity numeric,unit_label text, approved_amount numeric,realised_amount numeric,held_amount numeric,source_pay_channel text, parent_complete boolean,segment_attribution_complete boolean) language plpgsql security definer set search_path=pg_catalog,private",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "include_stack": [],
+      "order": 5531,
+      "source_file_sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17",
+      "definition_sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6",
+      "body_sha256": "c894fa3bfe776d647bbbb9074e88490e3a84bb45d518736032313bf2bc6f50f6",
+      "saved": "input/private_bpay_next_workbench_work_members_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_refresh_work_core_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_refresh_work_core_v1(p_work_id uuid) returns void language plpgsql security definer set search_path=pg_catalog,private",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "include_stack": [],
+      "order": 5532,
+      "source_file_sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522",
+      "definition_sha256": "39596ef09ff413e81292f7f0bbea02df551730f343a2687c69ff8ae39b8a2769",
+      "body_sha256": "450936da32dcb9de79b266350ecdf71f0f6ecc1f4ace8441a15868d8cd6a30d7",
+      "saved": "input/private_bpay_next_workbench_refresh_work_core_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_kind_page_v1",
+      "inputTypes": "text,jsonb,jsonb,integer",
+      "id": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_kind_page_v1( p_kind text,p_scope jsonb,p_after jsonb,p_limit integer ) returns jsonb language plpgsql stable security invoker set search_path=pg_catalog,private,public set statement_timeout='5s'",
+      "file": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+      "include_stack": [],
+      "order": 5608,
+      "source_file_sha256": "a75f4c3d2c494cf79742e01c1a0b56aaf7d5b3c31401afbfc4993ffad1ae4310",
+      "definition_sha256": "6d3caaedc59467e3e482bc9deec69ae4032757004dbebcba40b9f0c894320647",
+      "body_sha256": "3087aa60b4cd612523515726ca50ea07ad06334663f0035fb9c86ac2b9961a3d",
+      "saved": "input/private_bpay_next_workbench_kind_page_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.bpay_next_workbench_page_v1",
+      "inputTypes": "jsonb",
+      "id": "public.bpay_next_workbench_page_v1(jsonb)",
+      "offset": 0,
+      "header": "public.bpay_next_workbench_page_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public set statement_timeout='5s'",
+      "file": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+      "include_stack": [],
+      "order": 5609,
+      "source_file_sha256": "a75f4c3d2c494cf79742e01c1a0b56aaf7d5b3c31401afbfc4993ffad1ae4310",
+      "definition_sha256": "7f4938e853ab8cd1f63f2ce901c632c0ea6c909ed89f10a98f69ac9578c438bb",
+      "body_sha256": "6661a2e39350cb855d89dd17ed57eee084624b375c09bedef20995b6ce9d99d7",
+      "saved": "input/public_bpay_next_workbench_page_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_create_preparation_v1",
+      "inputTypes": "uuid,uuid,date,jsonb,uuid",
+      "id": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_create_preparation_v1( p_run_id uuid,p_actor_user_id uuid,p_pay_date date,p_descriptor jsonb,p_command_id uuid ) returns jsonb language sql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+      "include_stack": [],
+      "order": 5202,
+      "source_file_sha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6",
+      "definition_sha256": "fe7be7f9096f51bb181e678225ff24daf4c97d44f1b65035bf20caab5d9f4f98",
+      "body_sha256": "2396d1fca8096ee4782c4b3203cd40e9b0bb3728deeb8636307d51311bef2722",
+      "saved": "input/private_bpay_next_create_preparation_v1__5_args.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_refresh_group_display_v1",
+      "inputTypes": "text",
+      "id": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_refresh_group_display_v1(p_group_key text) returns void language plpgsql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "include_stack": [],
+      "order": 5581,
+      "source_file_sha256": "9cf9e4054bfd6c7c06babc1cfd8fdc0fe3280bf291e0ac059c009906c458ddec",
+      "definition_sha256": "d71fd36e08464e9744898c49d6607875f9f80b36a79d874f5734e1cf4f96612f",
+      "body_sha256": "b04434b83d5f519852486430a2dfefdd3c4adb6c00ac187c763596b94cc9748d",
+      "saved": "input/private_bpay_next_workbench_refresh_group_display_v1.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_create_preparation_v1",
+      "inputTypes": "uuid,uuid,date,jsonb,uuid,jsonb",
+      "id": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "offset": 0,
+      "header": "private.bpay_next_create_preparation_v1( p_run_id uuid,p_actor_user_id uuid,p_pay_date date,p_descriptor jsonb,p_command_id uuid,p_guard jsonb ) returns jsonb language plpgsql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "include_stack": [],
+      "order": 5568,
+      "source_file_sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3",
+      "definition_sha256": "615f734caee9d73872deabc50685a82b1225997f17defad8634e3a35da194a47",
+      "body_sha256": "5e8de9cdfa17c4a60b18f44fd69a386ce65e5fbddc473f0a612058be2e531153",
+      "saved": "input/private_bpay_next_create_preparation_v1__6_args.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_source_query_segment_exclusions_v1",
+      "inputTypes": "uuid,jsonb",
+      "id": "private.bpay_next_source_query_segment_exclusions_v1(uuid,jsonb)",
+      "offset": 0,
+      "header": "private.bpay_next_source_query_segment_exclusions_v1(p_revision_id uuid,p_gate jsonb) returns jsonb language plpgsql stable security invoker set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "include_stack": [],
+      "order": 5276,
+      "source_file_sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+      "definition_sha256": "f00b841fd02c29101e5fa8e6249428d98d09f7da5e05551e5c8cf799d8e624f5",
+      "body_sha256": "50a513e1bc632292fd48ed91a8357c5c6f50bed4aee1707f854eacae3e58bf4e",
+      "saved": "input/private_bpay_next_source_query_segment_exclusions_v1.sqlinc"
+    }
+  ],
+  "direct_source_file_pins": [
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "bytes": 9345,
+      "sha256": "202aee306e61e6150fa2978e8594c0aa38863b7d6f458888a59a99ce02702652"
+    },
+    {
+      "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "bytes": 196240,
+      "sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+      "bytes": 26267,
+      "sha256": "e8415355b5a11f2e75e0bc532f5610b920d542799b89725bba25493d1f1af641"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "bytes": 4718,
+      "sha256": "18317d4152fa8e8df4c17ac7895046453a3e26d534b10c45b1fafb50b91a983d"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql",
+      "bytes": 955,
+      "sha256": "fb70e23a80c7686606b5cbf8f17e2878ca37224f5752067d903e9a253a3cbfa8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "bytes": 184614,
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "bytes": 68504,
+      "sha256": "2fe6c4c816613aaa554d012289124c47219fd228a2af229c2ceabdb8f0cc305b"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "bytes": 55357,
+      "sha256": "dc539089fae0cd1a8baf4765a89cea9ff1d1e8039200ecda5d80371dda2335dd"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "bytes": 36867,
+      "sha256": "9212749c48615fac296a1af071ad1b7bb187bfc19c92bcba5021bf4fdc602391"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "bytes": 9154,
+      "sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "bytes": 41811,
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+      "bytes": 185122,
+      "sha256": "a75f4c3d2c494cf79742e01c1a0b56aaf7d5b3c31401afbfc4993ffad1ae4310"
+    },
+    {
+      "file": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+      "bytes": 55164,
+      "sha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "bytes": 32020,
+      "sha256": "9cf9e4054bfd6c7c06babc1cfd8fdc0fe3280bf291e0ac059c009906c458ddec"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "bytes": 78316,
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    }
+  ],
+  "schema_and_selected_native_raw_pins": [
+    {
+      "file": "supabase/migrations/10102026_1252_banking_pay_next_workbench_summary.sql",
+      "saved": "input/10102026_1252_banking_pay_next_workbench_summary.sql",
+      "bytes": 22502,
+      "sha256": "aa9a42864893856c9ae02479edb1172cdf39c764a6ca2e9e77f2fd11253affab"
+    },
+    {
+      "file": "supabase/migrations/10102026_1946_banking_pay_next_candidate_group_display.sql",
+      "saved": "input/10102026_1946_banking_pay_next_candidate_group_display.sql",
+      "bytes": 11407,
+      "sha256": "08040425d1d1e603782b9c157421df33adf64075ff50f79cd0329d239df861b7"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "saved": "input/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "bytes": 41811,
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "saved": "input/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "bytes": 9154,
+      "sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17"
+    },
+    {
+      "file": "supabase/migrations/04102026_0300_banking_pay_next_case_instruction_core.sql",
+      "saved": "input/04102026_0300_banking_pay_next_case_instruction_core.sql",
+      "bytes": 52863,
+      "sha256": "04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "saved": "input/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "bytes": 78316,
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    }
+  ],
+  "absent_selected_names": [
+    "public.weekly_source_first_authorise_atomic_v1",
+    "private.bpay_next_workbench_totals_v1",
+    "private.bpay_next_workbench_dirty_group_v1",
+    "private.bpay_next_workbench_mark_dirty_v1",
+    "private.bpay_next_workbench_metadata_v1",
+    "private.bpay_next_workbench_require_service_v1",
+    "private.bpay_next_workbench_display_kind_page_v1",
+    "private.bpay_next_selection_segments_page_v1",
+    "private.bpay_next_seal_selected_segments_v1",
+    "private.bpay_next_capture_components_page_v1"
+  ],
+  "guarded_pg_get_functiondef_read_sites": 22,
+  "final_effective_current_body_and_native_catalogue_proof": false,
+  "native_calls": 0,
+  "Banking_owner_modified": false,
+  "not_implemented_adapter": true
+}

@@ -1,0 +1,52 @@
+create or replace function private.bpay_next_workbench_group_contribution_v1(p_group_key text)
+returns setof private.bpay_next_workbench_delta
+language plpgsql stable security definer set search_path=pg_catalog,private
+as $function$
+begin
+  perform private.bpay_next_workbench_require_next_v1();
+  return query
+    with scoped as (
+      select g.candidate_id,cs.client_id,cs.client_scope,ch.pay_channel,sec.section,
+        i.group_key,i.component_key,i.member_kind,i.member_key,i.portion_kind,i.section item_section,
+        i.selectable,i.is_selected,i.direction,i.payroll_stage,i.amount_known,i.selected_amount_known,
+        (g.complete and g.certified_zero and i.member_kind='GROUP_EVIDENCE') certified_zero_evidence,
+        i.reason_code,i.gross_due_source_ex_vat,i.nominal_source_ex_vat,i.approved_source_ex_vat,i.realised_source_ex_vat,
+        i.active_reserved_source_ex_vat,i.included_source_ex_vat,i.excluded_source_ex_vat,
+        i.recovery_source_ex_vat,i.deduction_balance_source_ex_vat,i.selected_source_ex_vat
+      from private.bpay_next_workbench_item i
+      join private.bpay_next_workbench_group g on g.group_key=i.group_key
+      cross join lateral(select distinct v.client_id,v.client_scope from (values(g.client_id,g.client_id::text),(null::uuid,'ALL'::text)) v(client_id,client_scope)
+        where v.client_scope is not null) cs
+      cross join lateral(select distinct v.pay_channel from (values(g.target_pay_channel),('ALL'::text)) v(pay_channel)
+        where v.pay_channel is not null) ch
+      cross join lateral(select distinct v.section from (values(i.section),('ALL'::text)) v(section)) sec
+      where i.group_key=p_group_key
+    )
+    select candidate_id,client_id,client_scope,pay_channel,section,
+      count(distinct group_key)::bigint,
+      count(*) filter(where member_kind<>'GROUP_EVIDENCE')::bigint,
+      count(distinct (component_key,member_kind,member_key)) filter(where member_kind<>'GROUP_EVIDENCE')::bigint,
+      count(*) filter(where selectable and direction='PAYMENT')::bigint,
+      count(distinct (component_key,member_kind,member_key)) filter(where is_selected)::bigint,
+      count(*) filter(where reason_code='SNOOZED')::bigint,
+      count(*) filter(where portion_kind='RESERVED' or (portion_kind='WITHDRAWN' and active_reserved_source_ex_vat>0))::bigint,
+      count(*) filter(where reason_code in ('PAY_QUERY_OPEN','PAY_QUERY_UNAVAILABLE'))::bigint,
+      count(*) filter(where item_section='BLOCKED')::bigint,
+      count(distinct (component_key,member_kind,member_key)) filter(where selectable and direction='DEDUCTION')::bigint,
+      count(*) filter(where not amount_known and not certified_zero_evidence)::bigint,
+      count(*) filter(where is_selected and not selected_amount_known)::bigint,
+      coalesce(sum(included_source_ex_vat) filter(where item_section='READY' and direction='PAYMENT' and payroll_stage='GROSS_ADD'),0)::numeric,
+      coalesce(sum(gross_due_source_ex_vat) filter(where item_section='WAITING' and direction='PAYMENT' and payroll_stage='GROSS_ADD' and portion_kind<>'RESERVED'),0)::numeric,
+      coalesce(sum(included_source_ex_vat) filter(where item_section='READY' and direction='PAYMENT' and payroll_stage='NET_ADD'),0)::numeric,
+      coalesce(sum(nominal_source_ex_vat) filter(where item_section='WAITING' and direction='PAYMENT' and payroll_stage='NET_ADD' and portion_kind<>'RESERVED'),0)::numeric,
+      coalesce(sum(deduction_balance_source_ex_vat) filter(where direction='DEDUCTION' and payroll_stage='GROSS_DEDUCT'),0)::numeric,
+      coalesce(sum(deduction_balance_source_ex_vat) filter(where direction='DEDUCTION' and payroll_stage='NET_DEDUCT'),0)::numeric,
+      coalesce(sum(approved_source_ex_vat),0)::numeric,
+      coalesce(sum(realised_source_ex_vat),0)::numeric,
+      coalesce(sum(active_reserved_source_ex_vat),0)::numeric,
+      coalesce(sum(excluded_source_ex_vat),0)::numeric,
+      coalesce(sum(recovery_source_ex_vat),0)::numeric,
+      coalesce(sum(selected_source_ex_vat) filter(where is_selected and selected_amount_known),0)::numeric
+    from scoped group by candidate_id,client_id,client_scope,pay_channel,section;
+end
+$function$;

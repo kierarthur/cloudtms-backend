@@ -1,0 +1,26 @@
+{
+  "source_only": true,
+  "inspected_source_checks": 9,
+  "pass": 9,
+  "fail": 0,
+  "syntax_pass": 3,
+  "exact_current_literal_owner_snapshots": 17,
+  "selected_overload_saved_paths_unique": true,
+  "current_source_counts": [
+    1484,
+    1745,
+    2160
+  ],
+  "guarded_body_reads": 22,
+  "final_effective_body_native_catalogue_proof": false,
+  "new_functions": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "Banking_owner_changed": false,
+  "implemented_adapter": false,
+  "actual_SQL_or_native_calls": 0,
+  "credential_findings": 0,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "limitation": "Native source-input and finite read-only adapter construction evidence; no universal or positive native/runtime verdict."
+}

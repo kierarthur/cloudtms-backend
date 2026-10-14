@@ -1,0 +1,6 @@
+create or replace function private.bpay_next_create_preparation_v1(
+ p_run_id uuid,p_actor_user_id uuid,p_pay_date date,p_descriptor jsonb,p_command_id uuid
+) returns jsonb language sql security definer set search_path=pg_catalog,private,public
+as $function$
+ select private.bpay_next_create_preparation_v1(p_run_id,p_actor_user_id,p_pay_date,p_descriptor,p_command_id,null::jsonb);
+$function$;
