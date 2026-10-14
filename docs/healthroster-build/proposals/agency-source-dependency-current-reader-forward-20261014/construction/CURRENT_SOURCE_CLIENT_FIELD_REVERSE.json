@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "native": false,
+  "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+  "current_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "current_source_path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+  "current_file_bytes": 20116,
+  "current_file_sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+  "current_definition_sha256": "bd83ccd7668ecc00910890dcaf209dbdfb8d7c2aced6f433c61c9ac70b5ab02f",
+  "forward_sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60",
+  "hunks": [
+    {
+      "before": "select root.timesheet_id,root.client_id,contract.candidate_id,root.contract_id,root.booking_id",
+      "after": "select root.timesheet_id,contract.client_id as client_id,contract.candidate_id,root.contract_id,root.booking_id"
+    }
+  ],
+  "full_reverse": true,
+  "scope_predicates_unchanged": true,
+  "footer_hash_guards_unchanged": true,
+  "new_signature": false,
+  "schema_defect": "Physical public.timesheets has no client_id; derive the unchanged DTO alias from the existing real Contract join.",
+  "no_null_fallback": true,
+  "native_seal": null,
+  "mount_ready": false
+}

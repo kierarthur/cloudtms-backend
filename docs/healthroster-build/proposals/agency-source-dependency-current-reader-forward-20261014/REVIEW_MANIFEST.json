@@ -1,0 +1,103 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "independent_review_pending": true,
+  "entries": [
+    {
+      "path": "HANDBACK.md",
+      "bytes": 1971,
+      "sha256": "d29ebfd8c2292cc8578928dec96c2e31d5fca364db00acdd3efcc8dc35973337"
+    },
+    {
+      "path": "ORIGINAL_EVIDENCE_SOURCE_RECONCILIATION.md",
+      "bytes": 1826,
+      "sha256": "f450319bd5116548a79c882689974e74171e147783133ad69a57083a2631349a"
+    },
+    {
+      "path": "PURE_TEST_OUTPUT.txt",
+      "bytes": 4671,
+      "sha256": "36d1cba1663090628d6c6a15de2f523a3f3e8c8c3e42e38da33d84f4f85f3bd0"
+    },
+    {
+      "path": "SOURCE_ARBITER_INTERFACE_REQUIREMENTS.md",
+      "bytes": 2291,
+      "sha256": "39621ca148af279a44e3ccaaf49872b29048753dd77e00007ccccea7f271a5eb"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 3507,
+      "sha256": "e1ca09292ee2e837a09ed592b10c8c0b8ab0bd6c3e10db3db51e6143c7f2decd"
+    },
+    {
+      "path": "construction/01_native_source_dependency_witness.sqlinc",
+      "bytes": 12185,
+      "sha256": "0f475d7896b7fffe553fdc5c164d14a6cfef680609c01cb3857d69f2c4cdb155"
+    },
+    {
+      "path": "construction/02_complete_current_source_facts_with_contract_client.sqlinc",
+      "bytes": 19291,
+      "sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60"
+    },
+    {
+      "path": "construction/CURRENT_SOURCE_CLIENT_FIELD_REVERSE.json",
+      "bytes": 1245,
+      "sha256": "afd4875888a2c68896b33453bdd48a4b8c77f0874d07f53a0b51013fd00a94db"
+    },
+    {
+      "path": "construction/CURRENT_SOURCE_FACTS_BEFORE.sql.txt",
+      "bytes": 19274,
+      "sha256": "bd83ccd7668ecc00910890dcaf209dbdfb8d7c2aced6f433c61c9ac70b5ab02f"
+    },
+    {
+      "path": "construction/CURRENT_TIMESHEETS_CONTRACT_SCHEMA.json",
+      "bytes": 34882,
+      "sha256": "700dde50aca972314d813f7aa865ddf5bca06990dbf48e5181cd0664d3d6b7ed"
+    },
+    {
+      "path": "construction/SOURCE_RAW_ID_DDL_MAPPING.json",
+      "bytes": 325875,
+      "sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804"
+    },
+    {
+      "path": "construction/source-dependencies.test.mjs",
+      "bytes": 7598,
+      "sha256": "657234ae09f0cb558d12fd3b473c40e5d3979504e76566f29731ac2557286ab7"
+    },
+    {
+      "path": "generators/prepare-source-dependency-reader-forward.mjs",
+      "bytes": 4123,
+      "sha256": "da27da45bce8237f18a3f97e07a401dbe1002085d8ca576ddcbfc4c390d28d52"
+    },
+    {
+      "path": "reference/06_agency_immutable_submitted_claim.sqlinc",
+      "bytes": 5605,
+      "sha256": "90d4ad24cbca8d96a9125a2731fe3b92222d4e2931b3c01cfbacc839f1e6fe15"
+    },
+    {
+      "path": "reference/11_03_cas_operational_projection.sqlinc",
+      "bytes": 20116,
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7"
+    },
+    {
+      "path": "reference/14_complete_native_snapshot_assembler.sqlinc",
+      "bytes": 123180,
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79"
+    },
+    {
+      "path": "reference/15_agency_original_claim_recheck.sqlinc",
+      "bytes": 9726,
+      "sha256": "08c20fc4c0b9723c334b282a56940782b4cb8f79cc04463afe0cb5b49b464e14"
+    },
+    {
+      "path": "reference/21072026_1820_00_import_review_internal_core.sql",
+      "bytes": 275109,
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9"
+    },
+    {
+      "path": "reference/21_agency_legacy_original_document.sqlinc",
+      "bytes": 15019,
+      "sha256": "4dce5030b0706d67b5323442799c26a03e4f77c42a1f958af8927f87b36b57e5"
+    }
+  ]
+}

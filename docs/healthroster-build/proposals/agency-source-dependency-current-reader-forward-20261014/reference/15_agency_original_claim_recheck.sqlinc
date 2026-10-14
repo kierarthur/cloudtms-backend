@@ -1,0 +1,121 @@
+-- Recheck the native original claim through immutable workflow/component owners.
+-- The ordinary current-submission reader is unchanged and still rejects revoke.
+create or replace function private.weekly_source_agency_original_claim_recheck_v1(
+ p_request_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ w public.candidate_submission_workflows%rowtype;
+ h public.candidate_submission_components%rowtype; sig public.candidate_submission_components%rowtype;
+ t public.timesheets%rowtype; capture jsonb; stored jsonb; witness jsonb;
+ input jsonb; patch jsonb; schedule jsonb; actual jsonb; count_hours integer;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ capture:=r.native_receipts->'original_capture';stored:=capture->'original_submitted_claim';
+ if private.weekly_source_agency_change_request_sha256_v1(r.contract_week_id,r.reason,r.initial_row_signature,
+  r.request_key,r.actor_user_id,capture) is distinct from r.request_sha256 then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_REQUEST_DIGEST_INVALID' using errcode='55000'; end if;
+ select * into strict t from public.timesheets where timesheet_id=r.initial_timesheet_id;
+ if r.current_timesheet_id is distinct from r.initial_timesheet_id or t.is_current is distinct from true
+  or t.version is distinct from r.initial_timesheet_version or t.contract_id is distinct from r.contract_id
+  or t.week_ending_date is distinct from r.week_ending_date or t.sheet_scope::text is distinct from 'WEEKLY'
+  or t.line_type::text is distinct from 'HOURS' or t.archived_at_utc is not null
+  or (t.revoked_at is not null and coalesce((t.revoked_reason='TIMESHEET_UNAUTHORISE'
+    and t.revoked_by=r.native_receipts#>>'{unauthorise,phase_actor_user_id}'
+    and r.native_receipts#>>'{unauthorise,result,timesheet_id}'=t.timesheet_id::text
+    and r.native_receipts#>>'{unauthorise,result,ok}'='true'
+    and r.phase in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT')),false) is distinct from true) then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_SCOPE_CHANGED' using errcode='40001'; end if;
+ if stored->>'available' is distinct from 'true' then
+  return jsonb_build_object('available',false,'reason',coalesce(stored->>'reason','ORIGINAL_CLAIM_PRODUCER_UNAVAILABLE'));
+ end if;
+ if stored->>'submission_state'='NO_ORIGINAL_SUBMISSION' then
+  if stored#>>'{native_submission,actual_submitted}' is distinct from 'false'
+   or stored#>>'{native_submission,support_state}' is distinct from 'NOT_SUBMITTED'
+   or stored->>'claim_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_AGENCY_NO_ORIGINAL_SUBMISSION_V1',jsonb_build_object('timesheet_id',r.initial_timesheet_id,
+     'timesheet_version',r.initial_timesheet_version,'native_submission',stored->'native_submission')),'hex')
+   or exists(select 1 from public.candidate_submission_workflows workflow
+    where workflow.target_timesheet_id=t.timesheet_id and workflow.candidate_id=r.candidate_id
+     and workflow.worker_submitted_at_utc is not null and workflow.cancelled_at_utc is null
+     and workflow.workflow_kind in('CONTRACT_HOURS','CONTRACT_COMBINED')
+     and workflow.state in('WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+       'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
+       'AWAITING_PAPER_RETURN','RECEIVED','FINALISED')) then
+   raise exception 'AGENCY_CHANGE_ORIGINAL_SUBMISSION_CHANGED' using errcode='40001'; end if;
+  -- This is a proved original absence, not a paid quantity or signed claim.
+  return jsonb_build_object('available',true,'submission_state','NO_ORIGINAL_SUBMISSION',
+   'claim_sha256',stored->'claim_sha256','claim',null);
+ end if;
+ if stored->>'submission_state' is distinct from 'IMMUTABLE_CANDIDATE_CLAIM'
+  or jsonb_typeof(stored->'claim_witness') is distinct from 'object' then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_PRODUCER_UNAVAILABLE' using errcode='55000'; end if;
+ witness:=stored->'claim_witness';
+ select * into strict w from public.candidate_submission_workflows
+  where id=(witness->>'workflow_id')::uuid and generation=(witness->>'workflow_generation')::integer
+   and target_timesheet_id=r.initial_timesheet_id and candidate_id=r.candidate_id and contract_id=r.contract_id
+   and environment=r.environment
+   and week_ending_date=r.week_ending_date and scope='WEEKLY'
+   and workflow_kind in('CONTRACT_HOURS','CONTRACT_COMBINED') and worker_submitted_at_utc is not null
+   and cancelled_at_utc is null and state in('WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+    'READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+    'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED','FINALISED');
+ if jsonb_typeof(w.immutable_submission_json) is distinct from 'object'
+  or octet_length(w.immutable_submission_sha256) is distinct from 32
+  or private._candidate_sha256_jsonb_v1(w.immutable_submission_json) is distinct from w.immutable_submission_sha256
+  or encode(w.immutable_submission_sha256,'hex') is distinct from witness->>'submission_sha256'
+  or (t.candidate_workflow_id is not null and (t.candidate_workflow_id is distinct from w.id
+    or t.candidate_workflow_generation is distinct from w.generation)) then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_SUBMISSION_CHANGED' using errcode='40001'; end if;
+ select count(*) into count_hours from public.candidate_submission_components component
+  where component.workflow_id=w.id and component.workflow_generation=w.generation
+   and component.component_kind='HOURS_TIMESHEET' and component.required
+   and component.state='IMMUTABLE' and component.immutable_at_utc is not null
+   and (component.timesheet_id is null or component.timesheet_id=t.timesheet_id);
+ select * into strict h from public.candidate_submission_components where id=(witness->>'hours_component_id')::uuid
+  and workflow_id=w.id and workflow_generation=w.generation and component_kind='HOURS_TIMESHEET'
+  and required and state='IMMUTABLE' and immutable_at_utc is not null
+  and (timesheet_id is null or timesheet_id=t.timesheet_id);
+ select * into strict sig from public.candidate_submission_components where id=w.candidate_signature_component_id
+  and id=(witness->>'candidate_signature_component_id')::uuid and workflow_id=w.id and workflow_generation=w.generation
+  and document_role='CANDIDATE_SIGNATURE' and state='IMMUTABLE' and immutable_at_utc is not null;
+ if count_hours<>1 or w.candidate_signed_at_utc is null or nullif(btrim(sig.storage_key),'') is null
+  or octet_length(sig.source_content_sha256) is distinct from 32
+  or sig.source_content_sha256 is distinct from w.candidate_signature_sha256 then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_COMPONENT_CHANGED' using errcode='40001'; end if;
+ input:=coalesce(w.immutable_submission_json->'hours_submission',w.immutable_submission_json);
+ patch:=coalesce(input->'timesheet_patch_json',input);
+ schedule:=coalesce(patch->'actual_schedule_json',input#>'{canonical_tsfin_snapshot,actual_schedule_json}');
+ if jsonb_typeof(schedule) is distinct from 'array' or jsonb_array_length(schedule)>100
+  or octet_length(schedule::text)>65536 then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_BOUND_INVALID' using errcode='55000'; end if;
+ actual:=jsonb_build_object('authority','CANDIDATE_IMMUTABLE_HOURS','timesheet_id',t.timesheet_id,
+  'timesheet_version',r.initial_timesheet_version,'candidate_id',r.candidate_id,'client_id',r.client_id,
+  'contract_id',r.contract_id,'week_ending_date',r.week_ending_date,'workflow_id',w.id,'workflow_generation',w.generation,
+  'submission_sha256',encode(w.immutable_submission_sha256,'hex'),'hours_component_id',h.id,
+  'candidate_signature_component_id',sig.id,'submitted_at_utc',w.worker_submitted_at_utc,
+  'signed_at_utc',w.candidate_signed_at_utc,'actual_schedule_json',schedule);
+ -- Validate the actual native instants, while retaining the original emitted
+ -- timestamp strings so a different session TimeZone cannot rewrite claim bytes.
+ if actual-array['actual_schedule_json','submitted_at_utc','signed_at_utc']
+    is distinct from witness-array['submitted_at_utc','signed_at_utc']
+  or (witness->>'submitted_at_utc')::timestamptz is distinct from w.worker_submitted_at_utc
+  or (witness->>'signed_at_utc')::timestamptz is distinct from w.candidate_signed_at_utc then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_CHANGED' using errcode='40001'; end if;
+ actual:=witness||jsonb_build_object('actual_schedule_json',schedule);
+ if encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',actual),'hex')
+    is distinct from stored->>'claim_sha256' then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_CHANGED' using errcode='40001'; end if;
+ return jsonb_build_object('available',true,'submission_state','IMMUTABLE_CANDIDATE_CLAIM',
+  'claim_sha256',stored->'claim_sha256','claim',actual);
+exception when no_data_found or too_many_rows or invalid_text_representation
+ or invalid_datetime_format or datetime_field_overflow then
+ raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_original_claim_recheck_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_original_claim_recheck_v1(uuid)
+ from public,anon,authenticated,service_role;

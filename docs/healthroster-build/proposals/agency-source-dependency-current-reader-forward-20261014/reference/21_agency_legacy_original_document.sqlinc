@@ -1,0 +1,187 @@
+-- Read-only original-document VIEW witness. It is deliberately not the
+-- worker's immutable submitted-hours claim. It grants no paid writer, amount,
+-- authorisation, source membership or protection capability. Current capture
+-- uses the actual submission reader and the actual native snapshot assembler.
+-- Historical reads use ONLY the document captured by the planned request.
+create or replace function private.weekly_source_agency_legacy_original_document_v1(
+ p_timesheet_id uuid,p_request_id uuid,p_actual_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+ t public.timesheets%rowtype; c public.contracts%rowtype;
+ d public.invoice_document_versions%rowtype;
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ capture jsonb; stored jsonb; witness jsonb; submission jsonb; model jsonb;
+ actual_snapshot record; doc_id uuid; days jsonb; shifts jsonb; signing jsonb;
+ source_fingerprint text; receipt jsonb; count_rows bigint;
+ snapshot_keys constant text[]:=array['snapshot_schema_version','request_key','presentation_model',
+  'presentation_model_hash','timesheet_sources','supporting_sources','supporting_manifest','higher_rate_support'];
+ signing_keys constant text[]:=array['submission_mode','r2_nurse_key','r2_auth_key','img_sha256_nurse',
+  'img_sha256_auth','auth_name','auth_job_title','authorised_at_server','qr_status','qr_scanned_at',
+  'qr_signed_hash','qr_signed_at_utc','manual_pdf_r2_key','manual_document_asset_id'];
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if private.weekly_source_pay_actor_allowed_v1(p_actual_actor_user_id) is distinct from true then
+  raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501'; end if;
+ select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+ select * into strict c from public.contracts where id=t.contract_id;
+ if t.is_current is distinct from true or t.archived_at_utc is not null
+  or t.sheet_scope::text is distinct from 'WEEKLY' or t.line_type::text is distinct from 'HOURS'
+  or t.week_ending_date is null or c.candidate_id is null or c.client_id is null then
+  raise exception 'AGENCY_LEGACY_ORIGINAL_SCOPE_CHANGED' using errcode='40001'; end if;
+ if p_request_id is null then
+  if t.revoked_at is not null then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_CURRENT_SUBMISSION_REQUIRED' using errcode='40001'; end if;
+  submission:=private.weekly_source_actual_timesheet_submission_v1(t.timesheet_id);
+  if submission->>'actual_submitted' is distinct from 'true'
+   or submission->>'support_state' is distinct from 'PROVED'
+   or submission->>'authority' is distinct from 'VERIFIED_LEGACY_SOURCE_DOCUMENT'
+   or submission->>'timesheet_id' is distinct from t.timesheet_id::text
+   or submission->>'timesheet_version' is distinct from t.version::text
+   or submission->>'candidate_id' is distinct from c.candidate_id::text
+   or submission->>'client_id' is distinct from c.client_id::text
+   or submission->>'contract_id' is distinct from c.id::text
+   or submission->>'week_ending_date' is distinct from t.week_ending_date::text
+   or not pg_input_is_valid(coalesce(submission->>'document_version_id',''),'uuid') then
+   return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_LEGACY_ORIGINAL_DOCUMENT_VIEW_V1',
+    'available',false,'reason','GENUINE_LEGACY_SUBMISSION_UNPROVED','document_view',null,'worker_claim_proved',null);
+  end if;
+  doc_id:=(submission->>'document_version_id')::uuid;
+  source_fingerprint:=submission->>'source_evidence_fingerprint';
+  if source_fingerprint is null or source_fingerprint!~'^[0-9a-f]{64}$'
+   or doc_id is distinct from t.current_document_version_id then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_DOCUMENT_CHANGED' using errcode='40001'; end if;
+ else
+  select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+  capture:=r.native_receipts->'original_capture';stored:=capture->'original_legacy_document';
+  if private.weekly_source_agency_change_request_sha256_v1(r.contract_week_id,r.reason,r.initial_row_signature,
+   r.request_key,r.actor_user_id,capture) is distinct from r.request_sha256
+   or r.initial_timesheet_id is distinct from t.timesheet_id or r.current_timesheet_id is distinct from t.timesheet_id
+   or r.initial_timesheet_version is distinct from t.version or r.current_timesheet_version is distinct from t.version
+   or r.candidate_id is distinct from c.candidate_id or r.client_id is distinct from c.client_id
+   or r.contract_id is distinct from c.id or r.week_ending_date is distinct from t.week_ending_date
+   or stored->>'document_state' is distinct from 'FROZEN_DOCUMENT_VIEW'
+   or stored->>'available' is distinct from 'true' or jsonb_typeof(stored->'document_witness') is distinct from 'object' then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_CAPTURE_INVALID' using errcode='55000'; end if;
+  -- Read permission belongs to the real current reader, not the original
+  -- creator or a former phase actor. A read never impersonates either actor.
+  perform private.weekly_source_office_authority_v1(p_actual_actor_user_id,'VIEW_PAY_WORK',
+   r.source_group_id,r.client_id,r.week_ending_date);
+  witness:=stored->'document_witness';
+  if witness->>'authority' is distinct from 'VERIFIED_LEGACY_FROZEN_TIMESHEET_DOCUMENT'
+   or not pg_input_is_valid(coalesce(witness->>'document_version_id',''),'uuid') then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_CAPTURE_INVALID' using errcode='55000'; end if;
+  doc_id:=(witness->>'document_version_id')::uuid;
+  source_fingerprint:=witness->>'source_evidence_fingerprint';
+  -- Generic unauthorise may clear its authorisation clock. It is allowed only
+  -- through this request's actual recorded native unauthorise result; every
+  -- signature/QR/asset identity remains the originally captured value.
+  if t.revoked_at is not null and coalesce((t.revoked_reason='TIMESHEET_UNAUTHORISE'
+   and t.revoked_by=r.native_receipts#>>'{unauthorise,phase_actor_user_id}'
+   and r.native_receipts#>>'{unauthorise,result,timesheet_id}'=t.timesheet_id::text
+   and r.native_receipts#>>'{unauthorise,result,ok}'='true'
+   and r.phase in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT')),false) is distinct from true then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_SCOPE_CHANGED' using errcode='40001'; end if;
+ end if;
+ select * into strict d from public.invoice_document_versions where id=doc_id;
+ if d.entity_type is distinct from 'TIMESHEET' or d.entity_id is distinct from t.timesheet_id
+  or d.purpose is distinct from 'TIMESHEET' or d.template_version is distinct from 'timesheet-professional-v2'
+  or d.status not in('READY','SUPERSEDED') or d.ready_at_utc is null or d.verified_at_utc is null
+  or nullif(btrim(d.r2_key),'') is null or coalesce(d.sha256,'')!~'^[0-9a-f]{64}$'
+  or d.size_bytes is null or d.size_bytes<=0 or d.page_count is null or d.page_count<=0
+  or jsonb_typeof(d.snapshot_json) is distinct from 'object' or octet_length(d.snapshot_json::text)>1048576
+  or not(d.snapshot_json ?& snapshot_keys) or d.snapshot_json-snapshot_keys<>'{}'::jsonb
+  or d.snapshot_json->>'snapshot_schema_version' is distinct from 'TIMESHEET_PRESENTATION_SNAPSHOT_V5'
+  or encode(extensions.digest(convert_to(d.snapshot_json::text,'UTF8'),'sha256'),'hex') is distinct from d.snapshot_hash then
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_LEGACY_ORIGINAL_DOCUMENT_VIEW_V1',
+   'available',false,'reason','FROZEN_LEGACY_DOCUMENT_ORIGINAL_UNAVAILABLE','document_view',null,'worker_claim_proved',null);
+ end if;
+ model:=d.snapshot_json->'presentation_model';
+ if jsonb_typeof(model) is distinct from 'object'
+  or model->>'schema_version' is distinct from 'TIMESHEET_RENDER_MODEL_V2'
+  or model->>'timesheet_id' is distinct from t.timesheet_id::text
+  or model->>'sheet_scope' is distinct from 'WEEKLY'
+  or model->>'document_revision' is distinct from d.source_revision
+  or model#>>'{week_period,start_date}' is distinct from (t.week_ending_date-6)::text
+  or model#>>'{week_period,end_date}' is distinct from t.week_ending_date::text
+  or encode(extensions.digest(convert_to(model::text,'UTF8'),'sha256'),'hex')
+   is distinct from d.snapshot_json->>'presentation_model_hash' then
+  raise exception 'AGENCY_LEGACY_ORIGINAL_MODEL_CHANGED' using errcode='55000'; end if;
+ days:=model#>'{week_period,days}';
+ if jsonb_typeof(days) is distinct from 'array' or jsonb_array_length(days)<>7
+  or exists(select 1 from jsonb_array_elements(days) with ordinality day(value,ordinality)
+   where jsonb_typeof(value) is distinct from 'object' or value->>'date' is distinct from
+    (t.week_ending_date-7+ordinality::integer)::text or jsonb_typeof(value->'shift_lines') is distinct from 'array') then
+  raise exception 'AGENCY_LEGACY_ORIGINAL_WEEK_VECTOR_INVALID' using errcode='55000'; end if;
+ select count(*),coalesce(jsonb_agg(shift.value order by day.ordinality,shift.ordinality),'[]'::jsonb)
+  into count_rows,shifts from jsonb_array_elements(days) with ordinality day(value,ordinality)
+  cross join lateral jsonb_array_elements(day.value->'shift_lines') with ordinality shift(value,ordinality);
+ if count_rows not between 1 and 100 or octet_length(shifts::text)>65536
+  or exists(select 1 from jsonb_array_elements(days) day cross join lateral jsonb_array_elements(day->'shift_lines') shift
+   where jsonb_typeof(shift) is distinct from 'object' or shift->>'date' is distinct from day->>'date'
+    or nullif(shift->>'row_key','') is null or nullif(shift->>'segment_id','') is null
+    or coalesce(shift->>'display_start_local','')!~'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$'
+    or coalesce(shift->>'display_end_local','')!~'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$')
+  or (select count(distinct value->>'row_key') from jsonb_array_elements(shifts))<>count_rows then
+  raise exception 'AGENCY_LEGACY_ORIGINAL_SHIFT_VECTOR_INVALID' using errcode='55000'; end if;
+ signing:=(select jsonb_object_agg(key,value) from jsonb_each(to_jsonb(t)) where key=any(signing_keys));
+ if p_request_id is null then
+  if d.status is distinct from 'READY' or d.superseded_at_utc is not null
+   or d.source_revision is distinct from t.document_revision::text then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_CURRENT_DOCUMENT_REQUIRED' using errcode='40001'; end if;
+  -- Literal actual owner and native arguments. This is not a mapper callback,
+  -- schema equality assertion, current T0 fallback or caller-normalised vector.
+  select * into strict actual_snapshot from private._invoice_presentation_snapshot_batch(jsonb_build_array(
+   jsonb_build_object('request_key',d.snapshot_json->>'request_key','entity_type','TIMESHEET',
+    'entity_id',t.timesheet_id,'purpose','TIMESHEET','template_version',d.template_version)),transaction_timestamp());
+  if actual_snapshot.valid is distinct from true or actual_snapshot.snapshot_json is distinct from d.snapshot_json
+   or actual_snapshot.snapshot_hash is distinct from d.snapshot_hash
+   or actual_snapshot.presentation_model is distinct from model then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_NATIVE_DOCUMENT_SOURCE_CHANGED' using errcode='40001'; end if;
+  receipt:=jsonb_build_object('authority','VERIFIED_LEGACY_FROZEN_TIMESHEET_DOCUMENT','timesheet_id',t.timesheet_id,
+   'timesheet_version',t.version,'candidate_id',c.candidate_id,'client_id',c.client_id,'contract_id',c.id,
+   'week_ending_date',t.week_ending_date,'document_version_id',d.id,'document_source_revision',d.source_revision,
+   'document_template_version',d.template_version,'document_snapshot_sha256',d.snapshot_hash,
+   'presentation_model_sha256',d.snapshot_json->'presentation_model_hash','document_sha256',d.sha256,
+   'document_size_bytes',d.size_bytes,'document_page_count',d.page_count,'document_r2_key',d.r2_key,
+   'ready_at_utc',d.ready_at_utc,'verified_at_utc',d.verified_at_utc,
+   'source_evidence_fingerprint',source_fingerprint,'signing_basis',signing,'original_shift_lines',shifts);
+ else
+  if witness->>'document_source_revision' is distinct from d.source_revision
+   or witness->>'document_template_version' is distinct from d.template_version
+   or witness->>'document_snapshot_sha256' is distinct from d.snapshot_hash
+   or witness->'presentation_model_sha256' is distinct from d.snapshot_json->'presentation_model_hash'
+   or witness->>'document_sha256' is distinct from d.sha256
+   or witness->>'document_size_bytes' is distinct from d.size_bytes::text
+   or witness->>'document_page_count' is distinct from d.page_count::text
+   or witness->>'document_r2_key' is distinct from d.r2_key
+   or (witness->>'ready_at_utc')::timestamptz is distinct from d.ready_at_utc
+   or (witness->>'verified_at_utc')::timestamptz is distinct from d.verified_at_utc
+   or (signing-array['authorised_at_server','qr_scanned_at','qr_signed_at_utc']) is distinct from
+    ((witness->'signing_basis')-array['authorised_at_server','qr_scanned_at','qr_signed_at_utc'])
+   or (witness#>>'{signing_basis,qr_scanned_at}')::timestamptz is distinct from t.qr_scanned_at
+   or (witness#>>'{signing_basis,qr_signed_at_utc}')::timestamptz is distinct from t.qr_signed_at_utc
+   or (t.authorised_at_server is null and witness#>>'{signing_basis,authorised_at_server}' is not null
+    and coalesce(r.native_receipts#>>'{unauthorise,result,ok}'='true',false) is distinct from true)
+   or (t.authorised_at_server is not null and t.authorised_at_server is distinct from
+    (witness#>>'{signing_basis,authorised_at_server}')::timestamptz) then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_CAPTURED_DOCUMENT_CHANGED' using errcode='40001'; end if;
+  -- Retain captured timestamp bytes. Actual instants were checked above, so
+  -- another session TimeZone cannot manufacture a different original hash.
+  receipt:=witness||jsonb_build_object('original_shift_lines',shifts);
+  if encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_LEGACY_ORIGINAL_DOCUMENT_VIEW_V1',receipt),'hex')
+   is distinct from stored->>'document_view_sha256' then
+   raise exception 'AGENCY_LEGACY_ORIGINAL_CAPTURED_VECTOR_CHANGED' using errcode='40001'; end if;
+ end if;
+ return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_LEGACY_ORIGINAL_DOCUMENT_VIEW_V1','available',true,
+  'reason',null,'document_view',receipt,'document_view_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+   'WEEKLY_SOURCE_AGENCY_LEGACY_ORIGINAL_DOCUMENT_VIEW_V1',receipt),'hex'),'worker_claim_proved',null);
+exception when no_data_found or too_many_rows or invalid_text_representation
+ or invalid_datetime_format or datetime_field_overflow then
+ raise exception 'AGENCY_LEGACY_ORIGINAL_DOCUMENT_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_legacy_original_document_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_legacy_original_document_v1(uuid,uuid,uuid)
+ from public,anon,authenticated,service_role;

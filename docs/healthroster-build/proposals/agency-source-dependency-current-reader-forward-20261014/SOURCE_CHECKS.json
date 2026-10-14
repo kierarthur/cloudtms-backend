@@ -1,0 +1,81 @@
+{
+  "source_only": true,
+  "native": false,
+  "consumed_current_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "tests": 50,
+  "syntax": [
+    "construction/source-dependencies.test.mjs",
+    "generators/prepare-source-dependency-reader-forward.mjs"
+  ],
+  "lexical": [
+    {
+      "path": "construction/01_native_source_dependency_witness.sqlinc",
+      "statements": 3,
+      "sha256": "0f475d7896b7fffe553fdc5c164d14a6cfef680609c01cb3857d69f2c4cdb155"
+    },
+    {
+      "path": "construction/02_complete_current_source_facts_with_contract_client.sqlinc",
+      "statements": 1,
+      "sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/11_03_cas_operational_projection.sqlinc",
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "bytes": 20116
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/21072026_1820_00_import_review_internal_core.sql",
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+      "bytes": 275109
+    },
+    {
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "bytes": 123180
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/dependencies/06_agency_immutable_submitted_claim.sqlinc",
+      "commit": "28a39f4108940bc83df103c321ddf988ac9188ce",
+      "packet_path": "reference/06_agency_immutable_submitted_claim.sqlinc",
+      "sha256": "90d4ad24cbca8d96a9125a2731fe3b92222d4e2931b3c01cfbacc839f1e6fe15",
+      "bytes": 5605
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/15_agency_original_claim_recheck.sqlinc",
+      "commit": "28a39f4108940bc83df103c321ddf988ac9188ce",
+      "packet_path": "reference/15_agency_original_claim_recheck.sqlinc",
+      "sha256": "08c20fc4c0b9723c334b282a56940782b4cb8f79cc04463afe0cb5b49b464e14",
+      "bytes": 9726
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/21_agency_legacy_original_document.sqlinc",
+      "commit": "28a39f4108940bc83df103c321ddf988ac9188ce",
+      "packet_path": "reference/21_agency_legacy_original_document.sqlinc",
+      "sha256": "4dce5030b0706d67b5323442799c26a03e4f77c42a1f958af8927f87b36b57e5",
+      "bytes": 15019
+    }
+  ],
+  "current_reader_complete_reverse": true,
+  "reverse_hunks": 1,
+  "new_private_signatures": [
+    "private.weekly_source_agency_source_dependencies_v1(uuid,uuid[])"
+  ],
+  "new_tables": [],
+  "new_columns": [],
+  "public_signature_changes": [],
+  "browser_grants": [],
+  "actual_retention_calls": 0,
+  "compiled_contract_sha256": null,
+  "native_observations": null,
+  "independent_review_pending": true,
+  "mount_ready": false,
+  "raw_whitespace_pass": false
+}
