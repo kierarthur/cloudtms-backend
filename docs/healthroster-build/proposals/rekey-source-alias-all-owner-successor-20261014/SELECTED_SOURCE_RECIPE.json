@@ -1,0 +1,44 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "private_signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+  "private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "selected_source_order": [
+    {
+      "packet": "rekey-source-alias-all-owner-successor-20261014",
+      "file": "forward/00_known_source_key.sqlinc",
+      "bytes": 4123,
+      "sha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d"
+    },
+    {
+      "packet": "rekey-source-alias-current-native-successor-20261014",
+      "file": "forward/01_complete_identical_rekey_prior.sqlinc",
+      "bytes": 10758,
+      "sha256": "7243e1b99f016f22efcf5b1bbaa1a061bb2fc6f2e621c4ca24bbe0368f397eaf"
+    },
+    {
+      "packet": "rekey-source-alias-current-native-successor-20261014",
+      "file": "forward/02_complete_upload_context.sqlinc",
+      "bytes": 28750,
+      "sha256": "1a23b8da7645ed0ce0482ed1647165076c7b0d2747dba1dee3fe2c95d417e4df"
+    },
+    {
+      "packet": "rekey-source-alias-current-native-successor-20261014",
+      "file": "forward/03_complete_projection_rows.sqlinc",
+      "bytes": 69070,
+      "sha256": "14f01e7ca69c1f1ada8720194d0aa7311e2b9bd408f6865e9e563b4505a1fe60"
+    }
+  ],
+  "excluded_predecessor_leaf": "rekey-source-alias-current-native-successor-20261014/forward/00_known_source_key.sqlinc",
+  "new_signatures_beyond_frozen15": [],
+  "public_native_abis_unchanged": true,
+  "shared_banking_owner_changes": 0,
+  "stores_or_columns_added": 0,
+  "event_original_key_rewritten": false,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_paid_overlap_complete": false,
+  "full_primary_complete": false,
+  "source_and_native_gates": "REFUSAL_ABI_AND_BOUNDARY.md"
+}

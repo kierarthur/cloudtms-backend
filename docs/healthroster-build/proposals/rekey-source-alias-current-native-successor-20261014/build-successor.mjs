@@ -1,0 +1,31 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';const dir=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(dir,'../../../..'),source=path.join(path.dirname(dir),'kept-pay-identical-rekey-current-root-forward-20261014/forward'),sha=b=>createHash('sha256').update(b).digest('hex'),proofs=[];assert.ok(!fs.existsSync(path.join(dir,'FROZEN_ARTIFACT_MANIFEST.json')));
+function compose(input,file,hunks){const before=fs.readFileSync(path.join(source,input));const eol=before.includes(Buffer.from('\r\n'))?'\r\n':'\n';let s=before.toString();const actual=hunks.map(h=>({...h,before:h.before.replaceAll('\n',eol),after:h.after.replaceAll('\n',eol)}));for(const h of actual){assert.equal(s.split(h.before).length,2,h.name);s=s.replace(h.before,h.after);}const after=Buffer.from(s);for(const h of [...actual].reverse()){assert.equal(s.split(h.after).length,2);s=s.replace(h.after,h.before);}assert.deepEqual(Buffer.from(s),before);for(const side of ['before','forward'])fs.mkdirSync(path.join(dir,side),{recursive:true});fs.writeFileSync(path.join(dir,'before',file),before);fs.writeFileSync(path.join(dir,'forward',file),after);proofs.push({input:'docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/'+input,file,before_bytes:before.length,before_sha256:sha(before),after_bytes:after.length,after_sha256:sha(after),hunks:actual,unique_hunks:actual.length,whole_reverse_verified:true});}
+compose('01_identical_rekey_prior.sqlinc','01_complete_identical_rekey_prior.sqlinc',[{name:'genuine new-key rekey requires absence of every actual prior Source reference',before:`    and not exists(select 1 from public.weekly_source_upload_rows in_file
+      where in_file.upload_id=v_upload.id and in_file.external_source_key=e.profile_external_key);`,after:`    and not exists(select 1 from public.weekly_source_upload_rows in_file
+      where in_file.upload_id=v_upload.id and (in_file.external_source_key=e.profile_external_key
+        or in_file.external_source_key=old_row.external_source_key
+        or exists(select 1 from public.weekly_work_event_source_links prior_link
+          join public.weekly_source_row_resolutions prior_resolution on prior_resolution.id=prior_link.row_resolution_id
+            and prior_resolution.upload_row_id=prior_link.upload_row_id and prior_resolution.work_event_id=e.id
+            and prior_resolution.mapping_state='RESOLVED' and prior_resolution.candidate_id=e.candidate_id and prior_resolution.client_id=e.client_id
+          join public.weekly_source_upload_rows prior_row on prior_row.id=prior_link.upload_row_id
+            and prior_row.external_source_key=in_file.external_source_key
+          join public.weekly_source_uploads prior_upload on prior_upload.id=prior_row.upload_id
+            and prior_upload.source_format_profile_id=v_profile.id
+          join public.weekly_source_cycles prior_cycle on prior_cycle.id=prior_upload.source_cycle_id and prior_cycle.source_group_id=v_cycle.source_group_id
+          where prior_link.work_event_id=e.id and prior_link.link_hash=private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_WORK_EVENT_LINK_V1',jsonb_build_object('work_event_id',prior_link.work_event_id,
+              'upload_row_id',prior_link.upload_row_id,'resolution_id',prior_link.row_resolution_id,'link_kind',prior_link.link_kind)))));`}]);
+compose('02_complete_upload_context.sqlinc','02_complete_upload_context.sqlinc',[
+ {name:'known immutable Source alias precedes genuinely new-key rekey proof',before:'            v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);',after:`            v_prior_work_event_id:=private.weekly_source_known_source_key_v1(v_source_row.id,v_candidate_id,v_row_client_id);
+            if v_prior_work_event_id is null then
+              v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);
+            end if;`},
+ {name:'discovery retains native ambiguity without selecting one alias event',before:"if SQLERRM is distinct from 'WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS' then raise; end if;",after:"if SQLERRM not in ('WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS','WEEKLY_SOURCE_SOURCE_KEY_ALIAS_AMBIGUOUS') then raise; end if;"}
+]);
+compose('03_complete_projection_rows.sqlinc','03_complete_projection_rows.sqlinc',[{name:'actual projection independently re-proves known alias or new-key exact rekey',before:'        v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);',after:`        v_identical_rekey_prior:=private.weekly_source_known_source_key_v1(v_source_row.id,v_candidate_id,v_client_id);
+        if v_identical_rekey_prior is null then
+          v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);
+        end if;`}]);
+const commit='a67a44319e25e136fa34c61fb6ca4d270d85ceda';for(const p of proofs)assert.deepEqual(execFileSync('git',['show',commit+':'+p.input],{cwd:root,maxBuffer:3e6}),fs.readFileSync(path.join(dir,'before',p.file)));fs.writeFileSync(path.join(dir,'COMPLETE_CURRENT_REVERSES.json'),JSON.stringify({source_only:true,own_input_commit:commit,complete_owners:proofs.length,unique_hunks:proofs.reduce((n,p)=>n+p.unique_hunks,0),proofs,canonical_mounted:false,native_proof:false},null,2)+'\n');console.log(JSON.stringify({complete_owners:proofs.length,unique_hunks:proofs.reduce((n,p)=>n+p.unique_hunks,0)}));
+const native='33927fff2f7b90b90241d746d9e35aa21c57bd07',files=['supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql','supabase/repeatable/15092026_1534_weekly_source_projection_build_v1.sql','supabase/repeatable/15092026_1534_weekly_source_upload_context_v1.sql'];fs.writeFileSync(path.join(dir,'CURRENT_NATIVE_INPUT_PINS.json'),JSON.stringify({source_only:true,current_native_input_commit:native,inputs:files.map(file=>{const b=execFileSync('git',['show',native+':'+file],{cwd:root,maxBuffer:4e6});return {commit:native,file,bytes:b.length,sha256:sha(b)};}),canonical_mounted:false,native_proof:false},null,2)+'\n');

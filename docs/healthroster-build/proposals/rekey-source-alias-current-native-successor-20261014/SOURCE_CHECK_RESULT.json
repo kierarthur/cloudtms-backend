@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "effect_free_source_schema_identity_cases": 9,
+  "passed": 9,
+  "failed": 0,
+  "syntax_passed": 3,
+  "complete_existing_owner_reversals": 3,
+  "unique_hunks": 4,
+  "new_private_signatures": 1,
+  "new_public_signatures": 0,
+  "new_stores": 0,
+  "new_columns": 0,
+  "event_original_key_rewritten": false,
+  "paid_classifier_added": false,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_paid_overlap_complete": false,
+  "full_primary_complete": false,
+  "real_database_or_lab_calls": 0,
+  "scratch_created": false,
+  "remaining_gates": "CONSTRUCTION_BOUNDARY.md"
+}

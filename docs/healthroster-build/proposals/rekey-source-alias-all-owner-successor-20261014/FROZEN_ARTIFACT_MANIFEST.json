@@ -1,0 +1,60 @@
+{
+  "schema_version": "REKEY_SOURCE_ALIAS_ALL_OWNER_SOURCE_SUCCESSOR_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_proof": false,
+  "artifact_count": 10,
+  "artifacts": [
+    {
+      "file": "COMPLETE_OWNER_REVERSE.json",
+      "bytes": 2174,
+      "sha256": "c1ce1df034d13cf579cc9af8176555c043318a0a62c7c08884e672e56c27b8fa"
+    },
+    {
+      "file": "CONTROLLING_INPUT_PINS.json",
+      "bytes": 2617,
+      "sha256": "09ebfd2cd2f978e6e57808350d49031f15b3576b92aabf3b37f247304cd6831c"
+    },
+    {
+      "file": "REFUSAL_ABI_AND_BOUNDARY.md",
+      "bytes": 3990,
+      "sha256": "79eaaa8c317f873b04a5c4d0d856118a47cdf9dc8b4b65f79fb8df76975a116b"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 1791,
+      "sha256": "5628be774f8f0b95bd91c52d1c54189c0e003ee6a5a3ad94e789050a00095e67"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1006,
+      "sha256": "1a8604c53c669c319934264c55714f51431796e72db60e2f1066294f8eac5015"
+    },
+    {
+      "file": "all-owner.test.mjs",
+      "bytes": 17599,
+      "sha256": "ffd11e7d42fc7b35387b32b1cce8657b78ec2f608a9395899193a5e6f1006a2f"
+    },
+    {
+      "file": "before/00_known_source_key.sqlinc",
+      "bytes": 3920,
+      "sha256": "6cf09e5142613772b8af399099e59cc480715f3161cccdc88789787ee4771145"
+    },
+    {
+      "file": "build-successor.mjs",
+      "bytes": 6258,
+      "sha256": "953d861cedcb4b972979adac617093abad31da47b35563b83087a33784e64c1e"
+    },
+    {
+      "file": "forward/00_known_source_key.sqlinc",
+      "bytes": 4123,
+      "sha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 3386,
+      "sha256": "b8d326b8cb1a6fd3592928db5a70ecbbda2d9a48bee8d57ab3fe3b32cf98553f"
+    }
+  ]
+}

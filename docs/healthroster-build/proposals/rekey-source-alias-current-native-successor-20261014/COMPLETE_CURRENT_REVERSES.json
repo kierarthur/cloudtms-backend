@@ -1,0 +1,66 @@
+{
+  "source_only": true,
+  "own_input_commit": "a67a44319e25e136fa34c61fb6ca4d270d85ceda",
+  "complete_owners": 3,
+  "unique_hunks": 4,
+  "proofs": [
+    {
+      "input": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/01_identical_rekey_prior.sqlinc",
+      "file": "01_complete_identical_rekey_prior.sqlinc",
+      "before_bytes": 9377,
+      "before_sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0",
+      "after_bytes": 10758,
+      "after_sha256": "7243e1b99f016f22efcf5b1bbaa1a061bb2fc6f2e621c4ca24bbe0368f397eaf",
+      "hunks": [
+        {
+          "name": "genuine new-key rekey requires absence of every actual prior Source reference",
+          "before": "    and not exists(select 1 from public.weekly_source_upload_rows in_file\n      where in_file.upload_id=v_upload.id and in_file.external_source_key=e.profile_external_key);",
+          "after": "    and not exists(select 1 from public.weekly_source_upload_rows in_file\n      where in_file.upload_id=v_upload.id and (in_file.external_source_key=e.profile_external_key\n        or in_file.external_source_key=old_row.external_source_key\n        or exists(select 1 from public.weekly_work_event_source_links prior_link\n          join public.weekly_source_row_resolutions prior_resolution on prior_resolution.id=prior_link.row_resolution_id\n            and prior_resolution.upload_row_id=prior_link.upload_row_id and prior_resolution.work_event_id=e.id\n            and prior_resolution.mapping_state='RESOLVED' and prior_resolution.candidate_id=e.candidate_id and prior_resolution.client_id=e.client_id\n          join public.weekly_source_upload_rows prior_row on prior_row.id=prior_link.upload_row_id\n            and prior_row.external_source_key=in_file.external_source_key\n          join public.weekly_source_uploads prior_upload on prior_upload.id=prior_row.upload_id\n            and prior_upload.source_format_profile_id=v_profile.id\n          join public.weekly_source_cycles prior_cycle on prior_cycle.id=prior_upload.source_cycle_id and prior_cycle.source_group_id=v_cycle.source_group_id\n          where prior_link.work_event_id=e.id and prior_link.link_hash=private.weekly_source_sha256_jsonb_v1(\n            'WEEKLY_SOURCE_WORK_EVENT_LINK_V1',jsonb_build_object('work_event_id',prior_link.work_event_id,\n              'upload_row_id',prior_link.upload_row_id,'resolution_id',prior_link.row_resolution_id,'link_kind',prior_link.link_kind)))));"
+        }
+      ],
+      "unique_hunks": 1,
+      "whole_reverse_verified": true
+    },
+    {
+      "input": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/02_complete_upload_context.sqlinc",
+      "file": "02_complete_upload_context.sqlinc",
+      "before_bytes": 28514,
+      "before_sha256": "879d5956940041ad1d91a4900ceb8b7df3baa3ab178bcbe4ff85630461937de3",
+      "after_bytes": 28750,
+      "after_sha256": "1a23b8da7645ed0ce0482ed1647165076c7b0d2747dba1dee3fe2c95d417e4df",
+      "hunks": [
+        {
+          "name": "known immutable Source alias precedes genuinely new-key rekey proof",
+          "before": "            v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);",
+          "after": "            v_prior_work_event_id:=private.weekly_source_known_source_key_v1(v_source_row.id,v_candidate_id,v_row_client_id);\r\n            if v_prior_work_event_id is null then\r\n              v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\r\n            end if;"
+        },
+        {
+          "name": "discovery retains native ambiguity without selecting one alias event",
+          "before": "if SQLERRM is distinct from 'WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS' then raise; end if;",
+          "after": "if SQLERRM not in ('WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS','WEEKLY_SOURCE_SOURCE_KEY_ALIAS_AMBIGUOUS') then raise; end if;"
+        }
+      ],
+      "unique_hunks": 2,
+      "whole_reverse_verified": true
+    },
+    {
+      "input": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/03_complete_projection_rows.sqlinc",
+      "file": "03_complete_projection_rows.sqlinc",
+      "before_bytes": 68884,
+      "before_sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "after_bytes": 69070,
+      "after_sha256": "14f01e7ca69c1f1ada8720194d0aa7311e2b9bd408f6865e9e563b4505a1fe60",
+      "hunks": [
+        {
+          "name": "actual projection independently re-proves known alias or new-key exact rekey",
+          "before": "        v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);",
+          "after": "        v_identical_rekey_prior:=private.weekly_source_known_source_key_v1(v_source_row.id,v_candidate_id,v_client_id);\n        if v_identical_rekey_prior is null then\n          v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\n        end if;"
+        }
+      ],
+      "unique_hunks": 1,
+      "whole_reverse_verified": true
+    }
+  ],
+  "canonical_mounted": false,
+  "native_proof": false
+}

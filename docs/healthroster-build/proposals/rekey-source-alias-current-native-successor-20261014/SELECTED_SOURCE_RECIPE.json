@@ -1,0 +1,21 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "own_source_input_commit": "a67a44319e25e136fa34c61fb6ca4d270d85ceda",
+  "controlling_original_packet": "kept-pay-identical-rekey-current-root-forward-20261014",
+  "new_private_signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+  "new_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "selected_source_order": ["forward/00_known_source_key.sqlinc", "forward/01_complete_identical_rekey_prior.sqlinc", "forward/02_complete_upload_context.sqlinc", "forward/03_complete_projection_rows.sqlinc"],
+  "existing_public_native_abis_unchanged": true,
+  "new_public_signatures": [],
+  "new_alias_stores": 0,
+  "new_columns": 0,
+  "shared_banking_owner_changes": 0,
+  "event_original_key_rewritten": false,
+  "whole_reverse_proofs": "COMPLETE_CURRENT_REVERSES.json",
+  "canonical_mounted": false,
+  "native_proof": false,
+  "full_paid_overlap_complete": false,
+  "full_primary_complete": false,
+  "remaining_source_and_native_gates": "CONSTRUCTION_BOUNDARY.md"
+}

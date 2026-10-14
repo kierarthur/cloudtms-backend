@@ -1,0 +1,38 @@
+{
+  "source_only": true,
+  "controlling_packet": "rekey-source-alias-current-native-successor-20261014",
+  "controlling_manifest_sha256": "44706e1eef850a647458d1af77e4a860520ca60d68801b1b91f88bae6135be07",
+  "input": "forward/00_known_source_key.sqlinc",
+  "file": "00_known_source_key.sqlinc",
+  "before_bytes": 3920,
+  "before_sha256": "6cf09e5142613772b8af399099e59cc480715f3161cccdc88789787ee4771145",
+  "after_bytes": 4123,
+  "after_sha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d",
+  "hunks": [
+    {
+      "name": "retain all-owner mismatch aggregate",
+      "before": "  v_cycle public.weekly_source_cycles%rowtype;v_count integer;v_event uuid;",
+      "after": "  v_cycle public.weekly_source_cycles%rowtype;v_count integer;v_event uuid;v_foreign_owner boolean;"
+    },
+    {
+      "name": "aggregate entire genuine alias namespace before local admission",
+      "before": "  select count(distinct event.id),min(event.id::text)::uuid into v_count,v_event",
+      "after": "  select count(distinct event.id),min(event.id::text)::uuid,\n    bool_or(event.candidate_id is distinct from p_candidate_id or event.client_id is distinct from p_client_id)\n    into v_count,v_event,v_foreign_owner"
+    },
+    {
+      "name": "do not erase foreign Candidate or Client before owner census",
+      "before": "    and event.candidate_id=p_candidate_id and event.client_id=p_client_id\n    and resolution.candidate_id=event.candidate_id and resolution.client_id=event.client_id",
+      "after": "    and resolution.candidate_id=event.candidate_id and resolution.client_id=event.client_id"
+    },
+    {
+      "name": "single foreign owner refuses instead of returning new-key NULL",
+      "before": "  if v_count=0 then return null;end if;\n  return v_event;",
+      "after": "  if v_count=0 then return null;end if;\n  if v_foreign_owner then raise exception 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT' using errcode='55000';end if;\n  return v_event;"
+    }
+  ],
+  "unique_hunks": 4,
+  "complete_owner_reverse_verified": true,
+  "inherited_three_owner_four_hunk_reversals_unchanged": true,
+  "canonical_mounted": false,
+  "native_proof": false
+}

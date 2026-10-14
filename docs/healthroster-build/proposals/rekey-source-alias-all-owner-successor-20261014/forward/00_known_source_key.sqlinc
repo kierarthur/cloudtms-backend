@@ -1,0 +1,46 @@
+-- Source identity read only: immutable real source links, no alias store,
+-- schedule/paid/amount classifier or change to the event's original key.
+create or replace function private.weekly_source_known_source_key_v1(
+  p_upload_row_id uuid,p_candidate_id uuid,p_client_id uuid
+) returns uuid language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_row public.weekly_source_upload_rows%rowtype;v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;v_count integer;v_event uuid;v_foreign_owner boolean;
+begin
+  if p_upload_row_id is null or p_candidate_id is null or p_client_id is null then return null;end if;
+  select * into strict v_row from public.weekly_source_upload_rows where id=p_upload_row_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  if nullif(btrim(v_row.external_source_key),'') is null
+    or not exists(select 1 from public.weekly_source_groups g where g.id=v_cycle.source_group_id and g.active and g.source_family='ROSTER')
+    or not exists(select 1 from public.weekly_source_format_profiles p where p.id=v_upload.source_format_profile_id and p.active
+      and p.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'))
+    or not private.weekly_source_upload_client_eligible_v1(v_upload.id,p_client_id,v_row.work_date) then return null;end if;
+  -- Existing canonical-key ownership (including a foreign Candidate/Client)
+  -- retains the normal native owner/refusal. A historical alias cannot override it.
+  if exists(select 1 from public.weekly_work_events event where event.first_source_group_id=v_cycle.source_group_id
+    and event.source_format_profile_id=v_upload.source_format_profile_id and event.identity_kind='PROFILE_EXTERNAL_KEY'
+    and event.profile_external_key=v_row.external_source_key) then return null;end if;
+  select count(distinct event.id),min(event.id::text)::uuid,
+    bool_or(event.candidate_id is distinct from p_candidate_id or event.client_id is distinct from p_client_id)
+    into v_count,v_event,v_foreign_owner
+  from public.weekly_work_event_source_links link
+  join public.weekly_source_row_resolutions resolution on resolution.id=link.row_resolution_id
+    and resolution.upload_row_id=link.upload_row_id and resolution.work_event_id=link.work_event_id and resolution.mapping_state='RESOLVED'
+  join public.weekly_source_upload_rows old_row on old_row.id=link.upload_row_id and old_row.external_source_key=v_row.external_source_key
+  join public.weekly_source_uploads old_upload on old_upload.id=old_row.upload_id and old_upload.source_format_profile_id=v_upload.source_format_profile_id
+  join public.weekly_source_cycles old_cycle on old_cycle.id=old_upload.source_cycle_id and old_cycle.source_group_id=v_cycle.source_group_id
+  join public.weekly_work_events event on event.id=link.work_event_id and event.identity_kind='PROFILE_EXTERNAL_KEY'
+    and event.first_source_group_id=v_cycle.source_group_id and event.source_format_profile_id=v_upload.source_format_profile_id
+    and resolution.candidate_id=event.candidate_id and resolution.client_id=event.client_id
+  where link.link_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_WORK_EVENT_LINK_V1',jsonb_build_object(
+    'work_event_id',link.work_event_id,'upload_row_id',link.upload_row_id,'resolution_id',link.row_resolution_id,'link_kind',link.link_kind));
+  if v_count>1 then raise exception 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_AMBIGUOUS' using errcode='55000';end if;
+  if v_count=0 then return null;end if;
+  if v_foreign_owner then raise exception 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT' using errcode='55000';end if;
+  return v_event;
+end;
+$function$;
+alter function private.weekly_source_known_source_key_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_known_source_key_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

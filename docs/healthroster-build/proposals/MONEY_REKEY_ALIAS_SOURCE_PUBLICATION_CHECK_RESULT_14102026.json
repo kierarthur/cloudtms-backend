@@ -1,0 +1,28 @@
+{
+  "source_only": true,
+  "listed_artifacts": 25,
+  "manifests": 2,
+  "source_scan_files": 35,
+  "credential_rules": 4,
+  "credential_findings": 0,
+  "raw_hash_length_mismatches": 0,
+  "critic_sha256": "72662d08c841ce001ddadf48f9a32b29ade6e913c5953e83a0d9fdfb6342e53e",
+  "finding_source_closed_only_with_corrective_helper": true,
+  "new_source_cases": 15,
+  "inherited_source_cases": 9,
+  "syntax_passed": 3,
+  "whole_owner_reversals": 4,
+  "unique_hunks": 8,
+  "defective_helper_selected": false,
+  "old_findings_preserved": true,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "full_paid_overlap_complete": false,
+  "full_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "whitespace": {
+    "status": "PASS",
+    "findings": []
+  }
+}

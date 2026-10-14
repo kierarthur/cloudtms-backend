@@ -1,0 +1,61 @@
+{
+  "source_only": true,
+  "own_published_source_commit": "a67a44319e25e136fa34c61fb6ca4d270d85ceda",
+  "current_native_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "controlling_packet": "rekey-source-alias-current-native-successor-20261014",
+  "controlling_manifest_sha256": "44706e1eef850a647458d1af77e4a860520ca60d68801b1b91f88bae6135be07",
+  "controlling_artifacts_unchanged": 15,
+  "controlling_leaves": [
+    {
+      "file": "forward/00_known_source_key.sqlinc",
+      "bytes": 3920,
+      "sha256": "6cf09e5142613772b8af399099e59cc480715f3161cccdc88789787ee4771145"
+    },
+    {
+      "file": "forward/01_complete_identical_rekey_prior.sqlinc",
+      "bytes": 10758,
+      "sha256": "7243e1b99f016f22efcf5b1bbaa1a061bb2fc6f2e621c4ca24bbe0368f397eaf"
+    },
+    {
+      "file": "forward/02_complete_upload_context.sqlinc",
+      "bytes": 28750,
+      "sha256": "1a23b8da7645ed0ce0482ed1647165076c7b0d2747dba1dee3fe2c95d417e4df"
+    },
+    {
+      "file": "forward/03_complete_projection_rows.sqlinc",
+      "bytes": 69070,
+      "sha256": "14f01e7ca69c1f1ada8720194d0aa7311e2b9bd408f6865e9e563b4505a1fe60"
+    }
+  ],
+  "current_native_pins": {
+    "source_only": true,
+    "current_native_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+    "inputs": [
+      {
+        "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+        "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+        "bytes": 229113,
+        "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+      },
+      {
+        "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+        "file": "supabase/repeatable/15092026_1534_weekly_source_projection_build_v1.sql",
+        "bytes": 69610,
+        "sha256": "b61ae1f1ed98fb1e8ec53bd30fe1a999cf3222d91b4c499e26f45d70d4dc1281"
+      },
+      {
+        "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+        "file": "supabase/repeatable/15092026_1534_weekly_source_upload_context_v1.sql",
+        "bytes": 30900,
+        "sha256": "d0234213cd0b772043f525612d861dd754fc668eb58d9c0cbc194d72e588af0c"
+      }
+    ],
+    "canonical_mounted": false,
+    "native_proof": false
+  },
+  "original_finding": "P1-REKEY1",
+  "independent_critic_path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_BUILD_13102026/BUILD_MONEY_REKEY_SOURCE_ALIAS_SOURCE_CRITIC_14102026.md",
+  "independent_critic_sha256": "49b5a4e2580a4e7fabd36f0b0d2f2487960b55e5fe028369ebd96d0dd6bfec19",
+  "canonical_mounted": false,
+  "native_proof": false
+}

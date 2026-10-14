@@ -1,0 +1,26 @@
+{
+  "source_only": true,
+  "current_native_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_projection_build_v1.sql",
+      "bytes": 69610,
+      "sha256": "b61ae1f1ed98fb1e8ec53bd30fe1a999cf3222d91b4c499e26f45d70d4dc1281"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_upload_context_v1.sql",
+      "bytes": 30900,
+      "sha256": "d0234213cd0b772043f525612d861dd754fc668eb58d9c0cbc194d72e588af0c"
+    }
+  ],
+  "canonical_mounted": false,
+  "native_proof": false
+}

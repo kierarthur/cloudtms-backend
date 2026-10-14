@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "listed_artifacts": 15,
+  "manifests": 1,
+  "raw_hash_length_mismatches": 0,
+  "source_scan_files": 18,
+  "credential_rules": 4,
+  "credential_findings": 0,
+  "published_predecessor": "a67a44319e25e136fa34c61fb6ca4d270d85ceda",
+  "whole_owner_reversals": 3,
+  "unique_hunks": 4,
+  "effect_free_cases": 9,
+  "syntax_passed": 3,
+  "independent_review": "PENDING",
+  "source_published": false,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_paid_overlap_complete": false,
+  "full_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}
