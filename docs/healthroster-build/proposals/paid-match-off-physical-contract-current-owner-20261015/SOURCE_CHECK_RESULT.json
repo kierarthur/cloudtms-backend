@@ -1,0 +1,21 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 8,
+  "pass": 8,
+  "fail": 0,
+  "syntax_pass": 3,
+  "whole_reverse": 1,
+  "physical_unique_hunks": 2,
+  "independent_paid_unique_hunks": 2,
+  "preserved_dependency_artifacts": 68,
+  "credential_findings": 0,
+  "whitespace_disposition": "PASS",
+  "whitespace_exceptions": [],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": "PAID_MATCH_OFF_PHYSICAL_CONTRACT_CURRENT_OWNER_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 11,
+  "artifacts": [
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 2036,
+      "sha256": "db02bc60099ef3a1a8b8ef1869e3e48c1207837f71d7098d7912c093a97d8338"
+    },
+    {
+      "file": "FULL_SOURCE_JOIN_PROOF.json",
+      "bytes": 3372,
+      "sha256": "3d281d4bf162254056c14291f47b2a33b615ec62a7558adf129b4fe2fc4504ed"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 1736,
+      "sha256": "9a2697b7538f6570fdc44d7f70dcf7c1043ca9fe328dd9a8865363aa4f02fd56"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 513,
+      "sha256": "f983a6bc0d3e0324c0b0f5c760140d8713b339af6bbf908435780dfb8c92b9f5"
+    },
+    {
+      "file": "before/01_complete_off_parent_scope.sqlinc",
+      "bytes": 26539,
+      "sha256": "cd5501b7cb2940add1e1b38b345a6a45733a0f8c0269a1b893c302647d43eff4"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 4225,
+      "sha256": "041bab35db4e11442f3c00d1de0160649277ccbe532ea02af4c55e8c7aab2fc2"
+    },
+    {
+      "file": "forward/01_complete_off_parent_scope.sqlinc",
+      "bytes": 26495,
+      "sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4537,
+      "sha256": "9deebefb9a83cbc76acf28a384d97a6adea5beec6d98d453e382aea6aa1d22b0"
+    },
+    {
+      "file": "input/COMPLETE_PAID_CONSUMER_REVERSES.json",
+      "bytes": 5373,
+      "sha256": "3fefae2673b6a0344c9dec84150c41b92bc7d736a40ad3f3ffaa2eb730f3b5ca"
+    },
+    {
+      "file": "input/COMPLETE_PHYSICAL_OWNER_REVERSES.json",
+      "bytes": 13619,
+      "sha256": "b425732e248ea309f5a9d741e55a2704a8a92bb81745ceb3cf3f52e7eca45500"
+    },
+    {
+      "file": "join-source.test.mjs",
+      "bytes": 3465,
+      "sha256": "91cef7e465a5817dd27dd1f93b6c5fb7f53eeebb0c8d9c6b75984e7f9dad8f73"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const dir=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(dir,'../../../..'),commit='3f3ff2401baf271face606ad2feef8a8bdea663d';const sha=b=>createHash('sha256').update(b).digest('hex');
+assert.ok(!fs.existsSync(path.join(dir,'FROZEN_ARTIFACT_MANIFEST.json')));for(const f of ['before','forward','input'])fs.mkdirSync(path.join(dir,f),{recursive:true});
+const source='docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/04_complete_off_parent_scope.sqlinc';
+const physical='docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/COMPLETE_NATIVE_REVERSES.json';
+const raw=fs.readFileSync(path.join(root,source)),proofRaw=fs.readFileSync(path.join(root,physical));
+for(const [f,b] of [[source,raw],[physical,proofRaw]])assert.deepEqual(b,execFileSync('git',['show',commit+':'+f],{cwd:root,maxBuffer:3e6}));
+const p=JSON.parse(proofRaw).proofs.find(x=>x.output==='04_complete_native_parent_scope.sqlinc');assert.equal(p.hunks.length,2);
+const before=raw.toString();let after=before;for(const h of p.hunks){assert.equal(after.split(h.before).length,2);after=after.replace(h.before,()=>h.after);}
+let reversed=after;for(const h of [...p.hunks].reverse()){assert.equal(reversed.split(h.after).length,2);reversed=reversed.replace(h.after,()=>h.before);}assert.equal(reversed,before);
+assert.ok(!/\broot\.client_id\b/.test(after));assert.ok(after.includes('paid_overlap_target_work_event_id'));
+fs.writeFileSync(path.join(dir,'before/01_complete_off_parent_scope.sqlinc'),raw);fs.writeFileSync(path.join(dir,'forward/01_complete_off_parent_scope.sqlinc'),after);fs.writeFileSync(path.join(dir,'input/COMPLETE_PHYSICAL_OWNER_REVERSES.json'),proofRaw);
+const paidProofFile='docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/COMPLETE_CONSUMER_REVERSES.json';const paidRaw=fs.readFileSync(path.join(root,paidProofFile));assert.deepEqual(paidRaw,execFileSync('git',['show',commit+':'+paidProofFile],{cwd:root,maxBuffer:3e6}));
+const paid=JSON.parse(paidRaw).records.find(x=>x.output==='04_complete_off_parent_scope.sqlinc');fs.writeFileSync(path.join(dir,'input/COMPLETE_PAID_CONSUMER_REVERSES.json'),paidRaw);
+for(const h of paid.hunks){assert.equal(after.split(h.after).length,2);}
+let noPaid=after;for(const h of [...paid.hunks].reverse())noPaid=noPaid.replace(h.after,()=>h.before);
+const acceptSource='docs/healthroster-build/proposals/'+paid.input;let acceptFixed=fs.readFileSync(path.join(root,acceptSource),'utf8');
+for(const h of p.hunks){assert.equal(acceptFixed.split(h.before).length,2);acceptFixed=acceptFixed.replace(h.before,()=>h.after);}assert.equal(noPaid,acceptFixed);
+const physicalLeaf='docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/04_complete_native_parent_scope.sqlinc';const physLeaf=fs.readFileSync(path.join(root,physicalLeaf));assert.deepEqual(physLeaf,execFileSync('git',['show',commit+':'+physicalLeaf],{cwd:root,maxBuffer:3e6}));assert.equal(sha(physLeaf),p.after_sha256);
+fs.writeFileSync(path.join(dir,'FULL_SOURCE_JOIN_PROOF.json'),JSON.stringify({source_only:true,commit,source,before_sha256:sha(raw),after_sha256:sha(after),hunks:p.hunks,whole_reverse_to_OFF18_byte_exact:true,physical_pin:{file:physical,sha256:sha(proofRaw),selected_owner:physicalLeaf,selected_owner_sha256:sha(physLeaf),current_root_commit:p.commit,current_native_file:p.file,current_native_source_sha256:p.source_sha256},paid_pin:{file:paidProofFile,sha256:sha(paidRaw),hunks:paid.hunks},independent_paid_reverse_sha256:sha(noPaid),independent_physical_on_ACCEPT23_sha256:sha(acceptFixed),orthogonal_hunks_commute_byte_exact:true,no_new_signature_operation_selector_store_receipt:true,compiled:false,native:false,canonical_mounted:false},null,2)+'\n');
+console.log(JSON.stringify({before:sha(raw),after:sha(after),physical_hunks:p.hunks.length,paid_hunks:paid.hunks.length,whole_reverse:true,commuting_reverse:true}));

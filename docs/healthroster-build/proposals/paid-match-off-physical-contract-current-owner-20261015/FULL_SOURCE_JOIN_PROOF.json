@@ -1,0 +1,52 @@
+{
+  "source_only": true,
+  "commit": "3f3ff2401baf271face606ad2feef8a8bdea663d",
+  "source": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/04_complete_off_parent_scope.sqlinc",
+  "before_sha256": "cd5501b7cb2940add1e1b38b345a6a45733a0f8c0269a1b893c302647d43eff4",
+  "after_sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc",
+  "hunks": [
+    {
+      "name": "qualified root proves genuine non-null native Contract identity",
+      "before": "          if qualified and root.client_id is not null and root.client_id is distinct from contract.client_id then",
+      "after": "          if qualified and (contract.client_id is null or contract.candidate_id is null) then"
+    },
+    {
+      "name": "every qualified discovered physical root keeps same parent tuple and explicit unknown refusal",
+      "before": "          if (root.client_id is not null and root.client_id is distinct from contract.client_id)\n            or (contract_id is not null and contract_id is distinct from contract.id)",
+      "after": "          if contract.client_id is null or contract.candidate_id is null\n            or (contract_id is not null and contract_id is distinct from contract.id)"
+    }
+  ],
+  "whole_reverse_to_OFF18_byte_exact": true,
+  "physical_pin": {
+    "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/COMPLETE_NATIVE_REVERSES.json",
+    "sha256": "b425732e248ea309f5a9d741e55a2704a8a92bb81745ceb3cf3f52e7eca45500",
+    "selected_owner": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/04_complete_native_parent_scope.sqlinc",
+    "selected_owner_sha256": "cd18c8626a7092cb065de2e13fbd6bb2bcd679a1bca523d18ef8cd9615635221",
+    "current_root_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+    "current_native_file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+    "current_native_source_sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+  },
+  "paid_pin": {
+    "file": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/COMPLETE_CONSUMER_REVERSES.json",
+    "sha256": "3fefae2673b6a0344c9dec84150c41b92bc7d736a40ad3f3ffaa2eb730f3b5ca",
+    "hunks": [
+      {
+        "name": "discover actual new paid target parent before command audit/execution",
+        "before": "'family_id','work_event_id','prior_work_event_id',",
+        "after": "'family_id','work_event_id','prior_work_event_id','paid_overlap_target_work_event_id',"
+      },
+      {
+        "name": "actual target event inherits same real group/client/Candidate and sibling/fixture census refusal",
+        "before": "when 'work_event_id','prior_work_event_id' then",
+        "after": "when 'work_event_id','prior_work_event_id','paid_overlap_target_work_event_id' then"
+      }
+    ]
+  },
+  "independent_paid_reverse_sha256": "5b6667964d38c8fd64470b2e8f8ccdfd1f792b0aef51d87be069486c5478b603",
+  "independent_physical_on_ACCEPT23_sha256": "5b6667964d38c8fd64470b2e8f8ccdfd1f792b0aef51d87be069486c5478b603",
+  "orthogonal_hunks_commute_byte_exact": true,
+  "no_new_signature_operation_selector_store_receipt": true,
+  "compiled": false,
+  "native": false,
+  "canonical_mounted": false
+}

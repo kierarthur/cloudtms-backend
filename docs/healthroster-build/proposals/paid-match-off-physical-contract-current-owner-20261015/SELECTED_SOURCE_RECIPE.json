@@ -1,0 +1,39 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "3f3ff2401baf271face606ad2feef8a8bdea663d",
+  "selected_complete_owner": "forward/01_complete_off_parent_scope.sqlinc",
+  "replaces_complete_leaves": [
+    "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/04_complete_off_parent_scope.sqlinc",
+    "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/04_complete_native_parent_scope.sqlinc"
+  ],
+  "dependencies": [
+    {
+      "packet": "paid-match-off-command-consumer-construction-20261014",
+      "artifacts": 18,
+      "manifest_sha256": "1c63070851eff8d34a56cfce48e67b36a0850156b04231ee5624618b2527e517"
+    },
+    {
+      "packet": "qualification-physical-contract-identity-successor-20261014",
+      "artifacts": 27,
+      "manifest_sha256": "173622063cd1f6f5a655fb7cdd3ba1b6847d9eac7f787f3c8e48ad676e8719b9"
+    },
+    {
+      "packet": "missing-accept-off-admission-construction-20261014",
+      "artifacts": 23,
+      "manifest_sha256": "2af1ff63495d3164a425b429e2baf560790abc0dbf8845b762fdef5602875285"
+    }
+  ],
+  "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+  "new_private_public_signatures": [],
+  "new_operations_selectors_stores_receipts": 0,
+  "other_OFF18_and_Contract27_leaves_retained": true,
+  "whole_reverse_to_OFF18": true,
+  "independent_commuting_reverse": true,
+  "existing_native_actor_contract_Candidate_client_currentness_guards_retained": true,
+  "Source39_recorder9_13_three_receipts_PolicyX_unchanged": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}
