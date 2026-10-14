@@ -1,7 +1,7 @@
 create or replace function private.weekly_source_rule_qualification_transport_status_v1(p_request jsonb)
 returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
 as $function$
-declare req jsonb; cycles uuid[]:='{}'::uuid[]; discovered uuid; cycle_id uuid; actor uuid; op text; purpose text; result jsonb;
+declare req jsonb; parent_scope jsonb; cycle_id uuid; actor uuid; op text; purpose text; result jsonb; claim jsonb;
 begin
   perform private.weekly_source_query_require_service_v1();
   if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','agency_id','environment','qualification_action','native_operation','native_request'])
@@ -20,42 +20,23 @@ begin
   if (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)
     or (req ? 'p_actor_user_id' and req->>'p_actor_user_id' is distinct from actor::text) then
     raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_ACTOR_REFUSED' using errcode='42501'; end if;
-  if nullif(req->>'source_cycle_id','') is not null then cycles:=array_append(cycles,(req->>'source_cycle_id')::uuid); end if;
-  if nullif(req->>'upload_id','') is not null then
-    select source_cycle_id into strict discovered from public.weekly_source_uploads where id=(req->>'upload_id')::uuid;
-    cycles:=array_append(cycles,discovered);
-  end if;
-  if coalesce(nullif(req->>'projection_publication_id',''),nullif(req->>'p_publication_id',''),nullif(req->>'publication_id','')) is not null then
-    select source_cycle_id into strict discovered from public.weekly_source_projection_publications
-      where id=coalesce(nullif(req->>'projection_publication_id',''),nullif(req->>'p_publication_id',''),nullif(req->>'publication_id',''))::uuid;
-    cycles:=array_append(cycles,discovered);
-  end if;
-  if nullif(req->>'final_revision_id','') is not null then
-    select source_cycle_id into strict discovered from public.weekly_source_final_revisions where id=(req->>'final_revision_id')::uuid;
-    cycles:=array_append(cycles,discovered);
-  end if;
-  if nullif(req->>'run_id','') is not null then
-    select source_cycle_id into strict discovered from public.weekly_source_finalisation_pay_runs where id=(req->>'run_id')::uuid;
-    cycles:=array_append(cycles,discovered);
-  end if;
-  if nullif(req->>'orchestration_run_id','') is not null then
-    select source_cycle_id into strict discovered from public.weekly_exceptional_orchestration_runs where id=(req->>'orchestration_run_id')::uuid;
-    cycles:=array_append(cycles,discovered);
-  end if;
-  if (select count(distinct value) from unnest(cycles) value)>1 or array_position(cycles,null) is not null then
-    raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_SCOPE_CHANGED' using errcode='40001'; end if;
-  if cardinality(cycles)=0 then
-    -- Ordinary discovery of a not-yet-created cycle keeps its original owner.
-    -- A qualification command always names an actual already-ensured cycle.
+  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,null);
+  if parent_scope->>'source_cycle_id' is null or (parent_scope->>'ambiguous')::boolean then
+    if (select count(distinct value) from jsonb_array_elements_text(parent_scope->'observed_cycle_ids') value)>1 then
+      raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_SCOPE_CHANGED' using errcode='40001'; end if;
+    for cycle_id in select distinct value::uuid from jsonb_array_elements_text(parent_scope->'observed_cycle_ids') value loop
+      claim:=private.weekly_source_rule_qualification_status_v1(jsonb_build_object('actor_user_id',actor,'agency_id',p_request->>'agency_id',
+        'environment','TEST','qualification_action','OFF_RULE_STATUS','source_cycle_id',cycle_id,'purpose',purpose));
+      if (claim->>'qualified_fixture')::boolean then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_SCOPE_CHANGED' using errcode='40001'; end if;
+    end loop;
+    -- Advisory discovery never admits OFF. In particular an ordinary
+    -- unstaged run has no OFF cycle and retains its actual native response.
     return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1','qualified_fixture',false,'operational_ready',false);
   end if;
-  cycle_id:=cycles[1];
+  cycle_id:=(parent_scope->>'source_cycle_id')::uuid;
   result:=private.weekly_source_rule_qualification_status_v1(jsonb_build_object('actor_user_id',actor,'agency_id',p_request->>'agency_id',
     'environment','TEST','qualification_action','OFF_RULE_STATUS','source_cycle_id',cycle_id,'purpose',purpose));
   return result;
-exception when no_data_found or too_many_rows then
-  -- A missing parent is left to the exact normal native owner/refusal. It
-  -- cannot authorize an OFF frame or become guessed cycle authority.
-  return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1','qualified_fixture',false,'operational_ready',false);
 end;
 $function$;

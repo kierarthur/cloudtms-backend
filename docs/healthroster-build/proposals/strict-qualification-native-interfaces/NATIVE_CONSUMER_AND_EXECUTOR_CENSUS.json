@@ -348,7 +348,8 @@
     "public.weekly_source_finalisation_pay_open_atomic_v1",
     "public.weekly_source_finalisation_pay_task_start_atomic_v1",
     "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
-    "public.weekly_source_finalisation_pay_task_finish_atomic_v1"
+    "public.weekly_source_finalisation_pay_task_finish_atomic_v1",
+    "public.weekly_exceptional_pay_action_publication_status_v1"
   ],
   "per_entry_executor_closure": [
     {
@@ -2921,6 +2922,20 @@
         "public.weekly_source_finalisation_pay_tasks",
         "public.weekly_source_state_transitions"
       ],
+      "literal_write_trigger_signatures": [],
+      "unresolved_callees": []
+    },
+    {
+      "entry": "public.weekly_exceptional_pay_action_publication_status_v1",
+      "signatures": [
+        "private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])",
+        "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+        "private.weekly_source_pay_actor_allowed_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+        "private.weekly_source_sha256_text_v1(text,text)",
+        "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)"
+      ],
+      "write_relations": [],
       "literal_write_trigger_signatures": [],
       "unresolved_callees": []
     }
@@ -6885,6 +6900,19 @@
         "public.weekly_source_finalisation_pay_tasks",
         "public.weekly_source_state_transitions"
       ],
+      "via": "REQUESTED_ENTRY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)",
+      "owner_name": "public.weekly_exceptional_pay_action_publication_status_v1",
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "definition_sha256": "6bdfb7ff5493272374a4584e9df4e20bb7707e8ee0e151da0ab8a683b544cdd9",
+      "calls": [
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1"
+      ],
+      "writes": [],
       "via": "REQUESTED_ENTRY"
     },
     {

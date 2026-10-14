@@ -3,11 +3,11 @@ const out=path.dirname(fileURLToPath(import.meta.url)),own=path.resolve(out,'../
 const {scanManagedSql}=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')));
 const basePath='docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26_GIT_PINNED.json';
 const baseline=JSON.parse(fs.readFileSync(path.join(root,basePath),'utf8'));assert.equal(baseline.distinctPrivateSignatures,275);
-const selected=['OFF_RULE_AUTHORITY.sqlinc','OFF_RULE_COMMAND.sqlinc','OFF_RULE_STATUS.sqlinc','OFF_RULE_TRANSPORT_STATUS.sqlinc',
+const selected=['OFF_RULE_AUTHORITY.sqlinc','OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc','OFF_RULE_COMMAND.sqlinc','OFF_RULE_STATUS.sqlinc','OFF_RULE_TRANSPORT_STATUS.sqlinc',
  '01_operational_rule_projection.sqlinc','02_effective_rule_owner.sqlinc','03_cas_operational_projection.sqlinc','04_final_revision_rule_guard.sqlinc',
  '05_coverage_floor_owner.sqlinc','ACTIVATION_WINDOW_BINDING.sqlinc','FINAL_OPERATIONAL_CERTIFICATE.sqlinc',
  'HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc','HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc','11_complete_historical_fixture_native_assignment.sqlinc',
- '12_complete_report_nullable_rounding_owner.sqlinc',
+ '12_complete_report_nullable_rounding_owner.sqlinc','13_complete_nullable_physical_qualification_scope.sqlinc',
  'ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc','ACTIVATION_PROBE_SCOPE.sqlinc','POST_VERIFIED_PARTIAL_ASSERT.sqlinc',
  'POST_VERIFIED_SETUP_ASSERT.sqlinc','POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc','SETUP_STATIC_SHAPE_ASSERT.sqlinc','NONOPERATIONAL_PREREQUISITE_READER.sqlinc',
  'POST_VERIFIED_EVIDENCE_RECORD.sqlinc','REPORT_FIXTURE_REFERENCE.sqlinc','10_complete_bulk_test_scope.sqlinc',

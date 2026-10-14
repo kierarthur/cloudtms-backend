@@ -12,6 +12,7 @@ import {execFileSync} from 'node:child_process';
 import {buildActivationWindowBinding,assertActivationWindowBinding} from './activation-window-binding.mjs';
 import {createOffRuleTransportRpc} from './off-rule-transport-rpc.mjs';
 import {assertPostVerifiedReceipt} from './post-verified-evidence-controller.mjs';
+import {loadOperationalJourneys} from './final-operational-evidence.mjs';
 const out=path.dirname(fileURLToPath(import.meta.url)),id=n=>`91301300-0000-4000-8000-${String(n).padStart(12,'0')}`,h='a'.repeat(64);
 const scope={actorUserId:id(1),agencyId:id(2),environment:'TEST',sourceCycleId:id(3),purpose:'SOURCE_FIXTURE_SETUP'};
 // UNIT VECTORS ONLY: no one of these synthetic strings is an acceptance input.
@@ -91,7 +92,11 @@ test('the historical exception retains native assignment guards, real audit and 
  assert.match(feature,/if v_from<\(transaction_timestamp\(\) at time zone 'Europe\/London'\)::date then\s+raise exception 'WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED'/);
  assert.doesNotMatch(feature,/historical_fixture_assignment_assert/);
  const proof=JSON.parse(sql('HISTORICAL_FIXTURE_REVERSE.json'));assert.equal(proof.proofs.length,3);
- for(const p of proof.proofs){assert.equal(p.reverse_hunk_matches_entire_input_definition,true);assert.equal(createHash('sha256').update(sql(p.file)).digest('hex'),p.output_sha256);}
+ for(const p of proof.proofs){assert.equal(p.reverse_hunk_matches_entire_input_definition,true);
+  if(p.file==='OFF_RULE_AUTHORITY.sqlinc'){
+   const successor=JSON.parse(sql('CRITIC_NULLABLE_ROOT_REVERSE.json')).proofs.find(row=>row.file===p.file);
+   assert.equal(successor.input_sha256,p.output_sha256);assert.equal(createHash('sha256').update(sql(p.file)).digest('hex'),successor.output_sha256);
+  }else assert.equal(createHash('sha256').update(sql(p.file)).digest('hex'),p.output_sha256);}
 });
 test('closed OFF setup still rejects spoofed namespaces, actors, assignments and cycles with resealed hashes',()=>{
  const {context,controls,input}=vectors();input.week_ending='2026-10-04';const result=buildOffRuleTestAuthorization(context,input,controls);
@@ -124,6 +129,71 @@ test('all interface-only additions remain owner-only in the complete literal uni
  for(const row of census.additions){assert.ok(acl.includes(`revoke all on function ${row.signature} from PUBLIC,anon,authenticated,service_role,authenticator,supabase_admin;`));
   assert.ok(acl.includes(`grant execute on function ${row.signature} to "postgres";`));}
  assert.doesNotMatch(acl,/grant execute[^;]*to service_role/i);assert.equal(census.report_external_dependencies.length,2);
+});
+
+test('direct command and terminal setup serialize before OPEN without acquiring native I1 in reverse order',()=>{
+ const sql=fs.readFileSync(path.join(out,'OFF_RULE_COMMAND.sqlinc'),'utf8'),command=sql.slice(sql.indexOf('create or replace function private.weekly_source_rule_qualification_execute_v1'));
+ const gate=command.indexOf("pg_try_advisory_xact_lock(hashtextextended('weekly-source-off-rule-test:'"),open=command.indexOf('weekly_source_rule_qualification_scope_assert_v1(auth,actor,false)'),parent=command.indexOf('weekly_source_off_rule_native_parent_scope_v1(req,actor,auth)'),frame=command.indexOf('frame:=jsonb_build_object'),dispatch=command.indexOf('  case op'),completed=command.indexOf("'WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED',frame");
+ assert.ok(gate>=0&&gate<open&&open<parent&&parent<frame&&frame<dispatch&&dispatch<completed);
+ assert.match(sql,/pg_advisory_xact_lock\(hashtextextended\('weekly-source-off-rule-test:'/);
+ assert.doesNotMatch(command,/pg_advisory_unlock|for (?:update|share)|pg_advisory_xact_lock\(/i);
+ // Counterexample schedule: native command blocked on a native row while CLOSE
+ // tries to commit. The scope gate keeps CLOSE behind the whole transaction.
+ const state={held:null,closed:false};
+ const begin=owner=>{if(state.held)return false;state.held=owner;return true;};
+ assert.equal(begin('command'),true);assert.equal(begin('close'),false);assert.equal(state.closed,false);
+ state.held=null;assert.equal(begin('close'),true);state.closed=true;state.held=null;
+ assert.equal(begin('command'),true);assert.equal(state.closed,true); // OPEN recheck must refuse before frame.
+});
+
+test('actual command resolves all native foreign parent selectors including nested payloads before frame',()=>{
+ const sql=fs.readFileSync(path.join(out,'OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc'),'utf8');
+ for(const key of ['final_revision_id','run_id','task_id','orchestration_run_id','projection_receipt_id','root_timesheet_id','evidence_timesheet_id','publication_request_id','current_comparison_revision_id','expected_source_revision','c1_request','service_snapshot','p_rows'])assert.ok(sql.includes("'"+key+"'"),key);
+ assert.match(sql,/r\.source_cycle_id,'final_revision_id',r\.final_revision_id,'run_id',r\.id/);
+ assert.match(sql,/parent->>'run_id' is distinct from \(subject->>'run_id'\)::uuid::text/);
+ assert.match(sql,/observed<>expected/);assert.match(sql,/WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN/);
+ assert.match(sql,/r\.source_cycle_id=expected and t\.root_timesheet_id=root\.timesheet_id/);
+ assert.doesNotMatch(sql,/for (?:update|share)|execute\s+format|root\.week_ending_date\s*<>|work_date.*not between/i);
+ const admits=(expected,parents)=>parents.every(p=>p.cycle===expected&&p.run===p.declaredRun);
+ assert.equal(admits('fixture',[{cycle:'foreign',run:'same-actor-ready',declaredRun:'same-actor-ready'}]),false);
+ assert.equal(admits('fixture',[{cycle:'fixture',run:'foreign-task-run',declaredRun:'fixture-run'}]),false);
+ assert.equal(admits('fixture',[{cycle:'fixture',run:'fixture-run',declaredRun:'fixture-run'}]),true);
+});
+
+test('orchestration provenance uses actual run fingerprint and complete prepare audit while ordinary unstaged status survives',()=>{
+ const sql=fs.readFileSync(path.join(out,'OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc'),'utf8'),transport=fs.readFileSync(path.join(out,'OFF_RULE_TRANSPORT_STATUS.sqlinc'),'utf8');
+ assert.doesNotMatch(transport,/from public\.weekly_exceptional_orchestration_runs/);
+ assert.doesNotMatch(sql,/run_row\.source_cycle_id/);
+ for(const domain of ['WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1','WEEKLY_SOURCE_OFF_RULE_NATIVE_REQUEST_V1','WEEKLY_SOURCE_OFF_RULE_NATIVE_RESULT_V1','WEEKLY_SOURCE_OFF_RULE_COMMAND_V1'])assert.ok(sql.includes(domain));
+ assert.match(sql,/done\.before_json=admitted\.after_json/);assert.match(sql,/creation_orchestration_run_id=run_row\.id/);
+ assert.match(sql,/if qualified then raise; end if/);assert.match(transport,/qualified_fixture',false/);
+ assert.match(sql,/'observed_cycle_ids',to_jsonb\(cycles\)/);assert.match(transport,/if \(claim->>'qualified_fixture'\)::boolean then/);
+ assert.doesNotMatch(transport,/exception when no_data_found/);
+ const discovery=(cycles,ambiguous,knownOff)=>{if(new Set(cycles).size>1||(ambiguous&&cycles.some(c=>knownOff.has(c))))throw Error('SCOPE_CHANGED');return cycles.length===0?'ORDINARY':'STATUS';};
+ assert.equal(discovery([],false,new Set()),'ORDINARY');assert.equal(discovery([],true,new Set()),'ORDINARY');
+ assert.throws(()=>discovery(['fixture'],true,new Set(['fixture'])),/SCOPE_CHANGED/);
+ assert.throws(()=>discovery(['fixture','foreign'],true,new Set(['fixture'])),/SCOPE_CHANGED/);
+ const census=JSON.parse(fs.readFileSync(path.join(out,'NATIVE_CONSUMER_AND_EXECUTOR_CENSUS.json')));
+ assert.ok(census.source_executor_chain.some(row=>row.signature==='public.weekly_exceptional_pay_action_publication_status_v1(jsonb)'));
+});
+
+test('captured physical NULL and signed evidence roots outside pay receipts are rechecked without recollecting original items',()=>{
+ const sql=fs.readFileSync(path.join(out,'13_complete_nullable_physical_qualification_scope.sqlinc'),'utf8'),authority=fs.readFileSync(path.join(out,'OFF_RULE_AUTHORITY.sqlinc'),'utf8'),bulk=fs.readFileSync(path.join(out,'10_complete_bulk_test_scope.sqlinc'),'utf8');
+ assert.equal((sql.match(/'candidate_id',contract\.candidate_id,'client_id',sheet\.client_id\)/g)||[]).length,2);
+ assert.match(authority,/lease#>'\{original_census,original_root_identities\}'/);assert.match(authority,/actual is distinct from item/);
+ assert.match(bulk,/'client_id',s\.client_id\) into actual/);
+ const original={timesheet_id:id(31),booking_id:'SIGNED_OUTSIDE_SOURCE_PAY_RECEIPTS',contract_id:id(9),candidate_id:id(10),client_id:null};
+ assert.notDeepEqual({...original,client_id:id(8)},original);assert.notDeepEqual({...original,booking_id:'CHANGED'},original);
+ const proof=JSON.parse(fs.readFileSync(path.join(out,'CRITIC_NULLABLE_ROOT_REVERSE.json')));assert.equal(proof.original_source39_and_captured_once_items_preserved,true);
+});
+
+test('unchanged actual release caller can omit operational descriptor and shared Report bundle retains closed WITH-context schema',()=>{
+ const {context}=vectors();assert.deepEqual(loadOperationalJourneys(path.resolve(out,'../../../..'),{},context),[]);
+ const sql=fs.readFileSync(path.join(out,'final-operational-evidence.mjs'),'utf8'),controller=fs.readFileSync(path.join(out,'post-verified-evidence-controller.mjs'),'utf8');
+ assert.match(sql,/context\.receiptInputCommit\?\?context\.gitCommit/);assert.doesNotMatch(sql,/!bundle\.qualifications\.length/);
+ assert.match(sql,/exact\(row,\['context','native_context','native_gate_inputs','remote_gate_inputs','setup_closure','activation_scope'\]/);
+ assert.match(controller,/\['context','native_context','native_gate_inputs','remote_gate_inputs','setup_closure','activation_scope'\]/);
+ assert.match(sql,/const installation=row\.context/);assert.match(sql,/installation\.git_commit!==context\.gitCommit/);
 });
 test('nullable B clones only actual last Report row/window and preserves every ordinary calculator/identity guard',()=>{
  const source=fs.readFileSync(path.join(out,'12_complete_report_nullable_rounding_owner.sqlinc'),'utf8');

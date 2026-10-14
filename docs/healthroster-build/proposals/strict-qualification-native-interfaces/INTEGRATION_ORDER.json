@@ -13,6 +13,8 @@
     "OFF_RULE_AUTHORITY.sqlinc",
     "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
     "HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+    "13_complete_nullable_physical_qualification_scope.sqlinc",
+    "OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
     "OFF_RULE_COMMAND.sqlinc",
     "OFF_RULE_STATUS.sqlinc",
     "OFF_RULE_TRANSPORT_STATUS.sqlinc",
@@ -40,12 +42,39 @@
     "09_complete_controlled_setup_transport.sqlinc",
     "OWNER_ONLY_ADDITIONS_ACL.sqlinc"
   ],
-  "acl_final_gate": "Union all root275 + interface25 + separately owned Report signatures; preserve exact service grants, reassert full private registry/final browser ACL after all definitions, measure canonical installed privileges/fingerprint. No guessed count or service grant.",
+  "acl_final_gate": "Union all root275 + interface26 + separately owned Report signatures; preserve exact service grants, reassert full private registry/final browser ACL after all definitions, measure canonical installed privileges/fingerprint. No guessed count or service grant.",
   "runtime_mapping": "RUNTIME_SIDECAR_REVERSE.json gives complete final modules and exact destinations. BROKER_INDEX_SOURCE_FORWARD.js is a complete source reference: merge only its preserved import/dependency hunks into actual successor index and remeasure all consumed sources.",
   "report_rounding_paired_dependency": "The scoped nullable Report clone factory must compose with Report's actual native invoice admission branch and Report-only native snapshot compositor source ordinal ordering. Capture actual frozen/rendered last component full identity independently. No B qualification before this joined real proof.",
-  "recorder_request_fields": ["schema_version", "expected_execution", "expected_evidence_sha256", "receipt_input_commit", "receipt_tree_proof", "artifact_slot", "artifacts", "reason", "turn_backend_pid"],
-  "recorder_response_fields": ["schema_version", "execution", "receipt_input_commit", "receipt_tree_sha256", "artifact_slot", "artifacts_sha256", "prior_evidence_sha256", "evidence_sha256", "actor_user_id", "recorded_at_utc", "replayed", "operational_settings_changed", "receipt_sha256"],
-  "report_existing_slots": ["weekly_source_report_fin_native_comparisons", "weekly_source_report_fin_qualifications"],
+  "recorder_request_fields": [
+    "schema_version",
+    "expected_execution",
+    "expected_evidence_sha256",
+    "receipt_input_commit",
+    "receipt_tree_proof",
+    "artifact_slot",
+    "artifacts",
+    "reason",
+    "turn_backend_pid"
+  ],
+  "recorder_response_fields": [
+    "schema_version",
+    "execution",
+    "receipt_input_commit",
+    "receipt_tree_sha256",
+    "artifact_slot",
+    "artifacts_sha256",
+    "prior_evidence_sha256",
+    "evidence_sha256",
+    "actor_user_id",
+    "recorded_at_utc",
+    "replayed",
+    "operational_settings_changed",
+    "receipt_sha256"
+  ],
+  "report_existing_slots": [
+    "weekly_source_report_fin_native_comparisons",
+    "weekly_source_report_fin_qualifications"
+  ],
   "bundle_policy": "Only existing3 receipt bundle paths. Shared protected-operational bundle keeps qualifications array (possibly empty), optional existing Report fields and report_fin_native_artifacts. Raw inputs are independently rederived by their own protected producer.",
   "root_owned_real_gates": [
     "Independent source critic, integrated db:check and generated PostgreSQL17 contract",
@@ -57,5 +86,6 @@
     "Same-installed protected recorder and future native feature activation/replay only after full real gates"
   ],
   "no_database_or_runtime_acceptance": true,
-  "no_operational_assignment_change": true
+  "no_operational_assignment_change": true,
+  "critic_corrections": "Command takes nonwaiting same scope gate before OPEN revalidation and retains it through native completion; unified owner-only resolver admits every declared native parent before audit frame. Actual orchestration cycle comes from complete authenticated prepare trace plus actual native request fingerprint, or real native approval; no invented run column. Captured physical NULL Client roots are rechecked during Automatic scope/CLOSE and bulk. Original Source39/items unchanged. Shared loader preserves unchanged no-descriptor caller, WITH-context raw rows, qualifications[] and optional Report artifacts."
 }

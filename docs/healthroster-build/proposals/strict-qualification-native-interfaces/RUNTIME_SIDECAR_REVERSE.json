@@ -4,9 +4,9 @@
   "proofs": [
     {
       "input": "final-operational-evidence.mjs",
-      "input_sha256": "8f092310b61a9d3a803d09730f304d970e9d1d4b3dd8241139361a777aa2d330",
+      "input_sha256": "b0ebe4df3bcb833104b8f596379023cdacfb3959d8190e6679a4bf543cca1cda",
       "output": "weekly-source-protected-operational-evidence.mjs",
-      "output_sha256": "4ea4aabb470b144a7a78ca64452513f51fd8afd3d7fb760b9d0ae8e732120ee3",
+      "output_sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
       "destination": "scripts/weekly-source-protected-operational-evidence.mjs",
       "import_paths_only": true,
       "reverse_hunks_match_entire_module": true,

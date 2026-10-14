@@ -1,12 +1,12 @@
 {
   "schema_version": "STRICT_QUALIFICATION_NATIVE_INTERFACES_SOURCE_CHECK_V1",
   "status": "SOURCE_PACKET_CHECKS_PASS_INTEGRATED_RELEASE_CHECK_HELD",
-  "source_tests_pass": 16,
+  "source_tests_pass": 21,
   "source_tests_fail": 0,
   "preserved_money_and_lineage_source_vectors_pass": 16,
   "preserved_money_and_lineage_source_vectors_fail": 0,
-  "total_source_vectors_pass": 32,
-  "javascript_syntax_files": 37,
+  "total_source_vectors_pass": 37,
+  "javascript_syntax_files": 40,
   "sql_source_parser": [
     {
       "file": "01_operational_rule_projection.sqlinc",
@@ -81,6 +81,12 @@
       "source_parsed_only": true
     },
     {
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
       "file": "ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
       "statements": 1,
       "meta": 0,
@@ -100,7 +106,7 @@
     },
     {
       "file": "CURRENT_SOURCE_OWNER_INPUTS.sqlinc",
-      "statements": 271,
+      "statements": 272,
       "meta": 0,
       "source_parsed_only": true
     },
@@ -141,6 +147,12 @@
       "source_parsed_only": true
     },
     {
+      "file": "OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
       "file": "OFF_RULE_STATUS.sqlinc",
       "statements": 1,
       "meta": 0,
@@ -154,7 +166,7 @@
     },
     {
       "file": "OWNER_ONLY_ADDITIONS_ACL.sqlinc",
-      "statements": 75,
+      "statements": 78,
       "meta": 0,
       "source_parsed_only": true
     },
@@ -202,7 +214,7 @@
     },
     {
       "file": "SOURCE_EXECUTOR_EFFECT_INPUTS.sqlinc",
-      "statements": 487,
+      "statements": 488,
       "meta": 0,
       "source_parsed_only": true
     }
@@ -243,8 +255,8 @@
   },
   "source_pin": "2151af656561ad4d68e61e242769ed80a631fcc9",
   "original_consumed_definition_drift": 0,
-  "private_union": 300,
-  "owner_only_additions": 25,
+  "private_union": 301,
+  "owner_only_additions": 26,
   "independent_critic": false,
   "postgresql_compile": false,
   "actual_database_call": false,

@@ -82,7 +82,7 @@ begin
     raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_SOURCE_CHANGED' using errcode='40001'; end if;
   for item in select value from jsonb_array_elements(auth#>'{original_census,original_root_identities}') value loop
     select jsonb_build_object('timesheet_id',s.timesheet_id,'booking_id',s.booking_id,'contract_id',k.id,
-      'candidate_id',k.candidate_id,'client_id',k.client_id) into actual
+      'candidate_id',k.candidate_id,'client_id',s.client_id) into actual
       from public.timesheets s join public.contracts k on k.id=s.contract_id
       where s.timesheet_id=(item->>'timesheet_id')::uuid and (s.client_id is null or s.client_id=k.client_id);
     if actual is distinct from item then raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;

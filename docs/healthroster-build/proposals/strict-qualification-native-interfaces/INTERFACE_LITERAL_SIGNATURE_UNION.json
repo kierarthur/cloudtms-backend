@@ -9,13 +9,18 @@
   "inputs": [
     {
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "bytes": 19024,
-      "sha256": "10185537a09716c9a302fc689c984af2a98a9a1ead2fa982b0e5e994633ae02e"
+      "bytes": 21135,
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "file": "OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
     },
     {
       "file": "OFF_RULE_COMMAND.sqlinc",
-      "bytes": 18801,
-      "sha256": "1faf116f0bc616d0c9509ebc4150e46b21cafb9887c7a8cadbc0b4b6816b5a04"
+      "bytes": 18928,
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
     },
     {
       "file": "OFF_RULE_STATUS.sqlinc",
@@ -24,8 +29,8 @@
     },
     {
       "file": "OFF_RULE_TRANSPORT_STATUS.sqlinc",
-      "bytes": 5090,
-      "sha256": "a1a8aff4d6f0774b572142c680c0cc2f10d9fdeef7241c9f34d8fb5762468bea"
+      "bytes": 3929,
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
     },
     {
       "file": "01_operational_rule_projection.sqlinc",
@@ -83,6 +88,11 @@
       "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312"
     },
     {
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "bytes": 20020,
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
       "file": "ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
       "bytes": 18557,
       "sha256": "9a4698490f95584ed2e94ea58e1a6a9312c52b3a55f3109f067e9e3be3ba88b9"
@@ -130,7 +140,7 @@
     {
       "file": "10_complete_bulk_test_scope.sqlinc",
       "bytes": 18455,
-      "sha256": "3d33792023c4dc6a8a9aeb24ae00f844d704ca6611383a3081fd36207d03b288"
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
     },
     {
       "file": "07_automatic_capability_admission.sqlinc",
@@ -149,7 +159,7 @@
     }
   ],
   "composition_note": "Root 275 is a prepared literal closure, not a claim these uninstalled dependencies are physically present. Compose all root-listed original CAP/Q/strict/A0/creator inputs before this successor. Report validator/strategy additions are separately owned and not included here.",
-  "distinct_private_signatures": 300,
+  "distinct_private_signatures": 301,
   "preserved_all_275": true,
   "additions": [
     {
@@ -169,7 +179,7 @@
     {
       "signature": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "definition_sha256": "15ec2a6956fe326eb5b7cbe724c6a54267d19eda6b5bb598cd99c4e79cbe3178",
+      "definition_sha256": "c962ff3f8bc0712a2de78a951fc3b3f11d108620ff1c12941c4ff391d7118b6a",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
@@ -199,6 +209,16 @@
       ]
     },
     {
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "file": "OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "definition_sha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
       "signature": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
       "file": "OFF_RULE_COMMAND.sqlinc",
       "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
@@ -220,10 +240,11 @@
     {
       "signature": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
       "file": "OFF_RULE_COMMAND.sqlinc",
-      "definition_sha256": "d8e70426150280786c250473eb752a053d3869b2d24a26b2d15ec5f4237e6932",
+      "definition_sha256": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402",
       "security": "DEFINER",
       "volatility": "VOLATILE",
       "calls": [
+        "private.weekly_source_off_rule_native_parent_scope_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_query_require_service_v1",
         "private.weekly_source_rule_qualification_authorization_v1",
@@ -267,10 +288,11 @@
     {
       "signature": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
       "file": "OFF_RULE_TRANSPORT_STATUS.sqlinc",
-      "definition_sha256": "59ad0f5f4c341708a3a1d484abb3bc7fd99bb5e32285e3e97f8ddd80a8847de3",
+      "definition_sha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
+        "private.weekly_source_off_rule_native_parent_scope_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_query_require_service_v1",
         "private.weekly_source_rule_qualification_status_v1"
@@ -637,6 +659,79 @@
       ]
     },
     {
+      "signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb",
+      "security": "INVOKER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_query_require_service_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_release_v1()",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_protected_qualification_current_catalogue_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "7920d79b0c7873a80806945358437db5a1d5b1933435cc98b9d4feaada1878ce",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_bulk_source_facts_v1",
+        "private.weekly_source_checking_client_scope_v1",
+        "private.weekly_source_is_import_authoritative_v1",
+        "private.weekly_source_query_current_publication_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "278bec5f5e5e713a538076bd2e6ab2aa7f8e228b4f47e63d821b7ad90215d7df",
+      "security": "INVOKER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_qualification_census_v1",
+        "private.weekly_source_protected_qualification_owner_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._audit_insert"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "932d5c6e22f43aa37c6e97c11bbbac9c3678e1c21eb7612d66ab718531a9fd77",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_qualification_owner_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
       "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
       "file": "NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
       "definition_sha256": "ec0b759af0569ea1b2125e025380620a5c2feab6d77f71e08ace8304c3f84d24",
@@ -664,7 +759,7 @@
     {
       "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
       "file": "10_complete_bulk_test_scope.sqlinc",
-      "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c",
+      "definition_sha256": "673c05e40175c0e5c28af5af57737fec1f85d9a8c188a908e2f810caa98200dd",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
@@ -744,7 +839,7 @@
     {
       "signature": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "definition_sha256": "15ec2a6956fe326eb5b7cbe724c6a54267d19eda6b5bb598cd99c4e79cbe3178",
+      "definition_sha256": "c962ff3f8bc0712a2de78a951fc3b3f11d108620ff1c12941c4ff391d7118b6a",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
@@ -774,6 +869,16 @@
       ]
     },
     {
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "file": "OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "definition_sha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
       "signature": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
       "file": "OFF_RULE_COMMAND.sqlinc",
       "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
@@ -795,10 +900,11 @@
     {
       "signature": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
       "file": "OFF_RULE_COMMAND.sqlinc",
-      "definition_sha256": "d8e70426150280786c250473eb752a053d3869b2d24a26b2d15ec5f4237e6932",
+      "definition_sha256": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402",
       "security": "DEFINER",
       "volatility": "VOLATILE",
       "calls": [
+        "private.weekly_source_off_rule_native_parent_scope_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_query_require_service_v1",
         "private.weekly_source_rule_qualification_authorization_v1",
@@ -842,10 +948,11 @@
     {
       "signature": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
       "file": "OFF_RULE_TRANSPORT_STATUS.sqlinc",
-      "definition_sha256": "59ad0f5f4c341708a3a1d484abb3bc7fd99bb5e32285e3e97f8ddd80a8847de3",
+      "definition_sha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
+        "private.weekly_source_off_rule_native_parent_scope_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_query_require_service_v1",
         "private.weekly_source_rule_qualification_status_v1"
@@ -1037,6 +1144,79 @@
         "private.weekly_source_invoice_vat_target_pence_v1",
         "private.weekly_source_sha256_jsonb_v1",
         "public.weekly_source_billing_movements"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb",
+      "security": "INVOKER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_query_require_service_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_release_v1()",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_protected_qualification_current_catalogue_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "7920d79b0c7873a80806945358437db5a1d5b1933435cc98b9d4feaada1878ce",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_bulk_source_facts_v1",
+        "private.weekly_source_checking_client_scope_v1",
+        "private.weekly_source_is_import_authoritative_v1",
+        "private.weekly_source_query_current_publication_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "278bec5f5e5e713a538076bd2e6ab2aa7f8e228b4f47e63d821b7ad90215d7df",
+      "security": "INVOKER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_qualification_census_v1",
+        "private.weekly_source_protected_qualification_owner_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._audit_insert"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "definition_sha256": "932d5c6e22f43aa37c6e97c11bbbac9c3678e1c21eb7612d66ab718531a9fd77",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_qualification_owner_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_sha256_jsonb_v1"
       ]
     },
     {
@@ -1252,7 +1432,7 @@
     {
       "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
       "file": "10_complete_bulk_test_scope.sqlinc",
-      "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c",
+      "definition_sha256": "673c05e40175c0e5c28af5af57737fec1f85d9a8c188a908e2f810caa98200dd",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
@@ -1497,6 +1677,7 @@
     "private.weekly_source_mode_a_role_type_v1(text,text)",
     "private.weekly_source_not_finalised_dispatch_v1(uuid)",
     "private.weekly_source_not_finalised_due_scope_guard_v1()",
+    "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
     "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
     "private.weekly_source_office_next_owner_v1()",
     "private.weekly_source_office_next_paid_evidence_page_v1(uuid,uuid,text,uuid,jsonb,integer)",

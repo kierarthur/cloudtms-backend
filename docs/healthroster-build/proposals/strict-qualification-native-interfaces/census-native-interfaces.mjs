@@ -66,6 +66,7 @@ const entryNames=['public.weekly_source_group_rule_feature_set_atomic_v1','publi
  'public.weekly_source_projection_publish_atomic_v1','public.weekly_source_import_prepare_atomic_v1','public.weekly_source_finalise_atomic_v1',
  'public.weekly_source_finalisation_pay_open_atomic_v1','public.weekly_source_finalisation_pay_task_start_atomic_v1',
  'public.weekly_source_ordinary_pay_projection_apply_atomic_v1','public.weekly_source_finalisation_pay_task_finish_atomic_v1'];
+entryNames.push('public.weekly_exceptional_pay_action_publication_status_v1');
 const chain=new Map();function follow(name,via){for(const row of byName.get(name)??[]){if(chain.has(row.signature))continue;chain.set(row.signature,{...row,via});for(const call of row.calls)follow(call,row.signature);}}
 for(const name of entryNames)follow(name,'REQUESTED_ENTRY');
 let expanded=true;const triggerChain=new Map();while(expanded){expanded=false;const relations=new Set([...chain.values()].flatMap(row=>row.writes));

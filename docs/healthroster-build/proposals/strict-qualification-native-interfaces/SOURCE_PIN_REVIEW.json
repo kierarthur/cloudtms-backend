@@ -4,7 +4,22 @@
   "current_consumed_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
   "entire_root_source_equivalence_claim": false,
   "changed_consumed_definitions": [],
-  "compared_complete_definitions": 497,
+  "additional_actual_native_entry_owner": [
+    {
+      "signature": "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)",
+      "owner_name": "public.weekly_exceptional_pay_action_publication_status_v1",
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "definition_sha256": "6bdfb7ff5493272374a4584e9df4e20bb7707e8ee0e151da0ab8a683b544cdd9",
+      "calls": [
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1"
+      ],
+      "writes": [],
+      "via": "REQUESTED_ENTRY"
+    }
+  ],
+  "compared_complete_definitions": 498,
   "complete_consumed_definitions": [
     {
       "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
@@ -1565,6 +1580,11 @@
       "signature": "public.weekly_source_finalisation_pay_task_finish_atomic_v1(jsonb)",
       "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
       "sha256": "4d01593f2de81d0f61ef6ebbde975035495ce64986fd49b464fc2732eaff94d8"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "sha256": "6bdfb7ff5493272374a4584e9df4e20bb7707e8ee0e151da0ab8a683b544cdd9"
     },
     {
       "signature": "public._trg_change_bump()",

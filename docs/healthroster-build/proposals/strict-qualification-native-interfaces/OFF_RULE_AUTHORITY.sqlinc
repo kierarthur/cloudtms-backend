@@ -160,6 +160,29 @@ begin
       raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
   end if;
   if auth->>'purpose'='AUTOMATIC_JOURNEY' then
+    if not p_initial_open then
+      -- ORIGINAL_CAPTURED_PHYSICAL_ROOTS: recheck the OPEN union of Source
+      -- pay roots and signed evidence roots, including genuine physical NULL
+      -- Client. Never recollect only surviving OPEN incidents after a round.
+      if lease#>>'{original_census,schema_version}' is distinct from 'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1'
+        or lease#>>'{original_census,source_cycle_id}' is distinct from c.id::text
+        or lease#>>'{original_census,source_group_id}' is distinct from g.id::text
+        or lease#>>'{original_census,week_ending}' is distinct from c.finalisation_week_ending::text
+        or lease#>'{original_census,original_client_ids}' is distinct from auth#>'{fixture_manifest,client_ids}'
+        or lease#>>'{original_census,census_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1',lease->'original_census'-'census_sha256'),'hex') then
+        raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;
+      for item in select value from jsonb_array_elements(lease#>'{original_census,original_root_identities}') value loop
+        if not private.weekly_source_qualification_closed_object_v1(item,array['timesheet_id','booking_id','contract_id','candidate_id','client_id']) then
+          raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;
+        select jsonb_build_object('timesheet_id',sheet.timesheet_id,'booking_id',sheet.booking_id,'contract_id',contract.id,
+          'candidate_id',contract.candidate_id,'client_id',sheet.client_id) into actual
+          from public.timesheets sheet join public.contracts contract on contract.id=sheet.contract_id
+          where sheet.timesheet_id=(item->>'timesheet_id')::uuid and (sheet.client_id is null or sheet.client_id=contract.client_id);
+        if actual is distinct from item then
+          raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;
+      end loop;
+    end if;
     if cardinality(clients)<>1 or auth->'original_source_cas' is null or auth->'original_source_cas'='null'::jsonb
       or private.weekly_source_bulk_source_cas_v1(c.id,clients) is distinct from auth->'original_source_cas'
       or not exists(select 1 from public.weekly_source_final_revisions final where final.id=c.current_final_revision_id

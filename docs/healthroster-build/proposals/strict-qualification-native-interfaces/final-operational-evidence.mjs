@@ -101,21 +101,25 @@ export function activationReceiptReady(value,assignment){
   &&JSON.stringify(assignment.protected_capability_qualification)===JSON.stringify(value);}catch{return false;}
 }
 export function loadOperationalJourneys(root,release,context){
- if(!/^[0-9a-f]{40}$/.test(context.receiptInputCommit))fail('OPERATIONAL_RECEIPT_INPUT_COMMIT_INVALID');
- const bundle=loadCommittedBundle(root,release,{...context,gitCommit:context.receiptInputCommit},'weeklySourceProtectedOperational');if(bundle===null)return [];
+ const receiptInputCommit=context.receiptInputCommit??context.gitCommit;
+ const bundle=loadCommittedBundle(root,release,{...context,gitCommit:receiptInputCommit},'weeklySourceProtectedOperational');if(bundle===null)return [];
+ if(!/^[0-9a-f]{40}$/.test(receiptInputCommit))fail('OPERATIONAL_RECEIPT_INPUT_COMMIT_INVALID');
  exact(bundle,['schema_version','qualifications',...['report_fin_qualifications','report_fin_native_inputs','report_fin_native_artifacts']
   .filter(key=>Object.hasOwn(bundle,key))],'OPERATIONAL_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
-  ||!bundle.qualifications.length||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');
+  ||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');
  return bundle.qualifications.map(row=>{
-  exact(row,['native_context','native_gate_inputs','remote_gate_inputs','setup_closure','activation_scope'],'OPERATIONAL_BUNDLE_SCOPE_INVALID');
-  const installation={...row.native_context,release_id:context.releaseId,git_commit:context.gitCommit,contract_sha256:context.expectedHash};
+  exact(row,['context','native_context','native_gate_inputs','remote_gate_inputs','setup_closure','activation_scope'],'OPERATIONAL_BUNDLE_SCOPE_INVALID');
+  const installation=row.context;
+  if(installation.release_id!==context.releaseId||installation.git_commit!==context.gitCommit
+   ||installation.contract_sha256!==context.expectedHash||installation.environment!==context.environment
+   ||installation.database!==context.expectedDatabase)fail('OPERATIONAL_BUNDLE_EXECUTION_RELABELLED');
   const unpack=rows=>rows.map(input=>{
    exact(input,['gate','receipt_id','receipt','receipt_sha256'],'OPERATIONAL_BUNDLE_GATE_INVALID');
    if(typeof input.receipt!=='string'||sha(input.receipt)!==input.receipt_sha256)fail('OPERATIONAL_REMOTE_ARTIFACT_INVALID');
    return {gate:input.gate,receipt_id:input.receipt_id,receipt_bytes:input.receipt,expected_receipt_sha256:input.receipt_sha256};
   });
-  const source=proveCommittedSources(root,row.native_context.git_commit,context.receiptInputCommit);
+  const source=proveCommittedSources(root,row.native_context.git_commit,receiptInputCommit);
   const qualification=buildOperationalQualification(installation,row.native_context,unpack(row.native_gate_inputs),unpack(row.remote_gate_inputs),row.setup_closure,source,row.activation_scope);
   return {phase:'FULL_OPERATIONAL',context:installation,qualification};
  });

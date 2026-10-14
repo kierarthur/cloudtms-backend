@@ -8,6 +8,9 @@ grant execute on function private.weekly_source_rule_qualification_scope_assert_
 alter function private.weekly_source_rule_qualification_context_v1(uuid,uuid) owner to "postgres";
 revoke all on function private.weekly_source_rule_qualification_context_v1(uuid,uuid) from PUBLIC,anon,authenticated,service_role,authenticator,supabase_admin;
 grant execute on function private.weekly_source_rule_qualification_context_v1(uuid,uuid) to "postgres";
+alter function private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb) owner to "postgres";
+revoke all on function private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb) from PUBLIC,anon,authenticated,service_role,authenticator,supabase_admin;
+grant execute on function private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb) to "postgres";
 alter function private.weekly_source_rule_qualification_setup_atomic_v1(jsonb) owner to "postgres";
 revoke all on function private.weekly_source_rule_qualification_setup_atomic_v1(jsonb) from PUBLIC,anon,authenticated,service_role,authenticator,supabase_admin;
 grant execute on function private.weekly_source_rule_qualification_setup_atomic_v1(jsonb) to "postgres";
