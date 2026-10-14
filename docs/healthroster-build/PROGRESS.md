@@ -1,5 +1,15 @@
 # HealthRoster v2 TEST build progress
 
+## Latest rehearsal checkpoint — 14 October 2026, 01:25 UTC
+
+Install1 source is backed up and remote-matched at `37ddadc0a50721834c9e8a6c06becfc983f0dc32`, branch `codex/healthroster-install1-14102026`, authoritative local path `C:\Users\KierArthur\OneDrive - Arthur Rai\Documents\GitHub\.codex-worktrees\healthroster-install1-14102026`. Exact SQL/runtime contract remains `7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6`; remoteTEST/installed release remains Banking `07e66fb2b2742fbe634a41582f2ad3e004eed3b9`. There has been no HealthRoster promotion, install, activation or TestFlight.
+
+First full rehearsal on the prior pushed `206dc3dbb50ca971af8faa26a5f4ed384570368b` ran after its exact-archive source PASS, then was interrupted by a local mutable receipt-write failure in the stdout callback. Last persisted unit112 END is not a complete SQL/contract/rollback receipt. Only our clients were closed. A new owned shared turn freshly proved marker absence and unchanged ledger/catalogue/relation census with TEST/LEGACY:1/latest VERIFIED07e66/APPLYING0; business count/row fingerprints differ, so this attempt remains RESTORATION_HELD and is not installation proof. Fresh turn explicitly unlocked/closed at01:21:15.400Z. Full partial artifacts and source-safe report are now committed/pushed under the Install1 branch's `docs/healthroster-build/REHEARSAL_14102026_0101.md` and `install1-rehearsal/INTERRUPTED_*.json`.
+
+The reviewed forward repair uses immutable live C:\tmp receipts, small per-unit progress generations, safe callback/log exceptions, own-child cancellation, durable-child completion/reconciliation, authoritative local BUSY cooldown and guaranteed own-turn PAUSE close. Per-table names/counts/hashes diagnose drift without exposing rows or waiving any aggregate assertion. Independent focused receipt critic: SOURCE PASS;68 focused pure harness/turn/environment tests pass. A fresh committed-archive source preflight is running on37ddadc before the second exact full attempt; no protected release may run unless that attempt proves clean rollback/restoration.
+
+Money/OFF source critic currently HOLD for five P1 source findings; author corrections and Report/native A/B composition continue independently. Two normal installs remain the maximum: frozen WP-PP-only features-OFF Install1, then all gated remaining code in Install2. Full rehearsal/release estimate remains roughly1–3hours per successful cycle plus up-to-three repair rounds; remaining code/native acceptance/TestFlight/actual phone work remains several hours per area and depends on genuine receipts. Use a genuine past fresh-client/week upload; no automatic22October wait. NEXT acceptance waits Banking F17. Both final Part B verdicts and the final index remain outstanding.
+
 ## Owner pause and resume — 14 October 2026
 
 The owner paused the build, then explicitly resumed it with “continue”. All running implementation agents were interrupted during the pause. Source and partial results are preserved and pushed on our own feature branches: Install1 `2de1dff6abf256602a37424c64a964006a7a5262`, Money `3a4f1a7c7e8e08fb171068a2d0e3bc2259d1bc32`, Report `5fb310305ed91b9b3abcc7f0541f9357bbb77731`, and rehearsal harness `b830ec54783fae111f1a646949c16cf1bb30426c`. These are source backups; unfinished qualification packets remain unmounted and unproved.
@@ -299,3 +309,9 @@ The Install1 source reviewer reproduced a callback returning `proved` after `pg_
 SEND_7 turn: {"chat":"HealthRoster","task":"Install1 native SEND7 PID/OID/tag precheck only","status":"TAKEN","takenAt":"2026-10-14T00:01:09.668Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"Install1 native SEND7 PID/OID/tag precheck only","status":"RELEASED","takenAt":"2026-10-14T00:01:09.668Z","releasedAt":"2026-10-14T00:01:09.843Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"TAKEN","takenAt":"2026-10-14T01:01:35.409Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Fresh restoration proof after own interrupted Install1 rehearsal","status":"TAKEN","takenAt":"2026-10-14T01:17:04.156Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Fresh restoration proof after own interrupted Install1 rehearsal","status":"RELEASED","takenAt":"2026-10-14T01:17:04.156Z","releasedAt":"2026-10-14T01:21:15.400Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
