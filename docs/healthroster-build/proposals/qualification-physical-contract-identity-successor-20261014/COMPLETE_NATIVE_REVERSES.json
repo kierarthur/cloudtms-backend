@@ -1,0 +1,209 @@
+{
+  "source_only": true,
+  "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "proofs": [
+    {
+      "name": "private.weekly_source_protected_qualification_census_v1",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "output": "01_complete_original_census.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433",
+      "before_bytes": 5327,
+      "before_sha256": "a8c3e7bd999aa887ba0544dfaa6ef12acb7b9fd0762aa358a2eb49ce2a9304a7",
+      "after_bytes": 6055,
+      "after_sha256": "62a42572c84339f75895f1130d2273af99268573728df42af0fe4bbb1116686d",
+      "hunks": [
+        {
+          "name": "exact signed evidence root uses existing physical Contract tuple, not missing sheet Client",
+          "before": "        and contract.client_id=(item->>'client_id')::uuid\n        and (sheet.client_id is null or sheet.client_id=contract.client_id))) then",
+          "after": "        and contract.client_id=(item->>'client_id')::uuid)) then"
+        },
+        {
+          "name": "never erase an unbound member of the original physical-root union",
+          "before": "  with ids as (\n    select (item->>'evidence_timesheet_id')::uuid id from jsonb_array_elements(items) item",
+          "after": "  if exists(\n    select 1 from (\n      select (item->>'evidence_timesheet_id')::uuid id from jsonb_array_elements(items) item\n        where item->>'evidence_timesheet_id' is not null\n      union select (item->>'timesheet_id')::uuid from jsonb_array_elements(facts->'root_identities') item\n    ) original_id\n    left join public.timesheets physical on physical.timesheet_id=original_id.id\n    left join public.contracts native_contract on native_contract.id=physical.contract_id\n    where physical.timesheet_id is null or native_contract.id is null\n      or native_contract.candidate_id is null or native_contract.client_id is null\n      or not(native_contract.client_id=any(clients))\n  ) then\n    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_ROOT_SCOPE_INVALID' using errcode='55000';end if;\n  with ids as (\n    select (item->>'evidence_timesheet_id')::uuid id from jsonb_array_elements(items) item"
+        },
+        {
+          "name": "same five census keys with genuine Contract-derived Candidate/Client",
+          "before": "    'contract_id',contract.id,'candidate_id',contract.candidate_id,'client_id',sheet.client_id)",
+          "after": "    'contract_id',contract.id,'candidate_id',contract.candidate_id,'client_id',contract.client_id)"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "name": "private.weekly_source_protected_qualification_assert_v1",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "output": "02_complete_original_census_assert.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433",
+      "before_bytes": 6103,
+      "before_sha256": "a81781abaf0acfb58aad7237cb8c9bfaf65de842268951c093e87d9dcc2d399a",
+      "after_bytes": 6119,
+      "after_sha256": "5fdda8cce28d635e27e6cbd6ff905db0560d08a7a80020e1bb357d3d3fb3b7e5",
+      "hunks": [
+        {
+          "name": "same captured physical identity keys with actual Contract-derived Client",
+          "before": "      'candidate_id',contract.candidate_id,'client_id',sheet.client_id) into actual",
+          "after": "      'candidate_id',contract.candidate_id,'client_id',contract.client_id) into actual"
+        },
+        {
+          "name": "unbound Contract refuses instead of manufactured nullable physical Client",
+          "before": "      where sheet.timesheet_id=(original->>'timesheet_id')::uuid and (sheet.client_id is null or sheet.client_id=contract.client_id);",
+          "after": "      where sheet.timesheet_id=(original->>'timesheet_id')::uuid\n        and contract.candidate_id is not null and contract.client_id is not null;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_scope_assert_v1",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "output": "03_complete_off_scope_assert.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b",
+      "before_bytes": 11950,
+      "before_sha256": "b004ea85bce21aba784ca2c5d21c4317124bac46ccc1403df07a5254c31d6cfd",
+      "after_bytes": 12044,
+      "after_sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293",
+      "hunks": [
+        {
+          "name": "correct physical-field disposition in original-root comment",
+          "before": "      -- pay roots and signed evidence roots, including genuine physical NULL\n      -- Client. Never recollect only surviving OPEN incidents after a round.",
+          "after": "      -- pay roots and signed evidence roots with the physical root's actual\n      -- Contract-derived Client. Unbound Contract is not a nullable Client\n      -- proof. Never recollect only surviving OPEN incidents after a round."
+        },
+        {
+          "name": "same automatic/close census from actual physical Contract Client",
+          "before": "          'candidate_id',contract.candidate_id,'client_id',sheet.client_id) into actual",
+          "after": "          'candidate_id',contract.candidate_id,'client_id',contract.client_id) into actual"
+        },
+        {
+          "name": "real missing or unbound root/Contract cannot pass original census",
+          "before": "          where sheet.timesheet_id=(item->>'timesheet_id')::uuid and (sheet.client_id is null or sheet.client_id=contract.client_id);",
+          "after": "          where sheet.timesheet_id=(item->>'timesheet_id')::uuid\n            and contract.candidate_id is not null and contract.client_id is not null;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "name": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "output": "04_complete_native_parent_scope.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585",
+      "before_bytes": 22454,
+      "before_sha256": "d841410531821f0262d37d2adc8ff710842e575ca4f68d652906e5c45ab24ed0",
+      "after_bytes": 22410,
+      "after_sha256": "cd18c8626a7092cb065de2e13fbd6bb2bcd679a1bca523d18ef8cd9615635221",
+      "hunks": [
+        {
+          "name": "qualified root proves genuine non-null native Contract identity",
+          "before": "          if qualified and root.client_id is not null and root.client_id is distinct from contract.client_id then",
+          "after": "          if qualified and (contract.client_id is null or contract.candidate_id is null) then"
+        },
+        {
+          "name": "every qualified discovered physical root keeps same parent tuple and explicit unknown refusal",
+          "before": "          if (root.client_id is not null and root.client_id is distinct from contract.client_id)\n            or (contract_id is not null and contract_id is distinct from contract.id)",
+          "after": "          if contract.client_id is null or contract.candidate_id is null\n            or (contract_id is not null and contract_id is distinct from contract.id)"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "name": "private.weekly_source_protected_qualification_step_v1",
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "output": "05_complete_native_qualification_step.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+      "before_bytes": 9822,
+      "before_sha256": "6c420b53543231624b6f9b0539153fee118c9b84bb9b00bc79e38250bf9f4e02",
+      "after_bytes": 9887,
+      "after_sha256": "eaf88c9b9b87dfc48c374127a6dbfd6f7296206ce4f1a5a62b1c0a64ffe67355",
+      "hunks": [
+        {
+          "name": "explicit variable namespace for the native root identity predicate",
+          "before": "as $function$\ndeclare scope_value jsonb;",
+          "after": "as $function$\n<<qualification_step_identity>>\ndeclare scope_value jsonb;"
+        },
+        {
+          "name": "same native Contract/Candidate/Client tuple uses actual variables and no absent physical field",
+          "before": "        and contract.id=contract_id and contract.candidate_id=candidate_id and contract.client_id=client_id\n        and (sheet.client_id is null or sheet.client_id=client_id)) then",
+          "after": "        and contract.id=qualification_step_identity.contract_id\n        and contract.candidate_id=qualification_step_identity.candidate_id\n        and contract.client_id=qualification_step_identity.client_id) then"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "name": "private.weekly_source_protected_test_scope_assert_v1",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+      "output": "06_complete_bulk_original_root_assert.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6",
+      "before_bytes": 5097,
+      "before_sha256": "b5a4981d0a6628c9e5d844636cbd7a068d06ef79a2f599a954012adfe9e5be25",
+      "after_bytes": 5103,
+      "after_sha256": "63a5f545e3bf2cc5d765bbad49147ba446f4fcb9ddafaec2aead05c494af44a2",
+      "hunks": [
+        {
+          "name": "original physical-root census Client is the existing native Contract Client",
+          "before": "      'candidate_id',k.candidate_id,'client_id',s.client_id) into actual",
+          "after": "      'candidate_id',k.candidate_id,'client_id',k.client_id) into actual"
+        },
+        {
+          "name": "missing/unbound roots remain mismatches, not erased original scope",
+          "before": "      where s.timesheet_id=(item->>'timesheet_id')::uuid and (s.client_id is null or s.client_id=k.client_id);",
+          "after": "      where s.timesheet_id=(item->>'timesheet_id')::uuid and k.candidate_id is not null and k.client_id is not null;"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "raw_input_pins": [
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "saved": "input/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "bytes": 20020,
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "saved": "input/01_OFF_RULE_AUTHORITY.sqlinc",
+      "bytes": 21135,
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "saved": "input/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "saved": "input/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "saved": "input/16_10_complete_bulk_test_scope.sqlinc",
+      "bytes": 18455,
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+    }
+  ],
+  "source_schema_pin": {
+    "containing_report_commit": "63965738",
+    "file": "docs/healthroster-build/proposals/agency-source-dependency-current-reader-forward-20261014/construction/CURRENT_TIMESHEETS_CONTRACT_SCHEMA.json",
+    "sha256": "700dde50aca972314d813f7aa865ddf5bca06990dbf48e5181cd0664d3d6b7ed"
+  },
+  "current_contract_sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "Report_Source20_bulk_facts_reader_is_separate": true,
+  "old_frozen_nullable_physical_Client_concept_superseded_for_actual_T0_only": true,
+  "Source39_keys_count_actor_physical_Contract_Candidate_guards_preserved": true,
+  "financial_TF_Client_and_other_record_DTO_aliases_not_rewritten": true,
+  "SQL_compiled": false,
+  "native_proof": false
+}

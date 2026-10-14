@@ -1,0 +1,72 @@
+create or replace function private.weekly_source_protected_qualification_assert_v1(
+  p_scope_id uuid,p_cycle_id uuid,p_client_ids uuid[],p_capability text
+) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare scope_value jsonb; c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  clients uuid[]; actual_cas jsonb; context_value text; scopes integer; rules jsonb; original jsonb; actual jsonb;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  get diagnostics context_value=pg_context;
+  if context_value !~ 'PL/pgSQL function (private\.)?weekly_source_protected_qualification_step_v1\(uuid,text,jsonb\)' then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_CALLER_REQUIRED' using errcode='42501'; end if;
+  select count(*),jsonb_agg(audit.after_json)->0 into scopes,scope_value from public.audit_events audit
+    where audit.object_type='weekly_source_protected_qualification' and audit.action='WEEKLY_SOURCE_QUALIFICATION_SCOPE_ADMITTED'
+      and audit.event_sequence_is_authoritative
+      and audit.after_json->>'transaction_id'=pg_current_xact_id()::text
+      and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+      and (p_scope_id is null or audit.object_id_text=p_scope_id::text);
+  if scopes<>1 or scope_value->>'schema_version' is distinct from 'WEEKLY_SOURCE_TEST_ROLLBACK_QUALIFICATION_SCOPE_V1'
+    or scope_value->>'database' is distinct from current_database()
+    or scope_value->'operational_ready' is distinct from 'false'::jsonb
+    or scope_value->>'source_cycle_id' is distinct from p_cycle_id::text
+    or scope_value->>'current_local_date' is distinct from ((clock_timestamp() at time zone 'Europe/London')::date)::text
+    or scope_value->>'scope_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_TEST_ROLLBACK_QUALIFICATION_SCOPE_V1',scope_value-'scope_sha256'),'hex')
+    or scope_value->'execution' is distinct from private.weekly_source_protected_qualification_release_v1()
+    or not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted
+      and lock_row.mode='ExclusiveLock' and lock_row.classid=20261013::oid and lock_row.objid=1::oid and lock_row.objsubid=2
+      and lock_row.database=(select oid from pg_database where datname=current_database())
+      and lock_row.pid=(scope_value->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid())
+    or p_capability not in ('BULK_SIGNED','AUTOMATIC_RECONCILE')
+    or not(scope_value->'capabilities' @> jsonb_build_array(p_capability)) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  perform private._weekly_source_settings_require_admin_v1((scope_value->>'actor_user_id')::uuid);
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER';
+  if (g.id::text,g.agency_id::text,g.environment,c.finalisation_week_ending::text) is distinct from
+    (scope_value->>'source_group_id',scope_value->>'agency_id','TEST',scope_value->>'week_ending') then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_CHANGED' using errcode='40001'; end if;
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  perform private.weekly_source_office_authority_v1((scope_value->>'actor_user_id')::uuid,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  select array_agg(value::uuid order by value::uuid) into clients
+    from jsonb_array_elements_text(scope_value#>'{original_census,original_client_ids}') value;
+  if p_client_ids is not null and to_jsonb(p_client_ids) is distinct from to_jsonb(clients) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_CLIENT_CENSUS_CHANGED' using errcode='40001'; end if;
+  actual_cas:=private.weekly_source_bulk_source_cas_v1(c.id,clients);
+  if actual_cas is distinct from scope_value#>'{original_census,source_cas}' then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_CHANGED' using errcode='40001'; end if;
+  -- No mutable family/current-generation state is compared. Every original
+  -- physical root identity remains; native signed/stage/inventory guards do
+  -- their own version/signature/currentness work without a qualification waiver.
+  for original in select value from jsonb_array_elements(scope_value#>'{original_census,original_root_identities}') value loop
+    select jsonb_build_object('timesheet_id',sheet.timesheet_id,'booking_id',sheet.booking_id,'contract_id',contract.id,
+      'candidate_id',contract.candidate_id,'client_id',sheet.client_id) into actual
+      from public.timesheets sheet join public.contracts contract on contract.id=sheet.contract_id
+      where sheet.timesheet_id=(original->>'timesheet_id')::uuid and (sheet.client_id is null or sheet.client_id=contract.client_id);
+    if actual is distinct from original then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;
+  end loop;
+  if p_capability='AUTOMATIC_RECONCILE' then
+    if cardinality(clients)<>1 then raise exception 'WEEKLY_SOURCE_QUALIFICATION_AUTOMATIC_SCOPE_INVALID' using errcode='55000'; end if;
+    rules:=private.weekly_source_effective_rule_set_v1(clients[1],c.id)->'values';
+    if rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+      or rules->>'equal_protected_hours' is distinct from 'CLEAR_AUTOMATICALLY'
+      or (select automatic_reconcile_actor_user_id from public.weekly_source_global_settings where singleton)
+        is distinct from (scope_value->>'actor_user_id')::uuid then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_AUTOMATIC_SCOPE_INVALID' using errcode='55000'; end if;
+  end if;
+  return scope_value;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

@@ -1,0 +1,57 @@
+create or replace function private.weekly_source_protected_test_scope_assert_v1(
+  p_cycle_id uuid,p_actor_user_id uuid,p_original_client_ids uuid[],p_work_event_id uuid default null
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare lease jsonb; auth jsonb; n integer; c public.weekly_source_cycles%rowtype;
+  g public.weekly_source_groups%rowtype; clients uuid[]; expected jsonb; item jsonb; actual jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER' and environment='TEST';
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  select count(*),jsonb_agg(a.after_json)->0 into n,lease from public.audit_events a
+    where a.object_type='weekly_source_protected_test_journey' and a.action='WEEKLY_SOURCE_TEST_JOURNEY_OPENED'
+      and a.event_sequence_is_authoritative and a.after_json->>'source_cycle_id'=c.id::text
+      and a.after_json->>'journey_actor_user_id'=p_actor_user_id::text
+      and not exists(select 1 from public.audit_events closed where closed.object_type=a.object_type
+        and closed.object_id_text=a.object_id_text and closed.event_sequence_is_authoritative
+        and closed.action in ('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED','WEEKLY_SOURCE_TEST_JOURNEY_REVOKED'));
+  if n<>1 or lease->>'contract' is distinct from 'WEEKLY_SOURCE_TEST_JOURNEY_SCOPE_V1'
+    or lease->'operational_ready' is distinct from 'false'::jsonb
+    or lease->>'scope_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_TEST_JOURNEY_SCOPE_V1',lease-'scope_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  auth:=private.weekly_source_protected_test_authorization_v1((lease->>'authorization_id')::uuid);
+  if lease->>'authorization_sha256' is distinct from auth->>'authorization_sha256'
+    or lease->>'scope_id' is distinct from auth->>'scope_id'
+    or lease->>'source_cycle_id' is distinct from auth->>'source_cycle_id'
+    or lease->>'journey_actor_user_id' is distinct from auth->>'journey_actor_user_id'
+    or lease->>'week_ending' is distinct from c.finalisation_week_ending::text
+    or auth->>'agency_id' is distinct from g.agency_id::text or auth->>'source_group_id' is distinct from g.id::text
+    or clock_timestamp()>=(auth->>'expires_at_utc')::timestamptz
+    or (clock_timestamp() at time zone 'Europe/London')::date is distinct from (lease->>'opened_local_date')::date
+    or exists(select 1 from public.weekly_source_group_rule_assignments a where a.source_group_id=g.id and a.feature_enabled
+      and c.finalisation_week_ending between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date))
+    or private.weekly_source_bulk_producer_ready_v1(c.id) or private.weekly_source_automatic_reconcile_producer_ready_v1(c.id) then
+    raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  select array_agg(value::uuid order by value::uuid) into clients
+    from jsonb_array_elements_text(auth#>'{original_census,original_client_ids}') value;
+  if p_original_client_ids is not null and to_jsonb(p_original_client_ids) is distinct from to_jsonb(clients) then
+    raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+  if private.weekly_source_bulk_source_cas_v1(c.id,clients) is distinct from auth#>'{original_census,source_cas}' then
+    raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_SOURCE_CHANGED' using errcode='40001'; end if;
+  for item in select value from jsonb_array_elements(auth#>'{original_census,original_root_identities}') value loop
+    select jsonb_build_object('timesheet_id',s.timesheet_id,'booking_id',s.booking_id,'contract_id',k.id,
+      'candidate_id',k.candidate_id,'client_id',s.client_id) into actual
+      from public.timesheets s join public.contracts k on k.id=s.contract_id
+      where s.timesheet_id=(item->>'timesheet_id')::uuid and (s.client_id is null or s.client_id=k.client_id);
+    if actual is distinct from item then raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;
+  end loop;
+  if p_work_event_id is not null and not exists(select 1 from jsonb_array_elements(auth#>'{original_census,original_items}') item
+    where item->>'work_event_id'=p_work_event_id::text) then
+    raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_FOREIGN_EVENT_REFUSED' using errcode='42501'; end if;
+  return lease||jsonb_build_object('original_census',auth->'original_census','capabilities',auth->'capabilities');
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_TEST_JOURNEY_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

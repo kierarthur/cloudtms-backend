@@ -1,0 +1,970 @@
+{
+  "source_only": true,
+  "containing_report_commit": "63965738",
+  "source": "docs/healthroster-build/proposals/agency-source-dependency-current-reader-forward-20261014/construction/SOURCE_RAW_ID_DDL_MAPPING.json",
+  "whole_mapping_sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804",
+  "physical": {
+    "relation": "public.timesheets",
+    "ddl": [
+      {
+        "relation": "public.timesheets",
+        "kind": "CREATE_TABLE",
+        "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+        "source_raw_sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730",
+        "source_line": 4276,
+        "statement_raw_sha256": "37f77ae682ffd1ffef2cd9394790334207010d0c622d5f429dcfe442e1da8d4d",
+        "statement_bytes": 2878,
+        "statement": "create table public.timesheets (\n  timesheet_id uuid not null,\n  booking_id text not null,\n  occupant_key_norm text not null,\n  hospital_norm text not null,\n  ward_norm text not null,\n  job_title_norm text not null,\n  shift_label_norm text,\n  scheduled_start_iso timestamp with time zone,\n  scheduled_end_iso timestamp with time zone,\n  worked_start_iso timestamp with time zone,\n  worked_end_iso timestamp with time zone,\n  break_start_iso timestamp with time zone,\n  break_end_iso timestamp with time zone,\n  break_minutes integer,\n  worked_minutes integer,\n  week_ending_date date not null,\n  auth_name text,\n  auth_job_title text,\n  authorised_at_server timestamp with time zone,\n  r2_nurse_key text,\n  r2_auth_key text,\n  img_sha256_nurse text,\n  img_sha256_auth text,\n  reference_number text,\n  reference_set_at timestamp with time zone,\n  status timesheet_status_enum not null,\n  idempotency_key text,\n  client_hash text,\n  client_ua text,\n  created_at timestamp with time zone not null,\n  updated_at timestamp with time zone not null,\n  version integer not null,\n  is_current boolean not null,\n  revoked_at timestamp with time zone,\n  revoked_reason text,\n  revoked_by text,\n  contract_id uuid,\n  submission_mode submission_mode_enum,\n  manual_pdf_r2_key text,\n  line_type timesheet_line_type_enum not null,\n  sheet_scope timesheet_scope_enum not null,\n  actual_schedule_json jsonb,\n  additional_units_week jsonb not null,\n  additional_units_per_day jsonb not null,\n  qr_token text,\n  qr_status timesheet_qr_status_enum,\n  qr_payload_json jsonb not null,\n  qr_generated_at timestamp with time zone,\n  qr_scanned_at timestamp with time zone,\n  qr_scan_info_json jsonb,\n  qr_r2_key text,\n  day_references_json jsonb,\n  manual_pdf_rotation_degrees integer not null,\n  qr_last_sent_hash text,\n  qr_last_sent_at_utc timestamp with time zone,\n  qr_signed_hash text,\n  qr_signed_at_utc timestamp with time zone,\n  candidate_hint_text jsonb,\n  band text,\n  generated_pdf_at_utc timestamp with time zone,\n  is_adjustment boolean not null,\n  parent_timesheet_id uuid,\n  generated_pdf_refs_sig text,\n  generated_pdf_refs_snapshot_json jsonb,\n  generated_pdf_refs_captured_at_utc timestamp with time zone,\n  qr_sent_refs_sig text,\n  qr_sent_refs_snapshot_json jsonb,\n  qr_sent_refs_captured_at_utc timestamp with time zone,\n  correction_id text,\n  correction_kind text,\n  adjustment_origin text,\n  archived_at_utc timestamp with time zone,\n  archived_by_user_id uuid,\n  archived_reason_code text,\n  document_revision bigint not null,\n  document_state text not null,\n  current_document_version_id uuid,\n  active_document_operation_id uuid,\n  manual_document_asset_id uuid,\n  last_document_error_json jsonb,\n  candidate_submission_route_intent text,\n  candidate_workflow_id uuid,\n  candidate_workflow_generation integer,\n  candidate_manager_approved_at_utc timestamp with time zone\n);"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/12072026_1428_migrations.sql",
+        "source_raw_sha256": "9aedd750700f3e968c80c8ebba422655001d6ca58238e9e964e7330a932e2482",
+        "source_line": 3,
+        "statement_raw_sha256": "a3869341cd31a1215e4897fdc7f8168efb159408b08480aa8303289959b52cea",
+        "statement_bytes": 192,
+        "statement": "ALTER TABLE public.timesheets\n  ADD COLUMN IF NOT EXISTS archived_at_utc timestamptz,\n  ADD COLUMN IF NOT EXISTS archived_by_user_id uuid,\n  ADD COLUMN IF NOT EXISTS archived_reason_code text;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/23072026_2207_invoice_operation_queue_schema.sql",
+        "source_raw_sha256": "9e850f1e75837ab86e1e9d4e20d134083ea5a2bbf0ca5808ed31de6eb42b9fdb",
+        "source_line": 443,
+        "statement_raw_sha256": "6327fb98f76749971378d2bd1bc7ebb5e1a27707654eefa31b84f738900e8b7b",
+        "statement_bytes": 1041,
+        "statement": "alter table public.timesheets\n add column document_revision bigint not null default 1,\n add column document_state text not null default 'NOT_REQUESTED',\n add column current_document_version_id uuid,\n add column active_document_operation_id uuid,\n add column manual_document_asset_id uuid,\n add column last_document_error_json jsonb,\n add constraint timesheets_document_state_ck check(document_state in('NOT_REQUESTED','QUEUED','STALE','PREPARING','READY','FAILED')),\n add constraint timesheets_current_document_version_fk foreign key(current_document_version_id)\n  references public.invoice_document_versions(id) on delete set null deferrable initially deferred,\n add constraint timesheets_active_document_operation_fk foreign key(active_document_operation_id)\n  references public.invoice_operations(id) on delete set null deferrable initially deferred,\n add constraint timesheets_manual_document_asset_fk foreign key(manual_document_asset_id)\n  references public.invoice_document_assets(id) on delete set null deferrable initially deferred;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql",
+        "source_raw_sha256": "4b6184ae53ac7321720da0d4adc78ae7002bea6e1dcbe53d607601caf161cc3a",
+        "source_line": 43,
+        "statement_raw_sha256": "a5d47591f1971aa504606d71147cf2b7e29fbef60ff006a7dc6bb78b2f3ae038",
+        "statement_bytes": 96,
+        "statement": "alter table public.timesheets\n  add column if not exists candidate_submission_route_intent text;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql",
+        "source_raw_sha256": "de172f00b5eddf6427765893a55e642ec9da366baaa59aaee1d420625bb4c423",
+        "source_line": 71,
+        "statement_raw_sha256": "27e26c29895846d439c815f4aa13f86596a580a5231fb8810e09dfe6fdd327e1",
+        "statement_bytes": 224,
+        "statement": "alter table public.timesheets\n  add column if not exists candidate_workflow_id uuid,\n  add column if not exists candidate_workflow_generation integer,\n  add column if not exists candidate_manager_approved_at_utc timestamptz;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql",
+        "source_raw_sha256": "de172f00b5eddf6427765893a55e642ec9da366baaa59aaee1d420625bb4c423",
+        "source_line": 164,
+        "statement_raw_sha256": "188fbffa8a21e9069af2037281158cda1367ca4e3d4946edf6e2011a16e7d7d1",
+        "statement_bytes": 417,
+        "statement": "alter table public.timesheets\n  add constraint timesheets_candidate_workflow_generation_ck check (\n    candidate_workflow_generation is null or candidate_workflow_generation > 0\n  ),\n  add constraint timesheets_candidate_workflow_pair_ck check (\n    (candidate_workflow_id is null and candidate_workflow_generation is null)\n    or (candidate_workflow_id is not null and candidate_workflow_generation is not null)\n  );"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+        "source_raw_sha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30",
+        "source_line": 62,
+        "statement_raw_sha256": "cff4634c8c72028a12248871e455b74ae30d2694a8b5a4841549146cd7d1ef4e",
+        "statement_bytes": 311,
+        "statement": "alter table public.timesheets\n  add column if not exists settings_authority_json jsonb not null default '{}'::jsonb,\n  add column if not exists settings_authority_version text,\n  add column if not exists settings_authority_fingerprint text,\n  add column if not exists settings_authority_resolved_at timestamptz;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+        "source_raw_sha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30",
+        "source_line": 68,
+        "statement_raw_sha256": "bd36c371d5df1fa7e221bd5daa3f6eea0dba5afbb96e4a21be0535ba31e730d1",
+        "statement_bytes": 784,
+        "statement": "alter table public.timesheets\n  drop constraint if exists timesheets_settings_authority_object_ck,\n  add constraint timesheets_settings_authority_object_ck\n    check (jsonb_typeof(settings_authority_json) = 'object'),\n  drop constraint if exists timesheets_settings_authority_identity_ck,\n  add constraint timesheets_settings_authority_identity_ck check (\n    (settings_authority_json = '{}'::jsonb\n      and settings_authority_version is null\n      and settings_authority_fingerprint is null\n      and settings_authority_resolved_at is null)\n    or\n    (settings_authority_json <> '{}'::jsonb\n      and settings_authority_version = 'CONTRACT_SETTINGS_AUTHORITY_V1'\n      and settings_authority_fingerprint ~ '^[0-9a-f]{64}$'\n      and settings_authority_resolved_at is not null)\n  );"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+        "source_raw_sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316",
+        "source_line": 90,
+        "statement_raw_sha256": "8c7b714f9705cbbaa532a2b5c5683dfd12ed60b8f392a787feb2b8a790a8c5ca",
+        "statement_bytes": 210,
+        "statement": "ALTER TABLE public.timesheets ADD COLUMN bpay_work_key_v1 text GENERATED ALWAYS AS (\nCASE\n    WHEN ((booking_id IS NOT NULL) AND (btrim(booking_id) <> ''::text)) THEN booking_id\n    ELSE NULL::text\nEND) STORED;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+        "source_raw_sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316",
+        "source_line": 96,
+        "statement_raw_sha256": "77b811dd27d28748f80ac321d527e083a4980bc79be0eabadb7976aef0c715ed",
+        "statement_bytes": 76,
+        "statement": "ALTER TABLE public.timesheets ALTER COLUMN bpay_work_key_v1 DROP EXPRESSION;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+        "source_raw_sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316",
+        "source_line": 97,
+        "statement_raw_sha256": "154ab6bb16642a843771d004a2d517e9a4d5d142fdbc08c53bb684135056e7ff",
+        "statement_bytes": 89,
+        "statement": "ALTER TABLE public.timesheets ADD COLUMN bpay_work_revision_v1 bigint DEFAULT 0 NOT NULL;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+        "source_raw_sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316",
+        "source_line": 117,
+        "statement_raw_sha256": "5dc23d55876ae1d66ab33f0f49d23c13473ab2f4130d0542b63dfa769b3296e0",
+        "statement_bytes": 122,
+        "statement": "ALTER TABLE public.timesheets ADD CONSTRAINT bpay_timesheet_work_identity_v1 UNIQUE (timesheet_id, bpay_work_revision_v1);"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+        "source_raw_sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316",
+        "source_line": 145,
+        "statement_raw_sha256": "c26b4538cbe7495b35b0717e22c9a9627c31ade327a247f7c1794d0fe2777184",
+        "statement_bytes": 258,
+        "statement": "ALTER TABLE public.timesheets ADD CONSTRAINT bpay_timesheet_work_key_expression_v1 CHECK ((bpay_work_key_v1 IS NOT DISTINCT FROM\nCASE\n    WHEN ((booking_id IS NOT NULL) AND (btrim(booking_id) <> ''::text)) THEN booking_id\n    ELSE NULL::text\nEND)) NOT VALID;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "source_raw_sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc",
+        "source_line": 14,
+        "statement_raw_sha256": "78a49ec071e5ebeace0b81888a91e96049e07b3068edd3204b181c9c82354baf",
+        "statement_bytes": 83,
+        "statement": "ALTER TABLE public.timesheets\n  ADD COLUMN IF NOT EXISTS candidate_hint_text jsonb;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "source_raw_sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc",
+        "source_line": 17,
+        "statement_raw_sha256": "e23d02020dbaf9bb952ce1bb1a12da98bbc1116a524f43e21f3c7ebd35f3c4f9",
+        "statement_bytes": 99,
+        "statement": "ALTER TABLE public.timesheets\n  DROP CONSTRAINT IF EXISTS timesheets_candidate_hint_text_is_object;"
+      },
+      {
+        "relation": "public.timesheets",
+        "kind": "ALTER_TABLE",
+        "source_path": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "source_raw_sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc",
+        "source_line": 20,
+        "statement_raw_sha256": "16e95aa5f3276f44e0d0ea132b6c3486a5842ff3002f7025908334fb4fc840e0",
+        "statement_bytes": 186,
+        "statement": "ALTER TABLE public.timesheets\n  ADD CONSTRAINT timesheets_candidate_hint_text_is_object\n  CHECK (\n    candidate_hint_text IS NULL\n    OR jsonb_typeof(candidate_hint_text) = 'object'\n  );"
+      }
+    ],
+    "mutation_owners": [
+      {
+        "signature": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+        "source_path": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+        "definition_raw_sha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_qr_restore_version(uuid,uuid,text,'pending' or 'signed' p_actor_user_id uuid)",
+        "source_path": "supabase/repeatable/16122025_timesheet_qr_refuse_restore_planned_delete_audit_rpc.sql",
+        "definition_raw_sha256": "8fd7ebcc94ae5e3c29268f53355bc06920f3fb4e86024863d1bc2c23fa8c0c32",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.tspdf_work_success_bulk(uuid[])",
+        "source_path": "supabase/repeatable/07012026_ts_pdfs_outbox_and_pdf_context_batch.sql",
+        "definition_raw_sha256": "e690f8c85a1a302abb8748d700cb4f5bf4e88700bd04dcc95dc44f7dd4507af5",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_weekly_chain_delete_apply(uuid,uuid)",
+        "source_path": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql",
+        "definition_raw_sha256": "dde5155fb3123aafebe597e8d63e2ad46d45137220b1b71693e734b62bdb0811",
+        "mutations": [
+          {
+            "operation": "DELETE FROM",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid)",
+        "source_path": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql",
+        "definition_raw_sha256": "c101364c6e7f78e7dfe21a43aa1f185897b21d0fbc288abf51f22c73a2169641",
+        "mutations": [
+          {
+            "operation": "DELETE FROM",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamp with time zone)",
+        "source_path": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql",
+        "definition_raw_sha256": "b74983ea85cac83e9b0dd523ad9611cccaa8b8fd6b24276f01115f43bb623df7",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone,text)",
+        "source_path": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
+        "definition_raw_sha256": "0c6c3acb91dc32c13b85ef7fafdd3e5d0f62a8d8fbd91767973b08ff8229421a",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_standard_delete_apply_v1(uuid,uuid,uuid,text)",
+        "source_path": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+        "definition_raw_sha256": "f841a5b4d5956b1b6b5250c9a4d88eeabda519706cf6c823c4c2e8eb0cb54760",
+        "mutations": [
+          {
+            "operation": "DELETE FROM",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid,uuid[],uuid[],uuid[],uuid[],text)",
+        "source_path": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+        "definition_raw_sha256": "b57e5118e2861d0f6a36dc528274ba91ec227bd757ee07045678afad562e294d",
+        "mutations": [
+          {
+            "operation": "DELETE FROM",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_archive_transition_v1(uuid,text,text,uuid,uuid,text,timestamp with time zone)",
+        "source_path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_raw_sha256": "74730cf697b728299ab8625f6ad70b6624256ab30aa9f183aa0fd97ff5626a63",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+        "source_path": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+        "definition_raw_sha256": "0d37f0a50664072788f012e54ef202fbbeb0139310922fbe3fbdc1c74d83b063",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+        "source_path": "supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql",
+        "definition_raw_sha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+        "source_path": "supabase/repeatable/21072026_1235_25_hr_weekly_phase3_apply_adjustment_truth_4arg.sql",
+        "definition_raw_sha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+        "source_path": "supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql",
+        "definition_raw_sha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_unauthorise_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+        "source_path": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+        "definition_raw_sha256": "67983c70f46bfd6732a08e5b1ce114cfe85744e84af2b5829817c20638a475a7",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+        "source_path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "definition_raw_sha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+        "source_path": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+        "definition_raw_sha256": "3dcce038c9b76e071be9ce22bd7521eeb8af33489641cbc395a1475d893a83f6",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_unauthorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+        "source_path": "supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql",
+        "definition_raw_sha256": "01daa92c68d3dc158794076fd958a4960521233138c4067eff33db84856ee59e",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.contract_week_manual_unprocess_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+        "source_path": "supabase/repeatable/21072026_1235_35_contract_week_manual_unprocess_atomic.sql",
+        "definition_raw_sha256": "a7401cd4b95d2d4452f25dd423c70bca033a32f534fe67882d646e4f3263cdb2",
+        "mutations": [
+          {
+            "operation": "DELETE FROM",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+        "source_path": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+        "definition_raw_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+        "source_path": "supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql",
+        "definition_raw_sha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+        "source_path": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+        "definition_raw_sha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+        "source_path": "supabase/repeatable/21072026_1820_09_weekly_import_apply_cancellations.sql",
+        "definition_raw_sha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+        "source_path": "supabase/repeatable/21072026_1820_10_nhsp_weekly_apply_cancellations.sql",
+        "definition_raw_sha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+        "source_path": "supabase/repeatable/21072026_1820_11_weekly_import_create_cancellation_corrections.sql",
+        "definition_raw_sha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+        "source_path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+        "definition_raw_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.invoice_operation_control_batch(jsonb,uuid,timestamptz)",
+        "source_path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql",
+        "definition_raw_sha256": "2d8bbc344a5cc8c4a089a7d1f01a173b8546689cb8c991b69b168dd644a558f7",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.manual_timesheet_queue_attach_process_atomic(uuid,uuid,uuid,text,text,uuid,jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_manual_timesheet_queue_attach_process_atomic.sql",
+        "definition_raw_sha256": "fe79bcb8052c5cce4be19b618fa899809b72b5bf4c60734d6e78a511f266e5bf",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.trg_timesheet_document_invalidate()",
+        "source_path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+        "definition_raw_sha256": "8d10dac60a2ff17bf790aa8c14073706eba1485303a2bea5ab4f6aeb9d263bad",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.invoice_work_complete_batch(jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+        "definition_raw_sha256": "05e621a3f3e36ea37a3c8ab3f822a3a89d1c42a9ccaafc2eb8ce8e16e56c7c03",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._invoice_document_advance_batch_v6_downstream(jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+        "definition_raw_sha256": "df93415a80a26a2ca3c234ae2a48b1c59ce28a7c25e69e3a7299b275c3f1b369",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._invoice_reconcile_advance_batch(jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_reconcile_advance_batch.sql",
+        "definition_raw_sha256": "1865497026c4bdf5514d2afe300ef9c0b10ae547c97e6486e0b5eda8d7a6c7c8",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamptz)",
+        "source_path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+        "definition_raw_sha256": "791a96838952db0e19a6a46aaf25d9f7a579d9a5f314bfe842e8464168d8b70d",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamptz)",
+        "source_path": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "definition_raw_sha256": "c29d1115d243d98e07e8ea273e501d3c8bfad31158559c15eee9c7f877135d06",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_daily_save_recalculate_atomic_v1(uuid,integer,jsonb,uuid,timestamptz)",
+        "source_path": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+        "definition_raw_sha256": "8c9b88d176c6af030637781132fb3c2a02e8b0eaf89e9cb2d998ea411b60554c",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamptz)",
+        "source_path": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+        "definition_raw_sha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.candidate_submission_reject_atomic_v1(uuid,text,uuid,uuid,text,text,text,timestamptz)",
+        "source_path": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+        "definition_raw_sha256": "827548d010c38f84a89efdc15cf4f5364c136e0c98c877f5b3f7b3f9805e165d",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+        "source_path": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+        "definition_raw_sha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_route_version_confirmed_v1(uuid,uuid,text,text,text,uuid,text,text,text,boolean,timestamptz)",
+        "source_path": "supabase/repeatable/11102026_1107_banking_pay_next_daily_route_retention_v1.sql",
+        "definition_raw_sha256": "534783421910f02048a5976f02e9be822e8e90789b4218e377f7906560821dcd",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamptz)",
+        "source_path": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "definition_raw_sha256": "ac37282cdd9e3184c2a3c7cac57ccd927b4a05bbc4c7cc443af1921d0568783e",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamptz)",
+        "source_path": "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
+        "definition_raw_sha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamptz)",
+        "source_path": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+        "definition_raw_sha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_daily_factual_receipt_v1(uuid,integer,text,jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/28082026_1923_candidate_daily_factual_receipt_v1.sql",
+        "definition_raw_sha256": "ad62d367679783a9a8909bdd9335010b211a7d55a155109c8fef59a666772d6e",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamptz)",
+        "source_path": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+        "definition_raw_sha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.timesheet_daily_abandoned_receipt_delete_apply_v1(uuid,uuid,uuid,text)",
+        "source_path": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+        "definition_raw_sha256": "a96f5e2361c2662bf5f82ed642dc8ea5a8e1f5cd0791ede029640f15adb5d37a",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+        "source_path": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+        "definition_raw_sha256": "00dc5e790b3324d4dcfcb459106950505e4698d94c2d0e29d84cc21f1b9e410a",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._candidate_legacy_paper_orphan_prepare_v1(text,uuid,integer,timestamptz)",
+        "source_path": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+        "definition_raw_sha256": "be225b645f6cab1daa2e7f27b6f7e1c24be0b176e52a315d141594cc1846b148",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private._daily_timesheet_settings_authority_after_fin_v1()",
+        "source_path": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "definition_raw_sha256": "0960fd2e8fa5fa990a0fcd5c646510a8afcfb403f411c390d84f9e7f7d12eb98",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamptz)",
+        "source_path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+        "definition_raw_sha256": "1b48ef8ca6b156e55ae039df9e8b5e7ec5c62bedeacafe5d8b0cccba2d8a07eb",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+        "source_path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definition_raw_sha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670",
+        "mutations": [
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+        "source_path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+        "definition_raw_sha256": "af68582fe7d41fb5c5e61c02cb588d4c4fc7711e6977caada750799180de1d3f",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+        "source_path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+        "definition_raw_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "definition_raw_sha256": "d4b13c8ff109290882f34a0cffa9cf8fa2bfd1abbb20ef2446ac51f0acf9ef64",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          },
+          {
+            "operation": "UPDATE",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private.timesheet_weekly_chain_delete_apply_base_v1(uuid,uuid,uuid[],uuid[],uuid[],text)",
+        "source_path": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+        "definition_raw_sha256": "b11080d9728fee481abbb6aa979855f53533702129319676df063aa0d8a432d0",
+        "mutations": [
+          {
+            "operation": "DELETE FROM",
+            "table": "public.timesheets"
+          }
+        ]
+      },
+      {
+        "signature": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamptz)",
+        "source_path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+        "definition_raw_sha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+        "mutations": [
+          {
+            "operation": "INSERT INTO",
+            "table": "public.timesheets"
+          }
+        ]
+      }
+    ]
+  }
+}

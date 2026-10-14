@@ -1,0 +1,117 @@
+create or replace function private.weekly_source_protected_qualification_step_v1(
+  p_scope_id uuid,p_operation text,p_request jsonb
+) returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare scope_value jsonb; cycle_id uuid; actor uuid; request_value jsonb; result_value jsonb;
+  item jsonb; selected_event uuid; family_id uuid; request_id uuid; contract_id uuid; client_id uuid;
+  candidate_id uuid; root_id uuid; native_cycle uuid; step_count integer; receipt jsonb; capability text;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if p_scope_id is null or p_operation not in ('BULK_PREVIEW','BULK_ADMIT','BULK_ROUND','BULK_APPLY',
+      'PREPARE_FAMILY','PREPARE_ACTION','ACTION_CONTEXT','STAGE_C1_REQUEST','COMPLETE_LOCAL',
+      'AUTOMATIC_PREVIEW','AUTOMATIC_COMPLETE')
+    or jsonb_typeof(p_request) is distinct from 'object' or octet_length(convert_to(p_request::text,'UTF8'))>262144 then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+  select (audit.after_json->>'source_cycle_id')::uuid into strict cycle_id from public.audit_events audit
+    where audit.object_type='weekly_source_protected_qualification' and audit.object_id_text=p_scope_id::text
+      and audit.action='WEEKLY_SOURCE_QUALIFICATION_SCOPE_ADMITTED' and audit.event_sequence_is_authoritative
+      and audit.after_json->>'transaction_id'=pg_current_xact_id()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text;
+  capability:=case when p_operation like 'AUTOMATIC_%' then 'AUTOMATIC_RECONCILE' else 'BULK_SIGNED' end;
+  scope_value:=private.weekly_source_protected_qualification_assert_v1(p_scope_id,cycle_id,null,capability);
+  actor:=(scope_value->>'actor_user_id')::uuid;
+  select count(*) into step_count from public.audit_events audit
+    where audit.object_type='weekly_source_protected_qualification' and audit.object_id_text=p_scope_id::text
+      and audit.action='WEEKLY_SOURCE_QUALIFICATION_NATIVE_STEP_COMPLETED'
+      and audit.after_json->>'transaction_id'=pg_current_xact_id()::text;
+  if step_count>=(scope_value->>'max_native_steps')::integer then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_LIMIT' using errcode='54000'; end if;
+  if p_request ? 'actor_user_id' and p_request->>'actor_user_id' is distinct from actor::text then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ACTOR_MISMATCH' using errcode='42501'; end if;
+  if p_operation like 'AUTOMATIC_%' then request_value:=p_request;
+  else request_value:=p_request||jsonb_build_object('actor_user_id',actor); end if;
+  if p_operation<>'COMPLETE_LOCAL' and request_value->>'source_cycle_id' is distinct from cycle_id::text then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_CYCLE_MISMATCH' using errcode='42501'; end if;
+  if p_operation not in ('BULK_PREVIEW','BULK_ADMIT','BULK_ROUND','BULK_APPLY') then
+    if p_operation in ('COMPLETE_LOCAL','AUTOMATIC_COMPLETE') then
+      request_id:=(request_value->>'publication_request_id')::uuid;
+      select approval.work_event_id,approval.client_id,request.contract_id,request.candidate_id,
+        request.root_timesheet_id,approval.source_cycle_id into strict selected_event,client_id,contract_id,candidate_id,root_id,native_cycle
+        from public.weekly_exceptional_c1_publication_requests request
+        join public.weekly_exceptional_payment_approvals approval on approval.creation_orchestration_run_id=request.orchestration_run_id
+          and approval.pay_target_family_id=request.family_id where request.id=request_id;
+      if native_cycle is distinct from cycle_id or (p_operation='AUTOMATIC_COMPLETE'
+        and request_value->>'work_event_id' is distinct from selected_event::text) then
+        raise exception 'WEEKLY_SOURCE_QUALIFICATION_CYCLE_MISMATCH' using errcode='42501'; end if;
+    else
+      selected_event:=(request_value->>'work_event_id')::uuid;
+      if p_operation='PREPARE_FAMILY' then
+        contract_id:=(request_value->>'contract_id')::uuid; client_id:=(request_value->>'client_id')::uuid;
+        candidate_id:=(request_value->>'candidate_id')::uuid;
+      elsif p_operation<>'AUTOMATIC_PREVIEW' then
+        family_id:=(request_value->>'family_id')::uuid;
+        select family.contract_id,family.candidate_id,family.root_timesheet_id,contract.client_id
+          into strict contract_id,candidate_id,root_id,client_id
+          from public.weekly_exceptional_pay_target_families family join public.contracts contract on contract.id=family.contract_id
+          where family.id=family_id and contract.candidate_id=family.candidate_id;
+      end if;
+    end if;
+    select value into strict item from jsonb_array_elements(scope_value#>'{original_census,original_items}') value
+      where value->>'work_event_id'=selected_event::text;
+    if p_operation<>'AUTOMATIC_PREVIEW' and
+      (item->>'contract_id',item->>'candidate_id',item->>'client_id') is distinct from
+        (contract_id::text,candidate_id::text,client_id::text) then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_ITEM_CHANGED' using errcode='40001'; end if;
+    if p_operation in ('PREPARE_FAMILY','ACTION_CONTEXT','STAGE_C1_REQUEST')
+      and request_value->>'evidence_timesheet_id' is distinct from item->>'evidence_timesheet_id' then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_SIGNED_ROOT_SCOPE_INVALID' using errcode='42501'; end if;
+    if root_id is not null and not exists(select 1 from public.timesheets sheet
+      join public.contracts contract on contract.id=sheet.contract_id where sheet.timesheet_id=root_id
+        and contract.id=contract_id and contract.candidate_id=candidate_id and contract.client_id=client_id
+        and (sheet.client_id is null or sheet.client_id=client_id)) then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_NATIVE_ROOT_SCOPE_INVALID' using errcode='55000'; end if;
+  end if;
+  -- No arbitrary routine text or dynamic EXECUTE. Native owners retain payload,
+  -- actor/signature/rates/financial/I-1/CAS/replay guards and existing side effects.
+  case p_operation
+    when 'BULK_PREVIEW' then
+      if request_value->>'mode' is distinct from 'PREVIEW' then raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+      result_value:=public.weekly_source_protect_all_signed_atomic_v1(request_value);
+    when 'BULK_ADMIT' then
+      if request_value->>'mode' is distinct from 'COMMIT' or coalesce(request_value->>'phase','ADMIT')<>'ADMIT' then
+        raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+      result_value:=public.weekly_source_protect_all_signed_atomic_v1(request_value);
+    when 'BULK_ROUND' then
+      if request_value->>'mode' is distinct from 'COMMIT' or request_value->>'phase' is distinct from 'ROUND' then
+        raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+      result_value:=public.weekly_source_protect_all_signed_atomic_v1(request_value);
+    when 'BULK_APPLY' then
+      if request_value->>'mode' is distinct from 'COMMIT' or request_value->>'phase' is distinct from 'APPLY' then
+        raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+      result_value:=public.weekly_source_protect_all_signed_atomic_v1(request_value);
+    when 'PREPARE_FAMILY' then result_value:=public.weekly_exceptional_pay_prepare_family_v1(request_value);
+    when 'PREPARE_ACTION' then result_value:=public.weekly_exceptional_pay_prepare_action_v1(request_value);
+    when 'ACTION_CONTEXT' then result_value:=public.weekly_exceptional_pay_action_context_v1(request_value);
+    when 'STAGE_C1_REQUEST' then result_value:=public.weekly_exceptional_pay_stage_c1_request_v1(request_value);
+    when 'COMPLETE_LOCAL' then result_value:=public.weekly_exceptional_pay_complete_local_v1(request_value);
+    when 'AUTOMATIC_PREVIEW' then
+      if request_value->>'mode' is distinct from 'PREVIEW' then raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+      result_value:=public.weekly_source_automatic_reconcile_atomic_v1(request_value);
+    when 'AUTOMATIC_COMPLETE' then
+      if request_value->>'mode' is distinct from 'COMPLETE' then raise exception 'WEEKLY_SOURCE_QUALIFICATION_STEP_INVALID' using errcode='22023'; end if;
+      result_value:=public.weekly_source_automatic_reconcile_atomic_v1(request_value);
+  end case;
+  -- Own native stage may change its protected state, not immutable Source CAS.
+  perform private.weekly_source_protected_qualification_assert_v1(p_scope_id,cycle_id,null,capability);
+  receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_TEST_ROLLBACK_NATIVE_STEP_V1',
+    'scope_id',p_scope_id,'scope_sha256',scope_value->>'scope_sha256','transaction_id',pg_current_xact_id()::text,
+    'execution',scope_value->'execution','operation',p_operation,'actor_user_id',actor,'source_cycle_id',cycle_id,
+    'request_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_QUALIFICATION_NATIVE_REQUEST_V1',request_value),'hex'),
+    'result_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_QUALIFICATION_NATIVE_RESULT_V1',result_value),'hex'),
+    'source_cas',scope_value#>'{original_census,source_cas}','operational_replay',false);
+  perform public._audit_insert('weekly_source_protected_qualification',p_scope_id::text,
+    'WEEKLY_SOURCE_QUALIFICATION_NATIVE_STEP_COMPLETED',null,receipt,'Bounded owner-run native prerequisite',actor);
+  return jsonb_build_object('qualification_step',receipt,'native_result',result_value);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_NATIVE_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

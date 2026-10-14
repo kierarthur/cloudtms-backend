@@ -1,0 +1,243 @@
+-- SOURCE PROPOSAL ONLY. Root integrates and proves; no operational activation.
+-- The only persisted relation named here is the existing audit_events owner.
+-- Its scope is transaction-bound and cannot authorize another transaction.
+create or replace function private.weekly_source_protected_qualification_owner_v1()
+returns void language plpgsql stable security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare owner_name name;
+begin
+  select pg_get_userbyid(proowner) into strict owner_name from pg_proc
+    where oid='private.weekly_source_protected_qualification_owner_v1()'::regprocedure;
+  if session_user is distinct from owner_name or current_user is distinct from owner_name then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_OWNER_REQUIRED' using errcode='42501'; end if;
+  perform private.weekly_source_query_require_service_v1();
+end;
+$function$;
+
+create or replace function private.weekly_source_protected_qualification_release_v1()
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; i private.cloudtms_database_identity%rowtype;
+begin
+  select * into strict i from private.cloudtms_database_identity where singleton and environment='TEST';
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if current_database()<>'cloudtms_test_clone' or r.status is distinct from 'VERIFIED'
+    or r.completed_at_utc is null or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,schema_version}'
+      is distinct from 'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_CATALOGUE_V1'
+    or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,contract_sha256}' is distinct from r.installed_contract_sha256
+    or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}' is distinct from encode(
+      private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_QUALIFICATION_INSTALLED_CATALOGUE_V1',
+        private.weekly_source_protected_qualification_current_catalogue_v1()),'hex') then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_RELEASE_REQUIRED' using errcode='55000'; end if;
+  return jsonb_build_object('release_id',r.release_id,'source_commit',r.git_commit,
+    'contract_sha256',r.installed_contract_sha256,'installation_id',i.installation_id,
+    'environment',i.environment,'database',current_database(),
+    'managed_manifest_sha256',r.evidence_json#>>'{managed_release,manifest_sha256}',
+    'installed_catalogue_jsonb_sha256',r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}');
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_RELEASE_REQUIRED' using errcode='55000';
+end;
+$function$;
+
+-- Plain discovery only. Original signed physical identities and immutable
+-- Source pay roots are sealed. Protection family/current-generation state is
+-- not made a second Source authority, and a completed Client is never removed.
+create or replace function private.weekly_source_protected_qualification_census_v1(p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; p public.weekly_source_projection_publications%rowtype;
+  clients uuid[]; facts jsonb; cas_value jsonb; roots jsonb; items jsonb; census jsonb;
+begin
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict p from public.weekly_source_projection_publications
+    where id=c.current_projection_publication_id and source_cycle_id=c.id and state='CURRENT'
+      and authority_scope_kind='CYCLE' and correction_session_id is null and report_scope_id is null;
+  perform private.weekly_source_query_current_publication_v1(c.id,p.id);
+  select coalesce(array_agg(distinct incident.client_id order by incident.client_id),'{}'::uuid[])
+    into clients from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=c.source_group_id
+    join public.contracts contract on contract.id=comparison.contract_id and contract.candidate_id=work.candidate_id
+      and contract.client_id=work.client_id
+    where incident.source_cycle_id=c.id and incident.state='OPEN'
+      and private.weekly_source_is_import_authoritative_v1(work.client_id,contract.id,work.work_date)
+      and (private.weekly_source_checking_client_scope_v1(p.id) is null
+        or incident.client_id=private.weekly_source_checking_client_scope_v1(p.id));
+  if cardinality(clients) not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_CLIENTS_REQUIRED' using errcode='55000'; end if;
+  facts:=private.weekly_source_bulk_source_facts_v1(c.id,clients);
+  cas_value:=private.weekly_source_bulk_source_cas_v1(c.id,clients);
+  select coalesce(jsonb_agg(jsonb_build_object('incident_id',incident.id,'work_event_id',work.id,
+    'client_id',work.client_id,'candidate_id',work.candidate_id,'contract_id',contract.id,'work_date',work.work_date,
+    'comparison_revision_id',comparison.id,'evidence_timesheet_id',comparison.candidate_timesheet_id)
+    order by work.candidate_id,work.id,incident.id),'[]'::jsonb) into items
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=c.source_group_id
+    join public.contracts contract on contract.id=comparison.contract_id and contract.candidate_id=work.candidate_id
+      and contract.client_id=work.client_id
+    where incident.source_cycle_id=c.id and incident.state='OPEN' and work.client_id=any(clients)
+      and private.weekly_source_is_import_authoritative_v1(work.client_id,contract.id,work.work_date);
+  if exists(select 1 from jsonb_array_elements(items) item where item->>'evidence_timesheet_id' is not null
+    and not exists(select 1 from public.timesheets sheet join public.contracts contract on contract.id=sheet.contract_id
+      where sheet.timesheet_id=(item->>'evidence_timesheet_id')::uuid
+        and contract.id=(item->>'contract_id')::uuid and contract.candidate_id=(item->>'candidate_id')::uuid
+        and contract.client_id=(item->>'client_id')::uuid
+        and (sheet.client_id is null or sheet.client_id=contract.client_id))) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SIGNED_ROOT_SCOPE_INVALID' using errcode='55000'; end if;
+  with ids as (
+    select (item->>'evidence_timesheet_id')::uuid id from jsonb_array_elements(items) item
+      where item->>'evidence_timesheet_id' is not null
+    union select (item->>'timesheet_id')::uuid from jsonb_array_elements(facts->'root_identities') item
+  ) select coalesce(jsonb_agg(jsonb_build_object('timesheet_id',sheet.timesheet_id,'booking_id',sheet.booking_id,
+    'contract_id',contract.id,'candidate_id',contract.candidate_id,'client_id',sheet.client_id)
+    order by sheet.timesheet_id),'[]'::jsonb) into roots from ids
+    join public.timesheets sheet on sheet.timesheet_id=ids.id join public.contracts contract on contract.id=sheet.contract_id;
+  census:=jsonb_build_object('schema_version','WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1','source_cycle_id',c.id,
+    'source_group_id',c.source_group_id,'week_ending',c.finalisation_week_ending,'original_client_ids',to_jsonb(clients),
+    'original_root_identities',roots,'original_items',items,'source_cas',cas_value);
+  return census||jsonb_build_object('census_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1',census),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+
+create or replace function private.weekly_source_protected_qualification_begin_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare actor uuid; cycle_id uuid; scope_id uuid; c public.weekly_source_cycles%rowtype;
+  g public.weekly_source_groups%rowtype; census jsonb; execution jsonb; scope_value jsonb; existing_count integer;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['scope_id','actor_user_id','source_cycle_id',
+      'expected_execution','expected_census_sha256','capabilities','reason','turn_backend_pid'])
+    or not(p_request ?& array['scope_id','actor_user_id','source_cycle_id','expected_execution','expected_census_sha256','capabilities','reason','turn_backend_pid'])
+    or jsonb_typeof(p_request->'capabilities') is distinct from 'array'
+    or p_request->'capabilities' not in ('["BULK_SIGNED"]'::jsonb,'["AUTOMATIC_RECONCILE","BULK_SIGNED"]'::jsonb)
+    or char_length(coalesce(p_request->>'reason','')) not between 1 and 1000 then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_REQUEST_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid; cycle_id:=(p_request->>'source_cycle_id')::uuid; scope_id:=(p_request->>'scope_id')::uuid;
+  if actor is null or cycle_id is null or scope_id is null then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_REQUEST_INVALID' using errcode='22023'; end if;
+  if not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted
+    and lock_row.mode='ExclusiveLock' and lock_row.classid=20261013::oid and lock_row.objid=1::oid and lock_row.objsubid=2
+      and lock_row.database=(select oid from pg_database where datname=current_database())
+    and lock_row.pid=(p_request->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid()) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SHARED_TURN_REQUIRED' using errcode='55000'; end if;
+  perform private._weekly_source_settings_require_admin_v1(actor);
+  select * into strict c from public.weekly_source_cycles where id=cycle_id;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER';
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  if g.environment<>'TEST' then raise exception 'WEEKLY_SOURCE_QUALIFICATION_TEST_ONLY' using errcode='42501'; end if;
+  perform private.weekly_source_office_authority_v1(actor,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  execution:=private.weekly_source_protected_qualification_release_v1();
+  if execution is distinct from p_request->'expected_execution' then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_EXECUTION_CHANGED' using errcode='40001'; end if;
+  if private.weekly_source_bulk_producer_ready_v1(c.id) or private.weekly_source_automatic_reconcile_producer_ready_v1(c.id) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_OPERATIONAL_SCOPE_REFUSED' using errcode='55000'; end if;
+  census:=private.weekly_source_protected_qualification_census_v1(c.id);
+  if census->>'census_sha256' is distinct from p_request->>'expected_census_sha256' then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_CHANGED' using errcode='40001'; end if;
+  select count(*) into existing_count from public.audit_events audit
+    where audit.object_type='weekly_source_protected_qualification' and audit.action='WEEKLY_SOURCE_QUALIFICATION_SCOPE_ADMITTED'
+      and audit.after_json->>'transaction_id'=pg_current_xact_id()::text
+      and audit.after_json->>'backend_pid'=pg_backend_pid()::text;
+  if existing_count<>0 then raise exception 'WEEKLY_SOURCE_QUALIFICATION_SCOPE_ALREADY_ADMITTED' using errcode='23505'; end if;
+  scope_value:=jsonb_build_object('schema_version','WEEKLY_SOURCE_TEST_ROLLBACK_QUALIFICATION_SCOPE_V1','scope_id',scope_id,
+    'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,'database',current_database(),
+    'turn_backend_pid',p_request->>'turn_backend_pid',
+    'execution',execution,'actor_user_id',actor,'agency_id',g.agency_id,'source_group_id',g.id,'source_cycle_id',c.id,
+    'current_local_date',(clock_timestamp() at time zone 'Europe/London')::date,'week_ending',c.finalisation_week_ending,
+    'capabilities',p_request->'capabilities','original_census',census,'operational_ready',false,'max_native_steps',64);
+  scope_value:=scope_value||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_TEST_ROLLBACK_QUALIFICATION_SCOPE_V1',scope_value),'hex'));
+  perform public._audit_insert('weekly_source_protected_qualification',scope_id::text,'WEEKLY_SOURCE_QUALIFICATION_SCOPE_ADMITTED',
+    null,scope_value,p_request->>'reason',actor);
+  return scope_value;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+
+-- This is not producer_ready. It can be consumed only below the private,
+-- owner-session dispatcher. Actual public service/API calls cannot enter it.
+create or replace function private.weekly_source_protected_qualification_assert_v1(
+  p_scope_id uuid,p_cycle_id uuid,p_client_ids uuid[],p_capability text
+) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare scope_value jsonb; c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  clients uuid[]; actual_cas jsonb; context_value text; scopes integer; rules jsonb; original jsonb; actual jsonb;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  get diagnostics context_value=pg_context;
+  if context_value !~ 'PL/pgSQL function (private\.)?weekly_source_protected_qualification_step_v1\(uuid,text,jsonb\)' then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_CALLER_REQUIRED' using errcode='42501'; end if;
+  select count(*),jsonb_agg(audit.after_json)->0 into scopes,scope_value from public.audit_events audit
+    where audit.object_type='weekly_source_protected_qualification' and audit.action='WEEKLY_SOURCE_QUALIFICATION_SCOPE_ADMITTED'
+      and audit.event_sequence_is_authoritative
+      and audit.after_json->>'transaction_id'=pg_current_xact_id()::text
+      and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+      and (p_scope_id is null or audit.object_id_text=p_scope_id::text);
+  if scopes<>1 or scope_value->>'schema_version' is distinct from 'WEEKLY_SOURCE_TEST_ROLLBACK_QUALIFICATION_SCOPE_V1'
+    or scope_value->>'database' is distinct from current_database()
+    or scope_value->'operational_ready' is distinct from 'false'::jsonb
+    or scope_value->>'source_cycle_id' is distinct from p_cycle_id::text
+    or scope_value->>'current_local_date' is distinct from ((clock_timestamp() at time zone 'Europe/London')::date)::text
+    or scope_value->>'scope_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_TEST_ROLLBACK_QUALIFICATION_SCOPE_V1',scope_value-'scope_sha256'),'hex')
+    or scope_value->'execution' is distinct from private.weekly_source_protected_qualification_release_v1()
+    or not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted
+      and lock_row.mode='ExclusiveLock' and lock_row.classid=20261013::oid and lock_row.objid=1::oid and lock_row.objsubid=2
+      and lock_row.database=(select oid from pg_database where datname=current_database())
+      and lock_row.pid=(scope_value->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid())
+    or p_capability not in ('BULK_SIGNED','AUTOMATIC_RECONCILE')
+    or not(scope_value->'capabilities' @> jsonb_build_array(p_capability)) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  perform private._weekly_source_settings_require_admin_v1((scope_value->>'actor_user_id')::uuid);
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER';
+  if (g.id::text,g.agency_id::text,g.environment,c.finalisation_week_ending::text) is distinct from
+    (scope_value->>'source_group_id',scope_value->>'agency_id','TEST',scope_value->>'week_ending') then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_CHANGED' using errcode='40001'; end if;
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  perform private.weekly_source_office_authority_v1((scope_value->>'actor_user_id')::uuid,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  select array_agg(value::uuid order by value::uuid) into clients
+    from jsonb_array_elements_text(scope_value#>'{original_census,original_client_ids}') value;
+  if p_client_ids is not null and to_jsonb(p_client_ids) is distinct from to_jsonb(clients) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_CLIENT_CENSUS_CHANGED' using errcode='40001'; end if;
+  actual_cas:=private.weekly_source_bulk_source_cas_v1(c.id,clients);
+  if actual_cas is distinct from scope_value#>'{original_census,source_cas}' then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_CHANGED' using errcode='40001'; end if;
+  -- No mutable family/current-generation state is compared. Every original
+  -- physical root identity remains; native signed/stage/inventory guards do
+  -- their own version/signature/currentness work without a qualification waiver.
+  for original in select value from jsonb_array_elements(scope_value#>'{original_census,original_root_identities}') value loop
+    select jsonb_build_object('timesheet_id',sheet.timesheet_id,'booking_id',sheet.booking_id,'contract_id',contract.id,
+      'candidate_id',contract.candidate_id,'client_id',sheet.client_id) into actual
+      from public.timesheets sheet join public.contracts contract on contract.id=sheet.contract_id
+      where sheet.timesheet_id=(original->>'timesheet_id')::uuid and (sheet.client_id is null or sheet.client_id=contract.client_id);
+    if actual is distinct from original then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_ROOT_CHANGED' using errcode='40001'; end if;
+  end loop;
+  if p_capability='AUTOMATIC_RECONCILE' then
+    if cardinality(clients)<>1 then raise exception 'WEEKLY_SOURCE_QUALIFICATION_AUTOMATIC_SCOPE_INVALID' using errcode='55000'; end if;
+    rules:=private.weekly_source_effective_rule_set_v1(clients[1],c.id)->'values';
+    if rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+      or rules->>'equal_protected_hours' is distinct from 'CLEAR_AUTOMATICALLY'
+      or (select automatic_reconcile_actor_user_id from public.weekly_source_global_settings where singleton)
+        is distinct from (scope_value->>'actor_user_id')::uuid then
+      raise exception 'WEEKLY_SOURCE_QUALIFICATION_AUTOMATIC_SCOPE_INVALID' using errcode='55000'; end if;
+  end if;
+  return scope_value;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

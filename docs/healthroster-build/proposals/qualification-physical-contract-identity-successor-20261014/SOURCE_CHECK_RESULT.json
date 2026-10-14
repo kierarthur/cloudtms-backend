@@ -1,0 +1,33 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 13,
+  "pass": 13,
+  "fail": 0,
+  "syntax_pass": 3,
+  "full_owner_reversals": 6,
+  "unique_hunks": 14,
+  "raw_native_pins": 5,
+  "full_actual_physical_schema_and_DDL": true,
+  "preserved_dependency_artifacts": 63,
+  "signatures_unchanged": [
+    "private.weekly_source_protected_qualification_census_v1(uuid)",
+    "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+    "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+    "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+    "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+    "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)"
+  ],
+  "new_signatures": 0,
+  "new_tables_columns_calculators": 0,
+  "Source39_unchanged": true,
+  "credential_findings": 0,
+  "whitespace_disposition": "PASS",
+  "whitespace_exceptions": [],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

@@ -1,0 +1,76 @@
+create or replace function private.weekly_source_protected_qualification_census_v1(p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; p public.weekly_source_projection_publications%rowtype;
+  clients uuid[]; facts jsonb; cas_value jsonb; roots jsonb; items jsonb; census jsonb;
+begin
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict p from public.weekly_source_projection_publications
+    where id=c.current_projection_publication_id and source_cycle_id=c.id and state='CURRENT'
+      and authority_scope_kind='CYCLE' and correction_session_id is null and report_scope_id is null;
+  perform private.weekly_source_query_current_publication_v1(c.id,p.id);
+  select coalesce(array_agg(distinct incident.client_id order by incident.client_id),'{}'::uuid[])
+    into clients from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=c.source_group_id
+    join public.contracts contract on contract.id=comparison.contract_id and contract.candidate_id=work.candidate_id
+      and contract.client_id=work.client_id
+    where incident.source_cycle_id=c.id and incident.state='OPEN'
+      and private.weekly_source_is_import_authoritative_v1(work.client_id,contract.id,work.work_date)
+      and (private.weekly_source_checking_client_scope_v1(p.id) is null
+        or incident.client_id=private.weekly_source_checking_client_scope_v1(p.id));
+  if cardinality(clients) not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_CLIENTS_REQUIRED' using errcode='55000'; end if;
+  facts:=private.weekly_source_bulk_source_facts_v1(c.id,clients);
+  cas_value:=private.weekly_source_bulk_source_cas_v1(c.id,clients);
+  select coalesce(jsonb_agg(jsonb_build_object('incident_id',incident.id,'work_event_id',work.id,
+    'client_id',work.client_id,'candidate_id',work.candidate_id,'contract_id',contract.id,'work_date',work.work_date,
+    'comparison_revision_id',comparison.id,'evidence_timesheet_id',comparison.candidate_timesheet_id)
+    order by work.candidate_id,work.id,incident.id),'[]'::jsonb) into items
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=c.source_group_id
+    join public.contracts contract on contract.id=comparison.contract_id and contract.candidate_id=work.candidate_id
+      and contract.client_id=work.client_id
+    where incident.source_cycle_id=c.id and incident.state='OPEN' and work.client_id=any(clients)
+      and private.weekly_source_is_import_authoritative_v1(work.client_id,contract.id,work.work_date);
+  if exists(select 1 from jsonb_array_elements(items) item where item->>'evidence_timesheet_id' is not null
+    and not exists(select 1 from public.timesheets sheet join public.contracts contract on contract.id=sheet.contract_id
+      where sheet.timesheet_id=(item->>'evidence_timesheet_id')::uuid
+        and contract.id=(item->>'contract_id')::uuid and contract.candidate_id=(item->>'candidate_id')::uuid
+        and contract.client_id=(item->>'client_id')::uuid)) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_SIGNED_ROOT_SCOPE_INVALID' using errcode='55000'; end if;
+  if exists(
+    select 1 from (
+      select (item->>'evidence_timesheet_id')::uuid id from jsonb_array_elements(items) item
+        where item->>'evidence_timesheet_id' is not null
+      union select (item->>'timesheet_id')::uuid from jsonb_array_elements(facts->'root_identities') item
+    ) original_id
+    left join public.timesheets physical on physical.timesheet_id=original_id.id
+    left join public.contracts native_contract on native_contract.id=physical.contract_id
+    where physical.timesheet_id is null or native_contract.id is null
+      or native_contract.candidate_id is null or native_contract.client_id is null
+      or not(native_contract.client_id=any(clients))
+  ) then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_ORIGINAL_ROOT_SCOPE_INVALID' using errcode='55000';end if;
+  with ids as (
+    select (item->>'evidence_timesheet_id')::uuid id from jsonb_array_elements(items) item
+      where item->>'evidence_timesheet_id' is not null
+    union select (item->>'timesheet_id')::uuid from jsonb_array_elements(facts->'root_identities') item
+  ) select coalesce(jsonb_agg(jsonb_build_object('timesheet_id',sheet.timesheet_id,'booking_id',sheet.booking_id,
+    'contract_id',contract.id,'candidate_id',contract.candidate_id,'client_id',contract.client_id)
+    order by sheet.timesheet_id),'[]'::jsonb) into roots from ids
+    join public.timesheets sheet on sheet.timesheet_id=ids.id join public.contracts contract on contract.id=sheet.contract_id;
+  census:=jsonb_build_object('schema_version','WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1','source_cycle_id',c.id,
+    'source_group_id',c.source_group_id,'week_ending',c.finalisation_week_ending,'original_client_ids',to_jsonb(clients),
+    'original_root_identities',roots,'original_items',items,'source_cas',cas_value);
+  return census||jsonb_build_object('census_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1',census),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_SOURCE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

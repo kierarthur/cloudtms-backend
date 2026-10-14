@@ -1,0 +1,14 @@
+-- Existing private owners only; no public/service/browser grant is introduced.
+alter function private.weekly_source_protected_qualification_census_v1(uuid) owner to postgres;
+alter function private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text) owner to postgres;
+alter function private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean) owner to postgres;
+alter function private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb) owner to postgres;
+alter function private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb) owner to postgres;
+alter function private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_qualification_census_v1(uuid),
+  private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text),
+  private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean),
+  private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb),
+  private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb),
+  private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)
+from public,anon,authenticated,service_role;

@@ -1,0 +1,59 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "current_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "own_backup": "638b38642f8905b3ceae0fb45ebaa119e7311734",
+  "dependencies": [
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97",
+      "listed_artifacts": 30,
+      "preserved": true
+    },
+    {
+      "packet": "paid-match-correct-final-choice-construction-20261014",
+      "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5",
+      "listed_artifacts": 33,
+      "preserved": true
+    }
+  ],
+  "selected_SQL_order": [
+    "forward/01_complete_original_census.sqlinc",
+    "forward/02_complete_original_census_assert.sqlinc",
+    "forward/03_complete_off_scope_assert.sqlinc",
+    "forward/04_complete_native_parent_scope.sqlinc",
+    "forward/05_complete_native_qualification_step.sqlinc",
+    "forward/06_complete_bulk_original_root_assert.sqlinc",
+    "forward/07_existing_owner_only_acl.sqlinc"
+  ],
+  "complete_reverse": "COMPLETE_NATIVE_REVERSES.json",
+  "existing_owner_private_signatures": [
+    "private.weekly_source_protected_qualification_census_v1(uuid)",
+    "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+    "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+    "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+    "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+    "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)"
+  ],
+  "new_private_signatures": [],
+  "new_public_signatures": [],
+  "all_six_argument_security_volatility_return_headers_unchanged": true,
+  "owner_private_ACL": "logical postgres; PUBLIC/anon/authenticated/service_role revoked",
+  "required_separate_Report_Source20_bulk_source_facts_successor": {
+    "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+    "source_before_sha256": "bd83ccd7668ecc00910890dcaf209dbdfb8d7c2aced6f433c61c9ac70b5ab02f",
+    "selected_source_after_sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60",
+    "containing_report_commit": "63965738"
+  },
+  "Source39_key_count_and_domain_unchanged": true,
+  "original_five_root_identity_keys_unchanged": true,
+  "unbound_Contract_unknown_refuses": true,
+  "financial_TF_Client_record_DTO_fields_preserved": true,
+  "original_nullable_physical_Client_concept_superseded_only_for_T0": true,
+  "new_table_column_classification_money_calculator": 0,
+  "actual_effective_body_catalogue_full_current_union_verifiers": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

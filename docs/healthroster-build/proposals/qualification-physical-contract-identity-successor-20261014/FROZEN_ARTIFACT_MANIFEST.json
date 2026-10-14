@@ -1,0 +1,146 @@
+{
+  "schema_version": "QUALIFICATION_PHYSICAL_CONTRACT_IDENTITY_SUCCESSOR_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 27,
+  "artifacts": [
+    {
+      "file": "COMPLETE_NATIVE_REVERSES.json",
+      "bytes": 13619,
+      "sha256": "b425732e248ea309f5a9d741e55a2704a8a92bb81745ceb3cf3f52e7eca45500"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 2823,
+      "sha256": "211cf99b40050dcc44c240ad471088a34a0c0d1e047868d2ec6e2ae203223dba"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1150,
+      "sha256": "5c018c1fc5a221304900e3bb9efbb0a50e964c68d5e18d077140a07cf0f037c6"
+    },
+    {
+      "file": "SOURCE_DISPOSITION.md",
+      "bytes": 3582,
+      "sha256": "16b60bb3a9d43a0da4d614b40496e7966a0877ed39d73eb5402f8d9dc40ce269"
+    },
+    {
+      "file": "before/01_complete_original_census.sqlinc",
+      "bytes": 5327,
+      "sha256": "a8c3e7bd999aa887ba0544dfaa6ef12acb7b9fd0762aa358a2eb49ce2a9304a7"
+    },
+    {
+      "file": "before/02_complete_original_census_assert.sqlinc",
+      "bytes": 6103,
+      "sha256": "a81781abaf0acfb58aad7237cb8c9bfaf65de842268951c093e87d9dcc2d399a"
+    },
+    {
+      "file": "before/03_complete_off_scope_assert.sqlinc",
+      "bytes": 11950,
+      "sha256": "b004ea85bce21aba784ca2c5d21c4317124bac46ccc1403df07a5254c31d6cfd"
+    },
+    {
+      "file": "before/04_complete_native_parent_scope.sqlinc",
+      "bytes": 22454,
+      "sha256": "d841410531821f0262d37d2adc8ff710842e575ca4f68d652906e5c45ab24ed0"
+    },
+    {
+      "file": "before/05_complete_native_qualification_step.sqlinc",
+      "bytes": 9822,
+      "sha256": "6c420b53543231624b6f9b0539153fee118c9b84bb9b00bc79e38250bf9f4e02"
+    },
+    {
+      "file": "before/06_complete_bulk_original_root_assert.sqlinc",
+      "bytes": 5097,
+      "sha256": "b5a4981d0a6628c9e5d844636cbd7a068d06ef79a2f599a954012adfe9e5be25"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 10725,
+      "sha256": "3e87c16adf7bdea188be55beb539485ac385db43fa73c2bb08f436406928955e"
+    },
+    {
+      "file": "forward/01_complete_original_census.sqlinc",
+      "bytes": 6055,
+      "sha256": "62a42572c84339f75895f1130d2273af99268573728df42af0fe4bbb1116686d"
+    },
+    {
+      "file": "forward/02_complete_original_census_assert.sqlinc",
+      "bytes": 6119,
+      "sha256": "5fdda8cce28d635e27e6cbd6ff905db0560d08a7a80020e1bb357d3d3fb3b7e5"
+    },
+    {
+      "file": "forward/03_complete_off_scope_assert.sqlinc",
+      "bytes": 12044,
+      "sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293"
+    },
+    {
+      "file": "forward/04_complete_native_parent_scope.sqlinc",
+      "bytes": 22410,
+      "sha256": "cd18c8626a7092cb065de2e13fbd6bb2bcd679a1bca523d18ef8cd9615635221"
+    },
+    {
+      "file": "forward/05_complete_native_qualification_step.sqlinc",
+      "bytes": 9887,
+      "sha256": "eaf88c9b9b87dfc48c374127a6dbfd6f7296206ce4f1a5a62b1c0a64ffe67355"
+    },
+    {
+      "file": "forward/06_complete_bulk_original_root_assert.sqlinc",
+      "bytes": 5103,
+      "sha256": "63a5f545e3bf2cc5d765bbad49147ba446f4fcb9ddafaec2aead05c494af44a2"
+    },
+    {
+      "file": "forward/07_existing_owner_only_acl.sqlinc",
+      "bytes": 1241,
+      "sha256": "f3641f1fdd1cf58444c6c79db9dcbecda17814718a73e3ac302db868d3c7d970"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 6490,
+      "sha256": "16631c7c93341024bfb44e426449dcc74e157314e3daf74cbe7ad41a6ede6730"
+    },
+    {
+      "file": "input/01_OFF_RULE_AUTHORITY.sqlinc",
+      "bytes": 21135,
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "file": "input/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "bytes": 20020,
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
+      "file": "input/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "file": "input/16_10_complete_bulk_test_scope.sqlinc",
+      "bytes": 18455,
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+    },
+    {
+      "file": "input/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "input/CURRENT_TIMESHEETS_CONTRACT_SCHEMA.json",
+      "bytes": 34882,
+      "sha256": "700dde50aca972314d813f7aa865ddf5bca06990dbf48e5181cd0664d3d6b7ed"
+    },
+    {
+      "file": "input/RAW_TIMESHEETS_DDL.json",
+      "bytes": 45640,
+      "sha256": "e2400d7100082579ce7a21bef3dea2f259fc1689a0bc83595a77b14384cafbb5"
+    },
+    {
+      "file": "physical-identity-source.test.mjs",
+      "bytes": 8814,
+      "sha256": "692bce6307ad17b0ca5d306b0f316e47487ef65fde6b35d728f528e4080a7426"
+    }
+  ]
+}
