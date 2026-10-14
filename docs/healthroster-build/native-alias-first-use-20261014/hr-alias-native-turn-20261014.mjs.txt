@@ -1,0 +1,48 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {withSharedRehearsalTurn,agencyChildEnvironment} from '../scripts/healthroster-rehearsal-turn.mjs';
+import {restorationSnapshotSql} from '../scripts/healthroster-install1-full-rehearsal.mjs';
+const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const receiptDir=path.join(workspace,'.codex-worktrees/healthroster-install2-14102026/.codex-tmp/alias-native-first-use-attempt2-20261014');
+if(fs.existsSync(receiptDir))throw Error('EXISTING_NATIVE_RECEIPT_FOLDER_REFUSED');
+fs.mkdirSync(receiptDir,{recursive:true});
+const marker='hr_alias_lab_'+crypto.randomBytes(16).toString('hex');
+const preparationDir=path.join(workspace,'.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/root-rekey-alias-trigger-review-20261014');
+const schema=JSON.parse(fs.readFileSync(path.join(preparationDir,'INSTALLED_FIXTURE_CATALOG_PRECHECK.json')));
+const relationNames=[...new Set(schema.columns.map(r=>r.table))];
+const relations=relationNames.map(name=>{if(!/^public\.[a-z_0-9]+$/.test(name))throw Error('RELATION_SCOPE_REFUSED');const [schema,nameOnly]=name.split('.');return{schema,name:nameOnly,kind:'r'};});
+const exportContractSql=fs.readFileSync('supabase/release/export_contract.sql','utf8');
+const result=await withSharedRehearsalTurn({task:'Reviewed corrected alias helper first-use rollback lab, finite fixture and fresh restoration',progressPath:path.join(workspace,'.codex-worktrees/healthroster-v2-backend-13102026/docs/healthroster-build/PROGRESS.md'),async work(turn){
+ // Reuse the reviewed fingerprint renderer, whose historical marker validator
+ // permits only hr_install1_. Replace only its single marker-probe literal;
+ // the actual alias marker keeps the independently reviewed finite namespace.
+ const legacyMarker='hr_install1_'+marker.slice('hr_alias_lab_'.length);
+ const rendered=restorationSnapshotSql({identity:turn.identity,marker:legacyMarker,relations,exportContractSql});
+ const oldLiteral="'private."+legacyMarker+"'",newLiteral="'private."+marker+"'";
+ if(rendered.split(oldLiteral).length!==2)throw Error('ALIAS_MARKER_ADAPTER_LITERAL_DRIFT');
+ const snapshotSql=rendered.replace(oldLiteral,newLiteral);
+ if(snapshotSql.replace(newLiteral,oldLiteral)!==rendered)throw Error('ALIAS_MARKER_ADAPTER_REVERSE_REFUSED');
+ const snapshot=async()=>{
+  const child=await turn.runOwnedChild({file:'C:/Program Files/PostgreSQL/18/bin/psql.exe',args:['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate','-f','-'],input:"begin read only;set local statement_timeout='30s';set local lock_timeout='1s';\n"+snapshotSql+'\nrollback;\n',options:{env:agencyChildEnvironment('healthroster_alias_native_core_snapshot'),windowsHide:true,stdio:['pipe','pipe','pipe']},cancelOnLoss:true});
+  if(child.code!==0)throw Error('ALIAS_CORE_SNAPSHOT_SQLSTATE_'+(child.stderr.match(/(?:ERROR|FATAL):\s*([A-Z0-9]{5})/)?.[1]??'UNKNOWN'));
+  const lines=child.stdout.split(/\r?\n/).filter(s=>s.startsWith('{'));if(lines.length!==1)throw Error('ALIAS_CORE_SNAPSHOT_ENVELOPE');return JSON.parse(lines[0]);
+ };
+ const before=await snapshot();
+ if(before.physicalDatabase!=='cloudtms_test_clone'||before.identityTest!==true||before.customerKeyNull!==true||before.module!=='LEGACY:1'||before.applyingCount!==0||!before.markerAbsent||before.latestRelease?.commit!=='f743b81fe537830d81b1de93ec4f9cb0331532a7'||before.latestRelease?.status!=='VERIFIED')throw Error('ALIAS_FRESH_BEFORE_AUTHORITY_REFUSED');
+ fs.writeFileSync(path.join(receiptDir,'BEFORE.json'),JSON.stringify(before,null,2)+'\n',{flag:'wx'});
+ fs.writeFileSync(path.join(receiptDir,'TURN_READY.json'),JSON.stringify({status:'OWN_ALIAS_TURN_READY',marker,turn:turn.identity,before},null,2)+'\n',{flag:'wx'});
+ console.log(JSON.stringify({status:'OWN_ALIAS_TURN_READY',marker,receiptDir,identity:turn.identity,beforeFingerprints:Object.fromEntries(['ledgerFingerprint','catalogueFingerprint','relationCensus','businessCountsFingerprint','businessRowsFingerprint'].map(k=>[k,before[k]]))}));
+ await new Promise((resolve,reject)=>{let text='';const onData=chunk=>{text+=chunk.toString();if(text.includes('END')){process.stdin.removeListener('data',onData);process.stdin.pause();resolve();}};process.stdin.on('data',onData);process.stdin.resume();turn.signal.addEventListener('abort',()=>reject(turn.signal.reason),{once:true});});
+ await turn.assertHeld('alias-after-lab-before-fresh-core');
+ const after=await snapshot();fs.writeFileSync(path.join(receiptDir,'AFTER.json'),JSON.stringify(after,null,2)+'\n',{flag:'wx'});
+ // Other sessions are observed only. They cannot block a short server-owned
+ // rollback proof after core and exact finite fixture restoration are proved.
+ const unchanged=['ledgerFingerprint','catalogueFingerprint','relationCensus','businessCountsFingerprint','businessRowsFingerprint'].every(k=>before[k]===after[k]);
+ const receipt={status:unchanged?'ALIAS_FRESH_CORE_FINGERPRINTS_UNCHANGED':'ALIAS_FRESH_BUSINESS_ATTRIBUTION_REQUIRED',database:after.physicalDatabase,markerAbsent:after.markerAbsent,module:after.module,connectedFresh:true,unchangedCore:['ledgerFingerprint','catalogueFingerprint','relationCensus'].every(k=>before[k]===after[k]),unchangedObservedBusiness:before.businessCountsFingerprint===after.businessCountsFingerprint&&before.businessRowsFingerprint===after.businessRowsFingerprint,observedBusinessRelations:relations.length,otherActivityCountObserved:after.otherActivityCount,otherActivityBlocksProof:false,ownTurn:turn.identity,limits:'Business fingerprints cover the twelve directly written fixture relations. Whole catalogue and control ledgers are fingerprinted. All lab SQL/fixture verification and unconditional server rollback must also pass; this file alone does not qualify the native fixture or full pipeline.'};
+ fs.writeFileSync(path.join(receiptDir,'CORE_RESTORATION.json'),JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});
+ if(!receipt.unchangedCore||after.physicalDatabase!=='cloudtms_test_clone'||after.module!=='LEGACY:1'||!after.markerAbsent||after.applyingCount!==0)throw Error('ALIAS_FRESH_CORE_RESTORATION_REFUSED');
+ return receipt;
+}});
+fs.writeFileSync(path.join(receiptDir,'TURN_CLOSED.json'),JSON.stringify({result,closedAt:new Date().toISOString(),returnedAfterOwnedTurnCleanup:true},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({status:'ALIAS_TURN_CLOSED',result}));

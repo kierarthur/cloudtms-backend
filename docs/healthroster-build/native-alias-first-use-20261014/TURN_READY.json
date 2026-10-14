@@ -1,0 +1,96 @@
+{
+  "status": "OWN_ALIAS_TURN_READY",
+  "marker": "hr_alias_lab_947d9a343aac7a83cb2d21f994416e55",
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 32545,
+    "turnId": "hr_turn_17c0eac7af33c0469fac8309fa0aef0a",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T19:00:53.530Z",
+    "task": "Reviewed corrected alias helper first-use rollback lab, finite fixture and fresh restoration"
+  },
+  "before": {
+    "module": "LEGACY:1",
+    "identityTest": true,
+    "markerAbsent": true,
+    "applyingCount": 0,
+    "latestRelease": {
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "status": "VERIFIED"
+    },
+    "relationCensus": "97336f6c486f2ab0f908f8cd260dfe9a87dd5a1789b9216ca06a9df4d2de97e8",
+    "customerKeyNull": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "businessRelations": [
+      {
+        "hash": "aa2132128aa83067733cfd9c1e2d6a7b814071d080cb7164aa5bcde1eaed44fa",
+        "count": 3537,
+        "relation": "public.candidates"
+      },
+      {
+        "hash": "904e7f9a42f996e9c679e7221a0733ec269a05803f99d62f29060c48103c3464",
+        "count": 212,
+        "relation": "public.clients"
+      },
+      {
+        "hash": "11cc42510bc706e25557addc79ba65d905707a19a9a6f02af26cd35d98e20415",
+        "count": 31,
+        "relation": "public.contracts"
+      },
+      {
+        "hash": "11708bf7015a47b628f22f7e2f78c74d56a4820a96199f7782fde18e82d5c569",
+        "count": 6,
+        "relation": "public.tms_users"
+      },
+      {
+        "hash": "011f774e3c33d9d2b98ed1ff3cbc354104a04312a6c7ec600f6360af0ee9e92c",
+        "count": 3,
+        "relation": "public.weekly_source_cycles"
+      },
+      {
+        "hash": "a2f6b917210b35e783d5b12c392354496f7bf9ffe75c6418e0b8608ef63388f7",
+        "count": 2,
+        "relation": "public.weekly_source_group_clients"
+      },
+      {
+        "hash": "58fc45d7512af60bf69d0cbe94f15964198ff81c5c1631ee41dac4bf48994200",
+        "count": 1,
+        "relation": "public.weekly_source_groups"
+      },
+      {
+        "hash": "559c762faa20dd6aaebd4db89a45c9e0e2d887bc07ae76620930047f13d871b2",
+        "count": 22,
+        "relation": "public.weekly_source_row_resolutions"
+      },
+      {
+        "hash": "021b7f26e6b81866f796392ef51eae6fd55ac2cdda62d372ef331d03b08c03a4",
+        "count": 24,
+        "relation": "public.weekly_source_upload_rows"
+      },
+      {
+        "hash": "d3448f4f2fc0061ca809ba3afa6b6065160b9f10d10e17df661eca2417d386ea",
+        "count": 12,
+        "relation": "public.weekly_source_uploads"
+      },
+      {
+        "hash": "e9db22a13ef23517e7d0580ab510424908940fbc8b0d40b138fa8ad234156492",
+        "count": 17,
+        "relation": "public.weekly_work_event_source_links"
+      },
+      {
+        "hash": "d5126ebc5202d1e21d7f9a02ec8922b1ddeef690dc0fe3b1f7947489ccbf841e",
+        "count": 10,
+        "relation": "public.weekly_work_events"
+      }
+    ],
+    "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+    "otherActivityCount": 0,
+    "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+    "businessRowsFingerprint": "0083dd0d00d6e5f55db12476a0898a5a92d859be89f63081ce139355ad14a67d",
+    "businessCountsFingerprint": "21741d84714532dc0bd69340b36c9e375b1e9c3eab4d74a157a7eeaae64a4557"
+  }
+}

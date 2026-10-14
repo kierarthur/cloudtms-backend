@@ -1,0 +1,616 @@
+{
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "label": "HealthRoster corrected native alias helper first use",
+  "sqlSha256": "c7f2605f9921773142022c26e825798dda693c464ca9815d5e947e0047f89154",
+  "statementCount": 52,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 13,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 14,
+      "command": "INSERT",
+      "rowCount": 90,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 15,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_assert"
+      ],
+      "rows": [
+        {
+          "hr_alias_assert": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 16,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_assert"
+      ],
+      "rows": [
+        {
+          "hr_alias_assert": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 17,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_assert"
+      ],
+      "rows": [
+        {
+          "hr_alias_assert": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 18,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_assert"
+      ],
+      "rows": [
+        {
+          "hr_alias_assert": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 19,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 20,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 21,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 22,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 23,
+      "command": "INSERT",
+      "rowCount": 2,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 24,
+      "command": "INSERT",
+      "rowCount": 2,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 25,
+      "command": "INSERT",
+      "rowCount": 2,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 26,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 27,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 28,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 29,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 30,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 31,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_upload"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_upload": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 32,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_upload"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_upload": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 33,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_upload"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_upload": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 34,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_upload"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_upload": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 35,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_upload"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_upload": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 36,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 37,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 38,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_row"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_row": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 39,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_row"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_row": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 40,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_row"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_row": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 41,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_row"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_row": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 42,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_seed_row"
+      ],
+      "rows": [
+        {
+          "hr_alias_seed_row": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 43,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 44,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 45,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 46,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 47,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 48,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 49,
+      "command": "INSERT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 50,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_assert"
+      ],
+      "rows": [
+        {
+          "hr_alias_assert": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 51,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_alias_assert"
+      ],
+      "rows": [
+        {
+          "hr_alias_assert": ""
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 52,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "jsonb_build_object"
+      ],
+      "rows": [
+        {
+          "jsonb_build_object": {
+            "marker": "hr_alias_lab_947d9a343aac7a83cb2d21f994416e55",
+            "status": "ALIAS_FIXTURE_ALL_ASSERTIONS_REACHED",
+            "database": "cloudtms_test_clone",
+            "fixtureSha256": "2ecc5c7d2837e4bfd404056504fbe470638eb654a3e13b3dd71844f725d2432a"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "database": "cloudtms_test_clone",
+              "legacyOne": true,
+              "helperAbsent": true,
+              "markerAbsent": true,
+              "testIdentity": true,
+              "fixtureCounts": [
+                {
+                  "relation": "public.candidates",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.clients",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.contracts",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.tms_users",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_source_cycles",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_source_group_clients",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_source_groups",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_source_row_resolutions",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_source_upload_rows",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_source_uploads",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_work_event_source_links",
+                  "fixture_matches": 0
+                },
+                {
+                  "relation": "public.weekly_work_events",
+                  "fixture_matches": 0
+                }
+              ],
+              "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+              "allFixtureIdentifiersAbsent": true
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ]
+}

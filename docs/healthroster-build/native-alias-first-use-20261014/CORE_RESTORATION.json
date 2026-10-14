@@ -1,0 +1,27 @@
+{
+  "status": "ALIAS_FRESH_CORE_PROOF",
+  "connectedFresh": true,
+  "ownTurnHeldBeforeAndAfterSnapshot": true,
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 32545,
+    "turnId": "hr_turn_17c0eac7af33c0469fac8309fa0aef0a",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T19:00:53.530Z",
+    "task": "Reviewed corrected alias helper first-use rollback lab, finite fixture and fresh restoration"
+  },
+  "physicalDatabase": "cloudtms_test_clone",
+  "module": "LEGACY:1",
+  "markerAbsent": true,
+  "unchangedCore": true,
+  "unchangedObservedBusiness": true,
+  "observedBusinessRelations": 12,
+  "otherActivityBlocksProof": false,
+  "otherActivityCountObserved": 0,
+  "stdinCompletionFailed": "write_stdin returned stdin closed for non-TTY exec; fresh core snapshot recovered on separate read-only connection while original turn remained held",
+  "scope": "Whole ledger/catalogue/relation census; business fingerprints only twelve directly written fixture relations; lab52 actual assertions and fresh fixture absence separately required."
+}

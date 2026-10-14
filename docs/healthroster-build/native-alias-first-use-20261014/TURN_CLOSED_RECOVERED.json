@@ -1,0 +1,20 @@
+{
+  "status": "OWN_CONNECTION_AND_ADVISORY_LOCK_FRESHLY_ABSENT",
+  "fresh": {
+    "observedAt": "2026-10-14T19:13:46.997503+00:00",
+    "database": "cloudtms_test_clone",
+    "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+    "ownPidAbsent": true,
+    "ownPidLockAbsent": true,
+    "legacyOne": true
+  },
+  "onlyLocalOwnedPsqlClosed": {
+    "processId": 32160,
+    "parentHarnessProcessId": 75536,
+    "backendPid": 32545
+  },
+  "explicitUnlockConfirmed": false,
+  "wrapperStatus": "LOST_INCOMPLETE/RELEASED proved=false retained; fresh native and core proof had completed before deliberate close",
+  "noOtherSessionCancelled": true,
+  "noDurableInstallation": true
+}

@@ -1,0 +1,82 @@
+{
+  "status": "FOCUSED_NATIVE_HELPER_OBSERVATIONS_WITH_RETAINED_WRAPPER_FAILURE",
+  "physicalDatabase": "cloudtms_test_clone",
+  "nativeStatementCount": 52,
+  "allAssertionsReached": true,
+  "serverRolledBack": true,
+  "freshFixtureAbsence": true,
+  "freshCoreUnchanged": true,
+  "freshOwnConnectionAndLockAbsent": true,
+  "explicitUnlockConfirmed": false,
+  "wrapperQualified": false,
+  "fullPipelineQualified": false,
+  "noOtherSessionCancelled": true,
+  "credentialPatterns": 0,
+  "files": [
+    {
+      "file": "AFTER.json",
+      "bytes": 2731,
+      "sha256": "5c6dfd673531cbe6617e2a32a076088dec7fd16c74ba6e670cd37da90d808d44"
+    },
+    {
+      "file": "BEFORE.json",
+      "bytes": 2731,
+      "sha256": "5c6dfd673531cbe6617e2a32a076088dec7fd16c74ba6e670cd37da90d808d44"
+    },
+    {
+      "file": "CORE_RESTORATION.json",
+      "bytes": 1116,
+      "sha256": "a6c53ec0311b9eacb151790a65e19caaa41c86539683aa29ec3ffe398c233015"
+    },
+    {
+      "file": "FRESH_VERIFICATION_SQL.sql",
+      "bytes": 14602,
+      "sha256": "50c143cbdef0c81453e19ada52a9a0fa7e0774a9aedbb6f66c581ee1639746ca"
+    },
+    {
+      "file": "LAB_SQL.sql",
+      "bytes": 23184,
+      "sha256": "c7f2605f9921773142022c26e825798dda693c464ca9815d5e947e0047f89154"
+    },
+    {
+      "file": "NATIVE_LAB_RESULT.json",
+      "bytes": 12832,
+      "sha256": "d34d7223c37b7b297abd85b33e952021f310f8cd4c7109546203048935d0f984"
+    },
+    {
+      "file": "PREPARATION.json",
+      "bytes": 1398,
+      "sha256": "ae1e7f762c1c1ecb182b9c495155b36189f71123575745bb01d36330cf3e5b30"
+    },
+    {
+      "file": "TURN_CLOSED_RECOVERED.json",
+      "bytes": 676,
+      "sha256": "e76fcc24ba20a154606e2e71500fec7e8f4e5ffa7aa3d38a5d8f560352201c22"
+    },
+    {
+      "file": "TURN_READY.json",
+      "bytes": 3370,
+      "sha256": "20ec08b1aaba1ea74da206fc616ee1fcc4ab0a517674e49ac46515a7b6a4ca4a"
+    },
+    {
+      "file": "hr-alias-native-turn-20261014.mjs.txt",
+      "bytes": 6462,
+      "sha256": "6ef9ecf7e684cdd1e673925ca53382cae0f1983edf17d9d9cb8b056555d48a53"
+    },
+    {
+      "file": "hr-alias-native-fresh-after-recovery-20261014.mjs.txt",
+      "bytes": 4039,
+      "sha256": "30f5ebda4b61ce64062207a78a1b197605f48085bafa1c9aa4fa552a64222afe"
+    },
+    {
+      "file": "hr-alias-native-close-proof-20261014.mjs.txt",
+      "bytes": 2280,
+      "sha256": "70979b1ac90e90e1effc01756309be8c4433336590cafa10682d9e2e0b7eaddf"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2318,
+      "sha256": "33a8422d0c285201d849146ec94eea150cdfdfa65ef82fcb204c69dd11dfdd29"
+    }
+  ]
+}

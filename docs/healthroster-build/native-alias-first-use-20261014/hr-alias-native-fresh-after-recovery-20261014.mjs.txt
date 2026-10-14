@@ -1,0 +1,23 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {agencyChildEnvironment} from '../scripts/healthroster-rehearsal-turn.mjs';
+import {restorationSnapshotSql} from '../scripts/healthroster-install1-full-rehearsal.mjs';
+const root='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const dir=path.join(root,'.codex-worktrees/healthroster-install2-14102026/.codex-tmp/alias-native-first-use-attempt2-20261014');
+const ready=JSON.parse(fs.readFileSync(path.join(dir,'TURN_READY.json'))),before=ready.before;
+const schema=JSON.parse(fs.readFileSync(path.join(root,'.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/root-rekey-alias-trigger-review-20261014/INSTALLED_FIXTURE_CATALOG_PRECHECK.json')));
+const relations=[...new Set(schema.columns.map(r=>r.table))].map(n=>{if(!/^public\.[a-z_0-9]+$/.test(n))throw Error('RELATION_SCOPE');const [schema,name]=n.split('.');return{schema,name,kind:'r'};});
+const legacy='hr_install1_'+ready.marker.slice('hr_alias_lab_'.length);
+const rendered=restorationSnapshotSql({identity:ready.turn,marker:legacy,relations,exportContractSql:fs.readFileSync('supabase/release/export_contract.sql','utf8')});
+const oldLiteral="'private."+legacy+"'",newLiteral="'private."+ready.marker+"'";
+if(rendered.split(oldLiteral).length!==2)throw Error('MARKER_LITERAL_COUNT');
+const sql=rendered.replace(oldLiteral,newLiteral);if(sql.replace(newLiteral,oldLiteral)!==rendered)throw Error('MARKER_REVERSE');
+const own=`select json_build_object('ownTurnStillHeld',exists(select 1 from pg_catalog.pg_locks l join pg_catalog.pg_stat_activity a on a.pid=l.pid where l.locktype='advisory' and l.pid=32545 and l.database=324139 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.granted and a.datname='cloudtms_test_clone' and a.application_name='healthroster_rehearsal_turn'));`;
+let output;try{output=execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate','-f','-'],{input:"begin read only;set local statement_timeout='30s';set local lock_timeout='1s';\n"+own+'\n'+sql+'\n'+own+'\nrollback;\n',encoding:'utf8',windowsHide:true,env:agencyChildEnvironment('healthroster_alias_native_after_recovery'),stdio:['pipe','pipe','pipe'],timeout:60000});}catch(e){throw Error('AFTER_SQLSTATE_'+(e.stderr?.toString().match(/(?:ERROR|FATAL):\s*([A-Z0-9]{5})/)?.[1]??'UNKNOWN'));}
+const rows=output.split(/\r?\n/).filter(l=>l.startsWith('{')).map(l=>JSON.parse(l));if(rows.length!==3||!rows[0].ownTurnStillHeld||!rows[2].ownTurnStillHeld)throw Error('OWN_HELD_AFTER_PROOF_REFUSED');
+const after=rows[1];fs.writeFileSync(path.join(dir,'AFTER.json'),JSON.stringify(after,null,2)+'\n',{flag:'wx'});
+const receipt={status:'ALIAS_FRESH_CORE_PROOF',connectedFresh:true,ownTurnHeldBeforeAndAfterSnapshot:true,turn:ready.turn,physicalDatabase:after.physicalDatabase,module:after.module,markerAbsent:after.markerAbsent,unchangedCore:['ledgerFingerprint','catalogueFingerprint','relationCensus'].every(k=>before[k]===after[k]),unchangedObservedBusiness:['businessCountsFingerprint','businessRowsFingerprint'].every(k=>before[k]===after[k]),observedBusinessRelations:relations.length,otherActivityBlocksProof:false,otherActivityCountObserved:after.otherActivityCount,stdinCompletionFailed:'write_stdin returned stdin closed for non-TTY exec; fresh core snapshot recovered on separate read-only connection while original turn remained held',scope:'Whole ledger/catalogue/relation census; business fingerprints only twelve directly written fixture relations; lab52 actual assertions and fresh fixture absence separately required.'};
+fs.writeFileSync(path.join(dir,'CORE_RESTORATION.json'),JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});
+if(!receipt.unchangedCore||after.physicalDatabase!=='cloudtms_test_clone'||after.module!=='LEGACY:1'||!after.markerAbsent||after.applyingCount!==0)throw Error('CORE_RESTORATION_REFUSED');
+console.log(JSON.stringify(receipt));
