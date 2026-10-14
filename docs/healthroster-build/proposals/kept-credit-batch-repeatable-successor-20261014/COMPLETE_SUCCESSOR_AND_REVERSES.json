@@ -1,0 +1,144 @@
+{
+  "schema_version": "KEEP_CREDIT_BATCH_AND_REPEATABLE_SUCCESSOR_V1",
+  "source_only": true,
+  "immutable_input_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+  "immutable_keep32_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+  "findings": [
+    "P1-KC1",
+    "P1-KC2"
+  ],
+  "changes": [
+    {
+      "source_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+      "source_file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/08_credited_targets_admit.sqlinc",
+      "source_packet_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "before_file": "before/08_credited_targets_admit.sqlinc",
+      "forward_file": "forward/08_credited_targets_admit.sqlinc",
+      "before_bytes": 7524,
+      "before_sha256": "e6e725b0b51b45abb8ee836fac0086924ac134910b2a8c37565a767e04dc7a47",
+      "after_bytes": 9403,
+      "after_sha256": "2b4138a69c14ea322920da83027265250fc1b8d099197eb175872659bc385d1c",
+      "hunks": [
+        {
+          "before": "  v_frame jsonb; v_frame_hash bytea;",
+          "after": "  v_frame jsonb; v_frame_hash bytea; v_add_ids uuid[]; v_removal_lines jsonb;"
+        },
+        {
+          "before": "  if jsonb_typeof(p_payload) is distinct from 'object' or jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array' then",
+          "after": "  if jsonb_typeof(p_payload) is distinct from 'object'\n    or (p_payload ? 'add_adjustments' and jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array')\n    or (p_payload ? 'remove_invoice_line_ids' and jsonb_typeof(p_payload->'remove_invoice_line_ids') is distinct from 'array') then"
+        },
+        {
+          "before": "  if exists(select 1 from jsonb_array_elements(p_payload->'add_adjustments') item",
+          "after": "  if exists(select 1 from jsonb_array_elements(coalesce(p_payload->'add_adjustments','[]'::jsonb)) item"
+        },
+        {
+          "before": "  select array_agg(distinct (item->>'credited_work_event_id')::uuid order by (item->>'credited_work_event_id')::uuid)\n    into v_ids from jsonb_array_elements(p_payload->'add_adjustments') item where item ? 'credited_work_event_id';",
+          "after": "  select coalesce(array_agg(distinct (item->>'credited_work_event_id')::uuid order by (item->>'credited_work_event_id')::uuid),'{}'::uuid[])\n    into v_add_ids from jsonb_array_elements(coalesce(p_payload->'add_adjustments','[]'::jsonb)) item where item ? 'credited_work_event_id';\n  -- Capture genuine existing pointer lines BEFORE any own deletion. Removal-only\n  -- historical edits need identity/facts scope, not fresh missing-shift eligibility.\n  select coalesce(jsonb_agg(jsonb_build_object('invoice_line_id',line.id,'invoice_id',line.invoice_id,\n    'work_event_id',(line.meta_json->>'credited_work_event_id')::uuid,\n    'metadata_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CREDIT_REMOVAL_METADATA_V1',line.meta_json),'hex'))\n    order by line.id),'[]'::jsonb) into v_removal_lines\n  from public.invoice_lines line where line.invoice_id=p_invoice_id\n    and line.id in(select value::uuid from jsonb_array_elements_text(coalesce(p_payload->'remove_invoice_line_ids','[]'::jsonb)) value)\n    and line.meta_json ? 'credited_work_event_id';\n  if exists(select 1 from public.invoice_lines line where line.invoice_id=p_invoice_id\n    and line.id in(select value::uuid from jsonb_array_elements_text(coalesce(p_payload->'remove_invoice_line_ids','[]'::jsonb)) value)\n    and line.meta_json ? 'credited_work_event_id'\n    and private.weekly_source_invoice_adjustment_line_valid_v1(line.id,p_invoice_id) is distinct from true) then\n    raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;\n  select array_agg(distinct id order by id) into v_ids from (\n    select unnest(v_add_ids) id union select (item->>'work_event_id')::uuid from jsonb_array_elements(v_removal_lines) item\n  ) affected;"
+        },
+        {
+          "before": "      or v_context->'source_present' is distinct from 'false'::jsonb\n      or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb)\n      or v_context->'current_pay_head_movement_id'='null'::jsonb",
+          "after": "      or (v_id=any(v_add_ids) and (v_context->'source_present' is distinct from 'false'::jsonb\n        or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb)\n        or v_context->'current_pay_head_movement_id'='null'::jsonb))"
+        },
+        {
+          "before": "      or v_context->'source_present' is distinct from 'false'::jsonb\n      or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb) then",
+          "after": "      or (v_id=any(v_add_ids) and (v_context->'source_present' is distinct from 'false'::jsonb\n        or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb))) then"
+        },
+        {
+          "before": "    'native_contexts',v_after,'adjustment_authority',v_authority);",
+          "after": "    'native_contexts',v_after,'add_target_ids',to_jsonb(v_add_ids),'removal_lines',v_removal_lines,'adjustment_authority',v_authority);"
+        }
+      ],
+      "whole_unique_reverse": true,
+      "signatures_unchanged": true
+    },
+    {
+      "source_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+      "source_file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/09_complete_invoice_apply_edits.sqlinc",
+      "source_packet_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "before_file": "before/09_complete_invoice_apply_edits.sqlinc",
+      "forward_file": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "before_bytes": 148842,
+      "before_sha256": "e74ed7ae0769bbad783c7fb1b8b3d28fc18d6c6c0a8f0f9dfdd6668cce89100c",
+      "after_bytes": 149278,
+      "after_sha256": "1933d1caac5e6f76257c1957d12ec94218d83a3e7e087fe2e977c800da60280f",
+      "hunks": [
+        {
+          "before": "    and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'",
+          "after": "    and (exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'"
+        },
+        {
+          "before": "      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id') then",
+          "after": "      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id')\n    or exists(select 1 from public.invoice_lines removed where removed.invoice_id=p_invoice_id\n      and removed.meta_json ? 'credited_work_event_id'\n      and removed.id in(select case when pg_input_is_valid(value,'uuid') then value::uuid end\n        from jsonb_array_elements_text(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'\n          then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end) value))) then"
+        }
+      ],
+      "whole_unique_reverse": true,
+      "signatures_unchanged": true
+    },
+    {
+      "source_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+      "source_file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/10_complete_adjustments_apply.sqlinc",
+      "source_packet_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "before_file": "before/10_complete_adjustments_apply.sqlinc",
+      "forward_file": "forward/10_complete_adjustments_apply.sqlinc",
+      "before_bytes": 9032,
+      "before_sha256": "25b4b20c1741afe1b542d4551ce26ea6c0c21ea26fae189aad3531ac01e6a2a0",
+      "after_bytes": 12575,
+      "after_sha256": "e0622ffff90d5828aa46f8dbc47210de1aade911efce595e04870a186449566a",
+      "hunks": [
+        {
+          "before": "  v_credit_frame jsonb; v_pg_context text; v_credit_context jsonb;",
+          "after": "  v_credit_frame jsonb; v_pg_context text; v_credit_context jsonb;\n  v_current_context jsonb; v_target_ids uuid[]; v_frame_ids uuid[]; v_removal_lines jsonb;"
+        },
+        {
+          "before": "    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id') then",
+          "after": "    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id')\n    or exists(select 1 from public.invoice_lines removed where removed.invoice_id=p_invoice_id\n      and removed.meta_json ? 'credited_work_event_id'\n      and removed.id in(select case when pg_input_is_valid(value,'uuid') then value::uuid end\n        from jsonb_array_elements_text(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'\n          then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end) value)) then"
+        },
+        {
+          "before": "  if p_payload ? 'remove_invoice_line_ids' then",
+          "after": "  -- KC1: validate the complete genuine pre-write census ONCE, after original\n  -- invoice authority/lock admission and BEFORE any accepted own removal/add.\n  -- The outer Source owner retains all native Candidate/family/group/cycle locks.\n  if v_credit_frame is not null then\n    select coalesce(array_agg(distinct id order by id),'{}'::uuid[]) into v_target_ids from (\n      select (item->>'credited_work_event_id')::uuid id\n        from jsonb_array_elements(coalesce(p_payload->'add_adjustments','[]'::jsonb)) item where item ? 'credited_work_event_id'\n      union select (removed.meta_json->>'credited_work_event_id')::uuid\n        from public.invoice_lines removed where removed.invoice_id=p_invoice_id and removed.meta_json ? 'credited_work_event_id'\n          and removed.id in(select value::uuid from jsonb_array_elements_text(coalesce(p_payload->'remove_invoice_line_ids','[]'::jsonb)) value)\n    ) affected;\n    select coalesce(array_agg((saved->>'work_event_id')::uuid order by (saved->>'work_event_id')::uuid),'{}'::uuid[])\n      into v_frame_ids from jsonb_array_elements(v_credit_frame->'native_contexts') saved;\n    if v_frame_ids is distinct from v_target_ids then\n      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n    select coalesce(jsonb_agg(jsonb_build_object('invoice_line_id',removed.id,'invoice_id',removed.invoice_id,\n      'work_event_id',(removed.meta_json->>'credited_work_event_id')::uuid,\n      'metadata_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CREDIT_REMOVAL_METADATA_V1',removed.meta_json),'hex'))\n      order by removed.id),'[]'::jsonb) into v_removal_lines from public.invoice_lines removed\n      where removed.invoice_id=p_invoice_id and removed.meta_json ? 'credited_work_event_id'\n        and removed.id in(select value::uuid from jsonb_array_elements_text(coalesce(p_payload->'remove_invoice_line_ids','[]'::jsonb)) value);\n    if v_removal_lines is distinct from v_credit_frame->'removal_lines' then\n      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n    for v_credit_context in select value from jsonb_array_elements(v_credit_frame->'native_contexts') loop\n      v_current_context:=private.weekly_source_kept_as_paid_context_v1((v_credit_context->>'work_event_id')::uuid,p_actor_user_id);\n      if v_credit_context->>'facts_fingerprint' is distinct from encode(private.weekly_source_kept_as_paid_facts_v1(\n          (v_credit_context->>'work_event_id')::uuid,'CREDITED'),'hex')\n        or v_current_context->>'client_id' is distinct from inv.client_id::text\n        or v_current_context->>'source_group_id' is distinct from v_credit_frame->>'source_group_id'\n        or v_current_context->>'candidate_id' is distinct from v_credit_context->>'candidate_id'\n        or v_current_context->>'source_cycle_id' is distinct from v_credit_context->>'source_cycle_id'\n        or v_current_context->'root_timesheet_ids' is distinct from v_credit_context->'root_timesheet_ids'\n        or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CREDIT_TARGET_NATIVE_PAID_BASIS_V1',\n          v_current_context->'native_paid_basis'),'hex') is distinct from v_credit_context->>'native_paid_basis_sha256' then\n        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n    end loop;\n  end if;\n  if p_payload ? 'remove_invoice_line_ids' then"
+        },
+        {
+          "before": "        select saved into v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;\n        if v_credit_context is null or v_credit_context->>'facts_fingerprint' is distinct from encode(\n          private.weekly_source_kept_as_paid_facts_v1((item->>'credited_work_event_id')::uuid,'CREDITED'),'hex') then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;",
+          "after": "        -- The complete event/facts frame was validated before any own write.\n        -- Same-event accepted additions/removals are not foreign CAS drift."
+        }
+      ],
+      "whole_unique_reverse": true,
+      "signatures_unchanged": true
+    },
+    {
+      "source_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+      "source_file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/12_keep_ack_native_guard.sqlinc",
+      "source_packet_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "before_file": "before/12_keep_ack_native_guard.sqlinc",
+      "forward_file": "forward/12_keep_ack_native_guard.sqlinc",
+      "before_bytes": 7316,
+      "before_sha256": "1111f7dd1e88c06649d496c6622b90b6b7e38ed6c402efc96eb59742ac36ee6b",
+      "after_bytes": 7349,
+      "after_sha256": "ca26ba277b35f692b2473d68a5cca196e646d47858761b6b09c98c12d42d1fb0",
+      "hunks": [
+        {
+          "before": "create trigger zzzz_weekly_source_keep_ack_native_guard",
+          "after": "create or replace trigger zzzz_weekly_source_keep_ack_native_guard"
+        },
+        {
+          "before": "create trigger zzzz_weekly_source_keep_ack_update_guard",
+          "after": "create or replace trigger zzzz_weekly_source_keep_ack_update_guard"
+        },
+        {
+          "before": "create trigger zzzz_weekly_source_keep_ack_delete_guard",
+          "after": "create or replace trigger zzzz_weekly_source_keep_ack_delete_guard"
+        }
+      ],
+      "whole_unique_reverse": true,
+      "signatures_unchanged": true
+    }
+  ],
+  "complete_unique_reversals": 4,
+  "new_private_public_table_signatures": 0,
+  "original_source39_recorder_three_bundles_tree_exceptions_unchanged": true,
+  "shared13_unchanged_and_proposed_not_approved": true,
+  "current_root_canonical_sources_modified": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_implementation_complete": false
+}

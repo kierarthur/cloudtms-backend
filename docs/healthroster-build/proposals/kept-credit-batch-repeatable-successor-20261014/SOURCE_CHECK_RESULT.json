@@ -1,0 +1,44 @@
+{
+  "schema_version": "KEEP_CREDIT_BATCH_REPEATABLE_SUCCESSOR_SOURCE_CHECK_V1",
+  "source_only": true,
+  "base_own_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+  "frozen_keep32_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+  "source_findings_addressed": [
+    "P1-KC1",
+    "P1-KC2"
+  ],
+  "independent_critic_disposition": "PENDING",
+  "tests": {
+    "count": 8,
+    "pass": 8,
+    "fail": 0,
+    "output_sha256": "29c4f88803a84169a4bf087cc67dab3412843c06edfadb6b9392ad66a4b7f3c7",
+    "kind": "Full source reversals + actual before/after facts-placement schedule model + exact trigger-source replay; no PostgreSQL evaluator/native claim"
+  },
+  "inert_syntax_files": [
+    "build-successor.mjs",
+    "successor-source.test.mjs",
+    "freeze-successor.mjs"
+  ],
+  "whole_unique_current_reversals": 4,
+  "added_removed_target_union_before_own_dml": true,
+  "pointer_free_native_owners_retain_original_semantics": true,
+  "complete_native_guard_function_body_unchanged": true,
+  "repeatable_guard_declarations_replace_only_same_three_names": true,
+  "new_private_public_table_signatures": 0,
+  "credential_scan": {
+    "files": 13,
+    "rules": [
+      "PRIVATE_KEY",
+      "JWT_LITERAL",
+      "GITHUB_TOKEN"
+    ],
+    "findings": []
+  },
+  "old_frozen32_and_shared13_preserved": true,
+  "canonical_banking_root_sources_modified": false,
+  "sql_compiled": false,
+  "sql_executed": false,
+  "native_proof": false,
+  "full_missing_default_cancel_capture_selector_accept_overlap_prepared_office_and_final_native_gates": "UNCHANGED_HOLD_SOURCE_ENGINEERING"
+}

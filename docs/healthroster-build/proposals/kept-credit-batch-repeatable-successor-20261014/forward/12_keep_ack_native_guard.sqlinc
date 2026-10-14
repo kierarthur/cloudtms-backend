@@ -1,0 +1,96 @@
+-- Reserve ONLY the new typed ACK action. Generic invoice/other native audits
+-- retain their existing owner. An asserted actor/PID/hash is not a real ACK.
+create or replace function private.weekly_source_keep_ack_native_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_context text; v_after jsonb:=new.after_json; v_request jsonb;
+  v_decision public.weekly_source_kept_as_paid_decisions%rowtype;
+  v_event public.weekly_work_events%rowtype; v_sequence bigint; v_native_context jsonb;
+begin
+  if tg_op='DELETE' then
+    if old.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED' then
+      raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_IMMUTABLE' using errcode='55000'; end if;
+    return old;
+  end if;
+  if tg_op='UPDATE' and (old.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED'
+    or new.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED') then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_IMMUTABLE' using errcode='55000'; end if;
+  if new.action is distinct from 'WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED' then return new; end if;
+  get diagnostics v_context=PG_CONTEXT;
+  perform private.weekly_source_query_require_service_v1();
+  if tg_op is distinct from 'INSERT' or tg_table_schema is distinct from 'public' or tg_table_name is distinct from 'audit_events'
+    or v_context !~* 'PL/pgSQL function (public[.])?weekly_source_keep_as_paid_decide_atomic_v1[(]jsonb[)]'
+    or new.object_type is distinct from 'weekly_source_kept_as_paid_decisions'
+    or jsonb_typeof(v_after) is distinct from 'object'
+    or not v_after ?& array['schema_version','decision_id','work_event_id','reason','credit_invoice_line_id',
+      'facts_fingerprint','actor_user_id','acknowledged_at_utc','acknowledgement_sequence','idempotency_key',
+      'request_sha256','request','result','native_backend_pid','native_transaction_id']
+    or v_after-array['schema_version','decision_id','work_event_id','reason','credit_invoice_line_id',
+      'facts_fingerprint','actor_user_id','acknowledged_at_utc','acknowledgement_sequence','idempotency_key',
+      'request_sha256','request','result','native_backend_pid','native_transaction_id']<>'{}'::jsonb
+    or v_after->>'schema_version' is distinct from 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_V1'
+    or v_after->>'native_backend_pid' is distinct from pg_backend_pid()::text
+    or v_after->>'native_transaction_id' is distinct from txid_current()::text
+    or v_after->>'actor_user_id' is distinct from new.actor_user_id::text
+    or v_after->>'work_event_id' is distinct from new.object_id_text then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_NATIVE_ACK_REQUIRED' using errcode='55000'; end if;
+  v_request:=v_after->'request';
+  if jsonb_typeof(v_request) is distinct from 'object'
+    or v_after->>'request_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_V1',v_request),'hex')
+    or (v_request->>'actor_user_id')::uuid is distinct from new.actor_user_id
+    or (v_request->>'work_event_id')::uuid is distinct from new.object_id_text::uuid
+    or v_request->>'decision' is distinct from 'KEEP_AS_PAID'
+    or v_request->>'reason' is distinct from v_after->>'reason'
+    or (v_request->>'credit_invoice_line_id')::uuid is distinct from (v_after->>'credit_invoice_line_id')::uuid
+    or v_request->>'idempotency_key' is distinct from v_after->>'idempotency_key'
+    or v_request->>'expected_facts_fingerprint' is distinct from v_after->>'facts_fingerprint'
+    or not isfinite((v_after->>'acknowledged_at_utc')::timestamptz) then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_NATIVE_ACK_REQUIRED' using errcode='55000'; end if;
+  select * into strict v_decision from public.weekly_source_kept_as_paid_decisions
+    where id=(v_after->>'decision_id')::uuid;
+  select * into strict v_event from public.weekly_work_events where id=v_decision.work_event_id;
+  if v_decision.decision is distinct from 'KEEP_AS_PAID' or v_decision.work_event_id::text is distinct from new.object_id_text
+    or v_decision.reason is distinct from v_after->>'reason'
+    or to_jsonb(v_decision.credit_invoice_line_id) is distinct from nullif(v_after->'credit_invoice_line_id','null'::jsonb)
+    or encode(v_decision.facts_fingerprint,'hex') is distinct from v_after->>'facts_fingerprint'
+    or v_decision.facts_fingerprint is distinct from private.weekly_source_kept_as_paid_facts_v1(v_event.id,v_decision.reason) then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_FACTS_CHANGED' using errcode='40001'; end if;
+  v_native_context:=private.weekly_source_kept_as_paid_context_v1(v_event.id,new.actor_user_id);
+  perform private.weekly_source_office_authority_v1(new.actor_user_id,'APPROVE_PROTECTED_PAY',
+    v_event.first_source_group_id,v_event.client_id,(v_native_context->>'finalisation_week_ending')::date);
+  if v_native_context->'source_present' is distinct from 'false'::jsonb
+    or not (v_native_context->'invoiced'='true'::jsonb or v_native_context->'paid'='true'::jsonb) then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_NOT_ELIGIBLE' using errcode='55000'; end if;
+  select coalesce(max((audit.after_json->>'acknowledgement_sequence')::bigint),0)+1 into v_sequence
+    from public.audit_events audit where audit.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED'
+      and audit.object_type='weekly_source_kept_as_paid_decisions' and audit.object_id_text=new.object_id_text;
+  if (v_after->>'acknowledgement_sequence')::bigint is distinct from v_sequence
+    or v_after#>>'{result,decision_id}' is distinct from v_decision.id::text
+    or v_after#>>'{result,actor_user_id}' is distinct from new.actor_user_id::text
+    or v_after#>>'{result,acknowledged_at_utc}' is distinct from v_after->>'acknowledged_at_utc'
+    or v_after#>>'{result,acknowledgement_sequence}' is distinct from v_sequence::text
+    or v_after#>'{result,pay_changed}' is distinct from 'false'::jsonb
+    or v_after#>'{result,invoice_changed}' is distinct from 'false'::jsonb
+    or exists(select 1 from public.audit_events audit where audit.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED'
+      and audit.after_json->>'idempotency_key'=v_after->>'idempotency_key') then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_NATIVE_ACK_REQUIRED' using errcode='55000'; end if;
+  return new;
+end;
+$function$;
+alter function private.weekly_source_keep_ack_native_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_keep_ack_native_guard_v1() from public,anon,authenticated,service_role;
+create or replace trigger zzzz_weekly_source_keep_ack_native_guard
+  before insert on public.audit_events for each row
+  when (new.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED')
+  execute function private.weekly_source_keep_ack_native_guard_v1();
+create or replace trigger zzzz_weekly_source_keep_ack_update_guard
+  before update on public.audit_events for each row
+  when (old.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED' or new.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED')
+  execute function private.weekly_source_keep_ack_native_guard_v1();
+create or replace trigger zzzz_weekly_source_keep_ack_delete_guard
+  before delete on public.audit_events for each row
+  when (old.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED')
+  execute function private.weekly_source_keep_ack_native_guard_v1();

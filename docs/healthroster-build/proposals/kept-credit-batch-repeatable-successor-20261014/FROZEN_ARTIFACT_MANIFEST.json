@@ -1,0 +1,86 @@
+{
+  "schema_version": "KEEP_CREDIT_BATCH_REPEATABLE_SUCCESSOR_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "base_own_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+  "findings": [
+    "P1-KC1",
+    "P1-KC2"
+  ],
+  "independent_review": "PENDING",
+  "canonical_sources_modified": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "file": "COMPLETE_SUCCESSOR_AND_REVERSES.json",
+      "bytes": 15110,
+      "sha256": "5611880421ff16f440ee147da0e96364dfeeea3f4cc957e65455419cc2776a13"
+    },
+    {
+      "file": "REVIEW_AND_MOUNT_DISPOSITION.md",
+      "bytes": 4497,
+      "sha256": "ff35ea942ac4851af09e84c8062cd6226ee20a31b2131a7e106e5863592298f3"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1604,
+      "sha256": "e54881ad968567f4a064f0c45988b63d040383a79efa3b4f29775b9a98bd8d2b"
+    },
+    {
+      "file": "before/08_credited_targets_admit.sqlinc",
+      "bytes": 7524,
+      "sha256": "e6e725b0b51b45abb8ee836fac0086924ac134910b2a8c37565a767e04dc7a47"
+    },
+    {
+      "file": "before/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 148842,
+      "sha256": "e74ed7ae0769bbad783c7fb1b8b3d28fc18d6c6c0a8f0f9dfdd6668cce89100c"
+    },
+    {
+      "file": "before/10_complete_adjustments_apply.sqlinc",
+      "bytes": 9032,
+      "sha256": "25b4b20c1741afe1b542d4551ce26ea6c0c21ea26fae189aad3531ac01e6a2a0"
+    },
+    {
+      "file": "before/12_keep_ack_native_guard.sqlinc",
+      "bytes": 7316,
+      "sha256": "1111f7dd1e88c06649d496c6622b90b6b7e38ed6c402efc96eb59742ac36ee6b"
+    },
+    {
+      "file": "build-successor.mjs",
+      "bytes": 14051,
+      "sha256": "c86c9f33bdbfdb02e36f4c4c3df2cdae307903c3cadb492e70d958ebae10d3f6"
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "bytes": 9403,
+      "sha256": "2b4138a69c14ea322920da83027265250fc1b8d099197eb175872659bc385d1c"
+    },
+    {
+      "file": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 149278,
+      "sha256": "1933d1caac5e6f76257c1957d12ec94218d83a3e7e087fe2e977c800da60280f"
+    },
+    {
+      "file": "forward/10_complete_adjustments_apply.sqlinc",
+      "bytes": 12575,
+      "sha256": "e0622ffff90d5828aa46f8dbc47210de1aade911efce595e04870a186449566a"
+    },
+    {
+      "file": "forward/12_keep_ack_native_guard.sqlinc",
+      "bytes": 7349,
+      "sha256": "ca26ba277b35f692b2473d68a5cca196e646d47858761b6b09c98c12d42d1fb0"
+    },
+    {
+      "file": "freeze-successor.mjs",
+      "bytes": 4040,
+      "sha256": "fc5ca83e222f4b3a335fbc740b206f35d727c696f13afd20c1d21907de367aea"
+    },
+    {
+      "file": "successor-source.test.mjs",
+      "bytes": 6666,
+      "sha256": "4e338521ca20137f440c97012ea113425c817825c6f46227876326578720df89"
+    }
+  ]
+}
