@@ -1,0 +1,26 @@
+{
+  "beganAt": "2026-10-14T00:01:07.577Z",
+  "endedAt": "2026-10-14T00:01:09.847Z",
+  "remote": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "result": {
+    "status": "NATIVE_OWN_TURN_ADDRESS_PROVED_NO_REHEARSAL",
+    "identity": {
+      "physicalDatabase": "cloudtms_test_clone",
+      "databaseOid": 324139,
+      "backendPid": 484457,
+      "turnId": "hr_turn_31eeb791443dddf4e3c68a014e5935eb",
+      "key": [
+        20261013,
+        1
+      ],
+      "takenAt": "2026-10-14T00:01:09.668Z",
+      "task": "Install1 native SEND7 PID/OID/tag precheck only"
+    },
+    "physicalDatabase": "cloudtms_test_clone",
+    "keyNamespace": "two-int32/objsubid=2",
+    "fingerprintsRead": false,
+    "trialRun": false,
+    "ddlOrFixtureApplied": false,
+    "fullRehearsalProved": false
+  }
+}

@@ -1,5 +1,11 @@
 # HealthRoster v2 TEST build progress
 
+## Latest acceptance calendar clarification — 14 October 2026
+
+The owner defines a fresh cycle as **no existing upload for the acceptance TEST client/week**, not this calendar week. Use a dedicated TEST client from the setup manifest, a genuine earlier HealthRoster file and a past week ending with an already-open upload window; upload today with the real server timestamp. No old upload/file/date is relabelled, and no false timestamp or pretend proof is permitted. The earlier unconditional 22 October wait is superseded. Only an exact demonstrated code guard preventing that older open week can retain a wait, with path/lines/input/refusal/reason in OWNER_QUESTIONS.md. Money/OFF/Report builders are reconciling their real historical fixture and future activation assignment bindings without weakening the native guards.
+
+Estimate remains at most two normal installs. Install1 WP-PP selection is frozen and its candidate WIP is pushed at2d405edae701ba905afaa4b91a3abfcf8847106e. The one mechanical task-owned PostgreSQL17 rebuild has compiled all207 pending baseline-successor migrations and792 selected closures; contract sealed7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6, exact diff/security review pending. The native short SEND7 precheck proved TEST databaseOID324139/ownPID484457/two-int32 lock namespace, then explicitly unlockedtrue/closed at00:01:09.843UTC; no fingerprint, DDL, fixture or fullrehearsal ran on TEST. Full source safety review covers158 current verifierroots,16 exclusions/142 eligible, stillNOTRUN. Allowroughly1–3hours per fullrehearsal/releasecycle plusup-to3sourcefixrounds; remainingcode/nativeacceptance severalhoursperarea without an automatic calendarweek wait, actualNEXTF17/Apple/device prerequisites retained.
+
 ## Latest Install 1 selection — Banking window released
 
 Banking's first install is COMPLETE; its shared unlock returned true at `2026-10-13T23:45:36.217Z`. Fresh protected run38476430690 and remoteTEST07e66fb2b2742fbe634a41582f2ad3e004eed3b9 checks match the permitted install record. Install1 selection is frozen to **WP-PP SQL/Worker helper and bounded scoped permission/read consumers only, featuresOFF**, without waiting for other packages. No additional package had passed its installation gates at that first window. See INSTALL1_SELECTION_14102026.md for exact source/worktree/remaining common gates. No HealthRoster install is claimed.
@@ -281,3 +287,7 @@ New owner batching instruction applied immediately at top ofPROGRESS and TEST_IN
 ## Shared-turn false-unlock source repair — 14 October 2026
 
 The Install1 source reviewer reproduced a callback returning `proved` after `pg_advisory_unlock` returned false. The owned wrapper now closes its own connection, retains `explicitUnlockConfirmed:false`, and throws `TURN_UNLOCK_CONFIRMATION_FAILED`; that callback cannot return a clean turn receipt. A dedicated counterexample and the full pure protocol/turn suite pass (18 tests). No database connection or protected workflow was opened by these tests. Exact reviewed baseline: 14fc8a524c5568de38112dd784b198495361fb22; this forward source repair does not prove installation readiness. Actual turn PID/database OID and loss monitoring across a full rehearsal and protected release remain required source integration work. Banking's first install remains in progress; no rehearsal or HealthRoster publication resumed.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 native SEND7 PID/OID/tag precheck only","status":"TAKEN","takenAt":"2026-10-14T00:01:09.668Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 native SEND7 PID/OID/tag precheck only","status":"RELEASED","takenAt":"2026-10-14T00:01:09.668Z","releasedAt":"2026-10-14T00:01:09.843Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
