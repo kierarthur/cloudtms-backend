@@ -1,0 +1,167 @@
+{
+  "source_only": true,
+  "native": false,
+  "records": [
+    {
+      "file": "00_source_token_grammar.sqlinc",
+      "source_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "source_path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/00_source_token_grammar.sqlinc",
+      "before_bytes": 5502,
+      "before_sha256": "46d9d29656ae2158c056954163156c05d7add3479b834d45c65c729a7e368018",
+      "after_bytes": 5578,
+      "after_sha256": "bccccd390cd6d5e70b3fb6b0f0b7e0fa3dfc1e31a99fc784bd7dea13b95a26ff",
+      "hunks": [
+        {
+          "label": "closed policy membership range domain",
+          "before": "'SOURCE_GLOBAL_SETTINGS','SOURCE_CONTRACT_COVERAGE','SOURCE_REVISION_CLIENT'",
+          "after": "'SOURCE_GLOBAL_SETTINGS','SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE','SOURCE_REVISION_CLIENT'"
+        },
+        {
+          "label": "same native inclusive range grammar",
+          "before": "if kind='SOURCE_CONTRACT_COVERAGE' then",
+          "after": "if kind in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE') then"
+        }
+      ]
+    },
+    {
+      "file": "01_complete_same_arbiter_schema.sqlinc",
+      "source_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "source_path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/01_complete_same_arbiter_schema.sqlinc",
+      "before_bytes": 6396,
+      "before_sha256": "6c65c6ff3c3b377628acb7c0f2b05c97a2055d7453f4833a31981e9a8d689c74",
+      "after_bytes": 6436,
+      "after_sha256": "e934e1f6f425c23a02f70d16c1039d8104965d8c725efb3f40688de8728e9ddf",
+      "hunks": [
+        {
+          "label": "same native range exclusion supports separate typed policy domain",
+          "before": "or(token_kind='SOURCE_CONTRACT_COVERAGE' and uuid_identity",
+          "after": "or(token_kind in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE') and uuid_identity"
+        }
+      ]
+    },
+    {
+      "file": "02_complete_scalar_helpers.sqlinc",
+      "source_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "source_path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "before_bytes": 23386,
+      "before_sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653",
+      "after_bytes": 23386,
+      "after_sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653",
+      "hunks": []
+    },
+    {
+      "file": "03_coverage_and_compatibility_acquire.sqlinc",
+      "source_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "source_path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "before_bytes": 6806,
+      "before_sha256": "da2969244917a2fa383d640754b5e89994e2cef737c6373f6ced9b0c13b11425",
+      "after_bytes": 7703,
+      "after_sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae",
+      "hunks": [
+        {
+          "label": "extract one exact same-arbiter coverage core preserving original wrapper",
+          "before": "-- The same arbiter, native date overlap and opposite intent classes.\n-- Engine contention/dirty visibility/old-RR and whole caller order remain UNRUN.\ncreate or replace function private.timesheet_correction_a0_source_coverage_acquire_v1(p_client uuid,p_coverage daterange,p_retain boolean)\nreturns void language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'\nas $coverage$\ndeclare old_timeout text:=current_setting('lock_timeout');span numrange;xid numeric;inserted integer;changed integer;\nbegin\n if p_client is null or p_coverage is null or isempty(p_coverage) or p_retain is null then\n  raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;\n if p_retain then span:=numrange(null,null,'()');else\n  xid:=pg_current_xact_id()::text::numeric;span:=numrange(xid,xid+1,'[)');end if;\n begin\n  perform set_config('lock_timeout','1ms',true);\n  if p_retain then\n   perform 1 from private.timesheet_correction_a0_transaction_fences f\n    where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client\n      and f.coverage_span=p_coverage for update nowait;\n   if not found then\n    insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,retained,intent_span,coverage_span,touch_bit)\n     values('SOURCE_CONTRACT_COVERAGE',p_client,true,span,p_coverage,true)\n     on conflict(token_kind,uuid_identity,coverage_span) where retained and coverage_span is not null\n      do nothing returning 1 into inserted;\n    if inserted is distinct from 1 then\n     perform 1 from private.timesheet_correction_a0_transaction_fences f\n      where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client\n       and f.coverage_span=p_coverage for update nowait;\n     if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;\n    end if;\n   end if;\n   if inserted is distinct from 1 then\n    update private.timesheet_correction_a0_transaction_fences f set touch_bit=not f.touch_bit\n     where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client and f.coverage_span=p_coverage;\n    get diagnostics changed=row_count;\n    if changed<>1 then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;\n   end if;\n  else\n   perform 1 from private.timesheet_correction_a0_transaction_fences f\n    where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client\n     and f.coverage_span && p_coverage for share nowait;\n   if not found then\n    insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,retained,intent_span,coverage_span,touch_bit)\n     values('SOURCE_CONTRACT_COVERAGE',p_client,false,span,p_coverage,false)\n     on conflict on constraint timesheet_correction_a0_fences_coverage_excl do nothing returning 1 into inserted;\n    if inserted=1 then\n     delete from private.timesheet_correction_a0_transaction_fences f\n      where not f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client\n       and f.coverage_span=p_coverage and f.intent_span=span;\n    else\n     perform 1 from private.timesheet_correction_a0_transaction_fences f\n      where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client\n       and f.coverage_span && p_coverage for share nowait;\n     if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;\n    end if;\n   end if;\n  end if;\n  perform set_config('lock_timeout',old_timeout,true);\n exception when others then perform set_config('lock_timeout',old_timeout,true);raise;end;\nend;\n$coverage$;\nalter function private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean) owner to postgres;\nrevoke all on function private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean) from public,anon,authenticated,service_role;\n\n",
+          "after": "-- The same arbiter, native date overlap and opposite intent classes.\n-- Engine contention/dirty visibility/old-RR and whole caller order remain UNRUN.\ncreate or replace function private.timesheet_correction_a0_source_coverage_acquire_core_v1(p_kind text,p_client uuid,p_coverage daterange,p_retain boolean)\nreturns void language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'\nas $coverage$\ndeclare old_timeout text:=current_setting('lock_timeout');span numrange;xid numeric;inserted integer;changed integer;\nbegin\n if p_kind is null or p_kind not in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE') or p_client is null or p_coverage is null or isempty(p_coverage) or p_retain is null then\n  raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;\n if p_retain then span:=numrange(null,null,'()');else\n  xid:=pg_current_xact_id()::text::numeric;span:=numrange(xid,xid+1,'[)');end if;\n begin\n  perform set_config('lock_timeout','1ms',true);\n  if p_retain then\n   perform 1 from private.timesheet_correction_a0_transaction_fences f\n    where f.retained and f.token_kind=p_kind and f.uuid_identity=p_client\n      and f.coverage_span=p_coverage for update nowait;\n   if not found then\n    insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,retained,intent_span,coverage_span,touch_bit)\n     values(p_kind,p_client,true,span,p_coverage,true)\n     on conflict(token_kind,uuid_identity,coverage_span) where retained and coverage_span is not null\n      do nothing returning 1 into inserted;\n    if inserted is distinct from 1 then\n     perform 1 from private.timesheet_correction_a0_transaction_fences f\n      where f.retained and f.token_kind=p_kind and f.uuid_identity=p_client\n       and f.coverage_span=p_coverage for update nowait;\n     if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;\n    end if;\n   end if;\n   if inserted is distinct from 1 then\n    update private.timesheet_correction_a0_transaction_fences f set touch_bit=not f.touch_bit\n     where f.retained and f.token_kind=p_kind and f.uuid_identity=p_client and f.coverage_span=p_coverage;\n    get diagnostics changed=row_count;\n    if changed<>1 then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;\n   end if;\n  else\n   perform 1 from private.timesheet_correction_a0_transaction_fences f\n    where f.retained and f.token_kind=p_kind and f.uuid_identity=p_client\n     and f.coverage_span && p_coverage for share nowait;\n   if not found then\n    insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,retained,intent_span,coverage_span,touch_bit)\n     values(p_kind,p_client,false,span,p_coverage,false)\n     on conflict on constraint timesheet_correction_a0_fences_coverage_excl do nothing returning 1 into inserted;\n    if inserted=1 then\n     delete from private.timesheet_correction_a0_transaction_fences f\n      where not f.retained and f.token_kind=p_kind and f.uuid_identity=p_client\n       and f.coverage_span=p_coverage and f.intent_span=span;\n    else\n     perform 1 from private.timesheet_correction_a0_transaction_fences f\n      where f.retained and f.token_kind=p_kind and f.uuid_identity=p_client\n       and f.coverage_span && p_coverage for share nowait;\n     if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;\n    end if;\n   end if;\n  end if;\n  perform set_config('lock_timeout',old_timeout,true);\n exception when others then perform set_config('lock_timeout',old_timeout,true);raise;end;\nend;\n$coverage$;\nalter function private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean) owner to postgres;\nrevoke all on function private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean) from public,anon,authenticated,service_role;\n\n-- Preserve the original Contract-coverage helper ABI and its exact domain.\ncreate or replace function private.timesheet_correction_a0_source_coverage_acquire_v1(p_client uuid,p_coverage daterange,p_retain boolean)\nreturns void language sql volatile security definer set search_path='pg_catalog','pg_temp'\nas $coverage_contract$\n select private.timesheet_correction_a0_source_coverage_acquire_core_v1('SOURCE_CONTRACT_COVERAGE',p_client,p_coverage,p_retain);\n$coverage_contract$;\nalter function private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean) owner to postgres;\nrevoke all on function private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean) from public,anon,authenticated,service_role;\n\n"
+        },
+        {
+          "label": "new range domain recognised before scalar fallback",
+          "before": "'SOURCE_GLOBAL_SETTINGS','SOURCE_CONTRACT_COVERAGE','SOURCE_REVISION_CLIENT'",
+          "after": "'SOURCE_GLOBAL_SETTINGS','SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE','SOURCE_REVISION_CLIENT'"
+        },
+        {
+          "label": "whole envelope validates either range before any acquisition",
+          "before": "if t->>'kind'='SOURCE_CONTRACT_COVERAGE' and",
+          "after": "if t->>'kind' in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE') and"
+        },
+        {
+          "label": "both ranges excluded from unchanged scalar core",
+          "before": "where value->>'kind' is distinct from 'SOURCE_CONTRACT_COVERAGE'",
+          "after": "where coalesce(value->>'kind','') not in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE')"
+        },
+        {
+          "label": "distinct typed ranges share one ordered phase",
+          "before": "where value->>'kind'='SOURCE_CONTRACT_COVERAGE' order by value loop",
+          "after": "where value->>'kind' in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE') order by value loop"
+        },
+        {
+          "label": "same range core takes actual closed kind",
+          "before": "perform private.timesheet_correction_a0_source_coverage_acquire_v1((t->>'uuid')::uuid,",
+          "after": "perform private.timesheet_correction_a0_source_coverage_acquire_core_v1(t->>'kind',(t->>'uuid')::uuid,"
+        }
+      ]
+    },
+    {
+      "file": "06_complete_source_witness_policy_projection.sqlinc",
+      "source_commit": "8291f6290044e21a3210bd04a8db0d9cfd2f81e8",
+      "source_path": "docs/healthroster-build/proposals/agency-source-selector-precision-forward-20261014/construction/85_complete_source_dependency_witness_with_exact_selector_tuples.sqlinc",
+      "before_bytes": 14843,
+      "before_sha256": "d3e032b911499cfe0563a4f21f55643b05b51ebd6cb8c1313f112ea04f2fca2b",
+      "after_bytes": 16686,
+      "after_sha256": "1be247f3656ce583549cbe4456d8ba5c7088a31bb983637df92c53060e5ccfd1",
+      "hunks": [
+        {
+          "label": "actual full native resolved-policy dependency declarations",
+          "before": "revision_event_pairs jsonb; exact_report_bound_resolutions jsonb;",
+          "after": "revision_event_pairs jsonb; exact_report_bound_resolutions jsonb; policy_dates jsonb; policy_groups jsonb; policy_parents jsonb;"
+        },
+        {
+          "label": "derive actual policy dates and identities from the SAME facts read",
+          "before": " -- Group/client and date predicates are retained as typed native selectors,",
+          "after": " -- The effective-policy reader counts ALL active groups for each actual\n -- Client/work date. A competing group's membership is a real phantom even\n -- when the cycle's own group has not changed. No extra facts/CAS read.\n select coalesce(jsonb_agg(jsonb_build_array(client_id,work_date) order by client_id,work_date),'[]'::jsonb)\n  into policy_dates from(select distinct (item->>'client_id')::uuid client_id,(item->>'work_date')::date work_date\n   from jsonb_array_elements(facts->'resolved_policies') item) actual;\n select coalesce(jsonb_agg(jsonb_build_array(group_id,client_id) order by group_id,client_id),'[]'::jsonb)\n  into policy_groups from(select distinct (item#>>'{policy,source_group_id}')::uuid group_id,(item->>'client_id')::uuid client_id\n   from jsonb_array_elements(facts->'resolved_policies') item) actual;\n select coalesce(jsonb_agg(jsonb_build_array(relation_name,id) order by relation_name,id),'[]'::jsonb)\n  into policy_parents from(select distinct field.relation_name,(item#>>array['policy',field.policy_key])::uuid id\n   from jsonb_array_elements(facts->'resolved_policies') item cross join(values\n    ('public.weekly_source_groups','source_group_id'),\n    ('public.weekly_source_group_clients','source_group_membership_id'),\n    ('public.weekly_source_client_policies','client_policy_id'),\n    ('public.weekly_source_contract_policies','contract_policy_id')\n   ) field(relation_name,policy_key) where item#>>array['policy',field.policy_key] is not null\n   union select distinct 'public.contracts',(item->>'contract_id')::uuid\n    from jsonb_array_elements(facts->'resolved_policies') item where item->>'contract_id' is not null) actual;\n -- Group/client and date predicates are retained as typed native selectors,"
+        },
+        {
+          "label": "return actual policy selectors without changing Source CAS",
+          "before": "'resolution_slots',resolution_slots,",
+          "after": "'policy_date_pairs',policy_dates,'policy_group_client_pairs',policy_groups,'policy_parent_objects',policy_parents,\n   'resolution_slots',resolution_slots,"
+        }
+      ]
+    },
+    {
+      "file": "04_native_source_footprint.sqlinc",
+      "source_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "source_path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/04_native_source_footprint.sqlinc",
+      "before_bytes": 10409,
+      "before_sha256": "bae96628383b3cfe6cef01547045e69b0c2a1cce9f4fa52edaf512ae583e42b3",
+      "after_bytes": 11580,
+      "after_sha256": "7ce58452bf0980476076ad7f5ff9fd9e90ab0d49ddd40b99b37f32e7ddc6d59e",
+      "hunks": [
+        {
+          "label": "full policy dates, resolved groups and native parent object closure",
+          "before": " -- Revisions are selected in the actual Source group by the current cycle,",
+          "after": " -- Precise actual resolved-policy transitive closure, including any genuine\n -- earlier/foreign group selected by the native Client/work-date policy owner.\n for field in select * from(values('policy_parent_objects','SOURCE_OBJECT'),\n   ('policy_group_client_pairs','SOURCE_GROUP_CLIENT')) mapping(selector_field,token_kind) loop\n  if jsonb_typeof(selectors->field.selector_field) is distinct from 'array' then\n   raise exception 'CORRECTION_A0_SOURCE_WITNESS_INVALID' using errcode='55000';end if;\n  select coalesce(jsonb_agg(jsonb_build_object('kind',field.token_kind,'json',value::text)),'[]'::jsonb)\n   into item from jsonb_array_elements(selectors->field.selector_field);tokens:=tokens||item;\n end loop;\n if jsonb_typeof(selectors->'policy_date_pairs') is distinct from 'array' then\n  raise exception 'CORRECTION_A0_SOURCE_WITNESS_INVALID' using errcode='55000';end if;\n select coalesce(jsonb_agg(jsonb_build_object('kind','SOURCE_POLICY_MEMBERSHIP_COVERAGE',\n  'uuid',(value->>0)::uuid::text,'coverage',jsonb_build_array((value->>1)::date,(value->>1)::date))),'[]'::jsonb)\n  into item from jsonb_array_elements(selectors->'policy_date_pairs');tokens:=tokens||item;\n -- Revisions are selected in the actual Source group by the current cycle,"
+        }
+      ]
+    },
+    {
+      "file": "05_raw_selector_helpers.sqlinc",
+      "source_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "source_path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/05_raw_selector_helpers.sqlinc",
+      "before_bytes": 13244,
+      "before_sha256": "cf542ddbf992da40a5e0bcabc6cf2451d1d37b38abffa45764e1858a411b05f6",
+      "after_bytes": 15713,
+      "after_sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de",
+      "hunks": [
+        {
+          "label": "raw actual membership date range before any parent lookup",
+          "before": " if p_relation='public.weekly_source_final_revisions' and",
+          "after": " if p_relation='public.weekly_source_group_clients' then\n  if p_row->>'client_id' is null or p_row->>'valid_from' is null then\n   raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;\n  tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_POLICY_MEMBERSHIP_COVERAGE',\n   'uuid',(p_row->>'client_id')::uuid::text,'coverage',jsonb_build_array((p_row->>'valid_from')::date,(p_row->>'valid_to')::date)));\n end if;\n if p_relation='public.weekly_source_final_revisions' and"
+        },
+        {
+          "label": "one actual group activation reader",
+          "before": "create or replace function private.timesheet_correction_a0_source_reference_before_v1()",
+          "after": "-- Actual group activation scopes after RAW OLD/NEW acquisition. Membership\n-- ranges are extracted without parent lookup, including currently inactive\n-- groups: otherwise concurrent activation plus insertion can erase a phantom.\ncreate or replace function private.timesheet_correction_a0_source_policy_tokens_v1(p_relation text,p_row jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'\nas $source_policy$\ndeclare tokens jsonb:='[]'::jsonb;token jsonb;\nbegin\n if p_relation is null then raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;\n if p_relation<>'public.weekly_source_groups' then return tokens;end if;\n if jsonb_typeof(p_row) is distinct from 'object' then raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;\n if p_row->'active' is distinct from 'true'::jsonb then return tokens;end if;\n select coalesce(jsonb_agg(jsonb_build_object('kind','SOURCE_POLICY_MEMBERSHIP_COVERAGE','uuid',member.client_id::text,\n  'coverage',jsonb_build_array(member.valid_from,member.valid_to))),'[]'::jsonb) into tokens\n  from public.weekly_source_group_clients member where member.source_group_id=(p_row->>'id')::uuid;\n for token in select value from jsonb_array_elements(tokens) loop\n  perform private.timesheet_correction_a0_source_token_assert_v1(token);end loop;\n select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into tokens\n  from(select distinct value from jsonb_array_elements(tokens)) complete;return tokens;\nend;\n$source_policy$;\nalter function private.timesheet_correction_a0_source_policy_tokens_v1(text,jsonb) owner to postgres;\nrevoke all on function private.timesheet_correction_a0_source_policy_tokens_v1(text,jsonb) from public,anon,authenticated,service_role;\n\ncreate or replace function private.timesheet_correction_a0_source_reference_before_v1()"
+        },
+        {
+          "label": "OLD policy scope joins same nested acquire after raw phase",
+          "before": "nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(old));",
+          "after": "nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(old))\n   ||private.timesheet_correction_a0_source_policy_tokens_v1('public.'||tg_table_name,to_jsonb(old));"
+        },
+        {
+          "label": "NEW policy scope joins same nested acquire after raw phase",
+          "before": "nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(new));",
+          "after": "nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(new))\n   ||private.timesheet_correction_a0_source_policy_tokens_v1('public.'||tg_table_name,to_jsonb(new));"
+        }
+      ]
+    }
+  ]
+}

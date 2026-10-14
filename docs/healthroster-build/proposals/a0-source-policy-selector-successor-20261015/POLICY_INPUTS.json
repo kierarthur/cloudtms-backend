@@ -1,0 +1,10 @@
+{
+  "source_only": true,
+  "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "source_path": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+  "bytes": 13643,
+  "sha256": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed",
+  "witness_commit": "8291f6290044e21a3210bd04a8db0d9cfd2f81e8",
+  "witness_path": "docs/healthroster-build/proposals/agency-source-selector-precision-forward-20261014/construction/85_complete_source_dependency_witness_with_exact_selector_tuples.sqlinc",
+  "source_cas_changed": false
+}
