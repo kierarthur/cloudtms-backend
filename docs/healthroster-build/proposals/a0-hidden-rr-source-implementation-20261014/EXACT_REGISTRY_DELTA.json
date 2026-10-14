@@ -1,0 +1,20 @@
+{
+  "rootCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "newPrivateTables": [
+    {
+      "name": "private.timesheet_correction_a0_transaction_fences",
+      "classification": "OWNER_PRIVATE_CONCURRENCY_ONLY",
+      "businessAuthority": false
+    }
+  ],
+  "newOwnerPrivateSignatures": [
+    "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])",
+    "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)",
+    "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])",
+    "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)"
+  ],
+  "serviceSignaturesChanged": [],
+  "allCurrentInventoriesRetained": true,
+  "canonicalContractAndDefinitionHashes": "NOT_GENERATED_NATIVE_COMPILATION_BLOCKED",
+  "mandatoryVerifier": "14102026_1030_a0_transaction_fence_source_contract.sql"
+}

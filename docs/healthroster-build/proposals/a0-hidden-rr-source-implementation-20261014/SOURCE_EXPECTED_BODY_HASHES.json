@@ -1,0 +1,57 @@
+{
+  "sourceOnly": true,
+  "observedNative": false,
+  "normalization": "CRLF to LF only, all other body bytes preserved",
+  "expect": [
+    {
+      "signature": "private.timesheet_correction_a0_booking_before_v1()",
+      "bodySha256": "0fe1736bd3a3a11e49c75dc2a10ed20fc0d11464b67ac3809dd2526bd58e67f2",
+      "source": "sql/14102026_1030_05_native_creator_intents_and_triggers.complete-proposed.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_candidate_before_v1()",
+      "bodySha256": "3a9445e369763184b205cdd291480fa35b884829e92546dc4d8e03db892a4ecf",
+      "source": "sql/14102026_1030_05_native_creator_intents_and_triggers.complete-proposed.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])",
+      "bodySha256": "4b33a249ed8643bf43f64d80823bf64fadc890b9b8c978ba621fab8dd26d4f9c",
+      "source": "sql/14102026_1030_a0_transaction_fence_helpers.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)",
+      "bodySha256": "3fa2a8b2ee663dfb5157d8f5e590eb3f890d07734e465fd9ef928c1dcaae2115",
+      "source": "sql/14102026_1030_a0_transaction_fence_helpers.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])",
+      "bodySha256": "653c0bd88ba5d4d2e07ff40025c066f7571be30ec2efad155800857fe6f7824e",
+      "source": "sql/14102026_1030_a0_transaction_fence_helpers.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "bodySha256": "7664be49abc77c420f9564ad7e31eca6879c2e9e6ba702e087bde33368e33bdb",
+      "source": "sql/14102026_1030_04_complete_native_lock_fence.complete-proposed.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_reference_before_v1()",
+      "bodySha256": "a9171a266474afa69997ad36228a02ba8acd4b7b0ed8873b86ec72ed41aeeb9c",
+      "source": "sql/14102026_1030_05_native_creator_intents_and_triggers.complete-proposed.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)",
+      "bodySha256": "90404c94cdf2e172e555c815abdc47cad7e9757c25ed62ae6c080d8d651d3d79",
+      "source": "sql/14102026_1030_a0_transaction_fence_helpers.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+      "bodySha256": "99e25df0cad8c96e2a242bb071a792f0a6a40322cc11a72ea0e0df8de0d165fc",
+      "source": "sql/14102026_1030_06_send_family_fence.complete-proposed.sqlinc"
+    },
+    {
+      "signature": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "bodySha256": "464df8310ebde80124b1a79f192a4eb3412f0fd899979dd642781e61a77797a0",
+      "source": "sql/14102026_1030_08_complete_current_request.complete-proposed.sqlinc"
+    }
+  ]
+}

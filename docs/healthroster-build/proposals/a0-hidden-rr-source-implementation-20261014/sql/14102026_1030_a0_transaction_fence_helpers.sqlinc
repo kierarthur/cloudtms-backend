@@ -1,0 +1,156 @@
+-- A0_HIDDEN_RR_FENCE_ABI_V1. Owner-private serialization, never admission.
+create or replace function private.timesheet_correction_a0_fence_tokens_v1(
+  p_family uuid[],p_physical uuid[],p_bookings text[],p_keys text[],p_aliases jsonb[]
+) returns jsonb language sql immutable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+with tokens as (
+  select jsonb_build_object('kind','FAMILY_UUID','uuid',u.id::text) as value
+    from unnest(p_family) u(id) where u.id is not null
+  union all
+  select jsonb_build_object('kind','PHYSICAL_UUID','uuid',u.id::text)
+    from unnest(p_physical) u(id) where u.id is not null
+  union all
+  select jsonb_build_object('kind','BOOKING','json',to_jsonb(btrim(b.value)))
+    from unnest(p_bookings) b(value) where b.value is not null
+  union all
+  select jsonb_build_object('kind','KEY_NORM','json',to_jsonb(k.value))
+    from unnest(p_keys) k(value) where k.value is not null
+  union all
+  -- Native aliases @> [occupant] matches top-level string array members.
+  -- Scalar/object/NULL/mixed non-string members retain native nonmatching
+  -- behavior. Empty non-NULL strings remain identities; nothing is trimmed.
+  select jsonb_build_object('kind','ALIAS_JSON_STRING','json',a.value)
+    from unnest(p_aliases) j(value)
+    cross join lateral jsonb_array_elements(case when jsonb_typeof(j.value)='array'
+      then j.value else '[]'::jsonb end) a(value)
+    where jsonb_typeof(a.value)='string'
+), dedup as (select distinct value from tokens)
+select coalesce(jsonb_agg(value order by value->>'kind' collate "C",value->>'uuid' collate "C",value->'json'),'[]'::jsonb)
+from dedup;
+$function$;
+alter function private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[]) owner to postgres;
+revoke all on function private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[]) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_fence_acquire_v1(p_tokens jsonb,p_retain boolean)
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare t jsonb; k text; u uuid; j jsonb; v_inserted integer; v_timeout text:=current_setting('lock_timeout');
+begin
+  if p_retain is null or jsonb_typeof(p_tokens) is distinct from 'array'
+    or exists(select 1 from jsonb_array_elements(p_tokens) x(value)
+      where jsonb_typeof(x.value) is distinct from 'object' or x.value->>'kind' is null
+        or x.value->>'kind' not in('FAMILY_UUID','PHYSICAL_UUID','BOOKING','KEY_NORM','ALIAS_JSON_STRING')
+        or exists(select 1 from jsonb_object_keys(x.value) n(key) where n.key not in('kind','uuid','json'))
+        or (x.value->>'kind' in('FAMILY_UUID','PHYSICAL_UUID') and
+          (pg_input_is_valid(x.value->>'uuid','uuid') is distinct from true or x.value ? 'json'))
+        or (x.value->>'kind' in('BOOKING','KEY_NORM','ALIAS_JSON_STRING') and
+          (jsonb_typeof(x.value->'json') is distinct from 'string' or x.value ? 'uuid'))) then
+    raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';
+  end if;
+  -- Only the new correction purpose is bounded by the exact unique-index
+  -- envelope. An oversized ordinary identity cannot equal a valid seeded
+  -- token under the verified native deterministic/JSONB equality domains.
+  if p_retain and exists(select 1 from jsonb_array_elements(p_tokens) x(value)
+    where x.value ? 'json' and octet_length((x.value->'json')::text)>1536) then
+    raise exception 'CORRECTION_A0_TOKEN_IDENTITY_UNPROVED' using errcode='55000';
+  end if;
+  if jsonb_array_length(p_tokens)=0 then return;end if;
+  begin
+    for t in select distinct x.value from jsonb_array_elements(p_tokens) x(value)
+      where not (x.value ? 'json') or octet_length((x.value->'json')::text)<=1536
+      order by x.value
+    loop
+      k:=t->>'kind';u:=case when t ? 'uuid' then(t->>'uuid')::uuid end;j:=t->'json';
+      perform set_config('lock_timeout','1ms',true);
+      if p_retain then
+        -- Correction alone inserts a durable row or actually changes its
+        -- tuple. Even two toggles in one unit create the real MVCC conflict.
+        insert into private.timesheet_correction_a0_transaction_fences as f(token_kind,uuid_identity,json_identity,touch_bit)
+          values(k,u,j,true)
+          on conflict on constraint timesheet_correction_a0_fences_identity_key
+          do update set touch_bit=not f.touch_bit;
+      else
+        -- Compatible ordinary readers do not UPDATE a visible retained token.
+        -- SHARE conflicts with a correction's non-key UPDATE, unlike KEY SHARE.
+        perform 1 from private.timesheet_correction_a0_transaction_fences f
+          where f.token_kind=k and ((u is not null and f.uuid_identity=u) or(j is not null and f.json_identity=j))
+          for share nowait;
+        if not found then
+          v_inserted:=null;
+          insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,json_identity,touch_bit)
+            values(k,u,j,false) on conflict on constraint timesheet_correction_a0_fences_identity_key
+            do nothing returning 1 into v_inserted;
+          if v_inserted=1 then
+            -- This is only our own newly inserted probe. The dirty-snapshot
+            -- unique check still arbitrates on its inserting XID until the
+            -- outer unit ends. No permanent ordinary token survives commit.
+            delete from private.timesheet_correction_a0_transaction_fences f
+              where f.token_kind=k and ((u is not null and f.uuid_identity=u) or(j is not null and f.json_identity=j));
+          else
+            -- PostgreSQL's RR conflict visibility check ordinarily raises40001
+            -- before this branch for an invisible correction. RC must acquire
+            -- the committed retained tuple, never assume DO NOTHING admitted it.
+            perform 1 from private.timesheet_correction_a0_transaction_fences f
+              where f.token_kind=k and ((u is not null and f.uuid_identity=u) or(j is not null and f.json_identity=j))
+              for share nowait;
+            if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+          end if;
+        end if;
+      end if;
+    end loop;
+    perform set_config('lock_timeout',v_timeout,true);
+  exception when others then perform set_config('lock_timeout',v_timeout,true);raise;end;
+end;
+$function$;
+alter function private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean) owner to postgres;
+revoke all on function private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_family_tokens_retain_v1(p_root uuid,p_members uuid[])
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_count integer;v_expected integer;v_ids uuid[];v_bookings text[];v_keys text[];v_aliases jsonb[];
+begin
+  -- Call-only after genuine Candidate/I1 admission and exact family CAS.
+  select count(distinct x.id) into v_expected from unnest(p_members) x(id) where x.id is not null;
+  select count(*),array_agg(t.timesheet_id order by t.timesheet_id),array_agg(t.booking_id order by t.timesheet_id),
+    array_agg(t.occupant_key_norm order by t.timesheet_id),array_agg(to_jsonb(array[t.occupant_key_norm]::text[]) order by t.timesheet_id)
+    into v_count,v_ids,v_bookings,v_keys,v_aliases from public.timesheets t where t.timesheet_id=any(p_members);
+  if p_root is null or v_expected=0 or v_expected>256 or v_count<>v_expected
+    or not p_root=any(v_ids) then raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  perform private.timesheet_correction_a0_fence_acquire_v1(
+    private.timesheet_correction_a0_fence_tokens_v1(array[p_root],v_ids,v_bookings,v_keys,v_aliases),true);
+end;
+$function$;
+alter function private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[]) owner to postgres;
+revoke all on function private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[]) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_request_tokens_retain_v1(p_request private.timesheet_correction_requests)
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare t public.timesheets%rowtype;v_r uuid;v_r_booking text;v_keys text[];v_aliases jsonb[];
+begin
+  -- The private typed request is allocated/checked by the native SEND/atomic
+  -- owners. No service-executable mode flag or client UUID intent is accepted.
+  if p_request.id is null or p_request.root_timesheet_id is null or p_request.reversed_timesheet_id is null
+    or p_request.replacement_timesheet_id is null or p_request.origin is distinct from 'SIGNED_TIMESHEET_CORRECTION'
+    or p_request.reversed_financial_id is not null or p_request.frozen_original_json#>>'{timesheet,sheet_scope}' is distinct from 'WEEKLY'
+    or pg_input_is_valid(p_request.frozen_original_json->>'planned_reversal_timesheet_id','uuid') is distinct from true then
+    raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  select s.* into strict t from public.timesheets s where s.timesheet_id=p_request.reversed_timesheet_id;
+  if t.contract_id is distinct from p_request.contract_id or t.version is distinct from p_request.reversed_version
+    or private.timesheet_correction_a0_signed_precursor_v1(t.timesheet_id) is distinct from true then
+    raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  v_r:=(p_request.frozen_original_json->>'planned_reversal_timesheet_id')::uuid;
+  -- Exact existing physical R0 booking expression; this is not an economic key.
+  v_r_booking:='bk_awc_'||substr(encode(digest(p_request.id::text||'|R0','sha256'),'hex'),1,24);
+  select array_agg(s.occupant_key_norm order by s.timesheet_id),
+    array_agg(to_jsonb(array[s.occupant_key_norm]::text[]) order by s.timesheet_id)
+    into v_keys,v_aliases from public.timesheets s where s.timesheet_id in(p_request.root_timesheet_id,p_request.reversed_timesheet_id);
+  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(
+    array[p_request.root_timesheet_id],array[p_request.root_timesheet_id,p_request.reversed_timesheet_id,p_request.replacement_timesheet_id,v_r],
+    array[p_request.original_booking_id,t.booking_id,p_request.replacement_booking_id,v_r_booking],v_keys,v_aliases),true);
+end;
+$function$;
+alter function private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests) owner to postgres;
+revoke all on function private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests) from public,anon,authenticated,service_role;

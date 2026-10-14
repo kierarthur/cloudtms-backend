@@ -1,0 +1,43 @@
+{
+  "sourceOnly": true,
+  "rootCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "exactPublishedSourceInputs": 1747,
+  "savedPinsFreshlyMatch": true,
+  "preserved": [
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "bytes": 31493,
+      "sha256": "d6ef131d253c7e513c371168f0fe278fddb702e3f8de5d8b73509997d79a407e",
+      "artifacts": 108,
+      "allMatch": true
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/REVIEW_MANIFEST.json",
+      "bytes": 1829,
+      "sha256": "ea1aa874a943f7eb289cc666b290154fe3f82e1d88c11cd7dda77cb782834332",
+      "artifacts": 6,
+      "allMatch": true
+    }
+  ],
+  "controllingPlan": {
+    "file": "cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026/HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2/03_IMPLEMENTATION_PLAN.md",
+    "bytes": 563296,
+    "sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3"
+  },
+  "runtimeInputs": [
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8927507,
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "savedEqualsPublished": true
+    },
+    {
+      "file": "broker/src/weekly-source/guard-refusal-record.mjs",
+      "bytes": 8193,
+      "sha256": "85c7a7d2a5d43886ef1324fe0bc64628138ed2d9d02f250125815cd93da87979",
+      "savedEqualsPublished": true
+    }
+  ],
+  "ordinaryRRConfigurationChanged": false,
+  "nativeRun": false
+}

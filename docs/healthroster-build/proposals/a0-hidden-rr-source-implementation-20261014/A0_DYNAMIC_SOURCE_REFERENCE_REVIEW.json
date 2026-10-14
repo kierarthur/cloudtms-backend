@@ -1,0 +1,107 @@
+{
+  "sourceOnly": true,
+  "rootCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "status": "Literal dynamic SQL/procedure-presence references only. Actual selected admission and control flow must be read in each complete owner; no inferred invocation from mere presence.",
+  "pages": [
+    {
+      "id": "private.timesheet_correction_actor_allowed_v1(uuid)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "line": 1,
+      "literals": [
+        {
+          "bodyLine": 6,
+          "text": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_pay_actor_allowed_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        },
+        {
+          "bodyLine": 7,
+          "text": "select private.weekly_source_pay_actor_allowed_v1($1)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_pay_actor_allowed_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        }
+      ]
+    },
+    {
+      "id": "private.timesheet_correction_actor_assert_v1(uuid)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "line": 27,
+      "literals": [
+        {
+          "bodyLine": 9,
+          "text": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_pay_actor_allowed_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        },
+        {
+          "bodyLine": 12,
+          "text": "select private.weekly_source_pay_actor_allowed_v1($1)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_pay_actor_allowed_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        }
+      ]
+    },
+    {
+      "id": "private.timesheet_correction_origin_v1(uuid)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "line": 69,
+      "literals": [
+        {
+          "bodyLine": 6,
+          "text": "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_agency_invoice_check_only_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        },
+        {
+          "bodyLine": 7,
+          "text": "select private.weekly_source_agency_invoice_check_only_v1($1)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_agency_invoice_check_only_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        },
+        {
+          "bodyLine": 10,
+          "text": "private.weekly_source_signed_check_only_v1(uuid)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_signed_check_only_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        },
+        {
+          "bodyLine": 11,
+          "text": "select private.weekly_source_signed_check_only_v1($1)",
+          "sourcePotentialSignatures": [
+            "private.weekly_source_signed_check_only_v1(uuid)"
+          ],
+          "actualInvocationProven": false
+        }
+      ]
+    },
+    {
+      "id": "private.timesheet_correction_cancel_capability_v1(uuid,uuid)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "line": 3,
+      "literals": [
+        {
+          "bodyLine": 6,
+          "text": "private.timesheet_correction_cancel_capability_v1(uuid,uuid)",
+          "sourcePotentialSignatures": [
+            "private.timesheet_correction_cancel_capability_v1(uuid,uuid)"
+          ],
+          "actualInvocationProven": false
+        }
+      ]
+    }
+  ]
+}

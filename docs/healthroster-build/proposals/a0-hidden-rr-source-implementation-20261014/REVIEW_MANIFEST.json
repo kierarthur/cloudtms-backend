@@ -1,0 +1,185 @@
+{
+  "schemaVersion": "A0_HIDDEN_RR_SOURCE_IMPLEMENTATION_FROZEN_V1",
+  "sourceOnly": true,
+  "status": "IMPLEMENTED_ADJACENT_PROPOSAL_NOT_ACCEPTED_CODE_OR_NATIVE_CLOSURE",
+  "rootCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "controllingPlanSha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+  "nativeCompilationRun": false,
+  "nativeSchedulesRun": false,
+  "ordinaryAbsentSharedAliasSemanticsQualified": false,
+  "canonicalNativeContractRecaptured": false,
+  "newPrivateFunctions": 4,
+  "changedCurrentOwners": 6,
+  "completeCurrentFileReversals": 4,
+  "newPrivateConcurrencyTables": 1,
+  "rawGuardTables": 5,
+  "fullLiteralInputs": 1747,
+  "completeDefinitionCount": 679,
+  "files": [
+    {
+      "file": "A0_DYNAMIC_SOURCE_REFERENCE_REVIEW.json",
+      "bytes": 3800,
+      "sha256": "3cd4306c36a33a0579e0711f31269a7b08c4d05215744c8b5ebdf60143f8fc0a"
+    },
+    {
+      "file": "ACTUAL_NATIVE_FIN_WRITER_PAGES.json",
+      "bytes": 3215141,
+      "sha256": "329478c8b031d80bab52690ea8fae55a6152d6d389cd954748efbff4212a4c74"
+    },
+    {
+      "file": "ACTUAL_SOURCE_CALLEE_AND_TRIGGER_CLOSURE.json",
+      "bytes": 17609908,
+      "sha256": "075c87923e5a690fa776ef0a5c84ceac66f96083f4a9497c0194cca25668ba40"
+    },
+    {
+      "file": "analyse-closure.mjs",
+      "bytes": 3167,
+      "sha256": "7d1b4e2e2633730acb061d8463a30379c7eee9f6a25b4407b5379407c8cfb002"
+    },
+    {
+      "file": "build-current-source.mjs",
+      "bytes": 22218,
+      "sha256": "6554b23659fe1a1195e2b2466ccb4234f70e9e3c72a5cb2a993dbf1b0fd1d0d4"
+    },
+    {
+      "file": "compact-closure.mjs",
+      "bytes": 2055,
+      "sha256": "2048d121faf9e53b9e2928fe4938992a8e332b6aaf299b37440435aa5a008a96"
+    },
+    {
+      "file": "CURRENT_SOURCE_REVERSE_AND_CENSUS.json",
+      "bytes": 686653,
+      "sha256": "a253ff69df4bcce2e8996e5f955b185c6c39031cbc25bd3f8f06c8f15a952d6c"
+    },
+    {
+      "file": "current-release.complete-proposed.json",
+      "bytes": 35314,
+      "sha256": "6a5d722342c8e4d3fbeaa62b553ef87c81c64eba296470ec5b60c3f7b28067b0"
+    },
+    {
+      "file": "dynamic-call-review.mjs",
+      "bytes": 1607,
+      "sha256": "0a6684b34a376a65b4e1dd966722ec6938eb82c8d0b3995424e011269ef5cea9"
+    },
+    {
+      "file": "EXACT_REGISTRY_DELTA.json",
+      "bytes": 884,
+      "sha256": "df6fb68649a516bea5b9aba990beef8ca9f5d1747c56b0afcd8f5b7cbca730d4"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4837,
+      "sha256": "59370ebbdaf50004b1f69d69ba4b33baabc1bac2aece2afaebbb7b4d31b5a69c"
+    },
+    {
+      "file": "generate-body-verifier.mjs",
+      "bytes": 2350,
+      "sha256": "02cb089cec401ea0f4b4ef36e778d2e470672f6791fd075498a4607094d113f8"
+    },
+    {
+      "file": "native-fin-review.mjs",
+      "bytes": 1539,
+      "sha256": "f430d69c987a30ebc5cca40c59bde3420a860b82ae3c06a58ba01c090da4957a"
+    },
+    {
+      "file": "PRESERVED_INPUT_AND_RUNTIME_PROOF.json",
+      "bytes": 1568,
+      "sha256": "1245782b4a060895abfb090c1d2fa9f07bbc1de63cc7f05c14e1d0a234686fc7"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 15743,
+      "sha256": "eae4268c1d8a36ca2fc9cfeca08f0ee1fc828e661db0f5229605e9fa4aef7369"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 227,
+      "sha256": "fcff93449133dd825cce474f180d96947224a7b9be1c1d7d2f08112704ad4761"
+    },
+    {
+      "file": "SOURCE_EXPECTED_BODY_HASHES.json",
+      "bytes": 2890,
+      "sha256": "2465b887c70c381ace24f8ae9784093e310d28309135b3f594f850e20a703941"
+    },
+    {
+      "file": "source-checks.mjs",
+      "bytes": 9351,
+      "sha256": "9aaa1dd56add7bfe0dcd96bcac7810bd2a1e7f05d081a6456519c264815f16cb"
+    },
+    {
+      "file": "sql/14102026_1030_04_complete_native_lock_fence.complete-proposed.sqlinc",
+      "bytes": 12642,
+      "sha256": "8fb6b54edad1a41e205f9969ac1261ba19b435abf769b236add2513c4034f119"
+    },
+    {
+      "file": "sql/14102026_1030_05_native_creator_intents_and_triggers.complete-proposed.sqlinc",
+      "bytes": 21519,
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "file": "sql/14102026_1030_06_send_family_fence.complete-proposed.sqlinc",
+      "bytes": 6346,
+      "sha256": "4b81746b47de2d05e4cf7b6eba5ec5bb6290518e314b278f209504b7b22191f5"
+    },
+    {
+      "file": "sql/14102026_1030_08_complete_current_request.complete-proposed.sqlinc",
+      "bytes": 23545,
+      "sha256": "8f561a4f9cf35497d2d4096855b5300d4a65afebcfeeb66ce2cfb9347e43fe3a"
+    },
+    {
+      "file": "sql/14102026_1030_a0_hidden_rr_transaction_fence_v1.sql",
+      "bytes": 6943,
+      "sha256": "ac0fa45bc48d539d179f80fb5b60bf8adfe85334c52554ac92468d5aeb18ee42"
+    },
+    {
+      "file": "sql/14102026_1030_a0_transaction_fence_helpers.sqlinc",
+      "bytes": 10948,
+      "sha256": "3c1f6a83ed66bf3189f0bfc5fc66282f3aa97837a8658b86d0c71cf45c3e1b34"
+    },
+    {
+      "file": "sql/14102026_1030_a0_transaction_fence_reviewed_bodies.sqlinc",
+      "bytes": 2168,
+      "sha256": "646f0faa2be40ef1f7e25e291011bfcbd8e032d99b74437b3fdcd774db5a1a77"
+    },
+    {
+      "file": "sql/14102026_1030_a0_transaction_fence_schema.sql",
+      "bytes": 3552,
+      "sha256": "3e782c26f59ae0ea8c47b8d32e95fa6703f82cd922729cd6820b048b41f41b0a"
+    },
+    {
+      "file": "sql/14102026_1030_a0_transaction_fence_source_contract.sql",
+      "bytes": 5486,
+      "sha256": "a36890ddad5cf8f3c355c4cb41a82370b93b01b489304a87fc6c233644f9c21b"
+    },
+    {
+      "file": "WRITER_EXCEPTION_BLOCK_REVIEW.json",
+      "bytes": 1786346,
+      "sha256": "01987f4b8aac1a667bcdae635a76371836b55c2551712ffc04857e6e5b05f967"
+    }
+  ],
+  "preserved": [
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "bytes": 31493,
+      "sha256": "d6ef131d253c7e513c371168f0fe278fddb702e3f8de5d8b73509997d79a407e",
+      "artifacts": 108,
+      "allMatch": true
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/REVIEW_MANIFEST.json",
+      "bytes": 1829,
+      "sha256": "ea1aa874a943f7eb289cc666b290154fe3f82e1d88c11cd7dda77cb782834332",
+      "artifacts": 6,
+      "allMatch": true
+    }
+  ],
+  "requiredNativeSchedules": [
+    "validation-first",
+    "invoice-first",
+    "Candidate-alias-rank",
+    "raw-booking-sibling",
+    "native-FIN-late-hooks"
+  ],
+  "remainingSourceCoverageGate": "Full immutable/new-child owner exclusion or exact native raw-intent extension; existing parent locks do not refresh older RR.",
+  "independentCritic": false
+}

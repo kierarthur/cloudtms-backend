@@ -1,0 +1,276 @@
+-- Adjacent review proposal. No installation/exposure or RR qualification.
+-- Uses existing parent rows and call-only native Candidate/I-1 owners.
+-- This read-only predicate identifies only an actual native signed precursor.
+-- It grants no pricing/rule/history authority. Unproved signatures cannot be
+-- admitted to missing-A0 by SEND either; ordinary unsigned records are a no-op.
+create or replace function private.timesheet_correction_a0_signed_precursor_v1(p_timesheet_id uuid)
+returns boolean language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare t public.timesheets%rowtype; v_witness jsonb;
+begin
+  select ts.* into t from public.timesheets ts where ts.timesheet_id=p_timesheet_id;
+  if not found or t.sheet_scope::text is distinct from 'WEEKLY' or t.submission_mode::text is distinct from 'ELECTRONIC'
+    or t.contract_id is null or exists(select 1 from public.timesheets_financials f where f.timesheet_id=t.timesheet_id)
+    or private.timesheet_correction_origin_v1(t.timesheet_id) is distinct from 'SIGNED_TIMESHEET_CORRECTION' then return false; end if;
+  v_witness:=private.timesheet_correction_signed_witness_v1(t.timesheet_id,false);
+  return v_witness is not null;
+exception when sqlstate '55000' then return false;
+end;
+$function$;
+alter function private.timesheet_correction_a0_signed_precursor_v1(uuid) owner to postgres;
+revoke all on function private.timesheet_correction_a0_signed_precursor_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_writer_admit_v1(p_ids uuid[],p_bookings text[],p_kind text)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_requests jsonb; v_after jsonb; v_req_ids uuid[]; v_candidates uuid[]; v_roots uuid[];
+  v_parent_ids uuid[]; v_members uuid[]; v_gate jsonb; v_lock jsonb; v_family_before jsonb; v_family_after jsonb;
+  v_old_timeout text:=current_setting('lock_timeout'); r record;
+begin
+  if p_kind not in('VALIDATION_REFERENCE','INVOICE_REFERENCE','BOOKING_IDENTITY','CANDIDATE_IDENTITY') then
+    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000'; end if;
+  -- Actual private immutable request/physical identity is the only active arm.
+  -- Caller arguments are trigger-owned OLD/NEW references, not client flags.
+  select jsonb_agg(jsonb_build_object('id',q.id,'state_revision',q.state_revision::text,'target_revision',q.target_revision,
+    'candidate_id',q.candidate_id,'client_id',q.client_id,'contract_id',q.contract_id,'root',q.root_timesheet_id,
+    'original',q.reversed_timesheet_id,'p0',q.replacement_timesheet_id,'original_booking',q.original_booking_id,
+    'reversed_booking',q.frozen_original_json#>>'{timesheet,booking_id}','p0_booking',q.replacement_booking_id) order by q.id)
+    into v_requests from private.timesheet_correction_requests q
+    where q.state='WAITING' and q.origin='SIGNED_TIMESHEET_CORRECTION' and q.reversed_financial_id is null
+      and q.frozen_original_json#>>'{timesheet,sheet_scope}'='WEEKLY'
+      and (q.root_timesheet_id=any(p_ids) or q.reversed_timesheet_id=any(p_ids) or q.replacement_timesheet_id=any(p_ids)
+        or exists(select 1 from public.timesheets t where t.timesheet_id=any(p_ids)
+          and t.booking_id in(q.original_booking_id,q.frozen_original_json#>>'{timesheet,booking_id}',q.replacement_booking_id))
+        or exists(select 1 from unnest(p_bookings) b(value) where btrim(b.value) in(
+          btrim(q.original_booking_id),btrim(q.frozen_original_json#>>'{timesheet,booking_id}'),btrim(q.replacement_booking_id))));
+  if v_requests is not null then
+    -- Refusal is limited to an actual visible active missing-A0 request.
+    -- An older RR snapshot that cannot see the parent/request is separately
+    -- HELD in the native recipe, never certified by this source predicate.
+    if current_setting('transaction_isolation')<>'read committed' then
+      raise exception 'CORRECTION_A0_TRANSACTION_SNAPSHOT_UNPROVED' using errcode='55000'; end if;
+    if jsonb_array_length(v_requests)>4 then raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+    select array_agg((x.value->>'id')::uuid order by x.value->>'id') into v_req_ids from jsonb_array_elements(v_requests) x(value);
+    select array_agg(distinct (x.value->>'candidate_id')::uuid order by (x.value->>'candidate_id')::uuid)
+      into v_candidates from jsonb_array_elements(v_requests) x(value);
+    select array_agg(distinct t.timesheet_id order by t.timesheet_id) into v_roots
+      from jsonb_array_elements(v_requests) x(value)
+      cross join lateral unnest(array[(x.value->>'root')::uuid,(x.value->>'original')::uuid,(x.value->>'p0')::uuid]) i(id)
+      join public.timesheets t on t.timesheet_id=i.id;
+    -- P0 may be the same unit's not-yet-inserted physical row. Original/root
+    -- must already exist; no missing existing family is silently dropped.
+    if v_roots is null or exists(select 1 from jsonb_array_elements(v_requests) x(value)
+      where not exists(select 1 from public.timesheets t where t.timesheet_id=(x.value->>'root')::uuid)
+        or not exists(select 1 from public.timesheets t where t.timesheet_id=(x.value->>'original')::uuid)) then
+      raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+    select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id)
+      into v_family_before from public._pay_timesheet_rotation_scope(v_roots) s;
+    begin
+      perform set_config('lock_timeout','1ms',true);
+      -- ALL Candidate gates precede ONE native complete family acquisition.
+      for r in select c.id from unnest(v_candidates) c(id) order by c.id loop
+        v_gate:=private.weekly_source_candidate_serial_gate_v1(r.id,'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION',
+          v_req_ids[1],'CORRECTION_A0_SCOPED_CREATOR');
+        if v_gate->'ok' is distinct from 'true'::jsonb or v_gate->>'gate' is distinct from 'GRANTED' then
+          raise exception 'CORRECTION_A0_AUTHORITY_BUSY' using errcode='55P03'; end if;
+      end loop;
+      perform set_config('lock_timeout','1ms',true);
+      -- Optional Candidate NULL is the native multi-Candidate set interface;
+      -- exact persisted request/Contract dimensions are checked below.
+      v_lock:=private.weekly_source_lock_family_rows_v1(v_roots,null);
+      if v_lock->'ok' is distinct from 'true'::jsonb then
+        raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+      perform set_config('lock_timeout',v_old_timeout,true);
+    exception when others then perform set_config('lock_timeout',v_old_timeout,true); raise; end;
+    select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id)
+      into v_family_after from public._pay_timesheet_rotation_scope(v_roots) s;
+    if v_family_before is null or v_family_after is distinct from v_family_before then
+      raise exception 'CORRECTION_A0_WRITER_SCOPE_CHANGED' using errcode='40001'; end if;
+    perform 1 from private.timesheet_correction_requests q where q.id=any(v_req_ids) order by q.id for share nowait;
+    select jsonb_agg(jsonb_build_object('id',q.id,'state_revision',q.state_revision::text,'target_revision',q.target_revision,
+      'candidate_id',q.candidate_id,'client_id',q.client_id,'contract_id',q.contract_id,'root',q.root_timesheet_id,
+      'original',q.reversed_timesheet_id,'p0',q.replacement_timesheet_id,'original_booking',q.original_booking_id,
+      'reversed_booking',q.frozen_original_json#>>'{timesheet,booking_id}','p0_booking',q.replacement_booking_id) order by q.id)
+      into v_after from private.timesheet_correction_requests q
+      where q.state='WAITING' and q.origin='SIGNED_TIMESHEET_CORRECTION' and q.reversed_financial_id is null
+        and q.frozen_original_json#>>'{timesheet,sheet_scope}'='WEEKLY'
+        and (q.root_timesheet_id=any(p_ids) or q.reversed_timesheet_id=any(p_ids) or q.replacement_timesheet_id=any(p_ids)
+          or exists(select 1 from public.timesheets t where t.timesheet_id=any(p_ids)
+            and t.booking_id in(q.original_booking_id,q.frozen_original_json#>>'{timesheet,booking_id}',q.replacement_booking_id))
+          or exists(select 1 from unnest(p_bookings) b(value) where btrim(b.value) in(
+            btrim(q.original_booking_id),btrim(q.frozen_original_json#>>'{timesheet,booking_id}'),btrim(q.replacement_booking_id))));
+    if v_after is distinct from v_requests then raise exception 'CORRECTION_A0_WRITER_SCOPE_CHANGED' using errcode='40001'; end if;
+    if exists(select 1 from jsonb_array_elements(v_requests) x(value)
+      join public.timesheets t on t.timesheet_id=(x.value->>'original')::uuid
+      left join public.contracts c on c.id=t.contract_id
+      where t.contract_id is distinct from (x.value->>'contract_id')::uuid
+        or c.candidate_id is distinct from (x.value->>'candidate_id')::uuid
+        or c.client_id is distinct from (x.value->>'client_id')::uuid) then
+      raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+    select array_agg(distinct s.family_timesheet_id order by s.family_timesheet_id) into v_members
+      from public._pay_timesheet_rotation_scope(v_roots) s;
+  end if;
+  -- Retain the existing parent intent through commit even before SEND exists.
+  -- This narrowly covers the actual manager-signed weekly/no-FIN precursor
+  -- required by the missing-A0 arm; it grants no pricing/signature authority.
+  -- Other ordinary, historical NULL/dangling and existing-finance rows have
+  -- no new parent admission outside an actual active request.
+  -- Invoice already has the unchanged archived-Timesheet guard's real parent
+  -- intent. Do not duplicate or widen its ordinary/dangling reference policy.
+  select array_agg(distinct t.timesheet_id order by t.timesheet_id) into v_parent_ids
+    from public.timesheets t where (t.timesheet_id=any(p_ids) or exists(select 1 from unnest(p_bookings) b(value)
+      where btrim(t.booking_id)=btrim(b.value)))
+      and (t.timesheet_id=any(v_members)
+        or (p_kind<>'INVOICE_REFERENCE' and private.timesheet_correction_a0_signed_precursor_v1(t.timesheet_id)));
+  if v_parent_ids is not null then
+    if cardinality(v_parent_ids)>256 then raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+    perform 1 from public.timesheets t where t.timesheet_id=any(v_parent_ids) order by t.timesheet_id for key share nowait;
+  end if;
+  return jsonb_build_object('requests',coalesce(v_requests,'[]'::jsonb),'parent_ids',coalesce(to_jsonb(v_parent_ids),'[]'::jsonb));
+end;
+$function$;
+alter function private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text) owner to postgres;
+revoke all on function private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_reference_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ids uuid[];v_bookings text[];
+begin
+  if tg_table_schema<>'public' or tg_table_name not in('timesheet_validations','invoice_lines','timesheets_financials') or tg_op not in('INSERT','UPDATE','DELETE') then
+    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000';end if;
+  if tg_op='DELETE' then v_ids:=array[old.timesheet_id];
+    if tg_table_name='invoice_lines' then v_bookings:=array[old.booking_id];end if;
+  elsif tg_op='UPDATE' then v_ids:=array[old.timesheet_id,new.timesheet_id];
+    if tg_table_name='invoice_lines' then v_bookings:=array[old.booking_id,new.booking_id];end if;
+  else v_ids:=array[new.timesheet_id];
+    if tg_table_name='invoice_lines' then v_bookings:=array[new.booking_id];end if;
+  end if;
+  select array_agg(distinct x.id order by x.id) into v_ids from unnest(v_ids) x(id) where x.id is not null;
+  -- Every actual reference mutation participates, including unchanged pointers
+  -- with changed validation/invoice facts and historical DELETE. No FK/lookup
+  -- is required for a raw future P0 UUID. NULL/no-identity keeps the native arm.
+  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(
+    null,v_ids,v_bookings,null,null),false);
+  -- FIN's native owners retain every financial rule/admission. The only added
+  -- fact is raw PHYSICAL_UUID serialization before native FIN/AFTER effects.
+  -- Existing T0 parent locks do not refresh an older RR snapshot.
+  if tg_table_name='timesheets_financials' then
+    if tg_op='DELETE' then return old;end if;return new;
+  end if;
+  if v_ids is not null or v_bookings is not null then
+    perform private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,
+      case when tg_table_name='invoice_lines' then 'INVOICE_REFERENCE' else 'VALIDATION_REFERENCE' end);
+  end if;
+  if tg_op='DELETE' then return old;end if;return new;
+end;
+$function$;
+alter function private.timesheet_correction_a0_reference_before_v1() owner to postgres;
+revoke all on function private.timesheet_correction_a0_reference_before_v1() from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_correction_a0_booking_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ids uuid[];v_bookings text[];v_parents uuid[];v_keys text[];v_aliases jsonb[];v_admit jsonb;r record;v_match boolean;
+begin
+  if tg_table_schema<>'public' or tg_table_name<>'timesheets' or tg_op not in('INSERT','UPDATE','DELETE') then
+    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000';end if;
+  if tg_op='DELETE' then
+    v_ids:=array[old.timesheet_id];v_bookings:=array[old.booking_id];v_parents:=array[old.parent_timesheet_id];
+    v_keys:=array[old.occupant_key_norm];
+  elsif tg_op='UPDATE' then
+    v_ids:=array[old.timesheet_id,new.timesheet_id];v_bookings:=array[old.booking_id,new.booking_id];
+    v_parents:=array[old.parent_timesheet_id,new.parent_timesheet_id];v_keys:=array[old.occupant_key_norm,new.occupant_key_norm];
+  else
+    v_ids:=array[new.timesheet_id];v_bookings:=array[new.booking_id];v_parents:=array[new.parent_timesheet_id];v_keys:=array[new.occupant_key_norm];
+  end if;
+  select array_agg(to_jsonb(array[k.value]::text[])) into v_aliases from unnest(v_keys) k(value);
+  -- Full Timesheet authority/signature/schedule/rank mutation coverage, not
+  -- merely booking/Contract changes. Parent is a native raw UUID, not a resolver.
+  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(
+    v_parents,v_ids||v_parents,v_bookings,v_keys,v_aliases),false);
+  v_admit:=private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,'BOOKING_IDENTITY');
+  if tg_op='DELETE' then return old;end if;
+  for r in select x.value from jsonb_array_elements(v_admit->'requests') x(value) loop
+    v_match:=btrim(new.booking_id) in(btrim(r.value->>'original_booking'),btrim(r.value->>'reversed_booking'),btrim(r.value->>'p0_booking'));
+    if v_match and (new.contract_id is distinct from (r.value->>'contract_id')::uuid
+      or new.booking_id not in(r.value->>'original_booking',r.value->>'reversed_booking',r.value->>'p0_booking')) then
+      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;
+    if new.timesheet_id=(r.value->>'p0')::uuid and (new.booking_id is distinct from r.value->>'p0_booking'
+      or new.contract_id is distinct from (r.value->>'contract_id')::uuid) then
+      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;
+    if new.timesheet_id=(r.value->>'original')::uuid and (new.booking_id is distinct from r.value->>'reversed_booking'
+      or new.contract_id is distinct from (r.value->>'contract_id')::uuid) then
+      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;
+    if new.timesheet_id=(r.value->>'root')::uuid and new.booking_id is distinct from r.value->>'original_booking' then
+      raise exception 'CORRECTION_A0_WRITER_IDENTITY_UNPROVED' using errcode='55000';end if;
+  end loop;
+  return new;
+end;
+$function$;
+alter function private.timesheet_correction_a0_booking_before_v1() owner to postgres;
+revoke all on function private.timesheet_correction_a0_booking_before_v1() from public,anon,authenticated,service_role;
+
+-- Concrete existing-table trigger proposal, not a new FK or independent root.
+-- Root must qualify enablement/order and every existing trigger's mutation of
+-- the protected reference fields before installing or exposing this closure.
+drop trigger if exists zzzz_healthroster_a0_reference_before_v1 on public.timesheet_validations;
+create trigger zzzz_healthroster_a0_reference_before_v1 before insert or update or delete on public.timesheet_validations
+for each row execute function private.timesheet_correction_a0_reference_before_v1();
+-- Native FIN direct writers and synchronous late hooks use this same raw
+-- physical fence. No Bank function or native financial decision is replaced.
+drop trigger if exists aaa_healthroster_a0_financial_before_v1 on public.timesheets_financials;
+create trigger aaa_healthroster_a0_financial_before_v1 before insert or update or delete on public.timesheets_financials
+for each row execute function private.timesheet_correction_a0_reference_before_v1();
+-- No existing invoice BEFORE owner changes the reference; this guard runs
+-- before archived guard's parent intent so actual active gates/I-1 come first.
+drop trigger if exists aaa_healthroster_a0_reference_before_v1 on public.invoice_lines;
+create trigger aaa_healthroster_a0_reference_before_v1 before insert or update or delete on public.invoice_lines
+for each row execute function private.timesheet_correction_a0_reference_before_v1();
+-- Earliest BEFORE admission is required: the retained native booking-change
+-- guards can acquire the native family key. No reviewed BEFORE owner rewrites
+-- booking_id/contract_id; root must refuse install if that census changes.
+drop trigger if exists aaa_healthroster_a0_booking_before_v1 on public.timesheets;
+create trigger aaa_healthroster_a0_booking_before_v1 before insert or update or delete on public.timesheets
+for each row execute function private.timesheet_correction_a0_booking_before_v1();
+
+-- The real context reader ranks key_norm, then nhsp_hr_name_aliases, then
+-- updated_at/created_at. ALL Candidate mutations can change that ranking,
+-- including an unrelated edit of a foreign row with an unchanged shared alias.
+create or replace function private.timesheet_correction_a0_candidate_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_old_key text; v_new_key text; v_old_aliases jsonb; v_new_aliases jsonb; v_ids uuid[];
+begin
+  if tg_table_schema<>'public' or tg_table_name<>'candidates' or tg_op not in('INSERT','UPDATE','DELETE') then
+    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000'; end if;
+  if tg_op<>'INSERT' then v_old_key:=old.key_norm;v_old_aliases:=old.nhsp_hr_name_aliases; end if;
+  if tg_op<>'DELETE' then v_new_key:=new.key_norm;v_new_aliases:=new.nhsp_hr_name_aliases; end if;
+  -- Raw OLD/NEW key/alias tokens precede every snapshot-visible classification.
+  -- Even a born-later physical family and unchanged foreign ranking alias
+  -- intersect the actual retained occupant-domain tokens.
+  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v1(
+    null,null,null,array[v_old_key,v_new_key],array[v_old_aliases,v_new_aliases]),false);
+  -- Exact same equality/JSON containment as tsfin_load_context_batch; no
+  -- additional name normalization, Contract identity fallback or new resolver.
+  select array_agg(distinct t.timesheet_id order by t.timesheet_id) into v_ids from public.timesheets t
+    where t.occupant_key_norm is not null and (t.occupant_key_norm in(v_old_key,v_new_key)
+      or v_old_aliases @> to_jsonb(array[t.occupant_key_norm]::text[])
+      or v_new_aliases @> to_jsonb(array[t.occupant_key_norm]::text[]))
+      and (private.timesheet_correction_a0_signed_precursor_v1(t.timesheet_id)
+        or exists(select 1 from private.timesheet_correction_requests q where q.state='WAITING'
+          and q.origin='SIGNED_TIMESHEET_CORRECTION' and q.reversed_financial_id is null
+          and q.frozen_original_json#>>'{timesheet,sheet_scope}'='WEEKLY'
+          and t.timesheet_id in(q.root_timesheet_id,q.reversed_timesheet_id,q.replacement_timesheet_id)));
+  if v_ids is not null then perform private.timesheet_correction_a0_writer_admit_v1(v_ids,null,'CANDIDATE_IDENTITY'); end if;
+  if tg_op='DELETE' then return old; end if; return new;
+end;
+$function$;
+alter function private.timesheet_correction_a0_candidate_before_v1() owner to postgres;
+revoke all on function private.timesheet_correction_a0_candidate_before_v1() from public,anon,authenticated,service_role;
+drop trigger if exists zzzz_healthroster_a0_candidate_before_v1 on public.candidates;
+create trigger zzzz_healthroster_a0_candidate_before_v1 before insert or update or delete on public.candidates
+for each row execute function private.timesheet_correction_a0_candidate_before_v1();
