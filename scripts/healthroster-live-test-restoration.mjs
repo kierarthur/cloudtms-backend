@@ -51,7 +51,7 @@ export function backgroundSnapshotFieldsSql(){
   'backgroundSnapshotXip',(select coalesce(jsonb_agg(x::text),'[]'::jsonb) from pg_snapshot_xip(pg_current_snapshot()) x),
   'backgroundRows',jsonb_build_object(${literal(batch)},(${batches}),${literal(outbox)},(${outboxes})),
   'backgroundWriterRoutines',(select coalesce(jsonb_agg(r order by r->>'schema',r->>'identity'),'[]'::jsonb)
-    from catalogue c cross join lateral jsonb_array_elements(c.jsonb_build_object->'routines') r
+    from catalogue c cross join lateral jsonb_array_elements(c.jsonb_build_object::jsonb->'routines') r
     where r->>'identity' ~ '^(candidate_daily_projection_claim_v1|_candidate_daily_json_sha256_v1|tsfin_dequeue_batch_ids|tsfin_work_fail)\\(')`;
 }
 export function transactionIdentitySql(){return `select 'HR_REHEARSAL_TRANSACTION_JSON '||jsonb_build_object('database',current_database(),'backendPid',pg_backend_pid(),'xid',pg_current_xact_id()::text,'epochZero',pg_current_xact_id()::text::numeric<4294967296)::text;`;}

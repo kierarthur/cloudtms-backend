@@ -1,0 +1,24 @@
+{
+  "status": "HELD_NOT_COMPLETE",
+  "candidatePin": "c042890606c88e6a7b8eee309bf21bec8270f66c",
+  "predecessor": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "contract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+  "marker": "hr_install1_94564519a7ea00e8a453e21972ed72b6",
+  "beganAt": "2026-10-14T08:40:44.331Z",
+  "errors": [],
+  "publication": null,
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 516040,
+    "turnId": "hr_turn_517d0c885cb70efadd12131648864375",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T08:40:46.937Z",
+    "task": "Install1 exact pushed WP-PP full rehearsal and managed TEST release"
+  },
+  "failure": "NATIVE_READ_ONLY_PROBE_FAILED",
+  "endedAt": "2026-10-14T08:40:54.742Z"
+}
