@@ -1,0 +1,111 @@
+  function normalisePaidMatch(payloadValue) {
+    const payload = asObject(payloadValue), question = asObject(payload.paid_match_question);
+    const keys = ['schema_version','state','reason_code','upload_row_id','upload_id','projection_publication_id',
+      'candidate_id','client_id','contract_id','expected_authority_scope_version','expected_row_manifest_hash',
+      'expected_paid_overlap_inputs_sha256','choices'];
+    const requestKeys = ['request_id','upload_id','upload_row_id','projection_publication_id',
+      'expected_authority_scope_version','expected_row_manifest_hash'];
+    const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+    const hash = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+    const closed = (value, fields) => value && typeof value === 'object' && !Array.isArray(value)
+      && Object.keys(value).length === fields.length && fields.every(key => Object.hasOwn(value,key));
+    const invalid = () => { throw new Error('The paid-shift comparison has changed. Refresh the workspace before choosing.'); };
+    if (!closed(question,keys) || question.schema_version !== 'WEEKLY_SOURCE_PAID_MATCH_QUESTION_V1'
+      || question.state !== 'READY' || question.reason_code !== null
+      || !['upload_row_id','upload_id','projection_publication_id','candidate_id','client_id','contract_id'].every(key => uuid(question[key]))
+      || !Number.isSafeInteger(question.expected_authority_scope_version) || question.expected_authority_scope_version < 1
+      || !hash(question.expected_row_manifest_hash) || !hash(question.expected_paid_overlap_inputs_sha256)
+      || !Array.isArray(question.choices) || !question.choices.length || question.choices.length > 100) invalid();
+    const request = payload.recheck_payload;
+    if (!closed(request,requestKeys) || !uuid(request.request_id)
+      || !requestKeys.slice(1).every(key => request[key] === question[key])
+      || payload.upload_row_id !== question.upload_row_id || payload.contract_id !== question.contract_id) invalid();
+    const ids = new Set();
+    const choices = question.choices.map(item => {
+      if (!closed(item,['work_event_id','work_date','start','end','break_minutes','contract_id','same_allowed'])
+        || !uuid(item.work_event_id) || !uuid(item.contract_id) || ids.has(item.work_event_id)
+        || typeof item.work_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.work_date)
+        || ![item.start,item.end].every(value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value))
+        || (item.break_minutes !== null && (!Number.isSafeInteger(item.break_minutes) || item.break_minutes < 0))
+        || typeof item.same_allowed !== 'boolean' || item.same_allowed !== (item.contract_id === question.contract_id)) invalid();
+      ids.add(item.work_event_id); return { ...item };
+    });
+    return { question: { ...question, choices }, request: { ...request },
+      candidate: asText(payload.candidate), client: asText(payload.client), shift: asText(payload.shift), system_hours: asText(payload.system_hours) };
+  }
+
+  function buildPaidMatchRequest(model, targetId, choice, reasonValue) {
+    const target = model.question.choices.find(item => item.work_event_id === targetId), reason = asText(reasonValue);
+    if (!target || !['SAME','SEPARATE'].includes(choice) || !reason || reason.length > 1000
+      || (choice === 'SAME' && target.same_allowed !== true)) throw new Error('Choose the paid shift, confirm Same or Separate, and enter a reason.');
+    const question = model.question;
+    return { ...model.request, candidate_id: question.candidate_id, client_id: question.client_id,
+      contract_id: question.contract_id, match_reason: reason,
+      paid_overlap_target_work_event_id: target.work_event_id,
+      expected_paid_overlap_inputs_sha256: question.expected_paid_overlap_inputs_sha256,
+      ...(choice === 'SAME' ? { pay_effect: 'NONE', work_event_id: target.work_event_id }
+        : { pay_effect: 'NORMAL', separate_shift: true }) };
+  }
+
+  function openPaidMatch(payloadValue) {
+    let model;
+    try { model = normalisePaidMatch(payloadValue); }
+    catch (error) { return openDetail({ detail: { problem: error.message } }, 'Compare paid shift'); }
+    const state = { target: '', choice: '', reason: '', busy: false, pending: null, error: '' };
+    const kind = 'weekly-source-paid-match-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const authority = workspaceApi();
+    const callerCurrent = () => workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render = () => {
+      const locked = state.busy || state.pending, target = model.question.choices.find(item => item.work_event_id === state.target);
+      return `<div class="ws-child" data-paid-match>
+        <p><strong>${escapeHtml(model.candidate)}</strong> · ${escapeHtml(model.client)} · ${escapeHtml(model.shift)}</p>
+        <p>Imported shift: <strong>${escapeHtml(model.system_hours)}</strong></p>
+        <p>This booking reference overlaps a paid shift. Confirm whether the imported row describes that work or separate work.</p>
+        <div class="ws-child-fields"><label>Paid shift<select data-paid-match-target${locked ? ' disabled' : ''}><option value="">Choose a shift</option>${model.question.choices.map(item => `<option value="${escapeHtml(item.work_event_id)}"${state.target === item.work_event_id ? ' selected' : ''}>${escapeHtml(displayDate(item.work_date))} · ${escapeHtml(item.start)}–${escapeHtml(item.end)} · ${item.break_minutes === null ? 'Break not recorded' : escapeHtml(item.break_minutes) + ' min break'}</option>`).join('')}</select></label>
+        <label>Comparison<select data-paid-match-choice${locked || !target ? ' disabled' : ''}><option value="">Choose Same or Separate</option><option value="SAME"${state.choice === 'SAME' ? ' selected' : ''}${target?.same_allowed ? '' : ' disabled'}>Same work — retain the earlier pay and invoice this source row</option><option value="SEPARATE"${state.choice === 'SEPARATE' ? ' selected' : ''}>Separate work — create a separate shift</option></select></label>
+        ${target && !target.same_allowed ? '<p>The selected shift uses a different contract. Same is unavailable for this row.</p>' : ''}
+        <label>Reason<textarea data-paid-match-reason maxlength="1000"${locked ? ' disabled' : ''}>${escapeHtml(state.reason)}</textarea></label></div>
+        ${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ''}<div class="ws-child-actions"><button class="btn btn-outline" data-paid-match-cancel${state.busy ? ' disabled' : ''}>Cancel</button><button class="btn primary" data-paid-match-save${state.busy ? ' disabled' : ''}>${state.sourceAdmissionBusy ? 'Try again' : state.pending ? 'Retry exact request' : 'Confirm and recheck'}</button></div></div>`;
+    };
+    const wire = () => {
+      const host = root.document?.querySelector('[data-paid-match]');
+      if (!host || host.dataset.wsaWired) return;
+      host.dataset.wsaWired = '1';
+      host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', closeChild);
+      host.querySelector('[data-paid-match-target]')?.addEventListener('change', event => {
+        if (state.pending || state.busy) return; state.target = event.target.value; state.choice = ''; rerender(kind);
+      });
+      host.querySelector('[data-paid-match-choice]')?.addEventListener('change', event => { if (!state.pending && !state.busy) state.choice = event.target.value; });
+      host.querySelector('[data-paid-match-reason]')?.addEventListener('input', event => { if (!state.pending && !state.busy) state.reason = event.target.value; });
+      host.querySelector('[data-paid-match-save]')?.addEventListener('click', async () => {
+        if (!callerCurrent() || state.busy) return;
+        try { state.pending ||= buildPaidMatchRequest(model,state.target,state.choice,state.reason); }
+        catch (error) { state.error = error.message; rerender(kind); return; }
+        state.busy = true; state.error = ''; rerender(kind);
+        try {
+          const result = await authority.issueCommand('RECHECK_SOURCE', state.pending);
+          if (!callerCurrent()) return;
+          // The native publisher returns publication/upload, not a fabricated
+          // request_id. The unchanged recheck owner binds exact request replay.
+          if (result?.ok !== true || result?.status !== 'CURRENT'
+            || result?.upload_id !== state.pending.upload_id
+            || typeof result?.publication_id !== 'string'
+            || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(result.publication_id)
+            || result.publication_id === state.pending.projection_publication_id) throw new Error('The saved comparison is not yet confirmed. Retry exact request.');
+          await finishAction(undefined, callerCurrent);
+        } catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+          state.error = error?.code === 'WEEKLY_SOURCE_RECHECK_INCOMPLETE'
+            ? 'The comparison was saved, but rechecking is not yet confirmed. Retry this exact request.'
+            : plainMessage(error?.message, 'The comparison is not yet confirmed. Retry this exact request.');
+        } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      });
+    };
+    const opened = openChild({ title: 'Confirm paid shift match', kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+

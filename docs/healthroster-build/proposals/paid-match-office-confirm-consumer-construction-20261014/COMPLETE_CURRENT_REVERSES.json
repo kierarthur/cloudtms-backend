@@ -1,0 +1,106 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "file": "02_complete_office_workspace.sqlinc",
+      "repository": "backend",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "complete_definition": true,
+      "before_bytes": 117953,
+      "before_sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+      "after_bytes": 119453,
+      "after_sha256": "572c5ab504598a73de572987d07f56f48636d56a3d239dd475d6147c8bd59a51",
+      "hunks": [
+        {
+          "name": "native question status in existing blocked row",
+          "before": "        'text',case\n          when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'",
+          "after": "        'text',case\n          when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then 'Paid shift needs matching'\n          when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'"
+        },
+        {
+          "name": "paid matching plain problem",
+          "before": "      'problem',case\n        when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'",
+          "after": "      'problem',case\n        when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then case\n          when paid_question.value->>'state'='READY' then 'Confirm whether this is the paid shift or separate work.'\n          else 'The paid-shift comparison is unavailable. Recheck the current payment and source authority.' end\n        when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'"
+        },
+        {
+          "name": "finite distinct question action",
+          "before": "        'label',case when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm shift match'",
+          "after": "        'label',case when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then case\n            when paid_question.value->>'state'='READY' then 'Confirm paid shift match' else 'View details' end\n          when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm shift match'"
+        },
+        {
+          "name": "bounded native DTO without raw paid facts",
+          "before": "          'match_choices',private.weekly_source_protected_match_candidates_v1(source_row.id,resolution.candidate_id,resolution.client_id),",
+          "after": "          'paid_match_question',paid_question.value,\n          'match_choices',private.weekly_source_protected_match_candidates_v1(source_row.id,resolution.candidate_id,resolution.client_id),"
+        },
+        {
+          "name": "paid unavailable detail has no implied financial permission",
+          "before": "            'problem',case\n              when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'",
+          "after": "            'problem',case\n              when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED' then case\n                when paid_question.value->>'state'='READY' then 'Choose Same only for the work already paid. Earlier pay is retained; the imported row is invoiced. Choose Separate only for different work, then enter a reason. The saved comparison is rechecked before it can be used.'\n                else 'The native paid proof, current source or payment authority is unavailable. No Same or Separate choice can be saved from this screen. Recheck the workspace.' end\n              when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED'"
+        },
+        {
+          "name": "question derives once from actual current publication and current resolution",
+          "before": "    left join lateral (select latest.* from public.weekly_source_row_resolutions latest\n      where latest.upload_row_id=source_row.id order by latest.generation desc,latest.id desc limit 1) resolution on true\n    left join public.candidates candidate on candidate.id=resolution.candidate_id\n    left join lateral (select latest.* from public.weekly_source_charge_checks latest",
+          "after": "    left join lateral (select latest.* from public.weekly_source_row_resolutions latest\n      where latest.upload_row_id=source_row.id order by latest.generation desc,latest.id desc limit 1) resolution on true\n    left join lateral (select case when resolution.blocker_code='PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED'\n      then private.weekly_source_paid_match_question_v1(v_publication.id,source_row.id,v_actor) else null end value) paid_question on true\n    left join public.candidates candidate on candidate.id=resolution.candidate_id\n    left join lateral (select latest.* from public.weekly_source_charge_checks latest"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "frontend/js/weekly-source/workspace-actions.js",
+      "repository": "frontend",
+      "commit": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+      "complete_file": true,
+      "before_bytes": 108758,
+      "before_sha256": "66345020ef21fdb2b71db996b8d9fbff100f1bbc9d4694dc2659b60cab5b416a",
+      "after_bytes": 118582,
+      "after_sha256": "576dc06e0e88839f1c44c5e5e0c90d52567abe58e1b5eca3730b612b5fcc2948",
+      "hunks": [
+        {
+          "name": "closed question request builder and actor-frame-bound actual modal",
+          "before": "  function openProtectedMatch(payloadValue) {",
+          "after": "  function normalisePaidMatch(payloadValue) {\n    const payload = asObject(payloadValue), question = asObject(payload.paid_match_question);\n    const keys = ['schema_version','state','reason_code','upload_row_id','upload_id','projection_publication_id',\n      'candidate_id','client_id','contract_id','expected_authority_scope_version','expected_row_manifest_hash',\n      'expected_paid_overlap_inputs_sha256','choices'];\n    const requestKeys = ['request_id','upload_id','upload_row_id','projection_publication_id',\n      'expected_authority_scope_version','expected_row_manifest_hash'];\n    const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);\n    const hash = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);\n    const closed = (value, fields) => value && typeof value === 'object' && !Array.isArray(value)\n      && Object.keys(value).length === fields.length && fields.every(key => Object.hasOwn(value,key));\n    const invalid = () => { throw new Error('The paid-shift comparison has changed. Refresh the workspace before choosing.'); };\n    if (!closed(question,keys) || question.schema_version !== 'WEEKLY_SOURCE_PAID_MATCH_QUESTION_V1'\n      || question.state !== 'READY' || question.reason_code !== null\n      || !['upload_row_id','upload_id','projection_publication_id','candidate_id','client_id','contract_id'].every(key => uuid(question[key]))\n      || !Number.isSafeInteger(question.expected_authority_scope_version) || question.expected_authority_scope_version < 1\n      || !hash(question.expected_row_manifest_hash) || !hash(question.expected_paid_overlap_inputs_sha256)\n      || !Array.isArray(question.choices) || !question.choices.length || question.choices.length > 100) invalid();\n    const request = payload.recheck_payload;\n    if (!closed(request,requestKeys) || !uuid(request.request_id)\n      || !requestKeys.slice(1).every(key => request[key] === question[key])\n      || payload.upload_row_id !== question.upload_row_id || payload.contract_id !== question.contract_id) invalid();\n    const ids = new Set();\n    const choices = question.choices.map(item => {\n      if (!closed(item,['work_event_id','work_date','start','end','break_minutes','contract_id','same_allowed'])\n        || !uuid(item.work_event_id) || !uuid(item.contract_id) || ids.has(item.work_event_id)\n        || typeof item.work_date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.work_date)\n        || ![item.start,item.end].every(value => typeof value === 'string' && /^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(value))\n        || (item.break_minutes !== null && (!Number.isSafeInteger(item.break_minutes) || item.break_minutes < 0))\n        || typeof item.same_allowed !== 'boolean' || item.same_allowed !== (item.contract_id === question.contract_id)) invalid();\n      ids.add(item.work_event_id); return { ...item };\n    });\n    return { question: { ...question, choices }, request: { ...request },\n      candidate: asText(payload.candidate), client: asText(payload.client), shift: asText(payload.shift), system_hours: asText(payload.system_hours) };\n  }\n\n  function buildPaidMatchRequest(model, targetId, choice, reasonValue) {\n    const target = model.question.choices.find(item => item.work_event_id === targetId), reason = asText(reasonValue);\n    if (!target || !['SAME','SEPARATE'].includes(choice) || !reason || reason.length > 1000\n      || (choice === 'SAME' && target.same_allowed !== true)) throw new Error('Choose the paid shift, confirm Same or Separate, and enter a reason.');\n    const question = model.question;\n    return { ...model.request, candidate_id: question.candidate_id, client_id: question.client_id,\n      contract_id: question.contract_id, match_reason: reason,\n      paid_overlap_target_work_event_id: target.work_event_id,\n      expected_paid_overlap_inputs_sha256: question.expected_paid_overlap_inputs_sha256,\n      ...(choice === 'SAME' ? { pay_effect: 'NONE', work_event_id: target.work_event_id }\n        : { pay_effect: 'NORMAL', separate_shift: true }) };\n  }\n\n  function openPaidMatch(payloadValue) {\n    let model;\n    try { model = normalisePaidMatch(payloadValue); }\n    catch (error) { return openDetail({ detail: { problem: error.message } }, 'Compare paid shift'); }\n    const state = { target: '', choice: '', reason: '', busy: false, pending: null, error: '' };\n    const kind = 'weekly-source-paid-match-v1';\n    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;\n    let initiatingFrame = null;\n    const authority = workspaceApi();\n    const callerCurrent = () => workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();\n    const render = () => {\n      const locked = state.busy || state.pending, target = model.question.choices.find(item => item.work_event_id === state.target);\n      return `<div class=\"ws-child\" data-paid-match>\n        <p><strong>${escapeHtml(model.candidate)}</strong> · ${escapeHtml(model.client)} · ${escapeHtml(model.shift)}</p>\n        <p>Imported shift: <strong>${escapeHtml(model.system_hours)}</strong></p>\n        <p>This booking reference overlaps a paid shift. Confirm whether the imported row describes that work or separate work.</p>\n        <div class=\"ws-child-fields\"><label>Paid shift<select data-paid-match-target${locked ? ' disabled' : ''}><option value=\"\">Choose a shift</option>${model.question.choices.map(item => `<option value=\"${escapeHtml(item.work_event_id)}\"${state.target === item.work_event_id ? ' selected' : ''}>${escapeHtml(displayDate(item.work_date))} · ${escapeHtml(item.start)}–${escapeHtml(item.end)} · ${item.break_minutes === null ? 'Break not recorded' : escapeHtml(item.break_minutes) + ' min break'}</option>`).join('')}</select></label>\n        <label>Comparison<select data-paid-match-choice${locked || !target ? ' disabled' : ''}><option value=\"\">Choose Same or Separate</option><option value=\"SAME\"${state.choice === 'SAME' ? ' selected' : ''}${target?.same_allowed ? '' : ' disabled'}>Same work — retain the earlier pay and invoice this source row</option><option value=\"SEPARATE\"${state.choice === 'SEPARATE' ? ' selected' : ''}>Separate work — create a separate shift</option></select></label>\n        ${target && !target.same_allowed ? '<p>The selected shift uses a different contract. Same is unavailable for this row.</p>' : ''}\n        <label>Reason<textarea data-paid-match-reason maxlength=\"1000\"${locked ? ' disabled' : ''}>${escapeHtml(state.reason)}</textarea></label></div>\n        ${state.error ? `<p role=\"alert\">${escapeHtml(state.error)}</p>` : ''}<div class=\"ws-child-actions\"><button class=\"btn btn-outline\" data-paid-match-cancel${state.busy ? ' disabled' : ''}>Cancel</button><button class=\"btn primary\" data-paid-match-save${state.busy ? ' disabled' : ''}>${state.sourceAdmissionBusy ? 'Try again' : state.pending ? 'Retry exact request' : 'Confirm and recheck'}</button></div></div>`;\n    };\n    const wire = () => {\n      const host = root.document?.querySelector('[data-paid-match]');\n      if (!host || host.dataset.wsaWired) return;\n      host.dataset.wsaWired = '1';\n      host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', closeChild);\n      host.querySelector('[data-paid-match-target]')?.addEventListener('change', event => {\n        if (state.pending || state.busy) return; state.target = event.target.value; state.choice = ''; rerender(kind);\n      });\n      host.querySelector('[data-paid-match-choice]')?.addEventListener('change', event => { if (!state.pending && !state.busy) state.choice = event.target.value; });\n      host.querySelector('[data-paid-match-reason]')?.addEventListener('input', event => { if (!state.pending && !state.busy) state.reason = event.target.value; });\n      host.querySelector('[data-paid-match-save]')?.addEventListener('click', async () => {\n        if (!callerCurrent() || state.busy) return;\n        try { state.pending ||= buildPaidMatchRequest(model,state.target,state.choice,state.reason); }\n        catch (error) { state.error = error.message; rerender(kind); return; }\n        state.busy = true; state.error = ''; rerender(kind);\n        try {\n          const result = await authority.issueCommand('RECHECK_SOURCE', state.pending);\n          if (!callerCurrent()) return;\n          // The native publisher returns publication/upload, not a fabricated\n          // request_id. The unchanged recheck owner binds exact request replay.\n          if (result?.ok !== true || result?.status !== 'CURRENT'\n            || result?.upload_id !== state.pending.upload_id\n            || typeof result?.publication_id !== 'string'\n            || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(result.publication_id)\n            || result.publication_id === state.pending.projection_publication_id) throw new Error('The saved comparison is not yet confirmed. Retry exact request.');\n          await finishAction(undefined, callerCurrent);\n        } catch (error) {\n          if (!callerCurrent()) return;\n          state.sourceAdmissionBusy = sourceAdmissionBusy(error);\n          state.error = error?.code === 'WEEKLY_SOURCE_RECHECK_INCOMPLETE'\n            ? 'The comparison was saved, but rechecking is not yet confirmed. Retry this exact request.'\n            : plainMessage(error?.message, 'The comparison is not yet confirmed. Retry this exact request.');\n        } finally { state.busy = false; if (callerCurrent()) rerender(kind); }\n      });\n    };\n    const opened = openChild({ title: 'Confirm paid shift match', kind, render, wire });\n    initiatingFrame = currentChild(kind);\n    return opened;\n  }\n\n  function openProtectedMatch(payloadValue) {"
+        },
+        {
+          "name": "literal dispatch leaves protected match unchanged",
+          "before": "    if (label === 'Confirm shift match') return openProtectedMatch(detail.payload);",
+          "after": "    if (label === 'Confirm paid shift match') return openPaidMatch(detail.payload);\n    if (label === 'Confirm shift match') return openProtectedMatch(detail.payload);"
+        },
+        {
+          "name": "pure closed DTO constructors available for inspected tests",
+          "before": "    CONTRACT, normalisePreview, renderPreview, buildUploadAcceptancePayload,",
+          "after": "    CONTRACT, normalisePreview, renderPreview, buildUploadAcceptancePayload, normalisePaidMatch, buildPaidMatchRequest,"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "frontend/js/weekly-source/import-workspace.js",
+      "repository": "frontend",
+      "commit": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+      "complete_file": true,
+      "before_bytes": 164956,
+      "before_sha256": "8c54438fa8cac5556ce29d4c5e8ed3266cab257f9449cff058587d5ff820d42a",
+      "after_bytes": 165012,
+      "after_sha256": "0ade9730da19455b83f95a20c48cff2b80f770329a2e560ee5ba1f011400e27a",
+      "hunks": [
+        {
+          "name": "existing Office checks allowlist receives one exact paid-match action",
+          "before": "    finalise: new Set(['Confirm shift match',",
+          "after": "    finalise: new Set(['Confirm paid shift match', 'Confirm shift match',"
+        },
+        {
+          "name": "stale current workspace disables the new matching mutation too",
+          "before": "'No shifts to import', 'Confirm shift match',",
+          "after": "'No shifts to import', 'Confirm paid shift match', 'Confirm shift match',"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "native_money_classification_copied": false,
+  "existing_Office_recheck_route_and_saved_replay_unchanged": true,
+  "frozen_writer58_runtime_required": true,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "full_primary_complete": false
+}

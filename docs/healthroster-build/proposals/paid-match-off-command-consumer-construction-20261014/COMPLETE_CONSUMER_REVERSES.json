@@ -1,0 +1,100 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "input": "missing-accept-off-admission-construction-20261014/forward/01_complete_off_command.sqlinc",
+      "output": "01_complete_off_command.sqlinc",
+      "before_sha256": "156942450f8d63f2a3b8661db261444d2c8d0c207ea485f744412af0f864578f",
+      "after_sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4",
+      "hunks": [
+        {
+          "name": "existing native Office recheck in finite SOURCE_FIXTURE_SETUP purpose",
+          "before": "if op in ('weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1'",
+          "after": "if op in ('weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1'"
+        },
+        {
+          "name": "same actual public native owner, unchanged request and frame",
+          "before": "    when 'weekly_source_upload_context_v1' then result:=public.weekly_source_upload_context_v1(req);",
+          "after": "    when 'weekly_source_office_recheck_begin_v1' then result:=public.weekly_source_office_recheck_begin_v1(req);\n    when 'weekly_source_upload_context_v1' then result:=public.weekly_source_upload_context_v1(req);"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "input": "missing-accept-off-admission-construction-20261014/forward/02_complete_off_transport.sqlinc",
+      "output": "02_complete_off_transport.sqlinc",
+      "before_sha256": "dbcaeec9eefbfd49719d7a71845a331876f31f1f911521875e71ac6fb9be2258",
+      "after_sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "hunks": [
+        {
+          "name": "same finite Office operation discovery purpose",
+          "before": "if op in ('weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1'",
+          "after": "if op in ('weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1'"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "input": "missing-accept-off-admission-construction-20261014/forward/03_complete_off_setup_shape.sqlinc",
+      "output": "03_complete_off_setup_shape.sqlinc",
+      "before_sha256": "5e71bdfcff67d2cbbcdcbff313eff9aa2bcbb3ec8810070cb2624f1ed78ff759",
+      "after_sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59",
+      "hunks": [
+        {
+          "name": "closed SOURCE setup allowed-operation list, not an AUTOMATIC or general SQL route",
+          "before": "    'weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1'",
+          "after": "    'weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1'"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "input": "missing-accept-off-admission-construction-20261014/forward/04_complete_off_parent_scope.sqlinc",
+      "output": "04_complete_off_parent_scope.sqlinc",
+      "before_sha256": "3f5f86c2eca05accb23637744e1388dbbff222b1f3f897a02ee72911573cb173",
+      "after_sha256": "cd5501b7cb2940add1e1b38b345a6a45733a0f8c0269a1b893c302647d43eff4",
+      "hunks": [
+        {
+          "name": "discover actual new paid target parent before command audit/execution",
+          "before": "'family_id','work_event_id','prior_work_event_id',",
+          "after": "'family_id','work_event_id','prior_work_event_id','paid_overlap_target_work_event_id',"
+        },
+        {
+          "name": "actual target event inherits same real group/client/Candidate and sibling/fixture census refusal",
+          "before": "when 'work_event_id','prior_work_event_id' then",
+          "after": "when 'work_event_id','prior_work_event_id','paid_overlap_target_work_event_id' then"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "input": "missing-accept-off-admission-construction-20261014/forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "output": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "before_sha256": "590b27fb67aca721e28cd8ac1c1edd1d5e0c7dd82b41cf7249bde17396056433",
+      "after_sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69",
+      "hunks": [
+        {
+          "name": "closed native operation entry in existing server dependency proxy",
+          "before": "sourceOperations=Object.freeze(['weekly_source_upload_context_v1'",
+          "after": "sourceOperations=Object.freeze(['weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1'"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "preserved_off_scope_gate_and_native_I1_order": true,
+  "command_parent_admission_before_frame": true,
+  "ordinary_transport_and_closed_requests_unchanged": true,
+  "new_operation": "weekly_source_office_recheck_begin_v1",
+  "purpose": "SOURCE_FIXTURE_SETUP",
+  "native_payload_ABI_unchanged": true,
+  "native_parent_field": "paid_overlap_target_work_event_id",
+  "existing_actor_and_group_and_fixture_identity_guards_preserved": true,
+  "qualified_multi_period_fixture_constructed": false,
+  "settled_Original_fixture_or_qualification_minted": false,
+  "new_public_signature": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false
+}

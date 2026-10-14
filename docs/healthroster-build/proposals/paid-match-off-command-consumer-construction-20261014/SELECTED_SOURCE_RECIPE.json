@@ -1,0 +1,32 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "preceding_OFF23_manifest_sha256": "2af1ff63495d3164a425b429e2baf560790abc0dbf8845b762fdef5602875285",
+  "selected_SQL_order": [
+    "forward/03_complete_off_setup_shape.sqlinc",
+    "forward/04_complete_off_parent_scope.sqlinc",
+    "forward/01_complete_off_command.sqlinc",
+    "forward/02_complete_off_transport.sqlinc"
+  ],
+  "selected_runtime": "forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+  "whole_before_after_reverse": "COMPLETE_CONSUMER_REVERSES.json",
+  "existing_native_operation": "weekly_source_office_recheck_begin_v1",
+  "operation_purpose": "SOURCE_FIXTURE_SETUP",
+  "new_parent_field": "paid_overlap_target_work_event_id",
+  "private_or_public_signature_additions": [],
+  "new_columns_or_stores": 0,
+  "new_receipt_or_bundle_or_artifact_slot": 0,
+  "unchanged_native_owner_payload": true,
+  "existing_callee_current_actor_payment_Contract_and_choice_guards": true,
+  "same_scope_serialization_and_I1_order": true,
+  "original_purpose_cycle_fixture_CAS_and_event_census_unchanged": true,
+  "complete_current_actor_owner_ACL_assembly_required": true,
+  "actual_current_index_route_and_Office_wiring_complete": false,
+  "genuine_multi_period_setup_and_original_root_CAS_coverage_complete": false,
+  "settled_Original_native_fixture_or_proof_minted": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}

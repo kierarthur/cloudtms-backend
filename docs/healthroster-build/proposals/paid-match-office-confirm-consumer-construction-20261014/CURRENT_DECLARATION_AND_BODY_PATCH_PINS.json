@@ -1,0 +1,179 @@
+{
+  "source_only": true,
+  "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "casefold_sql_inventory": true,
+  "root_count": 1484,
+  "input_paths": 1745,
+  "occurrences": 2160,
+  "all_1745_input_hashes_equal_corrected_root_case_census": true,
+  "ordered_source_occurrences_sha256": "9173f22040d3639365620027405565a152754556eddea52036f831b38665c4e3",
+  "complete_literal_semantic_symbols": 2690,
+  "unresolved_dynamic_statements": 15,
+  "selected_final_literal_declarations": [
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_office_authority_v1",
+      "inputTypes": "uuid,text,uuid,uuid,date",
+      "id": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "offset": 0,
+      "header": "private.weekly_source_office_authority_v1( p_actor_user_id uuid, p_operation text, p_source_group_id uuid default null, p_client_id uuid default null, p_scope_date date default null ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "include_stack": [],
+      "order": 6037,
+      "source_file_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "body_sha256": "5cc2197010d7ddc639ab540ae221c7852bd1b862fad76ddf75bb869e34ecdb53"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_query_require_service_v1",
+      "inputTypes": "",
+      "id": "private.weekly_source_query_require_service_v1()",
+      "offset": 0,
+      "header": "private.weekly_source_query_require_service_v1() returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "include_stack": [],
+      "order": 3797,
+      "source_file_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "body_sha256": "379fbd7c0113eada17adab3ce212f1e719a7b4c0c26d2c00d6fc79650f3bf237"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_query_current_publication_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_query_current_publication_v1(uuid,uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_query_current_publication_v1( p_source_cycle_id uuid, p_projection_publication_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "include_stack": [],
+      "order": 3828,
+      "source_file_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "definition_sha256": "cd4b71b4777bc146ce610ada54e3a19d946439c14f9b218cf447cb0fd9bfa232",
+      "body_sha256": "e6be83c623ed5ee59e4649c41eb099e7e8175d4bee8596ba02c283426a0d99d6"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_office_workspace_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "offset": 0,
+      "header": "public.weekly_source_office_workspace_v1( p_request jsonb ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "include_stack": [],
+      "order": 6045,
+      "source_file_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "definition_sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+      "body_sha256": "28b22376ce92b4a3840e59ac66cd0988912c277c4b1b37ae00c2c04747947cc8"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_upload_context_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "offset": 0,
+      "header": "public.weekly_source_upload_context_v1( p_request jsonb ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','extensions','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "include_stack": [
+        "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql"
+      ],
+      "order": 6011,
+      "source_file_sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561",
+      "definition_sha256": "d1cec8aaf630daf2d550bb75b44eb39db2f948a3148ee04891f17ce4c7341975",
+      "body_sha256": "1d1d501ee2e85cf328e7507446e5153108c495c1ccdbde3894865effe8ff0805"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_projection_publish_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "offset": 0,
+      "header": "public.weekly_source_projection_publish_atomic_v1( p_request jsonb ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "include_stack": [],
+      "order": 6005,
+      "source_file_sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061",
+      "definition_sha256": "5f595cf2ff14c774518a95aa921f17bf3a0a306e17fa9fcc9b085c8792bb36b3",
+      "body_sha256": "a8d8e1ccc7890a01f64f3e34601a1594cb4aff12d1a99dcf626878f620aa66c8"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "offset": 0,
+      "header": "public.weekly_source_office_recheck_begin_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "include_stack": [],
+      "order": 4682,
+      "source_file_sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2",
+      "definition_sha256": "dcb2f4fb5e4e62b71a9b3ae9eac3a0c47be89ed42ddd11a782b232481144ab35",
+      "body_sha256": "3178d36871c4bee0d3890226f54e122fc53b00dc21d5a93f5754a047b059fe14"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_protected_match_candidates_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_protected_match_candidates_v1( p_upload_row_id uuid,p_candidate_id uuid,p_client_id uuid ) returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "include_stack": [],
+      "order": 4334,
+      "source_file_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+      "definition_sha256": "278444c66888cc6d14c6fd688b530e21dbf61b18bc3b2865534f6c60e3f82df1",
+      "body_sha256": "3d3e891e6b87424e07cdf652032d3a346b0831995a7e94ad2f45ad192f5f8824"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "offset": 0,
+      "header": "private.weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid) returns boolean language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "include_stack": [],
+      "order": 6036,
+      "source_file_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "definition_sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+      "body_sha256": "97cf8d3eeafbaa54c5cbec657e009db77fa93e100a847497132d1b1ccc6c0b94"
+    }
+  ],
+  "direct_source_input_pins": [
+    {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "bytes": 311541,
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "bytes": 268078,
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "bytes": 27489,
+      "sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "bytes": 74335,
+      "sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061"
+    },
+    {
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "bytes": 39828,
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "bytes": 105442,
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    }
+  ],
+  "guarded_pg_get_functiondef_read_sites": 22,
+  "guarded_or_catalogue_amendments_remain_native_and_whole_body_reconstruction_holds": true,
+  "supplied_containing_body_census": "973625f17cd51a49803872a819638e10f13bbbff",
+  "source_PPV2_is_controlling_literal_workspace_owner": true,
+  "not_a_final_effective_catalogue_or_native_proof": true
+}

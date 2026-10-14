@@ -1,0 +1,4 @@
+alter function public.weekly_source_office_workspace_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_office_workspace_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_office_workspace_v1(jsonb) to service_role;
+notify pgrst, 'reload schema';

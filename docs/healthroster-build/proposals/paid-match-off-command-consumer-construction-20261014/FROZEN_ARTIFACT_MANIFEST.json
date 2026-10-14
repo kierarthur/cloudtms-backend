@@ -1,0 +1,102 @@
+{
+  "schema_version": "PAID_MATCH_OFF_NATIVE_COMMAND_CONSUMER_CONSTRUCTION_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "artifact_count": 18,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CONSUMER_REVERSES.json",
+      "bytes": 5373,
+      "sha256": "3fefae2673b6a0344c9dec84150c41b92bc7d736a40ad3f3ffaa2eb730f3b5ca"
+    },
+    {
+      "file": "CURRENT_SOURCE_INPUT_PINS.json",
+      "bytes": 1855,
+      "sha256": "2b2bd6854dc758897f3be89ebdb70380cfb607fcd4a2b8c5b27bdeb0845b56dc"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 1527,
+      "sha256": "84036461958e9c6fd1e4d4eb41a31a0641599e181eeeb9c968ebd6dd86fc7c51"
+    },
+    {
+      "file": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md",
+      "bytes": 2334,
+      "sha256": "0c137e420fabd2c237670d894ee198900b53c04f2c3d711a56e8a6801dca79fd"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 989,
+      "sha256": "b6922f940a211c29f27655b961ae519cd183d8836ff7659b02962107934e3162"
+    },
+    {
+      "file": "before/01_complete_off_command.sqlinc",
+      "bytes": 19659,
+      "sha256": "156942450f8d63f2a3b8661db261444d2c8d0c207ea485f744412af0f864578f"
+    },
+    {
+      "file": "before/02_complete_off_transport.sqlinc",
+      "bytes": 4066,
+      "sha256": "dbcaeec9eefbfd49719d7a71845a331876f31f1f911521875e71ac6fb9be2258"
+    },
+    {
+      "file": "before/03_complete_off_setup_shape.sqlinc",
+      "bytes": 6000,
+      "sha256": "5e71bdfcff67d2cbbcdcbff313eff9aa2bcbb3ec8810070cb2624f1ed78ff759"
+    },
+    {
+      "file": "before/04_complete_off_parent_scope.sqlinc",
+      "bytes": 26467,
+      "sha256": "3f5f86c2eca05accb23637744e1388dbbff222b1f3f897a02ee72911573cb173"
+    },
+    {
+      "file": "before/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3775,
+      "sha256": "590b27fb67aca721e28cd8ac1c1edd1d5e0c7dd82b41cf7249bde17396056433"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 4934,
+      "sha256": "2e2dc342490f7cd4c17c5930fc49925d51287f10c6f6353922912a0562eaa72a"
+    },
+    {
+      "file": "forward/01_complete_off_command.sqlinc",
+      "bytes": 19812,
+      "sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4"
+    },
+    {
+      "file": "forward/02_complete_off_transport.sqlinc",
+      "bytes": 4106,
+      "sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc"
+    },
+    {
+      "file": "forward/03_complete_off_setup_shape.sqlinc",
+      "bytes": 6040,
+      "sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59"
+    },
+    {
+      "file": "forward/04_complete_off_parent_scope.sqlinc",
+      "bytes": 26539,
+      "sha256": "cd5501b7cb2940add1e1b38b345a6a45733a0f8c0269a1b893c302647d43eff4"
+    },
+    {
+      "file": "forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3815,
+      "sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 6047,
+      "sha256": "8b7baea71a23a66290da205c6e7f6cc6f176ce4dad59265ebef6dd32e0f7c6ec"
+    },
+    {
+      "file": "off-source.test.mjs",
+      "bytes": 6618,
+      "sha256": "42e58a32bcce7c45302bd972b416aeb0c98d0c32d7edee68b13ddca9a1483b28"
+    }
+  ]
+}

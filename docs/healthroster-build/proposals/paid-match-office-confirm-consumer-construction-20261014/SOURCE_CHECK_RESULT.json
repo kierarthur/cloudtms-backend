@@ -1,0 +1,36 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 18,
+  "passed": 18,
+  "failed": 0,
+  "syntax_passed": 12,
+  "complete_current_owner_reversals": 3,
+  "unique_hunks": 11,
+  "input_pins": 9,
+  "current_literal_source_roots": 1484,
+  "current_input_paths": 1745,
+  "current_include_occurrences": 2160,
+  "guarded_pg_get_functiondef_sites": 22,
+  "native_current_body_proof": false,
+  "preserved_frozen_dependency_artifacts": 126,
+  "private_additions": 1,
+  "public_additions": 0,
+  "store_column_money_calculator_additions": 0,
+  "credential_pattern_findings": 0,
+  "whitespace_disposition": "EXACT INPUT/OWNER EXCEPTIONS RETAINED; NO BLANKET PASS",
+  "whitespace_exceptions": [
+    {
+      "file": "paid-match-frontend-functions.jsinc",
+      "kind": "EXACT_SOURCE_EOF_BLANK_LINES"
+    }
+  ],
+  "actual_SQL_compilation": false,
+  "native_database_API_calls": 0,
+  "browser_or_native_UI_proof": false,
+  "canonical_mounted": false,
+  "whole_pipeline_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}

@@ -1,0 +1,151 @@
+{
+  "schema_version": "PAID_MATCH_OFFICE_CONFIRM_CONSUMER_CONSTRUCTION_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_proof": false,
+  "whole_pipeline_complete": false,
+  "artifact_count": 28,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 17406,
+      "sha256": "a7d1ad47759ef152e2cfb0917a9a18682e26777d75249d57e0aa3d326566dcf8"
+    },
+    {
+      "file": "CURRENT_DECLARATION_AND_BODY_PATCH_PINS.json",
+      "bytes": 10026,
+      "sha256": "5ccc6cd518c5a0ede6d3c6ec3b26fbb1f7447a0be39494b6324dfc5f15d890e0"
+    },
+    {
+      "file": "CURRENT_SOURCE_INPUT_PINS.json",
+      "bytes": 3546,
+      "sha256": "e4a9947e70e97baf7016c8c0423c8669290bc5e02dff73742ef34dfa8209cfbc"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 3194,
+      "sha256": "8f9299a106962b911b0072a752ec3e3e1a5d76583ae6e6c3a41b24eb71232cf4"
+    },
+    {
+      "file": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md",
+      "bytes": 5861,
+      "sha256": "dfbebc283bd47892f33b14e72d2ab10afc20b497747cdb7d237d08448a5d01ea"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1107,
+      "sha256": "a9d20b1235081062651f901f03cd705b26c64368672388797971837250662a9e"
+    },
+    {
+      "file": "before/02_complete_office_workspace.sqlinc",
+      "bytes": 117953,
+      "sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44"
+    },
+    {
+      "file": "before/frontend/js/weekly-source/import-workspace.js",
+      "bytes": 164956,
+      "sha256": "8c54438fa8cac5556ce29d4c5e8ed3266cab257f9449cff058587d5ff820d42a"
+    },
+    {
+      "file": "before/frontend/js/weekly-source/workspace-actions.js",
+      "bytes": 108758,
+      "sha256": "66345020ef21fdb2b71db996b8d9fbff100f1bbc9d4694dc2659b60cab5b416a"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 8175,
+      "sha256": "192ddf8a3bc6d7063413be1af03718bfc0c670e9970866d21d9362a3b5746207"
+    },
+    {
+      "file": "forward/01_paid_match_question.sqlinc",
+      "bytes": 6388,
+      "sha256": "4ea6f553ce20082f9f941a303869643c0cc2011cdcf97f03c7b34a629ce87aa2"
+    },
+    {
+      "file": "forward/02_complete_office_workspace.sqlinc",
+      "bytes": 119453,
+      "sha256": "572c5ab504598a73de572987d07f56f48636d56a3d239dd475d6147c8bd59a51"
+    },
+    {
+      "file": "forward/03_office_workspace_acl.sqlinc",
+      "bytes": 307,
+      "sha256": "b224a8cab75c1b57e86702f4f0440f998d7674c53237a134d09172beefc96661"
+    },
+    {
+      "file": "forward/frontend/js/weekly-source/import-workspace.js",
+      "bytes": 165012,
+      "sha256": "0ade9730da19455b83f95a20c48cff2b80f770329a2e560ee5ba1f011400e27a"
+    },
+    {
+      "file": "forward/frontend/js/weekly-source/workspace-actions.js",
+      "bytes": 118582,
+      "sha256": "576dc06e0e88839f1c44c5e5e0c90d52567abe58e1b5eca3730b612b5fcc2948"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 7601,
+      "sha256": "ed9b6e26405d8a5af225b45f14f178b5ac77f2650875205ba6cc0bf5454d8c96"
+    },
+    {
+      "file": "input/body_amendment_census.json",
+      "bytes": 437551,
+      "sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d"
+    },
+    {
+      "file": "input/current_import_workspace.js",
+      "bytes": 164956,
+      "sha256": "8c54438fa8cac5556ce29d4c5e8ed3266cab257f9449cff058587d5ff820d42a"
+    },
+    {
+      "file": "input/current_pp2.sql",
+      "bytes": 311541,
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "file": "input/current_routes.js",
+      "bytes": 66355,
+      "sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef"
+    },
+    {
+      "file": "input/current_upload_owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "file": "input/native_query_delivery.sql",
+      "bytes": 268078,
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "file": "input/native_upload_publication.sql",
+      "bytes": 162591,
+      "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+    },
+    {
+      "file": "input/source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "office-source.test.mjs",
+      "bytes": 14434,
+      "sha256": "cb691b5a51b2675bbe43f2014bd16b924eaf609eaadec81fca3709f75105901d"
+    },
+    {
+      "file": "paid-match-frontend-functions.jsinc",
+      "bytes": 9697,
+      "sha256": "9b0ed67876a9ef7855d85d124d4dc1658155025269fababaceba93da766184e5"
+    },
+    {
+      "file": "pin-current-declarations.mjs",
+      "bytes": 5838,
+      "sha256": "5969db927cce6cd170ee46a1cd57018eb16f1ffcd14471b127a0e74ed8b9145e"
+    },
+    {
+      "file": "pin-inputs.mjs",
+      "bytes": 3341,
+      "sha256": "5056e37f1dbbf3a7fd0dbb57be4e8b19b32ef038dbfaba8bb373076e6455f0a5"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "source_only": true,
+  "own_preceding_commit": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+  "OFF23_manifest_sha256": "2af1ff63495d3164a425b429e2baf560790abc0dbf8845b762fdef5602875285",
+  "OFF23_artifacts_preserved": 23,
+  "inputs": [
+    {
+      "commit": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+      "file": "docs/healthroster-build/proposals/missing-accept-off-admission-construction-20261014/forward/01_complete_off_command.sqlinc",
+      "sha256": "156942450f8d63f2a3b8661db261444d2c8d0c207ea485f744412af0f864578f"
+    },
+    {
+      "commit": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+      "file": "docs/healthroster-build/proposals/missing-accept-off-admission-construction-20261014/forward/02_complete_off_transport.sqlinc",
+      "sha256": "dbcaeec9eefbfd49719d7a71845a331876f31f1f911521875e71ac6fb9be2258"
+    },
+    {
+      "commit": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+      "file": "docs/healthroster-build/proposals/missing-accept-off-admission-construction-20261014/forward/03_complete_off_setup_shape.sqlinc",
+      "sha256": "5e71bdfcff67d2cbbcdcbff313eff9aa2bcbb3ec8810070cb2624f1ed78ff759"
+    },
+    {
+      "commit": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+      "file": "docs/healthroster-build/proposals/missing-accept-off-admission-construction-20261014/forward/04_complete_off_parent_scope.sqlinc",
+      "sha256": "3f5f86c2eca05accb23637744e1388dbbff222b1f3f897a02ee72911573cb173"
+    },
+    {
+      "commit": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+      "file": "docs/healthroster-build/proposals/missing-accept-off-admission-construction-20261014/forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "590b27fb67aca721e28cd8ac1c1edd1d5e0c7dd82b41cf7249bde17396056433"
+    }
+  ],
+  "canonical_actual_OFF98_vs_OFF23_composition_still_required": true,
+  "native_proof": false
+}

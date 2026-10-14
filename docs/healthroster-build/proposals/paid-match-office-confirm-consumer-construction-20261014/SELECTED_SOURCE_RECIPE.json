@@ -1,0 +1,75 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "preceding_own_checkpoint": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+  "native_source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "Office_feature_source": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+  "Office_installed_main": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "dependency_pins": [
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+      "artifacts": 58
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "artifacts": 26
+    },
+    {
+      "packet": "paid-match-prepared-pay-consumer-construction-20261014",
+      "manifest_sha256": "d26c0a2b3139e0eb471068ce938809e4acce169bd58afd79b414018cc42a80e4",
+      "artifacts": 17
+    },
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "manifest_sha256": "17fb14d164309dbc3c17895be10ae105ea6663e083d9a495112a50a92e6f0fd5",
+      "artifacts": 15
+    },
+    {
+      "packet": "rekey-source-alias-all-owner-successor-20261014",
+      "manifest_sha256": "400b1b49fe5534b79baccbea9a9e3b7017458b40c84afeb66ebafedced92ff5c",
+      "artifacts": 10
+    }
+  ],
+  "selected_SQL_order": [
+    "forward/01_paid_match_question.sqlinc",
+    "forward/02_complete_office_workspace.sqlinc",
+    "forward/03_office_workspace_acl.sqlinc"
+  ],
+  "required_unmounted_native_dependencies": [
+    "accepted facts15 single payment-facts and overlap helpers",
+    "accepted rekey all-owner 3efed077 + identical helper",
+    "writer58 choice admission/current reader/closed office recheck/projection/context/native NONE consequences"
+  ],
+  "selected_frontend_forward_files": [
+    {
+      "source": "forward/frontend/js/weekly-source/workspace-actions.js",
+      "destination": "js/weekly-source/workspace-actions.js"
+    },
+    {
+      "source": "forward/frontend/js/weekly-source/import-workspace.js",
+      "destination": "js/weekly-source/import-workspace.js"
+    }
+  ],
+  "frontend_predecessor_current_composition_required_before_mount": true,
+  "unchanged_existing_runtime_dependency": "writer58 forward/broker/src/weekly-source/upload-publication-owner.mjs",
+  "unchanged_existing_runtime_route": "fa661 broker/src/weekly-source/routes.js (U3/Undo preserved; no new operation)",
+  "new_private_signatures": [
+    "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)"
+  ],
+  "new_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "existing_public_signatures": [
+    "public.weekly_source_office_workspace_v1(jsonb)"
+  ],
+  "existing_public_acl": "logical postgres; PUBLIC/anon/authenticated revoked; service_role EXECUTE only",
+  "new_public_signatures": [],
+  "new_money_classifiers": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "compiled_contract_and_current_verifier_union": false,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "whole_pipeline_complete": false,
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}
