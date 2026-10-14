@@ -1,0 +1,37 @@
+{
+  "schema_version": "OFFICE_CURRENT_MAIN_SOURCE_CRITIQUE_FREEZE_V1",
+  "status": "NARROW_SAVED_SOURCE_ACCEPTED_AFTER_APPLIED_P2_NOT_PART_B_OR_NATIVE_ACCEPTANCE",
+  "feature_input_commit": "1b7dff8c6312f711cceac628bb195a61a5e5f8b7",
+  "incoming_main_commit": "413cea9b35975c6ccac0b084327ef109b05c1c48",
+  "source_evidence_sha256": "865e12193fb3935f08c406bbe99859cfc28b867fb8912c8c0bf488a092a56430",
+  "artifacts": [
+    {
+      "path": "OFFICE_SOURCE_CRITIQUE.md",
+      "bytes": 5019,
+      "sha256": "f20346fb2d879d41b90504221ca3c18b80c7f28cbd421281b1eb4f4f9a460a8f"
+    },
+    {
+      "path": "SOURCE_REVIEW_EVIDENCE.json",
+      "bytes": 43874,
+      "sha256": "865e12193fb3935f08c406bbe99859cfc28b867fb8912c8c0bf488a092a56430"
+    },
+    {
+      "path": "freeze-office-source-review.mjs",
+      "bytes": 2333,
+      "sha256": "d17210d293e09b62444c64d8e7e478fbce9cbfef69a2f63f8caabedb8ddee4cb"
+    },
+    {
+      "path": "permission-fallback-reproduction.cjs",
+      "bytes": 2136,
+      "sha256": "f7fc9b693227c8db9e80d7fa3c5eb5100877a50d9c76c1aa3b54b412f7784a95"
+    },
+    {
+      "path": "review-office-source.mjs",
+      "bytes": 6333,
+      "sha256": "820c5bc5a74b5d3331333ae2448a8585941aba167955aba76430d67963052615"
+    }
+  ],
+  "credential_findings": 0,
+  "no_office_source_mutation": true,
+  "no_native_or_publication": true
+}

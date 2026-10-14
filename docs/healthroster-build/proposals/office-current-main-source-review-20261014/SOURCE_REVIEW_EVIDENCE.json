@@ -1,0 +1,1066 @@
+{
+  "schema_version": "OFFICE_CURRENT_MAIN_INDEPENDENT_SOURCE_REVIEW_V1",
+  "status": "SOURCE_ACCEPTED_AFTER_APPLIED_PERMISSION_FALLBACK_P2",
+  "office_path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+  "feature_input_commit": "1b7dff8c6312f711cceac628bb195a61a5e5f8b7",
+  "incoming_main_commit": "413cea9b35975c6ccac0b084327ef109b05c1c48",
+  "saved_uncommitted_merge": true,
+  "source_snapshots": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 16852,
+      "sha256": "12d2db00e94fae90c4a324f7aafaa532349f24f7d2938b6fd3076cbf510a24fd"
+    },
+    {
+      "path": "BANKING_PAY_BIBLE.md",
+      "bytes": 158774,
+      "sha256": "523a134aea2c277fd8c49eb91bbfcae565f094558f48942f42ca231f47d7ec34"
+    },
+    {
+      "path": "index.html",
+      "bytes": 97502,
+      "sha256": "c15da401fea00a5db095a5dc83fa145951f73dacc68ed10f9ed6df825638c3d1"
+    },
+    {
+      "path": "css/weekly-source.css",
+      "bytes": 48256,
+      "sha256": "6bd04b6e0d9646c28fbe3cf29f03854eb7401c5d2fd44f38e1ad1c0354384a2f"
+    },
+    {
+      "path": "js/invoice-batch-modal.js",
+      "bytes": 127483,
+      "sha256": "287761071cceab3ec5795aaed7ccaac7a34f5f35d6259e4ba6eab1a38c127fae"
+    },
+    {
+      "path": "js/main.js",
+      "bytes": 17829569,
+      "sha256": "ed486ea92f5a3fde59fa362033425aeee94a98df562d64e999c52c85c5a6d3ed"
+    },
+    {
+      "path": "js/weekly-source/agency-invoice-credit-ui.js",
+      "bytes": 3691,
+      "sha256": "794e61946424a709d25e45206092f751c49f54d148e3908f96fbf204dcbe375c"
+    },
+    {
+      "path": "js/weekly-source/combined-review.js",
+      "bytes": 31500,
+      "sha256": "34991b08403a00c3995873fbd135664cfa67207100cd1c525a0b14bd344897cd"
+    },
+    {
+      "path": "js/weekly-source/import-workspace.js",
+      "bytes": 158455,
+      "sha256": "f31696889f20278260788b165210b47f1a1f2347687159254f0e30db1ba98366"
+    },
+    {
+      "path": "js/weekly-source/rule-set-validation.js",
+      "bytes": 10709,
+      "sha256": "edcbea94cfcad64b297023edcab891c1da62d7601d7c79f021771a58cd2d2764"
+    },
+    {
+      "path": "js/weekly-source/rule-settings.js",
+      "bytes": 16199,
+      "sha256": "0adcddc05b1c2502ae8f4f2900e3fcef3cfc60688751f19eba9b244b7f617278"
+    },
+    {
+      "path": "js/weekly-source/settings.js",
+      "bytes": 39932,
+      "sha256": "5b3d8af1bddc7839089fd1cea41282dfa09534c6950c35db64a3933a8d6b1c84"
+    },
+    {
+      "path": "js/weekly-source/source-invoice-adjustments.js",
+      "bytes": 7515,
+      "sha256": "80c1a294d3c3754863cbdc10cdd0ce47d1d9a94118f74b6287e7d0d967cae62b"
+    },
+    {
+      "path": "js/weekly-source-presentation-v1.js",
+      "bytes": 136175,
+      "sha256": "df01d69e1f55f20a28c29bf7a1698cbbd9a7041525bf31f5ae9e7039d306d7b6"
+    },
+    {
+      "path": "js/weekly-source/finalise-batch.js",
+      "bytes": 6483,
+      "sha256": "eae08f9064f1792ab44125e4c9bae863677c57bba4646955e05c6e7b803268db"
+    },
+    {
+      "path": "js/weekly-source/combined-finalise.js",
+      "bytes": 9344,
+      "sha256": "255c287d19cac8a2a267c56d5fab285c31b738b82dce613c4d72c51e0fe977a7"
+    },
+    {
+      "path": "js/weekly-source/protected-shift-editor.js",
+      "bytes": 19422,
+      "sha256": "b19c1f6063a1ef90f3b6b51a0e49dd9a9d5cbfa23fa02addd5f9e3ec87cbb26e"
+    },
+    {
+      "path": "js/weekly-source/workspace-actions.js",
+      "bytes": 110183,
+      "sha256": "04d2614210a6d32a0c8ed42b21fab9dc384b3958e053fbec28e704f33c81f267"
+    },
+    {
+      "path": "tests/unit/backend-source-binding.cjs",
+      "bytes": 1073,
+      "sha256": "86db0c1063c57f1123d4661e59601c78fa2d3e5014f93822fad6bdaad7df51be"
+    },
+    {
+      "path": "tests/unit/candidate-office-api-v1.test.cjs",
+      "bytes": 8026,
+      "sha256": "162e2dbedec6dfbd2eb39d66eb069173aac0e5b5c04cb1b42e87b1cf899abe7a"
+    },
+    {
+      "path": "tests/unit/candidate-office-bootstrap-v1.test.cjs",
+      "bytes": 5513,
+      "sha256": "5babbeb881a39c0b6d41c48ce9dd4a817e6674d37d2579c31b637cc69d9c914a"
+    },
+    {
+      "path": "tests/unit/candidate-office-bridge-identity.test.cjs",
+      "bytes": 11092,
+      "sha256": "3a386df26f4bd46be2a1d1060150f5114e42fb5d7e8fd5bfd10f3361480f5905"
+    },
+    {
+      "path": "tests/unit/candidate-office-contract-v1.test.cjs",
+      "bytes": 26324,
+      "sha256": "19a2529222bfea145e8d0c6050bd8dbc1afeab1deb8bad240dcf4e73fe80ae40"
+    },
+    {
+      "path": "tests/unit/candidate-office-controller-idempotency.test.cjs",
+      "bytes": 11305,
+      "sha256": "1b3ddd16023ce20045475a81a9c2660f9f7186d15d7dbcdb4b2e9d1bb035b41b"
+    },
+    {
+      "path": "tests/unit/candidate-office-daily-receipt-status.test.cjs",
+      "bytes": 5417,
+      "sha256": "7bad23e1b22da482ce3f1db6ec0979f74d137a78d82acf9254d0bfbb04da7245"
+    },
+    {
+      "path": "tests/unit/candidate-office-expense-reconciliation.test.cjs",
+      "bytes": 13742,
+      "sha256": "1dc2e284cea8d2bedb35e0749e3735dc360cc327a9fc077feffa6ba297ffe0cc"
+    },
+    {
+      "path": "tests/unit/candidate-office-finance-summary.test.cjs",
+      "bytes": 4555,
+      "sha256": "b5598a77811ededa5b5ceb677f442c02948480de5fafa22faf000e65366bddae"
+    },
+    {
+      "path": "tests/unit/candidate-office-invoice-diagnostic.test.cjs",
+      "bytes": 1903,
+      "sha256": "27137a5f86d5d121fa5be8175fef5411ec06a8c5190124b1a1bf0ea3a0e02c58"
+    },
+    {
+      "path": "tests/unit/candidate-office-openapi-parity.test.cjs",
+      "bytes": 11778,
+      "sha256": "f3d99cbb7de1ec7544f58918ece8c9d65af3ab211197b4f29de41bcb1e522c3a"
+    },
+    {
+      "path": "tests/unit/candidate-office-rate-client-picker.test.cjs",
+      "bytes": 3532,
+      "sha256": "cec5be47e363d4b2c236f99c9eb24831cf1deb6649a325a422e7d6a8417eec5c"
+    },
+    {
+      "path": "tests/unit/candidate-office-reminder-workspace.test.cjs",
+      "bytes": 16439,
+      "sha256": "74f627f1f772f25ba64da93ab05f72119c98b4af4e25abf7f8f9a581d2758878"
+    },
+    {
+      "path": "tests/unit/candidate-office-summary.test.cjs",
+      "bytes": 41791,
+      "sha256": "11871ccd159deae59d124d4d2e1e872e3e7f0d9e042ab36646764676090dfdb9"
+    },
+    {
+      "path": "tests/unit/candidate-office-ui-policy.test.cjs",
+      "bytes": 36548,
+      "sha256": "6f95dde70b87fd3a59a8b74536c1e732f7a03b9a972d8a461d6e7e9853e54796"
+    },
+    {
+      "path": "tests/unit/candidate-pay-method-retained-finance.test.cjs",
+      "bytes": 2487,
+      "sha256": "52b7c43aaf0b42aa9e5930cba8bebcd92c3dd1eb6e4d1cc5329a302ea5435a72"
+    },
+    {
+      "path": "tests/unit/candidate-pay-method-umbrella-selection.test.cjs",
+      "bytes": 1877,
+      "sha256": "43b715b581ef2caf09bb3e6c770ad64a41e2ff5b86d663c75f716acf17b0837b"
+    },
+    {
+      "path": "tests/unit/client-settings-save-version.test.cjs",
+      "bytes": 4468,
+      "sha256": "15101cb8d64b6a48dcca083f8e00b4ccc7498c329e30a5badbfa8c9cbfdecea4"
+    },
+    {
+      "path": "tests/unit/cloudtms-branding-assets.test.cjs",
+      "bytes": 2400,
+      "sha256": "c762cde50a10df12e901f9431222d13a37fcb24febe9d167237f83b73a6d1f73"
+    },
+    {
+      "path": "tests/unit/contract-delete-friendly-confirm.test.cjs",
+      "bytes": 1351,
+      "sha256": "c022ef5f60a66d1c4efdf019e5e0076970ec92a01d99855a97c39c7f5b835e0e"
+    },
+    {
+      "path": "tests/unit/main-asset-cache-version.test.cjs",
+      "bytes": 5305,
+      "sha256": "34b81965b088432ed75961e70f0831c7ac88a80f4076d12f9905a95eba1c93d9"
+    },
+    {
+      "path": "tests/unit/mobile-summary-contract-ux.test.cjs",
+      "bytes": 5819,
+      "sha256": "c5782aa30de4ef6225565446f097ae081531a2906f161fed27ccd1c96c2f98b8"
+    },
+    {
+      "path": "tests/unit/modal-modernisation-policy.test.cjs",
+      "bytes": 2767,
+      "sha256": "4887f348900bb59c6c97c029847148c35436090ac98f61125877d10ec61b4ddc"
+    },
+    {
+      "path": "tests/unit/mytms-office-v1.test.cjs",
+      "bytes": 10564,
+      "sha256": "06d6e44107d6c48d90334dfafedd8864dfd0154fbe3685e4e74b4fa0189e8ed6"
+    },
+    {
+      "path": "tests/unit/record-modal-layout.test.cjs",
+      "bytes": 5878,
+      "sha256": "769e96aefe5700c572857dfef4f9a8d70e83c7a22d0e9ae19e0e05a2b5d492bf"
+    },
+    {
+      "path": "tests/unit/summary-money-format.test.cjs",
+      "bytes": 2294,
+      "sha256": "86afcf9c3bb08fba067cd954d8c5c8338d9890e97c707eb8c707fabc92415627"
+    },
+    {
+      "path": "tests/unit/timesheet-processing-status-badges.test.cjs",
+      "bytes": 5817,
+      "sha256": "05471cec893802c7cafd25b6b06fcf40c85e310276030809f3d323500e87fcaa"
+    },
+    {
+      "path": "tests/unit/timesheet-summary-issues.test.cjs",
+      "bytes": 2545,
+      "sha256": "d0e682fdf7cbeefbdac41d8b67499b96ef00a5a4933ce361c665b82a67d714e3"
+    },
+    {
+      "path": "tests/unit/weekly-source-entrypoint-reachability.test.cjs",
+      "bytes": 3438,
+      "sha256": "7a174a44941b48988ead3ba6d7e351ec22b4da5df6a1adc72502d5b018242c71"
+    },
+    {
+      "path": "tests/unit/healthroster-automatic-credit-presentation.test.cjs",
+      "bytes": 2052,
+      "sha256": "c2e05a7b782ffa1c6f52a88f69e91bbdc4d07faf5628096280fad850e70cf583"
+    },
+    {
+      "path": "tests/unit/healthroster-rule-settings.test.cjs",
+      "bytes": 3909,
+      "sha256": "996ea27ac4afbe6bffaa4230f12b31eec696b63c5dffc56f5dcde87b1430668c"
+    },
+    {
+      "path": "tests/unit/healthroster-train0.test.cjs",
+      "bytes": 4950,
+      "sha256": "f5ea59eae12e7f0099ff6d67b79d75f487d9b7eb47979298a388e9645738bf72"
+    },
+    {
+      "path": "tests/unit/weekly-source-candidate-office-surface.test.cjs",
+      "bytes": 2476,
+      "sha256": "0fa59f72fd281cda88a1c5cd80b767832a3e1a8f747cda330eaa8113c6e232f0"
+    },
+    {
+      "path": "tests/unit/weekly-source-combined-finalise.test.cjs",
+      "bytes": 3493,
+      "sha256": "ea122d79995d794d17ebc40e6524d611a118ea18d80c0e1619a34495896ba675"
+    },
+    {
+      "path": "tests/unit/weekly-source-combined-review.test.cjs",
+      "bytes": 23694,
+      "sha256": "618b56251a1d2fc304118911d1df9aeae9fd72e7cd8c857c0e54b69275dca2b9"
+    },
+    {
+      "path": "tests/unit/weekly-source-finalise-batch.test.cjs",
+      "bytes": 4514,
+      "sha256": "9a1268ed7cf00974c0bc9ba50428d5ef3102a5d995b3230685006e2b21ef35fd"
+    },
+    {
+      "path": "tests/unit/weekly-source-finance-authority.test.cjs",
+      "bytes": 1772,
+      "sha256": "c994865bf9f5a064862c95eeea5300293cf427ea6b60647660653b160a2012b9"
+    },
+    {
+      "path": "tests/unit/weekly-source-import-workspace.test.cjs",
+      "bytes": 44883,
+      "sha256": "2fba6aaa413a21645734cd0ac489c178309f335b376d11db9cfba67d5eb757c7"
+    },
+    {
+      "path": "tests/unit/weekly-source-invoice-batch-integration.test.cjs",
+      "bytes": 6783,
+      "sha256": "f56e9a7abd3ef9cb01267ed126c7dc43617f2e155478ee705abfec5f4170f6b0"
+    },
+    {
+      "path": "tests/unit/weekly-source-lifecycle-v1.test.cjs",
+      "bytes": 32971,
+      "sha256": "419bc6b4d447763ba0adf41f3a051e98d68ced30ee8afa2567790f9f0ca75546"
+    },
+    {
+      "path": "tests/unit/weekly-source-office-integration.test.cjs",
+      "bytes": 8105,
+      "sha256": "703a6e3e4ad55ede047bc05b4897dbfd65a289cad6c89f9d236464f49e7e68e9"
+    },
+    {
+      "path": "tests/unit/weekly-source-office-notifications.test.cjs",
+      "bytes": 1887,
+      "sha256": "f7041ac7418204ec2923baf3da48ccacaf14a77deafb588af5895c1609c74e6d"
+    },
+    {
+      "path": "tests/unit/weekly-source-presentation-v1.test.cjs",
+      "bytes": 36541,
+      "sha256": "1077e41a06e2f1bf73d7bda8ac39239ae34545134a38247179a1297922d4181e"
+    },
+    {
+      "path": "tests/unit/weekly-source-protected-resume-asset-cache.test.cjs",
+      "bytes": 1437,
+      "sha256": "1b8cdf39ff22fd1ddb4752a93a34d87c6ac8055f2836a27d856d8a2122589c25"
+    },
+    {
+      "path": "tests/unit/weekly-source-protected-shift-editor.test.cjs",
+      "bytes": 13897,
+      "sha256": "21018ca05653159aa7fbce24fdeb916b49d42ec0a87d31d7400a70b43ce57c3d"
+    },
+    {
+      "path": "tests/unit/weekly-source-settings.test.cjs",
+      "bytes": 19235,
+      "sha256": "dc8d13b6a2d1838357115821d2300e9e56daf5e968950e73dd0759e69d64ca08"
+    },
+    {
+      "path": "tests/unit/weekly-source-workspace-actions.test.cjs",
+      "bytes": 27432,
+      "sha256": "0ca77976892f7a0ebf64bca5c6c6f96d2f6e83ac59069a2fddb2dccd025f06dc"
+    },
+    {
+      "path": "tests/unit/healthroster-permission-refresh-race.test.cjs",
+      "bytes": 2636,
+      "sha256": "9e95c8d355ad7fcacf9b134d78c4af7d5b982c9ed65d1c10fe315ab1cd4de0e1"
+    }
+  ],
+  "independently_run_source_gates": [
+    {
+      "name": "managedOfficeSourceGate",
+      "files": [
+        "tests/unit/candidate-office-api-v1.test.cjs",
+        "tests/unit/candidate-office-bootstrap-v1.test.cjs",
+        "tests/unit/candidate-office-bridge-identity.test.cjs",
+        "tests/unit/candidate-office-contract-v1.test.cjs",
+        "tests/unit/candidate-office-controller-idempotency.test.cjs",
+        "tests/unit/candidate-office-daily-receipt-status.test.cjs",
+        "tests/unit/candidate-office-expense-reconciliation.test.cjs",
+        "tests/unit/candidate-office-finance-summary.test.cjs",
+        "tests/unit/candidate-office-invoice-diagnostic.test.cjs",
+        "tests/unit/candidate-office-openapi-parity.test.cjs",
+        "tests/unit/candidate-office-rate-client-picker.test.cjs",
+        "tests/unit/candidate-office-reminder-workspace.test.cjs",
+        "tests/unit/candidate-office-summary.test.cjs",
+        "tests/unit/candidate-office-ui-policy.test.cjs",
+        "tests/unit/candidate-pay-method-retained-finance.test.cjs",
+        "tests/unit/candidate-pay-method-umbrella-selection.test.cjs",
+        "tests/unit/client-settings-save-version.test.cjs",
+        "tests/unit/cloudtms-branding-assets.test.cjs",
+        "tests/unit/contract-delete-friendly-confirm.test.cjs",
+        "tests/unit/main-asset-cache-version.test.cjs",
+        "tests/unit/mobile-summary-contract-ux.test.cjs",
+        "tests/unit/modal-modernisation-policy.test.cjs",
+        "tests/unit/mytms-office-v1.test.cjs",
+        "tests/unit/record-modal-layout.test.cjs",
+        "tests/unit/summary-money-format.test.cjs",
+        "tests/unit/timesheet-processing-status-badges.test.cjs",
+        "tests/unit/timesheet-summary-issues.test.cjs",
+        "tests/unit/weekly-source-entrypoint-reachability.test.cjs"
+      ],
+      "exit_code": 0,
+      "tests": 236,
+      "pass": 236,
+      "fail": 0,
+      "skipped": 0,
+      "output_sha256": "745cbafd35efefc4fdd8c7c619ab609a34a49c0ee6696131d5157b39f871f9b0",
+      "source_only": true
+    },
+    {
+      "name": "healthrosterAndSource",
+      "files": [
+        "tests/unit/healthroster-automatic-credit-presentation.test.cjs",
+        "tests/unit/healthroster-rule-settings.test.cjs",
+        "tests/unit/healthroster-train0.test.cjs",
+        "tests/unit/weekly-source-candidate-office-surface.test.cjs",
+        "tests/unit/weekly-source-combined-finalise.test.cjs",
+        "tests/unit/weekly-source-combined-review.test.cjs",
+        "tests/unit/weekly-source-entrypoint-reachability.test.cjs",
+        "tests/unit/weekly-source-finalise-batch.test.cjs",
+        "tests/unit/weekly-source-finance-authority.test.cjs",
+        "tests/unit/weekly-source-import-workspace.test.cjs",
+        "tests/unit/weekly-source-invoice-batch-integration.test.cjs",
+        "tests/unit/weekly-source-lifecycle-v1.test.cjs",
+        "tests/unit/weekly-source-office-integration.test.cjs",
+        "tests/unit/weekly-source-office-notifications.test.cjs",
+        "tests/unit/weekly-source-presentation-v1.test.cjs",
+        "tests/unit/weekly-source-protected-resume-asset-cache.test.cjs",
+        "tests/unit/weekly-source-protected-shift-editor.test.cjs",
+        "tests/unit/weekly-source-settings.test.cjs",
+        "tests/unit/weekly-source-workspace-actions.test.cjs"
+      ],
+      "exit_code": 0,
+      "tests": 244,
+      "pass": 244,
+      "fail": 0,
+      "skipped": 0,
+      "output_sha256": "5d4a8b7829f31e4af6abe692ba5d3716037c209654b0c66e79ee611254904bda",
+      "source_only": true
+    },
+    {
+      "name": "permissionDiscoveryRace",
+      "files": [
+        "tests/unit/healthroster-permission-refresh-race.test.cjs"
+      ],
+      "exit_code": 0,
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "skipped": 0,
+      "output_sha256": "5d878b6a7c806a9f2694637daffb5569a139a0eaab63db06f3dece2b1765bff0",
+      "source_only": true
+    }
+  ],
+  "common_incoming_runtime_objects_lf_source_equal": 80,
+  "common_source_pins": [
+    {
+      "path": "css/banking-pay-modal-v2.css",
+      "incoming_git_sha256": "c39b90ffc2d9984684b824bd00a44107fecc169a439c1ce2fdb322563d6696ee",
+      "saved_raw_sha256": "e7c876da632025fee48cfc07ab7b2044143f85d2c134852ae88b87577ae70d85",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "incoming_git_sha256": "c82de088fe183daaeb6ad464b49a7fec4c100d8c0d081d828a0af0ea8634bc0a",
+      "saved_raw_sha256": "f31d7a22cb887c51465f0d767f8286c89d00f78cc614f5b3fe92ac4f80f927f2",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/candidate-office-v1.css",
+      "incoming_git_sha256": "cfa19f68520a496b58761ba2fdcf78a264de11aa78993dad10ca2c72963f41c8",
+      "saved_raw_sha256": "3c6496c94a2667552b76ccc4539702f72d0f62aa148fc7edbd5506cf6459fc4b",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/import-review-v1.css",
+      "incoming_git_sha256": "ebe436512290408457b7824b5858caaf5cda4263a0ef5b664396387de2f27304",
+      "saved_raw_sha256": "7ff254a1af5fbb40d94f3c022066392fc9166c46ee0108eba67854ff22d4af59",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/invoice-batch-modal.css",
+      "incoming_git_sha256": "52adde7a819244ef2b6e369cb5eba16f725c44fc0edb3fa7d80828d47730d5f5",
+      "saved_raw_sha256": "531289a33e680e3bba3799b51721e5cb8e2f853f587f1c9f2bc0df73e7e1989c",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/manager-authorisers.css",
+      "incoming_git_sha256": "67c5918e8619fe88e7d6ed334392188c874676c66a031045610b36730aff1cef",
+      "saved_raw_sha256": "9b8da32d3654f3457c7cb443b24bdb68f9101dd87d3238fb24eaeda815436b71",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/modal-modernisation.css",
+      "incoming_git_sha256": "c22c85d63aa561832cb822a4c816b82837d5b1b24a775f3681bc13bdc33ce698",
+      "saved_raw_sha256": "1c8b40a11ca90d40ab760f85f667573ead4dab6801f54089d437a003fa497389",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/record-modal-layout.css",
+      "incoming_git_sha256": "4726d41bc35d9a34ac0e4314615fae5e88cf7693f66e2c8b1453787fc43fcff6",
+      "saved_raw_sha256": "40d46ad9f4e2b2a5afaf1ab4c739e2fdcd48ae3afece55861f2652ff8c0ede89",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/summary-modernisation.css",
+      "incoming_git_sha256": "5f6682a43254b0a4df46a2b3a18c4c05ec9c157314b9f0cdaed85d2d8cbd353e",
+      "saved_raw_sha256": "263ca2842777d3aa5abf7419c61c2a93cb0b5735628091f2dcb77a1c992db6dd",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/timesheet-nhsp-lines.css",
+      "incoming_git_sha256": "c65fe08be0db2c5ff6a8b1aa4d313c842fd6c2c11028dae4909a815a7749db1c",
+      "saved_raw_sha256": "1d81e78117f7ce57b466487f8ccd1888310a75b7054d60e13abf697c88a3dac0",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "css/weekly-source-presentation-v1.css",
+      "incoming_git_sha256": "e3c9995c36b064f40e0a89d0b23ac1ccf8ff03d0eb4b2396349e0ff26a31c9cc",
+      "saved_raw_sha256": "0cda5dde5e515e679ee8ae4f8d87a3d0b76f4ee1547732bbe172e5430b31bc99",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/auth-broker.js",
+      "incoming_git_sha256": "15c6ba575020c4b60e936f1d5554ace279d1bfd6031d532b5bd004905b4c3c7d",
+      "saved_raw_sha256": "d76019b8dd57d1e0c52cee372e69f6294e2c9bd1728f640941021b11a7c49aa2",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-candidate.js",
+      "incoming_git_sha256": "32e7404e84a61dea9fa0d2d17e370a301285f7c48e9ce9d7550416411efc8924",
+      "saved_raw_sha256": "fdb6c71179ca96a9f2fe242497508acb6683a9e13afd1c22b6db9e97de9541ee",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-copy.js",
+      "incoming_git_sha256": "3ced6b10ac39ed7577e4c57521ef377a1fcf4f0a5784565d86b456ad74f938c1",
+      "saved_raw_sha256": "a12633c8376ef5653c41a151681c58cbc1b61f48347380535bc1d12a5aa91d7f",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-details-legacy.js",
+      "incoming_git_sha256": "85c3f6f2d8998e13b931231571c711d31111c8398ac457fc17a19ff7eed51cad",
+      "saved_raw_sha256": "ed29120a1c5f31cf851f66dbce1dccd9a85a2b4476a7244c8354bc2f6aadb3f1",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-draft-review.js",
+      "incoming_git_sha256": "38042edba70e1bcba4cfd5d3b6c7860f269e07044cc721e4d594391459150602",
+      "saved_raw_sha256": "4343f4ca3054fe7169d2b46cd9d38c2fac19d9994892a3086af49883e221fc18",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-integration.js",
+      "incoming_git_sha256": "2c08418f9cdc977049b9f25f9e5d10a54d26977c3e05d85cd89cfd2ad54997ae",
+      "saved_raw_sha256": "02edabc89b203086b371523b4a0728fb779a1f8b0852ce0d8d1c37fc210b67a8",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-issue-detail.js",
+      "incoming_git_sha256": "d181a398145034621439a929c9e5cace51299c5c843f5d1fa8f883cade891d69",
+      "saved_raw_sha256": "eaad09275cd5fbeff73c50d029f9433f9951870803557d1e6626d9ae3827e484",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-issues.js",
+      "incoming_git_sha256": "5dea1e092e51172811f9ece51a7ed999608993859608e2857666a966b26d9732",
+      "saved_raw_sha256": "52189240c764d4e9afc927261f0dc9e307421d9c9c83480884832469b6cc9b54",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-mutation.js",
+      "incoming_git_sha256": "fc13120bec176260cd332d8782670b3d3d4736b14799371223165bd9f306361d",
+      "saved_raw_sha256": "2996b162b58f6abdb565af655563f6809b4fd06983219426adf35b26d95c53e5",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-settlement.js",
+      "incoming_git_sha256": "36d63e819a1b35f63992b9799139d54f274d6c84104ebfbb781542a6fa1efc77",
+      "saved_raw_sha256": "d102cb56a6a57deab81b22dd18df3664ed7ca58cbcd349aa75300358a24c2928",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2-table.js",
+      "incoming_git_sha256": "49a053b62669c0f41796fdd15dff55d7d82b423f10f003732d36b2e97ddbcadd",
+      "saved_raw_sha256": "b2544fafa56e113a8e1e9871ee8c64f3079b27464d429af8e3946dc4d9751ed2",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/banking-pay-modal-v2.js",
+      "incoming_git_sha256": "edf8797582f7b8322687fe424475ac942b019fe13b41a1713fcac407fd0e6725",
+      "saved_raw_sha256": "f29c23c94d85558e55e1aa6b4fb57ccb658b3302205a336adff23c7fc08cc707",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-audit-contract.js",
+      "incoming_git_sha256": "2b0dc4c5cdef2e9d4f906e0e3db30e0e765a456a8f6942fa78581fee06d80ea2",
+      "saved_raw_sha256": "6ae34d5d4a40601ae4cbed75d82dd029d7a88d99cce50ac8547d2a90277d9a6c",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-audit.js",
+      "incoming_git_sha256": "15d133f75e6e2d2c14eb6253cf0c4436e0821db98f6bfe28f7f42cf278c4adf5",
+      "saved_raw_sha256": "fda801bc39382ab1067f4387f66c808ce75d7ee123954a641eee3655918bc6b8",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-channel.js",
+      "incoming_git_sha256": "11fceb766ffee934464728a031684bd6bbf3feade7dc9c23b442bbd9e8f8dc8b",
+      "saved_raw_sha256": "9b33a34ce57d6e93f8a19c220e8e69135eb1b17097ddca256e616942c55041b7",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-list.js",
+      "incoming_git_sha256": "49e8a219e79a9e8f72851065ce3cc31cd768e0a38a79093a2711bfa38931d8aa",
+      "saved_raw_sha256": "0c4023cf6789129630d21d271ceefe6e6124d83adf5a89d5225f2f1a10abd9d6",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-pause.js",
+      "incoming_git_sha256": "194471fc32e43fdb63cf97c0cbe7bced7643fe8b0573e1767f2a748af24e1be0",
+      "saved_raw_sha256": "603106d09d72c47719037ccc77815eba9d4d6ea75a45bba66d60e4209dff143f",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-preview.js",
+      "incoming_git_sha256": "90a38c4cb3c204248f3fe974934e94ed4d8a3a485a1742aa7341e3c1ce3956d1",
+      "saved_raw_sha256": "e491854f52a305196e6f6baedfdb68af371b7933751c9f07c5327f37da4c68ee",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-case-restructure.js",
+      "incoming_git_sha256": "dd84bd9fbffe4dae93e0c77a6832741e1e154ae2f8ce48a9262f83484069e559",
+      "saved_raw_sha256": "4c149abea14fad7fa5c9be4433f75a093a0ad2d1f97350ccfa59114a1ba5325e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-clear-choice.js",
+      "incoming_git_sha256": "4f36e14377ae1a4f20b39539795f498610f75818be1dca604ae4e6c149c3d9e8",
+      "saved_raw_sha256": "e66f3cd68e4156681618f6ec25cbc0f7d58bbe433c9136a3065e143d455d331e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-component-choice.js",
+      "incoming_git_sha256": "0d889317f7523057998808368f057bd909aec5b2fffeefad0971579ee8a01aa7",
+      "saved_raw_sha256": "3ccd11582df003e1bbd69963071c23668e5ebcad0c757bdaa240c9884005cf84",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-dates.js",
+      "incoming_git_sha256": "ef24ad39457a771aa67e7c4f64a90807a8e2991349397566d05c9f985191a9c1",
+      "saved_raw_sha256": "f259b422b8824f9a3de7d6ae0221ad707e196f33f3ac7d9a970c27642dff288f",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-decisions-clear.js",
+      "incoming_git_sha256": "c6caad5fd7e16cd744995179c2d073eb4e1bfe75db5fe1d577725d85cc15cd51",
+      "saved_raw_sha256": "c2bca6cd3f321aabb52c658afc608d95ca8ba8a6d96f7aa0c97e570cd4964a27",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-manual-credit.js",
+      "incoming_git_sha256": "6052f37ca9a51bf9f02c7e2b48a8f4e011b896a14c2fd5ac3b4c7f968cb82b47",
+      "saved_raw_sha256": "d059530877f4ec035aa93c1080e872631e318989cf1e03ca270415ffa28fccbd",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-manual-debt.js",
+      "incoming_git_sha256": "c3339f85d05de78c2c738e30cfc6f3c933293a8b105fc3500fce83a3dafcd3c9",
+      "saved_raw_sha256": "e28d3a98d13a553ae7d1d4f5df55b499b51aa3a78497ff6684bebad2dbf9e2c7",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-office.js",
+      "incoming_git_sha256": "7c7398e2dccbfb990b663e10722015b5d6802867909da8b75d11be9901bba9bd",
+      "saved_raw_sha256": "bec62b70585d4994cd1531769aff7cf2b83f9ba4889a63bc6fe6b805a9e8b72a",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-owner.js",
+      "incoming_git_sha256": "4947d2e61cd4fa734cbaa99b05c415bad8552865d286233123cc48f34e1ca922",
+      "saved_raw_sha256": "1da82d52bc3ea7e63279be83785d0c05c3775d2be69fc633a4930561d9dac83e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-pay-channel.js",
+      "incoming_git_sha256": "b79069d12e902faf6331859f47146847a77f2fb65b5570d67f087cad76af30df",
+      "saved_raw_sha256": "d19688a18c9d65f888c01c5d45d0ea79db9364f7bac773a1b5ecc103a5cf4013",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-pay-method-change.js",
+      "incoming_git_sha256": "4bf56a3f87aa85d5c9ac762923dbb20639549fce49a202d4afd9a38ee9fbba99",
+      "saved_raw_sha256": "75c4c5df6c89a49d9a0a41f7f30142ce9d4695deaf13fc6950da171229236588",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-paye-net-contract.js",
+      "incoming_git_sha256": "781254a0636bed5c3705b761d90051fd7616508a87766d01e5d5b4b19cbcdb03",
+      "saved_raw_sha256": "2dc27716a10a47bc69738ef5440b1eb40382a2692320985a9bb7fafa97885547",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-payment-advance.js",
+      "incoming_git_sha256": "6e03c93ed8a39ab35d121b1f46e980150a918bc7a3e39b6615ff1e50a693c570",
+      "saved_raw_sha256": "16e7073e917bf167db9f439551c660f72045f13e6f1e537059683c50dab25e44",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-payment-history.js",
+      "incoming_git_sha256": "467a78cd820f61cb0ee0e461f02f78d6c06f468024e7121f629770351f074d4e",
+      "saved_raw_sha256": "fcd0bfaff96311e91b5bd0dba95c51aff3d0826a44f0ed1a8ae9ad7e14131265",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-rates.js",
+      "incoming_git_sha256": "5de0bf8d8af1f9e4e76c30e80e69c5a71d6e6d77a979d647f34bb9a8505b9e53",
+      "saved_raw_sha256": "9d2b55ba802985981eff1735b438f28125f3cab5175d4bdfb58950944f8fc54e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-resolution-adoption.js",
+      "incoming_git_sha256": "992c116865783c1fe63fb1ac83b40a785c2c035971afd2551522690b1ac639a0",
+      "saved_raw_sha256": "69f9dc20325f3c13ea34d82132140b03b796d530d6c282343aecafd78491b701",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-resolution.js",
+      "incoming_git_sha256": "4a77056945af568bef19b1ebf05a520b39edcc6e3dfc843c06f78ec86cc43143",
+      "saved_raw_sha256": "c9eba6898914d597024732cf2bab823c1713f0204289ab90a5d89f564c3943cd",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-snooze-actions.js",
+      "incoming_git_sha256": "2e66b0d1d959ebe4018eab02283509ecb7e7e4b0c0f087522f7c0cb89f195aa4",
+      "saved_raw_sha256": "39e5f2d3ceafd0d7e039225b0a40e33b28f86f32a9c52290ec8eb551a6730a87",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-snooze-window.js",
+      "incoming_git_sha256": "b94b7eef5bba4712c5078bc2c5242931d1716ff9122e6f28f2fd39921bbc3751",
+      "saved_raw_sha256": "1fc2f2428d483ced5d557b67f3d05a481ab91cba45d54f06d9e15015cc86821e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-ui.js",
+      "incoming_git_sha256": "78e06aa4a025a1be0bd71b0f0c06af5ba162b719e1433db9c15b1d11ee936a4e",
+      "saved_raw_sha256": "09eb74c11175b1aeba542506c3d2040a8f757ada23d993d1a39f9e814aae9400",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-workbench.js",
+      "incoming_git_sha256": "28e96c48892190c0dfd3897b474dcc837a5b714595538d6ef41e60143c856be7",
+      "saved_raw_sha256": "dc5b482729c71ee09b3041c75f38dbd473220790730c23726926da07749df666",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bpay-next-write-off.js",
+      "incoming_git_sha256": "38fbbea83062503849f0d86f2791627deaa6af41a842f48c8bc4c0cccd04af30",
+      "saved_raw_sha256": "1f2fb0c66a8459a23c30dccfeb4791d71c982e4eeebb0b6b31ddb4f5ac2ce9cb",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bulk-authorise-evidence-controller.js",
+      "incoming_git_sha256": "b8e7802c8001c1c18d49e4b290972cf3a6d30c4a46d6fddac603ef9a033bf820",
+      "saved_raw_sha256": "b39f5cbd6be602577f38b2b9c68f26e1aea25afe1fd4d4d42529e2b1dc6a65a4",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bulk-authorise-lifecycle-v2.js",
+      "incoming_git_sha256": "eb07760a11097159ae0f6a7ee393fad5fb44033df6a3ea02b1e9f053f3c7b80c",
+      "saved_raw_sha256": "cccef0842ed3234059bdb2cf63e64ceae0b28f1118a3aed969e282d149d2dce8",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/bulk-row-freshness-v1.js",
+      "incoming_git_sha256": "5d9d9aadcd825b45238928e859a572c71720713c4284e4356a2d6fa640297340",
+      "saved_raw_sha256": "62476e8b965771af59b02c458e43eda2084fa84d95436f8882b5149e14802958",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-api-v1.js",
+      "incoming_git_sha256": "ff9be823e174fb8a00da96d60f975dbba586593d8eba4c71bf922b9473785fc2",
+      "saved_raw_sha256": "bb1ae7966a5ebf6e5e719662e874dd2368d84420d92b3ac3c428362b57a8f21e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-bootstrap-v1.js",
+      "incoming_git_sha256": "8db1412e32d86169118e8e83f0ca933afe7049d542597e7dab523b9ea42de92c",
+      "saved_raw_sha256": "1104ba8af601378b196e9dcd54ea61996e2cb18e6343abe483a45437fcb683ee",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-bridge-v1.js",
+      "incoming_git_sha256": "33a5ffac5380ba0380209a2bbe5e406b9aee5ef0ec317b4def8ca2d7553ab292",
+      "saved_raw_sha256": "73520a0019d0c00cbb4920cc4a8ca9bd57802d3b37fc234a47a54151349a451b",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-contract-v1.js",
+      "incoming_git_sha256": "849886bbcde6d441a7d134ed8b60740bf1b93fe9859b2a107521a787bacbebb5",
+      "saved_raw_sha256": "40bf06d46c21dc2a05eba4fd783abfdc5e99ace1299fabf4e01bd13d68ee4981",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-controller-v1.js",
+      "incoming_git_sha256": "a2eade39fde059e5988d3f68151d76878f87456bc5c872cf40f1280f4a724b86",
+      "saved_raw_sha256": "189aef8b0b2da7994d601d28a14eae509a4c7d4e7f924fa21d23a97c4bc847a3",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-modal-v1.js",
+      "incoming_git_sha256": "9f9aa1f2260cd31b95372e61e592af1716ca0f66727d23eb4a9355722c7beee8",
+      "saved_raw_sha256": "2d9027039cbd9a7a3ffe4ea96353ef5045750f10889ab85a209dc03b7c711ed9",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-presenter-v1.js",
+      "incoming_git_sha256": "9f329a8126b2765d649f8059094156bf6754218a5684b74fb720ab240e599377",
+      "saved_raw_sha256": "c10bc87abcf07339bf55282068a2c42e22f83cd9eed17fc2fa71ac399ddf57c8",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-reminder-workspace-v1.js",
+      "incoming_git_sha256": "e760c0ee21edffd4d493039ad90976701fcff0bfe3c049f3c570c9f4a9e59d35",
+      "saved_raw_sha256": "0558c77292574d31e83b9a71cc3a7e25ed00338fe4d5afc70b73865b86c1588e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-surface-v1.js",
+      "incoming_git_sha256": "9e3d71cbeec394026576d47353a93411ac2f04a67b7a65a0cc7b6c24e7492327",
+      "saved_raw_sha256": "d4b0ad4f7140d0c0b3fd0f6d79f06b2543455d02a0c47a67e3c455ea420c3f25",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-office-ui-policy-v1.js",
+      "incoming_git_sha256": "945d1d11823c042043af634421a1c27996f7c6a54d8d98d4a9aa2ea307c00c2d",
+      "saved_raw_sha256": "471f0a0a040fae4718bcc59845823fbfb4cf60211eef4dc8581d3ac5ea9c867c",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/candidate-route-warning-v1.js",
+      "incoming_git_sha256": "ebb87cffa13fc3bd62e5ed6f3a798c4330b5e0e29caddea7467d0db355fc1331",
+      "saved_raw_sha256": "d1b6a44dd6522ed46302f7d062d07a18349f172bafe5d2dc41940bd56b669778",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/import-review-v1.js",
+      "incoming_git_sha256": "ee5a48574f2bce4d23293f092cc3027f83778b9a67d0683e5986de1a394ce57b",
+      "saved_raw_sha256": "684a1e38eacb3d7a745b1687ac6411ef06096a09611a0e67cc6a318192212593",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/invoice-async-ui.js",
+      "incoming_git_sha256": "643d9f86c35ffac9da2d3cefaf447f2f600a20bb7874fce8e201da50e00f3295",
+      "saved_raw_sha256": "5d6e9957e13ec62346fa89a981096a841a46dd9010fcb31dae3de5d67e5e27f6",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/invoice-diagnostic-catalog.js",
+      "incoming_git_sha256": "a7a8041f1f5a77b91a7c6ffd3aa43295ac3b308c7aa96a525b602dd4b5cec71c",
+      "saved_raw_sha256": "969be47d97b88ead5b1c77821b7d86a8242bb48af882ad0cb9806a41efc9ad6f",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/manager-authorisers.js",
+      "incoming_git_sha256": "ed3dafdb893a440eadb409e3b44bc783b0c8b7733cca9154023c4ffe6f8615c3",
+      "saved_raw_sha256": "ba4161223fd67163a7b3164499718b408eb3c7f59df7667fd33929643ba09b09",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/modal-modernisation.js",
+      "incoming_git_sha256": "55bf0a38aa91c6a451bd6a0a33f1c2440caa8256806e25f9de7e57657504c90e",
+      "saved_raw_sha256": "027d011bbb4889e9bacc37702d3cda2642b0acef24e4c22d157b2906dff40459",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/mytms-office-v1.js",
+      "incoming_git_sha256": "dd600bca1f94194974927090627adeda6c0b1c17e2cc0b692b7870df3521ff4e",
+      "saved_raw_sha256": "cff7c52e994510dd5c6aed7366c29b0172acb1dbb68420fae02af6b776f14867",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/record-modal-layout.js",
+      "incoming_git_sha256": "0475bd6bd7e5ef7652c9dc7d3bc20cff2d258b1a7b35ef847dd9b4e31c4ee9d2",
+      "saved_raw_sha256": "c9901cdefdb18f6de6206373c252de3b60e5f1473d31ba73ba2850124fffe54c",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/summary-continuous-grid-v1.js",
+      "incoming_git_sha256": "3190f7c6bd1cef05de323fc6eb3e664255a1bdbdd2be18c619336f42f79d94be",
+      "saved_raw_sha256": "3fce106dd431dc3671b433c2d83250b13f5d4b94aead963d8594546b83bfb0af",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/summary-modernisation.js",
+      "incoming_git_sha256": "a591b8485596fa47e54edad3143d76b23382589ae122d8f71f75d89044e0b3f3",
+      "saved_raw_sha256": "5a6ba92a21c78117f9dc845cc757b499a0c1fd940b3ff4866ced8ded9aac69db",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/weekly-source-presentation-v1.js",
+      "incoming_git_sha256": "f7f4064cab82d47b91bec7fe32be6c81f3ae949917d6ca6a910570aa31fabbfa",
+      "saved_raw_sha256": "df01d69e1f55f20a28c29bf7a1698cbbd9a7041525bf31f5ae9e7039d306d7b6",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/weekly-source/combined-finalise.js",
+      "incoming_git_sha256": "106cdb4b8ba5c852d76e42f305f36c442c1ccba6eaa8950522c53f1883ccf838",
+      "saved_raw_sha256": "255c287d19cac8a2a267c56d5fab285c31b738b82dce613c4d72c51e0fe977a7",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/weekly-source/finalise-batch.js",
+      "incoming_git_sha256": "278da964135dbe5f137f1dfacca277cdc0be27b88be53d59b5349ea25df1ef81",
+      "saved_raw_sha256": "eae08f9064f1792ab44125e4c9bae863677c57bba4646955e05c6e7b803268db",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/weekly-source/office-notifications.js",
+      "incoming_git_sha256": "368067553053597c45189bf82c7326d9047e5c7034e146f90b126a8225739a7d",
+      "saved_raw_sha256": "9a2e0979e9604f9c1412e42c79af3451ab8395aae8b774e19f15ff7cebdd6bdf",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/weekly-source/protected-shift-editor.js",
+      "incoming_git_sha256": "6ec9e690880c2c59ebfd3b5586a2725da52c0c7ed65fa0bbf8a75480a8177e03",
+      "saved_raw_sha256": "b19c1f6063a1ef90f3b6b51a0e49dd9a9d5cbfa23fa02addd5f9e3ec87cbb26e",
+      "raw_equal": false,
+      "lf_source_equal": true
+    },
+    {
+      "path": "js/weekly-source/workspace-actions.js",
+      "incoming_git_sha256": "66345020ef21fdb2b71db996b8d9fbff100f1bbc9d4694dc2659b60cab5b416a",
+      "saved_raw_sha256": "04d2614210a6d32a0c8ed42b21fab9dc384b3958e053fbec28e704f33c81f267",
+      "raw_equal": false,
+      "lf_source_equal": true
+    }
+  ],
+  "line_ending_only_differences": 80,
+  "comparison_normalizer": "CRLF_TO_LF_ONLY; exact raw hashes retained separately",
+  "common_runtime_source_mismatches": [],
+  "unchanged_incoming_asset_urls_preserved": true,
+  "cache_markers": [
+    {
+      "path": "css/weekly-source.css",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/invoice-batch-modal.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/main.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/agency-invoice-credit-ui.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/combined-review.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/import-workspace.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/rule-set-validation.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/rule-settings.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/settings.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    },
+    {
+      "path": "js/weekly-source/source-invoice-adjustments.js",
+      "url_count": 1,
+      "healthroster_marker": true
+    }
+  ],
+  "current_main_changed_hunks": [
+    "@@ -306457 +306457,6 @@ function invoiceModalComputePreviewTotals(modalCtx) {",
+    "@@ -306785 +306790,3 @@ async function invoiceModalSaveEdits(modalCtx, { rerender, reload }) {",
+    "@@ -309156 +309163,9 @@ async function openInvoiceAddAdjustmentModal(modalCtx, { rerender }) {",
+    "@@ -311530,0 +311546,4 @@ const hasRefEdits = (() => {",
+    "@@ -311731,0 +311751,2 @@ function renderInvoiceLinesTable(modalCtx, invoiceData, items) {",
+    "@@ -333452,0 +333474 @@ let _pushedRight = false;"
+  ],
+  "initial_P2": {
+    "file": "js/weekly-source/import-workspace.js",
+    "old_permission_fallback_adopted_after_newer_refresh": true,
+    "unit_only_reproduction": "permission-fallback-reproduction.cjs",
+    "status": "APPLIED_SOURCE_CORRECTION_BY_ROOT",
+    "correction": "Capture sequence/openGeneration/openCurrent and recheck after normal and permission-discovery success/error before adoption.",
+    "independent_current_race_tests": 3
+  },
+  "baseline_bank_fixture_failures": "Parent recorded33 reproduced incoming; not rerun or claimed closed in this narrow review.",
+  "backend_test_binding": "Read only explicit tests/unit/backend-source-binding.cjs; no Banking worktree read and no actual backend test transport invoked.",
+  "no_office_source_mutation": true,
+  "no_database_or_browser_or_native_or_phone_or_publication": true,
+  "not_final_part_b": true
+}
