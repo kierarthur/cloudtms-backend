@@ -36,6 +36,8 @@ emit('final-operational-evidence.mjs',js,[
  {before:" const body={schema_version:operationalSchema,phase:",after:" assertActivationWindowBinding(activationScope,context,nativeContext,setupClosure);\n const body={activation_scope:activationScope,receipt_input_commit:sourceProof.installation_source_commit,schema_version:operationalSchema,phase:"},
  {before:" const bundle=loadCommittedBundle(root,release,context,'weeklySourceProtectedOperational');if(bundle===null)return [];",
   after:" if(!/^[0-9a-f]{40}$/.test(context.receiptInputCommit))fail('OPERATIONAL_RECEIPT_INPUT_COMMIT_INVALID');\n const bundle=loadCommittedBundle(root,release,{...context,gitCommit:context.receiptInputCommit},'weeklySourceProtectedOperational');if(bundle===null)return [];"},
+ {before:" exact(bundle,['schema_version','qualifications'],'OPERATIONAL_BUNDLE_INVALID');",
+  after:" exact(bundle,['schema_version','qualifications',...['report_fin_qualifications','report_fin_native_inputs','report_fin_native_artifacts']\n  .filter(key=>Object.hasOwn(bundle,key))],'OPERATIONAL_BUNDLE_INVALID');"},
  {before:"exact(row,['native_context','native_gate_inputs','remote_gate_inputs','setup_closure'],'OPERATIONAL_BUNDLE_SCOPE_INVALID');",
   after:"exact(row,['native_context','native_gate_inputs','remote_gate_inputs','setup_closure','activation_scope'],'OPERATIONAL_BUNDLE_SCOPE_INVALID');"},
  {before:'const source=proveCommittedSources(root,row.native_context.git_commit,context.gitCommit);',

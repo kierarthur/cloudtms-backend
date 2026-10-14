@@ -139,7 +139,7 @@ const casAfter=`      v_auth:=private.weekly_source_rule_qualification_context_v
     end;`;
 save('08_cas_admission_owner.sqlinc',casAdmission,replaceOnce(replaceOnce(casAdmission,casDeclBefore,casDeclAfter),casBefore,casAfter),
  [{before:casDeclBefore,after:casDeclAfter},{before:casBefore,after:casAfter}]);
-fs.writeFileSync(path.join(out,'OWNER_SOURCE_REVERSE_PROOFS.json'),JSON.stringify({source_only:true,root_pin:'ab26a5ff22200be037d215b1100c969d6c0bae73',
+fs.writeFileSync(path.join(out,'OWNER_SOURCE_REVERSE_PROOFS.json'),JSON.stringify({source_only:true,root_pin:'2151af656561ad4d68e61e242769ed80a631fcc9',
  original_operational_reader:{input_sha256:sha(Buffer.from(effective)),renamed_copy_sha256:sha(Buffer.from(operational)),query_bytes_unchanged:true},edits,
  no_original_policy_hash_or_pay_nochange_change:true,no_installed_execution:true},null,2)+'\n');
 console.log(JSON.stringify({source_only:true,complete_owner_artifacts:8,entire_source_reverse_proofs:edits.length}));

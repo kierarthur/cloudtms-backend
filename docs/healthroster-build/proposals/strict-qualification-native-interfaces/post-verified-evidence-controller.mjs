@@ -22,7 +22,7 @@ const selection=Object.freeze({
 const bundleKeys=Object.freeze({
  weeklySourceProtectedTestSetup:['schema_version','authorizations','controls'],
  weeklySourceProtectedPrerequisites:['schema_version','qualifications','partial_native_evidence','activation_probe_authorizations'],
- weeklySourceProtectedOperational:['schema_version','qualifications','report_fin_qualifications','report_fin_native_inputs']
+ weeklySourceProtectedOperational:['schema_version','qualifications','report_fin_qualifications','report_fin_native_inputs','report_fin_native_artifacts']
 });
 const bundleSchemas=Object.freeze({weeklySourceProtectedTestSetup:'WEEKLY_SOURCE_PROTECTED_TEST_SETUP_INPUT_BUNDLE_V1',
  weeklySourceProtectedPrerequisites:'WEEKLY_SOURCE_PROTECTED_PREREQUISITE_INPUT_BUNDLE_V1',

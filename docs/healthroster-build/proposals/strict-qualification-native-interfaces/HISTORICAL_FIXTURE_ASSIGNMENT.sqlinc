@@ -53,7 +53,11 @@ begin
     or cardinality(clients)<>(select count(distinct value) from unnest(clients) value)
     or c.current_complete_upload_id is not null or c.current_projection_publication_id is not null or c.current_final_revision_id is not null
     or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
-    or exists(select 1 from public.weekly_source_uploads u join public.weekly_source_cycles cycle on cycle.id=u.source_cycle_id where cycle.source_group_id=g.id)
+    or exists(select 1 from public.weekly_source_uploads u join public.weekly_source_cycles cycle on cycle.id=u.source_cycle_id
+      where cycle.source_group_id=g.id or (cycle.finalisation_week_ending=week and (cycle.scope_client_id=any(clients)
+        or u.file_metadata_json->>'client_id' in(select value::text from unnest(clients) value)
+        or exists(select 1 from public.weekly_source_group_clients member where member.source_group_id=cycle.source_group_id
+          and member.client_id=any(clients) and week between member.valid_from and coalesce(member.valid_to,'infinity'::date)))))
     or exists(select 1 from public.weekly_source_final_revisions f join public.weekly_source_cycles cycle on cycle.id=f.source_cycle_id where cycle.source_group_id=g.id)
     or exists(select 1 from public.weekly_source_report_scopes scope where scope.source_group_id=g.id)
     or exists(select 1 from public.weekly_source_self_bill_reports report where report.source_group_id=g.id)

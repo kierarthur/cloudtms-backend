@@ -9,8 +9,8 @@
   "inputs": [
     {
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "bytes": 18581,
-      "sha256": "a679e28f915a5769381abde637d5b06a015dade2aeb13811b1a292a7fe90b277"
+      "bytes": 19024,
+      "sha256": "10185537a09716c9a302fc689c984af2a98a9a1ead2fa982b0e5e994633ae02e"
     },
     {
       "file": "OFF_RULE_COMMAND.sqlinc",
@@ -63,6 +63,26 @@
       "sha256": "9ba9d59f3168492d53cf38c003e5a7cca117aa627edcbfe211061a0d628e8c2f"
     },
     {
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "bytes": 15114,
+      "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202"
+    },
+    {
+      "file": "HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "bytes": 7932,
+      "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28"
+    },
+    {
+      "file": "11_complete_historical_fixture_native_assignment.sqlinc",
+      "bytes": 7213,
+      "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac"
+    },
+    {
+      "file": "12_complete_report_nullable_rounding_owner.sqlinc",
+      "bytes": 11611,
+      "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312"
+    },
+    {
       "file": "ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
       "bytes": 18557,
       "sha256": "9a4698490f95584ed2e94ea58e1a6a9312c52b3a55f3109f067e9e3be3ba88b9"
@@ -79,18 +99,38 @@
     },
     {
       "file": "POST_VERIFIED_SETUP_ASSERT.sqlinc",
-      "bytes": 6889,
-      "sha256": "fd5440cc836513e7c09c83f5a79a02fc81a43a1bf12b35ecd25952069cd14bf4"
+      "bytes": 7474,
+      "sha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0"
+    },
+    {
+      "file": "POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "bytes": 7129,
+      "sha256": "81fbe2c9cd141d10a909072f140a734e8a759a39ce5102691b57ed25fd40982d"
+    },
+    {
+      "file": "SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "bytes": 5863,
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+    },
+    {
+      "file": "NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "bytes": 8838,
+      "sha256": "c0c7b32a56ad4974759932c38214691888d3bd4a8d5400838ceb24943cde110d"
     },
     {
       "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
-      "bytes": 12746,
-      "sha256": "dbcc3bd1fd7e304ea154bb4a84fdcb2e916aaf9fbb351d4d6081f4451e523880"
+      "bytes": 13750,
+      "sha256": "9f8e8a6448ead46d3d35e539938a6d1b36996d3a39ce8688645d4db806e12238"
     },
     {
       "file": "REPORT_FIXTURE_REFERENCE.sqlinc",
       "bytes": 7539,
       "sha256": "697d3ca1fe0d9af1588d9e71c0b25c69b2dc48effd86e01dccc05aec65e28031"
+    },
+    {
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "bytes": 18455,
+      "sha256": "3d33792023c4dc6a8a9aeb24ae00f844d704ca6611383a3081fd36207d03b288"
     },
     {
       "file": "07_automatic_capability_admission.sqlinc",
@@ -109,16 +149,17 @@
     }
   ],
   "composition_note": "Root 275 is a prepared literal closure, not a claim these uninstalled dependencies are physically present. Compose all root-listed original CAP/Q/strict/A0/creator inputs before this successor. Report validator/strategy additions are separately owned and not included here.",
-  "distinct_private_signatures": 294,
+  "distinct_private_signatures": 300,
   "preserved_all_275": true,
   "additions": [
     {
       "signature": "private.weekly_source_rule_qualification_authorization_v1(uuid,uuid,text)",
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "definition_sha256": "49f51270b4c804836eebbcf5991b2dac14fbaff75b867c7fff5a8a283ddade6f",
+      "definition_sha256": "779bd0e39e9f66056a8f1d5e17428f18dcafbbb6378df1603b9bb91f34427288",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
+        "private.weekly_source_off_rule_setup_shape_assert_v1",
         "private.weekly_source_protected_qualification_release_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_query_require_service_v1",
@@ -128,7 +169,7 @@
     {
       "signature": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "definition_sha256": "8d734b6849dd066398a3a18412f1faae3b37955c983574151ef2f6484e8d25fa",
+      "definition_sha256": "15ec2a6956fe326eb5b7cbe724c6a54267d19eda6b5bb598cd99c4e79cbe3178",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
@@ -138,6 +179,7 @@
         "private.weekly_source_automatic_reconcile_producer_ready_v1",
         "private.weekly_source_bulk_producer_ready_v1",
         "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_historical_fixture_setup_assert_v1",
         "private.weekly_source_office_authority_v1",
         "private.weekly_source_pay_actor_allowed_v1",
         "private.weekly_source_qualification_closed_object_v1",
@@ -255,6 +297,61 @@
       ]
     },
     {
+      "signature": "private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)",
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "definition_sha256": "accc6ca74d79a68598e22ebb6c677f45d0dc942b07d5dd64e6e2ea9f453d0ede",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private._weekly_source_rule_group_context_v1",
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_post_verified_artifact_assert_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_assignment_assert_v1(jsonb)",
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "definition_sha256": "ee99f2b3f609e927f895e29c742043815ce73b1df9a2b1f997c5defc7f2e4ebf",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_historical_fixture_assignment_scope_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb)",
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "definition_sha256": "ba6ebf8d2e93087655d557d01867661b0746575e1a339b2d3c4ce1e08c359eb6",
+      "security": "INVOKER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private.weekly_source_historical_fixture_assignment_scope_v1",
+        "private.weekly_source_protected_qualification_owner_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._audit_insert",
+        "public.weekly_source_group_rule_assign_atomic_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_setup_assert_v1(jsonb,boolean)",
+      "file": "HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "definition_sha256": "983823324d841e058c3ff7eb6739fd743e3b652bc12801dc43ddc2fffdb53072",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
       "signature": "private.weekly_source_protected_activation_probe_authorization_assert_v1(jsonb,uuid,date,date,text)",
       "file": "ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
       "definition_sha256": "34c544d34708514ac1e7e9d1bb653c3ec9cf44449267a7ee1960aeaa59bfd809",
@@ -330,29 +427,62 @@
     {
       "signature": "private.weekly_source_post_verified_setup_artifact_assert_v1(jsonb,jsonb)",
       "file": "POST_VERIFIED_SETUP_ASSERT.sqlinc",
-      "definition_sha256": "5842f236052ad902159560ea704c028e8a54cc63198dc44eef245f5b506cdb72",
+      "definition_sha256": "973c3eb053c9ce1b946343c282ae6143adfbebe07dfcfb08665b4437a62d9262",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
         "private._weekly_source_settings_deployment_v1",
         "private._weekly_source_settings_require_admin_v1",
         "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_historical_fixture_setup_assert_v1",
+        "private.weekly_source_off_rule_setup_shape_assert_v1",
         "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_sha256_jsonb_v1"
       ]
     },
     {
-      "signature": "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)",
-      "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
-      "definition_sha256": "ecd3ff0c470575623e803b376efee5ac59dcd91acc150efb66f748b514118ff5",
+      "signature": "private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(jsonb,jsonb)",
+      "file": "POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "definition_sha256": "7248fdcb2e426028008a525219bf5f439e6c6da6ed2f639491e91cd346c9eb70",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_prerequisite_release_assert_v2",
+        "private.weekly_source_protected_qualification_census_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "file": "SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "definition_sha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_qualification_closed_object_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)",
+      "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "definition_sha256": "5bdd7034983de7853bb76bb8eaba9da39a1eb031d564bd7ad673caf3beac5c07",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_post_verified_bulk_setup_artifact_assert_v1",
         "private.weekly_source_post_verified_partial_artifact_assert_v1",
         "private.weekly_source_post_verified_setup_artifact_assert_v1",
         "private.weekly_source_protected_activation_probe_authorization_assert_v1",
         "private.weekly_source_protected_operational_certificate_assert_v1",
+        "private.weekly_source_protected_prerequisite_release_assert_v2",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_report_fin_native_comparisons_assert_v1",
         "private.weekly_source_report_fin_qualifications_assert_v1"
@@ -361,7 +491,7 @@
     {
       "signature": "private.weekly_source_post_verified_evidence_record_v1(uuid,jsonb)",
       "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
-      "definition_sha256": "53dce5085f7e3da5306c3bd05704f8a8bf84c23fa81aa83feb67bab641deb606",
+      "definition_sha256": "6c27dcfce842bfbf1351c257c25da6ff1698f5a8c1ce50a40fa05d1e3780cdf4",
       "security": "INVOKER",
       "volatility": "VOLATILE",
       "calls": [
@@ -491,6 +621,85 @@
       ]
     },
     {
+      "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+      "file": "12_complete_report_nullable_rounding_owner.sqlinc",
+      "definition_sha256": "d2e2fddc47289e0ce6e089c2940200b07bf6a624fc7d0ffcfc92bc94a4a0edda",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private.weekly_source_billing_movement_hash_v1",
+        "private.weekly_source_frozen_rule_values_v1",
+        "private.weekly_source_invoice_movement_window_id_v1",
+        "private.weekly_source_invoice_only_vector_v1",
+        "private.weekly_source_invoice_vat_target_pence_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.weekly_source_billing_movements"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+      "file": "NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "definition_sha256": "ec0b759af0569ea1b2125e025380620a5c2feab6d77f71e08ace8304c3f84d24",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_protected_execution_tree_assert_v2",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "definition_sha256": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_test_authorization_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "definition_sha256": "743efbd0c71c35cbc6e2fcefe159e408296cde2d88b3e622c8cce24de54701d6",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_prerequisite_release_assert_v2",
+        "private.weekly_source_protected_qualification_census_v1",
+        "private.weekly_source_protected_test_authorization_v1",
+        "private.weekly_source_protected_test_scope_assert_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._audit_insert"
+      ]
+    },
+    {
       "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
       "file": "07_automatic_capability_admission.sqlinc",
       "definition_sha256": "c42d144aa23af3c5146ba972123b8023c015147ee560dfcbef7a853294e26580",
@@ -521,10 +730,11 @@
     {
       "signature": "private.weekly_source_rule_qualification_authorization_v1(uuid,uuid,text)",
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "definition_sha256": "49f51270b4c804836eebbcf5991b2dac14fbaff75b867c7fff5a8a283ddade6f",
+      "definition_sha256": "779bd0e39e9f66056a8f1d5e17428f18dcafbbb6378df1603b9bb91f34427288",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
+        "private.weekly_source_off_rule_setup_shape_assert_v1",
         "private.weekly_source_protected_qualification_release_v1",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_query_require_service_v1",
@@ -534,7 +744,7 @@
     {
       "signature": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
       "file": "OFF_RULE_AUTHORITY.sqlinc",
-      "definition_sha256": "8d734b6849dd066398a3a18412f1faae3b37955c983574151ef2f6484e8d25fa",
+      "definition_sha256": "15ec2a6956fe326eb5b7cbe724c6a54267d19eda6b5bb598cd99c4e79cbe3178",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
@@ -544,6 +754,7 @@
         "private.weekly_source_automatic_reconcile_producer_ready_v1",
         "private.weekly_source_bulk_producer_ready_v1",
         "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_historical_fixture_setup_assert_v1",
         "private.weekly_source_office_authority_v1",
         "private.weekly_source_pay_actor_allowed_v1",
         "private.weekly_source_qualification_closed_object_v1",
@@ -743,6 +954,92 @@
       ]
     },
     {
+      "signature": "private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)",
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "definition_sha256": "accc6ca74d79a68598e22ebb6c677f45d0dc942b07d5dd64e6e2ea9f453d0ede",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private._weekly_source_rule_group_context_v1",
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_post_verified_artifact_assert_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_assignment_assert_v1(jsonb)",
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "definition_sha256": "ee99f2b3f609e927f895e29c742043815ce73b1df9a2b1f997c5defc7f2e4ebf",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_historical_fixture_assignment_scope_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb)",
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "definition_sha256": "ba6ebf8d2e93087655d557d01867661b0746575e1a339b2d3c4ce1e08c359eb6",
+      "security": "INVOKER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private.weekly_source_historical_fixture_assignment_scope_v1",
+        "private.weekly_source_protected_qualification_owner_v1",
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._audit_insert",
+        "public.weekly_source_group_rule_assign_atomic_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_setup_assert_v1(jsonb,boolean)",
+      "file": "HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "definition_sha256": "983823324d841e058c3ff7eb6739fd743e3b652bc12801dc43ddc2fffdb53072",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_group_rule_assign_atomic_v1(jsonb)",
+      "file": "11_complete_historical_fixture_native_assignment.sqlinc",
+      "definition_sha256": "a5480ee1ac00ee4330f456a2e43eada8398a6d4ea5ecb85770030b31495fb136",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_rule_group_context_v1",
+        "private._weekly_source_settings_assert_request_v1",
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_historical_fixture_assignment_assert_v1",
+        "public.weekly_source_group_rule_assignments"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+      "file": "12_complete_report_nullable_rounding_owner.sqlinc",
+      "definition_sha256": "d2e2fddc47289e0ce6e089c2940200b07bf6a624fc7d0ffcfc92bc94a4a0edda",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private.weekly_source_billing_movement_hash_v1",
+        "private.weekly_source_frozen_rule_values_v1",
+        "private.weekly_source_invoice_movement_window_id_v1",
+        "private.weekly_source_invoice_only_vector_v1",
+        "private.weekly_source_invoice_vat_target_pence_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.weekly_source_billing_movements"
+      ]
+    },
+    {
       "signature": "private.weekly_source_protected_activation_probe_authorization_assert_v1(jsonb,uuid,date,date,text)",
       "file": "ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
       "definition_sha256": "34c544d34708514ac1e7e9d1bb653c3ec9cf44449267a7ee1960aeaa59bfd809",
@@ -818,29 +1115,74 @@
     {
       "signature": "private.weekly_source_post_verified_setup_artifact_assert_v1(jsonb,jsonb)",
       "file": "POST_VERIFIED_SETUP_ASSERT.sqlinc",
-      "definition_sha256": "5842f236052ad902159560ea704c028e8a54cc63198dc44eef245f5b506cdb72",
+      "definition_sha256": "973c3eb053c9ce1b946343c282ae6143adfbebe07dfcfb08665b4437a62d9262",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
         "private._weekly_source_settings_deployment_v1",
         "private._weekly_source_settings_require_admin_v1",
         "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_historical_fixture_setup_assert_v1",
+        "private.weekly_source_off_rule_setup_shape_assert_v1",
         "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
         "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(jsonb,jsonb)",
+      "file": "POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "definition_sha256": "7248fdcb2e426028008a525219bf5f439e6c6da6ed2f639491e91cd346c9eb70",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_prerequisite_release_assert_v2",
+        "private.weekly_source_protected_qualification_census_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "file": "SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "definition_sha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_qualification_closed_object_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+      "file": "NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "definition_sha256": "ec0b759af0569ea1b2125e025380620a5c2feab6d77f71e08ace8304c3f84d24",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_protected_execution_tree_assert_v2",
         "private.weekly_source_sha256_jsonb_v1"
       ]
     },
     {
       "signature": "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)",
       "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
-      "definition_sha256": "ecd3ff0c470575623e803b376efee5ac59dcd91acc150efb66f748b514118ff5",
+      "definition_sha256": "5bdd7034983de7853bb76bb8eaba9da39a1eb031d564bd7ad673caf3beac5c07",
       "security": "DEFINER",
       "volatility": "STABLE",
       "calls": [
+        "private.weekly_source_post_verified_bulk_setup_artifact_assert_v1",
         "private.weekly_source_post_verified_partial_artifact_assert_v1",
         "private.weekly_source_post_verified_setup_artifact_assert_v1",
         "private.weekly_source_protected_activation_probe_authorization_assert_v1",
         "private.weekly_source_protected_operational_certificate_assert_v1",
+        "private.weekly_source_protected_prerequisite_release_assert_v2",
         "private.weekly_source_qualification_closed_object_v1",
         "private.weekly_source_report_fin_native_comparisons_assert_v1",
         "private.weekly_source_report_fin_qualifications_assert_v1"
@@ -849,7 +1191,7 @@
     {
       "signature": "private.weekly_source_post_verified_evidence_record_v1(uuid,jsonb)",
       "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
-      "definition_sha256": "53dce5085f7e3da5306c3bd05704f8a8bf84c23fa81aa83feb67bab641deb606",
+      "definition_sha256": "6c27dcfce842bfbf1351c257c25da6ff1698f5a8c1ce50a40fa05d1e3780cdf4",
       "security": "INVOKER",
       "volatility": "VOLATILE",
       "calls": [
@@ -892,6 +1234,57 @@
         "private.weekly_source_protected_qualification_owner_v1",
         "private.weekly_source_rule_qualification_context_v1",
         "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "definition_sha256": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_protected_qualification_release_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "calls": [
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_test_authorization_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "definition_sha256": "743efbd0c71c35cbc6e2fcefe159e408296cde2d88b3e622c8cce24de54701d6",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "calls": [
+        "private._weekly_source_settings_deployment_v1",
+        "private._weekly_source_settings_require_admin_v1",
+        "private.weekly_source_automatic_reconcile_producer_ready_v1",
+        "private.weekly_source_bulk_producer_ready_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_prerequisite_release_assert_v2",
+        "private.weekly_source_protected_qualification_census_v1",
+        "private.weekly_source_protected_test_authorization_v1",
+        "private.weekly_source_protected_test_scope_assert_v1",
+        "private.weekly_source_qualification_closed_object_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._audit_insert"
       ]
     },
     {
@@ -1038,6 +1431,10 @@
     "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
     "private.weekly_source_head_origin_guard_v2()",
     "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+    "private.weekly_source_historical_fixture_assignment_assert_v1(jsonb)",
+    "private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)",
+    "private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb)",
+    "private.weekly_source_historical_fixture_setup_assert_v1(jsonb,boolean)",
     "private.weekly_source_import_is_prepared_v1(uuid)",
     "private.weekly_source_import_outreach_v1(uuid)",
     "private.weekly_source_incident_contact_retire_v1(uuid)",
@@ -1100,6 +1497,7 @@
     "private.weekly_source_mode_a_role_type_v1(text,text)",
     "private.weekly_source_not_finalised_dispatch_v1(uuid)",
     "private.weekly_source_not_finalised_due_scope_guard_v1()",
+    "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
     "private.weekly_source_office_next_owner_v1()",
     "private.weekly_source_office_next_paid_evidence_page_v1(uuid,uuid,text,uuid,jsonb,integer)",
     "private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb)",
@@ -1116,6 +1514,7 @@
     "private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)",
     "private.weekly_source_pay_query_scope_v1(uuid)",
     "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)",
+    "private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(jsonb,jsonb)",
     "private.weekly_source_post_verified_evidence_record_v1(uuid,jsonb)",
     "private.weekly_source_post_verified_partial_artifact_assert_v1(jsonb,jsonb)",
     "private.weekly_source_post_verified_setup_artifact_assert_v1(jsonb,jsonb)",

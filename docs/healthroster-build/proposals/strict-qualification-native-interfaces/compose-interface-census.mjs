@@ -6,8 +6,11 @@ const baseline=JSON.parse(fs.readFileSync(path.join(root,basePath),'utf8'));asse
 const selected=['OFF_RULE_AUTHORITY.sqlinc','OFF_RULE_COMMAND.sqlinc','OFF_RULE_STATUS.sqlinc','OFF_RULE_TRANSPORT_STATUS.sqlinc',
  '01_operational_rule_projection.sqlinc','02_effective_rule_owner.sqlinc','03_cas_operational_projection.sqlinc','04_final_revision_rule_guard.sqlinc',
  '05_coverage_floor_owner.sqlinc','ACTIVATION_WINDOW_BINDING.sqlinc','FINAL_OPERATIONAL_CERTIFICATE.sqlinc',
+ 'HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc','HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc','11_complete_historical_fixture_native_assignment.sqlinc',
+ '12_complete_report_nullable_rounding_owner.sqlinc',
  'ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc','ACTIVATION_PROBE_SCOPE.sqlinc','POST_VERIFIED_PARTIAL_ASSERT.sqlinc',
- 'POST_VERIFIED_SETUP_ASSERT.sqlinc','POST_VERIFIED_EVIDENCE_RECORD.sqlinc','REPORT_FIXTURE_REFERENCE.sqlinc',
+ 'POST_VERIFIED_SETUP_ASSERT.sqlinc','POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc','SETUP_STATIC_SHAPE_ASSERT.sqlinc','NONOPERATIONAL_PREREQUISITE_READER.sqlinc',
+ 'POST_VERIFIED_EVIDENCE_RECORD.sqlinc','REPORT_FIXTURE_REFERENCE.sqlinc','10_complete_bulk_test_scope.sqlinc',
  '07_automatic_capability_admission.sqlinc','08_cas_admission_owner.sqlinc','09_complete_controlled_setup_transport.sqlinc'];
 const exactParams=params=>params.split(',').map(p=>p.trim().replace(/\s+default\s+[\s\S]*$/i,'')
  .replace(/^(?:in\s+|out\s+|inout\s+)?[a-z_][a-z_0-9]*\s+/i,'').replace(/\s+/g,' ').toLowerCase()).join(',');

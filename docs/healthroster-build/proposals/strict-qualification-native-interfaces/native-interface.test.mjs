@@ -8,6 +8,7 @@ import {buildOffRuleTestAuthorization,assertManagedOffRuleTestEvidence} from './
 import {domainHash} from '../protected-source-capability/release-qualification.mjs';
 import {buildMeasuredNativePartial} from './measured-partial-evidence.mjs';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {buildActivationWindowBinding,assertActivationWindowBinding} from './activation-window-binding.mjs';
 import {createOffRuleTransportRpc} from './off-rule-transport-rpc.mjs';
 import {assertPostVerifiedReceipt} from './post-verified-evidence-controller.mjs';
@@ -68,11 +69,86 @@ test('the native two-parameter reader, Source CAS projection, revision and calen
  assert.match(sql('04_final_revision_rule_guard.sqlinc'),/if tg_op='UPDATE'/);
  assert.match(sql('04_final_revision_rule_guard.sqlinc'),/WEEKLY_SOURCE_FINAL_RULE_VERSION_IMMUTABLE/);
  assert.match(sql('05_coverage_floor_owner.sqlinc'),/WEEKLY_SOURCE_OFF_RULE_TEST_OPENED/);
- assert.match(sql('OFF_RULE_AUTHORITY.sqlinc'),/a.effective_from_week_ending<today or c.finalisation_week_ending<>a.effective_from_week_ending/);
+ assert.match(sql('OFF_RULE_AUTHORITY.sqlinc'),/if a.effective_from_week_ending<today then\s+perform private.weekly_source_historical_fixture_setup_assert_v1/);
+ assert.match(sql('OFF_RULE_AUTHORITY.sqlinc'),/c.finalisation_week_ending<>a.effective_from_week_ending/);
  assert.doesNotMatch(sql('OFF_RULE_AUTHORITY.sqlinc'),/set_config\(|p_now|feature_enabled\s*=\s*true/i);
  assert.match(sql('OFF_RULE_COMMAND.sqlinc'),/case op/);assert.doesNotMatch(sql('OFF_RULE_COMMAND.sqlinc'),/execute\s+(?:format|op)/i);
  const proofs=JSON.parse(sql('OWNER_SOURCE_REVERSE_PROOFS.json'));assert.equal(proofs.edits.length,6);
  assert.ok(proofs.edits.every(row=>row.reverse_hunk_matches_entire_input_definition===true));
+});
+test('the historical exception retains native assignment guards, real audit and disabled future reference; ordinary activation stays future only',()=>{
+ const sql=file=>fs.readFileSync(path.join(out,file),'utf8');
+ const assign=sql('11_complete_historical_fixture_native_assignment.sqlinc'),scope=sql('HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc'),setup=sql('HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc');
+ assert.match(assign,/if v_from<\(transaction_timestamp\(\) at time zone 'Europe\/London'\)::date then[\s\S]*?weekly_source_historical_fixture_assignment_assert_v1\(p_request\)/);
+ for(const code of ['RULE_GROUP_STALE','RULE_REQUEST_REUSED','RULE_FINALISED_WEEK_REFUSED','RULE_ASSIGNMENT_OVERLAP','RULE_ACTIVE_AGENCY_TRANSITION_REQUIRED'])assert.ok(assign.includes(code),code);
+ assert.match(scope,/pg_current_xact_id_if_assigned\(\)::text/);assert.match(scope,/weekly_source_historical_fixture_rule_assign_v1\\\(uuid,jsonb/);
+ assert.match(scope,/public.weekly_source_group_rule_assign_atomic_v1\(p_request->'native_request'\)/);
+ assert.match(scope,/cycle.scope_client_id=any\(clients\)/);assert.match(scope,/u.file_metadata_json->>'client_id'/);
+ assert.match(setup,/completed->'native_receipt'/);assert.match(setup,/assignment.assignment_request_sha256/);
+ assert.match(setup,/reference.effective_from_week_ending<today/);assert.match(setup,/not exists\(select 1 from public.audit_events admitted/);
+ assert.match(setup,/HISTORICAL_FIXTURE_NOT_FRESH/);assert.match(setup,/cycle.finalisation_week_ending=week/);
+ const feature=sql('09_complete_controlled_setup_transport.sqlinc');
+ assert.match(feature,/if v_from<\(transaction_timestamp\(\) at time zone 'Europe\/London'\)::date then\s+raise exception 'WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED'/);
+ assert.doesNotMatch(feature,/historical_fixture_assignment_assert/);
+ const proof=JSON.parse(sql('HISTORICAL_FIXTURE_REVERSE.json'));assert.equal(proof.proofs.length,3);
+ for(const p of proof.proofs){assert.equal(p.reverse_hunk_matches_entire_input_definition,true);assert.equal(createHash('sha256').update(sql(p.file)).digest('hex'),p.output_sha256);}
+});
+test('closed OFF setup still rejects spoofed namespaces, actors, assignments and cycles with resealed hashes',()=>{
+ const {context,controls,input}=vectors();input.week_ending='2026-10-04';const result=buildOffRuleTestAuthorization(context,input,controls);
+ assert.equal(result.week_ending,'2026-10-04');assert.equal(result.original_source_cas,null);
+ for(const patch of [{fixture_namespace:'LIVE_'},{journey_actor_user_id:'missing'},{assignment_sha256:'missing'},
+  {assignment_version:'01'},{week_ending:'2026-10-05'},{allowed_operations:['send_email']},{extra:true}]){
+  assert.throws(()=>buildOffRuleTestAuthorization(context,{...input,...patch},controls));}
+ const bad=structuredClone(input);bad.fixture_manifest.client_refs[0].cli_ref='CLI-1';assert.throws(()=>buildOffRuleTestAuthorization(context,bad,controls));
+ const sql=fs.readFileSync(path.join(out,'POST_VERIFIED_SETUP_ASSERT.sqlinc'),'utf8');
+ assert.match(sql,/historical_fixture_setup_assert_v1\(p_artifact,p_artifact->>'purpose'='SOURCE_FIXTURE_SETUP'\)/);
+ assert.match(sql,/final.rule_set_version_id=v.id/);assert.match(sql,/weekly_source_bulk_source_cas_v1\(c.id,clients\)/);
+});
+test('transport preserves ordinary RPC results and exceptions; positional native projection remains exact',async()=>{
+ const calls=[],ordinaryValue=[{native:'original response envelope'}];
+ const base=async(name,args,options)=>{calls.push({name,args,options});if(name==='weekly_source_group_rule_feature_set_atomic_v1')
+  return {contract:'WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1',qualified_fixture:false,operational_ready:false};return ordinaryValue;};
+ const rpc=createOffRuleTransportRpc({baseRpc:base,getActor:()=>id(1),agencyId:id(2),environment:'TEST'});
+ const args={p_actor_user_id:id(1),p_publication_id:id(20),p_rows:[{source:'unchanged'}]},options={timeoutMs:20000};
+ assert.equal(await rpc('weekly_source_projection_rows_apply_atomic_v1',args,options),ordinaryValue);
+ assert.equal(calls[0].args.p_request.native_request,args);assert.equal(calls[1].args,args);assert.equal(calls[1].options,options);
+ const refusal=Object.assign(Error('native refusal'),{status:409,code:'NATIVE_CAS_REFUSED'});
+ await assert.rejects(createOffRuleTransportRpc({baseRpc:async()=>{throw refusal;},getActor:()=>id(1),agencyId:id(2),environment:'TEST'})
+  ('weekly_source_finalise_atomic_v1',{p_request:{}}),error=>error===refusal);
+ const untouched={arbitrary:true};assert.equal(await rpc('ordinary_native_rpc',untouched,options),ordinaryValue);assert.equal(calls.at(-1).args,untouched);
+});
+test('all interface-only additions remain owner-only in the complete literal union and Report ABI stays separate',()=>{
+ const census=JSON.parse(fs.readFileSync(path.join(out,'INTERFACE_LITERAL_SIGNATURE_UNION.json'))),acl=fs.readFileSync(path.join(out,'OWNER_ONLY_ADDITIONS_ACL.sqlinc'),'utf8');
+ assert.equal(census.preserved_all_275,true);assert.ok(census.signatures.includes('private.weekly_source_historical_fixture_setup_assert_v1(jsonb,boolean)'));
+ assert.ok(census.signatures.includes('private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb)'));
+ for(const row of census.additions){assert.ok(acl.includes(`revoke all on function ${row.signature} from PUBLIC,anon,authenticated,service_role,authenticator,supabase_admin;`));
+  assert.ok(acl.includes(`grant execute on function ${row.signature} to "postgres";`));}
+ assert.doesNotMatch(acl,/grant execute[^;]*to service_role/i);assert.equal(census.report_external_dependencies.length,2);
+});
+test('nullable B clones only actual last Report row/window and preserves every ordinary calculator/identity guard',()=>{
+ const source=fs.readFileSync(path.join(out,'12_complete_report_nullable_rounding_owner.sqlinc'),'utf8');
+ const proof=JSON.parse(fs.readFileSync(path.join(out,'REPORT_ROUNDING_ORIGIN_REVERSE.json')));
+ assert.equal(proof.reverse_hunks_match_entire_original_definition,true);assert.equal(proof.no_new_signature_table_grant_or_selector,true);
+ assert.equal(createHash('sha256').update(source).digest('hex'),proof.output_definition_sha256);
+ assert.match(source,/revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and profile='SELF_BILL_REPORT'/);
+ assert.match(source,/identity_row.source_line_kind='SELF_BILL_REPORT_LINE'/);
+ for(const field of ['self_bill_report_id','report_scope_id','upload_row_id','source_row_ordinal','rule_set_version_id'])
+  assert.ok(source.includes("identity_row.source_facts_json->>'"+field+"'"),field);
+ assert.match(source,/report_upload.report_scope_id is distinct from report_scope.id/);
+ assert.match(source,/report_upload.content_sha256 is distinct from report.content_sha256/);
+ assert.match(source,/p_invoice_window_cycle_id<>revision.source_cycle_id/);
+ assert.match(source,/later.source_row_ordinal>report_row.source_row_ordinal/);
+ assert.match(source,/identity_row.canonical_pay_vector_json is distinct from private.weekly_source_invoice_only_vector_v1\('PAY',0\)/);
+ assert.match(source,/else\s+if identity_row.final_revision_id<>revision.id or identity_row.actual_client_id<>p_client_id\s+or identity_row.source_line_kind='INVOICE_VAT_ROUNDING' or identity_row.candidate_id is null\s+or identity_row.contract_id is null or identity_row.work_event_id is null or identity_row.invoice_timesheet_id is null then/);
+ assert.doesNotMatch(source,/created_at_utc\s*=|coalesce\(identity_row\.(?:candidate_id|contract_id|work_event_id|invoice_timesheet_id)/i);
+});
+test('new Report factory guards use the exact real schema rather than an invented Report upload column',()=>{
+ const own=path.resolve(out,'../../../..'),schema=execFileSync('git',['show','2151af65:supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql'],{cwd:own}).toString('utf8');
+ const declaration=schema.match(/create table public\.weekly_source_self_bill_reports \(([\s\S]*?)\n\);/)[1];
+ const columns=new Set([...declaration.matchAll(/^\s{2}([a-z_0-9]+)\s+(?:uuid|text|date|bytea|integer|bigint|timestamptz)\b/gm)].map(row=>row[1]));
+ const source=fs.readFileSync(path.join(out,'12_complete_report_nullable_rounding_owner.sqlinc'),'utf8');
+ for(const field of new Set([...source.matchAll(/\breport\.([a-z_0-9]+)/g)].map(row=>row[1])))assert.ok(columns.has(field),'ACTUAL_REPORT_COLUMN '+field);
+ assert.ok(columns.has('source_cycle_id'));assert.equal(columns.has('upload_id'),false);
 });
 test('a real-shaped non-NEXT partial does not manufacture NEXT or an operational certificate',()=>{
  const context={release_id:'UNIT_VECTOR_NOT_NATIVE_EVIDENCE',git_commit:'b'.repeat(40),contract_sha256:h,agency_id:id(2),environment:'TEST',

@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 const out=path.dirname(fileURLToPath(import.meta.url)),own=path.resolve(out,'../../../..');
-const root=path.resolve(own,'../healthroster-v2-backend-13102026'),commit='ab26a5ff22200be037d215b1100c969d6c0bae73';
+const root=path.resolve(own,'../healthroster-v2-backend-13102026'),commit='2151af656561ad4d68e61e242769ed80a631fcc9';
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const git=args=>execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0',...args],{cwd:root,maxBuffer:20_000_000});
 const {sqlDateKey}=await import(pathToFileURL(path.join(root,'scripts/cloudtms-db-release-lib.mjs')));
@@ -44,7 +44,7 @@ function visit(file,stack=[]){
   const name=head[1].toLowerCase(),signature=name+'('+identity(head[2])+')';
   const noStrings=normalizedIdentifiers.replace(/'(?:''|[^'])*'/g,match=>' '.repeat(match.length));
   const direct=[...noStrings.matchAll(/\b((?:private|public)\.[A-Za-z_][\w]*)\s*\(/gi)]
-    .filter(match=>!/(?:\binsert\s+into|\bupdate|\bdelete\s+from)\s*$/i.test(noStrings.slice(Math.max(0,match.index-50),match.index)))
+    .filter(match=>!/(?:\binsert\s+into|\bupdate|\bdelete\s+from)\s*$/i.test(noStrings.slice(Math.max(0,match.index-256),match.index)))
     .map(match=>match[1].toLowerCase()).filter(call=>call!==name);
   const dynamic=[...normalizedIdentifiers.matchAll(/'((?:''|[^'])*)'/g)].filter(match=>/\b(?:select|perform|call)\s+(?:private|public)\./i.test(match[1]))
     .flatMap(match=>[...match[1].matchAll(/\b((?:private|public)\.\w+)\s*\(/gi)].map(call=>call[1].toLowerCase()));
@@ -95,4 +95,6 @@ const record={schema_version:'STRICT_QUALIFICATION_NATIVE_INTERFACE_LITERAL_CENS
 fs.writeFileSync(path.join(out,'NATIVE_CONSUMER_AND_EXECUTOR_CENSUS.json'),JSON.stringify(record,null,2)+'\n');
 const selected=[...new Map([...consumers,...chain.values()].filter(row=>row.name.startsWith('private.weekly_source_')||entryNames.includes(row.name)).map(row=>[row.signature,row])).values()];
 fs.writeFileSync(path.join(out,'CURRENT_SOURCE_OWNER_INPUTS.sqlinc'),selected.map(row=>`-- Source input ${row.signature}; ${row.file}; SHA256 ${row.definition_sha256}\n${row.definition}`).join('\n\n')+'\n');
+fs.writeFileSync(path.join(out,'SOURCE_EXECUTOR_EFFECT_INPUTS.sqlinc'),[...chain.values()].map(row=>
+ `-- Source effect input ${row.signature}; ${row.file}; SHA256 ${row.definition_sha256}\n${row.definition}`).join('\n\n')+'\n');
 console.log(JSON.stringify({source_only:true,effective_rule_consumers:consumers.length,executor_chain:chain.size,unresolved_callees:unknownCalls.length,physical_timesheet_write_leaves:record.physical_timesheet_write_leaves.length,root_source_commit:commit}));

@@ -1,0 +1,281 @@
+{
+  "source_only": true,
+  "no_runtime_mount": true,
+  "proofs": [
+    {
+      "input": "final-operational-evidence.mjs",
+      "input_sha256": "8f092310b61a9d3a803d09730f304d970e9d1d4b3dd8241139361a777aa2d330",
+      "output": "weekly-source-protected-operational-evidence.mjs",
+      "output_sha256": "4ea4aabb470b144a7a78ca64452513f51fd8afd3d7fb760b9d0ae8e732120ee3",
+      "destination": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "node:crypto",
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-activation-window-binding.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'../strict-qualification-git-path-parser-forward/source-equivalence.mjs'",
+          "after": "'./weekly-source-protected-execution-tree.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./activation-window-binding.mjs'",
+          "after": "'./weekly-source-activation-window-binding.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "same-installed-prerequisite-evidence.mjs",
+      "input_sha256": "911a68902f37f6e3003cc5905d9b35590a387a2430e9820080385765c58d7ecc",
+      "output": "weekly-source-protected-prerequisite-evidence.mjs",
+      "output_sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "destination": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "node:crypto",
+        "node:child_process",
+        "node:fs",
+        "node:path",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'../strict-qualification-git-path-parser-forward/source-equivalence.mjs'",
+          "after": "'./weekly-source-protected-execution-tree.mjs'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "input": "activation-probe-evidence.mjs",
+      "input_sha256": "c886cea77f15fa563da6e9fb1288dcf5dd214d89f26fc9ccf9b85ddd3805190e",
+      "output": "weekly-source-protected-activation-probe-evidence.mjs",
+      "output_sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "destination": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "node:crypto",
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-protected-probe-native-evidence.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'../strict-qualification-git-path-parser-forward/source-equivalence.mjs'",
+          "after": "'./weekly-source-protected-execution-tree.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./probe-native-evidence.mjs'",
+          "after": "'./weekly-source-protected-probe-native-evidence.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "probe-native-evidence.mjs",
+      "input_sha256": "c68839904a7f536fc2dddea81646c6ed109f5512da25dd6f5824557d95c3db67",
+      "output": "weekly-source-protected-probe-native-evidence.mjs",
+      "output_sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "destination": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "measured-partial-evidence.mjs",
+      "input_sha256": "260640f4b590dec37e0945af761ac0aad279f962f71109cc349c919138869ef2",
+      "output": "weekly-source-protected-partial-native-evidence.mjs",
+      "output_sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "destination": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-probe-native-evidence.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./probe-native-evidence.mjs'",
+          "after": "'./weekly-source-protected-probe-native-evidence.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "activation-window-binding.mjs",
+      "input_sha256": "fea7d182359444e120cfaa2efdacea343b6cf688bdc580ea4a291b3576441265",
+      "output": "weekly-source-activation-window-binding.mjs",
+      "output_sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "destination": "scripts/weekly-source-activation-window-binding.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "off-rule-setup-evidence.mjs",
+      "input_sha256": "ff3af939db7743466d460b4cb51ccc13e7d60867d099ed174eeae9b40a8ead54",
+      "output": "weekly-source-off-rule-setup-evidence.mjs",
+      "output_sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "destination": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "../broker/src/weekly-source/off-rule-native-proxy.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./off-rule-native-proxy.mjs'",
+          "after": "'../broker/src/weekly-source/off-rule-native-proxy.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "post-verified-evidence-controller.mjs",
+      "input_sha256": "6a56d9d0d56fd36afb245e44d93909fa5d3f3ce71c3f7e37c5634457fe59097d",
+      "output": "weekly-source-post-verified-evidence-controller.mjs",
+      "output_sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "destination": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "node:child_process",
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-off-rule-setup-evidence.mjs",
+        "./weekly-source-protected-partial-native-evidence.mjs",
+        "./weekly-source-protected-operational-evidence.mjs",
+        "./weekly-source-protected-activation-probe-evidence.mjs",
+        "./weekly-source-protected-prerequisite-evidence.mjs",
+        "./weekly-source-protected-test-setup-evidence.mjs"
+      ],
+      "edits": [
+        {
+          "before": "'../protected-source-capability/release-qualification.mjs'",
+          "after": "'./weekly-source-protected-release-qualification.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'../strict-qualification-git-path-parser-forward/source-equivalence.mjs'",
+          "after": "'./weekly-source-protected-execution-tree.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'../protected-source-qualification-operational-gate/setup-evidence.mjs'",
+          "after": "'./weekly-source-protected-test-setup-evidence.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./final-operational-evidence.mjs'",
+          "after": "'./weekly-source-protected-operational-evidence.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./same-installed-prerequisite-evidence.mjs'",
+          "after": "'./weekly-source-protected-prerequisite-evidence.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./activation-probe-evidence.mjs'",
+          "after": "'./weekly-source-protected-activation-probe-evidence.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./measured-partial-evidence.mjs'",
+          "after": "'./weekly-source-protected-partial-native-evidence.mjs'",
+          "count": 1
+        },
+        {
+          "before": "'./off-rule-setup-evidence.mjs'",
+          "after": "'./weekly-source-off-rule-setup-evidence.mjs'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "input": "off-rule-native-proxy.mjs",
+      "input_sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "output": "off-rule-native-proxy.mjs",
+      "output_sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "destination": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [],
+      "edits": []
+    },
+    {
+      "input": "off-rule-transport-rpc.mjs",
+      "input_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "output": "off-rule-transport-rpc.mjs",
+      "output_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "destination": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "import_paths_only": true,
+      "reverse_hunks_match_entire_module": true,
+      "imports": [
+        "./off-rule-native-proxy.mjs"
+      ],
+      "edits": []
+    }
+  ],
+  "external_required_scripts": [
+    "weekly-source-protected-release-qualification.mjs",
+    "weekly-source-protected-execution-tree.mjs",
+    "weekly-source-protected-test-setup-evidence.mjs"
+  ],
+  "native_calculators_changed": false,
+  "external_source_equivalence_exception_added": false
+}

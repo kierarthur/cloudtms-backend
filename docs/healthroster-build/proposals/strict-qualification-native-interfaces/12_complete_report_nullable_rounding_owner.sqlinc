@@ -1,0 +1,111 @@
+create or replace function private.weekly_source_vat_rounding_movement_insert_v1(p_final_revision_id uuid,p_client_id uuid,p_identity_movement_id uuid,p_invoice_window_cycle_id uuid)
+returns uuid language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare revision public.weekly_source_final_revisions%rowtype; identity_row public.weekly_source_billing_movements%rowtype;
+  rules jsonb; net numeric; vat numeric; rate numeric; target numeric; difference bigint; rate_count integer;
+  id uuid; pending_hold_rows uuid[]; facts jsonb; pay jsonb; charge jsonb; mapping bytea; h bytea; profile text;
+  report_scope public.weekly_source_report_scopes%rowtype; report public.weekly_source_self_bill_reports%rowtype; report_row public.weekly_source_upload_rows%rowtype; report_upload public.weekly_source_uploads%rowtype;
+begin
+  select * into strict revision from public.weekly_source_final_revisions where weekly_source_final_revisions.id=p_final_revision_id;
+  rules:=private.weekly_source_frozen_rule_values_v1(revision.id);
+  if rules is null or rules->>'invoice_sender'<>'CLIENT_SELF_BILL' or rules->>'invoice_vat_method'='SUM_OF_LINES' then return null; end if;
+  if p_invoice_window_cycle_id is null or not exists(select 1 from public.weekly_source_cycles actual
+    join public.weekly_source_cycles original on original.id=revision.source_cycle_id and actual.source_group_id=original.source_group_id
+    where actual.id=p_invoice_window_cycle_id and (actual.scope_client_id is null or actual.scope_client_id=p_client_id)) then
+    raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_WINDOW_INVALID' using errcode='55000'; end if;
+  if revision.state not in ('CURRENT','PREPARED') or p_client_id is null then raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_SCOPE_INVALID' using errcode='55000'; end if;
+  select m.id into id from public.weekly_source_billing_movements m where m.vat_rounding_revision_id=revision.id and m.actual_client_id=p_client_id
+    and coalesce(m.invoice_window_cycle_id,m.finalisation_cycle_id)=p_invoice_window_cycle_id;
+  if found then return id; end if;
+  select coalesce(sum(m.invoice_presentation_charge_pence),0),coalesce(sum(m.vat_amount*100),0),min(m.vat_rate_pct),count(distinct m.vat_rate_pct),min(m.source_profile_kind)
+    into net,vat,rate,rate_count,profile from public.weekly_source_billing_movements m
+    where m.final_revision_id=revision.id and m.actual_client_id=p_client_id and m.source_line_kind<>'INVOICE_VAT_ROUNDING'
+      and private.weekly_source_invoice_movement_window_id_v1(m.id)=p_invoice_window_cycle_id;
+  if rate_count=0 then return null; end if;
+  if rate_count<>1 or profile not in ('SELF_BILL_REPORT','HEALTHROSTER_ACTUAL_ROWS','GENERIC_COMPLETE_SNAPSHOT') then
+    raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_RATE_AMBIGUOUS' using errcode='55000'; end if;
+  target:=private.weekly_source_invoice_vat_target_pence_v1(net,vat,rules->>'invoice_vat_method',rate);
+  if target is null then raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_METHOD_INVALID' using errcode='55000'; end if;
+  select array_agg(distinct s.id order by s.id) into pending_hold_rows
+    from public.weekly_source_billing_movements m join public.weekly_source_upload_rows s
+      on s.id::text=m.source_facts_json->>'upload_row_id'
+    where m.final_revision_id=revision.id and m.actual_client_id=p_client_id
+      and private.weekly_source_invoice_movement_window_id_v1(m.id)=p_invoice_window_cycle_id
+      and m.source_facts_json->>'invoice_hold'='VAT_FIT'
+;
+  difference:=(target-vat)::bigint;
+  -- This proposed zero authority is restricted to unresolved actual VAT_FIT.
+  -- D0 with no hold (including Report210825) retains no movement/visible line.
+  if difference=0 and pending_hold_rows is null then return null; end if;
+  if p_identity_movement_id is not null then
+    select * into strict identity_row from public.weekly_source_billing_movements where weekly_source_billing_movements.id=p_identity_movement_id;
+    if revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and profile='SELF_BILL_REPORT'
+      and identity_row.source_profile_kind='SELF_BILL_REPORT' and identity_row.source_line_kind='SELF_BILL_REPORT_LINE' then
+      -- REPORT_NATIVE_NULLABLE_ROUNDING_ORIGIN. Clone the actual immutable
+      -- Report component, including its existing NULLs. Never substitute pay
+      -- identity. Report's native compositor must preserve source ordinal;
+      -- actual rendered last-component equality is still a qualification gate.
+      select * into strict report_scope from public.weekly_source_report_scopes where id=revision.report_scope_id;
+      select * into strict report from public.weekly_source_self_bill_reports where id=report_scope.self_bill_report_id;
+      select * into strict report_upload from public.weekly_source_uploads where id=revision.upload_id;
+      select * into strict report_row from public.weekly_source_upload_rows where id=identity_row.self_bill_report_row_id;
+      if revision.reason is distinct from 'INITIAL_FINALISATION'
+        or report_scope.source_cycle_id<>revision.source_cycle_id or report_scope.client_id<>p_client_id
+        or report.source_cycle_id<>revision.source_cycle_id or report.client_id<>p_client_id or report.source_group_id<>report_scope.source_group_id
+        or report_upload.source_cycle_id<>revision.source_cycle_id or report_upload.report_scope_id is distinct from report_scope.id
+        or report_upload.content_sha256 is distinct from report.content_sha256
+        or p_invoice_window_cycle_id<>revision.source_cycle_id or identity_row.final_revision_id<>revision.id
+        or identity_row.actual_client_id<>p_client_id or identity_row.finalisation_cycle_id<>revision.source_cycle_id
+        or private.weekly_source_invoice_movement_window_id_v1(identity_row.id)<>p_invoice_window_cycle_id
+        or report_row.upload_id<>revision.upload_id or report_row.row_finalisation_state is distinct from 'SOURCE_REPORT_LINE'
+        or identity_row.source_facts_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_SELF_BILL_REPORT_FACTS_V1'
+        or identity_row.source_facts_json->>'self_bill_report_id' is distinct from report.id::text
+        or identity_row.source_facts_json->>'report_scope_id' is distinct from report_scope.id::text
+        or identity_row.source_facts_json->>'upload_row_id' is distinct from report_row.id::text
+        or identity_row.source_facts_json->>'source_row_ordinal' is distinct from report_row.source_row_ordinal::text
+        or identity_row.source_facts_json->>'rule_set_version_id' is distinct from revision.rule_set_version_id::text
+        or identity_row.source_facts_json ? 'row_resolution_id'
+        or identity_row.total_pay_ex_vat<>0
+        or identity_row.canonical_pay_vector_json is distinct from private.weekly_source_invoice_only_vector_v1('PAY',0)
+        or identity_row.invoice_presentation_charge_pence is distinct from report_row.source_shift_charge_pence
+        or identity_row.vat_amount*100 is distinct from report_row.source_vat_pence::numeric
+        or identity_row.total_inc_vat*100 is distinct from report_row.source_gross_pence::numeric
+        or report_row.source_gross_pence::numeric is distinct from report_row.source_shift_charge_pence::numeric+report_row.source_vat_pence::numeric
+        or exists(select 1 from public.weekly_source_upload_rows later where later.upload_id=revision.upload_id
+          and later.source_row_ordinal>report_row.source_row_ordinal)
+        or exists(select 1 from public.weekly_source_billing_movements other where other.final_revision_id=revision.id
+          and other.actual_client_id=p_client_id and other.source_line_kind<>'SELF_BILL_REPORT_LINE') then
+        raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_REPORT_ORIGIN_INVALID' using errcode='55000'; end if;
+    else
+    if identity_row.final_revision_id<>revision.id or identity_row.actual_client_id<>p_client_id
+      or identity_row.source_line_kind='INVOICE_VAT_ROUNDING' or identity_row.candidate_id is null
+      or identity_row.contract_id is null or identity_row.work_event_id is null or identity_row.invoice_timesheet_id is null then
+      raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_IDENTITY_INVALID' using errcode='55000'; end if;
+    end if;
+  end if;
+  -- The calling integration must select A(NULL) or B(real last line) only after
+  -- hosted admission/render/pay-isolation proof. There is no UI/default choice.
+  pay:=private.weekly_source_invoice_only_vector_v1('PAY',0); charge:=private.weekly_source_invoice_only_vector_v1('CHARGE',0);
+  facts:=jsonb_build_object('schema_version','WEEKLY_SOURCE_VAT_ROUNDING_FACTS_V1','rule_set_version_id',revision.rule_set_version_id,
+    'invoice_vat_method',rules->>'invoice_vat_method','membership_net_pence',net,
+    'invoice_window_cycle_id',p_invoice_window_cycle_id,'pending_vat_fit_upload_row_ids',coalesce(to_jsonb(pending_hold_rows),'[]'::jsonb),'membership_vat_pence',vat,
+    'target_vat_pence',target,'identity_movement_id',p_identity_movement_id,'description','VAT rounding (matches the client''s self-bill)');
+  mapping:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_VAT_ROUNDING_V1',jsonb_build_object('rule_set_version_id',revision.rule_set_version_id));
+  h:=private.weekly_source_billing_movement_hash_v1(jsonb_build_object('vat_rounding_revision_id',revision.id,'final_revision_id',revision.id,
+    'finalisation_cycle_id',revision.source_cycle_id,'actual_client_id',p_client_id,'candidate_id',identity_row.candidate_id,'contract_id',identity_row.contract_id,
+    'work_event_id',identity_row.work_event_id,'movement_role','POSITIVE','prior_movement_id',p_identity_movement_id,'source_profile_kind',profile,
+    'source_line_kind','INVOICE_VAT_ROUNDING','source_facts',facts,'pay_vector',pay,'charge_vector',charge,'total_pay_pence',0,
+    'calculated_comparison_charge_pence',0,'source_validation_charge_pence',null,'invoice_presentation_charge_pence',0,
+    'vat_rate_pct',rate,'vat_amount',difference::numeric/100,'total_inc_vat',difference::numeric/100,'price_check_result','NOT_APPLICABLE',
+    'price_check_fingerprint',null,'charge_acceptance_id',null,'mapping_rate_policy_fingerprint',encode(mapping,'hex'),'invoice_timesheet_id',identity_row.invoice_timesheet_id)
+    ||case when p_invoice_window_cycle_id=revision.source_cycle_id then '{}'::jsonb else jsonb_build_object('invoice_window_cycle_id',p_invoice_window_cycle_id) end);
+  insert into public.weekly_source_billing_movements(vat_rounding_revision_id,invoice_window_cycle_id,final_revision_id,finalisation_cycle_id,actual_client_id,candidate_id,contract_id,work_event_id,
+    movement_role,prior_movement_id,source_profile_kind,source_line_kind,source_facts_json,canonical_pay_vector_json,canonical_charge_vector_json,
+    total_pay_ex_vat,calculated_comparison_charge_pence,invoice_presentation_charge_pence,vat_rate_pct,vat_amount,total_inc_vat,
+    price_check_result,mapping_rate_policy_fingerprint,invoice_timesheet_id,original_cycle_key,movement_economic_hash)
+  values(revision.id,case when p_invoice_window_cycle_id=revision.source_cycle_id then null else p_invoice_window_cycle_id end,revision.id,revision.source_cycle_id,p_client_id,identity_row.candidate_id,identity_row.contract_id,identity_row.work_event_id,
+    'POSITIVE',p_identity_movement_id,profile,'INVOICE_VAT_ROUNDING',facts,pay,charge,0,0,0,rate,difference::numeric/100,difference::numeric/100,
+    'NOT_APPLICABLE',mapping,identity_row.invoice_timesheet_id,revision.source_cycle_id::text,h) returning public.weekly_source_billing_movements.id into id;
+  return id;
+end;
+$function$;

@@ -103,7 +103,8 @@ export function activationReceiptReady(value,assignment){
 export function loadOperationalJourneys(root,release,context){
  if(!/^[0-9a-f]{40}$/.test(context.receiptInputCommit))fail('OPERATIONAL_RECEIPT_INPUT_COMMIT_INVALID');
  const bundle=loadCommittedBundle(root,release,{...context,gitCommit:context.receiptInputCommit},'weeklySourceProtectedOperational');if(bundle===null)return [];
- exact(bundle,['schema_version','qualifications'],'OPERATIONAL_BUNDLE_INVALID');
+ exact(bundle,['schema_version','qualifications',...['report_fin_qualifications','report_fin_native_inputs','report_fin_native_artifacts']
+  .filter(key=>Object.hasOwn(bundle,key))],'OPERATIONAL_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
   ||!bundle.qualifications.length||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');
  return bundle.qualifications.map(row=>{

@@ -137,8 +137,14 @@ begin
     or (select coalesce(jsonb_agg(value->'candidate_id' order by value->'candidate_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'candidate_refs') value) is distinct from manifest->'candidate_ids' then
     raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FIXTURE_REFUSED' using errcode='42501'; end if;
   perform private._weekly_source_rule_group_context_v1(g.id,a.effective_from_week_ending,a.effective_to_week_ending,v.values_json,true);
+  -- HISTORICAL_FIXTURE_OPEN_BOUNDARY: every use rechecks the real native
+  -- assignment audit; only the first source OPEN additionally requires zero
+  -- prior uploads. No historical operational enablement is inferred.
+  if a.effective_from_week_ending<today then
+    perform private.weekly_source_historical_fixture_setup_assert_v1(auth,p_initial_open and auth->>'purpose'='SOURCE_FIXTURE_SETUP');
+  end if;
   if p_initial_open then
-    if auth->>'purpose'='SOURCE_FIXTURE_SETUP' and (a.effective_from_week_ending<today or c.finalisation_week_ending<>a.effective_from_week_ending
+    if auth->>'purpose'='SOURCE_FIXTURE_SETUP' and (c.finalisation_week_ending<>a.effective_from_week_ending
       or c.current_final_revision_id is not null or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
       or exists(select 1 from public.weekly_source_final_revisions final where final.source_cycle_id=c.id)
       or auth->'original_source_cas' is distinct from 'null'::jsonb) then

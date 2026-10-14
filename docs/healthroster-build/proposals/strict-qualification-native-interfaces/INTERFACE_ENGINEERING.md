@@ -1,4 +1,6 @@
-# Native qualification interfaces — unfinished source engineering
+# Native qualification interfaces — historical working notes
+
+Superseded on 14 October 2026 by `SOURCE_REVIEW_READY.md`, `REVIEW_MANIFEST.json` and `SOURCE_CHECK_RESULT.json`. The notes below describe the earlier unfinished checkpoint; their former calendar wait and remaining-source list do not govern the completed source packet. No actual acceptance is claimed by either document.
 
 This folder is separate from frozen Q45, both pin6 packets, first-use F12 and fatal-path P10. No owner, schema, assignment, source, runtime or database change is mounted. Complete source composition and source regressions are still being authored; these files are not an acceptance packet.
 

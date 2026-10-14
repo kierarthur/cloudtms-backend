@@ -1,6 +1,8 @@
-import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 const out=path.dirname(fileURLToPath(import.meta.url)),own=path.resolve(out,'../../../..'),root=path.resolve(own,'../healthroster-v2-backend-13102026'),sha=x=>createHash('sha256').update(x).digest('hex');
-const original=fs.readFileSync(path.join(root,'broker/src/index.js'),'utf8');let value=original;const changes=[];
+const inputCommit='2151af656561ad4d68e61e242769ed80a631fcc9';
+const original=execFileSync('git',['show',inputCommit+':broker/src/index.js'],{cwd:own,maxBuffer:32_000_000}).toString('utf8');
+assert.equal(fs.readFileSync(path.join(root,'broker/src/index.js'),'utf8'),original,'BROKER_SAVED_SOURCE_PIN_CHANGED');let value=original;const changes=[];
 function edit(before,after){assert.equal(value.split(before).length-1,1,before);value=value.replace(before,()=>after);changes.push({before,after});}
 edit("import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';",
  "import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';\r\nimport { createOffRuleTransportRpc } from './weekly-source/off-rule-transport-rpc.mjs';");
@@ -31,7 +33,7 @@ after=after.replace(actor,()=>`requireUser: async (runtimeEnv, request, roles) =
 edit(body,injection+after);
 let reverse=value;for(const h of [...changes].reverse()){assert.equal(reverse.split(h.after).length-1,1);reverse=reverse.replace(h.after,()=>h.before);}assert.equal(reverse,original);
 fs.writeFileSync(path.join(out,'BROKER_INDEX_SOURCE_FORWARD.js'),value);
-fs.writeFileSync(path.join(out,'BROKER_TRANSPORT_REVERSE.json'),JSON.stringify({source_only:true,input_file:'broker/src/index.js',input_sha256:sha(original),output_sha256:sha(value),
+fs.writeFileSync(path.join(out,'BROKER_TRANSPORT_REVERSE.json'),JSON.stringify({source_only:true,input_commit:inputCommit,input_file:'broker/src/index.js',input_sha256:sha(original),output_sha256:sha(value),
  reverse_hunk_matches_entire_input_definition:true,scope:'Only existing Weekly Source request dependency block and one import',
  direct_rpc_callers:2,native_recording_rpc_callers:5,unchanged_calculator_and_c1_raw_dependencies:true,no_new_http_route:true,
  changes:changes.map(h=>({before_sha256:sha(h.before),after_sha256:sha(h.after)})),no_remote_acceptance:true},null,2)+'\n');

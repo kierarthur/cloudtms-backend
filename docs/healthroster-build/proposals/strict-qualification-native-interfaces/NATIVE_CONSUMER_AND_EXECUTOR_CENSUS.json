@@ -1,7 +1,7 @@
 {
   "schema_version": "STRICT_QUALIFICATION_NATIVE_INTERFACE_LITERAL_CENSUS_V1",
   "source_only": true,
-  "root_source_commit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "root_source_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
   "ordering": "Current release baselineFiles then actual repository sqlDateKey migrations/top-level repeatables, each include expanded at its literal occurrence; full current definitions by source identity. Definitions and literal triggers are source declarations, not installed catalogue proof. Dynamic DDL needs separate owner review.",
   "current_effective_rule_owner": [
     {

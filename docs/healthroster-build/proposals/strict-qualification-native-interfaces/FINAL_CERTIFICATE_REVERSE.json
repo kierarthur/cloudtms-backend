@@ -40,7 +40,7 @@
     {
       "file": "final-operational-evidence.mjs",
       "input_sha256": "76d4e65450ed45cb82600e51fd45461d34839f36d84452a5a226ce04878d9096",
-      "output_sha256": "4a6ed3853bc02c2ae533e4525c2201ebdbdcea5a2f7cd57615eb0f357b8b4958",
+      "output_sha256": "8f092310b61a9d3a803d09730f304d970e9d1d4b3dd8241139361a777aa2d330",
       "reverse_hunk_matches_entire_input_definition": true,
       "changes": [
         {
@@ -78,6 +78,10 @@
         {
           "before_sha256": "d177213d2dca527f8ce5cf174d082ed9f231eeb6b0e91af61c9d994e7be9ebe2",
           "after_sha256": "bd0dbca87c24ca49e2771608a56ee6107224d52b2dd865256e241ae7869ffee5"
+        },
+        {
+          "before_sha256": "02fd19aec5e385a310f7537915e03b002916892b5dfde56b0a1544463ec320b6",
+          "after_sha256": "6cb3753539ef679df43ea4cf97c4d090af1bfcabde8ca76a6ec3d4b0b76e1102"
         },
         {
           "before_sha256": "7b08e83c2579ba5d686b73999294f25847df657ca8f6ae445e62051c5ff68ab3",

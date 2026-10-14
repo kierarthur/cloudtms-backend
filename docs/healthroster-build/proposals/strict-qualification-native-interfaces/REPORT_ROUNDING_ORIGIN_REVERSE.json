@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "input_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "input_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+  "input_file_sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+  "input_definition_sha256": "ca37181dfd96a64539a060d2dc02705074424bb666384b7881629fd7102856c0",
+  "output_definition_sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312",
+  "reverse_hunks_match_entire_original_definition": true,
+  "ordinary_four_nonnull_identity_guard_preserved": true,
+  "all_native_vat_calculations_hashes_and_zero_pay_fields_unchanged": true,
+  "supplied_report_identity_is_existing_movement_including_nulls": true,
+  "no_new_signature_table_grant_or_selector": true,
+  "mandatory_external_dependency": "Report-only actual native invoice compositor source ordinal ordering and independently captured frozen/rendered last component full identity",
+  "actual_postgresql_or_document_acceptance": false,
+  "hunks": [
+    {
+      "before_sha256": "1104600751f6c665ed911ebdc4f15732cad77cb9b570aaa16ce5ebf02617090a",
+      "after_sha256": "0fc00dbe0ca1429bdb773318d198e10f38b445b8046a713224e747ea1bb4e2ce"
+    },
+    {
+      "before_sha256": "82b6720a842a3d0efc0b76dbeec080d4472727aafabb8ae560f75eaa6e249dc8",
+      "after_sha256": "f7b69ea7a85fec823aa8bbbd5eceb3f546100a47d04d43f17aad6c6a07dec468"
+    }
+  ]
+}

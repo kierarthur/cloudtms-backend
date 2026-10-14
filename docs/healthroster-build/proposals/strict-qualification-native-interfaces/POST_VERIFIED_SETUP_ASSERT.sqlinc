@@ -49,6 +49,11 @@ begin
   select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(p_artifact#>'{fixture_manifest,client_ids}') value;
   if cardinality(clients) not between 1 and 100 or to_jsonb(clients) is distinct from p_artifact#>'{fixture_manifest,client_ids}' then
     raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_SCOPE_CHANGED' using errcode='40001'; end if;
+  -- HISTORICAL_FIXTURE_RECORD_BOUNDARY: every past scope uses the exact
+  -- genuine native disabled assignment; Source setup also proves vacancy.
+  if a.effective_from_week_ending<(clock_timestamp() at time zone 'Europe/London')::date then
+    perform private.weekly_source_historical_fixture_setup_assert_v1(p_artifact,p_artifact->>'purpose'='SOURCE_FIXTURE_SETUP');
+  end if;
   if p_artifact->>'purpose'='AUTOMATIC_JOURNEY' then
     if cardinality(clients)<>1 or v.values_json->>'equal_protected_hours' is distinct from 'CLEAR_AUTOMATICALLY'
       or private.weekly_source_bulk_source_cas_v1(c.id,clients) is distinct from p_artifact->'original_source_cas'
@@ -57,11 +62,12 @@ begin
       or (select automatic_reconcile_actor_user_id from public.weekly_source_global_settings where singleton)
         is distinct from (p_artifact->>'journey_actor_user_id')::uuid then
       raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_SOURCE_CHANGED' using errcode='40001'; end if;
-  elsif a.effective_from_week_ending<(clock_timestamp() at time zone 'Europe/London')::date
-    or c.finalisation_week_ending<>a.effective_from_week_ending or c.current_final_revision_id is not null
+  else
+    if c.finalisation_week_ending<>a.effective_from_week_ending or c.current_final_revision_id is not null
     or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
     or exists(select 1 from public.weekly_source_final_revisions final where final.source_cycle_id=c.id)
     or p_artifact->'original_source_cas' is distinct from 'null'::jsonb then
     raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_FUTURE_UNFINALISED_REQUIRED' using errcode='55000'; end if;
+  end if;
 end;
 $function$;
