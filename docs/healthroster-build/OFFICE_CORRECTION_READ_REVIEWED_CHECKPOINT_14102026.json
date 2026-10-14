@@ -1,0 +1,54 @@
+{
+  "schema": "OFFICE_CORRECTION_READ_REVIEWED_SOURCE_CHECKPOINT_V1",
+  "own_parent_source_commit": "d59255c626bbad7f2ee5db02dc2c36ad58fcdd48",
+  "actual_office_source_commit": "f2de35ec8a376a814aefab1db2d7cf099b888784",
+  "actual_backend_mount_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "packets": [
+    {
+      "folder": "install2-office-correction-read-consumer-20261014",
+      "artifact_count": 14,
+      "manifest_sha256": "2d39c34ce67e3255b362cd9c8427fec4700b202790f624bbb4b6c044ce5354d6",
+      "checks_sha256": "247e787b12ecf602c785df68894eacd0c7ad3a0de59ab0036c2c50dbdc03b492"
+    },
+    {
+      "folder": "install2-office-correction-read-session-successor-20261014",
+      "artifact_count": 16,
+      "manifest_sha256": "ad0f5b3915d7e56004710dc55fd8b434e42acdb91f0cbd651535df19df9c002f",
+      "checks_sha256": "c345b601a4ac8b55b7615286da07c84058974f17557df8705e4820fc0750b110"
+    }
+  ],
+  "final_outputs": [
+    {
+      "path": "js/main.js",
+      "sha256": "75010872e22408e52bc378aa1acf0ec9d27e559873f4966535cd8efc13512d92"
+    },
+    {
+      "path": "index.html",
+      "sha256": "356d202cfa5b1271f7922a11ad499ca022012157e69c085637f615013543a321"
+    },
+    {
+      "path": "js/timesheet-correction-office-context.js",
+      "sha256": "03d2a43688e3b62dd74d17630970b17cf95df9cd6688ebf9d519993244fa3a12"
+    }
+  ],
+  "supersedes": {
+    "frozen14_p1": "P1-OFFICE-READ1",
+    "final_main_and_index": "immutable16",
+    "unchanged_read_module": "immutable14"
+  },
+  "independent_critic_source_accepted": true,
+  "effect_free_tests": 32,
+  "syntax_checks": 6,
+  "source_checks": 10,
+  "whole_current_reverse_hunks": 2,
+  "additional14_reverse_hunks": 4,
+  "old14_bytes_preserved": true,
+  "office_worktree_writes": false,
+  "backend_or_root_worktree_writes": false,
+  "database_calls": false,
+  "http_calls": false,
+  "native_calls": false,
+  "source_read_view_seam_complete": true,
+  "full_correction_workflow_complete": false,
+  "native_seal": null
+}

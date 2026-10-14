@@ -1,0 +1,80 @@
+{
+  "schema": "OFFICE_CORRECTION_READ_SESSION_SUCCESSOR_V1",
+  "actual_source_commit": "f2de35ec8a376a814aefab1db2d7cf099b888784",
+  "changed_current_owners": [
+    {
+      "path": "js/main.js",
+      "before_sha256": "ed486ea92f5a3fde59fa362033425aeee94a98df562d64e999c52c85c5a6d3ed",
+      "after_sha256": "75010872e22408e52bc378aa1acf0ec9d27e559873f4966535cd8efc13512d92",
+      "hunks": [
+        {
+          "before": "// ── Canonical timesheet finance actions (advance / unadvance / snooze) ──\r\ntry {\r\n  if (typeof wireTimesheetOverviewFinanceActions === 'function') {\r\n    wireTimesheetOverviewFinanceActions(root);\r\n  }\r\n} catch (err) {\r\n  if (LOGM) console.warn('[TS][OVERVIEW] finance action wiring failed', err);\r\n}",
+          "after": "// ── Canonical timesheet finance actions (advance / unadvance / snooze) ──\r\ntry {\r\n  if (typeof wireTimesheetOverviewFinanceActions === 'function') {\r\n    wireTimesheetOverviewFinanceActions(root);\r\n  }\r\n} catch (err) {\r\n  if (LOGM) console.warn('[TS][OVERVIEW] finance action wiring failed', err);\r\n}\r\n\r\n// Current native correction request read only. Original SEND, finance,\r\n// PREPARE and action eligibility remain with their own qualified producers.\r\ntry {\r\n  const sessionAtRead = SESSION, currentUser = sessionAtRead?.user;\r\n  const details = mc.timesheetDetails, physical = details?.timesheet;\r\n  const token = mc.openToken, actor = currentUser?.id;\r\n  // Existing /api/me does not carry current active/payment flags. Request the\r\n  // fixed read and consume its native admitted view; never mint a local role.\r\n  const view = 'NATIVE';\r\n  const rolesAtRead = JSON.stringify(Array.isArray(currentUser?.roles) ? currentUser.roles : null);\r\n  const payFlags = [currentUser?.role, currentUser?.is_active, currentUser?.payment_authoriser, currentUser?.payment_golden_key];\r\n  const admitted = typeof actor === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actor);\r\n  const physicalId = physical?.timesheet_id, version = physical?.version;\r\n  const current = () => root.isConnected && SESSION === sessionAtRead && SESSION?.user === currentUser\r\n    && SESSION?.user?.id === actor && isActiveTimesheetModalToken(token)\r\n    && JSON.stringify(Array.isArray(SESSION?.user?.roles) ? SESSION.user.roles : null) === rolesAtRead\r\n    && window.modalCtx?.timesheetDetails === details && window.modalCtx?.timesheetDetails?.timesheet?.version === version\r\n    && String(tsNow()).toLowerCase() === String(physicalId).toLowerCase()\r\n    && String(expectedNow()).toLowerCase() === String(physicalId).toLowerCase()\r\n    && JSON.stringify([SESSION?.user?.role, SESSION?.user?.is_active, SESSION?.user?.payment_authoriser,\r\n      SESSION?.user?.payment_golden_key]) === JSON.stringify(payFlags);\r\n  if (mode === 'view' && admitted && physicalId && Number.isSafeInteger(version) && version > 0 && current()) {\r\n    window.CloudTmsCorrectionOfficeContext?.mount?.({document,host:root,timesheetId:physicalId,version,view,callerCurrent:current,\r\n      readContext:async()=>{\r\n        if (!current()) throw new Error('Context changed');\r\n        const response = await authFetch(API('/api/timesheets/' + encodeURIComponent(physicalId) + '/corrections/context'));\r\n        if (!current()) throw new Error('Context changed');\r\n        let payload;try { payload = await response.json(); } catch { throw new Error('Correction details are unavailable'); }\r\n        if (!current() || !response.ok) throw new Error('Correction details are unavailable');\r\n        return payload;\r\n      },\r\n      openReplacement:id=>{if (current() && typeof window.openTimesheet === 'function') return window.openTimesheet(id);}\r\n    });\r\n  }\r\n} catch (err) {\r\n  if (LOGM) console.warn('[TS][OVERVIEW] correction request read wiring unavailable');\r\n}"
+        }
+      ]
+    },
+    {
+      "path": "index.html",
+      "before_sha256": "c15da401fea00a5db095a5dc83fa145951f73dacc68ed10f9ed6df825638c3d1",
+      "after_sha256": "356d202cfa5b1271f7922a11ad499ca022012157e69c085637f615013543a321",
+      "hunks": [
+        {
+          "before": "<script src=\"./js/main.js?v=20261012-sp10-r1&healthroster=20261014-r1\"></script>",
+          "after": "<script src=\"./js/timesheet-correction-office-context.js?v=20261014-correction-read-r1\"></script>\r\n<script src=\"./js/main.js?v=20261012-sp10-r1&healthroster=20261014-r3\"></script>"
+        }
+      ]
+    }
+  ],
+  "new_modules": [
+    {
+      "path": "js/timesheet-correction-office-context.js",
+      "before_absent": true,
+      "after_sha256": "03d2a43688e3b62dd74d17630970b17cf95df9cd6688ebf9d519993244fa3a12"
+    }
+  ],
+  "consumed_backend_source_commit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+  "actual_backend_mount_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "backend_context_module_sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0",
+  "read_only": true,
+  "mutation_commands": [],
+  "native_evidence": false,
+  "source_before_native_seal": null,
+  "predecessor_manifest_sha256": "2d39c34ce67e3255b362cd9c8427fec4700b202790f624bbb4b6c044ce5354d6",
+  "predecessor_source_checks_sha256": "247e787b12ecf602c785df68894eacd0c7ad3a0de59ab0036c2c50dbdc03b492",
+  "predecessor_artifact_count": 14,
+  "successor_changed_owners": [
+    {
+      "path": "js/main.js",
+      "before_sha256": "c9b1f04b390a7b7b3933a65bb7af6564c94fa54261c3bed724e06c28a74c46b6",
+      "after_sha256": "75010872e22408e52bc378aa1acf0ec9d27e559873f4966535cd8efc13512d92",
+      "hunks": [
+        {
+          "before": "  const currentUser = SESSION?.user;",
+          "after": "  const sessionAtRead = SESSION, currentUser = sessionAtRead?.user;"
+        },
+        {
+          "before": "  const payFlags = [currentUser?.role, currentUser?.is_active, currentUser?.payment_authoriser, currentUser?.payment_golden_key];",
+          "after": "  const rolesAtRead = JSON.stringify(Array.isArray(currentUser?.roles) ? currentUser.roles : null);\r\n  const payFlags = [currentUser?.role, currentUser?.is_active, currentUser?.payment_authoriser, currentUser?.payment_golden_key];"
+        },
+        {
+          "before": "  const current = () => root.isConnected && SESSION?.user?.id === actor && isActiveTimesheetModalToken(token)",
+          "after": "  const current = () => root.isConnected && SESSION === sessionAtRead && SESSION?.user === currentUser\r\n    && SESSION?.user?.id === actor && isActiveTimesheetModalToken(token)\r\n    && JSON.stringify(Array.isArray(SESSION?.user?.roles) ? SESSION.user.roles : null) === rolesAtRead"
+        }
+      ]
+    },
+    {
+      "path": "index.html",
+      "before_sha256": "e4e57e84bfc81d1c788f61565edace92b9ae91585c37b493d5753727ca4b64d5",
+      "after_sha256": "356d202cfa5b1271f7922a11ad499ca022012157e69c085637f615013543a321",
+      "hunks": [
+        {
+          "before": "healthroster=20261014-r2",
+          "after": "healthroster=20261014-r3"
+        }
+      ]
+    }
+  ],
+  "current_roles_array_source_bound": true,
+  "session_identity_bound": true,
+  "private_server_authority_unchanged": true
+}

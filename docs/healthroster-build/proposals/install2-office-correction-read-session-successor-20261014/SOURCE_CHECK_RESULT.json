@@ -1,0 +1,82 @@
+{
+  "schema": "OFFICE_CORRECTION_READ_SESSION_SOURCE_CHECKS_V1",
+  "checks": [
+    {
+      "name": "all14_predecessor_artifacts_and_manifest_unchanged",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "four_unique_session_cache_successor_hunks_restore_exact_frozen14",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "actual_roles_contents_and_current_session_identity_bound_without_client_authority_minting",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "both_whole_current_office_owners_saved_before_and_git_f2de_exact",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "two_unique_full_reverse_hunks_recover_all_current_office_bytes",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "new_module_absent_current_and_exact_generated_source",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "exact_current_backend_context_and_actual_me_shape_source_bound",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "six_source_syntax_checks_without_running_main_classic_browser_script_semantics",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "32_real_module_actual_me_shape_and_exact_main_hunk_effect_free_vectors",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    },
+    {
+      "name": "all_full_copy_trailing_whitespace_is_existing_parent_content_no_introduced",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_ONLY"
+    }
+  ],
+  "source_check_count": 10,
+  "unit_vector_count": 32,
+  "syntax_count": 6,
+  "whitespace_provenance": [
+    {
+      "path": "js/main.js",
+      "before_trailing_lines": 19,
+      "after_trailing_lines": 19,
+      "introduced": 0,
+      "raw_whitespace_pass": false,
+      "parent_provenance_sha256": "261a4368029fc1bb51ba0c8abac690b26386066d81ebd88590cd3408f757b441"
+    },
+    {
+      "path": "index.html",
+      "before_trailing_lines": 5,
+      "after_trailing_lines": 5,
+      "introduced": 0,
+      "raw_whitespace_pass": false,
+      "parent_provenance_sha256": "0846e86327e1d623ae599bbe0557bc653fde24ab44d956fd217881d143fe360c"
+    }
+  ],
+  "native_calls": false,
+  "http_calls": false,
+  "browser_calls": false,
+  "source_read_seam_complete": true,
+  "full_correction_workflow_complete": false,
+  "native_seal": null
+}

@@ -1,0 +1,14 @@
+{
+  "actual_source_pin": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "context": {
+    "path": "broker/src/timesheet-correction-office-context.mjs",
+    "raw_sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0"
+  },
+  "current_me": {
+    "path": "broker/src/index.js",
+    "full_source_raw_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+    "whole_definition_sha256": "90e546bdc8d939f9a45a0949198a6f3666e45a7eff86539d0537c86d1641c35f",
+    "evidence_file": "CURRENT_ME_SOURCE.js.txt"
+  },
+  "no_native_claim": true
+}

@@ -1,0 +1,3096 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>CloudTMS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="preload" as="image" href="./assets/branding/cloudtms-office-logo-black.png"/>
+  <link rel="stylesheet" href="./css/import-review-v1.css?v=20260802-validation-policy-r4&daily-roster-compat=20260822-r1"/>
+  <link rel="stylesheet" href="./css/timesheet-nhsp-lines.css"/>
+  <link rel="stylesheet" href="./css/weekly-source-presentation-v1.css?v=20261012-sp10-r1"/>
+  <link rel="stylesheet" href="./css/weekly-source.css?v=20261010-contact-policy-r2&healthroster=20261014-r1"/>
+  <link rel="stylesheet" href="./css/invoice-batch-modal.css?v=20260729-invoice-v8-flat-table-r5"/>
+  <link rel="stylesheet" href="./css/candidate-office-v1.css?v=20261005-candidate-header-r2"/>
+  <link rel="stylesheet" href="./css/banking-pay-modal-v2.css?v=20260901-r13"/>
+ <link rel="stylesheet" href="./css/bpay-next-office.css?v=20261013-xd01-r1">
+  <style>
+       :root{
+      --bg:#020617;
+      --panel:#0b1221;
+      --muted:#1f2937;
+      --text:#f8fafc;
+      --sub:#cbd5e1;
+      --brand:#4f46e5;
+      --ok:#16a34a;
+      --warn:#f59e0b;
+      --fail:#ef4444;
+      --line:#334155;
+      --chip:#0ea5e9;
+      --hover: rgba(79,70,229,.12);
+      --selection-blue:#2563eb;
+      --selection-blue-bg:rgba(37,99,235,.22);
+      --selection-blue-bg-strong:rgba(37,99,235,.34);
+      --selection-blue-border:#60a5fa;
+      --radius:12px;
+      --shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+
+ 
+  /* ===== Dark controls for Summary + Tools filters (non-modal) ===== */
+  .dark-control{
+    color-scheme: dark;
+    background:#0b152a !important;
+    color:var(--text) !important;
+    border:1px solid var(--line) !important;
+    border-radius:8px !important;
+    padding:4px 8px !important;
+    font-size:12px !important;
+    outline:none;
+  }
+  .dark-control:focus{
+    box-shadow: 0 0 0 2px rgba(79,70,229,.35);
+  }
+  .dark-control option{
+    background:#020617;
+    color:var(--text);
+  }
+
+  /* ===== Pager active page highlight ===== */
+  .pager .pager-btn.active{
+    background:var(--selection-blue-bg-strong) !important;
+    border-color:var(--selection-blue-border) !important;
+    color:#fff !important;
+    font-weight:700;
+  }
+    *{box-sizing:border-box}
+html,body{
+  height:100%;
+}
+
+body{
+  margin:0;
+  background:#020617;
+  color:var(--text);
+  font:13px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  /* Default: no window scroll, we use inner scrolls (.summary-body, modals) */
+  overflow:hidden;
+}
+
+/* Force native form controls in modal to use dark UI */
+#modal, .modal { 
+  color-scheme: dark;
+}
+
+/* Evidence dropdowns use class="input" but were rendering "white menu + white text" */
+#modal select.input,
+#modal .tabc select.input{
+  background:#000 !important;                 /* overrides inline background:transparent */
+  color:var(--text) !important;
+  border:1px solid var(--line) !important;
+}
+
+/* Try to force dropdown option palette dark as well (works in Chrome/Edge; varies by OS) */
+#modal select.input option{
+  background:#020617;
+  color:var(--text);
+}
+
+
+    a{color:inherit}
+
+    /* ===== App chrome ===== */
+    .topbar{
+      position:sticky; top:0; z-index:9;
+      display:flex; align-items:center; gap:10px;
+      padding:8px 16px;
+      background:rgba(15,23,42,.9);
+      border-bottom:1px solid rgba(148,163,184,.35);
+      backdrop-filter:saturate(150%) blur(10px);
+    }
+    .brand{
+      position:relative;
+      flex:0 0 102px;
+      width:102px;
+      height:37px;
+      margin-right:8px;
+      overflow:hidden;
+      isolation:isolate;
+    }
+    .brand img{
+      position:absolute;
+      width:145px;
+      max-width:none;
+      height:auto;
+      left:-21.5px;
+      top:-34.5px;
+      display:block;
+      mix-blend-mode:screen;
+      pointer-events:none;
+      user-select:none;
+    }
+
+    .nav{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+    .nav button{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid rgba(148,163,184,.4);
+      background:rgba(15,23,42,.95);
+      color:var(--text);
+      padding:6px 10px;
+      border-radius:999px;
+      cursor:pointer;
+      transition:background .12s ease,border-color .12s ease,transform .06s ease;
+      box-shadow:none;
+      font-size:12px;
+    }
+    .nav button:hover{
+      background:rgba(30,64,175,.35);
+      border-color:rgba(129,140,248,.7);
+      transform:translateY(-0.5px);
+    }
+    .nav button.active{
+      outline:none;
+      border-color:#6366f1;
+      background:rgba(79,70,229,.22);
+    }
+    .nav .ico{ width:18px; height:18px; opacity:.9 }
+
+    .userbox{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-left:auto;
+      color:var(--sub);
+      font-size:12px;
+    }
+    .userbox .chip{
+      background:#020617;
+      border:1px solid var(--line);
+      padding:4px 10px;
+      border-radius:20px;
+    }
+    .userbox button{
+      background:transparent;
+      color:var(--sub);
+      border:1px solid var(--line);
+      padding:6px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .userbox button:hover{
+      background:var(--hover);
+      color:var(--text);
+    }
+
+    /* ===== Layout ===== */
+.layout{
+  display:grid;
+  grid-template-columns:260px 1fr;
+  grid-template-rows: 1fr;
+  gap:16px;
+  height:calc(100vh - 48px);  /* fill the viewport under the topbar */
+  min-height:0;
+  padding:16px;
+}
+@media (max-height: 800px) {
+  html, body{
+    height:auto;
+    min-height:0;
+    overflow:auto;             /* allow outer window to scroll when screen is short */
+  }
+
+  .layout{
+    height:auto;               /* layout can grow taller than the viewport */
+    min-height:calc(100vh - 48px);
+  }
+}
+
+
+    .panel{
+      background:radial-gradient(circle at top left,#020617 0,#020617 45%,#020617 100%);
+      border:1px solid rgba(30,64,175,.35);
+      border-radius:var(--radius);
+      box-shadow:0 18px 40px rgba(15,23,42,.75);
+      min-height:0;
+    }
+
+    .tools{
+      padding:12px;
+      position:sticky;
+      top:72px;
+      height:fit-content;
+    }
+    .tools h3{
+      margin:4px 0 8px;
+      font-size:11px;
+      font-weight:600;
+      color:var(--sub);
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+    .tools .group{
+      border-top:1px dashed var(--line);
+      padding-top:10px;
+      margin-top:8px;
+    }
+    .tools button,
+    .tools .btn{
+      width:100%;
+      text-align:left;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      background:#020617;
+      border:1px solid var(--line);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      margin:6px 0;
+      font-size:12px;
+    }
+    .tools button:hover{
+      background:var(--hover);
+    }
+    .tools .note{
+      font-size:12px;
+      color:#9ca3af;
+    }
+
+    /* ===== Summary / main panel ===== */
+    .main{
+      padding:0;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+
+    .toolbar{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+    }
+    .toolbar .title{
+      font-weight:600;
+      font-size:15px;
+      letter-spacing:.01em;
+    }
+    .spacer{ flex:1 }
+    .toolbar input[type="text"]{
+      background:#0b1427;
+      border:1px solid var(--line);
+      color:#fff;
+      border-radius:8px;
+      padding:8px 10px;
+      min-width:260px;
+      font-size:12px;
+    }
+    .toolbar input[type="text"]::placeholder{
+      color:#64748b;
+    }
+    .toolbar .mini{
+      font-size:12px;
+      color:var(--sub);
+    }
+
+    /* "Columns" toolbar button */
+    .toolbar button{
+      border:1px solid rgba(148,163,184,.45);
+      background:#020617;
+      color:#e5e7eb;
+      padding:6px 10px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .toolbar button:hover{
+      background:rgba(79,70,229,.25);
+      border-color:#6366f1;
+      color:#f9fafb;
+    }
+
+    .main select{
+      background:#050b16;
+      border:1px solid rgba(255,255,255,.15);
+      color:#f8fafc;
+      border-radius:6px;
+      padding:2px 8px;
+      font-size:12px;
+    }
+
+    #content{
+      flex:1;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+    }
+
+.summary-body{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:auto;
+  scrollbar-width:thin;
+  scrollbar-color:#1e293b #020617;
+}
+.summary-body:focus,
+.summary-body:focus-visible{
+  outline:none;
+  box-shadow:none;
+}
+.summary-body::-webkit-scrollbar{
+  width:8px;
+  height:8px;
+}
+    .summary-body::-webkit-scrollbar-track{
+      background:#020617;
+    }
+    .summary-body::-webkit-scrollbar-thumb{
+      background:#1e293b;
+      border-radius:999px;
+      border:1px solid #020617;
+    }
+    .summary-body::-webkit-scrollbar-thumb:hover{
+      background:#334155;
+    }
+
+    /* ===== Grid / table ===== */
+    .grid{
+      border-collapse:separate;
+      border-spacing:0;
+      table-layout:fixed;
+      width:100%;
+    }
+    .grid th,
+    .grid td{
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+      vertical-align:top;
+      font-size:12px;
+    }
+    .grid th{
+      position:sticky;
+      top:0;
+      z-index:1;
+      background:#020617;
+      border-bottom:1px solid var(--line);
+      text-align:left;
+    }
+
+    .grid thead tr{
+      border-top:1px solid var(--line);
+      border-bottom:1px solid var(--line);
+    }
+    .grid thead th:first-child{
+      border-left:1px solid var(--line);
+    }
+    .grid thead th:last-child{
+      border-right:1px solid var(--line);
+    }
+    .grid thead th + th{
+      border-left:1px solid var(--line);
+    }
+
+    .main .grid thead th:first-child,
+    .main .grid tbody td:first-child{
+      width:40px;
+      min-width:40px;
+      max-width:40px;
+      text-align:center;
+    }
+
+     .grid tbody tr:nth-child(2n){
+      background:rgba(15,23,42,.55);
+    }
+    .grid tbody tr:hover{
+      background:rgba(30,64,175,.25);
+    }
+
+    /* ✅ Summary grid rows are clickable: use pointer instead of I-beam */
+    .summary-body .grid tbody tr,
+    .summary-body .grid tbody td{
+      cursor:pointer;
+    }
+
+    /* Keep native cursors for actual interactive controls inside cells */
+    .summary-body .grid tbody td input,
+    .summary-body .grid tbody td select,
+    .summary-body .grid tbody td textarea,
+    .summary-body .grid tbody td button,
+    .summary-body .grid tbody td a{
+      cursor:auto;
+    }
+/* ===== Weekly Import Summary (NHSP + HR weekly) ===== */
+#weeklyImportSummary .weekly-import-card{
+  background:#0c172d;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:12px;
+}
+
+/* Important: override global .grid { table-layout: fixed } just for this table */
+#weeklyImportSummary .wi-grid{
+  table-layout:auto;
+}
+
+/* Scroll only the table area */
+#weeklyImportSummary .wi-table-wrap{
+  max-height: 56vh;          /* adjust if you want taller/shorter */
+  overflow: auto;            /* vertical + horizontal if needed */
+  border:1px solid var(--line);
+  border-radius:10px;
+}
+
+/* Keep the table header locked within that scroll area */
+#weeklyImportSummary .wi-grid thead th{
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background:#020617;
+  box-shadow: 0 1px 0 var(--line);  /* keeps a crisp line when scrolling */
+}
+
+/* Wider columns (so it’s not cramped) */
+#weeklyImportSummary .wi-col-staff{   width: 200px; }
+#weeklyImportSummary .wi-col-unit{    width: 320px; }
+#weeklyImportSummary .wi-col-date{    width: 160px; }
+#weeklyImportSummary .wi-col-code{    width: 120px; }
+#weeklyImportSummary .wi-col-status{  width: 190px; }
+#weeklyImportSummary .wi-col-reason{  width: 420px; }
+#weeklyImportSummary .wi-col-actions{ width: 260px; }
+
+/* Make action buttons sit neatly */
+#weeklyImportSummary .wi-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:flex-start;
+}
+
+/* Row background state colouring (discreet) */
+#weeklyImportSummary tr.wi-row-ready{
+  background: rgba(22,163,74,.10) !important;   /* soft green */
+}
+#weeklyImportSummary tr.wi-row-issue{
+  background: rgba(239,68,68,.08) !important;   /* soft red */
+}
+
+/* Preserve hover but keep the meaning */
+#weeklyImportSummary tr.wi-row-ready:hover{
+  background: rgba(22,163,74,.16) !important;
+}
+#weeklyImportSummary tr.wi-row-issue:hover{
+  background: rgba(239,68,68,.14) !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   NEW: Weekly Actions table (2nd table) polish
+   Uses #weeklyActionsTbody as the stable hook.
+   ───────────────────────────────────────────────────────────── */
+
+/* Column sizing for body cells (header widths are already set inline in the renderer) */
+#weeklyImportSummary #weeklyActionsTbody td:nth-child(1){
+  width:44px;
+  min-width:44px;
+  max-width:44px;
+  text-align:center;
+}
+#weeklyImportSummary #weeklyActionsTbody td:nth-child(2){
+  width:110px;
+  min-width:110px;
+  max-width:110px;
+}
+#weeklyImportSummary #weeklyActionsTbody td:nth-child(4){
+  width:170px;
+  min-width:170px;
+  max-width:170px;
+  white-space:nowrap;
+}
+#weeklyImportSummary #weeklyActionsTbody td:nth-child(7){
+  width:240px;
+  min-width:240px;
+  max-width:240px;
+  white-space:normal;
+  word-break:break-word;
+}
+
+/* Subtle group header row styling (group headers are the rows with a single colspan cell) */
+#weeklyImportSummary #weeklyActionsTbody tr td[colspan]{
+  background: rgba(15,23,42,.55) !important;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Disabled internal buttons (if/when used in the weekly import card) */
+#weeklyImportSummary .btn.disabled,
+#weeklyImportSummary .btn[data-disabled="1"]{
+  opacity:.45;
+  cursor:not-allowed !important;
+  filter:saturate(0.6) brightness(0.9);
+  pointer-events:none;
+}
+#weeklyImportSummary .btn.disabled:hover,
+#weeklyImportSummary .btn[data-disabled="1"]:hover{
+  background:#0b152a;
+}
+
+     .grid tr.active,
+    .grid tr.selected,
+    .grid tr.active.selected{
+      background:var(--selection-blue-bg);
+      box-shadow:inset 0 0 0 1px var(--selection-blue-border);
+    }
+
+    .grid tbody tr.active:hover,
+    .grid tbody tr.selected:hover,
+    .grid tbody tr.active.selected:hover{
+      background:var(--selection-blue-bg-strong);
+      box-shadow:inset 0 0 0 1px var(--selection-blue-border);
+    }
+
+    .pill{
+      font-size:12px;
+      border:1px solid var(--line);
+      padding:2px 6px;
+      border-radius:999px;
+      background:#0e1a34;
+      color:var(--sub);
+    }
+
+    /* Small flex row for multiple issue badges in a cell */
+    .issue-badges{
+      display:flex;
+      flex-wrap:wrap;
+      gap:3px;
+    }
+
+    /* Timesheet-specific pill variants */
+    .pill-ok{
+      background:rgba(22,163,74,.15);
+      color:#bbf7d0;
+      border-color:rgba(16,185,129,.35);
+    }
+    .pill-info{
+      background:rgba(59,130,246,.18);
+      color:#bfdbfe;
+      border-color:rgba(59,130,246,.45);
+    }
+    .pill-warn{
+      background:rgba(245,158,11,.15);
+      color:#fde68a;
+      border-color:rgba(251,191,36,.35);
+    }
+      .pill-bad{
+      background:rgba(239,68,68,.15);
+      color:#fecaca;
+      border-color:rgba(248,113,113,.4);
+    }
+
+
+    .bulk-timesheet-evidence-badge--timesheet{
+      background:rgba(22,163,74,.18) !important;
+      color:#bbf7d0 !important;
+      border-color:rgba(16,185,129,.42) !important;
+    }
+
+    /* ===== Banking Pay workbench presentation hooks ===== */
+    .banking-pay-candidate-pending{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(251,191,36,.35);
+      background:rgba(245,158,11,.15);
+      color:#fde68a;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .banking-pay-candidate-pending .spinner{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      border:2px solid rgba(253,230,138,.35);
+      border-top-color:#fde68a;
+      animation:bankingPayInlineSpin .8s linear infinite;
+      flex:0 0 auto;
+    }
+
+    .banking-pay-candidate-failed{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(248,113,113,.4);
+      background:rgba(239,68,68,.15);
+      color:#fecaca;
+      font-size:12px;
+      white-space:nowrap;
+    }
+
+    .banking-pay-action-disabled,
+    .banking-pay-action-disabled.btn,
+    .banking-pay-action-disabled button{
+      opacity:.45;
+      cursor:not-allowed !important;
+      filter:saturate(0.6) brightness(0.9);
+      pointer-events:none;
+    }
+
+    @keyframes bankingPayInlineSpin{
+      to{ transform:rotate(360deg); }
+    }
+
+      .banking-nav-alert{
+      position:relative;
+      border-color:rgba(255,59,59,.9) !important;
+      background:rgba(255,48,48,.14) !important;
+      box-shadow:0 0 0 1px rgba(255,74,74,.7), 0 0 14px rgba(255,54,54,.65);
+      animation:bankingNavAlertPulse 1.8s ease-in-out infinite;
+    }
+    .banking-nav-alert-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:16px;
+      height:16px;
+      margin-left:6px;
+      padding:0 5px;
+      border-radius:999px;
+      background:#ff2f2f;
+      color:#fff;
+      border:1px solid rgba(255,205,205,.75);
+      font-size:11px;
+      font-weight:700;
+      line-height:1;
+      box-shadow:0 0 10px rgba(255,36,36,.75);
+      vertical-align:middle;
+    }
+    @keyframes bankingNavAlertPulse{
+      0%,100%{ box-shadow:0 0 0 1px rgba(255,74,74,.7), 0 0 12px rgba(255,54,54,.52); }
+      50%{ box-shadow:0 0 0 1px rgba(255,74,74,.9), 0 0 18px rgba(255,54,54,.92); }
+    }
+
+    .banking-nav-alert-trigger{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:24px;
+      height:24px;
+      margin-left:4px;
+      border:1px solid rgba(255,205,205,.65);
+      border-radius:999px;
+      background:rgba(127,29,29,.72);
+      color:#fff;
+      cursor:pointer;
+      box-shadow:0 0 10px rgba(255,36,36,.42);
+      line-height:1;
+      font-size:12px;
+      flex:0 0 auto;
+    }
+    .banking-nav-alert-trigger:hover,
+    .banking-nav-alert-trigger[aria-expanded="true"]{
+      background:rgba(220,38,38,.92);
+      border-color:rgba(254,202,202,.95);
+      box-shadow:0 0 14px rgba(255,36,36,.75);
+    }
+    .banking-nav-alert-popover{
+      position:absolute;
+      z-index:80;
+      top:calc(100% + 8px);
+      right:0;
+      width:min(420px, calc(100vw - 24px));
+      max-height:min(520px, calc(100vh - 88px));
+      overflow:auto;
+      padding:10px;
+      border:1px solid rgba(248,113,113,.55);
+      border-radius:14px;
+      background:linear-gradient(180deg,#111827,#020617);
+      color:var(--text);
+      box-shadow:0 22px 55px rgba(0,0,0,.65), 0 0 0 1px rgba(127,29,29,.38);
+    }
+    .banking-nav-alert-popover[hidden],
+    .banking-nav-alert-popover.is-hidden{
+      display:none !important;
+    }
+    .banking-nav-alert-popover-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      padding:2px 2px 8px;
+      border-bottom:1px solid rgba(148,163,184,.22);
+      margin-bottom:8px;
+    }
+    .banking-nav-alert-popover-title{
+      font-weight:800;
+      letter-spacing:.01em;
+      color:#fee2e2;
+    }
+    .banking-nav-alert-popover-subtitle{
+      font-size:12px;
+      color:#cbd5e1;
+      opacity:.9;
+    }
+    .banking-nav-alert-popover-row{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding:10px;
+      margin:8px 0;
+      border:1px solid rgba(148,163,184,.26);
+      border-radius:12px;
+      background:rgba(15,23,42,.78);
+      color:var(--text);
+    }
+    .banking-nav-alert-popover-row.critical{
+      border-color:rgba(248,113,113,.72);
+      background:linear-gradient(180deg,rgba(127,29,29,.44),rgba(69,10,10,.24));
+      box-shadow:inset 3px 0 0 #ef4444;
+    }
+    .banking-nav-alert-popover-row-title{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex-wrap:wrap;
+      font-weight:800;
+      color:#fee2e2;
+    }
+    .banking-nav-alert-popover-row-meta,
+    .banking-nav-alert-popover-row-description{
+      font-size:12px;
+      color:#e5e7eb;
+      opacity:.92;
+      overflow-wrap:anywhere;
+    }
+    .banking-nav-alert-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:4px;
+    }
+    .banking-nav-alert-actions .btn,
+    .banking-nav-alert-actions button{
+      border:1px solid rgba(148,163,184,.45);
+      background:#0b152a;
+      color:#fff;
+      padding:5px 9px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .banking-nav-alert-actions .btn:hover,
+    .banking-nav-alert-actions button:hover{
+      background:rgba(79,70,229,.25);
+      border-color:#6366f1;
+    }
+    .banking-nav-alert-actions .danger,
+    .banking-nav-alert-actions [data-action*="clear"]{
+      border-color:rgba(248,113,113,.55);
+      background:rgba(127,29,29,.42);
+      color:#fee2e2;
+    }
+    .banking-nav-alert-popover-footer{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding-top:8px;
+      margin-top:8px;
+      border-top:1px solid rgba(148,163,184,.22);
+    }
+    .banking-nav-alert-popover-reminder{
+      font-size:11px;
+      line-height:1.35;
+      color:#cbd5e1;
+      opacity:.86;
+    }
+    .banking-pay-blocked-funds-badge{
+      display:inline-flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:2px;
+      max-width:100%;
+      padding:5px 9px;
+      border:1px solid rgba(248,113,113,.72);
+      border-radius:10px;
+      background:linear-gradient(180deg,rgba(127,29,29,.52),rgba(69,10,10,.32));
+      color:#fee2e2;
+      box-shadow:inset 3px 0 0 #ef4444, 0 0 12px rgba(239,68,68,.22);
+      font-size:11px;
+      font-weight:800;
+      line-height:1.25;
+      letter-spacing:.01em;
+      text-transform:uppercase;
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+    .banking-pay-blocked-funds-badge .secondary,
+    .banking-pay-blocked-funds-badge small{
+      color:#fecaca;
+      font-size:10px;
+      font-weight:700;
+      text-transform:none;
+      letter-spacing:0;
+    }
+    .banking-pay-blocked-funds-banner,
+    .banking-pay-blocked-funds-overview-banner{
+      border:1px solid rgba(248,113,113,.72) !important;
+      background:linear-gradient(180deg,rgba(127,29,29,.42),rgba(69,10,10,.26)) !important;
+      color:#fee2e2 !important;
+      box-shadow:inset 4px 0 0 #ef4444, 0 12px 28px rgba(127,29,29,.22);
+    }
+    .banking-pay-blocked-funds-banner strong,
+    .banking-pay-blocked-funds-overview-banner strong{
+      color:#fff;
+    }
+    .banking-pay-blocked-funds-banner .mono,
+    .banking-pay-blocked-funds-overview-banner .mono{
+      color:#fff;
+    }
+    .banking-payment-issue-blocked-funds-card{
+      border:1px solid rgba(248,113,113,.72);
+      border-radius:14px;
+      background:linear-gradient(180deg,rgba(127,29,29,.42),rgba(69,10,10,.24));
+      color:#fee2e2;
+      box-shadow:inset 4px 0 0 #ef4444, 0 12px 28px rgba(127,29,29,.2);
+      padding:12px;
+    }
+    .banking-payment-issue-blocked-funds-card .payment-issue-badge,
+    .banking-payment-issue-blocked-funds-card .pill-bad{
+      background:rgba(239,68,68,.24);
+      color:#fee2e2;
+      border-color:rgba(248,113,113,.72);
+    }
+    .banking-payment-issue-blocked-funds-card .mini,
+    .banking-payment-issue-blocked-funds-card .hint{
+      color:#fecaca;
+    }
+    .banking-payment-issue-blocked-funds-card .mono{
+      color:#fff;
+    }
+
+    @media (max-width: 720px){
+      .banking-nav-alert-trigger{
+        width:22px;
+        height:22px;
+        font-size:11px;
+      }
+      .banking-nav-alert-popover{
+        position:fixed;
+        top:56px;
+        left:8px;
+        right:8px;
+        width:auto;
+        max-height:calc(100vh - 72px);
+        border-radius:12px;
+      }
+      .banking-nav-alert-popover-header{
+        flex-direction:column;
+        align-items:stretch;
+      }
+      .banking-nav-alert-actions{
+        justify-content:flex-start;
+      }
+      .banking-pay-blocked-funds-banner,
+      .banking-pay-blocked-funds-overview-banner,
+      .banking-payment-issue-blocked-funds-card{
+        padding:10px !important;
+      }
+    }
+
+    .pill-weekly{
+      background:rgba(79,70,229,.18);
+      color:#c7d2fe;
+      border-color:rgba(129,140,248,.5);
+    }
+    .pill-daily{
+      background:rgba(15,118,110,.18);
+      color:#a5f3fc;
+      border-color:rgba(45,212,191,.5);
+    }
+    .pill-elec{
+      background:rgba(56,189,248,.12);
+      color:#e0f2fe;
+      border-color:rgba(59,130,246,.5);
+    }
+    .pill-manual{
+      background:rgba(148,163,184,.18);
+      color:#e5e7eb;
+      border-color:rgba(148,163,184,.55);
+    }
+    .pill-hold{
+      background:rgba(202,138,4,.18);
+      color:#fef3c7;
+      border-color:rgba(245,158,11,.5);
+    }
+    .pill-nhsp{
+      background:rgba(59,130,246,.22);
+      color:#dbeafe;
+      border-color:rgba(37,99,235,.6);
+    }
+    .pill-hr{
+      background:rgba(34,197,94,.2);
+      color:#dcfce7;
+      border-color:rgba(22,163,74,.55);
+    }
+
+    .tag-ok{   background:rgba(22,163,74,.15);  color:#bbf7d0; border-color:rgba(16,185,129,.35) }
+    .tag-warn{ background:rgba(245,158,11,.15); color:#fde68a;  border-color:rgba(251,191,36,.35) }
+    .tag-fail{ background:rgba(239,68,68,.15);  color:#fecaca;  border-color:rgba(248,113,113,.35) }
+
+
+       /* ===== Modal ===== */
+      /* ===== Modal ===== */
+    .modal-back{
+      position:fixed;
+      inset:0;
+      background:rgba(2,6,23,.6);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:99;
+    }
+    .modal{
+      width:min(1100px,95vw);
+      max-height:90vh;
+      display:flex;
+      flex-direction:column;
+      background:radial-gradient(circle at top,#020617 0,#020617 55%,#020617 100%);
+      border:1px solid rgba(148,163,184,.4);
+      border-radius:16px;
+      box-shadow:0 24px 60px rgba(15,23,42,.85);
+      overflow:hidden;
+    }
+    .modal{
+  width:min(1100px,95vw);
+  max-height:90vh;
+  display:flex;
+  flex-direction:column;
+  background:radial-gradient(circle at top,#020617 0,#020617 55%,#020617 100%);
+  border:1px solid rgba(148,163,184,.4);
+  border-radius:16px;
+  box-shadow:0 24px 60px rgba(15,23,42,.85);
+  overflow:hidden;
+}
+
+/* ===== Resolve Timesheets modal: taller/wider so the table fits without a silly scrollbar ===== */
+#modal.resolve-modal{
+  width: min(1300px, 98vw);
+  max-height: 96vh;
+}
+
+#modal.resolve-modal .tabc{
+  padding: 10px;
+}
+/* ===== Invoice Batch modals (Generate/Issue): bigger + single inner scroll (no double scrollbars) ===== */
+#modal.invbatch-modal{
+  width: min(1300px, 98vw);
+  max-height: 96vh;
+}
+#modal.invbatch-modal .tabc{
+  padding: 10px;
+  min-height: 0;
+}
+#modal.invbatch-modal .modal-b{
+  padding: 0;
+  overflow: hidden; /* ✅ IMPORTANT: avoid outer modal scrollbar */
+}
+
+/* ===== Banking modal: responsive shell + one predictable outer scroll owner ===== */
+#modal.banking-modal{
+  width:min(1520px,calc(100vw - 20px));
+  max-width:calc(100vw - 20px);
+  max-height:96vh;
+  min-width:0;
+}
+#modal.banking-modal .modal-b{
+  padding:0;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  overflow:hidden;
+}
+#modal.banking-modal .modal-b > .tabs{
+  flex:0 0 auto;
+  min-width:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:thin;
+}
+#modal.banking-modal .modal-b > .tabs button{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+#modal.banking-modal .modal-b > #modalBody{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  padding:12px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+#modal.banking-modal #modalBody > .banking-modal-content{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:10px;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+#modal.banking-modal #modalBody > .banking-modal-content > .card{
+  margin:0;
+}
+#modal.banking-modal .banking-modal-content,
+#modal.banking-modal .banking-modal-content .card,
+#modal.banking-modal .banking-modal-content .row,
+#modal.banking-modal .banking-modal-content .controls,
+#modal.banking-modal #bankingPayNewBatchWizard,
+#modal.banking-modal #bankingPayNewBatchWizard > div,
+#modal.banking-modal #bankingPayTabRoot,
+#modal.banking-modal #bankingPayBatchListPanel{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+#modal.banking-modal #bankingPayNewBatchWizard > div{
+  grid-template-columns:minmax(0,1fr);
+}
+#modal.banking-modal #bankingPayNewBatchWizard > div > *{
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+#modal.banking-modal #bankingPayReadyScrollHost,
+#modal.banking-modal #bankingPayCasesScrollHost,
+#modal.banking-modal #bankingPayBlockedScrollHost,
+#modal.banking-modal .banking-pay-batch-table-scroll{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+#modal.banking-modal #bankingPayBatchListPanel > .row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:8px;
+}
+#modal.banking-modal #bankingPayBatchListPanel > .row > label{
+  font-size:14px;
+  font-weight:700;
+}
+#modal.banking-modal #bankingPayBatchListPanel > .row > .controls{
+  width:100%;
+}
+#modal.banking-modal .banking-pay-create-header,
+#modal.banking-modal .banking-pay-create-toolbar{
+  min-width:0;
+}
+#modal.banking-modal .banking-pay-create-toolbar .actions{
+  max-width:100%;
+}
+#modal.banking-modal .banking-pay-scope-summary{
+  min-width:240px !important;
+  overflow-wrap:anywhere;
+}
+#modal.banking-modal .grid th,
+#modal.banking-modal .grid td{
+  vertical-align:middle;
+}
+
+@media (max-width:760px){
+  #modal.banking-modal{
+    width:calc(100vw - 8px);
+    max-width:calc(100vw - 8px);
+    max-height:calc(100dvh - 8px);
+  }
+  #modal.banking-modal .modal-b > #modalBody{
+    padding:8px;
+  }
+  #modal.banking-modal .banking-pay-scope-summary{
+    flex-basis:100%;
+    min-width:0 !important;
+  }
+  #modal.banking-modal .banking-pay-create-toolbar .actions{
+    width:100%;
+    margin-left:0 !important;
+  }
+}
+
+ /* ===== Banking Pay child batch modal: wider/taller + controlled inner scrolling ===== */
+#modal.banking-pay-batch-child-modal{
+  width:min(1400px,98vw);
+  max-height:96vh;
+}
+#modal.banking-pay-batch-child-modal .modal-b{
+  padding:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden; /* shell stays stable; modalBody owns vertical scroll */
+}
+#modal.banking-pay-batch-child-modal .modal-b > .tabs{
+  flex:0 0 auto;
+}
+#modal.banking-pay-batch-child-modal .modal-b > #modalBody.tabc{
+  flex:1 1 auto;
+  min-height:0;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  overflow:auto;
+}
+#modal.banking-pay-batch-child-modal .modal-b > #modalBody.tabc > .card{
+  flex:0 0 auto;
+  min-height:0;
+}
+#modal.banking-pay-batch-child-modal .grid{
+  table-layout:auto;
+}
+#modal.banking-pay-batch-child-modal .grid thead th{
+  position:sticky;
+  top:0;
+  z-index:6;
+  background:#020617;
+  box-shadow:0 1px 0 var(--line);
+}
+#modal.banking-pay-batch-child-modal .grid th,
+#modal.banking-pay-batch-child-modal .grid td{
+  padding:8px 10px;
+}
+#modal.banking-pay-batch-child-modal details{
+  margin-top:4px;
+}
+#modal.banking-pay-batch-child-modal .pill{
+  white-space:nowrap;
+}
+
+/* ===== Timesheet workbench modals: larger shells + inner-pane scrolling ===== */
+#modal.timesheet-imports-workbench{
+  width:min(1580px,99vw);
+  max-height:96vh;
+}
+
+#modal.bulk-authorise-workbench{
+  width:min(1900px, 96vw);
+  min-width:min(1200px, 96vw);
+  max-width:96vw;
+  max-height:96vh;
+}
+
+#modal.bulk-process-workbench{
+  width:min(1660px, calc(100vw - 16px));
+  min-width:0;
+  max-width:calc(100vw - 16px);
+  max-height:96vh;
+}
+
+
+#modalBack:has(#modal.bulk-authorise-workbench),
+#modalBack:has(#modal.bulk-process-workbench){
+  overflow-x:auto;
+  overflow-y:auto;
+  align-items:flex-start;
+}
+
+#modalBack:has(#modal.bulk-authorise-workbench) #modal,
+#modalBack:has(#modal.bulk-process-workbench) #modal{
+  flex:0 0 auto;
+}
+
+#modal.timesheet-imports-workbench .modal-b,
+#modal.bulk-process-workbench .modal-b,
+#modal.bulk-authorise-workbench .modal-b{
+  padding:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+#modal.timesheet-imports-workbench .modal-b > .tabs,
+#modal.bulk-process-workbench .modal-b > .tabs,
+#modal.bulk-authorise-workbench .modal-b > .tabs{
+  flex:0 0 auto;
+}
+
+#modal.timesheet-imports-workbench .modal-b > #modalBody.tabc,
+#modal.bulk-process-workbench .modal-b > #modalBody.tabc,
+#modal.bulk-authorise-workbench .modal-b > #modalBody.tabc{
+  flex:1 1 auto;
+  min-height:0;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  overflow:hidden;
+}
+
+#modal.timesheet-imports-workbench .modal-b > #modalBody.tabc > .card,
+#modal.bulk-process-workbench .modal-b > #modalBody.tabc > .card,
+#modal.bulk-authorise-workbench .modal-b > #modalBody.tabc > .card{
+  flex:0 0 auto;
+  min-height:0;
+}
+
+#modal.timesheet-imports-workbench .grid,
+#modal.bulk-process-workbench .grid,
+#modal.bulk-authorise-workbench .grid{
+  table-layout:auto;
+}
+
+#modal.timesheet-imports-workbench .grid thead th,
+#modal.bulk-process-workbench .grid thead th,
+#modal.bulk-authorise-workbench .grid thead th{
+  position:sticky;
+  top:0;
+  z-index:6;
+  background:#020617;
+  box-shadow:0 1px 0 var(--line);
+}
+
+#modal.timesheet-imports-workbench .grid th,
+#modal.timesheet-imports-workbench .grid td,
+#modal.bulk-process-workbench .grid th,
+#modal.bulk-process-workbench .grid td,
+#modal.bulk-authorise-workbench .grid th,
+#modal.bulk-authorise-workbench .grid td{
+  padding:8px 10px;
+}
+
+#modal.timesheet-imports-workbench .pill,
+#modal.bulk-process-workbench .pill,
+#modal.bulk-authorise-workbench .pill{
+  white-space:nowrap;
+}
+
+/* Weekly schedule fit tuning for Bulk Process + Bulk Authorise right panes */
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot .ts-weekly-schedule-grid,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot .ts-weekly-schedule-grid{
+  table-layout:fixed !important;
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot .ts-weekly-schedule-wrap,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot .ts-weekly-schedule-wrap{
+  overflow-x:hidden !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule th,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule td,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule th,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule td{
+  padding:4px 3px;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule td input,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule td input{
+  max-width:100%;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="start"],
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="end"],
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_start"],
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_end"],
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="start"],
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="end"],
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_start"],
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_end"]{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_mins"],
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_mins"]{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="ref"],
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="ref"]{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-day,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-day{ width:28px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-date,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-date{ width:50px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-ref,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-ref{ width:auto; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-start,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-start{ width:44px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-end,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-end{ width:44px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-start,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-start{ width:46px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-end,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-end{ width:46px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-mins,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-mins{ width:42px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-paid-hrs,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-paid-hrs{ width:50px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-actions,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-actions{ width:58px; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-break-header,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-break-header{
+  display:inline-flex;
+  flex-direction:column;
+  align-items:center;
+  line-height:1.05;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-paid-hours-head,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-paid-hours-cell,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-paid-hours-head,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-paid-hours-cell{
+  white-space:nowrap;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions-head,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions-cell,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions-head,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions-cell{
+  text-align:right;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-schedule-actions,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-schedule-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:4px;
+  white-space:nowrap;
+  min-width:0;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-schedule-actions button,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-schedule-actions button{
+  flex:0 0 auto;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn{
+  min-width:14px;
+  width:14px;
+  height:14px;
+  line-height:1;
+  padding:0;
+  font-size:7.5px;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn.is-danger,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn.is-danger{ color:#d22; }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn.is-active-copy,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn.is-active-copy{ color:#ff8c00; box-shadow:0 0 8px rgba(255,140,0,0.9); }
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn.is-active-paste,
+#modal.bulk-authorise-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn.is-active-paste{ color:#1d8f3a; box-shadow:0 0 8px rgba(46,204,113,0.9); }
+
+/* Bulk Process-only parity overrides: keep Bulk Authorise untouched. */
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule{
+  table-layout:fixed !important;
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot .ts-weekly-schedule-wrap{
+  max-width:100% !important;
+  min-width:0 !important;
+  overflow-x:hidden !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule th,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule td{
+  padding-left:2px !important;
+  padding-right:2px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-day{
+  width:34px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-date{
+  width:50px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-ref{
+  width:76px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-start,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-end{
+  width:50px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-start{
+  width:62px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-end{
+  width:58px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-break-mins{
+  width:44px !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="start"],
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="end"],
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_start"],
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_end"]{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule input[data-weekly-field="break_mins"]{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-paid-hrs,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-paid-hours-head,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-paid-hours-cell{
+  width:48px !important;
+  min-width:48px !important;
+  max-width:48px !important;
+  white-space:nowrap !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-wk-col-actions,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions-head,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions-cell{
+  width:74px !important;
+  min-width:74px !important;
+  max-width:74px !important;
+  padding-left:2px !important;
+  padding-right:2px !important;
+  text-align:right !important;
+  white-space:nowrap !important;
+  overflow:visible !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-actions,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-schedule-actions{
+  display:inline-flex !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:2px !important;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  overflow:visible !important;
+}
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-schedule-actions button,
+#modal.bulk-process-workbench #bulkProcessManualEditorRoot #tsWeeklySchedule .ts-weekly-line-btn{
+  flex:0 0 12px !important;
+  min-width:12px !important;
+  width:12px !important;
+  height:12px !important;
+  line-height:12px !important;
+  padding:0 !important;
+  font-size:7px !important;
+  text-align:center !important;
+}
+
+#modal.bulk-authorise-workbench #bulkAuthoriseWorkbenchRoot,
+#modal.bulk-authorise-workbench #bulkAuthoriseWorkbenchGrid,
+#modal.bulk-authorise-workbench #bulkAuthoriseWorkbenchContent,
+#modal.bulk-authorise-workbench #bulkAuthoriseLeftPane,
+#modal.bulk-authorise-workbench #bulkAuthoriseMiddlePane,
+#modal.bulk-authorise-workbench #bulkAuthoriseRightPane,
+#modal.bulk-authorise-workbench #bulkProcessPreviewPaneRoot,
+#modal.bulk-authorise-workbench #bulkProcessPreviewStage,
+#modal.bulk-authorise-workbench #bulkAuthoriseActionRowRoot{
+  min-width:0;
+}
+
+/* Narrower modal just for Job Titles */
+    .modal.jobtitles-modal{
+      width:min(800px,95vw);
+    }
+    .modal.dragging{ opacity:.95 }
+
+
+    .modal-h{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 14px;
+      border-bottom:1px solid rgba(51,65,85,.9);
+      cursor:move;
+      background:linear-gradient(180deg,#020617,#020617);
+    }
+    .modal-h .ttl{
+      font-weight:600;
+      font-size:15px;
+    }
+    .modal-h .spacer{ flex:1 }
+    .modal-h button{
+      border:1px solid var(--line);
+      background:#0c172d;
+      color:#fff;
+      padding:6px 10px;
+      border-radius:10px;
+      font-size:12px;
+      cursor:pointer;
+    }
+
+      .modal-b{
+      padding:0;
+      overflow:auto;
+    }
+
+    /* Candidate, Client and Contract editors use one predictable scroll owner. */
+    #modal.record-modal{
+      width:min(1100px,calc(100vw - 24px));
+      max-width:calc(100vw - 24px);
+      max-height:calc(100vh - 24px);
+      min-width:0;
+    }
+    #modal.record-modal .modal-b{
+      display:flex;
+      flex:1 1 auto;
+      flex-direction:column;
+      min-height:0;
+      overflow:hidden;
+    }
+    #modal.record-modal #modalTabs{
+      flex:0 0 auto;
+      overflow-x:auto;
+      overflow-y:hidden;
+      scrollbar-width:thin;
+    }
+    #modal.record-modal #modalTabs button{
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+    #modal.record-modal #modalBody{
+      flex:1 1 auto;
+      min-height:0;
+      overflow:auto;
+      overscroll-behavior:contain;
+      scrollbar-gutter:stable;
+    }
+    #modal.record-modal #modalActions{
+      flex:0 0 auto;
+      flex-wrap:wrap;
+    }
+    #modal.record-modal .form,
+    #modal.record-modal .form .row,
+    #modal.record-modal .form .controls,
+    #modal.record-modal .split{
+      min-width:0;
+    }
+    #modal.record-modal .form > .row{
+      padding:8px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius:10px;
+      background:rgba(11,20,39,.52);
+    }
+    #modal.record-modal input,
+    #modal.record-modal select,
+    #modal.record-modal textarea{
+      box-sizing:border-box;
+      max-width:100%;
+    }
+    #modal.record-modal .record-inline-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    #modal.record-modal .record-save-first{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#0b1427;
+      padding:18px;
+      line-height:1.5;
+    }
+    #modal.record-modal .record-save-first strong{
+      display:block;
+      margin-bottom:4px;
+      color:var(--text);
+    }
+
+    /* ✅ Keep tabs visible when the modal body scrolls (e.g., long Settings → Remittances tab) */
+    .tabs{
+      display:flex;
+      gap:6px;
+      border-bottom:1px solid var(--line);
+      padding:6px 10px;
+      position:sticky;
+      top:0;
+      z-index:20;
+      background:#0c172d;
+    }
+
+    .tabs button{
+      background:#020617;
+      border:1px solid transparent;
+      border-bottom:none;
+      padding:6px 10px;
+      border-top-left-radius:999px;
+      border-top-right-radius:999px;
+      color:var(--sub);
+      cursor:pointer;
+      font-size:12px;
+    }
+    .tabs button.active{
+      background:#0b1221;
+      color:var(--text);
+      border-color:rgba(79,70,229,.7);
+      box-shadow:0 -1px 0 #0b1221;
+    }
+/* ✅ Disabled tabs (hover/tooltips must work reliably)
+   IMPORTANT: do NOT use the native disabled attribute for tabs.
+   Use .disabled and/or data-disabled="1" instead.
+*/
+.tabs button.disabled,
+.tabs button[data-disabled="1"]{
+  opacity:0.45;
+  cursor:not-allowed !important;
+  filter:saturate(0.6) brightness(0.95);
+}
+
+/* Optional: keep hover from looking “active” on disabled tabs */
+.tabs button.disabled:hover,
+.tabs button[data-disabled="1"]:hover{
+  background:#020617;
+  border-color:transparent;
+  box-shadow:none;
+}
+
+
+    .tabc{ padding:14px }
+
+    /* Scrollable wrapper for pickers (clients, candidates, etc.) */
+    .picker-table-wrap{
+      max-height:260px;
+      overflow-y:auto;
+      margin-top:6px;
+    }
+
+    /* Forms in modal */
+    .form{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(240px,1fr));
+      column-gap:18px;
+      row-gap:8px;
+    }
+    /* Forms in modal */
+.form{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(240px,1fr));
+  column-gap:18px;
+  row-gap:8px;
+}
+
+/* ===== Candidates: Care Packages tab (make rates table use full width) ===== */
+/* #tab-rates is rendered as <div class="form" id="tab-rates"> */
+#modal #tab-rates{
+  grid-template-columns: minmax(0, 1fr); /* force single column */
+}
+
+/* ratesTable is your container: <div id="ratesTable"></div> */
+#modal #tab-rates #ratesTable{
+  width:100%;
+  overflow:auto;          /* allow horizontal scroll if needed */
+}
+
+/* Override global .grid { table-layout: fixed } just inside the rates table */
+#modal #tab-rates #ratesTable .grid{
+  table-layout:auto;
+  min-width: 980px;       /* adjust if you want; gives columns breathing space */
+}
+
+    .form .row{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .form .row label{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+      color:#e5e7eb;
+    }
+    .form label.inline{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    /* Job Titles details: single-column, clean alignment for Category/Role/Visible */
+    #jt_details_form{
+      grid-template-columns:minmax(0,1fr);
+    }
+    #jt_details_form .row{
+      align-items:flex-start;
+    }
+    #jt_details_form #jt_cat_vis_row{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    #jt_details_form #jt_cat_vis_row label.inline{
+      margin:0;
+    }
+    #jt_details_form #jt_btn_delete,
+    #jt_details_form #jt_btn_save{
+      padding:4px 8px;
+      font-size:11px;
+    }
+
+ .form input,
+.form select,
+.form textarea{
+  background:#000;
+  border:1px solid var(--line);
+  color:var(--text);
+  border-radius:8px;
+  padding:8px 10px;
+  width:100%;
+  font-size:12px;
+}
+
+.form textarea{
+  min-height:90px;
+}
+
+/* ✅ FIX (SCOPED): only remittance checkboxes (Candidate + Umbrella).
+   Avoid touching other modal checkboxes/radios. */
+#modal input[type="checkbox"][name="remittance_overrides_enabled"],
+#modal input[type="checkbox"][name="remittance_receive_enabled"],
+#modal input[type="checkbox"][name="remittances_detailed_breakdown"],
+#modal input[type="checkbox"][name="remittance_receive_when_umbrella_paid"]{
+  width:auto !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  border-radius:0 !important;
+  margin:0 !important;
+  vertical-align:middle;
+  appearance:auto;
+  -webkit-appearance:auto;
+  accent-color: var(--brand);
+}
+    #modal .input{
+      background:#000;
+      border:1px solid var(--line);
+      color:var(--text);
+      border-radius:8px;
+      padding:8px 10px;
+      width:100%;
+      font-size:12px;
+    }
+    #modal .input::placeholder{
+      color:var(--sub);
+      opacity:.75;
+    }
+#modal .input{
+  background:#000;
+  border:1px solid var(--line);
+  color:var(--text);
+  border-radius:8px;
+  padding:8px 10px;
+  width:100%;
+  font-size:12px;
+}
+#modal .input::placeholder{
+  color:var(--sub);
+  opacity:.75;
+}
+
+/* ✅ Make validation errors very visible in the Timesheet modal */
+#modal input.is-invalid,
+#modal select.is-invalid,
+#modal textarea.is-invalid,
+#modal .input.is-invalid{
+  border-color: #ff1f1f !important; /* bright red */
+  box-shadow:
+    0 0 0 2px rgba(255,31,31,.95) inset,
+    0 0 0 3px rgba(255,31,31,.35) !important;
+}
+
+    /* Keep postcode "Lookup" button compact, not 50/50 flex */
+    .split .btn.mini{
+      flex:0 0 auto;
+    }
+
+    /* Put a little breathing room under the Job Titles pills before "Add Job Title…" */
+    #jobTitlesList + .btn.mini{
+      margin-top:4px;
+    }
+
+       /* Generic modal buttons (all small icon/utility buttons) */
+    #modal .btn{
+      border:1px solid var(--line);
+      background:#0b152a;
+      color:#f9fafb;
+      padding:6px 10px;
+      border-radius:8px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    #modal .btn.mini{
+      padding:3px 8px;
+      font-size:11px;
+    }
+    #modal .btn:hover{
+      background:var(--hover);
+      color:#f9fafb;
+    }
+
+    /* Button variants used by Invoice Batch modals */
+    #modal .btn.btn-sm{
+      padding:6px 10px;
+      font-size:12px;
+      border-radius:10px;
+    }
+    #modal .btn.btn-outline{
+      border:1px solid var(--line);
+      background:#0b152a;
+      color:#f9fafb;
+    }
+    #modal .btn.btn-primary{
+      background:linear-gradient(180deg,#5146e5,#4038cc);
+      border-color:#3730a3;
+      color:#fff;
+    }
+    #modal .btn.btn-warn{
+      background:#5a1d22;
+      border-color:#7f1d1d;
+      color:#fff;
+    }
+
+    /* ===== Invoice Batch (Generate/Issue) modal body styling ===== */
+    #modal.invbatch-modal .invbatch-root{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-height:0;
+    }
+    #modal.invbatch-modal .invbatch-controls{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#0b1427;
+    }
+    #modal.invbatch-modal .invbatch-scroll{
+      overflow:auto;
+      max-height:60vh;
+      padding:6px 2px;
+      scrollbar-width:thin;
+      scrollbar-color:#1e293b #020617;
+    }
+    #modal.invbatch-modal .invbatch-scroll::-webkit-scrollbar{
+      width:8px;
+      height:8px;
+    }
+    #modal.invbatch-modal .invbatch-scroll::-webkit-scrollbar-track{
+      background:#020617;
+    }
+    #modal.invbatch-modal .invbatch-scroll::-webkit-scrollbar-thumb{
+      background:#1e293b;
+      border-radius:999px;
+      border:1px solid #020617;
+    }
+    #modal.invbatch-modal .invbatch-scroll::-webkit-scrollbar-thumb:hover{
+      background:#334155;
+    }
+
+    #modal.invbatch-modal .invbatch-card{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#0b1427;
+      overflow:hidden;
+    }
+    #modal.invbatch-modal .invbatch-card-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px;
+      cursor:pointer;
+      user-select:none;
+    }
+    #modal.invbatch-modal .invbatch-week-head{
+      background:#081024;
+    }
+    #modal.invbatch-modal .invbatch-right{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:2px;
+      min-width:140px;
+    }
+    #modal.invbatch-modal .invbatch-results{
+      margin-top:10px;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#0b1427;
+    }
+
+
+    /* Timesheet tab action buttons (Overview / Lines / Evidence) */
+    #modal .tabc .controls button[type="button"]{
+      border:1px solid var(--line);
+      background:#0b152a;
+      color:#f9fafb;
+      padding:5px 9px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:12px;
+      margin-right:4px;
+    }
+    #modal .tabc .controls button[type="button"]:hover{
+      background:var(--hover);
+      color:#f9fafb;
+    }
+
+
+    /* Make the little trash icons less weedy */
+    #modal .bin{
+      font-size:13px;
+    }
+
+    /* ===== Modal footer buttons ===== */
+    .actions{
+      padding:10px;
+      border-top:1px solid var(--line);
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      background:#0c172d;
+    }
+    .actions button{
+      border:1px solid var(--line);
+      background:#0b152a;
+      color:#fff;
+      padding:8px 12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .actions .primary{
+      background:linear-gradient(180deg,#5146e5,#4038cc);
+      border-color:#3730a3;
+    }
+    .hint{
+      color:#cbd5e1;
+      font-size:12px;
+    }
+
+    /* Small dark buttons used in Advanced Search header */
+    #modal .adv-btn{
+      border:1px solid rgba(148,163,184,.45);
+      background:#020617;
+      color:#e5e7eb;
+      padding:4px 10px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:11px;
+      line-height:1.2;
+      white-space:nowrap;
+    }
+    #modal .adv-btn:hover{
+      background:rgba(79,70,229,.25);
+      border-color:#6366f1;
+      color:#f9fafb;
+    }
+
+    .actions button:disabled,
+    .actions button.disabled{
+      opacity:.45;
+      cursor:not-allowed !important;
+      filter:saturate(0.6) brightness(0.9);
+      pointer-events:none;
+    }
+    .actions .primary:disabled,
+    .actions .primary.disabled{
+      background:#2d2a66;
+      border-color:#252258;
+    }
+
+    /* ===== Calendar ===== */
+    .calendar{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:10px;
+    }
+/* Calendar layout wrappers used by renderDayGrid() */
+.year-wrap{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+}
+.month-wrap{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+
+    
+    .month{
+      border:1px solid var(--line);
+      border-radius:10px;
+      overflow:hidden;
+    }
+    .month h4{
+      margin:0;
+      padding:8px 10px;
+      background:#0c172d;
+      display:block;
+      border-bottom:1px solid var(--line);
+      font-size:12px;
+      font-weight:500;
+    }
+    .days{
+      display:grid;
+      grid-template-columns:repeat(7,1fr);
+    }
+ .days .d{
+  padding:6px;
+  border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  min-height:32px;
+
+  /* NEW: allow corner markers */
+  position:relative;
+  overflow:hidden;
+}
+.days.days-large .d{
+  min-height:46px;
+  padding:8px;
+}
+.d.mark-a{ background:rgba(245,158,11,.2) }
+.d.mark-i{ background:rgba(59,130,246,.2) }
+.d.mark-p{ background:rgba(34,197,94,.25) }
+
+/* Existing states */
+.cal-planned    { background: rgba(59,130,246,.18); }
+.cal-submitted  { background: rgba(147,51,234,.22); }  /* legacy */
+.cal-authorised { background: rgba(34,197,94,.22); }   /* legacy */
+.cal-invoiced   { background: rgba(245,158,11,.22); }
+.cal-paid       { background: rgba(20,184,166,.24); }
+.cal-needs-attention        { background: rgba(239,68,68,.18); }
+.cal-awaiting-authorisation { background: rgba(168,85,247,.20); }
+.cal-on-hold                { background: rgba(234,179,8,.20); }
+
+/* NEW: pipeline states */
+.cal-processed        { background: rgba(148,163,184,.16); }   /* processed, not ready */
+.cal-ready            { background: rgba(79,70,229,.20); }     /* ready */
+.cal-invoice-hold     { background: rgba(239,68,68,.18); }     /* invoice header ON_HOLD */
+.cal-pay-hold         { background: rgba(250,204,21,.18); }    /* pay_on_hold */
+.cal-pay-invoice-hold { background: rgba(147,51,234,.18); }    /* both holds */
+
+/* Grey “occupied by other contract” */
+.days .d.occupied-other{
+  background:rgba(148,163,184,.22) !important;
+  filter:saturate(0.6) brightness(0.98);
+}
+
+/* NEW: per-line hold overlays (corner markers) */
+.days .d.flag-payline-hold::before{
+  content:'';
+  position:absolute;
+  top:0; left:0;
+  width:0; height:0;
+  border-top:12px solid rgba(245,158,11,.95);  /* amber */
+  border-right:12px solid transparent;
+  pointer-events:none;
+}
+.days .d.flag-invoiceline-hold::after{
+  content:'';
+  position:absolute;
+  top:0; right:0;
+  width:0; height:0;
+  border-top:12px solid rgba(147,51,234,.95);  /* purple */
+  border-left:12px solid transparent;
+  pointer-events:none;
+}
+
+/* OPTIONAL: bigger markers in month view (days-large) */
+.days.days-large .d.flag-payline-hold::before{
+  border-top-width:14px;
+  border-right-width:14px;
+}
+.days.days-large .d.flag-invoiceline-hold::after{
+  border-top-width:14px;
+  border-left-width:14px;
+}
+
+
+.d.selected{
+  outline:2px solid var(--brand);
+  outline-offset:-2px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.d .ico{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.d .ico .dow{
+  font-size:10px;
+  letter-spacing:.02em;
+  opacity:.8;
+}
+.d .ico .num{
+  font-weight:700;
+  font-size:12px;
+}
+.days.days-large .ico .num{ font-size:16px }
+.days.days-large .ico .dow{ font-size:11px }
+
+/* Legend */
+.legend{
+  display:flex;
+  gap:8px;
+  margin-top:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+/* NEW: make legend “chips” look like chips without overriding cal-* backgrounds */
+.legend .chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,.35);
+  font-size:11px;
+  color:#e5e7eb;
+
+  /* default chip background (for "Not booked" etc.) */
+  background: rgba(2,6,23,.35);
+}
+
+/* Ensure state chips keep their colours inside the legend */
+.legend .chip.cal-planned         { background: rgba(59,130,246,.18); }
+.legend .chip.cal-submitted       { background: rgba(147,51,234,.22); }  /* legacy */
+.legend .chip.cal-authorised      { background: rgba(34,197,94,.22); }   /* legacy */
+.legend .chip.cal-invoiced        { background: rgba(245,158,11,.22); }
+.legend .chip.cal-paid            { background: rgba(20,184,166,.24); }
+.legend .chip.cal-needs-attention        { background: rgba(239,68,68,.18); }
+.legend .chip.cal-awaiting-authorisation { background: rgba(168,85,247,.20); }
+.legend .chip.cal-on-hold                { background: rgba(234,179,8,.20); }
+
+.legend .chip.cal-processed       { background: rgba(148,163,184,.16); }
+.legend .chip.cal-ready           { background: rgba(79,70,229,.20); }
+.legend .chip.cal-invoice-hold    { background: rgba(239,68,68,.18); }
+.legend .chip.cal-pay-hold        { background: rgba(250,204,21,.18); }
+.legend .chip.cal-pay-invoice-hold{ background: rgba(147,51,234,.18); }
+
+
+/* NEW: legend-only marker chips (not day backgrounds) */
+.legend .chip.cal-flag-payline{
+  background: rgba(245,158,11,.22);
+}
+.legend .chip.cal-flag-invoiceline{
+  background: rgba(147,51,234,.22);
+}
+.legend .chip.occupied-other{
+  background: rgba(148,163,184,.22);
+}
+
+/* (kept) old square legend styles (safe even if unused now) */
+.legend .lg{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:#e5e7eb;
+}
+.sq{ width:10px; height:10px; border-radius:2px }
+.sq.a{ background:rgba(245,158,11,.7) }
+.sq.i{ background:rgba(59,130,246,.7) }
+.sq.p{ background:rgba(34,197,94,.7) }
+
+
+    /* ===== Auth overlays ===== */
+    .auth-overlay{
+      position:fixed;
+      inset:0;
+      display:none;
+      place-items:center;
+      background:radial-gradient(800px 400px at 20% 0%,rgba(79,70,229,.2),transparent),rgba(2,6,23,.8);
+      z-index:100;
+    }
+    .auth-login-stack{
+      position:relative;
+      z-index:1;
+      width:min(520px,92vw);
+      display:grid;
+      justify-items:center;
+      gap:18px;
+    }
+    .auth-login-logo{
+      position:relative;
+      width:min(360px,76vw);
+      aspect-ratio:102 / 37;
+      overflow:hidden;
+    }
+    .auth-login-logo img{
+      position:absolute;
+      display:block;
+      width:142.16%;
+      max-width:none;
+      height:auto;
+      left:-21.08%;
+      top:-93.25%;
+      mix-blend-mode:screen;
+      pointer-events:none;
+      user-select:none;
+    }
+    .auth-card{
+      position:relative;
+      z-index:1;
+      width:min(520px,92vw);
+      padding:16px;
+      border-radius:16px;
+      border:1px solid var(--line);
+      background:linear-gradient(180deg,#0e1428,#0b1221);
+      box-shadow:var(--shadow);
+      color:#fff;
+    }
+    .auth-login-stack .auth-card{ width:100%; }
+    @media (max-width:640px){
+      .topbar{ padding-left:10px; padding-right:10px; }
+      .brand{ flex-basis:84px; width:84px; height:30px; margin-right:2px; }
+      .brand img{ width:120px; left:-17.8px; top:-28.6px; }
+      .auth-login-stack{ gap:14px; }
+      .auth-login-logo{ width:min(300px,76vw); }
+    }
+    .auth-h{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin:8px 0 10px;
+    }
+    .auth-h .ttl{
+      font-weight:800;
+      font-size:18px;
+    }
+    .auth-f .row{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin:8px 0;
+    }
+    .auth-f label{
+      font-size:12px;
+      color:var(--sub);
+    }
+    .auth-f input{
+      background:#000;
+      border:1px solid var(--line);
+      color:#fff;
+      padding:10px;
+      border-radius:8px;
+      font-size:13px;
+    }
+    .auth-f .actions{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border-top:none;
+      background:transparent;
+      padding:8px 0;
+    }
+    .link{
+      color:#93c5fd;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .error{
+      color:#fecaca;
+      background:rgba(239,68,68,.1);
+      border:1px solid rgba(248,113,113,.35);
+      padding:8px;
+      border-radius:8px;
+      font-size:12px;
+    }
+    .success{
+      color:#bbf7d0;
+      background:rgba(16,185,129,.12);
+      border:1px solid rgba(16,185,129,.3);
+      padding:8px;
+      border-radius:8px;
+      font-size:12px;
+    }
+    .split{ display:flex; gap:10px }
+    .eye{
+      cursor:pointer;
+      font-size:12px;
+      color:var(--sub);
+      white-space:nowrap;
+    }
+
+    .uk-datepicker-portal { color:#111827; }
+    .uk-datepicker-portal .cal-head a{
+      color:#111827;
+      text-decoration:none;
+      cursor:pointer;
+      line-height:1;
+      font-size:16px;
+    }
+
+    /* Contracts helpers */
+    .tabc .card{
+      background:#0c172d;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:12px;
+    }
+    .tabc .grid-2{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .tabc .grid-3{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .tabc .grid-5{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .tabc .grid-6{ display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; }
+    .tabc .grid-7{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; }
+
+    /* Contracts: keep form 2-col, but force schedule section to full width */
+    #modal.contract-modal #contractForm.form > .row:has(> label.section),
+    #modal.contract-modal #contractForm.form > .sched-grid{
+      grid-column: 1 / -1;
+    }
+
+    #modal.contract-modal .form input,
+    #modal.contract-modal .form select,
+    #modal.contract-modal .form textarea{
+      background:#000;
+      color:var(--text);
+      border:1px solid var(--line);
+    }
+    #modal.contract-modal .form input::placeholder,
+    #modal.contract-modal .form textarea::placeholder{
+      color:var(--sub);
+      opacity:.75;
+    }
+    #modal.contract-modal .btn,
+    #modal.contract-modal .tabc .btn{
+      border:1px solid var(--line);
+      background:#0b152a;
+      color:#fff;
+      padding:6px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    #modal.contract-modal .btn.mini,
+    #modal.contract-modal .tabc .btn.mini{
+      font-size:12px;
+      padding:4px 8px;
+    }
+    #modal.contract-modal .btn:hover,
+    #modal.contract-modal .tabc .btn:hover{
+      background:var(--hover);
+    }
+      #modal.contract-modal .mini{
+      font-size:12px;
+      color:var(--sub);
+    }
+
+    /* Contract rates: keep ordinary currency values readable at every supported width. */
+    #modal.record-modal #ratesCards{
+      grid-template-columns:minmax(0,1fr);
+    }
+    #modal.record-modal #ratesCards .grid-5{
+      grid-template-columns:repeat(5,minmax(104px,1fr));
+      overflow-x:auto;
+      padding-bottom:4px;
+    }
+    #modal.record-modal #ratesCards .grid-5 .row{
+      min-width:104px;
+    }
+    #modal.record-modal #ratesCards input[name^="paye_"],
+    #modal.record-modal #ratesCards input[name^="umb_"],
+    #modal.record-modal #ratesCards input[name^="charge_"],
+    #modal.record-modal #ratesCards input[name^="mileage_"]{
+      min-width:92px;
+      padding-left:10px;
+      padding-right:10px;
+      text-align:right;
+      font-variant-numeric:tabular-nums;
+    }
+    #modal.record-modal .contract-extra-rate-card{
+      margin:0 0 10px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#0b1427;
+      overflow:hidden;
+    }
+    #modal.record-modal .contract-extra-rate-card > summary{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:11px 12px;
+      cursor:pointer;
+      list-style:none;
+      user-select:none;
+    }
+    #modal.record-modal .contract-extra-rate-card > summary::-webkit-details-marker{ display:none; }
+    #modal.record-modal .contract-extra-rate-card > summary::before{
+      content:'+';
+      width:22px;
+      height:22px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      flex:0 0 auto;
+      border:1px solid var(--line);
+      border-radius:999px;
+    }
+    #modal.record-modal .contract-extra-rate-card[open] > summary::before{ content:'−'; }
+    #modal.record-modal .contract-extra-rate-summary-main{
+      min-width:0;
+      flex:1 1 auto;
+      font-weight:600;
+    }
+    #modal.record-modal .contract-extra-rate-summary-state{
+      color:var(--sub);
+      font-size:11px;
+      white-space:nowrap;
+    }
+    #modal.record-modal .contract-extra-rate-body{
+      padding:0 12px 12px;
+      border-top:1px solid var(--line);
+    }
+    #modal.record-modal .contract-extra-rate-body .grid-6{
+      grid-template-columns:repeat(3,minmax(150px,1fr));
+      padding-top:12px;
+    }
+    #modal.record-modal #contractCalendarHolder .contract-calendar-shell{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:0;
+    }
+    #modal.record-modal #contractCalendarHolder #__calScroll{
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      max-height:none !important;
+    }
+
+    @media (max-width:720px){
+      #modal.record-modal{
+        width:calc(100vw - 12px);
+        max-width:calc(100vw - 12px);
+        max-height:calc(100vh - 12px);
+        border-radius:12px;
+      }
+      #modal.record-modal .modal-h,
+      #modal.record-modal #modalActions{
+        padding:8px;
+      }
+      #modal.record-modal .tabc{ padding:10px; }
+      #modal.record-modal .form{
+        grid-template-columns:minmax(0,1fr);
+        column-gap:0;
+      }
+      #modal.record-modal .tabc .grid-2,
+      #modal.record-modal .tabc .grid-3,
+      #modal.record-modal .tabc .grid-5,
+      #modal.record-modal .tabc .grid-6,
+      #modal.record-modal .tabc .grid-7,
+      #modal.record-modal .contract-extra-rate-body .grid-6{
+        grid-template-columns:minmax(0,1fr);
+        min-width:0 !important;
+      }
+      #modal.record-modal #ratesCards .grid-5{
+        grid-template-columns:repeat(2,minmax(118px,1fr));
+        overflow:visible;
+      }
+      #modal.record-modal #ratesCards .grid-5 .row,
+      #modal.record-modal #ratesCards input[name^="paye_"],
+      #modal.record-modal #ratesCards input[name^="umb_"],
+      #modal.record-modal #ratesCards input[name^="charge_"]{
+        min-width:0;
+      }
+      #modal.record-modal .sched .controls,
+      #modal.record-modal .record-inline-actions{
+        align-items:stretch !important;
+      }
+      #modal.record-modal .sched .controls > .grid-3{
+        min-width:0 !important;
+        width:100%;
+      }
+      #modal.record-modal #modalActions .spacer{ display:none; }
+      #modal.record-modal #modalActions .hint{
+        flex:1 0 100%;
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       Summary Grid (4.11) — Coins + Row highlights + Invoiced cell
+       ───────────────────────────────────────────────────────────── */
+
+    .cell-right-icon{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+    .cell-right-icon .cell-main{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    /* Gold coin with £ inside (aligned to far right of the cell via flex) */
+    .coin-badge{
+      margin-left:auto;
+      width:16px;
+      height:16px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:11px;
+      line-height:1;
+      color:rgba(0,0,0,.75);
+      background: radial-gradient(circle at 30% 30%, #fff3b0 0%, #f5d76e 35%, #d4af37 60%, #a67c00 100%);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,.35),
+        0 1px 2px rgba(0,0,0,.35);
+    }
+
+      /* Row highlights (must beat zebra striping) */
+    .summary-body .grid tbody tr.row-light-green{
+      background: rgba(34,197,94,0.14) !important;
+    }
+    .summary-body .grid tbody tr.row-deep-green{
+      background: rgba(34,197,94,0.28) !important;
+    }
+
+    /* Optional: keep highlight while hovering */
+    .summary-body .grid tbody tr.row-light-green:hover{
+      background: rgba(34,197,94,0.20) !important;
+    }
+    .summary-body .grid tbody tr.row-deep-green:hover{
+      background: rgba(34,197,94,0.34) !important;
+    }
+
+      /* Processing State cell when fully invoiced */
+    td.cell-invoiced{
+      background: rgba(34,197,94,0.35);
+      border-radius: 6px;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       Global loading overlay (rotating dots)
+       ───────────────────────────────────────────────────────────── */
+    #globalLoadingOverlay{
+      position:fixed;
+      inset:0;
+      display:none;
+      place-items:center;
+      z-index:9999;
+      background: rgba(2,6,23,0.35);
+      backdrop-filter: blur(1px);
+    }
+    #globalLoadingOverlay[data-show="1"]{ display:grid; }
+
+   
+    #globalLoadingOverlay .gload-spinner{
+      position:relative;
+      width:54px;
+      height:54px;
+      animation: gloadSpin 0.95s linear infinite;
+    }
+    #globalLoadingOverlay .gload-spinner span{
+      position:absolute;
+      top:50%;
+      left:50%;
+      width:8px;
+      height:8px;
+      margin:-4px;
+      border-radius:50%;
+      background:#e5e7eb;
+      opacity:.25;
+      transform: rotate(calc(var(--i) * 45deg)) translate(20px);
+    }
+    #globalLoadingOverlay .gload-spinner span:nth-child(1){opacity:.25}
+    #globalLoadingOverlay .gload-spinner span:nth-child(2){opacity:.30}
+    #globalLoadingOverlay .gload-spinner span:nth-child(3){opacity:.35}
+    #globalLoadingOverlay .gload-spinner span:nth-child(4){opacity:.45}
+    #globalLoadingOverlay .gload-spinner span:nth-child(5){opacity:.60}
+    #globalLoadingOverlay .gload-spinner span:nth-child(6){opacity:.75}
+    #globalLoadingOverlay .gload-spinner span:nth-child(7){opacity:.90}
+    #globalLoadingOverlay .gload-spinner span:nth-child(8){opacity:1.00}
+
+    @keyframes gloadSpin{ to { transform: rotate(360deg); } }
+
+    /* Payment issue panel (Handover 5B) */
+    .payment-issue-panel{
+      margin-top:10px;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#0b152a;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .payment-issues-tab{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-width:0;
+      max-width:100%;
+    }
+    .payment-issues-tab .payment-issue-summary-card,
+    .payment-issues-tab .payment-issue-manual-action-card,
+    .payment-issues-tab .payment-issue-progress-compact{
+      min-width:0;
+      overflow-wrap:anywhere;
+      padding:10px;
+    }
+    .payment-issues-tab .payment-issue-manual-action-card{
+      border-color:rgba(148,163,184,0.32);
+      background:rgba(15,23,42,0.52);
+    }
+    .payment-issue-table-wrap{
+      overflow-x:auto;
+      overflow-y:visible;
+      max-width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:var(--panel);
+    }
+    .payment-issue-table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+      line-height:1.35;
+      min-width:920px;
+    }
+    .payment-issue-table th,
+    .payment-issue-table td{
+      padding:7px 8px;
+      border-bottom:1px solid rgba(148,163,184,0.18);
+      vertical-align:middle;
+    }
+    .payment-issue-table th:first-child,
+    .payment-issue-table td:first-child{
+      width:52px;
+      min-width:52px;
+      text-align:center;
+    }
+    .payment-issue-table th:nth-child(2),
+    .payment-issue-table td:nth-child(2){
+      min-width:180px;
+    }
+    .payment-issue-table th:nth-child(3),
+    .payment-issue-table td:nth-child(3){
+      min-width:180px;
+    }
+    .payment-issue-table th:nth-child(4),
+    .payment-issue-table td:nth-child(4){
+      min-width:130px;
+      text-align:right;
+      white-space:nowrap;
+    }
+    .payment-issue-table th:nth-child(5),
+    .payment-issue-table td:nth-child(5),
+    .payment-issue-table th:nth-child(7),
+    .payment-issue-table td:nth-child(7),
+    .payment-issue-table th:nth-child(8),
+    .payment-issue-table td:nth-child(8){
+      min-width:120px;
+      white-space:nowrap;
+    }
+    .payment-issue-table th:nth-child(6),
+    .payment-issue-table td:nth-child(6){
+      min-width:220px;
+      white-space:normal;
+    }
+    .payment-issue-row-selected{
+      background:rgba(56,189,248,0.12);
+      box-shadow:inset 3px 0 0 rgba(56,189,248,0.75);
+    }
+    .payment-issue-row-review{
+      background:rgba(245,158,11,0.16);
+      box-shadow:inset 3px 0 0 #f59e0b;
+    }
+    .payment-issue-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:.01em;
+      color:#fde68a;
+      background:rgba(245,158,11,0.18);
+      border:1px solid rgba(245,158,11,0.45);
+      white-space:nowrap;
+    }
+    .payment-issue-progress{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px 10px;
+      font-size:12px;
+      color:var(--text);
+      padding:4px 0;
+    }
+    .payment-issue-progress-compact{
+      padding:8px 10px;
+      font-size:12px;
+    }
+    .payment-issue-progress-compact:empty,
+    .payment-issue-progress-compact ul:empty{
+      display:none;
+    }
+    
+    .payment-issue-toolbar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin:8px 0;
+      align-items:center;
+      min-width:0;
+    }
+    .payment-issue-actions{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:10px;
+      align-items:center;
+      justify-content:flex-start;
+      min-width:0;
+    }
+    .payment-issue-approval-chip{
+      display:inline-flex;
+      align-items:center;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,0.45);
+      background:rgba(148,163,184,0.14);
+      color:#e2e8f0;
+      font-size:11px;
+      line-height:1.2;
+      white-space:nowrap;
+    }
+    .payment-issue-sort-button{
+      background:transparent;
+      border:0;
+      color:inherit;
+      font:inherit;
+      cursor:pointer;
+      padding:2px 4px;
+      border-radius:6px;
+      line-height:1.25;
+    }
+    .payment-issue-sort-button:hover{
+      background:rgba(148,163,184,0.12);
+    }
+    .payment-issue-finance-review{
+      border:1px solid rgba(148,163,184,0.25);
+      border-radius:8px;
+      padding:8px;
+      background:rgba(15,23,42,0.45);
+    }
+    .payment-issue-confirm-reauth{
+      border:1px dashed rgba(148,163,184,0.35);
+      border-radius:8px;
+      padding:8px;
+    }
+    .payment-issue-group-selector{
+      display:flex;
+      gap:6px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+  </style>
+  <link rel="stylesheet" href="./css/modal-modernisation.css?v=20261010-next-ready-cards-r1"/>
+  <link rel="stylesheet" href="./css/record-modal-layout.css?v=20260829-rate-picker-r1"/>
+  <link rel="stylesheet" href="./css/manager-authorisers.css?v=20260826-r2"/>
+  <link rel="stylesheet" href="./css/summary-modernisation.css?v=20260905-continuous-grid-r4"/>
+
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="brand" role="img" aria-label="CloudTMS" title="CloudTMS">
+      <img src="./assets/branding/cloudtms-office-logo-black.png" alt="" aria-hidden="true"/>
+    </div>
+    <div class="nav" id="nav"></div>
+    <div class="userbox">
+      <span class="chip" id="userChip">Signed out</span>
+      <button id="btnLogout">Logout</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="panel tools" id="tools">
+      <h3>Tools</h3>
+      <div id="toolButtons"></div>
+      <div class="group">
+        <div class="note">Tip: Double-click a row to view. Click <strong>Edit</strong> in the dialog to make changes.</div>
+      </div>
+    </aside>
+
+    <main class="panel main">
+      <div class="toolbar">
+        <div class="title" id="title">Loading…</div>
+        <div class="spacer"></div>
+        <input type="text" id="quickSearch" placeholder="Quick search…"/>
+        <button id="btnColumns">Columns</button>
+      </div>
+      <div id="content"></div>
+    </main>
+   </div>
+
+   <!-- ✅ Global loading overlay (spinner only) -->
+  <div id="globalLoadingOverlay" aria-hidden="true">
+    <div class="gload-spinner" aria-hidden="true">
+      <span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span>
+      <span style="--i:4"></span><span style="--i:5"></span><span style="--i:6"></span><span style="--i:7"></span>
+    </div>
+  </div>
+
+
+  <!-- ===== Draggable modal ===== -->
+  <div class="modal-back" id="modalBack" data-testid="modal-backdrop">
+  <div class="modal" id="modal" data-testid="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+
+    <div class="modal-h" id="modalDrag">
+      <div class="ttl" id="modalTitle" data-testid="modal-title">Details</div>
+      <div class="spacer"></div>
+      <!-- Related moved up next to Close -->
+      <button id="btnRelated" style="display:none">Related</button>
+      <button id="btnPaymentHistory" type="button" style="display:none">Payment history</button>
+      <button id="btnCloseModal" data-testid="modal-close">Close</button>
+    </div>
+    <div class="modal-b">
+      <div class="tabs" id="modalTabs" data-testid="modal-tabs"></div>
+      <div class="tabc" id="modalBody" data-testid="modal-body"></div>
+    </div>
+    <div class="actions" id="modalActions">
+      <span class="hint" id="modalHint"></span>
+      <div class="spacer"></div>
+      <!-- Bottom row now only core actions -->
+      <button id="btnDelete" class="danger" style="display:none">Delete</button>
+      <button id="btnEditModal" data-testid="modal-edit" style="display:none">Edit</button>
+      <button id="btnSave" class="primary" data-testid="modal-save">Save</button>
+    </div>
+  </div>
+</div>
+  <!-- ===== Auth overlays ===== -->
+  <div class="auth-overlay" id="loginOverlay" aria-hidden="true">
+    <div class="auth-login-stack">
+      <div class="auth-login-logo" role="img" aria-label="CloudTMS">
+        <img src="./assets/branding/cloudtms-office-logo-black.png" alt="" aria-hidden="true"/>
+      </div>
+      <div class="auth-card">
+        <div class="auth-h"><div class="ttl">Sign in</div></div>
+        <form class="auth-f" id="loginForm" data-testid="login-form">
+          <div id="loginError" class="error" style="display:none"></div>
+          <div class="row">
+            <label>Email</label>
+            <input id="loginEmail" data-testid="login-email" type="email" autocomplete="username" required />
+          </div>
+          <div class="row">
+            <label>Password</label>
+            <div class="split">
+              <input id="loginPassword" data-testid="login-password" type="password" autocomplete="current-password" required />
+              <span class="eye" id="toggleLoginPw">show</span>
+            </div>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="rememberMe" checked/> Keep me signed in</label>
+          </div>
+          <div class="actions">
+            <span class="link" id="linkForgot">Forgot password?</span>
+            <button type="submit" class="primary" data-testid="login-submit">Sign in</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="auth-overlay" id="forgotOverlay" aria-hidden="true">
+    <div class="auth-card">
+      <div class="auth-h"><div class="ttl">Password reset</div></div>
+      <form class="auth-f" id="forgotForm">
+        <div id="forgotMsg" class="success" style="display:none"></div>
+        <div id="forgotError" class="error" style="display:none"></div>
+        <div class="row">
+          <label>Enter your account email</label>
+          <input id="forgotEmail" type="email" required />
+        </div>
+        <div class="actions">
+          <span class="link" id="linkBackToLogin">Back to login</span>
+          <button type="submit">Send reset email</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ✅ NEW: 2FA overlay -->
+  <div class="auth-overlay" id="tfaOverlay" aria-hidden="true">
+    <div class="auth-card">
+      <div class="auth-h"><div class="ttl">Verification code</div></div>
+      <form class="auth-f" id="tfaForm">
+        <div id="tfaMsg" class="success" style="display:none"></div>
+        <div id="tfaError" class="error" style="display:none"></div>
+
+        <div class="row">
+          <label>Enter the 6-digit code we emailed you</label>
+          <input
+            id="tfaCode"
+            data-testid="tfa-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            required
+          />
+        </div>
+
+        <div class="actions">
+          <span class="link" id="linkTfaBackToLogin">Back to login</span>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button type="button" id="btnTfaResend">Resend code</button>
+            <button type="submit" class="primary">Verify</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="auth-overlay" id="resetOverlay" aria-hidden="true">
+    <div class="auth-card">
+      <div class="auth-h"><div class="ttl">Set a new password</div></div>
+      <form class="auth-f" id="resetForm">
+        <div id="resetMsg" class="success" style="display:none"></div>
+        <div id="resetError" class="error" style="display:none"></div>
+        <div class="row">
+          <label>New password</label>
+          <div class="split">
+            <input id="resetPw1" type="password" autocomplete="new-password" required minlength="8" />
+            <span class="eye" id="toggleResetPw1">show</span>
+          </div>
+        </div>
+        <div class="row">
+          <label>Confirm new password</label>
+          <div class="split">
+            <input id="resetPw2" type="password" autocomplete="new-password" required minlength="8" />
+            <span class="eye" id="toggleResetPw2">show</span>
+          </div>
+        </div>
+        <div class="actions">
+          <span class="link" id="linkResetToLogin">Back to login</span>
+          <button type="submit" class="primary">Update password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 1) Define the global base URL early -->
+  <script>
+
+
+  </script>
+
+ <!-- Candidate Office contract modules are definition-only until authenticated bootstrap. -->
+ <script src="./js/candidate-office-contract-v1.js?v=20260910-paid-history-r1"></script>
+ <script src="./js/candidate-office-ui-policy-v1.js?v=20260813-r1"></script>
+ <script src="./js/candidate-route-warning-v1.js?v=20260813-r1"></script>
+ <script src="./js/candidate-office-presenter-v1.js?v=20260907-timesheet-layout-r1"></script>
+ <script src="./js/candidate-office-api-v1.js?v=20260906-advanced-expense-r2"></script>
+ <script src="./js/candidate-office-modal-v1.js?v=20260910-paid-history-r1"></script>
+ <script src="./js/candidate-office-controller-v1.js?v=20260906-advanced-expense-r2"></script>
+ <script src="./js/candidate-office-surface-v1.js?v=20260907-timesheet-layout-r2"></script>
+
+ <!-- Banking Pay v2 is capability-gated and retains the existing main.js owners. -->
+ <!-- Banking Pay NEXT: static dependency order, qualified by the current agency owner. -->
+ <script src="./js/bpay-next-ui.js?v=20261011-fc10-r1"></script>
+ <script src="./js/bpay-next-snooze-window.js?v=20261012-fc02-r1"></script>
+ <script src="./js/bpay-next-snooze-actions.js?v=20261012-fc02-r1"></script>
+ <script src="./js/bpay-next-dates.js?v=20261010-next-environment-r1"></script>
+ <script src="./js/bpay-next-owner.js?v=20261010-next-environment-r1"></script>
+ <script src="./js/bpay-next-case-preview.js?v=20261012-fc13-r1"></script>
+ <script src="./js/bpay-next-pay-method-change.js?v=20261011-ex08-r1"></script>
+ <script src="./js/bpay-next-case-audit-contract.js?v=20261012-fc12-r1"></script>
+ <script src="./js/bpay-next-paye-net-contract.js?v=DR23-20261013"></script>
+ <script src="./js/bpay-next-office.js?v=DR23-20261013"></script>
+ <script src="./js/bpay-next-case-list.js?v=20261013-xd01-r1"></script>
+ <script src="./js/bpay-next-case-pause.js?v=20261011-fc10-r1"></script>
+ <script src="./js/bpay-next-write-off.js?v=20261012-fc11-r1"></script>
+ <script src="./js/bpay-next-case-restructure.js?v=20261012-fc12-r1"></script>
+ <script src="./js/bpay-next-case-channel.js?v=20261012-fc13-r1"></script>
+ <script src="./js/bpay-next-case-audit.js?v=20261011-fc14-r1"></script>
+ <script src="./js/bpay-next-payment-advance.js?v=20261011-fc09-r2"></script>
+ <script src="./js/bpay-next-manual-credit.js?v=20261011-fc09-r2"></script>
+ <script src="./js/bpay-next-manual-debt.js?v=20261011-fc09-r2"></script>
+ <script src="./js/bpay-next-resolution.js?v=WB34-20261013"></script>
+ <script src="./js/bpay-next-decisions-clear.js?v=20261013-wb28-r1"></script>
+ <script src="./js/bpay-next-workbench.js?v=WB34-20261013"></script>
+ <script src="./js/bpay-next-resolution-adoption.js?v=20261013-wb34-r1"></script>
+ <script src="./js/bpay-next-clear-choice.js?v=WB34-20261013"></script>
+ <script src="./js/bpay-next-rates.js?v=WB34-20261013"></script>
+ <script src="./js/bpay-next-component-choice.js?v=WB34-20261013"></script>
+ <script src="./js/bpay-next-pay-channel.js?v=WB34-20261013"></script>
+ <script src="./js/bpay-next-payment-history.js?v=20261010-next-history-attribution-r1"></script>
+ <script src="./js/banking-pay-modal-v2-copy.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-details-legacy.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-table.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-draft-review.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-issues.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-issue-detail.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-mutation.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-settlement.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-candidate.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2.js?v=20260901-r13"></script>
+ <script src="./js/banking-pay-modal-v2-integration.js?v=20260901-r13"></script>
+
+ <!-- 2) Load the application logic -->
+<script src="./js/summary-continuous-grid-v1.js?v=20260905-r8"></script>
+<script src="./js/weekly-source-presentation-v1.js?v=20260924-r3&protected-next-receipts=20261010-r1&source-pay-query-admission=20261010-r1&bpay-next-standard-window=20261010-r2&later-change-decision=20261012-r1"></script>
+<script src="./js/weekly-source/finalise-batch.js?v=20261001-r1&source-pay-query-admission=20261010-r1&bpay-next-standard-window=20261010-r2"></script>
+<script src="./js/weekly-source/combined-finalise.js?v=20261009-status-colours-r1&source-pay-query-admission=20261010-r1&bpay-next-standard-window=20261010-r2"></script>
+<script src="./js/weekly-source/combined-review.js?v=20261013-contact-policy-next-r1&healthroster=20261014-r1"></script>
+<script src="./js/weekly-source/import-workspace.js?v=20261013-contact-policy-next-r1&healthroster=20261014-r1&source-pay-query-admission=20261010-r1&bpay-next-standard-window=20261010-r2"></script>
+<script src="./js/weekly-source/office-notifications.js?v=20260923-r2"></script>
+<script src="./js/weekly-source/protected-shift-editor.js?v=20261007-history-r1&protected-next-receipts=20261010-r1&source-pay-query-admission=20261010-r1&bpay-next-standard-window=20261010-r2"></script>
+  <script src="./js/weekly-source/workspace-actions.js?v=20261009-contract-checkbox-r1&protected-next-receipts=20261010-r1&source-pay-query-admission=20261010-r1&bpay-next-standard-window=20261010-r2"></script>
+<script src="./js/weekly-source/rule-set-validation.js?v=20261013-r1&healthroster=20261014-r1"></script>
+<script src="./js/weekly-source/rule-settings.js?v=20261013-r1&healthroster=20261014-r1"></script>
+<script src="./js/weekly-source/settings.js?v=20261013-r1&healthroster=20261014-r1"></script>
+<script src="./js/weekly-source/source-invoice-adjustments.js?v=20261013-r1&healthroster=20261014-r1"></script>
+<script src="./js/timesheet-correction-office-context.js?v=20261014-correction-read-r1"></script>
+<script src="./js/main.js?v=20261012-sp10-r1&healthroster=20261014-r3"></script>
+ <script src="./js/mytms-office-v1.js?v=20261009-contract-invitation-save-r1"></script>
+ <script src="./js/candidate-office-reminder-workspace-v1.js?v=20260814-r2"></script>
+ <script src="./js/invoice-diagnostic-catalog.js?v=20260803-invoice-reference-policy-r2"></script>
+ <script src="./js/weekly-source/agency-invoice-credit-ui.js?v=20261013-r1&healthroster=20261014-r1"></script>
+<script src="./js/invoice-batch-modal.js?v=20260803-invoice-reference-policy-r2&healthroster=20261014-r1"></script>
+<script src="./js/invoice-async-ui.js?v=20260730-invoice-refs-ward-r13&invoice-ui-notices=20260822-r1"></script>
+ <script src="./js/import-review-v1.js?v=20260802-validation-policy-r6&daily-roster-compat=20260822-r1&daily-zero-dialog=20260822-r1&record-modal-layout=20260828-r1&weekly-source-entry=20260922-r1"></script>
+ <script src="./js/bulk-row-freshness-v1.js"></script>
+ <script src="./js/bulk-authorise-lifecycle-v2.js?v=20260922-weekly-source-categories-r1"></script>
+ <script src="./js/bulk-authorise-evidence-controller.js"></script>
+ <script src="./js/candidate-office-bridge-v1.js?v=20260910-simple-expense-refresh-r2"></script>
+ <script src="./js/candidate-office-bootstrap-v1.js?v=20260905-summary-trust-r1"></script>
+ <script src="./js/record-modal-layout.js?v=20260828-r2"></script>
+ <script src="./js/modal-modernisation.js?v=20261013-wb32-r1"></script>
+ <script src="./js/manager-authorisers.js?v=20261009-r2"></script>
+ <script src="./js/summary-modernisation.js?v=20260822-r2"></script>
+</body>
+</html>

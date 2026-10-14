@@ -1,0 +1,41 @@
+async function handleMe(env, req) {
+  const user = await requireUser(env, req /* no role gating here */);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let row = null;
+  try {
+    const apiUrl =
+      `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}` +
+      `?id=eq.${encodeURIComponent(String(user.id || ''))}` +
+      `&select=id,email,display_name,role,email_signature_html` +
+      `&limit=1`;
+
+    const res = await fetch(apiUrl, { headers: sbAuthHeaders(env) });
+    if (res.ok) {
+      const rows = await res.json().catch(() => []);
+      row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    }
+  } catch {
+    row = null;
+  }
+
+  const me = {
+    id: (row && row.id) ? row.id : user.id,
+    email: (row && Object.prototype.hasOwnProperty.call(row, 'email')) ? (row.email || null) : (user.email || null),
+    display_name:
+      (row && row.display_name) ||
+      user.display_name ||
+      user.name ||
+      user.email ||
+      null,
+    roles: Array.isArray(user.roles)
+      ? user.roles
+      : ((row && row.role) ? [row.role] : (user.role ? [user.role] : [])),
+    email_signature_html:
+      (row && Object.prototype.hasOwnProperty.call(row, 'email_signature_html'))
+        ? (row.email_signature_html ?? null)
+        : null
+  };
+
+  return withCORS(env, req, ok({ user: me }));
+}
