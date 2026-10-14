@@ -1,0 +1,60 @@
+-- Read the actual maintained native HR selection. The selected transition's
+-- current snapshot can restate the original movement after genuine NO_CHANGE.
+-- No date/UUID/history ranking, monetary classifier or cash permission here.
+create or replace function private.weekly_source_paid_overlap_current_snapshot_v1(
+  p_work_event_id uuid,p_movement_id uuid,p_candidate_id uuid,p_client_id uuid,p_contract_id uuid,p_source_group_id uuid,p_native_root_ids uuid[]
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_count integer;v_snapshot uuid;v_rows jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_work_event_id is null or p_movement_id is null or p_candidate_id is null or p_client_id is null
+    or p_contract_id is null or p_source_group_id is null or cardinality(p_native_root_ids) is null then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SNAPSHOT_SCOPE_INVALID' using errcode='22023';end if;
+  with actual as materialized (
+    select s.id,scope.id as scope_id,scope.root_timesheet_id,selected.selected_transition_id,
+      selected.selected_order_key::text,origin.source_hash,origin.final_revision_id,
+      transition.new_present as source_export_present,transition.exclude_cancel
+    from private.bpay_next_source_current_events selected
+    join private.bpay_next_source_current_scopes scope on scope.id=selected.scope_id
+    join private.bpay_next_source_current_origins origin on origin.scope_id=scope.id and origin.work_event_id=selected.work_event_id
+      and origin.origin_kind='TRANSITION' and origin.origin_id=selected.selected_transition_id
+      and origin.transition_id=selected.selected_transition_id and origin.active
+      and origin.selected_movement_id=selected.selected_movement_id and origin.order_key=selected.selected_order_key
+    join public.weekly_source_state_transitions transition on transition.id=selected.selected_transition_id
+      and transition.work_event_id=selected.work_event_id and transition.final_revision_id=origin.final_revision_id
+      and transition.transition_fingerprint=origin.source_hash
+    join public.weekly_source_final_revisions revision on revision.id=transition.final_revision_id and revision.state='CURRENT'
+      and revision.authority_scope_kind='CYCLE' and revision.report_scope_id is null
+    join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id and cycle.source_group_id=p_source_group_id
+      and cycle.current_final_revision_id=revision.id
+    join public.weekly_source_final_snapshot_lines s on s.id=coalesce(transition.new_snapshot_line_id,
+      case when transition.outcome='CANCEL' and transition.exclude_cancel then transition.previous_snapshot_line_id end)
+      and s.work_event_id=selected.work_event_id and s.pay_effect='NORMAL'
+    join private.bpay_next_source_current_snapshots mapping on mapping.snapshot_line_id=s.id and mapping.scope_id=scope.id
+      and mapping.work_event_id=selected.work_event_id and mapping.movement_id=p_movement_id
+    where selected.work_event_id=p_work_event_id and selected.source_kind='HR' and selected.source_present and not selected.ambiguous
+      and selected.selected_movement_id=p_movement_id and scope.source_group_id=p_source_group_id
+      and scope.candidate_id=p_candidate_id and scope.client_id=p_client_id and scope.contract_id=p_contract_id
+      and scope.root_timesheet_id=any(p_native_root_ids)
+      and (s.candidate_id,s.client_id,s.contract_id)=(p_candidate_id,p_client_id,p_contract_id)
+      and s.work_date between scope.week_ending_date-6 and scope.week_ending_date
+      and (transition.new_present or (transition.outcome='CANCEL' and transition.exclude_cancel
+        and not transition.new_present and transition.new_snapshot_line_id is null
+        and (case when transition.outcome='CANCEL' and transition.exclude_cancel
+          then private.weekly_source_missing_cancel_transition_assert_v1(transition.id) end)#>>'{original_basis,movement_id}'=p_movement_id::text))
+  ) select count(distinct id),max(id::text)::uuid,
+    coalesce(jsonb_agg(jsonb_build_object('snapshot_line_id',id,'scope_id',scope_id,'root_timesheet_id',root_timesheet_id,
+      'selected_transition_id',selected_transition_id,'selected_order_key',selected_order_key,
+      'source_hash',encode(source_hash,'hex'),'selected_final_revision_id',final_revision_id,
+      'source_export_present',source_export_present,'exclude_cancel',exclude_cancel) order by scope_id),'[]'::jsonb)
+    into v_count,v_snapshot,v_rows from actual;
+  if v_count>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_SNAPSHOT_AMBIGUOUS' using errcode='55000';end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_PAY_SNAPSHOT_V1',
+    'state',case when v_count=1 then 'CURRENT' else 'UNAVAILABLE' end,'snapshot_line_id',v_snapshot,
+    'work_event_id',p_work_event_id,'movement_id',p_movement_id,'native_current_selections',v_rows);
+end;
+$function$;
+alter function private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[]) owner to postgres;
+revoke all on function private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[]) from public,anon,authenticated,service_role;

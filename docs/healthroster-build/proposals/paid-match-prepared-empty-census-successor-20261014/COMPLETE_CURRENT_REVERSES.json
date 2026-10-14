@@ -1,0 +1,86 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/01_prepared_paid_choice_census.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "01_prepared_paid_choice_census.sqlinc",
+      "before_bytes": 4397,
+      "before_sha256": "ff81ee489028a0616a97ccf6fc452c659d8e9adb4551a8fb0d91cc40a63093f7",
+      "after_bytes": 4312,
+      "after_sha256": "836e2576b547dd2a1eb28cf6b1133e64187ca079caaef046dd2ea2f86a0d8aca",
+      "hunks": [
+        {
+          "name": "stored empty census must not short-circuit actual CYCLE choice discovery",
+          "before": "  select * into strict revision from public.weekly_source_final_revisions where id=p_final_revision_id;\n  if revision.paid_overlap_choice_census='{}'::jsonb then return '{}'::jsonb;end if;",
+          "after": "  select * into strict revision from public.weekly_source_final_revisions where id=p_final_revision_id;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/02_complete_prepared_context.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "02_complete_prepared_context.sqlinc",
+      "before_bytes": 8012,
+      "before_sha256": "0d566c0a1bed1ce8f0b60d6edc2a14db0b8c7e78cf5ff5c80a0db4a37068cdb4",
+      "after_bytes": 8204,
+      "after_sha256": "77030d9c8a457a512b923fd17af7921b92a8ba8d914c8527b2a3c438a0df7ce4",
+      "hunks": [
+        {
+          "name": "one actual CYCLE census read is reused by optional result construction",
+          "before": "  v_context jsonb;",
+          "after": "  v_context jsonb;\n  v_paid_choice_census jsonb;"
+        },
+        {
+          "name": "derive actual CYCLE choices even when the immutable prepared census is empty",
+          "before": "  v_source_mode:=case when v_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT'",
+          "after": "  if v_revision.authority_scope_kind='CYCLE' or v_revision.paid_overlap_choice_census<>'{}'::jsonb then\n    v_paid_choice_census:=private.weekly_source_paid_match_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id);\n  end if;\n  v_source_mode:=case when v_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT'"
+        },
+        {
+          "name": "reuse exact rederived census while preserving existing optional empty DTO shape",
+          "before": "'paid_overlap_choice_census',private.weekly_source_paid_match_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id)) end;",
+          "after": "'paid_overlap_choice_census',v_paid_choice_census) end;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/04_complete_apply_census_recheck.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "04_complete_apply_census_recheck.sqlinc",
+      "before_bytes": 37114,
+      "before_sha256": "b3a09495e226fccc6320c9a1bdd9e58c170145c40a3e31e24a6dc62eaea70753",
+      "after_bytes": 37166,
+      "after_sha256": "c70dd6c8c15b5bf8642a38661a894994e9a561ca77637c05bf7c7116d7deefd6",
+      "hunks": [
+        {
+          "name": "repeat full CYCLE empty or nonempty choice reproof after native root locks and before COMMITTING",
+          "before": "  if v_prepared_revision.paid_overlap_choice_census<>'{}'::jsonb then",
+          "after": "  if v_prepared_revision.authority_scope_kind='CYCLE' or v_prepared_revision.paid_overlap_choice_census<>'{}'::jsonb then"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "native_input_pins": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "saved": "input/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "bytes": 39828,
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "saved": "input/30092026_2129_weekly_source_office_resolution.sql",
+      "bytes": 2281,
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    }
+  ],
+  "original_replay_NHSP_and_mutability_guards_retained": true,
+  "legal_late_choice_interleaving_proved": false,
+  "SQL_compiled": false,
+  "native_proof": false
+}

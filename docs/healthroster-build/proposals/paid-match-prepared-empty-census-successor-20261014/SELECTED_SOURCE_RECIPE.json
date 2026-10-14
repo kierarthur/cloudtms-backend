@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_prior_checkpoint": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+  "prerequisite_packet": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/",
+  "prerequisite_manifest_sha256": "d26c0a2b3139e0eb471068ce938809e4acce169bd58afd79b414018cc42a80e4",
+  "selected_complete_source_order": [
+    "forward/01_prepared_paid_choice_census.sqlinc",
+    "forward/02_complete_prepared_context.sqlinc",
+    "forward/04_complete_apply_census_recheck.sqlinc"
+  ],
+  "replaced_complete_leaves": [
+    "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/01_prepared_paid_choice_census.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/02_complete_prepared_context.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/04_complete_apply_census_recheck.sqlinc"
+  ],
+  "existing_signatures_and_ACL_retained": true,
+  "new_private_signatures": [],
+  "new_public_signatures": [],
+  "new_store_column_calculator": 0,
+  "optional_empty_DTO_shape_retained": true,
+  "NHSP_empty_behavior_retained": true,
+  "genuine_CorrectFinal_paid_choice_writer_added": false,
+  "legal_late_choice_interleaving_proved": false,
+  "source_39_recorder_9_13_three_receipt_exceptions_and_Policy_X_unchanged": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

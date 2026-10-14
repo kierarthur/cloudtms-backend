@@ -1,0 +1,156 @@
+-- Re-read the single immutable Office choice with its real journal and audit.
+-- A current viewer proves current authority; the original confirmer is never
+-- substituted as the current actor. Raw financial facts have one producer.
+create or replace function private.weekly_source_paid_overlap_choice_current_v1(
+  p_upload_row_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_choice private.weekly_source_office_row_choices%rowtype;
+  v_journal private.weekly_source_office_rechecks%rowtype;
+  v_audit public.audit_events%rowtype;v_count integer;
+  v_saved jsonb;v_observed jsonb;v_match jsonb;v_result jsonb;v_recorded jsonb;
+  v_revision public.weekly_source_final_revisions%rowtype;v_cycle public.weekly_source_cycles%rowtype;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_actor_user_id is null then raise exception 'WEEKLY_SOURCE_ACTOR_REQUIRED' using errcode='42501';end if;
+  select * into v_choice from private.weekly_source_office_row_choices
+    where upload_row_id=p_upload_row_id order by id desc limit 1;
+  if v_choice.paid_overlap_target_work_event_id is null then return null;end if;
+  v_saved:=v_choice.paid_overlap_inputs_json;
+  if v_saved->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_ADMISSION_V1'
+    or v_saved->>'upload_row_id' is distinct from v_choice.upload_row_id::text
+    or v_saved->>'candidate_id' is distinct from v_choice.candidate_id::text
+    or v_saved->>'client_id' is distinct from v_choice.client_id::text
+    or v_saved->>'contract_id' is distinct from v_choice.contract_id::text
+    or v_saved->>'actor_user_id' is distinct from v_choice.actor_user_id::text
+    or v_saved->>'paid_overlap_target_work_event_id' is distinct from v_choice.paid_overlap_target_work_event_id::text
+    or v_saved->>'pay_effect' is distinct from v_choice.pay_effect
+    or v_saved->>'reason' is distinct from v_choice.match_reason
+    or v_saved->>'inputs_sha256' is distinct from encode(v_choice.paid_overlap_inputs_sha256,'hex') then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;
+  select * into strict v_journal from private.weekly_source_office_rechecks
+    where request_id=(v_saved->>'request_id')::uuid;
+  if v_journal.actor_user_id is distinct from v_choice.actor_user_id
+    or v_journal.upload_id::text is distinct from v_saved->>'upload_id'
+    or encode(v_journal.request_hash,'hex') is distinct from v_saved->>'request_sha256'
+    or v_journal.request_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_OFFICE_RECHECK_V1',v_journal.request_json) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;
+  select count(*) into v_count from public.audit_events a
+    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text
+      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;
+  select * into strict v_audit from public.audit_events a
+    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text
+      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';
+  if v_audit.actor_user_id is distinct from v_choice.actor_user_id
+    or v_audit.after_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMATION_V1'
+    or v_audit.after_json->'choice' is distinct from to_jsonb(v_choice)
+    or v_audit.after_json->'admission' is distinct from v_saved
+    or v_audit.after_json->'request' is distinct from v_journal.request_json
+    or v_audit.after_json->>'request_sha256' is distinct from encode(v_journal.request_hash,'hex') then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;
+  select revision.* into v_revision from public.weekly_source_final_revisions revision
+    join public.weekly_source_cycles cycle on cycle.current_final_revision_id=revision.id
+      and cycle.id=revision.source_cycle_id
+    join public.weekly_source_uploads upload on upload.id=revision.upload_id and upload.source_cycle_id=cycle.id
+    join public.weekly_source_upload_rows source_row on source_row.upload_id=upload.id
+    where source_row.id=p_upload_row_id and revision.state='CURRENT' and revision.authority_scope_kind='CYCLE'
+      and revision.report_scope_id is null;
+  if found then
+    select * into strict v_cycle from public.weekly_source_cycles where id=v_revision.source_cycle_id;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+      v_cycle.source_group_id,v_choice.client_id,v_cycle.finalisation_week_ending);
+    v_recorded:=v_revision.paid_overlap_choice_census->p_upload_row_id::text;
+    if v_recorded->>'choice_id' is distinct from v_choice.id::text
+      or v_recorded->>'choice_proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',v_recorded-'choice_proof_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FINAL_CENSUS_UNBOUND' using errcode='55000';end if;
+    -- Actual finalisation, capture and invoice admission may change current
+    -- header/binding facts. This is its original recorded confirmation only;
+    -- it is never accepted as fresh projection/finalisation admission.
+    v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_RECORDED_CHOICE_V1',
+      'choice_id',v_choice.id,'upload_row_id',v_choice.upload_row_id,'candidate_id',v_choice.candidate_id,
+      'client_id',v_choice.client_id,'contract_id',v_choice.contract_id,'pay_effect',v_choice.pay_effect,
+      'paid_overlap_target_work_event_id',v_choice.paid_overlap_target_work_event_id,
+      'confirmed_by_actor_user_id',v_choice.actor_user_id,'viewer_actor_user_id',p_actor_user_id,
+      'recorded_final_revision_id',v_revision.id,'recorded_choice_proof',v_recorded,
+      'confirmation_request_id',v_journal.request_id,'reason',v_choice.match_reason,'recorded_only',true);
+    return v_result||jsonb_build_object('recorded_choice_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_OVERLAP_RECORDED_CHOICE_V1',v_result),'hex'));
+  end if;
+  v_observed:=private.weekly_source_paid_overlap_candidates_v1(p_upload_row_id,p_actor_user_id,
+    v_choice.candidate_id,v_choice.client_id);
+  -- The only omitted fields identify the legitimate reader and the domain hash
+  -- that includes that reader. Every economic/native identity remains exact.
+  if (v_observed-'actor_user_id'-'inputs_sha256') is distinct from
+       ((v_saved->'inputs')-'actor_user_id'-'inputs_sha256') then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FACTS_CHANGED' using errcode='40001';end if;
+  select item into v_match from jsonb_array_elements(v_observed->'overlaps') item
+    where item->>'work_event_id'=v_choice.paid_overlap_target_work_event_id::text;
+  if v_match is null or v_match#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'
+    or v_match#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from v_match->>'snapshot_line_id'
+    or v_match#>>'{current_pay_snapshot,movement_id}' is distinct from v_match->>'current_pay_head_movement_id'
+    or v_match#>'{native_payment_facts,paid}' is distinct from 'true'::jsonb
+    or v_match#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_ORIGINAL'
+    or (v_choice.pay_effect='NONE' and (v_choice.work_event_id is distinct from v_choice.paid_overlap_target_work_event_id
+      or v_match->>'contract_id' is distinct from v_choice.contract_id::text))
+    or (v_choice.pay_effect='NORMAL' and (not v_choice.separate_shift or v_choice.work_event_id is not null)) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',
+    'choice_id',v_choice.id,'upload_row_id',v_choice.upload_row_id,'candidate_id',v_choice.candidate_id,
+    'client_id',v_choice.client_id,'contract_id',v_choice.contract_id,'pay_effect',v_choice.pay_effect,
+    'paid_overlap_target_work_event_id',v_choice.paid_overlap_target_work_event_id,
+    'confirmed_by_actor_user_id',v_choice.actor_user_id,'viewer_actor_user_id',p_actor_user_id,
+    'confirmation_request_id',v_journal.request_id,'confirmation_request_sha256',encode(v_journal.request_hash,'hex'),
+    'reason',v_choice.match_reason,'inputs',v_observed);
+  return v_result||jsonb_build_object('choice_proof_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid) from public,anon,authenticated,service_role;
+
+-- Discover the entire upload's confirmed choice set before the existing scope
+-- gate, then acquire complete native I-1 families in Candidate UUID order.
+-- The caller re-proves this whole set after its retained gate/group/cycle locks.
+create or replace function private.weekly_source_paid_overlap_projection_lock_v1(
+  p_upload_id uuid,p_actor_user_id uuid,p_publication_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_row uuid;v_choice jsonb;v_choices jsonb:='[]'::jsonb;v_candidate uuid;v_roots uuid[];v_lock jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  for v_row in select r.id from public.weekly_source_upload_rows r
+    join lateral(select c.* from private.weekly_source_office_row_choices c
+      where c.upload_row_id=r.id order by c.id desc limit 1) choice on true
+    where r.upload_id=p_upload_id and choice.paid_overlap_target_work_event_id is not null order by r.id
+  loop
+    v_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_row,p_actor_user_id);
+    if v_choice is null or v_choice->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1' then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_CHANGED' using errcode='40001';end if;
+    v_choices:=v_choices||jsonb_build_array(v_choice);
+  end loop;
+  if jsonb_array_length(v_choices)=0 then return '[]'::jsonb;end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  for v_candidate in select distinct (c->>'candidate_id')::uuid from jsonb_array_elements(v_choices) c order by 1
+  loop
+    select array_agg(distinct root::uuid order by root::uuid) into v_roots
+      from jsonb_array_elements(v_choices) c
+      cross join lateral jsonb_array_elements(c#>'{inputs,overlaps}') item
+      cross join lateral jsonb_array_elements_text(item#>'{native_payment_facts,root_timesheet_ids}') root
+      where (c->>'candidate_id')::uuid=v_candidate;
+    if coalesce(cardinality(v_roots),0)=0 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_ROOT_UNAVAILABLE' using errcode='55000';end if;
+    v_lock:=private.weekly_source_lock_and_resolve_families_v1(v_candidate,v_roots,
+      'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',p_publication_id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+    if v_lock->>'ok' is distinct from 'true' or v_lock->>'gate' is distinct from 'GRANTED' then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SCOPE_UNAVAILABLE' using errcode='55000';end if;
+  end loop;
+  return v_choices;
+end;
+$function$;
+alter function private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

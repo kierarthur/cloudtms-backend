@@ -1,0 +1,164 @@
+create or replace function private.weekly_source_correct_final_prepared_context_v1(
+  p_correction_session_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_manifest public.weekly_source_client_manifests%rowtype;
+  v_receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype;
+  v_root record;
+  v_source_mode text;
+  v_source_units jsonb;
+  v_segments jsonb;
+  v_expenses jsonb;
+  v_actual jsonb;
+  v_rate_refs jsonb;
+  v_context jsonb;
+  v_paid_choice_census jsonb;
+  v_contexts jsonb:='[]'::jsonb;
+  v_source_unit_hash bytea;
+  v_source_expense_hash bytea;
+  v_active_segment_hash bytea;
+begin
+  select * into v_session
+  from public.weekly_final_source_correction_sessions
+  where id=p_correction_session_id;
+  if not found or v_session.state not in ('PREPARING','PREPARED','COMMITTING')
+     or v_session.prepared_final_revision_id is null then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARED_CONTEXT_UNAVAILABLE'
+      using errcode='55000';
+  end if;
+  select * into strict v_revision
+  from public.weekly_source_final_revisions
+  where id=v_session.prepared_final_revision_id;
+  select * into strict v_cycle
+  from public.weekly_source_cycles where id=v_revision.source_cycle_id;
+  select * into strict v_upload
+  from public.weekly_source_uploads where id=v_revision.upload_id;
+  select * into strict v_profile
+  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  select * into v_manifest
+  from public.weekly_source_client_manifests
+  where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_revision.id;
+  if not found or exists(
+    select 1 from public.weekly_source_client_manifests other_manifest where coalesce(other_manifest.invoice_window_cycle_id,other_manifest.source_cycle_id)=other_manifest.source_cycle_id and other_manifest.final_revision_id=v_revision.id
+      and other_manifest.id<>v_manifest.id
+  ) or v_revision.state<>'PREPARED'
+     or v_revision.reason<>'CORRECT_FINAL_SOURCE'
+     or v_revision.predecessor_revision_id
+          is distinct from v_session.expected_current_final_revision_id
+     or v_upload.id is distinct from v_session.replacement_correction_upload_id
+     or v_upload.state<>'CORRECTION_READY' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARED_CONTEXT_INVALID'
+      using errcode='55000';
+  end if;
+  if v_revision.authority_scope_kind='CYCLE' or v_revision.paid_overlap_choice_census<>'{}'::jsonb then
+    v_paid_choice_census:=private.weekly_source_paid_match_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id);
+  end if;
+  v_source_mode:=case when v_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT'
+    then 'NHSP_WEEKLY' else 'HEALTHROSTER_WEEKLY' end;
+
+  -- Rebuild the complete union, not merely roots published by the mistaken
+  -- authority.  A valid complete replacement may add a root or remove the
+  -- last movement from an old root; both need one exact ordinary projection.
+  for v_root in
+    with prior_roots as (
+      select receipt.root_timesheet_id,receipt.id as prior_projection_receipt_id
+      from public.weekly_source_ordinary_pay_projection_receipts receipt
+      where receipt.final_revision_id=v_session.expected_current_final_revision_id
+        and receipt.outcome in ('PREPARED_FOR_AUTHORISATION','PROPOSED')
+    ), replacement_roots as (
+      select distinct movement.invoice_timesheet_id as root_timesheet_id
+      from public.weekly_source_billing_movements movement
+      where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'
+      and movement.final_revision_id=v_revision.id
+    )
+    select coalesce(replacement.root_timesheet_id,prior.root_timesheet_id)
+             as root_timesheet_id,
+           prior.prior_projection_receipt_id
+    from prior_roots prior
+    full join replacement_roots replacement using(root_timesheet_id)
+    order by coalesce(replacement.root_timesheet_id,prior.root_timesheet_id)
+  loop
+    v_source_units:=private.weekly_source_ordinary_projection_source_units_v1(
+      v_revision.id,v_root.root_timesheet_id
+    );
+    v_segments:=private.weekly_source_ordinary_projection_current_segments_v1(
+      v_root.root_timesheet_id,v_revision.id
+    );
+    v_expenses:=private.weekly_source_ordinary_projection_current_expenses_v1(
+      v_root.root_timesheet_id,v_revision.id
+    );
+    v_actual:=private.weekly_source_ordinary_projection_actual_schedule_v1(v_segments);
+    v_source_unit_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ORDINARY_UNIT_MANIFEST_V1',v_source_units
+    );
+    v_source_expense_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ORDINARY_SOURCE_EXPENSE_MANIFEST_V1',v_expenses
+    );
+    v_active_segment_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ORDINARY_ACTIVE_SEGMENTS_V1',v_segments
+    );
+    v_rate_refs:=pg_catalog.jsonb_build_object(
+      'schema_version','WEEKLY_SOURCE_FINAL_AUTHORITY_RATE_SOURCE_V1',
+      'source_mode',v_source_mode,'root_timesheet_id',v_root.root_timesheet_id,
+      'final_revision_id',v_revision.id,
+      'final_manifest_hash',pg_catalog.encode(v_revision.manifest_hash,'hex'),
+      'final_policy_fingerprint',pg_catalog.encode(v_revision.policy_fingerprint,'hex'),
+      'client_manifest_hash',pg_catalog.encode(v_manifest.manifest_hash,'hex'),
+      'source_unit_manifest_hash',pg_catalog.encode(v_source_unit_hash,'hex'),
+      'source_expense_manifest_hash',pg_catalog.encode(v_source_expense_hash,'hex'),
+      'active_segment_manifest_hash',pg_catalog.encode(v_active_segment_hash,'hex')
+    );
+    v_context:=pg_catalog.jsonb_build_object(
+      'root_timesheet_id',v_root.root_timesheet_id,
+      'prior_projection_receipt_id',v_root.prior_projection_receipt_id,
+      'client_id',v_manifest.client_id,
+      'source_profile_kind',v_profile.final_authority_kind,
+      'source_mode',v_source_mode,
+      'source_units',v_source_units,
+      'expected_segments',v_segments,
+      'expected_actual_schedule',v_actual,
+      'expected_source_expenses',v_expenses,
+      'expected_rate_source_refs',v_rate_refs,
+      'root_state_hash',pg_catalog.encode(
+         private.weekly_source_ordinary_projection_root_hash_v1(
+          v_root.root_timesheet_id
+        ),'hex'
+      )
+    );
+    v_contexts:=v_contexts||pg_catalog.jsonb_build_array(
+      v_context||pg_catalog.jsonb_build_object(
+        'prepared_context_hash',pg_catalog.encode(
+          private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_CORRECT_FINAL_PREPARED_ROOT_CONTEXT_V1',v_context
+          ),'hex'
+        )
+      )
+    );
+  end loop;
+
+  return pg_catalog.jsonb_build_object(
+    'correction_session_id',v_session.id,
+    'prepared_final_revision_id',v_revision.id,
+    'prior_final_revision_id',v_session.expected_current_final_revision_id,
+    'source_cycle_id',v_cycle.id,
+    'client_id',v_manifest.client_id,
+    'source_profile_kind',v_profile.final_authority_kind,
+    'source_mode',v_source_mode,
+    'root_contexts',v_contexts
+  )||case when v_revision.missing_cancel_basis_census='{}'::jsonb then '{}'::jsonb else jsonb_build_object(
+    'missing_cancel_basis_census',private.weekly_source_missing_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id)) end
+    ||case when v_revision.paid_overlap_choice_census='{}'::jsonb then '{}'::jsonb else jsonb_build_object(
+      'paid_overlap_choice_census',v_paid_choice_census) end;
+end;
+$function$;
+
+ALTER FUNCTION private.weekly_source_correct_final_prepared_context_v1(uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.weekly_source_correct_final_prepared_context_v1(uuid) FROM public,anon,authenticated,service_role;

@@ -1,0 +1,116 @@
+{
+  "schema_version": "PAID_MATCH_RETAINED_CURRENT_CAPTURE_CONSTRUCTION_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 21,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 9922,
+      "sha256": "1ef5e31dfd7bd51a49b4c1205c2250717c7d1b189c526799ec0fc48e2799c854"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 3384,
+      "sha256": "16d1799f57b6e182598b2f076db1d63ec16423629c4cd40ebd201ba72e0a22a9"
+    },
+    {
+      "file": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md",
+      "bytes": 4875,
+      "sha256": "d215efaf72b30fa875cbefb9d97582bc2ab0617b5a44d54b318809fc142eb033"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 648,
+      "sha256": "0407dd9e015c3bdbfbadcb04c5cd7356ffd784ff38f2da74f79b4d132b5c33b4"
+    },
+    {
+      "file": "before/02_complete_overlap_inputs.sqlinc",
+      "bytes": 6755,
+      "sha256": "4a0fb36b169fd35db727c152175979fe9ec1b5d4724a90e0202e8323513a1ac4"
+    },
+    {
+      "file": "before/03_complete_choice_admit.sqlinc",
+      "bytes": 10196,
+      "sha256": "c82a96bb8ad6bb51589e39f31f675a146eab99b6ba47877a8d31a2072f80642a"
+    },
+    {
+      "file": "before/04_complete_choice_current.sqlinc",
+      "bytes": 11558,
+      "sha256": "710a1a9a0036ae1cc1e58b44835cbe4c27e3c2538e53bd8c0e3532749411afa5"
+    },
+    {
+      "file": "before/05_complete_office_question.sqlinc",
+      "bytes": 6388,
+      "sha256": "4ea6f553ce20082f9f941a303869643c0cc2011cdcf97f03c7b34a629ce87aa2"
+    },
+    {
+      "file": "before/06_complete_shared_capture_proposal.sqlinc",
+      "bytes": 7903,
+      "sha256": "31f088f054494565affc36b21d7a3d29972917f4ae89d3112d2c9e79a2a946b6"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 8929,
+      "sha256": "202818be074aa76b5242e44b24d71f04c3f16329cbd69a56adee8f8cc1a95a0a"
+    },
+    {
+      "file": "capture-source.test.mjs",
+      "bytes": 6662,
+      "sha256": "2fbad64516ac4930881d07be8ecaf07125ab4f03c19d964df4320f8e069dc45c"
+    },
+    {
+      "file": "forward/00_current_pay_snapshot.sqlinc",
+      "bytes": 5302,
+      "sha256": "25dae4e5188c7942aefecbc4383a8a8e942d427834ad7d71b86728e22934ee2c"
+    },
+    {
+      "file": "forward/01_retained_paid_transition_assert.sqlinc",
+      "bytes": 11373,
+      "sha256": "704ca55c8009a28b008be3a6ce87de5cd39f39b2fe24bbb6a712a28da65623d2"
+    },
+    {
+      "file": "forward/02_complete_overlap_inputs.sqlinc",
+      "bytes": 7753,
+      "sha256": "cac377125532997d5e050cb3ff0bb98a202546f363b9145c135296baf53d53a3"
+    },
+    {
+      "file": "forward/03_complete_choice_admit.sqlinc",
+      "bytes": 10488,
+      "sha256": "7ffc41d4965ddba8b4184d5b4b80844e6fc71f05ec4ab3cfc758bea9ff4c41dd"
+    },
+    {
+      "file": "forward/04_complete_choice_current.sqlinc",
+      "bytes": 11850,
+      "sha256": "fb6b93bf0dcd7b5c7a5611778e5815e67d884b0556b9656874bfa4f365cacc7b"
+    },
+    {
+      "file": "forward/05_complete_office_question.sqlinc",
+      "bytes": 6681,
+      "sha256": "4e8320e0179565d406455226a4bea70b852c9418a2492d50fae6d05d7d4aa3ba"
+    },
+    {
+      "file": "forward/06_complete_shared_capture_proposal.sqlinc",
+      "bytes": 8618,
+      "sha256": "821e08d343725ff5ed4fb56f54c908c51ff28036b78fff4012c41389dc9a8fbf"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5603,
+      "sha256": "ece1258123a6a3708898f5c79dcc25774f80d51ea94a4fcc08557eac5c64e871"
+    },
+    {
+      "file": "input/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "file": "input/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "source": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/03_paid_overlap_source_inputs.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "02_complete_overlap_inputs.sqlinc",
+      "before_bytes": 6755,
+      "before_sha256": "4a0fb36b169fd35db727c152175979fe9ec1b5d4724a90e0202e8323513a1ac4",
+      "after_bytes": 7753,
+      "after_sha256": "cac377125532997d5e050cb3ff0bb98a202546f363b9145c135296baf53d53a3",
+      "hunks": [
+        {
+          "name": "actual maintained current snapshot observation",
+          "before": "  v_payment jsonb;v_items jsonb",
+          "after": "  v_current_snapshot jsonb;\n  v_payment jsonb;v_items jsonb"
+        },
+        {
+          "name": "genuine current native snapshot rather than original movement transition only",
+          "before": "    select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot\n      join public.weekly_source_state_transitions transition on transition.new_snapshot_line_id=snapshot.id\n      where transition.id=v_movement.transition_id and transition.final_revision_id=v_movement.final_revision_id\n        and snapshot.final_revision_id=v_movement.final_revision_id and snapshot.work_event_id=v_event.id\n        and snapshot.candidate_id=p_candidate_id and snapshot.client_id=p_client_id\n        and snapshot.contract_id=v_movement.contract_id and snapshot.work_date=v_row.work_date;",
+          "after": "    v_current_snapshot:=private.weekly_source_paid_overlap_current_snapshot_v1(v_event.id,v_movement.id,\n      p_candidate_id,p_client_id,v_movement.contract_id,v_cycle.source_group_id,\n      array(select value::uuid from jsonb_array_elements_text(v_payment->'root_timesheet_ids') value));\n    if v_current_snapshot->>'state'='CURRENT' then\n      select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot\n        where snapshot.id=(v_current_snapshot->>'snapshot_line_id')::uuid and snapshot.work_event_id=v_event.id\n          and snapshot.candidate_id=p_candidate_id and snapshot.client_id=p_client_id\n          and snapshot.contract_id=v_movement.contract_id and snapshot.work_date=v_row.work_date;\n    else\n      -- Retain a factual unknown/legacy overlap rather than erasing it. Its\n      -- original tuple never authorises Same/Separate without CURRENT proof.\n      select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot\n        join public.weekly_source_state_transitions transition on transition.new_snapshot_line_id=snapshot.id\n        where transition.id=v_movement.transition_id and transition.final_revision_id=v_movement.final_revision_id\n          and snapshot.final_revision_id=v_movement.final_revision_id and snapshot.work_event_id=v_event.id\n          and snapshot.candidate_id=p_candidate_id and snapshot.client_id=p_client_id\n          and snapshot.contract_id=v_movement.contract_id and snapshot.work_date=v_row.work_date;\n    end if;"
+        },
+        {
+          "name": "current selection provenance is hashed in actual full native input",
+          "before": "      'native_payment_facts',v_payment));",
+          "after": "      'current_pay_snapshot',v_current_snapshot,'native_payment_facts',v_payment));"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/01_paid_overlap_choice_admit.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "03_complete_choice_admit.sqlinc",
+      "before_bytes": 10196,
+      "before_sha256": "c82a96bb8ad6bb51589e39f31f675a146eab99b6ba47877a8d31a2072f80642a",
+      "after_bytes": 10488,
+      "after_sha256": "7ffc41d4965ddba8b4184d5b4b80844e6fc71f05ec4ab3cfc758bea9ff4c41dd",
+      "hunks": [
+        {
+          "name": "locked choice requires genuine complete current monetary snapshot lineage",
+          "before": "  if v_native_paid->'paid' is distinct from 'true'::jsonb",
+          "after": "  if v_match#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'\n    or v_match#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from v_match->>'snapshot_line_id'\n    or v_match#>>'{current_pay_snapshot,movement_id}' is distinct from v_match->>'current_pay_head_movement_id'\n    or v_native_paid->'paid' is distinct from 'true'::jsonb"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/03_paid_overlap_choice_current.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "04_complete_choice_current.sqlinc",
+      "before_bytes": 11558,
+      "before_sha256": "710a1a9a0036ae1cc1e58b44835cbe4c27e3c2538e53bd8c0e3532749411afa5",
+      "after_bytes": 11850,
+      "after_sha256": "fb6b93bf0dcd7b5c7a5611778e5815e67d884b0556b9656874bfa4f365cacc7b",
+      "hunks": [
+        {
+          "name": "fresh current choice cannot treat an unavailable original tuple as current",
+          "before": "  if v_match is null or v_match#>'{native_payment_facts,paid}'",
+          "after": "  if v_match is null or v_match#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'\n    or v_match#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from v_match->>'snapshot_line_id'\n    or v_match#>>'{current_pay_snapshot,movement_id}' is distinct from v_match->>'current_pay_head_movement_id'\n    or v_match#>'{native_payment_facts,paid}'"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014/forward/01_paid_match_question.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "05_complete_office_question.sqlinc",
+      "before_bytes": 6388,
+      "before_sha256": "4ea6f553ce20082f9f941a303869643c0cc2011cdcf97f03c7b34a629ce87aa2",
+      "after_bytes": 6681,
+      "after_sha256": "4e8320e0179565d406455226a4bea70b852c9418a2492d50fae6d05d7d4aa3ba",
+      "hunks": [
+        {
+          "name": "only a certified current monetary snapshot becomes a UI choice",
+          "before": "    if v_item#>'{native_payment_facts,paid}'",
+          "after": "    if v_item#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'\n      or v_item#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from v_item->>'snapshot_line_id'\n      or v_item#>>'{current_pay_snapshot,movement_id}' is distinct from v_item->>'current_pay_head_movement_id'\n      or v_item#>'{native_payment_facts,paid}'"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/missing-retained-snapshot-mapping-successor-20261014/forward/09_complete_shared_current_capture_proposal.sqlinc",
+      "containing_commit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+      "file": "06_complete_shared_capture_proposal.sqlinc",
+      "before_bytes": 7903,
+      "before_sha256": "31f088f054494565affc36b21d7a3d29972917f4ae89d3112d2c9e79a2a946b6",
+      "after_bytes": 8618,
+      "after_sha256": "821e08d343725ff5ed4fb56f54c908c51ff28036b78fff4012c41389dc9a8fbf",
+      "hunks": [
+        {
+          "name": "separate actual retained NONE provenance frame",
+          "before": "  v_origin_resolution uuid;v_missing_basis jsonb;",
+          "after": "  v_origin_resolution uuid;v_missing_basis jsonb;v_paid_basis jsonb;"
+        },
+        {
+          "name": "retained actual B and original pay snapshot assert before unchanged NO_CHANGE map",
+          "before": "    select s.movement_id into v_movement from private.bpay_next_source_current_snapshots s\n      where s.snapshot_line_id=v_t.previous_snapshot_line_id and s.scope_id=v_scope and s.work_event_id=v_t.work_event_id;",
+          "after": "    if v_t.pay_basis_kind='RETAINED_PAID_MATCH' then\n      v_paid_basis:=private.weekly_source_paid_match_retained_transition_assert_v1(v_t.id);\n    end if;\n    select s.movement_id into v_movement from private.bpay_next_source_current_snapshots s\n      where s.snapshot_line_id=v_t.previous_snapshot_line_id and s.scope_id=v_scope and s.work_event_id=v_t.work_event_id;\n    if v_paid_basis is not null and (v_paid_basis->>'snapshot_line_id' is distinct from v_t.previous_snapshot_line_id::text\n      or v_paid_basis->>'movement_id' is distinct from v_movement::text\n      or v_paid_basis->>'row_resolution_id' is distinct from v_origin_resolution::text\n      or v_paid_basis->>'lineage_id' is distinct from v_lineage::text\n      or v_paid_basis->>'economic_snapshot_id' is distinct from v_economic::text) then\n      raise exception 'BPAY_NEXT_SOURCE_RETAINED_PAID_BASIS_UNBOUND' using errcode='55000';end if;"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "current_native_inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "saved": "input/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "saved": "input/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    }
+  ],
+  "shared_Banking_capture_proposal_not_canonical": true,
+  "SQL_compiled": false,
+  "native_proof": false
+}

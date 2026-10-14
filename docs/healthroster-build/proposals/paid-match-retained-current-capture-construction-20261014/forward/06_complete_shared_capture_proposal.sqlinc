@@ -1,0 +1,104 @@
+create or replace function private.bpay_next_source_current_capture_transition_v1(p_transition uuid)
+returns jsonb language plpgsql security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_t public.weekly_source_state_transitions%rowtype;v_line public.weekly_source_final_snapshot_lines%rowtype;
+  v_origin private.bpay_next_source_current_origins%rowtype;v_revision record;v_scope uuid;v_movement uuid;
+  v_lineage uuid;v_economic uuid;v_inserted boolean;v_reversal public.weekly_source_billing_movements%rowtype;
+  v_origin_resolution uuid;v_missing_basis jsonb;v_paid_basis jsonb;
+begin
+  select t.* into v_t from public.weekly_source_state_transitions t where t.id=p_transition;
+  if not found then raise exception 'BPAY_NEXT_SOURCE_TRANSITION_MISSING' using errcode='55000';end if;
+  select o.* into v_origin from private.bpay_next_source_current_origins o where o.origin_kind='TRANSITION' and o.origin_id=p_transition;
+  if found and v_origin.source_hash is distinct from v_t.transition_fingerprint then
+    raise exception 'BPAY_NEXT_SOURCE_ORIGIN_CHANGED' using errcode='55000';end if;
+  if found and (v_origin.active or v_origin.retracted_by_session_id is not null) then
+    return jsonb_build_object('origin_id',p_transition,'active',v_origin.active,'idempotent',true);end if;
+  select * into strict v_revision from private.bpay_next_source_current_revision_v1(v_t.final_revision_id);
+  select l.* into strict v_line from public.weekly_source_final_snapshot_lines l
+    where l.id=coalesce(v_t.new_snapshot_line_id,v_t.previous_snapshot_line_id);
+  v_scope:=private.bpay_next_source_current_scope_v1(v_line.row_resolution_id,v_revision.source_group_id,v_t.work_event_id,v_line.contract_id);
+  select l.id into strict v_lineage from public.weekly_source_row_timesheet_lineages l where l.row_resolution_id=v_line.row_resolution_id;
+  select e.id into strict v_economic from public.weekly_source_row_economic_snapshots e where e.row_resolution_id=v_line.row_resolution_id;
+  v_origin_resolution:=v_line.row_resolution_id;
+  if v_t.outcome in ('ADD','AMEND') then
+    select m.id into strict v_movement from public.weekly_source_billing_movements m
+      where m.transition_id=p_transition and m.movement_role=case when v_t.outcome='ADD' then 'POSITIVE' else 'REPLACEMENT' end;
+  elsif v_t.outcome='NO_CHANGE' then
+    -- The real transition gives an exact previous snapshot, not an invitation
+    -- to rank the ledger. Its producer-maintained mapping preserves the prior
+    -- original movement even though the new report restates equivalent money.
+    if v_t.pay_basis_kind='RETAINED_PAID_MATCH' then
+      v_paid_basis:=private.weekly_source_paid_match_retained_transition_assert_v1(v_t.id);
+    end if;
+    select s.movement_id into v_movement from private.bpay_next_source_current_snapshots s
+      where s.snapshot_line_id=v_t.previous_snapshot_line_id and s.scope_id=v_scope and s.work_event_id=v_t.work_event_id;
+    if v_paid_basis is not null and (v_paid_basis->>'snapshot_line_id' is distinct from v_t.previous_snapshot_line_id::text
+      or v_paid_basis->>'movement_id' is distinct from v_movement::text
+      or v_paid_basis->>'row_resolution_id' is distinct from v_origin_resolution::text
+      or v_paid_basis->>'lineage_id' is distinct from v_lineage::text
+      or v_paid_basis->>'economic_snapshot_id' is distinct from v_economic::text) then
+      raise exception 'BPAY_NEXT_SOURCE_RETAINED_PAID_BASIS_UNBOUND' using errcode='55000';end if;
+    if v_movement is null then raise exception 'BPAY_NEXT_SOURCE_PREVIOUS_SNAPSHOT_UNCAPTURED' using errcode='55000';end if;
+  elsif v_t.outcome='CANCEL' and v_t.exclude_cancel then
+    -- Shared Banking owner proposal, not approved or mounted. The real
+    -- Source transition stays absent: new_present=false and new snapshot=NULL.
+    -- Financial selection retains exactly its immutable original basis.
+    v_missing_basis:=private.weekly_source_missing_cancel_transition_assert_v1(v_t.id);
+    v_movement:=(v_missing_basis#>>'{original_basis,movement_id}')::uuid;
+    v_origin_resolution:=(v_missing_basis#>>'{original_basis,row_resolution_id}')::uuid;
+    v_lineage:=(v_missing_basis#>>'{original_basis,lineage_id}')::uuid;
+    v_economic:=(v_missing_basis#>>'{original_basis,economic_snapshot_id}')::uuid;
+    if private.bpay_next_source_current_scope_v1(v_origin_resolution,v_revision.source_group_id,v_t.work_event_id,v_line.contract_id)
+      is distinct from v_scope then
+      raise exception 'BPAY_NEXT_SOURCE_MISSING_CANCEL_SCOPE_CHANGED' using errcode='55000';
+    end if;
+  end if;
+  if v_t.outcome in ('AMEND','CANCEL') and not v_t.exclude_cancel then
+    select m.* into strict v_reversal from public.weekly_source_billing_movements m
+      where m.transition_id=p_transition and m.movement_role='REVERSAL';
+    if v_reversal.prior_movement_id is null or not exists(
+      select 1 from private.bpay_next_source_current_snapshots s where s.snapshot_line_id=v_t.previous_snapshot_line_id
+        and s.scope_id=v_scope and s.work_event_id=v_t.work_event_id and s.movement_id=v_reversal.prior_movement_id) then
+      raise exception 'BPAY_NEXT_SOURCE_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;
+  end if;
+  if v_movement is not null and not exists(select 1 from public.weekly_source_billing_movements m
+    where m.id=v_movement and m.work_event_id=v_t.work_event_id and m.contract_id=v_line.contract_id
+      and m.candidate_id=v_line.candidate_id and m.actual_client_id=v_line.client_id
+      and m.movement_role in ('POSITIVE','REPLACEMENT')) then
+    raise exception 'BPAY_NEXT_SOURCE_TRANSITION_MOVEMENT_UNBOUND' using errcode='55000';end if;
+  if v_t.outcome='CANCEL' and v_t.exclude_cancel then
+    -- Record the genuine retained previous snapshot, including pre-NEXT
+    -- history. This is the existing native provenance map, not a new/current
+    -- snapshot or export-presence claim. The same original movement has just
+    -- passed the immutable Source basis, exact scope and subject checks.
+    insert into private.bpay_next_source_current_snapshots(snapshot_line_id,scope_id,work_event_id,movement_id)
+      values(v_t.previous_snapshot_line_id,v_scope,v_t.work_event_id,v_movement) on conflict do nothing;
+    if not exists(select 1 from private.bpay_next_source_current_snapshots s
+      where s.snapshot_line_id=v_t.previous_snapshot_line_id and s.scope_id=v_scope
+        and s.work_event_id=v_t.work_event_id and s.movement_id=v_movement) then
+      raise exception 'BPAY_NEXT_SOURCE_SNAPSHOT_MAPPING_CHANGED' using errcode='55000';
+    end if;
+  end if;
+  if v_t.new_snapshot_line_id is not null then
+    insert into private.bpay_next_source_current_snapshots(snapshot_line_id,scope_id,work_event_id,movement_id)
+      values(v_t.new_snapshot_line_id,v_scope,v_t.work_event_id,v_movement) on conflict do nothing;
+    if not exists(select 1 from private.bpay_next_source_current_snapshots s where s.snapshot_line_id=v_t.new_snapshot_line_id
+      and s.scope_id=v_scope and s.work_event_id=v_t.work_event_id and s.movement_id=v_movement) then
+      raise exception 'BPAY_NEXT_SOURCE_SNAPSHOT_MAPPING_CHANGED' using errcode='55000';end if;
+  end if;
+  insert into private.bpay_next_source_current_events(scope_id,work_event_id,source_kind,source_present,source_group_id,client_id,work_date)
+    select v_scope,v_t.work_event_id,'HR',false,v_revision.source_group_id,w.client_id,w.work_date
+    from public.weekly_work_events w where w.id=v_t.work_event_id on conflict do nothing;
+  if not exists(select 1 from private.bpay_next_source_current_events e where e.scope_id=v_scope
+    and e.work_event_id=v_t.work_event_id and e.source_kind='HR') then
+    raise exception 'BPAY_NEXT_SOURCE_EVENT_KIND_CHANGED' using errcode='55000';end if;
+  insert into private.bpay_next_source_current_origins(origin_kind,origin_id,transition_id,scope_id,work_event_id,
+    final_revision_id,order_key,source_hash,row_resolution_id,lineage_id,economic_snapshot_id,
+    selected_movement_id,snapshot_line_id,representative_created_at)
+    values('TRANSITION',p_transition,p_transition,v_scope,v_t.work_event_id,v_t.final_revision_id,v_revision.order_key,
+      v_t.transition_fingerprint,v_origin_resolution,v_lineage,v_economic,v_movement,v_t.new_snapshot_line_id,v_t.created_at_utc)
+    on conflict do nothing;
+  v_inserted:=found;
+  perform private.bpay_next_source_current_toggle_v1('TRANSITION',p_transition,v_revision.is_current);
+  return jsonb_build_object('origin_id',p_transition,'active',v_revision.is_current,'idempotent',not v_inserted and not v_revision.is_current);
+end $f$;

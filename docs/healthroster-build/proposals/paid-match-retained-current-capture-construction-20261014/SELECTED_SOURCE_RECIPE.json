@@ -1,0 +1,71 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_prior_source_checkpoint": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+  "dependencies": [
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "manifest_sha256": "17fb14d164309dbc3c17895be10ae105ea6663e083d9a495112a50a92e6f0fd5",
+      "artifact_count": 15
+    },
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+      "artifact_count": 58
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "artifact_count": 26
+    },
+    {
+      "packet": "paid-match-prepared-pay-consumer-construction-20261014",
+      "manifest_sha256": "d26c0a2b3139e0eb471068ce938809e4acce169bd58afd79b414018cc42a80e4",
+      "artifact_count": 17
+    },
+    {
+      "packet": "paid-match-office-confirm-consumer-construction-20261014",
+      "manifest_sha256": "3d0560bef03c6f8ef0b01024a45581d7d163b32bccc121401e4f0cfc8052e69d",
+      "artifact_count": 28
+    },
+    {
+      "packet": "missing-retained-snapshot-mapping-successor-20261014",
+      "manifest_sha256": "6fe840e0fdb7ca49a8875bac0fccd47dea05df9471991e651cff3c6d251f38fc",
+      "artifact_count": 9
+    }
+  ],
+  "selected_source_order": [
+    "forward/00_current_pay_snapshot.sqlinc",
+    "forward/01_retained_paid_transition_assert.sqlinc",
+    "forward/02_complete_overlap_inputs.sqlinc",
+    "forward/03_complete_choice_admit.sqlinc",
+    "forward/04_complete_choice_current.sqlinc",
+    "forward/05_complete_office_question.sqlinc",
+    "forward/06_complete_shared_capture_proposal.sqlinc"
+  ],
+  "replaced_earlier_complete_leaves": [
+    "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/03_paid_overlap_source_inputs.sqlinc",
+    "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/01_paid_overlap_choice_admit.sqlinc",
+    "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/03_paid_overlap_choice_current.sqlinc",
+    "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014/forward/01_paid_match_question.sqlinc",
+    "docs/healthroster-build/proposals/missing-retained-snapshot-mapping-successor-20261014/forward/09_complete_shared_current_capture_proposal.sqlinc"
+  ],
+  "private_additions": [
+    "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+    "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)"
+  ],
+  "new_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "existing_signatures_unchanged": true,
+  "new_public_signatures": [],
+  "new_stores": 0,
+  "new_columns": 0,
+  "new_calculators": 0,
+  "shared_Banking_owner_source_proposal": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+  "shared_owner_canonical_composition": false,
+  "actual_new_B_invoice_presence_and_prior_NORMAL_PAY_kept_separate": true,
+  "Native_recordable_receipt_or_tree_ABI_changed": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

@@ -1,0 +1,28 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const dir=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(dir,'../../../..'),rel=path.relative(root,dir).replaceAll('\\','/'),sha=b=>createHash('sha256').update(b).digest('hex');
+assert.ok(!fs.existsSync(path.join(dir,'FROZEN_ARTIFACT_MANIFEST.json')));const read=f=>fs.readFileSync(path.join(dir,f)),write=(f,x)=>fs.writeFileSync(path.join(dir,f),JSON.stringify(x,null,2)+'\n');
+const proof=JSON.parse(read('COMPLETE_CURRENT_REVERSES.json')),nativePins=[];for(const p of proof.current_native_inputs){const b=execFileSync('git',['show',p.commit+':'+p.file],{cwd:root,maxBuffer:2e6});assert.equal(sha(b),p.sha256);assert.deepEqual(b,read(p.saved));nativePins.push(p);}
+const dependencies=[];let preserved=0;for(const packet of ['paid-shift-overlap-native-facts-construction-20261014','paid-shift-match-writer-none-construction-20261014','paid-match-source-expense-native-construction-20261014','paid-match-prepared-pay-consumer-construction-20261014','paid-match-office-confirm-consumer-construction-20261014','missing-retained-snapshot-mapping-successor-20261014']){
+ const base=`docs/healthroster-build/proposals/${packet}/`,b=fs.readFileSync(path.join(root,base,'FROZEN_ARTIFACT_MANIFEST.json'));
+ assert.deepEqual(b,execFileSync('git',['show','76a5dbd0721ae2c41edb049312aa81d5df5a06be:'+base+'FROZEN_ARTIFACT_MANIFEST.json'],{cwd:root,maxBuffer:2e6}));const manifest=JSON.parse(b);
+ for(const a of manifest.artifacts){const x=fs.readFileSync(path.join(root,base,a.file));assert.equal(sha(x),a.sha256);assert.equal(x.length,a.bytes);preserved++;}
+ dependencies.push({packet,manifest_sha256:sha(b),artifact_count:manifest.artifact_count});}
+write('SELECTED_SOURCE_RECIPE.json',{source_only:true,independent_review:'PENDING',containing_prior_source_checkpoint:'76a5dbd0721ae2c41edb049312aa81d5df5a06be',dependencies,
+ selected_source_order:['forward/00_current_pay_snapshot.sqlinc','forward/01_retained_paid_transition_assert.sqlinc','forward/02_complete_overlap_inputs.sqlinc','forward/03_complete_choice_admit.sqlinc','forward/04_complete_choice_current.sqlinc','forward/05_complete_office_question.sqlinc','forward/06_complete_shared_capture_proposal.sqlinc'],
+ replaced_earlier_complete_leaves:proof.records.map(r=>r.source),private_additions:['private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])','private.weekly_source_paid_match_retained_transition_assert_v1(uuid)'],
+ new_private_acl:'logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only',existing_signatures_unchanged:true,new_public_signatures:[],new_stores:0,new_columns:0,new_calculators:0,
+ shared_Banking_owner_source_proposal:'private.bpay_next_source_current_capture_transition_v1(uuid)',shared_owner_canonical_composition:false,
+ actual_new_B_invoice_presence_and_prior_NORMAL_PAY_kept_separate:true,Native_recordable_receipt_or_tree_ABI_changed:false,SQL_compiled:false,native_proof:false,canonical_mounted:false,whole_primary_complete:false});
+function run(args){const r=spawnSync(process.execPath,args,{cwd:root,encoding:'utf8',maxBuffer:2e6});assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;}
+const t=run(['--test',rel+'/capture-source.test.mjs']);assert.match(t,/tests 9/);assert.match(t,/pass 9/);assert.match(t,/fail 0/);
+const files=[];function walk(prefix=''){for(const e of fs.readdirSync(path.join(dir,prefix),{withFileTypes:true})){const f=prefix?prefix+'/'+e.name:e.name;if(e.isDirectory())walk(f);else files.push(f);}}walk();
+for(const f of files.filter(f=>f.endsWith('.mjs')))run(['--check',rel+'/'+f]);
+const rx=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/\bgh[pousr]_[A-Za-z0-9]{20,}\b/,/\bAKIA[0-9A-Z]{16}\b/,/\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b/],ws=[];
+for(const f of files){const s=read(f).toString();assert.ok(!rx.some(r=>r.test(s)),'credential '+f);s.split(/\r?\n/).forEach((line,i)=>{if(/[ \t]+$/.test(line))ws.push({file:f,line:i+1});});if(/(?:\r?\n){2,}$/.test(s))ws.push({file:f,kind:'PRESERVED EOF BLANK LINES'});}
+write('SOURCE_CHECK_RESULT.json',{source_only:true,independent_review:'PENDING',cases:9,pass:9,fail:0,syntax_pass:3,whole_current_reversals:5,unique_hunks:8,native_raw_inputs:nativePins.length,
+ preserved_dependency_artifacts:preserved,new_private_signatures:2,new_public_signatures:0,new_store_column_calculator:0,credential_findings:0,
+ whitespace_disposition:ws.length?'EXACT FROZEN EXCEPTIONS RETAINED; NO BLANKET PASS':'PASS',whitespace_exceptions:ws,
+ SQL_compiled:false,native_calls:0,canonical_mounted:false,shared_owner_source_review_complete:false,whole_primary_complete:false,scratch_created:false,cleanup_retried:false});files.push('SOURCE_CHECK_RESULT.json');
+const artifacts=[...new Set(files)].sort().map(file=>{const b=read(file);return{file,bytes:b.length,sha256:sha(b)};});
+write('FROZEN_ARTIFACT_MANIFEST.json',{schema_version:'PAID_MATCH_RETAINED_CURRENT_CAPTURE_CONSTRUCTION_FREEZE_V1',source_only:true,independent_review:'PENDING',native_proof:false,canonical_mounted:false,whole_primary_complete:false,artifact_count:artifacts.length,artifacts});
+console.log(JSON.stringify({artifacts:artifacts.length,manifest_sha256:sha(read('FROZEN_ARTIFACT_MANIFEST.json')),check_sha256:sha(read('SOURCE_CHECK_RESULT.json')),recipe_sha256:sha(read('SELECTED_SOURCE_RECIPE.json')),cases:9,syntax:3,private_additions:2}));
