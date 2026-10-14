@@ -1,0 +1,395 @@
+{
+  "status": "BOUNDED_INDEPENDENT_PHYSICAL_CONTRACT_SOURCE_REVIEW",
+  "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+  "SQL_executed": false,
+  "native": false,
+  "generators_executed": false,
+  "another_lane_edited": false,
+  "pins": [
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/COMPLETE_NATIVE_REVERSES.json",
+      "bytes": 13619,
+      "sha256": "b425732e248ea309f5a9d741e55a2704a8a92bb81745ceb3cf3f52e7eca45500"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 5049,
+      "sha256": "173622063cd1f6f5a655fb7cdd3ba1b6847d9eac7f787f3c8e48ad676e8719b9"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/SELECTED_SOURCE_RECIPE.json",
+      "bytes": 2823,
+      "sha256": "211cf99b40050dcc44c240ad471088a34a0c0d1e047868d2ec6e2ae203223dba"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 1150,
+      "sha256": "5c018c1fc5a221304900e3bb9efbb0a50e964c68d5e18d077140a07cf0f037c6"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/SOURCE_DISPOSITION.md",
+      "bytes": 3582,
+      "sha256": "16b60bb3a9d43a0da4d614b40496e7966a0877ed39d73eb5402f8d9dc40ce269"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/before/01_complete_original_census.sqlinc",
+      "bytes": 5327,
+      "sha256": "a8c3e7bd999aa887ba0544dfaa6ef12acb7b9fd0762aa358a2eb49ce2a9304a7"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/before/02_complete_original_census_assert.sqlinc",
+      "bytes": 6103,
+      "sha256": "a81781abaf0acfb58aad7237cb8c9bfaf65de842268951c093e87d9dcc2d399a"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/before/03_complete_off_scope_assert.sqlinc",
+      "bytes": 11950,
+      "sha256": "b004ea85bce21aba784ca2c5d21c4317124bac46ccc1403df07a5254c31d6cfd"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/before/04_complete_native_parent_scope.sqlinc",
+      "bytes": 22454,
+      "sha256": "d841410531821f0262d37d2adc8ff710842e575ca4f68d652906e5c45ab24ed0"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/before/05_complete_native_qualification_step.sqlinc",
+      "bytes": 9822,
+      "sha256": "6c420b53543231624b6f9b0539153fee118c9b84bb9b00bc79e38250bf9f4e02"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/before/06_complete_bulk_original_root_assert.sqlinc",
+      "bytes": 5097,
+      "sha256": "b5a4981d0a6628c9e5d844636cbd7a068d06ef79a2f599a954012adfe9e5be25"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/build-source.mjs",
+      "bytes": 10725,
+      "sha256": "3e87c16adf7bdea188be55beb539485ac385db43fa73c2bb08f436406928955e"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/01_complete_original_census.sqlinc",
+      "bytes": 6055,
+      "sha256": "62a42572c84339f75895f1130d2273af99268573728df42af0fe4bbb1116686d"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/02_complete_original_census_assert.sqlinc",
+      "bytes": 6119,
+      "sha256": "5fdda8cce28d635e27e6cbd6ff905db0560d08a7a80020e1bb357d3d3fb3b7e5"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/03_complete_off_scope_assert.sqlinc",
+      "bytes": 12044,
+      "sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/04_complete_native_parent_scope.sqlinc",
+      "bytes": 22410,
+      "sha256": "cd18c8626a7092cb065de2e13fbd6bb2bcd679a1bca523d18ef8cd9615635221"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/05_complete_native_qualification_step.sqlinc",
+      "bytes": 9887,
+      "sha256": "eaf88c9b9b87dfc48c374127a6dbfd6f7296206ce4f1a5a62b1c0a64ffe67355"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/06_complete_bulk_original_root_assert.sqlinc",
+      "bytes": 5103,
+      "sha256": "63a5f545e3bf2cc5d765bbad49147ba446f4fcb9ddafaec2aead05c494af44a2"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/07_existing_owner_only_acl.sqlinc",
+      "bytes": 1241,
+      "sha256": "f3641f1fdd1cf58444c6c79db9dcbecda17814718a73e3ac302db868d3c7d970"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/freeze-source.mjs",
+      "bytes": 6490,
+      "sha256": "16631c7c93341024bfb44e426449dcc74e157314e3daf74cbe7ad41a6ede6730"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/01_OFF_RULE_AUTHORITY.sqlinc",
+      "bytes": 21135,
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "bytes": 20020,
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/16_10_complete_bulk_test_scope.sqlinc",
+      "bytes": 18455,
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/CURRENT_TIMESHEETS_CONTRACT_SCHEMA.json",
+      "bytes": 34882,
+      "sha256": "700dde50aca972314d813f7aa865ddf5bca06990dbf48e5181cd0664d3d6b7ed"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/input/RAW_TIMESHEETS_DDL.json",
+      "bytes": 45640,
+      "sha256": "e2400d7100082579ce7a21bef3dea2f259fc1689a0bc83595a77b14384cafbb5"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/physical-identity-source.test.mjs",
+      "bytes": 8814,
+      "sha256": "692bce6307ad17b0ca5d306b0f316e47487ef65fde6b35d728f528e4080a7426"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "bytes": 20020,
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "bytes": 21135,
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+      "bytes": 18455,
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "bytes": 154756,
+      "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/12072026_1428_migrations.sql",
+      "bytes": 2577,
+      "sha256": "9aedd750700f3e968c80c8ebba422655001d6ca58238e9e964e7330a932e2482"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/23072026_2207_invoice_operation_queue_schema.sql",
+      "bytes": 35922,
+      "sha256": "9e850f1e75837ab86e1e9d4e20d134083ea5a2bbf0ca5808ed31de6eb42b9fdb"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql",
+      "bytes": 31971,
+      "sha256": "4b6184ae53ac7321720da0d4adc78ae7002bea6e1dcbe53d607601caf161cc3a"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql",
+      "bytes": 21860,
+      "sha256": "de172f00b5eddf6427765893a55e642ec9da366baaa59aaee1d420625bb4c423"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql",
+      "bytes": 21860,
+      "sha256": "de172f00b5eddf6427765893a55e642ec9da366baaa59aaee1d420625bb4c423"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+      "bytes": 9754,
+      "sha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+      "bytes": 9754,
+      "sha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "bytes": 20361,
+      "sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "bytes": 20361,
+      "sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "bytes": 20361,
+      "sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "bytes": 20361,
+      "sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "bytes": 20361,
+      "sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "bytes": 136273,
+      "sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "bytes": 136273,
+      "sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "bytes": 136273,
+      "sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+    }
+  ],
+  "lexical": [
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/01_complete_original_census.sqlinc",
+      "statements": 1
+    },
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/02_complete_original_census_assert.sqlinc",
+      "statements": 1
+    },
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/03_complete_off_scope_assert.sqlinc",
+      "statements": 1
+    },
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/04_complete_native_parent_scope.sqlinc",
+      "statements": 1
+    },
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/05_complete_native_qualification_step.sqlinc",
+      "statements": 1
+    },
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/06_complete_bulk_original_root_assert.sqlinc",
+      "statements": 1
+    },
+    {
+      "file": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/07_existing_owner_only_acl.sqlinc",
+      "statements": 7
+    }
+  ],
+  "syntax": [
+    "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/build-source.mjs",
+    "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/freeze-source.mjs",
+    "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/physical-identity-source.test.mjs"
+  ],
+  "aliasChecks": [
+    {
+      "owner": "private.weekly_source_protected_qualification_census_v1",
+      "physical_alias_violations": []
+    },
+    {
+      "owner": "private.weekly_source_protected_qualification_assert_v1",
+      "physical_alias_violations": []
+    },
+    {
+      "owner": "private.weekly_source_rule_qualification_scope_assert_v1",
+      "physical_alias_violations": []
+    },
+    {
+      "owner": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "physical_alias_violations": []
+    },
+    {
+      "owner": "private.weekly_source_protected_qualification_step_v1",
+      "physical_alias_violations": []
+    },
+    {
+      "owner": "private.weekly_source_protected_test_scope_assert_v1",
+      "physical_alias_violations": []
+    }
+  ],
+  "schema": {
+    "timesheets_columns": 90,
+    "contracts_columns": 49,
+    "financial_columns": 95,
+    "source_only": true
+  },
+  "adaptation": {
+    "testFile": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/physical-identity-source.test.mjs",
+    "original_sha256": "692bce6307ad17b0ca5d306b0f316e47487ef65fde6b35d728f528e4080a7426",
+    "harness_source_sha256": "97056cad442be3b1495c803048c791358fe52ff1f3f4ca5b6d5f949bd89def72",
+    "changes": "ESM built-ins and exact pinned functionEvents injected; import.meta URL fixed to immutable virtual Git source. All thirteen test bodies/assertions unchanged."
+  }
+}
