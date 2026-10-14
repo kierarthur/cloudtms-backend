@@ -23,7 +23,7 @@ begin
   end if;
   select lower(btrim(coalesce(role,'')))='admin' into v_admin from public.tms_users where id=v_actor and is_active;
   perform private.weekly_source_office_authority_v1(v_actor,case when v_admin then 'VIEW_SOURCE_PROGRESS' else 'VIEW_PAY_WORK' end,
-    c.source_group_id,p_client_id,c.finalisation_week_ending);
+    c.source_group_id,p_client_id,v_week);
   v_limit:=coalesce((p_filters->>'limit')::integer,50);
   if v_limit not between 1 and 100 then raise exception 'WEEKLY_SOURCE_CHECK_ONLY_FILTER_INVALID' using errcode='22023'; end if;
   v_binding:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_BINDING_V1',
@@ -45,18 +45,27 @@ begin
     exception when others then raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end;
   end if;
   with actual as materialized (
-    select t.*,s.witness,rctx.route_read,cl.name client_name,coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),ca.id::text) worker_name,
+    select t.*,s.witness,rctx.route_read,ca.id actual_candidate_id,cl.name client_name,coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),ca.id::text) worker_name,
       private.weekly_source_query_ascii_fold_v1(coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),ca.id::text)) collate "C" worker_sort,
-      (s.witness->>'work_date')::date actual_work_date
+      case when rctx.route_read->>'route_state'='NATIVE_AGENCY_INVOICE' then t.week_ending_date else (s.witness->>'work_date')::date end actual_work_date
     from public.timesheets t
-    cross join lateral(select private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,c.source_group_id) route_read) rctx
+    cross join lateral(select private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,c.source_group_id) signed_read) signed_context
+    cross join lateral(select case when signed_context.signed_read->'eligible'='true'::jsonb then signed_context.signed_read
+      when private.weekly_source_agency_invoice_check_only_v1(t.timesheet_id) is true
+        and private.weekly_source_effective_rule_set_v1(p_client_id,c.id)#>>'{values,invoice_sender}'='AGENCY_INVOICE' then
+        jsonb_build_object('eligible',true,'read_only',true,'submission_witness',private.weekly_source_actual_timesheet_submission_v1(t.timesheet_id),
+          'route_state','NATIVE_AGENCY_INVOICE','query_route_available',true,'pending_materialisation',false)
+      else signed_context.signed_read end route_read) rctx
     cross join lateral(select rctx.route_read->'submission_witness' witness) s
-    join public.clients cl on cl.id=p_client_id join public.candidates ca on ca.id=(s.witness->>'candidate_id')::uuid
-    where (s.witness->>'actual_submitted')::boolean is true and s.witness->>'client_id'=p_client_id::text
+    left join public.contracts actual_contract on actual_contract.id=t.contract_id
+    join public.clients cl on cl.id=p_client_id join public.candidates ca on ca.id=case
+      when rctx.route_read->>'route_state'='NATIVE_AGENCY_INVOICE' then actual_contract.candidate_id else (s.witness->>'candidate_id')::uuid end
+    where ((s.witness->>'actual_submitted')::boolean is true and s.witness->>'client_id'=p_client_id::text
+      or (rctx.route_read->>'route_state'='NATIVE_AGENCY_INVOICE' and actual_contract.client_id=p_client_id))
       and t.week_ending_date between c.finalisation_week_ending-6 and c.finalisation_week_ending
       and t.week_ending_date=v_week
       and (rctx.route_read->>'eligible')::boolean is true
-      and exists(select 1 from public.weekly_source_groups g
+      and (rctx.route_read->>'route_state'='NATIVE_AGENCY_INVOICE' or exists(select 1 from public.weekly_source_groups g
         join public.weekly_source_group_clients gc on gc.source_group_id=g.id and gc.client_id=p_client_id
         join public.weekly_source_client_policies cp on cp.source_group_id=g.id and cp.client_id=gc.client_id
         join public.weekly_source_group_rule_assignments ga on ga.source_group_id=g.id and ga.feature_enabled
@@ -66,7 +75,7 @@ begin
           and t.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
           and (s.witness->>'work_date')::date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date)
           and t.week_ending_date between ga.effective_from_week_ending and coalesce(ga.effective_to_week_ending,'infinity'::date)
-          and cp.authority_mode='TIMESHEET_AUTHORITY' and cp.document_mode='INVOICE_EVIDENCE_REQUIRED' and not cp.self_bill_enabled)
+          and cp.authority_mode='TIMESHEET_AUTHORITY' and cp.document_mode='INVOICE_EVIDENCE_REQUIRED' and not cp.self_bill_enabled))
   ), context as materialized (
     select a.*,tv.id validation_id,tv.status::text validation_status,tv.reason_code validation_reason,
       tv.last_source validation_import_id,tv.validated_at_utc,tf.id financial_id,tf.processing_status::text processing_status,
@@ -98,7 +107,7 @@ begin
     select x.worker_sort,x.actual_work_date,('timesheet:'||x.timesheet_id) collate "C" item_sort,
       jsonb_build_object('item_id','timesheet:'||x.timesheet_id,'timesheet_id',x.timesheet_id,'item_kind','ACTUAL_TIMESHEET',
       'source_group_id',c.source_group_id,'source_cycle_id',c.id,'client_id',p_client_id,'client',x.client_name,
-      'candidate_id',x.witness->'candidate_id','worker',x.worker_name,'week_ending',x.week_ending_date,
+      'candidate_id',x.actual_candidate_id,'worker',x.worker_name,'week_ending',x.week_ending_date,
       'work_date',x.actual_work_date,'sheet_scope',x.sheet_scope,'submission_witness',x.witness,
       'submission_read_context',x.route_read,
       'validation',jsonb_build_object('id',x.validation_id,'status',x.validation_status,'reason_code',x.validation_reason,
@@ -113,6 +122,8 @@ begin
       -- Pay work remains available for native subject admission, but invoice
       -- query evidence, recipients and delivery history are admin-only.
       'query_import_id',case when v_admin then x.query_import_id end,
+      'query_preview',case when v_admin and x.query_import_id is not null then jsonb_build_object('import_id',x.query_import_id,
+        'preview_generation',x.preview_generation,'state_version',x.state_version,'preview_fingerprint',x.preview_fingerprint) end,
       'query_evidence',case when v_admin then x.query_evidence end,
       'native_issues',case when v_admin and (x.route_read->>'query_route_available')::boolean is true
         then coalesce(issues.value,'[]'::jsonb) else '[]'::jsonb end,
@@ -123,6 +134,7 @@ begin
         and x.query_import_id is null then 'CURRENT_IMPORT_REVIEW_ISSUE_SNAPSHOT_UNAVAILABLE' end) value
     from context x
     left join lateral(select jsonb_agg(jsonb_build_object('action_id',d.action_id,'action_kind',d.action_kind,
+      'import_id',d.import_id,'preview_generation',d.preview_generation,'timesheet_id',d.timesheet_id,'client_id',d.client_id,
       'evidence_fingerprint',d.evidence_fingerprint,'reason_code',d.summary_json->'reason_code','summary',d.summary_json,
       'issue_id',e.id,'issue_fingerprint',e.issue_fingerprint,'recipient_scope',e.recipient_scope,
       'sent_verified',e.delivery_history_status='SENT_VERIFIED' and delivery.status='SENT'
@@ -140,7 +152,7 @@ begin
       left join public.mail_outbox mail on mail.id=delivery.mail_outbox_id and mail.deterministic_outbox_key=delivery.deterministic_outbox_key
       where d.import_id=x.query_import_id and d.preview_generation=x.preview_generation and d.is_current
         and d.timesheet_id=x.timesheet_id and d.client_id=p_client_id
-        and d.action_kind in('EMAIL_WEEKLY_ISSUES','EMAIL_DAILY_ISSUES','EMAIL_MISSING_FROM_IMPORT')) issues on true
+        and d.action_kind in('EMAIL_ISSUE','EMAIL_REMINDER')) issues on true
   ), source_information as materialized (
     -- R-254 is informational inside an admitted actual-submission row. Native
     -- missing-source advisories never create a Checklist row or Timesheet count.
@@ -156,6 +168,8 @@ begin
         'work_date',hr.date_local,'week_ending',own_week.week_ending_date,
         'sheet_scope',case when upper(coalesce(d.summary_json->>'source_route','')) like '%DAILY%' then 'DAILY' else 'WEEKLY' end,
         'query_import_id',d.import_id,'hr_row_id',d.hr_row_id,'action_id',d.action_id,
+        'query_preview',jsonb_build_object('import_id',d.import_id,'preview_generation',st.preview_generation,
+          'state_version',st.state_version,'preview_fingerprint',st.preview_fingerprint),
         'action_kind',d.action_kind,'evidence_fingerprint',d.evidence_fingerprint,'summary',d.summary_json,
         'native_reason_code',d.summary_json->>'reason_code','writable_action',null) value
     from public.import_review_decisions d

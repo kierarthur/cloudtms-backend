@@ -1,0 +1,36 @@
+-- Root-supplied genuine native witness vectors. Source only; no fixture,
+-- Client, Timesheet or receipt is fabricated by this verifier.
+do $verify$
+declare fixture record; observed jsonb;
+begin
+  if to_regclass('pg_temp.wp_u3_submission_witness_fixtures') is null then
+    raise exception 'WP_U3_SUBMISSION_WITNESS_NATIVE_FIXTURES_REQUIRED';
+  end if;
+  if not exists(select 1 from pg_temp.wp_u3_submission_witness_fixtures) then
+    raise exception 'WP_U3_SUBMISSION_WITNESS_FIXTURES_EMPTY';
+  end if;
+  if exists(select required.kind from (values('DAILY_NULL_WORKFLOW_WEEK'),('FINALISED_ARTIFACT_GENERATION'),
+    ('COMBINED_SEPARATE_EXPENSE'),('PENDING_RESUBMITTED_ARTIFACT'),('UNRESOLVED_DAILY_CLIENT'),
+    ('FALSIFIED_FINALISATION_RECEIPT'),('FOREIGN_ARTIFACT_GENERATION'),('PLANNED'),('EXPENSE_ONLY'),('WAITING_P0_ONLY')) required(kind)
+    where not exists(select 1 from pg_temp.wp_u3_submission_witness_fixtures f where f.fixture_kind=required.kind)) then
+    raise exception 'WP_U3_SUBMISSION_WITNESS_FIXTURE_CASE_MISSING';
+  end if;
+  for fixture in select * from pg_temp.wp_u3_submission_witness_fixtures order by ordinal loop
+    observed:=private.weekly_source_actual_timesheet_submission_v1(fixture.timesheet_id);
+    if (observed->>'actual_submitted')::boolean is distinct from fixture.expected_actual_submitted
+      or observed->>'support_state' is distinct from fixture.expected_support_state
+      or observed->>'reason' is distinct from fixture.expected_reason then
+      raise exception 'WP_U3_SUBMISSION_WITNESS_CASE_FAILED: %',fixture.fixture_kind;
+    end if;
+    if fixture.expected_actual_submitted and (observed->>'timesheet_id' is distinct from fixture.timesheet_id::text
+      or observed->>'client_id' is distinct from fixture.expected_client_id::text
+      or observed->>'candidate_id' is distinct from fixture.expected_candidate_id::text
+      or observed->>'week_ending_date' is distinct from fixture.expected_week_ending::text
+      or observed->>'workflow_id' is distinct from fixture.expected_workflow_id::text
+      or (observed->>'workflow_generation')::integer is distinct from fixture.expected_artifact_generation
+      or observed->>'submission_sha256' is distinct from fixture.expected_submission_sha256) then
+      raise exception 'WP_U3_SUBMISSION_WITNESS_NATIVE_IDENTITY_FAILED: %',fixture.fixture_kind;
+    end if;
+  end loop;
+end;
+$verify$;

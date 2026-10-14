@@ -1,9 +1,9 @@
 {
-  "status": "SOURCE_ONLY_NATIVE_PRODUCER_BUILT_GATES_HELD",
+  "status": "SOURCE_ONLY_NATIVE_PRODUCER_WITH_ACTUAL_HOOKS_D10_PARENT_AND_FINANCIAL_FACTS_GATES_HELD",
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 57,
+    "passed": 64,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -12,11 +12,11 @@
   "source_pins": [
     {
       "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
-      "saved_sha256": "1cdcb9dfa9f869bdb9dc5a0cd504a7d2716184c619e011ef56638d6d5d02c920"
+      "saved_sha256": "1c3296998aad26e07e70dce543dfeebb4134ff0c1995c36b90782411fef61429"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
-      "saved_sha256": "414f62c3a8a29f31c7e7577b1bec266a814cdbd6ea460d8761e7414075f22194"
+      "saved_sha256": "64f4169e9bf3c51700ea1bdc68d34a077917b620e93d3d2fa9245a61b92b7cdd"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_page.sqlinc",
@@ -44,7 +44,191 @@
     },
     {
       "path": "tests/healthroster-checklist-native-producer.test.mjs",
-      "saved_sha256": "d387591744400f977e489042dd39b90961cd193ffdaa3210b380aa5453ae4b30"
+      "saved_sha256": "8a68a0850bbfe55e67d2fa2f884b0f4aea1b86fb6da8f1af757d0f279c7f0b46"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/README.md",
+      "saved_sha256": "b4d622423d8939cb0a0833e448672155daa6cb6405e4f39616ec847b5fac9061"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/CANDIDATE_OWNER_CENSUS.md",
+      "saved_sha256": "785d3ec44d014e2fedf9cc23289607336c324445ac8bbfa92edccc16ae399852"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/D10_GROUP_ABI.md",
+      "saved_sha256": "c17a7214029355844a101ff842db6fe4e8561faee651cf1cbbdd1e9654acbb5a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/build-owner-packet.mjs",
+      "saved_sha256": "1a0a887a290163c07887cab50b7bb8f82b9a73736d77169e416b2143c715163a"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "saved_sha256": "789fd5c9b9cfcf58d6d326b51c3c338ba153cc447a59ec84ff50ce2b7ddc49d3"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "saved_sha256": "d9e3b94a2fcaf1cc581ceadbe329ccfd07008f4081b9312a2558047c6fb720ee"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_cycle_admit.sqlinc",
+      "saved_sha256": "371bae5f12c87dbc1802b0ba022b6b9c14ae303e8442c175db1a495ccb8d77c1"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_hold_facts.sqlinc",
+      "saved_sha256": "3ba1dae5bec90dc144aa258e460e41c4fb477e492764a41257446ea32bae6262"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "saved_sha256": "7c6b3a3aad2d6a7b734996dc2ffc94efaf156039b459ac8b1e5da5886e329722"
+    },
+    {
+      "path": "supabase/verification/support/wp_u3_submission_witness_vectors.sqlinc",
+      "saved_sha256": "82c47a22a424c233cb13539fbed1b87bdadc2bda4cecf3d6c50be1657e13ffc3"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_candidate_transition.forward.sqlinc",
+      "saved_sha256": "716573288213096dc73db1479ddac7fa8b3de42028fde7063fb5316ba73561fd"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_candidate_transition.reverse.sqlinc",
+      "saved_sha256": "2376f0ca1cd24e0b52c2a99f2f7c4f7bd04ba8ba2b343cd5a05fc21b2e08d407"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_candidate_finalize.forward.sqlinc",
+      "saved_sha256": "3ae9ff79146ad5df31f687c1f5618787cadf4fbd02b43e3ec4326231fe49f70f"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_candidate_finalize.reverse.sqlinc",
+      "saved_sha256": "fe7c57f6d01f3e323d87a3e98fd4758202f32958ba846efc071ddf9bddbaef6b"
     }
+  ],
+  "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
+  "native_dependency_file_pins": [
+    {
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "saved_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "saved_sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "saved_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "saved_sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "saved_sha256": "18317d4152fa8e8df4c17ac7895046453a3e26d534b10c45b1fafb50b91a983d",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "saved_sha256": "202aee306e61e6150fa2978e8594c0aa38863b7d6f458888a59a99ce02702652",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "saved_sha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "saved_sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
+      "saved_sha256": "bc3c85a8cd2f8a6d6c76e6f8d0d559a9c8d4bd42910187affc11aff146798648",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0512_weekly_source_operational_category_v2.sql",
+      "saved_sha256": "602db4edb834be6a6b3428b5d47828b62f4c7ff3589738bc36d756b30a1b8700",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
+      "saved_sha256": "08c7ec51a1fcaeac01057f82337682a49b71b19d62cb311a37627337b44f7930",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
+      "saved_sha256": "3eee328de610d01b1890bf4fd039001fb01ccf8dc9cb51c8a233e6f4d1406b87",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "saved_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "saved_sha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "saved_sha256": "c968bad8bd17e046623d971c99c0e2a662e0230350c7edfaed0d14031835d6f4",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "saved_sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+      "saved_sha256": "e1d94c93a9a0b17f4e932d37af3028ff2bcd03f0c1b48ceb9729f3dad2379be4",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+      "saved_sha256": "24284276bdbe3d45301e329d5c7a1ad93dc9264d535c0bd6de1570999bb9b749",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1923_candidate_daily_factual_receipt_v1.sql",
+      "saved_sha256": "d9e53f2b814e6edd811e0a5a059e2e529ea18d3f985b04350c457a2edcd5f8de",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "supabase/migrations/21072026_1816_import_review_workflow.sql",
+      "saved_sha256": "e04f0066043a683f19e85329e381ae78abbae8478345abb27ba9bd6eb26fb003",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "saved_sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "broker/src/candidate-manager-provider-authority.js",
+      "saved_sha256": "8043801f1ea468e68c54566c18f16ee3a8a01770ebf872eb7acdfac3126deb64",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    },
+    {
+      "path": "broker/src/candidate-paper-provider-authority.js",
+      "saved_sha256": "e8224aa15ef41c5079af58dac6556598112f5343af452a6d657f999dc6fd572a",
+      "claim": "source ABI/provenance pin, not installed/native read graph qualification"
+    }
+  ],
+  "held_gates": [
+    "POSTGRESQL_FIRST_USE_AND_COMPLETE_TRANSITIVE_READ_GRAPH",
+    "POSITIVE_WITHHELD_PENCE_HOLD_GRAIN_INVOICE_PENDING_DECISION_CERTIFICATE",
+    "REAL_UNRESOLVED_DAILY_CLIENT_ASSIGNMENT_WRITER_HOOK",
+    "FINAL_CANDIDATE_A0_BANK_OWNER_UNION_AND_LOCK_VECTORS",
+    "FINAL_PPV2_QG_D10G_TARGET_COUNT_PAGE_UNION",
+    "D10_SEND_AND_R254_CANDIDATE_REMINDER_DESCRIPTOR",
+    "REPORT_NHSP_AGENCY_PROCESS_POPULATION_RETENTION_CURSOR_ANCHOR_ACCEPTANCE",
+    "NATIVE_API_UI_RUNTIME_PHONE_FEATURE_QUALIFICATION"
   ]
 }

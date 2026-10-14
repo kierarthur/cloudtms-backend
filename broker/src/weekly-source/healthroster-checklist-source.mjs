@@ -105,7 +105,7 @@ function identity(record) { text(record.item_id ?? record.row_id, 512); bindScop
 /** Service-owned evidence already contains native labels and admissible subjects. */
 export function projectChecklistItem(item, actor) {
   closed(item, ['item_id', 'item_kind', 'scope', 'route', 'worker', 'work_date', 'sheet_scope', 'reason_code', 'status', 'hold', 'subject',
-    'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read', 'native_source_witness']);
+    'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read', 'native_source_witness', 'queries_parent_witness']);
   identity(item); text(item.worker, 250); text(item.reason_code, 200);
   if (typeof item.work_date !== 'string' || !DATE.test(item.work_date) || !['WEEKLY', 'DAILY'].includes(item.sheet_scope) ||
       !['PAY', 'PAY_AND_INVOICE', 'INVOICE_ONLY', 'INFORMATION'].includes(item.subject) ||
@@ -128,12 +128,14 @@ export function projectChecklistItem(item, actor) {
   } else if (item.item_kind === 'NATIVE_SOURCE') {
     const witness = item.native_source_witness;
     closed(witness, ['owner', 'projection_publication_id', 'work_event_id', 'upload_row_id', 'row_resolution_id',
-      'incident_id', 'comparison_revision_id', 'manual_review_id', 'native_row_key', 'evidence_fingerprint']);
+      'incident_id', 'comparison_revision_id', 'manual_review_id', 'native_row_key', 'parent_group_key', 'evidence_fingerprint']);
     if (witness.owner !== 'private.weekly_source_office_query_groups_v1' ||
         !HASH.test(witness.evidence_fingerprint ?? '') || !['SELF_BILL', 'AGENCY_INVOICE', 'NATIVE'].includes(item.route) ||
         item.counted_timesheet_id !== null || item.correction_binding !== null || item.submission_read != null ||
         item.source_information_witness != null || item.action === undefined || item.action?.kind === 'TIMESHEET') fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
     uuid(witness.projection_publication_id); uuid(witness.work_event_id);
+    text(witness.parent_group_key, 512);
+    if (!/^qg_[0-9a-f]{64}$/.test(witness.parent_group_key) || witness.parent_group_key === witness.native_row_key) fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
     for (const key of ['upload_row_id', 'row_resolution_id', 'incident_id', 'comparison_revision_id', 'manual_review_id']) {
       if (witness[key] !== null) uuid(witness[key]);
     }
@@ -143,7 +145,7 @@ export function projectChecklistItem(item, actor) {
         (kind === 'incident' && (witness.comparison_revision_id === null || witness.manual_review_id !== null)) ||
         (kind === 'manual' && (witness.upload_row_id === null || witness.comparison_revision_id !== null)) ||
         (kind === 'missing' && witness.row_resolution_id === null) ||
-        (item.action !== null && (item.action.kind !== 'QUERIES' || item.action.target?.row_key !== witness.native_row_key))) {
+        (item.action !== null && (item.action.kind !== 'QUERIES' || item.action.target?.row_key !== witness.parent_group_key))) {
       fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
     }
   } else {
@@ -151,6 +153,25 @@ export function projectChecklistItem(item, actor) {
     if (item.source_information_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   }
   if (item.item_kind !== 'NATIVE_SOURCE' && item.native_source_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
+  const action = link(item.action ?? null, item.scope);
+  if (item.queries_parent_witness != null) {
+    const parent=item.queries_parent_witness;
+    closed(parent,['item_id','parent_group_key','owner','actor_user_id','permission_view','import_id',
+      'preview_generation','state_version','preview_fingerprint','proof_hash']);
+    uuid(parent.actor_user_id);uuid(parent.import_id);
+    if(parent.owner!=='private.weekly_source_check_only_query_groups_v1'||parent.item_id!==item.item_id||
+      !/^d10g_[0-9a-f]{64}$/.test(parent.parent_group_key??'')||!same(parent.actor_user_id,actor.actor_user_id)||
+      parent.permission_view!==actor.permission_view||!HASH.test(parent.preview_fingerprint??'')||!HASH.test(parent.proof_hash??'')||
+      !Number.isSafeInteger(parent.preview_generation)||parent.preview_generation<0||!Number.isSafeInteger(parent.state_version)||parent.state_version<0||
+      item.item_kind==='NATIVE_SOURCE'||item.action?.kind!=='QUERIES'||item.action.target?.row_key!==parent.parent_group_key) {
+      fail('CHECKLIST_CHECK_ONLY_QUERY_PARENT_INVALID');
+    }
+    if(item.item_kind==='SOURCE_INFORMATION'&&(item.source_information_witness.existing_row_id!==parent.parent_group_key||
+      !same(item.source_information_witness.import_id,parent.import_id)))fail('CHECKLIST_CHECK_ONLY_QUERY_PARENT_INVALID');
+  }
+  if(item.item_kind!=='NATIVE_SOURCE'&&item.action?.kind==='QUERIES'&&item.queries_parent_witness==null) {
+    fail('CHECKLIST_CHECK_ONLY_QUERY_PARENT_REQUIRED');
+  }
   if (item.submission_read != null) {
     const submitted=item.submission_read;
     closed(submitted, ['state', 'timesheet_id', 'client_id', 'candidate_id', 'work_date', 'workflow_id',
@@ -174,7 +195,6 @@ export function projectChecklistItem(item, actor) {
     const expected = correction.state === 'APPLIED' ? correction.replacement_timesheet_id : correction.original_timesheet_id;
     if (!same(item.counted_timesheet_id, expected) || same(item.counted_timesheet_id, correction.reversal_timesheet_id)) fail('CHECKLIST_CORRECTION_MEMBER_SELECTION_INVALID');
   }
-  const action = link(item.action ?? null, item.scope);
   if (item.route === 'SIGNED_TIMESHEETS' && action?.kind === 'FINALISE') fail('CHECKLIST_SIGNED_FINALISE_NOT_ALLOWED');
   if (action?.kind === 'TIMESHEET' && !same(action.target.timesheet_id,
       correction?.state === 'WAITING' ? correction.replacement_timesheet_id : item.counted_timesheet_id)) {

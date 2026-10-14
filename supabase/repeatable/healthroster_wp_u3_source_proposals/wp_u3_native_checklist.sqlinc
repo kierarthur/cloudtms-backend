@@ -20,6 +20,8 @@ declare
   native_workspace jsonb; tracker_action jsonb; finalise_link jsonb;
   agency_native record; agency_facts jsonb; comparison_accepted boolean; query_unsent boolean;
   report_bindings jsonb; needs_export boolean;
+  hold_facts jsonb; item_hold jsonb; financial_facts jsonb; native_root uuid; native_roots integer;
+  d10_groups jsonb; query_parent jsonb; query_targets jsonb;
   unknown_hold constant jsonb:='{"holds_pay":null,"holds_pay_scope":null,"withheld_amount_pence":null,"holds_invoice":null,"pending_decision":null,"authority":{"owner":"UNAVAILABLE","hash":null,"withholding_known":false}}';
   binding text; revision text; records jsonb; result jsonb; primary_key text; sort_key jsonb;
   empty_cell jsonb; admin_actions jsonb; no_work boolean; no_work_line text; limit_rows integer;
@@ -133,33 +135,47 @@ begin
     if route='NATIVE' and scope.source_family<>'NHSP'
       and private.weekly_source_is_import_authoritative_v1(scope.client_id,null,own_week) is distinct from true then continue; end if;
     actual_count:=coalesce((leaf->>'actual_timesheet_count')::integer,0); earlier:=coalesce((leaf->>'earlier_open_weeks')::integer,0);
-    checked_count:=0; open_count:=0; pay_count:=0; row_items:='[]'::jsonb; raw_rows:='[]'::jsonb;
-    checked_at:=null; checking_upload:=null; admin_actions:='[]'::jsonb; finalise_link:=null;
+    checked_count:=0; open_count:=0; pay_count:=0; row_items:='[]'::jsonb; raw_rows:='[]'::jsonb; financial_facts:='[]'::jsonb;
+    checked_at:=null; checking_upload:=null; admin_actions:='[]'::jsonb; finalise_link:=null; query_targets:='[]'::jsonb;
+    if route in('SIGNED_TIMESHEETS','AGENCY_INVOICE') then
+      d10_groups:=private.weekly_source_check_only_query_groups_v1(scope.cycle_id,scope.client_id,
+        jsonb_build_object('actor_user_id',actor.id,'source_group_id',scope.group_id,'week_ending',own_week));
+      query_targets:=d10_groups->'item_targets';
+      fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_d10_groups',d10_groups));
+    end if;
     if route='SIGNED_TIMESHEETS' then
       raw_cursor:=null;
       loop
         raw_page:=private.weekly_source_check_only_query_rows_v1(scope.cycle_id,scope.client_id,
           jsonb_strip_nulls(jsonb_build_object('actor_user_id',actor.id,'source_group_id',scope.group_id,'week_ending',own_week,'limit',100,'cursor',raw_cursor)));
         if raw_page->'ok' is distinct from 'true'::jsonb then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000'; end if;
+        if raw_page->>'read_revision' is distinct from d10_groups->>'source_read_revision' then
+          raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+        end if;
         raw_rows:=raw_rows||(raw_page->'rows');
         exit when raw_page->'has_more'='false'::jsonb;
         if raw_cursor is not distinct from raw_page->>'next_cursor' then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000'; end if;
         raw_cursor:=raw_page->>'next_cursor';
       end loop;
       for raw in select value from jsonb_array_elements(raw_rows) loop
-        action:=null; correction:=null; pending:=null; pay_subject:=false; signed:=null;
+        action:=null; correction:=null; pending:=null; pay_subject:=false; signed:=null; item_hold:=unknown_hold; query_parent:=null;
+        select value into query_parent from jsonb_array_elements(query_targets) where value->>'item_id'=raw->>'item_id';
         if raw->>'item_kind'='SOURCE_INFORMATION' then
+          hold_facts:=private.weekly_source_checklist_information_hold_facts_v1(raw,row_scope,actor.id);
+          item_hold:=hold_facts->'hold'; financial_facts:=financial_facts||jsonb_build_array(hold_facts->'native_facts');
           reason:=raw->>'native_reason_code'; subject:='INFORMATION'; rank:=90;
           status:=jsonb_build_object('text','No hold','tone','warning','subtext',coalesce(raw#>>'{summary,reason}',reason),'subtone','muted');
           item:=jsonb_build_object('source_information_witness',jsonb_build_object('native_action_id',raw->'action_id',
             'evidence_fingerprint',raw->'evidence_fingerprint','import_id',raw->'query_import_id','hr_row_id',raw->'hr_row_id',
-            'existing_row_id',raw->'item_id','counts_for_row_admission',false),'counted_timesheet_id',null);
-          if reason in('WEEKLY_TIMESHEET_NOT_SUBMITTED','DAILY_TIMESHEET_NOT_SUBMITTED') then
+            'existing_row_id',coalesce(query_parent->'parent_group_key',raw->'item_id'),'counts_for_row_admission',false),'counted_timesheet_id',null);
+          if reason in('WEEKLY_TIMESHEET_NOT_SUBMITTED','DAILY_TIMESHEET_NOT_SUBMITTED') and query_parent is not null then
             action:=jsonb_build_object('kind','QUERIES','label','View missing Timesheet in Queries ›','native_allowed',true,
-              'target',row_scope-'week_ending'||jsonb_build_object('row_key',raw->>'item_id'));
+              'target',row_scope-'week_ending'||jsonb_build_object('row_key',query_parent->>'parent_group_key'));
           end if;
         else
           witness:=raw->'submission_witness';
+          hold_facts:=private.weekly_source_checklist_timesheet_hold_facts_v1((raw->>'timesheet_id')::uuid,row_scope,actor.id);
+          item_hold:=hold_facts->'hold'; financial_facts:=financial_facts||jsonb_build_array(hold_facts->'native_facts');
           if raw#>>'{validation,last_source}' is not null and exists(select 1 from public.hr_imports hi
             join public.import_review_states st on st.import_id=hi.id and st.applied_at_utc is not null
             where hi.id=(raw#>>'{validation,last_source}')::uuid and hi.pruned_at is null
@@ -206,8 +222,8 @@ begin
             status:=jsonb_build_object('text','Decision needed','tone','warning','subtext',case when native_issue is not null then
               case when native_issue->'sent_verified'='true'::jsonb then 'Query sent to Temp Staffing '||coalesce(native_issue->>'last_sent_at','')
               else 'Query not sent yet' end else 'Not yet checked against HealthRoster' end,'subtone','muted');
-            action:=case when native_issue is not null then jsonb_build_object('kind','QUERIES','label','View query in Queries ›','native_allowed',true,
-              'target',row_scope-'week_ending'||jsonb_build_object('row_key',raw->>'item_id')) else
+            action:=case when native_issue is not null and query_parent is not null then jsonb_build_object('kind','QUERIES','label','View query in Queries ›','native_allowed',true,
+              'target',row_scope-'week_ending'||jsonb_build_object('row_key',query_parent->>'parent_group_key')) when native_issue is null then
               jsonb_build_object('kind','UPLOAD','label','Upload source file ›','native_allowed',true,'target',row_scope-'week_ending') end;
           else continue;
           end if;
@@ -218,8 +234,9 @@ begin
         if view='PAY_READONLY' and not pay_subject then continue; end if;
         item:=item||jsonb_build_object('item_id',raw->'item_id','item_kind',raw->'item_kind','scope',row_scope,'route',route,
           'worker',raw->'worker','work_date',raw->'work_date','sheet_scope',raw->'sheet_scope','reason_code',reason,
-          'status',status,'hold',unknown_hold,'subject',subject,'permitted_pay_subject',pay_subject,
-          'action',case when view='ADMIN' then action end,'correction_binding',correction,'submission_read',pending,
+          'status',status,'hold',item_hold,'subject',subject,'permitted_pay_subject',pay_subject,
+          'action',case when view='ADMIN' then action end,'queries_parent_witness',case when view='ADMIN' and action->>'kind'='QUERIES' then query_parent end,
+          'correction_binding',correction,'submission_read',pending,
           '_rank',rank);
         row_items:=row_items||jsonb_build_array(item);
       end loop;
@@ -325,7 +342,7 @@ begin
       -- R-254 HR information. The witness retains actual catalogue identities.
       seen_items:='{}'::text[];
       for source_native in
-        select publication.id publication_id,q.candidate_name,child.value native_row,
+        select publication.id publication_id,q.group_key parent_group_key,q.candidate_name,child.value native_row,
           event.id work_event_id,event.work_date,
           coalesce(comparison.source_row_id,review.upload_row_id,missing_row.id) upload_row_id,
           mapping.id row_resolution_id,incident.id incident_id,comparison.id comparison_revision_id,review.id manual_review_id,
@@ -358,8 +375,9 @@ begin
           'upload_row_id',source_native.upload_row_id,'row_resolution_id',source_native.row_resolution_id,
           'incident_id',source_native.incident_id,'comparison_revision_id',source_native.comparison_revision_id,
           'manual_review_id',source_native.manual_review_id,'native_row_key',source_native.native_row->>'row_key',
+          'parent_group_key',source_native.parent_group_key,
           'evidence_fingerprint',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_NATIVE_QUERY_WITNESS_V1',
-            jsonb_build_object('scope',row_scope,'publication_id',source_native.publication_id,'work_event_id',source_native.work_event_id,
+            jsonb_build_object('scope',row_scope,'publication_id',source_native.publication_id,'parent_group_key',source_native.parent_group_key,'work_event_id',source_native.work_event_id,
               'comparison_revision_id',source_native.comparison_revision_id,'row_resolution_id',source_native.row_resolution_id,
               'manual_review_id',source_native.manual_review_id,'native_row',source_native.native_row)),'hex'));
         if source_native.native_row->>'row_key'=any(seen_items) then
@@ -368,6 +386,19 @@ begin
         seen_items:=array_append(seen_items,source_native.native_row->>'row_key');
         pay_subject:=source_native.native_row->'accept_eligible'='true'::jsonb
           or jsonb_typeof(source_native.native_row->'protected_pay_seed')='object';
+        item_hold:=unknown_hold;
+        -- Resolve only real existing native lineage roots. A Source work event
+        -- does not acquire a counted Timesheet or invented family to read pay.
+        select count(distinct t.timesheet_id),(array_agg(distinct t.timesheet_id order by t.timesheet_id))[1]
+          into native_roots,native_root from public.weekly_source_row_timesheet_lineages l
+          join public.timesheets t on t.timesheet_id=l.timesheet_id and t.is_current
+          join public.contracts con on con.id=t.contract_id and con.client_id=scope.client_id
+          where l.work_event_id=source_native.work_event_id and t.week_ending_date=own_week
+            and t.line_type::text='HOURS' and t.archived_at_utc is null and t.revoked_at is null;
+        if native_roots=1 and private.weekly_source_actual_timesheet_submission_v1(native_root)->'actual_submitted'='true'::jsonb then
+          hold_facts:=private.weekly_source_checklist_timesheet_hold_facts_v1(native_root,row_scope,actor.id);
+          item_hold:=hold_facts->'hold'; financial_facts:=financial_facts||jsonb_build_array(hold_facts->'native_facts');
+        end if;
         if pay_subject then pay_count:=pay_count+1; end if;
         if view='PAY_READONLY' and pay_subject is distinct from true then continue; end if;
         row_items:=row_items||jsonb_build_array(jsonb_build_object('item_id','native-source:'||(source_native.native_row->>'row_key'),
@@ -376,10 +407,10 @@ begin
           'status',jsonb_build_object('text',coalesce(source_native.native_row#>>'{status,text}','Decision needed'),
             'tone',case when source_native.native_row#>>'{status,tone}' in('positive','warning','danger','muted')
               then source_native.native_row#>>'{status,tone}' else 'muted' end,
-            'subtext',coalesce(source_native.native_row->>'issue',''),'subtone','muted'),'hold',unknown_hold,
+            'subtext',coalesce(source_native.native_row->>'issue',''),'subtone','muted'),'hold',item_hold,
           'subject',case when pay_subject then 'PAY' else 'INFORMATION' end,'permitted_pay_subject',coalesce(pay_subject,false),
           'action',case when view='ADMIN' then jsonb_build_object('kind','QUERIES','label','View item in Queries ›','native_allowed',true,
-            'target',row_scope-'week_ending'||jsonb_build_object('row_key',source_native.native_row->>'row_key')) end,
+            'target',row_scope-'week_ending'||jsonb_build_object('row_key',source_native.parent_group_key)) end,
           'counted_timesheet_id',null,'correction_binding',null,'submission_read',null,'source_information_witness',null,
           'native_source_witness',source_witness,'_rank',50));
       end loop;
@@ -398,7 +429,7 @@ begin
             exists(select 1 from public.import_review_decisions d join public.import_review_states st on st.import_id=d.import_id
               and st.preview_generation=d.preview_generation and st.superseded_at_utc is null and st.abandoned_at_utc is null
               where d.timesheet_id=t.timesheet_id and d.client_id=scope.client_id and d.is_current
-                and d.import_id=validation.last_source and d.action_kind in('EMAIL_WEEKLY_ISSUES','EMAIL_DAILY_ISSUES','EMAIL_MISSING_FROM_IMPORT')
+                and d.import_id=validation.last_source and d.action_kind in('EMAIL_ISSUE','EMAIL_REMINDER')
                 and not exists(select 1 from public.hr_issue_emails e
                   join public.hr_issue_email_deliveries delivery on delivery.id=e.last_successful_delivery_id
                   join public.hr_issue_email_delivery_items delivery_item on delivery_item.delivery_id=delivery.id and delivery_item.issue_id=e.id
@@ -431,7 +462,12 @@ begin
           end if;
           agency_facts:=agency_facts||jsonb_build_array(to_jsonb(agency_native)); actual_count:=actual_count+1;
           if agency_native.comparison_accepted then checked_count:=checked_count+1; end if;
-          correction:=null; action:=null; pay_subject:=false; signed:=null;
+          correction:=null; action:=null; pay_subject:=false; signed:=null; item_hold:=unknown_hold; query_parent:=null;
+          select value into query_parent from jsonb_array_elements(query_targets) where value->>'item_id'='timesheet:'||agency_native.timesheet_id::text;
+          if private.weekly_source_actual_timesheet_submission_v1(agency_native.timesheet_id)->'actual_submitted'='true'::jsonb then
+            hold_facts:=private.weekly_source_checklist_timesheet_hold_facts_v1(agency_native.timesheet_id,row_scope,actor.id);
+            item_hold:=hold_facts->'hold'; financial_facts:=financial_facts||jsonb_build_array(hold_facts->'native_facts');
+          end if;
           if agency_native.request_id is not null then
             correction:=jsonb_build_object('request_id',agency_native.request_id,'state','WAITING','state_revision',agency_native.state_revision,
               'original_timesheet_id',agency_native.reversed_timesheet_id,'replacement_timesheet_id',agency_native.replacement_timesheet_id,
@@ -453,8 +489,10 @@ begin
               then 'NOT_YET_CHECKED' else 'HEALTHROSTER_VALIDATION_OUTSTANDING' end; subject:='INVOICE_ONLY'; rank:=40;
             complete_text:=case reason when 'QUERY_NOT_SENT' then 'Query not sent yet' when 'NOT_YET_CHECKED'
               then 'Not yet checked against HealthRoster' else 'HealthRoster validation outstanding' end;
-            action:=jsonb_build_object('kind','QUERIES','label','View item in Queries ›','native_allowed',true,
-              'target',row_scope-'week_ending'||jsonb_build_object('row_key','timesheet:'||agency_native.timesheet_id::text));
+            if query_parent is not null then
+              action:=jsonb_build_object('kind','QUERIES','label','View item in Queries ›','native_allowed',true,
+                'target',row_scope-'week_ending'||jsonb_build_object('row_key',query_parent->>'parent_group_key'));
+            end if;
           else continue;
           end if;
           open_count:=open_count+1; if pay_subject then pay_count:=pay_count+1; end if;
@@ -462,7 +500,8 @@ begin
           row_items:=row_items||jsonb_build_array(jsonb_build_object('item_id','timesheet:'||agency_native.timesheet_id::text,
             'item_kind','ACTUAL_TIMESHEET','scope',row_scope,'route',route,'worker',agency_native.worker,'work_date',own_week,
             'sheet_scope','WEEKLY','reason_code',reason,'status',jsonb_build_object('text','Decision needed','tone','warning','subtext',complete_text,'subtone','muted'),
-            'hold',unknown_hold,'subject',subject,'permitted_pay_subject',pay_subject,'action',case when view='ADMIN' then action end,
+            'hold',item_hold,'subject',subject,'permitted_pay_subject',pay_subject,'action',case when view='ADMIN' then action end,
+            'queries_parent_witness',case when view='ADMIN' and action->>'kind'='QUERIES' then query_parent end,
             'counted_timesheet_id',agency_native.timesheet_id,'correction_binding',correction,'submission_read',null,'source_information_witness',null,'_rank',rank));
         end loop;
         checked:=no_work or (actual_count>0 and checked_count=actual_count);
@@ -473,6 +512,7 @@ begin
       end if;
       fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_source_items',row_items));
     end if;
+    fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_financial_facts',financial_facts));
     if view='PAY_READONLY' and pay_count=0 then continue; end if;
     empty_cell:=jsonb_build_object('value',null,'status',jsonb_build_object('text','—','tone','muted','subtext','','subtone','muted'),'item_count',0,'link',null);
     rows:=rows||jsonb_build_array(jsonb_build_object('row_id',row_id,'scope',row_scope,'client',scope.client_name,
