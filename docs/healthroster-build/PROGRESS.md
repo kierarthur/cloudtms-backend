@@ -1,5 +1,17 @@
 # HealthRoster v2 TEST build progress
 
+## Current implementation and interrupted third rehearsal — 14 October 2026
+
+Install2 source is pushed at `5db7abee7925fffbeaf7c4e885cce809980fa079`. The independently accepted actual-root No Shifts Undo composition retains the native dated scope/CAS/idempotency/audit/whole-cycle gates; 38 mounted source tests pass, source integrity is399/1060, and final native registry/contract and workflow acceptance remain held. Office read-only correction consumer is pushed at `cce7b6bce0903d11889f9c16a504bc097087a8df`:515 source tests pass, actual SESSION/user identity and roles[] successor guards are retained, and current Office main413cea9b is included. It has not been published to TEST and does not complete U3/Original/agency workflows.
+
+The third whole Install1 rehearsal, candidate37643920, ran08:54:48–09:07:29UTC under our shared turn. Its connection closed during native Mode-A verifier unit130. PostgreSQL's postmaster restarted09:07:33.240096UTC; fresh read-only reconciliation confirms our old PID/lock absent, zero own rehearsal sessions, unchanged ledger/catalogue/relation fingerprints, absent marker and LEGACY:1. Only the existing batch-receipt and finance-outbox business fingerprints differ. Complete SQL error collection, transaction/fixture capture and live-writer attribution were lost, so this is an interrupted HOLD, never a clean rollback or install proof. Memory/restart metrics are preserved; zero reported OOM events prevents a claim that OOM is the established cause. No background job, trigger, schedule, other session, infrastructure allocation or credential was changed.
+
+All partial evidence and five historical diagnostic source scripts are pushed at Install1 `54d57b4367425d63e7121771017d2c2168fdf8cd`. The erroneous intermediate SQL-pass label when execution was missing is fixed prospectively; original receipt249069a9 remains byte-exact history. Nineteen full harness and three coordinator source tests pass, nine syntax checks, source389/1019, contract7e3c00b7 coupling, source credential scan and raw staged whitespace pass. The cause of the restart remains unresolved. The three-round batch is held; no fourth full rehearsal or managed release has been dispatched, and no HealthRoster install/runtime publication/activation/TestFlight/phone/final Part B is claimed. Future native work needs a reviewed repair and fresh exact committed-archive gates; earlier archive proofs do not qualify the new54d57 candidate.
+
+Money's source WIP checkpoint `a6739abd7382759ebdbf8a58e7877835258ede9c` preserves the owner-approved typed genuine A→B→A re-acknowledgement and concrete proposed shared Banking reader extraction. Its127 selected files are backed up; Keep32/shared13 are undergoing independent bounded source critique. The shared-owner change is proposed, not composed or approved by a source verdict. Default/CANCEL selectors, real Accept/proposal integration, paid overlap, prepared/Office consumers and native qualification remain unfinished. Agency and A0 source construction continue independently; no Banking chat is messaged.
+
+The at-most-two-normal-install plan, features-OFF Install1, genuine past open-week acceptance and NEXT-F17 dependency are unchanged. A successful qualified rehearsal/release cycle was estimated1–3hours; the interrupted restart and unresolved source/native/device areas mean there is currently no credible completion time. Retained new temporary folders: `C:\tmp\healthroster-install1-native-20261014T084044Z-PEoqab` and `C:\tmp\healthroster-install1-native-20261014T085448Z-cewJAg`; no deletion attempt/refusal. Archive-preflight temporary folders were successfully removed. Existing refused cleanup targets remain untouched.
+
 ## Owner answers and rehearsal continuation — 14 October 2026
 
 The owner resolved both pending questions. Kept-as-paid A→B→A uses a new typed genuine re-acknowledgement linked to immutable A, with request/CAS/idempotency and full audit history; latest genuine acknowledgement is displayed and old history is never rewritten or filtered. Money source construction continues on that authority.
@@ -418,3 +430,27 @@ SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic 
 SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic and changed-table metadata probe","status":"TAKEN","takenAt":"2026-10-14T02:13:41.559Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic and changed-table metadata probe","status":"RELEASED","takenAt":"2026-10-14T02:13:41.559Z","releasedAt":"2026-10-14T02:13:43.096Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"TAKEN","takenAt":"2026-10-14T08:40:46.937Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"RELEASED","takenAt":"2026-10-14T08:40:46.937Z","releasedAt":"2026-10-14T08:40:54.735Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"I1 own read-only failed precheck diagnosis; no rehearsal SQL","status":"TAKEN","takenAt":"2026-10-14T08:43:18.926Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"I1 own read-only failed precheck diagnosis; no rehearsal SQL","status":"RELEASED","takenAt":"2026-10-14T08:43:18.926Z","releasedAt":"2026-10-14T08:46:47.526Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"I1 corrected live snapshot fields read-only first use","status":"TAKEN","takenAt":"2026-10-14T08:48:56.944Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"I1 corrected live snapshot fields read-only first use","status":"RELEASED","takenAt":"2026-10-14T08:48:56.944Z","releasedAt":"2026-10-14T08:49:11.030Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"TAKEN","takenAt":"2026-10-14T08:54:51.681Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"LOST_INCOMPLETE","at":"2026-10-14T09:07:29.099Z","code":"TURN_CONNECTION_CLOSED","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"RELEASED","takenAt":"2026-10-14T08:54:51.681Z","releasedAt":"2026-10-14T09:07:29.106Z","explicitUnlockConfirmed":false,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"I1 lost own516948 turn read-only restoration reconciliation","status":"TAKEN","takenAt":"2026-10-14T09:13:19.262Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"I1 lost own516948 turn read-only restoration reconciliation","status":"RELEASED","takenAt":"2026-10-14T09:13:19.262Z","releasedAt":"2026-10-14T09:17:01.816Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}

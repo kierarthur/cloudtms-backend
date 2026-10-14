@@ -1,5 +1,13 @@
 # Current HealthRoster TEST install plan
 
+## Current batch status — third rehearsal interrupted, 14 October 2026
+
+Install1 remains WP-PP only, features OFF. Banking's first install is recorded, but our third full rehearsal lost its owned connection09:07:29UTC and PostgreSQL restarted09:07:33UTC. Fresh ledger/catalogue/relation fingerprints match, marker is absent and LEGACY:1, but complete SQL/fixture capture and qualified live-background attribution are unavailable. No installation is permitted from that evidence. Three-round batch held; no fourth rehearsal or managed release dispatched. Repair the concrete cause/evidence handling and obtain a valid bounded rehearsal window before a new full attempt. Preserve all original holds; never relabel them as PASS.
+
+Source/evidence backup is Install1 `54d57b4367425d63e7121771017d2c2168fdf8cd`; its truthful intermediate-status repair passes22 source tests and unchanged389/1019 database source/contract checks. A fresh committed-archive proof is required for this new candidate before any later native run. All background jobs stay running; no quiet-window pause is authorised. A prior archive or source test cannot replace the full locked rollback and fresh restoration proof.
+
+Remaining Install2 code continues at `5db7abee7925fffbeaf7c4e885cce809980fa079`, Office source-only consumer `cce7b6bce0903d11889f9c16a504bc097087a8df` (515 tests), and Money source WIP `a6739abd7382759ebdbf8a58e7877835258ede9c`. Source critiques and unfinished Agency/U3/Original/kept/rekey/default-CANCEL/isolation/native gates do not make those packages install-ready. At most two normal installs; activation/acceptance/TestFlight/phone follow Install2 qualification, NEXT checks wait actual F17. Genuine past open weeks remain valid. The prior1–3hour estimate applies only to a successful rehearsal/release cycle; no credible finish time while these defects/gaps remain.
+
 ## Owner answers — 14 October 2026
 
 The quiet-window hold is resolved: all normal background jobs remain running. Resume the third full rollback rehearsal and Install1 under the shared lock after the reviewed source and exact committed-archive gates. Restoration keeps unchanged ledger/catalogue/relation fingerprints, absent marker, LEGACY:1 and absent rehearsal fixtures. Business changes require read-only attribution to existing background writers by source/kind/timing, with zero fixture matches. Retain original before/after hashes and original held attempt receipts. No job pause or installation is claimed.
