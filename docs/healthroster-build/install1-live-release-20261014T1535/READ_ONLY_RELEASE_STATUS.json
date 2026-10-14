@@ -1,0 +1,23 @@
+{
+  "activity": [
+    {
+      "pid": 20994,
+      "state": "active",
+      "waitType": null,
+      "queryHash": "209c0c5b522153b473a93b0ecf6486e8",
+      "waitEvent": null,
+      "queryCommand": "do",
+      "queryStarted": "2026-10-14T15:31:54.136703+00:00",
+      "releasedReviewDo": false,
+      "workbenchOneHeadDo": false
+    }
+  ],
+  "database": "cloudtms_test_clone",
+  "observedAt": "2026-10-14T15:32:38.068602+00:00",
+  "latestRelease": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "status": "APPLYING"
+  },
+  "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+  "ownTurnStillPresent": true
+}

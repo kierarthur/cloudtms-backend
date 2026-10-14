@@ -1,0 +1,25 @@
+{
+  "formatVersion": 2,
+  "target": "TEST",
+  "startedAt": "2026-10-14T14:44:49.540Z",
+  "status": "DATABASE",
+  "stages": [],
+  "sharedTurn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 18462,
+    "turnId": "hr_turn_b0a639891bb0313cc64a023ba0e7772a",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T14:44:41.796Z",
+    "task": "Owner-ruled Install1 protected database then Workers then Office; no additional full rehearsal"
+  },
+  "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "officeCommit": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "databaseDispatchAttempted": true,
+  "databaseDispatchStartedAt": "2026-10-14T14:45:10.444Z",
+  "databaseRunId": 38583323424,
+  "databaseRunUrl": "https://github.com/kierarthur/cloudtms-backend/actions/runs/38583323424"
+}

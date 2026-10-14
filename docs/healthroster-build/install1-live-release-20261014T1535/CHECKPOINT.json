@@ -1,0 +1,64 @@
+{
+  "capturedAt": "2026-10-14T15:35:32.808Z",
+  "sourceOnly": false,
+  "completedInstallationClaim": false,
+  "releaseRun": 38583323424,
+  "releaseCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "releaseStatus": "DATABASE",
+  "readOnlyObservedAt": "2026-10-14T15:32:38.068602+00:00",
+  "latestRelease": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "status": "APPLYING"
+  },
+  "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+  "ownTurn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 18462,
+    "turnId": "hr_turn_b0a639891bb0313cc64a023ba0e7772a",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T14:44:41.796Z",
+    "task": "Owner-ruled Install1 protected database then Workers then Office; no additional full rehearsal"
+  },
+  "sourceBackups": {
+    "install2": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
+    "money": "f1aa8d578b34d2016e916f29c43e5b0c617ed1e8",
+    "agency": "9f4a921b0fe423e6450ee362d76bd46dc3d4a638"
+  },
+  "files": [
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\test-deployment-receipt.json",
+      "file": "PROTECTED_RELEASE_IN_PROGRESS.json",
+      "bytes": 845,
+      "sha256": "3ced5547745fb7b235f4fa1663f7d6ea80f44baf85d56865a98dbbd172fb21f4"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\install1-release-readonly-status.json",
+      "file": "READ_ONLY_RELEASE_STATUS.json",
+      "bytes": 624,
+      "sha256": "951618a92f8c48d18f29c423314e05d06d48e576f972d376ad57caa732c35ff5"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_CHECKLIST_QUERY_TARGET_SOURCE_CRITIC_14102026.md",
+      "file": "BUILD_CHECKLIST_QUERY_TARGET_SOURCE_CRITIC_14102026.md",
+      "bytes": 5450,
+      "sha256": "6470cf01417151da97514450471917af9d684827a19ef4076e52e82e5bc85860"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_AGENCY_NATIVE_PAID_PURPOSE_SOURCE_CRITIC_14102026.md",
+      "file": "BUILD_AGENCY_NATIVE_PAID_PURPOSE_SOURCE_CRITIC_14102026.md",
+      "bytes": 16347,
+      "sha256": "3d114cb07aeac8684ac50227018439b60da8c901ff24bb6db675a9b43e7e91c5"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_MONEY_MISSING_ACCEPT_SOURCE_CRITIC_14102026.md",
+      "file": "BUILD_MONEY_MISSING_ACCEPT_SOURCE_CRITIC_14102026.md",
+      "bytes": 8311,
+      "sha256": "0b4e7674cd30787a341e97561a3d0d5d69d46504fdde11347dc43de130da4d52"
+    }
+  ],
+  "scope": "Historical in-progress release snapshot and independent bounded source critiques. No final implementation or installation acceptance."
+}
