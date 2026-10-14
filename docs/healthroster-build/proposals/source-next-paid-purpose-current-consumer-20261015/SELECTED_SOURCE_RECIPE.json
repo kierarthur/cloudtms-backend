@@ -1,0 +1,66 @@
+{
+  "source_only": true,
+  "construction_authorised_by_root": true,
+  "independent_review": "PENDING",
+  "canonical_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "containing_own_commit": "c7b5cc496cac29e9680aa56892dfb24aa2b56ec1",
+  "dependencies": [
+    {
+      "packet": "source-next-paid-shared-kernel-proposal-20261014",
+      "artifacts": 13,
+      "manifest_sha256": "159c60f9b685994729ca996db5314d05f0db02a2e8f9117cdf9fe4d71bf23345"
+    },
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "artifacts": 30,
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+    },
+    {
+      "packet": "paid-match-correct-final-choice-construction-20261014",
+      "artifacts": 33,
+      "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5"
+    },
+    {
+      "packet": "paid-match-legacy-retained-basis-consumer-20261015",
+      "artifacts": 10,
+      "manifest_sha256": "13957cc01181a536023467ebba66a60193eb8032119a55dd964cc580ee840dd3"
+    },
+    {
+      "packet": "qualification-physical-contract-identity-successor-20261014",
+      "artifacts": 27,
+      "manifest_sha256": "173622063cd1f6f5a655fb7cdd3ba1b6847d9eac7f787f3c8e48ad676e8719b9"
+    },
+    {
+      "packet": "paid-match-off-physical-contract-current-owner-20261015",
+      "artifacts": 11,
+      "manifest_sha256": "1374a8f0b70667cec2b7e260da9469ab897dc3e7764c9a594f77262b03968efd"
+    }
+  ],
+  "selected_complete_source_order": [
+    "forward/01_complete_native_paid_kernel.sqlinc",
+    "forward/03_source_purpose_components_page.sqlinc",
+    "forward/02_complete_public_admin_wrapper.sqlinc",
+    "forward/04_complete_payment_facts.sqlinc"
+  ],
+  "new_owner_private_signatures": [
+    "private.bpay_next_source_paid_evidence_kernel_v1(jsonb)",
+    "private.weekly_source_kept_paid_components_page_v1(uuid,uuid,uuid,jsonb,integer)"
+  ],
+  "existing_public_signature": "public.bpay_next_source_paid_evidence_page_v1(jsonb)",
+  "public_service_ACL_and_two_admin_checks_unchanged": true,
+  "private_public_anon_authenticated_service_EXECUTE_revoked": true,
+  "existing_one_payment_fact_owner": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+  "new_store_columns_calculators_receipts": 0,
+  "replaces_shared13_selected_kernel_wrapper_purpose_leaves": true,
+  "replaces_Legacy30_complete_payment_facts": true,
+  "older_shared13_Keep_context_NOT_selected": true,
+  "Native77_four_kernels_original_cash_interface_present": false,
+  "original_native_three_cash_queries_and_positive_paid_predicate_unchanged": true,
+  "Source39_PolicyX_recorder9_13_three_receipts_unchanged": true,
+  "final_Report_Agency_native_shared_owner_composition_required": true,
+  "compiled_contract_catalogue_verifier_union_native_and_all_financial_gates_held": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

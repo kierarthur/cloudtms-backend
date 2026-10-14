@@ -1,0 +1,112 @@
+-- SHARED-OWNER REVIEW PROPOSAL ONLY. No canonical Bank definition is edited.
+-- Finite Source read purpose. It does not assign a paid quantity, cash amount,
+-- reservation, settlement status, process state or amendment authority.
+create or replace function private.weekly_source_kept_paid_components_page_v1(
+  p_actor_user_id uuid,p_work_event_id uuid,p_root_timesheet_id uuid,
+  p_after jsonb default null,p_limit integer default 100
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_event public.weekly_work_events%rowtype; v_scope record; v_component uuid;
+  v_work record; v_revision uuid; v_request jsonb; v_page jsonb; v_header jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_actor_user_id is null or p_work_event_id is null or p_root_timesheet_id is null
+    or p_limit is null or p_limit not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_KEEP_PAID_COMPONENT_REQUEST_INVALID' using errcode='22023'; end if;
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;
+  begin
+    select t.timesheet_id,t.version,t.booking_id,t.week_ending_date,c.id contract_id,
+      c.candidate_id,c.client_id into strict v_scope
+    from public.timesheets t join public.contracts c on c.id=t.contract_id
+    join public.weekly_source_group_clients membership on membership.client_id=c.client_id
+      and t.week_ending_date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+    join public.weekly_source_groups native_group on native_group.id=membership.source_group_id and native_group.active
+      and native_group.id=v_event.first_source_group_id
+    where t.timesheet_id=p_root_timesheet_id and t.is_current and t.revoked_at is null
+      and t.archived_at_utc is null and t.sheet_scope='WEEKLY' and t.line_type='HOURS'
+      and c.candidate_id=v_event.candidate_id and c.client_id=v_event.client_id
+      and v_event.work_date between t.week_ending_date-6 and t.week_ending_date
+      and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage
+        cross join lateral public._pay_timesheet_rotation_scope(array[lineage.timesheet_id]) family
+        where family.canonical_timesheet_id=t.timesheet_id and lineage.work_event_id=v_event.id
+          and lineage.candidate_id=c.candidate_id and lineage.client_id=c.client_id
+          and lineage.contract_id=c.id and lineage.week_ending_date=t.week_ending_date);
+  exception when no_data_found then
+    raise exception 'WEEKLY_SOURCE_KEEP_PAID_COMPONENT_SCOPE_FORBIDDEN' using errcode='42501';
+  when too_many_rows then
+    raise exception 'WEEKLY_SOURCE_KEEP_PAID_COMPONENT_SCOPE_AMBIGUOUS' using errcode='23514'; end;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+    v_event.first_source_group_id,v_scope.client_id,v_scope.week_ending_date);
+  if not private.weekly_source_office_next_owner_v1() then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_OFFICE_NEXT_PAGE_V1',
+      'available',false,'reason','NEXT_NOT_ACTIVE','request',null,'page',null); end if;
+  begin
+    select w.id,w.current_revision_id,w.applied_revision_id into strict v_work
+    from private.bpay_next_work w where w.work_kind='SOURCE' and w.booking_id=v_scope.booking_id
+      and w.contract_id=v_scope.contract_id and w.candidate_id=v_scope.candidate_id
+      and w.week_ending_date=v_scope.week_ending_date;
+  exception when no_data_found then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_OFFICE_NEXT_PAGE_V1',
+      'available',false,'reason','NO_QUALIFIED_ORIGINAL','request',null,'page',null);
+  when too_many_rows then
+    raise exception 'WEEKLY_SOURCE_KEEP_PAID_COMPONENT_SCOPE_AMBIGUOUS' using errcode='23514'; end;
+  v_revision:=coalesce(v_work.current_revision_id,v_work.applied_revision_id);
+  if v_revision is null then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_OFFICE_NEXT_PAGE_V1',
+      'available',false,'reason','CURRENT_ORIGIN_UNAVAILABLE','request',null,'page',null); end if;
+  v_component:=private.weekly_source_entitlement_component_id_v1('WORKED_TIME','SEGMENT',
+    'weekly-source-event:'||v_event.id::text,v_event.id::text);
+  -- Native current approved membership, independently tied to the real event
+  -- lineage. A Source head alone or an asserted component UUID is insufficient.
+  if not exists(select 1 from private.bpay_next_work_revision revision
+    join private.bpay_next_approved_line approved on approved.revision_id=revision.id
+      and approved.component_kind='WORK' and approved.source_component_id=v_component
+    where revision.id=v_revision and revision.work_id=v_work.id
+      and revision.physical_timesheet_id=v_scope.timesheet_id
+      and revision.physical_timesheet_version=v_scope.version
+      and (revision.source_head_id is null and revision.source_kind='SOURCE'
+        or exists(select 1 from public.weekly_source_entitlement_heads head
+          join public.weekly_source_entitlement_head_components component on component.head_id=head.id
+            and component.component_id=v_component and component.component_kind='WORKED_TIME'
+            and component.economic_key_type='SEGMENT'
+            and component.economic_key_value='weekly-source-event:'||v_event.id::text
+            and component.component_member_identity=v_event.id::text
+          where head.id=revision.source_head_id and head.root_timesheet_id=v_scope.timesheet_id
+            and head.root_timesheet_version=v_scope.version and head.root_family_booking_id=v_scope.booking_id
+            and head.candidate_id=v_scope.candidate_id and head.contract_id=v_scope.contract_id
+            and head.week_ending_date=v_scope.week_ending_date))) then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_OFFICE_NEXT_PAGE_V1',
+      'available',false,'reason','SOURCE_COMPONENT_UNAVAILABLE','request',null,'page',null); end if;
+  v_request:=jsonb_build_object('version','SOURCE_PAID_EVIDENCE_V1','actor_user_id',p_actor_user_id,
+    'root_timesheet_id',v_scope.timesheet_id,'work_id',v_work.id,'expected_revision_id',v_revision,
+    'kind','COMPONENTS','context_id',null,'after',p_after,'limit',p_limit);
+  -- One proposed shared native kernel. No public reader permission widening,
+  -- actor substitution, arbitrary SQL/callback or copied settlement classifier.
+  v_page:=private.bpay_next_source_paid_evidence_kernel_v1(v_request);
+  v_header:=v_page->'header';
+  if jsonb_typeof(v_page) is distinct from 'object' or not v_page ?& array[
+    'version','ok','kind','header','rows','complete','next_cursor','quantity_certificate','activity_coverage']
+    or v_page-array['version','ok','kind','header','rows','complete','next_cursor','quantity_certificate','activity_coverage']<>'{}'::jsonb
+    or v_page->>'version' is distinct from 'SOURCE_PAID_EVIDENCE_V1' or v_page->'ok' is distinct from 'true'::jsonb
+    or v_page->>'kind' is distinct from 'COMPONENTS' or jsonb_typeof(v_page->'rows') is distinct from 'array'
+    or jsonb_array_length(v_page->'rows')>p_limit or octet_length(v_page::text)>120000
+    or jsonb_typeof(v_page->'complete') is distinct from 'boolean'
+    or jsonb_typeof(v_header) is distinct from 'object'
+    or not v_header ?& array['root_timesheet_id','work_id','expected_revision_id','module_epoch',
+      'current_origin_state','financial_view_revision','scope','quantity_authority_scope','context']
+    or v_header-array['root_timesheet_id','work_id','expected_revision_id','module_epoch',
+      'current_origin_state','financial_view_revision','scope','quantity_authority_scope','context']<>'{}'::jsonb
+    or v_header->>'root_timesheet_id' is distinct from v_scope.timesheet_id::text
+    or v_header->>'work_id' is distinct from v_work.id::text or v_header->>'expected_revision_id' is distinct from v_revision::text
+    or v_header->>'scope' is distinct from 'EXACT_SOURCE_WORK' or v_header->'context' is distinct from 'null'::jsonb then
+    raise exception 'WEEKLY_SOURCE_KEEP_PAID_COMPONENT_CONTRACT_INVALID' using errcode='23514'; end if;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_OFFICE_NEXT_PAGE_V1',
+    'available',true,'reason',null,'request',v_request,'page',v_page);
+end;
+$function$;
+alter function private.weekly_source_kept_paid_components_page_v1(uuid,uuid,uuid,jsonb,integer) owner to postgres;
+revoke all on function private.weekly_source_kept_paid_components_page_v1(uuid,uuid,uuid,jsonb,integer) from public,anon,authenticated,service_role;

@@ -1,0 +1,14 @@
+create or replace function private.weekly_source_office_next_owner_v1()
+returns boolean language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_next boolean;
+begin
+  if to_regclass('private.bpay_next_module_control') is null then return false; end if;
+  execute 'select active_owner=''NEXT'' and owner_epoch>0 from private.bpay_next_module_control where id=1'
+    into strict v_next;
+  return v_next is true;
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_NEXT_OWNER_UNAVAILABLE' using errcode='23514';
+end;
+$function$;

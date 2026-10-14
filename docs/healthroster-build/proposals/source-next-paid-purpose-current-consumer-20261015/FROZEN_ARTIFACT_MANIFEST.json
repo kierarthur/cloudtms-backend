@@ -1,0 +1,127 @@
+{
+  "schema_version": "SOURCE_NEXT_PAID_PURPOSE_CURRENT_FINANCIAL_CONSUMER_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "construction_authorised_by_root": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 23,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_EXTRACTION_AND_REVERSES.json",
+      "bytes": 51608,
+      "sha256": "602add6449a1733e171ee17fff0c3fcf1eeb38bf7779fcaa69265d405527f1d8"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 4394,
+      "sha256": "4541f912249cfbe2252c361dbd36806e5be4997657bfadf2e4a37d39f55c100e"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 2960,
+      "sha256": "b802d15fa4b33c9c96835be70798b4d0542fa33e2e3f226c6c0d7dfc9f4ffde3"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 699,
+      "sha256": "9f35618691ff8fe3e54a450babb153fe4fc6683b0c9efa33f4dc675c6295c9fa"
+    },
+    {
+      "file": "before/01_complete_public_paid_page.sqlinc",
+      "bytes": 47617,
+      "sha256": "5227081f2bc136a4dd29395057610a0c94e205ee9d9f6945d6fdfc24f54d6535"
+    },
+    {
+      "file": "before/03_source_purpose_components_page.sqlinc",
+      "bytes": 8139,
+      "sha256": "73b3ab77f4f1667009b0731eba28e97053703693a5a1847aa3dd8b97c341f68a"
+    },
+    {
+      "file": "before/04_complete_payment_facts.sqlinc",
+      "bytes": 14686,
+      "sha256": "1773bd2b9da8eb9ece206ac1228c92e4a106b1f645252dd59193339a2604f33f"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 11714,
+      "sha256": "d79c16e71bb46d3b395d6c6650d994cf797d72ad91d53ee9fd32aad4c9d3278d"
+    },
+    {
+      "file": "forward/01_complete_native_paid_kernel.sqlinc",
+      "bytes": 47578,
+      "sha256": "e62c876b85eeb8b883be6003ac484aa459b8f5c92b8860af5f5578d70491a8bf"
+    },
+    {
+      "file": "forward/02_complete_public_admin_wrapper.sqlinc",
+      "bytes": 8929,
+      "sha256": "b6a2e8c8a0acdf5f88515829eac13b6262e3bea4123b8dfae730421b9d76c7f5"
+    },
+    {
+      "file": "forward/03_source_purpose_components_page.sqlinc",
+      "bytes": 8702,
+      "sha256": "d453b05604c21a75502076efb75cb81781917eb6eb32417234e742d980184b99"
+    },
+    {
+      "file": "forward/04_complete_payment_facts.sqlinc",
+      "bytes": 13986,
+      "sha256": "d24607fbce88c8e8fddcce69c3b31a6021cd656038bc83fd95bef23172fecc52"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5605,
+      "sha256": "17b644bef6153273d98389f7071785cf974780b4d31cf15690d55ca3de05f2d9"
+    },
+    {
+      "file": "input/05102026_1112_native_paid_evidence.sql",
+      "bytes": 48233,
+      "sha256": "42feb18efe21530f0299e693df4447363ba91f837d8d1154e1cb322b96c30432"
+    },
+    {
+      "file": "input/NATIVE77_FOUR_KERNELS_FORWARD.sqlinc",
+      "bytes": 37379,
+      "sha256": "884a92f62d998fa62dff3c0545abe91b82a28aa6a55685d6d818e84b90b064ba"
+    },
+    {
+      "file": "input/private.bpay_next_source_origin_state_v1_uuid_uuid_.sqlinc",
+      "bytes": 11149,
+      "sha256": "ebc337377fd6e1b59bee3852aaf105dce83718a1145d7af61d41c9564ef3ebef"
+    },
+    {
+      "file": "input/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "bytes": 587,
+      "sha256": "ef4cee3ea8df20aa90dc93054fdde50fef4ca9f50ab05e996b486ba96622e94b"
+    },
+    {
+      "file": "input/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "file": "input/private.weekly_source_office_next_owner_v1__.sqlinc",
+      "bytes": 608,
+      "sha256": "5f0608759e6e26ca86c27c2822464b6e920865ac1a1a450ad2c95bc7f6ec2f7b"
+    },
+    {
+      "file": "input/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 510,
+      "sha256": "6aa87be22a37e7f0001524c5dd41ee591c4d93c4d9f15a3adfa11046fdfe78ea"
+    },
+    {
+      "file": "input/private_weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "file": "input/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5334,
+      "sha256": "8c58d9897512ca0b96e5b5f99a459acdf9101afba14329ae3c6d7d2747c7bff7"
+    },
+    {
+      "file": "purpose-source.test.mjs",
+      "bytes": 12109,
+      "sha256": "18c49ef8fefb8f8899e3689a14a5ab3bd2b6aa19e658075a743052b95f74a7e8"
+    }
+  ]
+}

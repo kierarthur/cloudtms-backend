@@ -1,0 +1,133 @@
+create or replace function public.bpay_next_source_paid_evidence_page_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare
+  v_actor uuid;v_root uuid;v_work uuid;v_revision uuid;v_context uuid;v_kind text;v_limit integer;
+  v_after_key text;v_after_id uuid;v_after_no integer;v_after jsonb;v_scope record;v_worker record;
+  v_origin jsonb;v_authority text;v_state text;v_reason text;v_header jsonb;v_context_value jsonb;
+  v_query text;v_window jsonb;v_item jsonb;v_value jsonb;v_rows jsonb:='[]'::jsonb;
+  v_cursor jsonb;v_count integer:=0;v_more boolean:=false;v_all_zero boolean:=true;
+  v_positive_witness boolean:=false;v_membership_complete boolean:=false;v_certificate jsonb;
+  v_coverage jsonb;v_result jsonb;v_bytes integer;v_scope_name text;
+begin
+  -- Public EXECUTE is service-only AND the actual PostgREST JWT is checked.
+  perform private.weekly_source_query_require_service_v1();
+  if pg_catalog.jsonb_typeof(p_request) is distinct from 'object'
+    or not p_request ?& array['version','actor_user_id','root_timesheet_id','work_id','expected_revision_id',
+      'kind','context_id','after','limit']
+    or (p_request-array['version','actor_user_id','root_timesheet_id','work_id','expected_revision_id',
+      'kind','context_id','after','limit'])<>'{}'::jsonb
+    or p_request->>'version' is distinct from 'SOURCE_PAID_EVIDENCE_V1'
+    or pg_catalog.jsonb_typeof(p_request->'version') is distinct from 'string'
+    or pg_catalog.jsonb_typeof(p_request->'kind') is distinct from 'string'
+    or p_request->>'kind' not in ('COMPONENTS','ACTIVE_HOLDS','WORKER_TRANSFERS')
+    or pg_catalog.jsonb_typeof(p_request->'limit') is distinct from 'number'
+    or p_request->>'limit' !~ '^([1-9][0-9]?|100)$' then
+    raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_REQUEST_INVALID';
+  end if;
+  foreach v_kind in array array['actor_user_id','root_timesheet_id','work_id','expected_revision_id'] loop
+    if pg_catalog.jsonb_typeof(p_request->v_kind) is distinct from 'string'
+      or p_request->>v_kind !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_REQUEST_INVALID';
+    end if;
+  end loop;
+  v_actor:=(p_request->>'actor_user_id')::uuid;v_root:=(p_request->>'root_timesheet_id')::uuid;
+  v_work:=(p_request->>'work_id')::uuid;v_revision:=(p_request->>'expected_revision_id')::uuid;
+  v_kind:=p_request->>'kind';v_limit:=(p_request->>'limit')::integer;v_after:=p_request->'after';
+  if v_kind='WORKER_TRANSFERS' then
+    if pg_catalog.jsonb_typeof(p_request->'context_id') is distinct from 'string'
+      or p_request->>'context_id' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_REQUEST_INVALID';
+    end if;
+    v_context:=(p_request->>'context_id')::uuid;
+  elsif p_request->'context_id'<>'null'::jsonb then
+    raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_REQUEST_INVALID';
+  end if;
+  if v_after<>'null'::jsonb then
+    if pg_catalog.jsonb_typeof(v_after) is distinct from 'object' then
+      raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_CURSOR_INVALID';
+    end if;
+    if v_kind in ('COMPONENTS','ACTIVE_HOLDS') then
+      if not v_after ? 'after_component_key'
+        or pg_catalog.jsonb_typeof(v_after->'after_component_key') is distinct from 'string'
+        or pg_catalog.octet_length(v_after->>'after_component_key') not between 1 and 1024
+        or pg_catalog.char_length(v_after->>'after_component_key') not between 1 and 256 then
+        raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_CURSOR_INVALID';
+      end if;
+      v_after_key:=v_after->>'after_component_key';
+      if v_kind='COMPONENTS' and v_after-array['after_component_key']<>'{}'::jsonb then
+        raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_CURSOR_INVALID';
+      elsif v_kind='ACTIVE_HOLDS' then
+        if not v_after ? 'after_hold_id' or v_after-array['after_component_key','after_hold_id']<>'{}'::jsonb
+          or pg_catalog.jsonb_typeof(v_after->'after_hold_id') is distinct from 'string'
+          or v_after->>'after_hold_id' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+          raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_CURSOR_INVALID';
+        end if;
+        v_after_id:=(v_after->>'after_hold_id')::uuid;
+      end if;
+    else
+      if not v_after ? 'after_transfer_no' or v_after-array['after_transfer_no']<>'{}'::jsonb
+        or pg_catalog.jsonb_typeof(v_after->'after_transfer_no') is distinct from 'string'
+        or v_after->>'after_transfer_no' !~ '^[1-9][0-9]{0,9}$'
+        or (v_after->>'after_transfer_no')::numeric>2147483647 then
+        raise exception using errcode='22023',message='BPAY_NEXT_SOURCE_PAID_CURSOR_INVALID';
+      end if;
+      v_after_no:=(v_after->>'after_transfer_no')::integer;
+    end if;
+  end if;
+  if not exists(select 1 from private.bpay_next_module_control m where m.id=1
+    and m.active_owner='NEXT' and m.owner_epoch>0) then
+    raise exception using errcode='55000',message='BPAY_NEXT_MODULE_NOT_ACTIVE';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS',null,null,current_date);
+  -- Current physical permission is independent of historical captured money.
+  -- Exact raw family identity, not a trimmed remap or historical chooser.
+  begin
+  select t.timesheet_id,t.version,t.booking_id,t.week_ending_date,c.id as contract_id,c.client_id,
+    c.candidate_id,w.original_timesheet_id as work_original_root,
+    w.current_revision_id,w.applied_revision_id,w.current_revision_no,
+    r.id as revision_id,r.source_kind,r.source_head_id,r.source_event_id,r.source_inventory_digest,
+    r.physical_timesheet_id,r.physical_timesheet_version,r.sealed_at_utc,r.expected_line_count,
+    a.id as live_authorisation_id,a.current_entitlement_head_id,
+    a.family_booking_id as authorised_booking,a.timesheet_version as authorised_version,
+    h.state as head_state,h.inventory_digest as head_inventory_digest,
+    h.root_timesheet_id as head_root,h.root_timesheet_version as head_version,
+    h.root_family_booking_id as head_booking,h.candidate_id as head_candidate,h.contract_id as head_contract,
+    h.week_ending_date as head_week,h.authority_kind,
+    tf.id as current_snapshot_id,tf.is_stale,tf.authorised_at_utc as snapshot_authorised_at,
+    g.id as group_id,m.owner_epoch,wc.financial_view_revision
+    into strict v_scope
+  from public.timesheets t join public.contracts c on c.id=t.contract_id
+  join private.bpay_next_work w on w.id=v_work and w.work_kind='SOURCE'
+    and w.booking_id=t.booking_id and w.contract_id=c.id and w.candidate_id=c.candidate_id
+    and w.week_ending_date=t.week_ending_date
+  join private.bpay_next_work_revision r on r.work_id=w.id and r.id=v_revision
+  join private.bpay_next_module_control m on m.id=1
+  left join private.bpay_next_worker_control wc on wc.candidate_id=w.candidate_id
+  join public.weekly_source_group_clients gc on gc.client_id=c.client_id
+    and t.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+  join public.weekly_source_groups g on g.id=gc.source_group_id and g.active
+  left join public.weekly_source_root_authorisations a on a.root_timesheet_id=t.timesheet_id
+    and a.withdrawn_at_utc is null
+  left join public.weekly_source_entitlement_heads h on h.id=r.source_head_id
+  left join public.timesheets_financials tf on tf.id=r.financial_snapshot_id and tf.is_current
+  where t.timesheet_id=v_root and t.is_current and t.revoked_at is null and t.archived_at_utc is null
+    and t.sheet_scope='WEEKLY' and t.line_type='HOURS';
+  exception when no_data_found then
+    raise exception using errcode='42501',message='BPAY_NEXT_SOURCE_PAID_SCOPE_FORBIDDEN';
+  when too_many_rows then
+    raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_PAID_SCOPE_AMBIGUOUS';
+  end;
+  if coalesce(v_scope.current_revision_id,v_scope.applied_revision_id) is distinct from v_revision then
+    raise exception using errcode='42501',message='BPAY_NEXT_SOURCE_PAID_SCOPE_FORBIDDEN';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS',
+    v_scope.group_id,v_scope.client_id,v_scope.week_ending_date);
+  -- Both original public admin/scope checks precede the single native read.
+  return private.bpay_next_source_paid_evidence_kernel_v1(p_request);
+end
+$function$;
+alter function public.bpay_next_source_paid_evidence_page_v1(jsonb) owner to postgres;
+revoke all on function public.bpay_next_source_paid_evidence_page_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.bpay_next_source_paid_evidence_page_v1(jsonb) to service_role;
