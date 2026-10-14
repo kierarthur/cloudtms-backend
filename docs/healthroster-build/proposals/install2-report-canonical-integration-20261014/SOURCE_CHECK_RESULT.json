@@ -1,0 +1,19 @@
+{
+  "schema_version": "INSTALL2_REPORT_CANONICAL_SOURCE_CHECKS_V1",
+  "status": "SOURCE_ONLY_WAITING_INDEPENDENT_CRITIC_ROOT_COMPILE_NATIVE_SEAL_AND_REAL_GATES",
+  "complete_current_owners": 5,
+  "complete_forward_reverse_hunks": 32,
+  "literal_contained_sql_includes": 10,
+  "total_function_definitions": 12,
+  "new_owner_only_private_helpers": 7,
+  "new_service_or_browser_signatures": 0,
+  "new_tables": 0,
+  "recorder_slots": 2,
+  "request_return_fields": "UNCHANGED_9_13",
+  "receipt_bundle_paths": 3,
+  "script_syntax_passed": 5,
+  "normal_install_writer_or_caller_changes": 0,
+  "seal_literal_null": true,
+  "frozen_report49_and_correction35_unchanged": true,
+  "no_native_execution": true
+}

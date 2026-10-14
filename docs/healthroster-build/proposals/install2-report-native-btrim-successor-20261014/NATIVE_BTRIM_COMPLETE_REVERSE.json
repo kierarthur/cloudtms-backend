@@ -1,0 +1,50 @@
+{
+  "schema_version": "INSTALL2_REPORT_NATIVE_BTRIM_COMPATIBILITY_COMPLETE_REVERSE_V1",
+  "input": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+  "input_sha256": "9154c3e8939c92b284e0c22349465c8e9c51b6867bc6a7cf656564d6068be457",
+  "output": "forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+  "output_sha256": "34a0093ee48aa74a949ed7600ee187913f30e8d7a4d1591167e3863db20f2c77",
+  "hunks": [
+    {
+      "id": "POSTGRES_BTRIM_ASCII_SPACE_ONLY",
+      "old": "const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),quote=v=>\"'\"+String(v).replaceAll(\"'\",\"''\")+\"'\";",
+      "new": "const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),quote=v=>\"'\"+String(v).replaceAll(\"'\",\"''\")+\"'\";\n// PostgreSQL btrim(text) removes U+0020 only. Preserve tabs, NBSP, BOM and\n// newlines exactly; JS trim and a $ regex anchor have different semantics.\nconst nativeBtrimSpaces=value=>{let start=0,end=value.length;\n while(start<end&&value.charCodeAt(start)===32)start++;\n while(end>start&&value.charCodeAt(end-1)===32)end--;return value.slice(start,end);};"
+    },
+    {
+      "id": "EXACT_NATIVE_MEMBER_CANONICAL_BOOKING",
+      "old": "member.canonical_booking_id!==member.raw_booking_id.trim()",
+      "new": "member.canonical_booking_id!==nativeBtrimSpaces(member.raw_booking_id)"
+    }
+  ],
+  "full_reverse": true,
+  "native_semantics_source": {
+    "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "path": "supabase/migrations/04102026_0500_banking_pay_next_source_current_hooks.sql",
+    "sha256": "dc6150316e0095ab9397ccaad05c82e184d60a776370757bb3547f2f88bfcf86",
+    "constraint": "canonical_booking_id=pg_catalog.btrim(raw_booking_id)"
+  },
+  "unchanged_codec": {
+    "path": "forward/scripts/weekly-source-protected-release-qualification.mjs",
+    "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+    "mount_action": "PRESERVE_EXISTING_EXACT_ROOT_CODEC; copy is only source/test dependency"
+  },
+  "earlier_freezes": [
+    {
+      "name": "install2-shared-runtime-forward-20261014",
+      "manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50"
+    },
+    {
+      "name": "install2-report-canonical-integration-20261014",
+      "manifest_sha256": "6b16dda5df21ea961086c2336ada3e6337f482d244f0137acd1a6142d82eec75"
+    },
+    {
+      "name": "install2-report-canonical-seal-successor-20261014",
+      "manifest_sha256": "db40c675781b557f8954bdb102735203587320f6769f870908e58527f3592247"
+    }
+  ],
+  "new_native_signatures": 0,
+  "new_gucs": 0,
+  "new_slots": 0,
+  "new_bundle_exceptions": 0,
+  "no_native_execution": true
+}

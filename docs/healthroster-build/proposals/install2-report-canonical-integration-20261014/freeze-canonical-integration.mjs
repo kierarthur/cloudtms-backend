@@ -1,0 +1,13 @@
+// Freeze this proposal only; no native operation and no earlier freeze edit.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(here,'../../../..'),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const branch=execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','branch','--show-current'],{cwd:root,encoding:'utf8'}).trim();
+if(branch!=='codex/healthroster-v2-report-build-13102026')throw Error('OWN_REPORT_BRANCH_REQUIRED');
+execFileSync(process.execPath,[path.join(here,'verify-canonical-integration.mjs')],{cwd:root});
+const walk=directory=>fs.readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?walk(path.join(directory,entry.name)):[path.join(directory,entry.name)]);
+const files=walk(here).filter(p=>path.basename(p)!=='REVIEW_MANIFEST.json').sort();
+for(const file of files){const text=fs.readFileSync(file,'utf8');if(path.basename(file)!=='freeze-canonical-integration.mjs'
+ &&(/-----BEGIN (?:OPENSSH|RSA|EC|DSA|PRIVATE) (?:PRIVATE )?KEY-----/.test(text)||/\bAKIA[0-9A-Z]{16}\b/.test(text)||/\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/.test(text)))throw Error('CREDENTIAL_PATTERN_REFUSED '+file);
+ if(file.endsWith('.mjs'))execFileSync(process.execPath,['--check',file],{cwd:root});}
+const manifest={schema_version:'INSTALL2_REPORT_CANONICAL_CURRENT_INTEGRATION_FREEZE_V1',status:'FROZEN_FOR_INDEPENDENT_SOURCE_REVIEW_ROOT_COMPILE_NATIVE_SEAL_AND_REAL_GATES_HELD',base_current_commit:'a63455e878391cb3ee9732165e58c0db517f48a7',current_foundation_commit:'fe7b3dfc2946cf334ba88681ae425105f864c42f',prior_frozen_report_commit:'c57746f82558dd698d13fe5b2fc43dd18d72af6c',prior_report_manifest_sha256:'000b8db40dac31bbc89b1a2f0298b19d60d23e80ce4616e3882aa4fb3f984e51',correction35_manifest_sha256:JSON.parse(fs.readFileSync(path.join(here,'SCRIPT_AND_RECEIPT_DEPENDENCY_PINS.json'))).correction_manifest_sha256,source_checks_sha256:sha(fs.readFileSync(path.join(here,'SOURCE_CHECK_RESULT.json'))),artifacts:files.map(file=>({path:path.relative(here,file).replaceAll('\\','/'),bytes:fs.statSync(file).size,sha256:sha(fs.readFileSync(file))})),credential_findings:0,no_native_execution:true};
+const target=path.join(here,'REVIEW_MANIFEST.json');fs.writeFileSync(target,JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify({artifacts:files.length+1,manifest_sha256:sha(fs.readFileSync(target)),source_checks_sha256:manifest.source_checks_sha256,credential_findings:0,no_native_execution:true}));

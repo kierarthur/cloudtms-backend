@@ -1,0 +1,45 @@
+{
+  "schema_version": "INSTALL2_REPORT_SEAL_CANONICAL_AUTHORITY_SUCCESSOR_REVERSE_V1",
+  "input": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/build-native-seal.mjs",
+  "input_sha256": "ec975bb7aaa2419ced511dec6362afb13308fa24fa693b73065cb7f82876673b",
+  "output": "build-native-seal.mjs",
+  "output_sha256": "cbb5c29aea680fbd83fab583c871350b7913ed0df8bd9bade1487b99931e53de",
+  "hunks": [
+    {
+      "id": "CANONICAL28_PINNED_MAPPER_DEPENDENCY",
+      "old": "from './forward/scripts/weekly-source-report-fin-native-mapper.mjs';",
+      "new": "from '../install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs';"
+    },
+    {
+      "id": "ACTUAL_MANAGED_CANONICAL_CONTRACT_HASH",
+      "old": "const signature=r=>r.schema+'.'+r.identity.replace",
+      "new": "// Match actual managed canonicalContractHash; raw formatting is separate input provenance.\nconst contractHash=sha(JSON.stringify(contract));\nconst signature=r=>r.schema+'.'+r.identity.replace"
+    },
+    {
+      "id": "CATALOGUE_CANONICAL_CONTRACT_BINDING",
+      "old": "catalogue.contract_sha256!==sha(contractBytes)",
+      "new": "catalogue.contract_sha256!==sha(JSON.stringify(contract))"
+    },
+    {
+      "id": "EXECUTION_CANONICAL_CONTRACT_BINDING",
+      "old": "contract_sha256:sha(contractBytes)",
+      "new": "contract_sha256:contractHash"
+    },
+    {
+      "id": "RETAIN_RAW_CONTRACT_PREPARATION_HASH",
+      "old": "console.log(JSON.stringify({contract_sha256:seal.contract_sha256,owners:",
+      "new": "console.log(JSON.stringify({contract_sha256:seal.contract_sha256,compiled_contract_raw_sha256:sha(contractBytes),owners:"
+    }
+  ],
+  "full_reverse": true,
+  "prior35_manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+  "canonical28_manifest_sha256": "6b16dda5df21ea961086c2336ada3e6337f482d244f0137acd1a6142d82eec75",
+  "canonical_authority_hash_source": {
+    "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "path": "scripts/cloudtms-db-release-lib.mjs",
+    "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+    "expression": "SHA256(JSON.stringify(parsedContract))"
+  },
+  "raw_preparation_hash": "compiled_contract_raw_sha256 = SHA256(exact parsed input file bytes); never installed execution contract identity",
+  "no_native_execution": true
+}

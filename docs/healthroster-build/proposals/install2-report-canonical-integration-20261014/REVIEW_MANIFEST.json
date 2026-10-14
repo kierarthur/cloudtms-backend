@@ -1,0 +1,149 @@
+{
+  "schema_version": "INSTALL2_REPORT_CANONICAL_CURRENT_INTEGRATION_FREEZE_V1",
+  "status": "FROZEN_FOR_INDEPENDENT_SOURCE_REVIEW_ROOT_COMPILE_NATIVE_SEAL_AND_REAL_GATES_HELD",
+  "base_current_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "current_foundation_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "prior_frozen_report_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+  "prior_report_manifest_sha256": "000b8db40dac31bbc89b1a2f0298b19d60d23e80ce4616e3882aa4fb3f984e51",
+  "correction35_manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+  "source_checks_sha256": "37e9e6bdbe96766893ccac4e01caab1822c55945c2eb03d8a6f49f0fb5b8f6b4",
+  "artifacts": [
+    {
+      "path": "CANONICAL_REPORT_HANDOFF.md",
+      "bytes": 6949,
+      "sha256": "9a44b50d91f95c0e40ea0adee2ec675ca9fcc313665bae19ee65574b353716bf"
+    },
+    {
+      "path": "CURRENT_NATIVE_RETAINED_PINS.json",
+      "bytes": 1563,
+      "sha256": "2589122b2ccecad2b82e776fbc24e98b7c64af4c856c3e34a785e5c3019cea80"
+    },
+    {
+      "path": "CURRENT_NATIVE_REVERSE.json",
+      "bytes": 41548,
+      "sha256": "0f71cce1b6c6a81afffe4cbb685ae95a316bb9359d43d1281886f4897b133275"
+    },
+    {
+      "path": "INTEGRATION_ORDER.json",
+      "bytes": 2425,
+      "sha256": "1b8f1d89f9d1785af56059bf8a881d39ed91d4b09daff238361d6e7b058cb73a"
+    },
+    {
+      "path": "REPORT_PRIVATE_CLASSIFICATION_DELTA.json",
+      "bytes": 1135,
+      "sha256": "8bbd88fa0432d1ce71f51b28188be5176b05f20ba9c3a01611ebd674f510fecf"
+    },
+    {
+      "path": "SCRIPT_AND_RECEIPT_DEPENDENCY_PINS.json",
+      "bytes": 3710,
+      "sha256": "de47b4a34f89dcbcf5d3603a704ad4d395bbc7a35fef385ac5652606bd7710f2"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 699,
+      "sha256": "37e9e6bdbe96766893ccac4e01caab1822c55945c2eb03d8a6f49f0fb5b8f6b4"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "bytes": 30888,
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "bytes": 49303,
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "bytes": 11774,
+      "sha256": "9154c3e8939c92b284e0c22349465c8e9c51b6867bc6a7cf656564d6068be457"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "bytes": 47129,
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "bytes": 258,
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc",
+      "bytes": 8677,
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc",
+      "bytes": 9046,
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc",
+      "bytes": 3217,
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc",
+      "bytes": 103480,
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc",
+      "bytes": 24054,
+      "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc",
+      "bytes": 109868,
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc",
+      "bytes": 1938,
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc",
+      "bytes": 12162,
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc",
+      "bytes": 123180,
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc",
+      "bytes": 47770,
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration_v1.sql",
+      "bytes": 1103,
+      "sha256": "d0fdb943bff8c22e00713358c4100808fe64496af5c7bfc98fa25de8e6bc7601"
+    },
+    {
+      "path": "forward/supabase/verification/14102026_0440_healthroster_report_native_integration_declarations.sql",
+      "bytes": 3280,
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a"
+    },
+    {
+      "path": "freeze-canonical-integration.mjs",
+      "bytes": 2682,
+      "sha256": "84b933855a680e280501a765f3529abba3da93626e635c92387bcbea0ae6ac93"
+    },
+    {
+      "path": "prepare-canonical-integration.mjs",
+      "bytes": 12730,
+      "sha256": "76aef2234081a5a85c72bc8d1ef4f65ca6b11cd6afe8fa9a89e7cd3364740a52"
+    },
+    {
+      "path": "verify-canonical-integration.mjs",
+      "bytes": 6201,
+      "sha256": "b607ca7436aee01dcbdb90411946a306143cc61d81f81acaa0ab89e84568f465"
+    }
+  ],
+  "credential_findings": 0,
+  "no_native_execution": true
+}

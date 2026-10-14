@@ -2,6 +2,7 @@
 // connection. Only the root's existing owner rollback session executes queries.
 import {exact,sha256} from './weekly-source-protected-release-qualification.mjs';
 import {reportFinNativeSeal} from './weekly-source-report-fin-native-seal.mjs';
+import {validateNativeFinLockObservation,nativeOrdinaryRequestSha256} from './weekly-source-report-fin-native-lock-observation.mjs';
 const fail=code=>{throw Error(code);},hex=/^[0-9a-f]{64}$/,uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),q=v=>"'"+String(v).replaceAll("'","''")+"'";
 const decode=bytes=>{if(typeof bytes!=='string'||Buffer.byteLength(bytes)>256*1024)fail('REPORT_NATIVE_MAPPER_BYTES_INVALID');return JSON.parse(bytes);};
@@ -29,7 +30,12 @@ export const reportFinNativeOwnerSignatures=Object.freeze([
  'public.complete_local_v1(jsonb)',
  'public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)',
  'public._pay_workbench_candidate_serial_try_gate(uuid,uuid,text,jsonb,text)',
- 'private._weekly_source_effective_policy_v1(uuid,uuid,date)'
+ 'private._weekly_source_effective_policy_v1(uuid,uuid,date)',
+ 'private.weekly_source_rule_qualification_context_v1(uuid,uuid)',
+ 'private.weekly_source_bulk_source_cas_v1(uuid,uuid[])',
+ 'private.weekly_source_bulk_source_facts_v1(uuid,uuid[])',
+ 'private.weekly_source_protected_qualification_release_v1()',
+ 'public._audit_insert(text,text,text,jsonb,jsonb,text,uuid)'
 ]);
 export const nativeGateSlots=Object.freeze(['native_candidate_i1','ordinary_nhsp','origin_authority','no_external_effects']);
 export const nativeCandidateJobTypes=Object.freeze(['WORKBENCH_CANDIDATE_FIRST_AUTHORISATION','WORKBENCH_CANDIDATE_FIRST_AUTHORISATION_WITHDRAWAL',
@@ -58,7 +64,8 @@ export function deriveReportCaseGrain(caseId,basis,financial){
   const found=negative.filter(({m})=>m.movement_role==='REVERSAL'&&uuid.test(m.prior_movement_id)
    &&m.source_facts_json?.prior_report_movement_id===m.prior_movement_id
    &&['candidate_id','contract_id','work_event_id','invoice_timesheet_id'].every(k=>uuid.test(m[k]))
-   &&['bound_pay_snapshot_line_id','bound_pay_final_revision_id','bound_pay_projection_receipt_id','published_timesheet_financial_id',
+   &&(m.source_facts_json.published_timesheet_financial_id===null||uuid.test(m.source_facts_json.published_timesheet_financial_id))
+   &&['bound_pay_snapshot_line_id','bound_pay_final_revision_id','bound_pay_projection_receipt_id',
       'report_line_binding_id','bound_row_resolution_id','bound_export_projection_publication_id'].every(k=>uuid.test(m.source_facts_json[k])));
   if(!found.length)fail('REPORT_NATIVE_BOUND_NEGATIVE_GRAIN_UNPROVED');
  }
@@ -90,6 +97,50 @@ export function assertReportPayAuthority(raw,baseBytes,binding){
  }
  return {waiting};
 }
+export function validateNegativeProvenance(entries,context){
+ const negative=context.basis.rows.filter(row=>row.source_shift_charge_pence<0);
+ if(!Array.isArray(entries)||entries.length!==negative.length||new Set(entries.map(e=>e.report_row_id)).size!==negative.length)fail('REPORT_NATIVE_NEGATIVE_PRIOR_CENSUS_INVALID');
+ for(const e of entries){exact(e,['report_row_id','prior_bytes','prior_movement','prior_binding','prior_upload_row','prior_report','prior_revision',
+   'pay_snapshot','pay_revision','pay_receipt','pay_financial_identity'],'REPORT_NATIVE_NEGATIVE_PRIOR_ENTRY_INVALID');
+  const row=negative.find(row=>row.id===e.report_row_id),movement=context.financial.movements.find(m=>m.self_bill_report_row_id===e.report_row_id);
+  if(!row||!movement)fail('REPORT_NATIVE_NEGATIVE_PRIOR_UNBOUND');
+  if(e.prior_bytes===null){
+   if(movement.movement_role!=='STANDALONE_NEGATIVE'||movement.prior_movement_id!==null
+    ||['prior_movement','prior_binding','prior_upload_row','prior_report','prior_revision','pay_snapshot','pay_revision','pay_receipt'].some(k=>e[k]!==null)
+    ||['candidate_id','contract_id','work_event_id','invoice_timesheet_id'].some(k=>movement[k]!==null))fail('REPORT_NATIVE_STANDALONE_PRIOR_CHANGED');
+   const identity=e.pay_financial_identity;exact(identity,['id','timesheet_id','client_id','candidate_id'],'REPORT_NATIVE_PRIOR_FINANCIAL_IDENTITY_INVALID');
+   if(Object.values(identity).some(v=>v!==null))fail('REPORT_NATIVE_STANDALONE_FINANCIAL_ORIGIN_INVENTED');continue;
+  }
+  const selected=decode(e.prior_bytes),prior=e.prior_movement,b=e.prior_binding,original=e.prior_upload_row,report=e.prior_report,revision=e.prior_revision,
+   facts=prior?.source_facts_json,paySnapshot=e.pay_snapshot,payRevision=e.pay_revision,receipt=e.pay_receipt;
+  exact(selected,['prior_movement_id','row_id','resolution_id','publication_id','work_event_id'],'REPORT_NATIVE_PRIOR_SELECTOR_INVALID');
+  if(movement.movement_role!=='REVERSAL'||movement.prior_movement_id!==selected.prior_movement_id||prior?.id!==selected.prior_movement_id
+   ||prior.source_line_kind!=='SELF_BILL_REPORT_LINE'||prior.source_profile_kind!=='SELF_BILL_REPORT'||prior.movement_role!=='POSITIVE'
+   ||prior.actual_client_id!==context.basis.scope.client_id||prior.self_bill_report_row_id!==original?.id
+   ||original.external_source_key!==row.external_source_key||original.source_shift_charge_pence<=0
+   ||facts?.report_line_binding_id!==b?.id||b.report_row_id!==original.id||b.self_bill_report_id!==report?.id
+   ||b.export_upload_row_id!==selected.row_id||b.bound_row_resolution_id!==selected.resolution_id||b.export_projection_publication_id!==selected.publication_id
+   ||b.work_event_id!==selected.work_event_id||prior.work_event_id!==b.work_event_id||revision?.id!==prior.final_revision_id
+   ||revision.state!=='CURRENT'||revision.authority_scope_kind!=='SELF_BILL_REPORT_SCOPE'||revision.report_scope_id!==facts.report_scope_id
+   ||report.source_group_id!==context.basis.scope.source_group_id||report.client_id!==context.basis.scope.client_id
+   ||typeof report.invoice_date!=='string'||typeof context.basis.report.invoice_date!=='string'||report.invoice_date>=context.basis.report.invoice_date
+   ||['candidate_id','contract_id','work_event_id','invoice_timesheet_id'].some(k=>!uuid.test(prior[k])||movement[k]!==prior[k])
+   ||!context.basis.authorization.fixture_manifest.candidate_ids.includes(prior.candidate_id)
+   ||!context.basis.authorization.fixture_manifest.contract_ids.includes(prior.contract_id))fail('REPORT_NATIVE_BOUND_PRIOR_PROVENANCE_INVALID');
+  if(paySnapshot?.id!==facts.bound_pay_snapshot_line_id||payRevision?.id!==facts.bound_pay_final_revision_id||receipt?.id!==facts.bound_pay_projection_receipt_id
+   ||paySnapshot.final_revision_id!==payRevision.id||paySnapshot.work_event_id!==prior.work_event_id||paySnapshot.client_id!==prior.actual_client_id
+   ||paySnapshot.contract_id!==prior.contract_id||paySnapshot.candidate_id!==prior.candidate_id
+   ||receipt.final_revision_id!==payRevision.id||receipt.root_timesheet_id!==prior.invoice_timesheet_id||receipt.client_id!==prior.actual_client_id
+   ||receipt.published_timesheet_financial_id!==facts.published_timesheet_financial_id)fail('REPORT_NATIVE_BOUND_PRIOR_PAY_PROVENANCE_INVALID');
+  for(const key of ['bound_pay_snapshot_line_id','bound_pay_final_revision_id','bound_pay_projection_receipt_id','published_timesheet_financial_id'])
+   if(movement.source_facts_json[key]!==facts[key])fail('REPORT_NATIVE_REVERSAL_PAY_WITNESS_CHANGED');
+  const identity=e.pay_financial_identity;exact(identity,['id','timesheet_id','client_id','candidate_id'],'REPORT_NATIVE_PRIOR_FINANCIAL_IDENTITY_INVALID');
+  if(facts.published_timesheet_financial_id===null){if(Object.values(identity).some(v=>v!==null))fail('REPORT_NATIVE_PRIOR_FINANCIAL_ORIGIN_INVENTED');}
+  else if(identity.id!==facts.published_timesheet_financial_id||identity.timesheet_id!==prior.invoice_timesheet_id||identity.client_id!==prior.actual_client_id||identity.candidate_id!==prior.candidate_id)
+   fail('REPORT_NATIVE_PRIOR_FINANCIAL_IDENTITY_CHANGED');
+ }
+ return true;
+}
 function mount(execution){
  if(reportFinNativeSeal===null)return null;
  exact(reportFinNativeSeal,['schema_version','contract_sha256','managed_manifest_sha256','installed_catalogue_jsonb_sha256','owners','hooks','effect_relations','mapper_query_sha256','tool_source_sha256'], 'REPORT_NATIVE_SEAL_INVALID');
@@ -97,7 +148,8 @@ function mount(execution){
   ||!['contract_sha256','managed_manifest_sha256','installed_catalogue_jsonb_sha256'].every(k=>hex.test(reportFinNativeSeal[k])&&reportFinNativeSeal[k]===execution[k])
   ||!Array.isArray(reportFinNativeSeal.owners)||reportFinNativeSeal.owners.length!==reportFinNativeOwnerSignatures.length
   ||new Set(reportFinNativeSeal.owners.map(o=>o.signature)).size!==reportFinNativeOwnerSignatures.length
-  ||reportFinNativeSeal.owners.some(o=>{exact(o,['signature','definition_sha256'],'REPORT_NATIVE_SEAL_INVALID');return !reportFinNativeOwnerSignatures.includes(o.signature)||!hex.test(o.definition_sha256);})
+  ||reportFinNativeSeal.owners.some(o=>{exact(o,['signature','definition_sha256','anon_execute','authenticated_execute'],'REPORT_NATIVE_SEAL_INVALID');return !reportFinNativeOwnerSignatures.includes(o.signature)||!hex.test(o.definition_sha256)
+    ||typeof o.anon_execute!=='boolean'||typeof o.authenticated_execute!=='boolean';})
   ||!Array.isArray(reportFinNativeSeal.hooks)||!reportFinNativeSeal.hooks.length||reportFinNativeSeal.hooks.length>1024
   ||!same(reportFinNativeSeal.effect_relations,nativeEffectRelations)
   ||reportFinNativeSeal.mapper_query_sha256!==sha256(reportNativeMapperQueries.toString())||!hex.test(reportFinNativeSeal.tool_source_sha256))
@@ -156,13 +208,18 @@ export function reportNativeMapperQueries(nativeRequest,authorization){
     (select coalesce(jsonb_agg(to_jsonb(f) order by f.id),'[]'::jsonb) from public.timesheets_financials f where f.timesheet_id=t.timesheet_id)),'hex')) order by t.timesheet_id),'[]'::jsonb)::text
    from public.timesheets t join public.contracts c on c.id=t.contract_id where t.contract_id=any(array[${contracts}]::uuid[]) and t.is_current
     and not t.is_adjustment and t.revoked_at is null and t.archived_at_utc is null;`,
+  hooks:`select coalesce(jsonb_agg(jsonb_build_object('schema',namespace.nspname,'table',relation.relname,'name',trigger.tgname,'enabled',trigger.tgenabled::text,
+    'definition_sha256',encode(extensions.digest(pg_get_triggerdef(trigger.oid,true),'sha256'),'hex'),
+    'function_definition_sha256',encode(extensions.digest(pg_get_functiondef(trigger.tgfoid),'sha256'),'hex')) order by namespace.nspname,relation.relname,trigger.tgname),'[]'::jsonb)::text
+    from pg_trigger trigger join pg_class relation on relation.oid=trigger.tgrelid join pg_namespace namespace on namespace.oid=relation.relnamespace
+    where not trigger.tgisinternal and namespace.nspname in ('public','private');`,
   effects:'select jsonb_build_array('+nativeEffectRelations.map(table=>`jsonb_build_object('relation',${q(table)},'row_count',(select count(*)::text from ${table}),
     'rows_sha256',encode(private.weekly_source_sha256_jsonb_v1('REPORT_NATIVE_NO_EXTERNAL_EFFECTS_V1',
      (select coalesce(jsonb_agg(to_jsonb(row) order by to_jsonb(row)::text),'[]'::jsonb) from ${table} row)),'hex'))`).join(',')+')::text;'
  };
 }
 function result(name,sql,bytes){decode(bytes);return {query_id:name,query_sha256:sha256(sql),result_bytes:bytes,result_sha256:sha256(bytes)};}
-const beforeNames=['session','owners','roots','empty_set','pay_authorities','priors','inventories','next_control','ordinary_rows','effects'];
+const beforeNames=['session','owners','hooks','roots','empty_set','pay_authorities','priors','inventories','next_control','ordinary_rows','effects'];
 export function reportNativeI1ProbeSql(candidateId,rootIds,jobType){
  if(!uuid.test(candidateId)||!Array.isArray(rootIds)||!rootIds.length||rootIds.some(id=>!uuid.test(id))||new Set(rootIds).size!==rootIds.length
   ||!nativeCandidateJobTypes.includes(jobType))fail('REPORT_NATIVE_I1_PROBE_REQUEST_INVALID');
@@ -215,7 +272,7 @@ function boundRecord(record,name,context){
 export function validateNativeOrdinaryFinJourneys(journeys,context){
  if(!Array.isArray(journeys)||journeys.length!==2||new Set(journeys.map(j=>j.source_mode)).size!==2)fail('REPORT_NATIVE_ORDINARY_JOURNEY_CENSUS_INVALID');
  for(const j of journeys){exact(j,['schema_version','source_mode','owner_signature','owner_definition_sha256','argument_bytes','native_result_bytes',
-   'source_capture_bytes','pay_capture_bytes','native_tool_receipt_bytes'],'REPORT_NATIVE_ORDINARY_JOURNEY_INVALID');
+   'source_capture_bytes','pay_capture_bytes','native_tool_receipt_bytes','native_lock_observation'],'REPORT_NATIVE_ORDINARY_JOURNEY_INVALID');
   if(j.schema_version!=='WEEKLY_SOURCE_REPORT_FIN_ORDINARY_NATIVE_JOURNEY_V1'||!['HEALTHROSTER_WEEKLY','NHSP_WEEKLY'].includes(j.source_mode)
    ||j.owner_signature!==reportFinNativeOwnerSignatures[0]||!hex.test(j.owner_definition_sha256))fail('REPORT_NATIVE_ORDINARY_JOURNEY_OWNER_INVALID');
   const mounted=reportFinNativeSeal?.owners.find(o=>o.signature===j.owner_signature);
@@ -223,14 +280,17 @@ export function validateNativeOrdinaryFinJourneys(journeys,context){
   const args=decode(j.argument_bytes);exact(args,['p_request','p_correction_session_id','p_prepare_only','p_report_vat_rounding_variant'],'REPORT_NATIVE_ORDINARY_FIN_ARGUMENTS_INVALID');
   const r=args.p_request;
   if(!r||r.actor_user_id!==context.native_request.actor_user_id||!uuid.test(r.source_cycle_id)||!uuid.test(r.upload_id)
-   ||!uuid.test(r.projection_publication_id)||!['CYCLE','WINDOW'].includes(r.authority_scope_kind)
+   ||!uuid.test(r.projection_publication_id)||!['CYCLE','NHSP_REPORT_SCOPE'].includes(r.authority_scope_kind)
    ||args.p_correction_session_id!==null||args.p_prepare_only!==false||args.p_report_vat_rounding_variant!=='A'
    ||!Number.isSafeInteger(r.expected_authority_scope_version)||r.expected_authority_scope_version<1
    ||!['expected_row_manifest_hash','expected_comparison_manifest_hash','expected_issue_set_hash'].every(k=>hex.test(r[k])))fail('REPORT_NATIVE_ORDINARY_FIN_ARGUMENTS_INVALID');
+  nativeOrdinaryRequestSha256(r);
+  const lock=validateNativeFinLockObservation(j.native_lock_observation,{execution:context.execution,actor_user_id:r.actor_user_id,
+   backend_pid:context.backend_pid,transaction_id:context.transaction_id,native_result_bytes:j.native_result_bytes,native_argument_bytes:j.argument_bytes});
   const native=decode(j.native_result_bytes),source=decode(j.source_capture_bytes),pay=decode(j.pay_capture_bytes);
   if(native.ok!==true||native.status!=='FINALISED'||native.invoice_only===true||!uuid.test(native.final_revision_id)||native.source_cycle_id!==r.source_cycle_id)fail('REPORT_NATIVE_ORDINARY_FIN_RESULT_INVALID');
   exact(source,['source_cycle_id','source_group_id','upload_id','source_mode','revision','rows'],'REPORT_NATIVE_ORDINARY_SOURCE_INVALID');
-  if(source.source_cycle_id!==r.source_cycle_id||source.source_group_id!==context.basis.scope.source_group_id||source.upload_id!==r.upload_id||source.source_mode!==j.source_mode
+  if(source.source_cycle_id!==r.source_cycle_id||source.source_group_id!==lock.command.authorization.source_group_id||source.upload_id!==r.upload_id||source.source_mode!==j.source_mode
    ||source.revision?.id!==native.final_revision_id||source.revision.source_cycle_id!==r.source_cycle_id||source.revision.upload_id!==r.upload_id
    ||source.revision.state!=='CURRENT'||source.revision.authority_scope_kind!==r.authority_scope_kind
    ||!Array.isArray(source.rows)||!source.rows.length||source.rows.length>10000||new Set(source.rows.map(row=>row.id)).size!==source.rows.length
@@ -268,11 +328,14 @@ function validateOrdinarySlot(slot,context,waiting){
 export function validateNextOrigin(n){
  exact(n,['ok','code','work_id','owner_epoch','current_revision_id','applied_revision_id','source_event_id','source_head_id','financial_snapshot_id',
   'physical_root_id','physical_root_version','revision_seal','source_inventory_digest','application_state','command_id','agency_sequence','financial_view_revision'],'REPORT_NATIVE_NEXT_ORIGIN_INVALID');
- if(n.ok!==true||n.code!=='OK'||n.application_state!=='APPLIED'||!uuid.test(n.work_id)||!uuid.test(n.current_revision_id)||!uuid.test(n.applied_revision_id)
+ if(!['APPLIED','PENDING','UNAVAILABLE','INCOMPATIBLE'].includes(n.application_state)||typeof n.ok!=='boolean'
+  ||!['OK','UNAVAILABLE','INCOMPATIBLE'].includes(n.code)||['APPLIED','PENDING'].includes(n.application_state)!==(n.ok===true))fail('REPORT_NATIVE_NEXT_ORIGIN_INVALID');
+ if(n.application_state!=='APPLIED')return {qualified:false,waiting:['native_next_application_'+n.application_state.toLowerCase()]};
+ if(n.ok!==true||n.code!=='OK'||!uuid.test(n.work_id)||!uuid.test(n.current_revision_id)||!uuid.test(n.applied_revision_id)
   ||!uuid.test(n.command_id)||!uuid.test(n.physical_root_id)||!hex.test(n.revision_seal)||!hex.test(n.source_inventory_digest)
   ||n.physical_root_version===null||n.owner_epoch===null||n.agency_sequence===null||n.financial_view_revision===null
   ||n.source_head_id===null&&n.financial_snapshot_id===null)fail('REPORT_NATIVE_NEXT_ORIGIN_UNPROVED');
- return true;
+ return {qualified:true,waiting:[]};
 }
 export function validateNativeToolReceipt(receipt,context,required={}){
  exact(receipt,['schema_version','execution','tool_id','tool_source_sha256','actor_user_id','database','backend_pid','transaction_id',
@@ -325,8 +388,9 @@ export function validateReportNativeGateFacts(raw,context){
   if(session.database!=='cloudtms_test_clone'||session.backend_pid!==context.backend_pid||session.transaction_id!==context.transaction_id
    ||session.is_owner!==true||session.current_user!==session.session_user||session.managed_shared_lock!==true
    ||session.actor?.id!==context.native_request.actor_user_id||session.actor?.is_active!==true||String(session.actor?.role).toLowerCase()!=='admin')fail('REPORT_NATIVE_MAPPER_SESSION_INVALID');
-  if(!Array.isArray(decoded.owners)||decoded.owners.length!==seal.owners.length||decoded.owners.some(o=>!seal.owners.some(p=>p.signature===o.signature&&p.definition_sha256===o.definition_sha256)
-    ||o.anon_execute!==false||o.authenticated_execute!==false))fail('REPORT_NATIVE_MAPPER_OWNER_CHANGED');
+  if(!Array.isArray(decoded.owners)||decoded.owners.length!==seal.owners.length||new Set(decoded.owners.map(o=>o.signature)).size!==seal.owners.length
+   ||decoded.owners.some(o=>!seal.owners.some(p=>p.signature===o.signature&&p.definition_sha256===o.definition_sha256&&p.anon_execute===o.anon_execute&&p.authenticated_execute===o.authenticated_execute)))fail('REPORT_NATIVE_MAPPER_OWNER_CHANGED');
+  if(!Array.isArray(decoded.hooks)||decoded.hooks.length!==seal.hooks.length||!same(decoded.hooks,seal.hooks))fail('REPORT_NATIVE_CURRENT_HOOK_CENSUS_CHANGED');
   exact(decoded.empty_set,['ok','code','retryable','reason'],'REPORT_NATIVE_I1_EMPTY_SET_INVALID');
   if(decoded.empty_set.ok!==false||decoded.empty_set.code!=='WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE'||decoded.empty_set.retryable!==false||decoded.empty_set.reason!=='NO_REQUESTED_ROOTS')fail('REPORT_NATIVE_I1_EMPTY_SET_INVALID');
   if(!Array.isArray(decoded.pay_authorities)||decoded.pay_authorities.length!==context.basis.bindings.filter(b=>b.state==='CURRENT').length)fail('REPORT_NATIVE_MAPPER_BINDING_CENSUS_CHANGED');
@@ -370,7 +434,7 @@ export function validateReportNativeGateFacts(raw,context){
    const control=decode(records.find(r=>r.query_id==='next_control').result_bytes);
    if(control.active_owner!=='NEXT')waiting.push('native_next_active_owner');
    const next=authorities.filter(a=>a.native_pay_position==='DIRECT_NEXT_PUBLISHED').map(a=>a.next_application);
-   if(!next.length)waiting.push('native_actual_next_applied_origin');for(const n of next)validateNextOrigin(n);
+   if(!next.length)waiting.push('native_actual_next_applied_origin');for(const n of next)waiting.push(...validateNextOrigin(n).waiting);
   }
  }
  return {waiting:[...new Set(waiting)]};

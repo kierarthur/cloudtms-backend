@@ -1,0 +1,16 @@
+-- Final Report native successors after canonical Money0430.
+-- Source presence supplies no native qualification or activation.
+\set ON_ERROR_STOP on
+begin;
+\ir 14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc
+\ir 14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc
+notify pgrst, 'reload schema';
+commit;
