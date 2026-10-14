@@ -3,7 +3,7 @@
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 83,
+    "passed": 86,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -189,6 +189,22 @@
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-open-review.reverse.jsinc",
       "saved_sha256": "8a758f06863993c4284670f437e41e265bfc8ccaaf4da83c2a74afe0ba192c68"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_historical_submission_manifest.sqlinc",
+      "saved_sha256": "be3e4e6aa7b3599d1461267dcb711665521307468ee1af2e7432edb6d32d17e4"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_historical_submission_prepare.sqlinc",
+      "saved_sha256": "8e58767712bb46314b2c053f675ab5724c41d8a9ae7a6ae01d0a0f8fe3f2a80b"
+    },
+    {
+      "path": "tests/healthroster-checklist-historical-source.test.mjs",
+      "saved_sha256": "5c4151c270e9b3bfa42cc6695d8decd4aa5fa9aa036ad93a9974da5e7cefb5f3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/HISTORICAL_PREPARATION_WIP.md",
+      "saved_sha256": "13b452fe0c1bc076742353c894feb0912ec842292824efaf34f51d17bbfb916d"
     }
   ],
   "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
@@ -346,7 +362,7 @@
     "HISTORICAL_REAL_WITNESS_PREPARATION_CALLER_REQUIRED_BEFORE_FEATURE_ON",
     "D10_BOUND_REVIEW_NAVIGATION_OFFICE_MOUNT_AND_NATIVE_ACTOR_PREVIEW_ACCEPTANCE"
   ],
-  "predecessor_source_increment": "144e49b9ec630ad15d6dc61d7e8637530fbc615e",
+  "predecessor_source_increment": "8c1727a77f8840527afe8266ec928abb988df2ab",
   "db_source_check": {
     "passed": true,
     "migrations": 399,
@@ -390,5 +406,11 @@
     "finding": "P1-D10-ACTOR1",
     "successor_disposition": "WHOLE_ACTUAL_CALLER_SESSION_CONTINUATIONS_CORRECTED_AWAITING_INDEPENDENT_SOURCE_CLOSURE",
     "native_UI_executed": false
+  },
+  "historical_preparation_checkpoint": {
+    "status": "UNQUALIFIED_SOURCE_WIP_CALLER_NOT_BUILT",
+    "native_SQL_executed": false,
+    "mounted": false,
+    "feature_on": false
   }
 }
