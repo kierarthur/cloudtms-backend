@@ -1,0 +1,162 @@
+{
+  "status": "SOURCE_CHECKPOINT_PASS",
+  "predecessorSource": "f7526663331456358707c8bde8d4ad8acbbef359",
+  "recordedAt": "2026-10-14T11:59:31.458Z",
+  "pins": [
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "45c120e90133fe49a06477d7a06dde2f41ac0b09052bf1d5489b90a088f640c4"
+    },
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "sha256": "14c21bfa1d6655269308686b95f5a73fc0ff9ff21b4a1936d22e26b94eee78c3"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "e42abecdf4b963b1b411cd68fb970d0c49cb885fad0452a409b79ad222e4a9d7"
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "sha256": "c930f408d0d060dd35dfad8b1be4ab3e529d3df92a9b89c684adb932eee5aea0"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/POST_RESTART_ROUTE_HEALTH_14102026.json",
+      "sha256": "d8c200b221cf94b33a83ea2121867d745daf8fcbf6420bd6da203cbd1e8cc726"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_CONCLUSION_AND_RETRY_14102026.md",
+      "sha256": "2579b4fb322d347f4d2321a42dd6f68f357fb44c37fa955c348b0d5cad99ebdb"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_CRI_JSON_MESSAGES_14102026.json",
+      "sha256": "a3d69bbffd93d134134ea3cb7d00d39e86e62b13c8cab19267d1ff2d9951fcb2"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_EXACT_INSTANCE_LOGS_14102026.json",
+      "sha256": "a84d800472263c519a6a796fc251604b3db0d4c77b2a4b819e77a8ac08010a22"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_MINIMAL_LAB_14102026.json",
+      "sha256": "bcc79d26dfdea0a4dabe338bfae9f6e0d3f9928535734aa20484aa85e86da2b0"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_MINIMAL_OWN_CLOSE_PROOF_14102026.json",
+      "sha256": "1f2596cdf713f0a40b373010eb6119c925739d6e1b081cab01e72feb2c0087ed"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_PLAIN_POSTGRES_MESSAGES_14102026.json",
+      "sha256": "c37233040e3b9ddc526b8817a56cbf6bd4681576a2225f030809456b891c5bda"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_RESOURCE_ACTUAL_PREFLIGHT_14102026.json",
+      "sha256": "f5c0ac7b19f80f738d4d1cd6546f013ca049c994e722f6eab32c06873e384513"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_RESOURCE_LABELS_14102026.json",
+      "sha256": "4076758274133e5d5d7a9f62124aeee7b910cfda747e64ead76c4c57cda4e785"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_RESOURCE_SOURCE_CHECKS_14102026.json",
+      "sha256": "3c8a325d3ac5ba3b370c63d68dda40c2e5bf0b2e355b1df344b6fed8d05d0384"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_RESOURCE_TIMESTAMP_CURRENT_PREFLIGHT_14102026.json",
+      "sha256": "a084c594ca64252128271aec1a359b386c522b0bc02b4266467b4daf4391d1d3"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_RESOURCE_TIMESTAMP_PREFLIGHT_14102026.json",
+      "sha256": "82334f325ed3444adbf71a40afbcc6298682d21a2ae45abbf70700e26d14b279"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_SANITIZED_POD_MESSAGES_14102026.json",
+      "sha256": "846cf55b639a0bf86705a79df7db1d072aa5fad96ccfd80aae8d2cad38ba41f6"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/RESTART_TERMINATION_EVENT_PROBE_14102026.json",
+      "sha256": "a12137221f0d34ba77dbcb930eb45eaf7368d40e36a862a068faeffcd0e0315c"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-resource-guard.mjs",
+      "sha256": "55160d28cd55fd5e710f5dc4d48d0d43769af9986d16a2c7c29dbc134e3e5433"
+    },
+    {
+      "file": "tests/healthroster-rehearsal-resource-guard.test.mjs",
+      "sha256": "2242ee2a60b3e32d285246176e34a2f5587e522fc7480e392a4b3f3ecd086a0d"
+    }
+  ],
+  "syntax": [
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-resource-guard.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "tests/healthroster-rehearsal-resource-guard.test.mjs",
+      "exitCode": 0
+    }
+  ],
+  "credentialMatches": 0,
+  "whitespaceExitCode": 0,
+  "completeDiffs": [
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "beforeSha256": "835feb02401af45d480268e7ce152a40c91e97f3e0be92def99f9713cf323b35",
+      "completeDiffSha256": "2f72c4cdd6011923e8358a4b12bf6fcf30f56c5e0ea4f059d621fd9d3560b24a"
+    },
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "beforeSha256": "b123b4d8a86bdfc127888e0807711a624adef90822993c640e887b72ad1b847c",
+      "completeDiffSha256": "5c4c15098468aa48395df716c42e58fe4ede1a28d58a01a471e419998b13006d"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "beforeSha256": "bdbd63836c82b29e64d1d11f946554dc1293cd00e92b23e5eb6430f9bc933054",
+      "completeDiffSha256": "7adbe58c8bfddf48b47dd746029a0320243eea9ecc2d23f4cfdc271bf290a967"
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "beforeSha256": "400fd8e96029e70d5dc7ab9fb3b132d394d50a4954035cc85a1b8e5a3cad9d9d",
+      "completeDiffSha256": "829efb4c81c523de4000d0a44c3b66dc9c02f34ed08db78613bc92f98a02fb1d"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "beforeSha256": "f718c9b0bce53460e68fd5175b58d99177935ae052a1a31b46909d14ae1c4beb",
+      "completeDiffSha256": "93c00c52baac6e8745519652085a756d402e03cc5d587bbe27f0e82c3174c20e"
+    }
+  ],
+  "sourceSuites": {
+    "fullTenFiles": 113,
+    "latestGuard": 15,
+    "fullTenFilesBeforeFinalAgeBudgetTest": true
+  },
+  "sourceInventory": {
+    "migrations": 389,
+    "repeatables": 1019,
+    "coupling": "PASS"
+  },
+  "nativeFull": "NOT_RUN",
+  "fullRetryConsumed": false
+}

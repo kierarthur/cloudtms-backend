@@ -89,7 +89,13 @@ export function renderFullRehearsalUnits(units, {outerIsolation,observeLiveBusin
       }
     }
     const parts = [`\\echo HR_FILE_BEGIN ${index}`, 'reset role;', 'reset session authorization;',
-      'set local jit=off;', 'set local pg_show_plans.is_enabled=off;', 'set local statement_timeout=0;'];
+      // Managed release verifiers normally get fresh backends. The single outer
+      // rehearsal transaction must not retain every previous unit's plan cache.
+      // PLANS preserves the transaction, locks, objects, roles and every body.
+      'discard plans;',
+      'set local jit=off;', 'set local pg_show_plans.is_enabled=off;', 'set local statement_timeout=0;',
+      'set local work_mem=\'4MB\';', 'set local hash_mem_multiplier=1;',
+      'set local max_parallel_workers_per_gather=0;', 'set local client_connection_check_interval=\'1s\';'];
     // psql variables are client state: SQL savepoint rollback cannot clear them.
     // Keep each verifier's own internal set/if behavior, with no predecessor leak.
     const clientVariables = [...new Set(['weekly_source_verification_outer_transaction',

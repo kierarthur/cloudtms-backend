@@ -46,7 +46,7 @@ try{
   [npmCli,['run','db:contract:coupling']],
   ['--test',['tests/bpay-next-source-gates.test.js','tests/bpay-next-legacy-fence.test.js','tests/bpay-next-final-definers.test.js']],
   ['--test',['tests/database-release-system.test.mjs','tests/automatic-test-release-policy.test.mjs']],
-  ['--test',['tests/healthroster-install1-full-rehearsal.test.mjs','tests/healthroster-install1-native-coordinator.test.mjs','tests/healthroster-source-check-environment.test.mjs','tests/healthroster-turn-control.test.mjs','tests/healthroster-receipt-journal.test.mjs','tests/healthroster-rehearsal-turn.test.mjs','tests/healthroster-full-rehearsal-protocol.test.mjs','tests/healthroster-live-test-restoration.test.mjs','tests/healthroster-rehearsal-stream-observer.test.mjs']],
+  ['--test',['tests/healthroster-install1-full-rehearsal.test.mjs','tests/healthroster-install1-native-coordinator.test.mjs','tests/healthroster-source-check-environment.test.mjs','tests/healthroster-turn-control.test.mjs','tests/healthroster-receipt-journal.test.mjs','tests/healthroster-rehearsal-turn.test.mjs','tests/healthroster-full-rehearsal-protocol.test.mjs','tests/healthroster-live-test-restoration.test.mjs','tests/healthroster-rehearsal-stream-observer.test.mjs','tests/healthroster-rehearsal-resource-guard.test.mjs']],
   ['--test',['tests/weekly-source/weekly-source-pay-authority-sql.test.mjs','tests/weekly-source/weekly-source-pay-view.test.mjs','tests/weekly-source/weekly-source-pay-auth-transport.test.mjs','tests/weekly-source/weekly-source-office-presentation-integration.test.mjs']]
  ];
  for(const [checkIndex,[entry,args]] of checks.entries()){const began=Date.now();

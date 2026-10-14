@@ -1,0 +1,48 @@
+{
+  "status": "FRESH_NATIVE_RESOURCE_FRAME_PASS",
+  "recordedAt": "2026-10-14T11:54:53.480Z",
+  "sample": {
+    "service": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+    "pod": "postgres-service-p0qoe-1",
+    "namespace": "migetuq4",
+    "observedAt": "2026-10-14T11:54:54.515Z",
+    "metricTimes": {
+      "miget_instance_memory_used_bytes": {
+        "evaluatedAt": 1791978894.515,
+        "sampledAt": 1791978883.876
+      },
+      "miget_instance_resource_limit": {
+        "evaluatedAt": 1791978894.515,
+        "sampledAt": 1791978883.876
+      },
+      "miget_instance_restarts_total": {
+        "evaluatedAt": 1791978894.515,
+        "sampledAt": 1791978887.747
+      },
+      "miget_instance_oom_events_total": {
+        "evaluatedAt": 1791978894.515,
+        "sampledAt": 1791978870.834
+      },
+      "miget_volume_used_bytes": {
+        "evaluatedAt": 1791978894.515,
+        "sampledAt": 1791978883.146
+      },
+      "miget_volume_size_bytes": {
+        "evaluatedAt": 1791978894.515,
+        "sampledAt": 1791978883.146
+      }
+    },
+    "memoryUsed": 1877217280,
+    "memoryLimit": 4294967296,
+    "volumeUsed": 4884107264,
+    "volumeLimit": 52804530176,
+    "restarts": 2,
+    "oomEvents": 0
+  },
+  "limits": {
+    "evaluationAgeSeconds": 15,
+    "memorySampleAgeSeconds": 30,
+    "otherExporterSampleAgeSeconds": 90
+  },
+  "fullRetryConsumed": false
+}

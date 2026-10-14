@@ -1,0 +1,68 @@
+{
+  "status": "RESOURCE_TIMESTAMP_HOLD",
+  "recordedAt": "2026-10-14T11:54:08.378Z",
+  "code": "REHEARSAL_RESOURCE_SAMPLE_STALE",
+  "times": [
+    {
+      "metric": "miget_volume_size_bytes",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": 25.231000185012817
+    },
+    {
+      "metric": "miget_volume_used_bytes",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": 25.231000185012817
+    },
+    {
+      "metric": "miget_instance_oom_events_total",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": 39.36800003051758
+    },
+    {
+      "metric": "miget_instance_restarts_total",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": 20.630000114440918
+    },
+    {
+      "metric": "miget_instance_resource_limit",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": -0.12299990653991699
+    },
+    {
+      "metric": "miget_instance_memory_used_bytes",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": -0.12299990653991699
+    },
+    {
+      "metric": "miget_volume_size_bytes",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": null
+    },
+    {
+      "metric": "miget_volume_used_bytes",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": null
+    },
+    {
+      "metric": "miget_instance_oom_events_total",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": null
+    },
+    {
+      "metric": "miget_instance_restarts_total",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": null
+    },
+    {
+      "metric": "miget_instance_resource_limit",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": null
+    },
+    {
+      "metric": "miget_instance_memory_used_bytes",
+      "evaluatedAge": -1.060999870300293,
+      "sampleAge": null
+    }
+  ],
+  "fullRetryConsumed": false
+}

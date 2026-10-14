@@ -1,0 +1,62 @@
+{
+  "status": "READ_ONLY_EXACT_TEST_TERMINATION_EVENT_QUERY",
+  "checkedAt": "2026-10-14T11:25:52.941Z",
+  "results": [
+    {
+      "name": "kube_pod_container_status_last_terminated_reason",
+      "http": 200,
+      "series": []
+    },
+    {
+      "name": "kube_pod_container_status_last_terminated_exitcode",
+      "http": 200,
+      "series": []
+    },
+    {
+      "name": "kube_pod_container_status_last_terminated_timestamp",
+      "http": 200,
+      "series": []
+    },
+    {
+      "name": "kube_pod_status_reason",
+      "http": 200,
+      "series": []
+    },
+    {
+      "name": "kube_pod_container_status_waiting_reason",
+      "http": 200,
+      "series": []
+    },
+    {
+      "name": "container_memory_failcnt",
+      "http": 200,
+      "series": []
+    },
+    {
+      "name": "container_oom_events_total",
+      "http": 200,
+      "series": []
+    }
+  ],
+  "settings": [
+    {
+      "uuid": "01a02f5a-2c06-7b15-a071-37ddf6bdab6a",
+      "state": "running",
+      "processing_reason": null,
+      "fields": [
+        "version",
+        "public_access",
+        "cloudnative",
+        "instances",
+        "backup_enabled",
+        "scheduled_backup"
+      ],
+      "allocation": {
+        "instances": 1
+      }
+    }
+  ],
+  "serviceEventEndpointAdvertised": false,
+  "mutations": false,
+  "secretsReturned": false
+}

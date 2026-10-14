@@ -1,0 +1,23 @@
+{
+  "status": "ACTUAL_READ_ONLY_RESOURCE_GUARD_PREFLIGHT_PASS",
+  "observed": {
+    "service": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+    "pod": "postgres-service-p0qoe-1",
+    "namespace": "migetuq4",
+    "observedAt": "2026-10-14T11:39:28.323Z",
+    "memoryUsed": 1888002048,
+    "memoryLimit": 4294967296,
+    "volumeUsed": 4884082688,
+    "volumeLimit": 52804530176,
+    "restarts": 2,
+    "oomEvents": 0
+  },
+  "policy": {
+    "memoryStopBytes": 3221225472,
+    "minimumFreeBytes": 4294967296,
+    "intervalMs": 5000
+  },
+  "sqlExecuted": false,
+  "childOpened": false,
+  "mutations": false
+}

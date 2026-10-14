@@ -14,6 +14,7 @@ import {createReceiptJournal,latestBusyTimestamp} from './healthroster-receipt-j
 import {freshFixtureProofSql,qualifyLiveRestoration} from './healthroster-live-test-restoration.mjs';
 import assert from 'node:assert/strict';
 import {createRehearsalStreamObserver} from './healthroster-rehearsal-stream-observer.mjs';
+import {createRehearsalResourceGuard,createMigetRehearsalResourceReader} from './healthroster-rehearsal-resource-guard.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
@@ -134,9 +135,20 @@ export async function runNativeInstall1(){
        else {receipt.partialDiagnostics??=[];receipt.partialDiagnostics.push(value);}
        try{journal.checkpoint(value,{progress:true});}catch(error){receipt.receiptPersistenceFailed=true;throw error;}
       }});
-      const observedTurn={...turn,runOwnedChild:options=>turn.runOwnedChild({...options,options:{...options.options,onStdout:observer.onStdout,onStderr:observer.onStderr}})};
+      const local=Object.fromEntries(fs.readFileSync(path.join(workspace,'cloudtms-backend/.codex-tmp/miget-poc.env'),'utf8')
+       .split(/\r?\n/).filter(line=>line.includes('=')&&!line.trim().startsWith('#')).map(line=>{const at=line.indexOf('=');return[line.slice(0,at).trim(),line.slice(at+1).trim()];}));
+      requireThat(!!local.MIGET_API_TOKEN,'OWN_APPROVED_RESOURCE_OBSERVATION_TOKEN_REQUIRED');
+      const readSample=createMigetRehearsalResourceReader({headers:{authorization:'Bearer '+local.MIGET_API_TOKEN,accept:'application/json',
+       ...local.MIGET_WORKSPACE_ID?{'X-Workspace-Id':local.MIGET_WORKSPACE_ID}:{}}});
+      const resourceGuard=createRehearsalResourceGuard({readSample,onSample(sample){
+       receipt.resourceProgress=sample;receipt.resourceMaxima={memoryUsed:Math.max(receipt.resourceMaxima?.memoryUsed??0,sample.memoryUsed),
+        volumeUsed:Math.max(receipt.resourceMaxima?.volumeUsed??0,sample.volumeUsed)};
+       journal.checkpoint({kind:'OWN_REHEARSAL_RESOURCE_OBSERVATION',...sample},{progress:true});
+      }});
+      receipt.resourceLimits=await resourceGuard.prepare();save();
+      const observedTurn={...turn,runOwnedChild:options=>turn.runOwnedChild({...options,resourceGuard,options:{...options.options,onStdout:observer.onStdout,onStderr:observer.onStderr}})};
       let execution;try{execution=await executePsqlWithinOwnedTurn({...input,turn:observedTurn,psqlPath,env:agencyChildEnvironment('healthroster_install1_full')});}
-      finally{receipt.partialStreamSummary=observer.summary();save({continueRestoration:true});}
+      finally{receipt.partialStreamSummary=observer.summary();receipt.resourceGuard=await resourceGuard.stop();save({continueRestoration:true});}
       nativeExecution=execution;receipt.execution=publicExecution(execution);receipt.errors=execution.errors;receipt.status='FULL_REHEARSAL_SQL_COMPLETED';save();return execution;},
      async freshAfter(){const after={...await snapshot(),connectedFresh:true};receipt.after=publicSnapshot(after);
       const prior=new Map((receipt.before?.businessRelations??[]).map(row=>[row.relation,row]));

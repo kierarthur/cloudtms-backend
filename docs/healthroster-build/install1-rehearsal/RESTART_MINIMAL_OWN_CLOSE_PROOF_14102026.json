@@ -1,0 +1,12 @@
+{
+  "exactTest": true,
+  "ownTurnPidAbsent": true,
+  "ownTurnLockAbsent": true,
+  "ownRehearsalSessions": 0,
+  "status": "MINIMAL_PRECHECK_OWN_TTY_CLOSED_FRESH_ABSENCE_PROVED",
+  "explicitUnlockConfirmed": false,
+  "onlyOwnLocalExecSessionStopped": 15881,
+  "backendPid": 8594,
+  "fullRehearsalRetryConsumed": false,
+  "checkedAt": "2026-10-14T11:44:42.275Z"
+}
