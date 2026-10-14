@@ -1,0 +1,11 @@
+{
+  "activity": [],
+  "database": "cloudtms_test_clone",
+  "observedAt": "2026-10-14T16:08:56.936916+00:00",
+  "latestRelease": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "status": "VERIFIED"
+  },
+  "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+  "ownTurnStillPresent": false
+}

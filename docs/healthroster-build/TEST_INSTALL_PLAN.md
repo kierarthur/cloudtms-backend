@@ -1,3 +1,17 @@
+# Latest HealthRoster install status — 14 October 2026
+
+Install 1 is complete. Installed source f743b81fe537830d81b1de93ec4f9cb0331532a7 passed protected run38583323424 with all158 verifiers and matching7e3 contract. Four Workers then Office8ea published in order; active versions and served assets were read back. The shared turn was explicitly released and closed at16:06:33.336UTC. The actual WP-PP receipt and bounded evidence were published on backend test in docs-only successor912297ab79b48633b66d806d128ff00a9a9cd83d, after fresh non-forced ancestry and Banking completion checks. No further full Install1 rehearsal or forward-fix retry occurred. Features remainOFF; no owner response is awaited. See PUBLISHED_HELPERS.md and TEST_INSTALLS.md.
+
+Exactly one normal install remains: Install2 after the remaining code, current canonical classifications/contract, required native and installation gates are complete. Run its full rollback rehearsal under the shared lock, fix/retry up to3 rounds, then protected database first and ordered Workers/Office. Switch only eligible TEST features on after their gates and run genuine acceptance, TestFlight and phone journeys. NEXT-dependent acceptance still waits for Banking's actual F17 switch-on installation; perform all independent acceptance first. One batched forward fix remains conditional on real post-Install2 defects. No piecemeal release.
+
+Remaining native Checklist/Source/Money/Agency/A0 composition and qualification continue in parallel. Native Checklist public producer and genuine Daily historical-cycle preparation are in construction. Money's genuine deferred Missing anchor has an independently found source finding and a separate corrective successor awaiting review; Agency Authorise-phase source awaits review, with typed validation/Return and final latest workspace still construction. The new exact Office Queries target consumer has52 source/whole-caller checks after fixing the critic's reopen leak; it is not published and awaits critic closure/native browser qualification. Source acceptances are not complete financial/race/API/app gates. Allow several active hours per remaining area and roughly1–3hours for a gated rehearsal/release cycle; these are estimates, not a completion promise.
+
+Use a genuine past open acceptance week with no existing upload for the selected TEST client and a genuine earlier file. There is no calendar-week wait. Freshly check MyTMS main again before any EAS build, merge non-forced if it moved, rerun app checks and push complete source first. Current observed main6413f176 is already an ancestor of MyTMS8e17d185, so no new merge was needed at the last check. Preserve all owner business/security rules and TEST-only limits. Do not message Banking's chat.
+
+The dated checkpoints below retain historical decisions and failures. Their pending Install1 or retry wording is superseded by this completed record; it does not reopen the owner-closed combined-transaction diagnosis. The governing two-install, background attribution, lock, protected-release and acceptance rules remain applicable.
+
+---
+
 # Current HealthRoster TEST install plan
 
 ## Owner-authorised one further Install1 retry — 14 October 2026

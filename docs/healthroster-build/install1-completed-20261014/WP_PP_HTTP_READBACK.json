@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-10-14T16:07:52.844Z",
+  "target": "TEST",
+  "backend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+  "sourceCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "readOnlyApiCalls": true,
+  "fixtureOrBusinessMutation": false,
+  "anonymousWorkspaceStatus": 401,
+  "authenticatedWorkspace": {
+    "status": 200,
+    "contract": "WEEKLY_SOURCE_IMPORT_WORKSPACE_V1",
+    "payReadOnly": false,
+    "queriesPresent": true,
+    "sourceScopePresent": true
+  },
+  "refusedOriginCount": 0,
+  "refusedMethodCount": 0,
+  "browserRequestMethods": {
+    "GET": 104,
+    "POST": 1
+  },
+  "nonReadBusinessMethodsBlocked": true,
+  "securityRefreshCount": 1,
+  "securityRefreshException": "Existing exact POST /auth/refresh only; no business write endpoint",
+  "assertionsPassed": true
+}
