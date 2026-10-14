@@ -1,0 +1,40 @@
+{
+  "schema_version": "MISSING_ACCEPT_CURRENT_NATIVE_SOURCE_CHECK_V1",
+  "source_only": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "reviewed_missing_prerequisite_commit": "be5d1a194b8d34b40209d29083359c308241fbcf",
+  "effect_free_source_vm_cases": 23,
+  "passed": 23,
+  "failed": 0,
+  "inert_syntax_scripts": 8,
+  "syntax_passed": 8,
+  "complete_owner_reverses": 5,
+  "unique_hunks": 19,
+  "new_private_signatures": [
+    "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+    "private.weekly_source_missing_accept_proof_guard_v1()",
+    "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+    "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)"
+  ],
+  "new_public_service_only_signatures": [
+    "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_missing_accept_context_v1(jsonb)"
+  ],
+  "existing_approval_abi_unchanged": true,
+  "shared_banking_owner_changes": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "one_time_namespace_and_full_guards_atomic": true,
+  "repeatable_named_guards": 4,
+  "purpose_specific_existing_audit_indexes": 1,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "real_database_or_lab_calls": 0,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "remaining_source_gaps": "CONSTRUCTION_BOUNDARY.md",
+  "native_gates": "actual compile, current classifications/verifier-body coupling, feature/OFF new-operation admission, source/contract/catalogue/installed seals, namespace/genesis/trigger ordering and RC/RR/security/economics/cash/invoice/expense/reappearance/API/UI/phone"
+}

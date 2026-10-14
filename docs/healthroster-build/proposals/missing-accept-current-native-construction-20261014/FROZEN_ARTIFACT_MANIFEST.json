@@ -1,0 +1,161 @@
+{
+  "schema_version": "MISSING_ACCEPT_CURRENT_NATIVE_SOURCE_INCREMENT_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "full_primary_complete": false,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "artifact_count": 30,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 12225,
+      "sha256": "fb2d0b23b2bae4edc7394a95db6ea851691687991c74397d638e73ddb4046de3"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 5310,
+      "sha256": "1d34c80209a30bd18fcc964085a7f51d32dd144bf4c737e2ee8043a014c05d9d"
+    },
+    {
+      "file": "CURRENT_INPUT_PINS.json",
+      "bytes": 3189,
+      "sha256": "95255f86cfad05d6ec0d1915d0f5f7da5f6bd53ab75f39fe18fedf32bd3610ac"
+    },
+    {
+      "file": "NEW_INTERFACES_AND_RECIPE.json",
+      "bytes": 2742,
+      "sha256": "364ba9c4fe2944b81670d654cb1c1546a5360049fe581489c8f7b23efc9bd588"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1787,
+      "sha256": "a5fa60eec8d6b4e11ee6d4d90f9fb8f57b386401fd46b80383088f57f22e5e87"
+    },
+    {
+      "file": "accept-current-source.test.mjs",
+      "bytes": 15438,
+      "sha256": "34594d347b45173324821ddac22bd5e53925711e1a158933c77271f761e029b6"
+    },
+    {
+      "file": "accept-inputs-source.test.mjs",
+      "bytes": 3409,
+      "sha256": "7bfa1998b44a002849a83e46a232f97fc432340920832f2d7c933404d563defb"
+    },
+    {
+      "file": "before/05_complete_later_change_decide.sqlinc",
+      "bytes": 23746,
+      "sha256": "fab3a5495afc3a54d15891c9f1f65a028b4db09ba6d9daeb7b0257ed8c3425bb"
+    },
+    {
+      "file": "before/06_complete_missing_cancel_basis.sqlinc",
+      "bytes": 7286,
+      "sha256": "d66b67b0ab278f90113c2f59d93f1a8dccbf89543b8d0c377dfa4b7afa54add7"
+    },
+    {
+      "file": "before/07_complete_missing_prepared_census.sqlinc",
+      "bytes": 4741,
+      "sha256": "077ddade56c51eaa1f8d8700672c8c5e28cdc5d706b8169f7e1668258615c07e"
+    },
+    {
+      "file": "before/08_complete_kept_context.sqlinc",
+      "bytes": 29129,
+      "sha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11"
+    },
+    {
+      "file": "before/broker/src/weekly-source/routes.js",
+      "bytes": 66355,
+      "sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef"
+    },
+    {
+      "file": "build-current-source.mjs",
+      "bytes": 13161,
+      "sha256": "6847f7f1a66ff0d19d4d96c78a46c6c740f74bfd6279df913dce9c5fe6ed21e0"
+    },
+    {
+      "file": "forward/00_missing_accept_inventory_inputs.sqlinc",
+      "bytes": 10600,
+      "sha256": "32082b0db4d061cc0f54fc1af40f1ac3953642a4032bb20f40eaa267d9a2d39d"
+    },
+    {
+      "file": "forward/01_missing_accept_prepare.sqlinc",
+      "bytes": 11569,
+      "sha256": "ea7e8774ad3d27c19cef8158ceea91635eb1a1769ba2b32be49fd42f65c902aa"
+    },
+    {
+      "file": "forward/02_missing_accept_proof_guard.sqlinc",
+      "bytes": 6412,
+      "sha256": "00720c81120e4912ae1f28f3e6f45664feb28739db4f8d8e28904e493eaca7e4"
+    },
+    {
+      "file": "forward/03_missing_accept_proposal_read.sqlinc",
+      "bytes": 4868,
+      "sha256": "a722bbd76346b8649bfbb3c299da61604db46556f2fcc99e38359806b227af03"
+    },
+    {
+      "file": "forward/04_missing_accept_current_removal.sqlinc",
+      "bytes": 12921,
+      "sha256": "6bd583dc9262d7ddd81dece2bb41ac7c58329fb94ff59cf34bbcde4ab8bb5110"
+    },
+    {
+      "file": "forward/05_complete_later_change_decide.sqlinc",
+      "bytes": 24352,
+      "sha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1"
+    },
+    {
+      "file": "forward/06_complete_missing_cancel_basis.sqlinc",
+      "bytes": 7657,
+      "sha256": "f14cf68581e29a2e600dc9f174810fdfaae59d5248ba17664fcd64c46ab0f370"
+    },
+    {
+      "file": "forward/07_complete_missing_prepared_census.sqlinc",
+      "bytes": 5114,
+      "sha256": "bd27d25a3bbcfb24355bfa42a22257bc898fdc266664c9f757bfab40d18776d7"
+    },
+    {
+      "file": "forward/08_complete_kept_context.sqlinc",
+      "bytes": 30042,
+      "sha256": "33be64afc12c627db61902a92d511e9db41886d497d949fba05ac7c374dc6d51"
+    },
+    {
+      "file": "forward/09_missing_accept_prepare_public_entry.sqlinc",
+      "bytes": 718,
+      "sha256": "095e3467c28304e86b2dd52123a533a8e79b0678069383215f01e694da94ebd2"
+    },
+    {
+      "file": "forward/10_missing_accept_context_public_entry.sqlinc",
+      "bytes": 2046,
+      "sha256": "94007a04a43d762aab6c42fe2759795075132fb5314bde0db4266865c59c018f"
+    },
+    {
+      "file": "forward/broker/src/weekly-source/missing-accept.mjs",
+      "bytes": 2295,
+      "sha256": "da8e025bb779aaf7e9deaeb48a12b6590413b55dd2f5f5f62169416b655ca978"
+    },
+    {
+      "file": "forward/broker/src/weekly-source/routes.js",
+      "bytes": 67869,
+      "sha256": "b7a6277c3098dc21c86a0b5bd489154d4e49a504c5e7899b2a3e6770536775d7"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 3579,
+      "sha256": "61fd45ef44e1f8e485af5e06c0f1e604cbbbde7d4d01ce1b5989f5cdb50bb6c4"
+    },
+    {
+      "file": "input/current_routes.js",
+      "bytes": 66355,
+      "sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef"
+    },
+    {
+      "file": "one-time/00_missing_accept_reserved_namespace.sqlinc",
+      "bytes": 465,
+      "sha256": "f8bbdec13a6126807f87083ecc067dd32cdd7bb36f8b71f6402ccd8566d24f5b"
+    },
+    {
+      "file": "one-time/01_complete_reserved_namespace_guard.sqlinc",
+      "bytes": 7090,
+      "sha256": "d5ddc4b1a586bfbd4cc310fa1359349776d77f8b2415496aabdf8bd0024627b4"
+    }
+  ]
+}

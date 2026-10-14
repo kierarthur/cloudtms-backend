@@ -1,0 +1,117 @@
+-- Draft Source constructor for genuinely absent export work. It is not yet
+-- wired: complete prior-only root inventory and paired capture/Accept owners
+-- must be composed before this becomes an executable release candidate.
+create or replace function private.weekly_source_missing_cancel_basis_v1(
+  p_projection_publication_id uuid,p_previous_snapshot_line_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_snapshot public.weekly_source_final_snapshot_lines%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_context jsonb; v_original jsonb; v_result jsonb; v_correction_baseline jsonb; v_accepted_removed boolean;
+  v_roots uuid[]; v_locked uuid[]; v_operation uuid; v_lock_text text;
+  v_disposition text; v_stack text;
+begin
+  if p_projection_publication_id is null or p_previous_snapshot_line_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_INPUT_INVALID' using errcode='22023';
+  end if;
+  get diagnostics v_stack=pg_context;
+  if v_stack !~* 'PL/pgSQL function (private[.])?weekly_source_finalise_engine_v1[(]jsonb,uuid,boolean,text[)]' then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_OWNER_REQUIRED' using errcode='42501';
+  end if;
+  select * into strict v_snapshot from public.weekly_source_final_snapshot_lines where id=p_previous_snapshot_line_id;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_projection_publication_id;
+  v_context:=private.weekly_source_kept_as_paid_context_for_publication_v1(
+    v_snapshot.work_event_id,p_actor_user_id,v_publication.id);
+  if v_context->>'projection_publication_id' is distinct from v_publication.id::text
+    or (v_context->>'candidate_id')::uuid is distinct from v_snapshot.candidate_id
+    or (v_context->>'client_id')::uuid is distinct from v_snapshot.client_id
+    or (v_context->>'contract_id')::uuid is distinct from v_snapshot.contract_id then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_SCOPE_CHANGED' using errcode='40001';
+  end if;
+  -- Raw unfinalised or unresolved membership is not genuine absence. Leave
+  -- its existing native category/path intact; do not manufacture missing work
+  -- or add a new whole-Finalise refusal for that row through this constructor.
+  if v_context->'source_present' is distinct from 'false'::jsonb then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',
+      'exclude_cancel',false,'disposition','NOT_GENUINELY_ABSENT','basis',null);
+  end if;
+  select coalesce(array_agg(value::uuid order by value::uuid),'{}'::uuid[]) into v_roots
+    from jsonb_array_elements_text(v_context->'root_timesheet_ids') value;
+  if cardinality(v_roots)=0 then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_ROOT_UNAVAILABLE' using errcode='55000';
+  end if;
+  v_lock_text:=coalesce(current_setting('cloudtms.weekly_source_finalisation_lock_operation',true),'');
+  if v_lock_text<>'' then
+    begin v_operation:=v_lock_text::uuid;
+    exception when invalid_text_representation then
+      raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_LOCK_UNBOUND' using errcode='40001';
+    end;
+    perform private.bpay_next_source_current_lock_recheck_v1(v_operation);
+    if not exists(select 1 from private.bpay_next_source_current_lock_operations operation
+      where operation.id=v_operation and operation.transaction_id=pg_current_xact_id()
+        and operation.projection_publication_id=v_publication.id and operation.upload_id=v_publication.upload_id
+        and operation.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)
+        and operation.source_group_id=(v_context->>'source_group_id')::uuid
+        and operation.client_id=v_snapshot.client_id) then
+      raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_LOCK_UNBOUND' using errcode='40001';
+    end if;
+    select coalesce(array_agg(root_timesheet_id order by root_timesheet_id),'{}'::uuid[]) into v_locked
+      from private.bpay_next_source_current_lock_members where operation_id=v_operation;
+  else
+    v_lock_text:=coalesce(current_setting('cloudtms.weekly_source_finalisation_root_set',true),'');
+    if v_lock_text in ('','EMPTY_LOCKED_SET') then
+      raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_LOCK_UNBOUND' using errcode='40001';
+    end if;
+    begin v_locked:=string_to_array(v_lock_text,',')::uuid[];
+    exception when invalid_text_representation then
+      raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_LOCK_UNBOUND' using errcode='40001';
+    end;
+  end if;
+  if not v_roots<@v_locked then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_ROOT_SET_CHANGED' using errcode='40001';
+  end if;
+  v_original:=private.weekly_source_missing_snapshot_movement_v1(v_snapshot.id);
+  v_accepted_removed:=v_context->'accepted_source_removed'='true'::jsonb;
+  v_disposition:=case
+    when v_accepted_removed then 'ACCEPTED_SOURCE_REMOVED'
+    when v_context->'invoiced'='true'::jsonb then 'KEEP_INVOICED'
+    when v_context->'paid'='true'::jsonb then 'KEEP_PAID_NOT_INVOICED'
+    when v_context->'paid'='false'::jsonb then 'CANCEL_NOT_PAID_OR_INVOICED'
+    else null end;
+  if v_disposition is null then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_PAID_EVIDENCE_UNAVAILABLE' using errcode='55000';
+  end if;
+  if not coalesce(v_accepted_removed,false)
+    and v_original->>'movement_id' is distinct from v_context->>'current_pay_head_movement_id' then
+    if v_disposition is distinct from 'CANCEL_NOT_PAID_OR_INVOICED' then
+      raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_NATIVE_POSITION_CHANGED' using errcode='40001';
+    end if;
+    v_correction_baseline:=private.weekly_source_missing_correction_baseline_v1(
+      v_publication.id,v_snapshot.id,p_actor_user_id);
+  end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',
+    'work_event_id',v_snapshot.work_event_id,'previous_snapshot_line_id',v_snapshot.id,
+    'projection_publication_id',v_publication.id,'upload_id',v_publication.upload_id,
+    'projection_generation',coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer),
+    'comparison_manifest_hash',encode(v_publication.comparison_manifest_hash,'hex'),
+    'issue_set_hash',encode(v_publication.issue_set_hash,'hex'),
+    'candidate_id',v_snapshot.candidate_id,'client_id',v_snapshot.client_id,'contract_id',v_snapshot.contract_id,
+    'actor_user_id',p_actor_user_id,'owner_transaction_id',pg_current_xact_id()::text,
+    'owner_backend_pid',pg_backend_pid(),'disposition',v_disposition,'original_basis',v_original,
+    'target_native_context',v_context);
+  if v_accepted_removed then
+    v_result:=v_result||jsonb_build_object('accepted_removals',v_context->'accepted_source_removal_proofs');
+  end if;
+  if v_correction_baseline is not null then
+    v_result:=v_result||jsonb_build_object('correction_baseline',v_correction_baseline);
+  end if;
+  v_result:=v_result||jsonb_build_object('basis_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',v_result),'hex'));
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_CANCEL_BASIS_V1',
+    'exclude_cancel',v_disposition in ('KEEP_INVOICED','KEEP_PAID_NOT_INVOICED'),'disposition',v_disposition,'basis',v_result);
+end;
+$function$;
+alter function private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,26 @@
+-- One bounded read supplies genuine CAS inputs; the browser never derives a
+-- financial inventory digest or supplies native component/money assertions.
+create or replace function public.weekly_source_missing_accept_context_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid;v_event uuid;v_root uuid;v_publication uuid;
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),
+    nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+  perform private.weekly_source_publication_require_keys_v1(p_request,array[
+    'schema_version','actor_user_id','work_event_id','root_timesheet_id','projection_publication_id'],
+    'missing_accept.context');
+  if p_request->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_CONTEXT_V1' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CONTEXT_INVALID' using errcode='22023';end if;
+  v_actor:=(private.weekly_source_publication_scalar_v1(p_request->'actor_user_id','actor_user_id','UUID')#>>'{}')::uuid;
+  v_event:=(private.weekly_source_publication_scalar_v1(p_request->'work_event_id','work_event_id','UUID')#>>'{}')::uuid;
+  v_root:=(private.weekly_source_publication_scalar_v1(p_request->'root_timesheet_id','root_timesheet_id','UUID')#>>'{}')::uuid;
+  v_publication:=(private.weekly_source_publication_scalar_v1(p_request->'projection_publication_id','projection_publication_id','UUID')#>>'{}')::uuid;
+  return private.weekly_source_missing_accept_inventory_inputs_v1(v_event,v_root,v_publication,v_actor);
+end;
+$function$;
+alter function public.weekly_source_missing_accept_context_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_missing_accept_context_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_missing_accept_context_v1(jsonb) to postgres,service_role;

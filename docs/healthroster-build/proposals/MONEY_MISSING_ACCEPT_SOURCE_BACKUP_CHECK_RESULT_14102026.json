@@ -1,0 +1,28 @@
+{
+  "source_only": true,
+  "listed_artifacts": 30,
+  "manifests": 1,
+  "source_scan_files": 33,
+  "credential_rules": 4,
+  "credential_findings": 0,
+  "raw_hash_length_mismatches": 0,
+  "critic_sha256": "0b4e7674cd30787a341e97561a3d0d5d69d46504fdde11347dc43de130da4d52",
+  "independently_inspected_effect_free_cases": 23,
+  "syntax_passed": 8,
+  "full_owner_reversals": 5,
+  "unique_hunks": 19,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "continuity_draft_included": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "whitespace": {
+    "status": "RETAINED_RAW_ARCHIVE_EXCEPTIONS_NOT_PASS",
+    "exit_code": 2,
+    "findings": [
+      "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/before/08_complete_kept_context.sqlinc:364: new blank line at EOF.",
+      "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/08_complete_kept_context.sqlinc:377: new blank line at EOF."
+    ]
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "source_only": true,
+  "unreviewed": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "current_route_before_sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef",
+  "complete_owners": 5,
+  "unique_hunks": 19,
+  "proofs": [
+    {
+      "file": "05_complete_later_change_decide.sqlinc",
+      "input": "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/before/public.weekly_source_later_change_decide_atomic_v1_jsonb_.sqlinc",
+      "before_bytes": 23746,
+      "before_sha256": "fab3a5495afc3a54d15891c9f1f65a028b4db09ba6d9daeb7b0257ed8c3425bb",
+      "after_bytes": 24352,
+      "after_sha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1",
+      "unique_hunks": 3,
+      "hunks": [
+        {
+          "name": "native missing proposal local",
+          "before": "  v_recorded jsonb;",
+          "after": "  v_recorded jsonb;\n  v_missing_accept jsonb;"
+        },
+        {
+          "name": "actual proof after I-1 and bundle admission",
+          "before": "  if v_decision='APPROVE_UPDATED_HOURS' then\n    -- The complete proposed entitlement",
+          "after": "  if v_decision='APPROVE_UPDATED_HOURS' then\n    v_missing_accept:=private.weekly_source_missing_accept_proposal_v1(v_bundle_id,v_bundle_revision,v_actor);\n  end if;\n\n  if v_decision='APPROVE_UPDATED_HOURS' then\n    -- The complete proposed entitlement"
+        },
+        {
+          "name": "only reserved purpose changes rebuilt vector",
+          "before": "    v_components:=private.weekly_source_retain_approved_additional_v2(\n      v_root_timesheet_id,v_components\n    );\n  else",
+          "after": "    v_components:=private.weekly_source_retain_approved_additional_v2(\n      v_root_timesheet_id,v_components\n    );\n    if v_missing_accept is not null then\n      if v_missing_accept#>>'{inputs,target_final_revision_id}' is distinct from v_final_revision_id::text then\n        raise exception 'WEEKLY_SOURCE_LATER_CHANGE_REVIEW_STALE' using errcode='55000';\n      end if;\n      v_components:=v_missing_accept#>'{inputs,after_components}';\n      v_chosen_segments:=v_missing_accept#>'{inputs,chosen_source_segments}';\n    end if;\n  else"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "06_complete_missing_cancel_basis.sqlinc",
+      "input": "docs/healthroster-build/proposals/missing-correction-baseline-successor-20261014/forward/03_missing_cancel_basis.sqlinc",
+      "before_bytes": 7286,
+      "before_sha256": "d66b67b0ab278f90113c2f59d93f1a8dccbf89543b8d0c377dfa4b7afa54add7",
+      "after_bytes": 7657,
+      "after_sha256": "f14cf68581e29a2e600dc9f174810fdfaae59d5248ba17664fcd64c46ab0f370",
+      "unique_hunks": 5,
+      "hunks": [
+        {
+          "name": "actual removal fact local",
+          "before": "  v_context jsonb; v_original jsonb; v_result jsonb; v_correction_baseline jsonb;",
+          "after": "  v_context jsonb; v_original jsonb; v_result jsonb; v_correction_baseline jsonb; v_accepted_removed boolean;"
+        },
+        {
+          "name": "real committed removal precedes ordinary financial classification",
+          "before": "  v_disposition:=case\n    when v_context->'invoiced'",
+          "after": "  v_accepted_removed:=v_context->'accepted_source_removed'='true'::jsonb;\n  v_disposition:=case\n    when v_accepted_removed then 'ACCEPTED_SOURCE_REMOVED'\n    when v_context->'invoiced'"
+        },
+        {
+          "name": "current accepted proof resolves position independently of old ledger",
+          "before": "  if v_original->>'movement_id' is distinct from v_context->>'current_pay_head_movement_id' then",
+          "after": "  if not coalesce(v_accepted_removed,false)\n    and v_original->>'movement_id' is distinct from v_context->>'current_pay_head_movement_id' then"
+        },
+        {
+          "name": "freeze real removal proof, no paid or cash assertion",
+          "before": "  if v_correction_baseline is not null then",
+          "after": "  if v_accepted_removed then\n    v_result:=v_result||jsonb_build_object('accepted_removals',v_context->'accepted_source_removal_proofs');\n  end if;\n  if v_correction_baseline is not null then"
+        },
+        {
+          "name": "only real keep dispositions exclude native cancellation",
+          "before": "'exclude_cancel',v_disposition<>'CANCEL_NOT_PAID_OR_INVOICED'",
+          "after": "'exclude_cancel',v_disposition in ('KEEP_INVOICED','KEEP_PAID_NOT_INVOICED')"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "07_complete_missing_prepared_census.sqlinc",
+      "input": "docs/healthroster-build/proposals/missing-correction-baseline-successor-20261014/forward/14_missing_prepared_census_recheck.sqlinc",
+      "before_bytes": 4741,
+      "before_sha256": "077ddade56c51eaa1f8d8700672c8c5e28cdc5d706b8169f7e1668258615c07e",
+      "after_bytes": 5114,
+      "after_sha256": "bd27d25a3bbcfb24355bfa42a22257bc898fdc266664c9f757bfab40d18776d7",
+      "unique_hunks": 1,
+      "hunks": [
+        {
+          "name": "actual removal disposition still re-proves whole native context",
+          "before": "    elsif v_entry.value->>'disposition' is distinct from 'CANCEL_NOT_PAID_OR_INVOICED'",
+          "after": "    elsif v_entry.value->>'disposition'='ACCEPTED_SOURCE_REMOVED' then\n      if v_context->'accepted_source_removed' is distinct from 'true'::jsonb\n        or v_context->'accepted_source_removal_proofs' is distinct from v_basis->'accepted_removals' then\n        raise exception 'WEEKLY_SOURCE_MISSING_PREPARED_ACCEPTED_REMOVAL_CHANGED' using errcode='40001';\n      end if;\n    elsif v_entry.value->>'disposition' is distinct from 'CANCEL_NOT_PAID_OR_INVOICED'"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "08_complete_kept_context.sqlinc",
+      "input": "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/01_target_publication_context.sqlinc",
+      "before_bytes": 29129,
+      "before_sha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11",
+      "after_bytes": 30042,
+      "after_sha256": "33be64afc12c627db61902a92d511e9db41886d497d949fba05ac7c374dc6d51",
+      "unique_hunks": 8,
+      "hunks": [
+        {
+          "name": "current accepted removal locals",
+          "before": "  v_applies boolean:=false; v_ack_sequence bigint;",
+          "after": "  v_applies boolean:=false; v_ack_sequence bigint;\n  v_accept_complete boolean:=false;v_accept_proofs jsonb:='[]'::jsonb;v_accept_current jsonb;v_result jsonb;"
+        },
+        {
+          "name": "all current native roots must have the real committed removal",
+          "before": "  return jsonb_build_object('schema_version','WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_V1',",
+          "after": "  if not v_source_present and cardinality(v_roots)>0 then\n    v_accept_complete:=true;\n    foreach v_root in array v_roots loop\n      v_accept_current:=private.weekly_source_missing_accept_current_removal_v1(v_event.id,v_root,v_publication,p_actor_user_id);\n      if v_accept_current is null then v_accept_complete:=false;v_accept_proofs:='[]'::jsonb;exit;end if;\n      v_accept_proofs:=v_accept_proofs||jsonb_build_array(v_accept_current);\n    end loop;\n  end if;\n  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_V1',"
+        },
+        {
+          "name": "accepted current removal cannot present default Keep",
+          "before": "'kept_by_default',not v_source_present and v_invoiced,",
+          "after": "'kept_by_default',not v_accept_complete and not v_source_present and v_invoiced,"
+        },
+        {
+          "name": "genuine completed decision does not ask for a new Missing choice",
+          "before": "'decision_available',not v_source_present and (v_invoiced or v_paid is true),",
+          "after": "'decision_available',not v_accept_complete and not v_source_present and (v_invoiced or v_paid is true),"
+        },
+        {
+          "name": "retain unknown paid and resolve only Source decision need",
+          "before": "'decision_needed',case when not v_source_present",
+          "after": "'decision_needed',case when v_accept_complete then false when not v_source_present"
+        },
+        {
+          "name": "existing row pay hold meaning only",
+          "before": "'holds_pay',case when not v_source_present",
+          "after": "'holds_pay',case when v_accept_complete then false when not v_source_present"
+        },
+        {
+          "name": "existing row invoice hold meaning only",
+          "before": "'holds_invoice',case when not v_source_present",
+          "after": "'holds_invoice',case when v_accept_complete then false when not v_source_present"
+        },
+        {
+          "name": "conditional real accepted proof preserves ordinary context domain",
+          "before": "    'holds_invoice',case when v_accept_complete then false when not v_source_present and (v_invoiced or v_paid is true) then false else null end);\nend;",
+          "after": "    'holds_invoice',case when v_accept_complete then false when not v_source_present and (v_invoiced or v_paid is true) then false else null end);\n  if v_accept_complete then\n    v_result:=v_result||jsonb_build_object('accepted_source_removed',true,'accepted_source_removal_proofs',v_accept_proofs);\n  end if;\n  return v_result;\nend;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "input": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/input/current_routes.js",
+      "before_bytes": 66355,
+      "before_sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef",
+      "after_bytes": 67869,
+      "after_sha256": "b7a6277c3098dc21c86a0b5bd489154d4e49a504c5e7899b2a3e6770536775d7",
+      "unique_hunks": 2,
+      "hunks": [
+        {
+          "name": "finite closed preparation parser import",
+          "before": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';",
+          "after": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';\r\nimport {missingAcceptPrepareRequest,missingAcceptContextRequest} from './missing-accept.mjs';"
+        },
+        {
+          "name": "real Office admin commands to literal Source context/producer only",
+          "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+          "after": "  if (action === 'MISSING_ACCEPT_CONTEXT' || action === 'PREPARE_MISSING_ACCEPT') {\r\n    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body,'payload')) {\r\n      fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400);\r\n    }\r\n    let preparation;\r\n    try { preparation=action==='MISSING_ACCEPT_CONTEXT'\r\n      ? missingAcceptContextRequest(payload,user.id) : missingAcceptPrepareRequest(payload,user.id); }\r\n    catch { fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400); }\r\n    let owner;\r\n    try {\r\n      if (typeof dependencies.bpayNextOwnerStatusRpc !== 'function') throw new Error();\r\n      owner=normalizeBpayNextOwnerStatus(await dependencies.bpayNextOwnerStatusRpc(env));\r\n    } catch { fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE','This proposal is unavailable; try again shortly.',503); }\r\n    if (owner.active_owner !== 'NEXT') {\r\n      fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED','This proposal is not available for this agency yet.',409);\r\n    }\r\n    const rpc=action==='MISSING_ACCEPT_CONTEXT' ? 'weekly_source_missing_accept_context_v1'\r\n      : 'weekly_source_missing_accept_prepare_atomic_v1';\r\n    const result=await withRefusalRecording(dependencies,'broker:weekly-source:'+rpc,user.id,\r\n      ()=>callRpc(dependencies,rpc,preparation));\r\n    return jsonResponse(200,result);\r\n  }\r\n\r\n  if (action === 'LATER_CHANGE_DECISION') {"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "canonical_mounted": false,
+  "native_proof": false
+}

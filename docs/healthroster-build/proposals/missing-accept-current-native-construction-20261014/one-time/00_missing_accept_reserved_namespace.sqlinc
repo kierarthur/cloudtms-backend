@@ -1,0 +1,9 @@
+-- One-time prerequisite, never a repeatable reset/backfill. A pre-existing
+-- generic audit label cannot become native protected preparation evidence.
+do $source_missing_accept_namespace$
+begin
+  if exists(select 1 from public.audit_events audit where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED') then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_RESERVED_NAMESPACE_NOT_EMPTY' using errcode='55000';
+  end if;
+end;
+$source_missing_accept_namespace$;

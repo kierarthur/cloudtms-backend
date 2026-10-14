@@ -1,0 +1,73 @@
+{
+  "source_only": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "current_native_inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "bytes": 154756,
+      "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/migrations/04102026_2155_weekly_source_accepted_publication_actions_v1.sql",
+      "bytes": 4750,
+      "sha256": "f37a15755f4863ab415b9242de9c3a38ea60369856346300aff74745742e1448"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "bytes": 249666,
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "bytes": 173042,
+      "sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "bytes": 22317,
+      "sha256": "e397b067c2782a047633b9154b5faa5b8ef54c2c77a24d9733db2cf2fba20d9d"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+      "bytes": 141761,
+      "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "broker/src/bpay-busy.js",
+      "bytes": 4751,
+      "sha256": "f9de3b1fd722ce592868fe5b13f65d01494c88d83d082fcd1bd214bc99c16932"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "broker/src/weekly-source/routes.js",
+      "bytes": 66355,
+      "sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef"
+    }
+  ],
+  "reviewed_missing_prerequisite_commit": "be5d1a194b8d34b40209d29083359c308241fbcf",
+  "selected_before_delimiter": "same complete leaves from frozen reviewed packets, raw bytes retained",
+  "one_time_guard_sha256": "00720c81120e4912ae1f28f3e6f45664feb28739db4f8d8e28904e493eaca7e4",
+  "one_time_guard_same_complete_definition": true,
+  "shared_banking_owner_changes": 0,
+  "canonical_mounted": false,
+  "native_proof": false
+}

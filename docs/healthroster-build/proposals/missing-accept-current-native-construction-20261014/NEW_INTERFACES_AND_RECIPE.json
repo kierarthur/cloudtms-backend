@@ -1,0 +1,54 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "new_private_signatures": [
+    "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+    "private.weekly_source_missing_accept_proof_guard_v1()",
+    "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+    "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)"
+  ],
+  "new_public_service_only_signatures": [
+    "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_missing_accept_context_v1(jsonb)"
+  ],
+  "changed_existing_private_signatures": [
+    "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+    "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)"
+  ],
+  "changed_existing_public_signatures": ["public.weekly_source_later_change_decide_atomic_v1(jsonb)"],
+  "one_time_atomic_source": "one-time/01_complete_reserved_namespace_guard.sqlinc",
+  "repeatable_source_order": [
+    "forward/04_missing_accept_current_removal.sqlinc",
+    "forward/08_complete_kept_context.sqlinc",
+    "forward/00_missing_accept_inventory_inputs.sqlinc",
+    "forward/03_missing_accept_proposal_read.sqlinc",
+    "forward/01_missing_accept_prepare.sqlinc",
+    "forward/02_missing_accept_proof_guard.sqlinc",
+    "forward/05_complete_later_change_decide.sqlinc",
+    "forward/06_complete_missing_cancel_basis.sqlinc",
+    "forward/07_complete_missing_prepared_census.sqlinc",
+    "forward/09_missing_accept_prepare_public_entry.sqlinc",
+    "forward/10_missing_accept_context_public_entry.sqlinc"
+  ],
+  "runtime_destinations": [
+    {"source":"forward/broker/src/weekly-source/missing-accept.mjs","destination":"broker/src/weekly-source/missing-accept.mjs"},
+    {"source":"forward/broker/src/weekly-source/routes.js","destination":"broker/src/weekly-source/routes.js"}
+  ],
+  "native_approval_entry_unchanged": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+  "public_approval_schema_unchanged": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+  "broker_commands": ["MISSING_ACCEPT_CONTEXT","PREPARE_MISSING_ACCEPT","LATER_CHANGE_DECISION"],
+  "new_named_repeatable_audit_guards": 4,
+  "new_purpose_specific_existing_audit_index": "weekly_source_missing_accept_prepare_key_uq",
+  "new_tables": 0,
+  "new_columns": 0,
+  "shared_banking_owner_changes": 0,
+  "recorder_abi_changed": false,
+  "source39_changed": false,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "remaining_source_and_native_gates": "CONSTRUCTION_BOUNDARY.md"
+}
