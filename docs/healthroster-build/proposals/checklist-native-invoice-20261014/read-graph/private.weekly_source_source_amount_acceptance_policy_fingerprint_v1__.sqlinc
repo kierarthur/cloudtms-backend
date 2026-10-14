@@ -1,0 +1,7 @@
+create or replace function private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()
+returns bytea language sql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_sha256_jsonb_v1('SOURCE_AMOUNT_CHARGE_ACCEPTANCE_POLICY_V1',jsonb_build_object(
+    'accepted_results',jsonb_build_array('SOURCE_AMOUNT_DIFFERS'),'admission_kinds',jsonb_build_array('ACCEPTED_DISPARITY'),
+    'invoice_authority','EXACT_SOURCE_PENCE','candidate_pay_authority','CLOUDTMS_CALCULATION'));
+$function$;

@@ -1,0 +1,171 @@
+-- Positive-only genuine Source VAT_FIT invoice block/Office decision facts.
+-- Native line amounts and admission/release owners remain their authorities.
+-- REPORT_LINE_NET, other invoice causes, absent/obsolete/unproved facts and
+-- released holds do not become known false or a pay amount here.
+create or replace function private.weekly_source_checklist_source_invoice_hold_facts_v1(
+  p_upload_row_id uuid,p_work_event_id uuid,p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; cycle public.weekly_source_cycles%rowtype;
+  upload public.weekly_source_uploads%rowtype; source_row public.weekly_source_upload_rows%rowtype;
+  publication public.weekly_source_projection_publications%rowtype; resolution public.weekly_source_row_resolutions%rowtype;
+  revision public.weekly_source_final_revisions%rowtype; manifest public.weekly_source_client_manifests%rowtype;
+  movement public.weekly_source_billing_movements%rowtype; count_rows bigint; chosen_id uuid;
+  rules jsonb; current_rules jsonb; amounts jsonb; facts jsonb; proof_hash text;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_scope,
+    array['source_group_id','source_cycle_id','client_id','week_ending'],'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_INVALID');
+  if p_upload_row_id is null or p_work_event_id is null or jsonb_typeof(p_scope->'source_group_id') is distinct from 'string'
+    or not pg_input_is_valid(p_scope->>'source_group_id','uuid')
+    or jsonb_typeof(p_scope->'source_cycle_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_cycle_id','uuid')
+    or jsonb_typeof(p_scope->'client_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'client_id','uuid')
+    or jsonb_typeof(p_scope->'week_ending') is distinct from 'string' or not pg_input_is_valid(p_scope->>'week_ending','date') then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_INVALID' using errcode='22023';
+  end if;
+  select u.* into actor from public.tms_users u where u.id=p_actor_user_id and u.is_active
+    and lower(btrim(coalesce(u.role,'')))='admin';
+  if actor.id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_ACTOR_DENIED' using errcode='42501'; end if;
+  facts:=jsonb_build_object('scope',p_scope,'actor_user_id',actor.id,'upload_row_id',p_upload_row_id,
+    'authority',private.weekly_source_office_authority_v1(actor.id,'VIEW_SOURCE_PROGRESS',
+      (p_scope->>'source_group_id')::uuid,(p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date));
+  select c.* into cycle from public.weekly_source_cycles c where c.id=(p_scope->>'source_cycle_id')::uuid
+    and c.source_group_id=(p_scope->>'source_group_id')::uuid and (c.scope_client_id is null or c.scope_client_id=(p_scope->>'client_id')::uuid);
+  select s.* into source_row from public.weekly_source_upload_rows s where s.id=p_upload_row_id
+    and s.work_date between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date;
+  select u.* into upload from public.weekly_source_uploads u where u.id=source_row.upload_id and u.source_cycle_id=cycle.id
+    and u.id=cycle.current_complete_upload_id and u.state='CURRENT' and u.report_scope_id is null;
+  select p.* into publication from public.weekly_source_projection_publications p where p.id=cycle.current_projection_publication_id
+    and p.source_cycle_id=cycle.id and p.upload_id=upload.id and p.state='CURRENT' and p.authority_scope_kind='CYCLE' and p.report_scope_id is null;
+  select f.* into revision from public.weekly_source_final_revisions f where f.id=cycle.current_final_revision_id
+    and f.source_cycle_id=cycle.id and f.upload_id=upload.id and f.state='CURRENT' and f.authority_scope_kind='CYCLE' and f.report_scope_id is null;
+  facts:=facts||jsonb_build_object('cycle',to_jsonb(cycle),'upload',to_jsonb(upload),'row',to_jsonb(source_row),
+    'publication',to_jsonb(publication),'final_revision',to_jsonb(revision));
+  if cycle.id is null or source_row.id is null or upload.id is null or publication.id is null or revision.id is null then
+    return jsonb_build_object('known',false,'reason','NATIVE_CURRENT_INVOICE_ROW_SCOPE_UNAVAILABLE','native_facts',facts);
+  end if;
+  select count(*),(array_agg(r.id order by r.id))[1] into count_rows,chosen_id from public.weekly_source_row_resolutions r
+    where r.upload_row_id=source_row.id and r.work_event_id=p_work_event_id and r.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+      and r.mapping_state='RESOLVED' and r.client_id=(p_scope->>'client_id')::uuid;
+  if count_rows<>1 then return jsonb_build_object('known',false,'reason','NATIVE_INVOICE_RESOLUTION_UNAVAILABLE','native_facts',facts); end if;
+  select r.* into strict resolution from public.weekly_source_row_resolutions r where r.id=chosen_id;
+  if not exists(select 1 from public.weekly_work_events e join public.contracts c on c.id=resolution.contract_id
+    where e.id=resolution.work_event_id and e.first_source_group_id=cycle.source_group_id and e.work_date=source_row.work_date
+      and (e.client_id,e.candidate_id) is not distinct from (resolution.client_id,resolution.candidate_id)
+      and (c.client_id,c.candidate_id) is not distinct from (resolution.client_id,resolution.candidate_id)) then
+    return jsonb_build_object('known',false,'reason','NATIVE_INVOICE_EVENT_IDENTITY_UNAVAILABLE','native_facts',facts);
+  end if;
+  select count(*),(array_agg(m.id order by m.id))[1] into count_rows,chosen_id from public.weekly_source_client_manifests m
+    where m.final_revision_id=revision.id and m.source_group_id=cycle.source_group_id and m.source_cycle_id=cycle.id and m.client_id=resolution.client_id
+      and exists(select 1 from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements bm on bm.id=mm.billing_movement_id
+        where mm.client_manifest_id=m.id and mm.movement_hash=bm.movement_economic_hash
+          and bm.source_facts_json->>'upload_row_id'=source_row.id::text and bm.source_facts_json->>'invoice_hold'='VAT_FIT');
+  if count_rows<>1 then return jsonb_build_object('known',false,'reason','NATIVE_HELD_INVOICE_MANIFEST_UNAVAILABLE','native_facts',facts); end if;
+  select m.* into strict manifest from public.weekly_source_client_manifests m where m.id=chosen_id;
+  select count(*),(array_agg(m.id order by m.id))[1] into count_rows,chosen_id from public.weekly_source_manifest_movements mm
+    join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id and mm.movement_hash=m.movement_economic_hash
+    where mm.client_manifest_id=manifest.id and m.final_revision_id=revision.id and m.finalisation_cycle_id=cycle.id
+      and (m.actual_client_id,m.candidate_id,m.contract_id,m.work_event_id) is not distinct from
+        (resolution.client_id,resolution.candidate_id,resolution.contract_id,resolution.work_event_id)
+      and m.source_profile_kind='HEALTHROSTER_ACTUAL_ROWS' and m.movement_role in('POSITIVE','REPLACEMENT')
+      and m.source_line_kind in('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      and m.source_facts_json->>'upload_row_id'=source_row.id::text and m.source_facts_json->>'invoice_hold'='VAT_FIT';
+  if count_rows<>1 then return jsonb_build_object('known',false,'reason','NATIVE_HELD_INVOICE_MOVEMENT_UNAVAILABLE','native_facts',facts); end if;
+  select m.* into strict movement from public.weekly_source_billing_movements m where m.id=chosen_id;
+  facts:=facts||jsonb_build_object('resolution',to_jsonb(resolution),'manifest',to_jsonb(manifest),'movement',to_jsonb(movement));
+  -- This is the literal current admission refusal grain. Do not infer a
+  -- universal hold from invoice duty or the existence of a manifest.
+  if movement.placement_state<>'UNPLACED'
+    or exists(select 1 from public.weekly_source_invoice_line_bindings b where b.billing_movement_id=movement.id and b.state='CURRENT')
+    or exists(select 1 from public.weekly_source_invoice_hold_releases h where h.upload_row_id=source_row.id and h.hold_kind='VAT_FIT') then
+    return jsonb_build_object('known',false,'reason','NATIVE_UNRELEASED_VAT_FIT_HOLD_UNAVAILABLE','native_facts',facts);
+  end if;
+  rules:=private.weekly_source_frozen_rule_values_v1(revision.id);
+  current_rules:=private.weekly_source_effective_rule_set_v1(resolution.client_id,cycle.id)->'values';
+  facts:=facts||jsonb_build_object('frozen_rules',rules,'current_release_rules',current_rules);
+  if rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL' or rules->>'invoice_amount_basis' is distinct from 'SOURCE_AMOUNT'
+    or rules->>'source_amount_basis' is distinct from 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+    or current_rules->>'invoice_sender' is distinct from rules->>'invoice_sender'
+    or current_rules->>'invoice_amount_basis' is distinct from rules->>'invoice_amount_basis'
+    or current_rules->>'source_amount_basis' is distinct from rules->>'source_amount_basis' then
+    return jsonb_build_object('known',false,'reason','NATIVE_VAT_FIT_INVOICE_RULE_GRAIN_UNAVAILABLE','native_facts',facts);
+  end if;
+  begin amounts:=private.weekly_source_invoice_line_amounts_v1(resolution.id,revision.id);
+  exception when sqlstate '55000' or sqlstate '40001' or no_data_found or too_many_rows then
+    return jsonb_build_object('known',false,'reason','NATIVE_INVOICE_AMOUNT_CERTIFICATE_UNAVAILABLE',
+      'native_facts',facts||jsonb_build_object('native_qualification_sqlstate',sqlstate));
+  end;
+  facts:=facts||jsonb_build_object('native_line_amounts',amounts);
+  if amounts->>'invoice_hold' is distinct from 'VAT_FIT' or amounts->'hold_release_id' is distinct from 'null'::jsonb
+    or amounts->'pay_only' is distinct from 'false'::jsonb or amounts->'source_amount' is distinct from 'true'::jsonb then
+    return jsonb_build_object('known',false,'reason','NATIVE_POSITIVE_INVOICE_HOLD_UNAVAILABLE','native_facts',facts);
+  end if;
+  -- The same existing service/Admin release is the necessary manual decision
+  -- before this exact native admission can proceed. No action is invoked here.
+  perform private.weekly_source_office_authority_v1(actor.id,'FINALISE_WEEK',cycle.source_group_id,resolution.client_id,cycle.finalisation_week_ending);
+  proof_hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_SOURCE_INVOICE_HOLD_V1',facts),'hex');
+  return jsonb_build_object('known',true,'native_facts',facts,'holds_invoice',true,'pending_decision',true,
+    'witness',jsonb_build_object('owner','private.weekly_source_invoice_line_amounts_v1','hold_kind','VAT_FIT',
+      'actor_user_id',actor.id,'work_event_id',resolution.work_event_id,'projection_publication_id',publication.id,
+      'upload_id',upload.id,'upload_row_id',source_row.id,'row_resolution_id',resolution.id,'final_revision_id',revision.id,
+      'client_manifest_id',manifest.id,'billing_movement_id',movement.id,'read_proof_hash',proof_hash));
+end;
+$function$;
+alter function private.weekly_source_checklist_source_invoice_hold_facts_v1(uuid,uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_source_invoice_hold_facts_v1(uuid,uuid,jsonb,uuid) from public,anon,authenticated,service_role;
+
+-- Census of the exact native admission blocker, without requiring an unrelated
+-- open hours query. This delegates the SAME row certificate for every member.
+create or replace function private.weekly_source_checklist_source_invoice_rows_v1(p_scope jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare member record; certificate jsonb; rows jsonb:='[]'::jsonb; facts jsonb:='[]'::jsonb; seen uuid[]:='{}'::uuid[];
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_scope,array['source_group_id','source_cycle_id','client_id','week_ending'],
+    'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_INVALID');
+  if jsonb_typeof(p_scope->'source_group_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_group_id','uuid')
+    or jsonb_typeof(p_scope->'source_cycle_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_cycle_id','uuid')
+    or jsonb_typeof(p_scope->'client_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'client_id','uuid')
+    or jsonb_typeof(p_scope->'week_ending') is distinct from 'string' or not pg_input_is_valid(p_scope->>'week_ending','date') then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_INVALID' using errcode='22023';
+  end if;
+  if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and lower(btrim(coalesce(u.role,'')))='admin') then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_ACTOR_DENIED' using errcode='42501';
+  end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_SOURCE_PROGRESS',(p_scope->>'source_group_id')::uuid,
+    (p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date);
+  for member in
+    select bm.id,bm.work_event_id,s.id upload_row_id,s.work_date,
+      coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),ca.id::text) worker
+    from public.weekly_source_cycles c join public.weekly_source_final_revisions fr on fr.id=c.current_final_revision_id and fr.state='CURRENT'
+    join public.weekly_source_client_manifests cm on cm.final_revision_id=fr.id and cm.client_id=(p_scope->>'client_id')::uuid
+      and cm.source_group_id=c.source_group_id and cm.source_cycle_id=c.id
+    join public.weekly_source_manifest_movements mm on mm.client_manifest_id=cm.id
+    join public.weekly_source_billing_movements bm on bm.id=mm.billing_movement_id and bm.movement_economic_hash=mm.movement_hash
+    join public.weekly_source_upload_rows s on s.id::text=bm.source_facts_json->>'upload_row_id'
+    join public.candidates ca on ca.id=bm.candidate_id
+    where c.id=(p_scope->>'source_cycle_id')::uuid and c.source_group_id=(p_scope->>'source_group_id')::uuid
+      and bm.source_facts_json->>'invoice_hold'='VAT_FIT' and s.work_date between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date
+    order by bm.id
+  loop
+    if member.id=any(seen) then raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_ITEM_AMBIGUOUS' using errcode='55000'; end if;
+    seen:=array_append(seen,member.id);
+    certificate:=private.weekly_source_checklist_source_invoice_hold_facts_v1(member.upload_row_id,member.work_event_id,p_scope,p_actor_user_id);
+    facts:=facts||jsonb_build_array(certificate->'native_facts');
+    if certificate->'known' is distinct from 'true'::jsonb then continue; end if;
+    if certificate#>>'{witness,billing_movement_id}' is distinct from member.id::text then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_ITEM_AMBIGUOUS' using errcode='55000';
+    end if;
+    rows:=rows||jsonb_build_array(jsonb_build_object('item_id','native-invoice:'||member.id::text,'worker',member.worker,
+      'work_date',member.work_date,'reason_code','VAT_FIT','native_invoice_witness',certificate->'witness',
+      'hold',jsonb_build_object('holds_pay',null,'holds_pay_scope',null,'withheld_amount_pence',null,'holds_invoice',true,'pending_decision',true,
+        'authority',jsonb_build_object('owner','SOURCE_INVOICE_HOLD','hash',certificate#>>'{witness,read_proof_hash}','withholding_known',false))));
+  end loop;
+  return jsonb_build_object('rows',rows,'native_facts',facts);
+end;
+$function$;
+alter function private.weekly_source_checklist_source_invoice_rows_v1(jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_source_invoice_rows_v1(jsonb,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,33 @@
+create or replace function private.weekly_source_invoice_economics_fingerprint_v1(
+  p_source_money jsonb, p_line_vat_method text, p_vat_rate numeric
+) returns bytea
+language plpgsql immutable
+set search_path to 'private','pg_catalog','pg_temp'
+as $function$
+declare v_key text; v_money jsonb:='{}'::jsonb; v_amount bigint;
+begin
+  if pg_catalog.jsonb_typeof(p_source_money) is distinct from 'object'
+     or p_line_vat_method not in (
+       'ROUND_EACH_LINE_FROM_NET','LINE_GROSS_MINUS_NET_FROM_SOURCE',
+       'LINE_VAT_FROM_REPORT','ROUND_TOTAL_FROM_EXACT_NET'
+     ) or p_line_vat_method is null or p_vat_rate is null or p_vat_rate<0 or p_vat_rate>100 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ECONOMICS_NOT_READY' using errcode='55000';
+  end if;
+  foreach v_key in array array['source_shift_charge_pence','source_gross_pence','source_vat_pence']::text[] loop
+    if coalesce(p_source_money->>v_key,'') !~ '^[+-]?[0-9]+$' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ECONOMICS_NOT_READY' using errcode='55000';
+    end if;
+    v_amount:=(p_source_money->>v_key)::bigint;
+    if v_amount not between -999999999999 and 999999999999 then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ECONOMICS_NOT_READY' using errcode='55000';
+    end if;
+    v_money:=v_money||pg_catalog.jsonb_build_object(v_key,v_amount);
+  end loop;
+  return private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_INVOICE_ECONOMICS_V1',
+    v_money||pg_catalog.jsonb_build_object('line_vat_method',p_line_vat_method,'vat_rate_pct',p_vat_rate)
+  );
+exception when invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_INVOICE_ECONOMICS_NOT_READY' using errcode='55000';
+end;
+$function$;

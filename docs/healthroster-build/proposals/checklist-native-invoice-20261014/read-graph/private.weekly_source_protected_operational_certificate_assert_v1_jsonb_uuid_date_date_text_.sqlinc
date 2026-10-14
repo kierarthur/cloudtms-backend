@@ -1,0 +1,148 @@
+create or replace function private.weekly_source_protected_operational_certificate_assert_v1(
+  p_q jsonb,p_group_id uuid,p_from date,p_to date,p_expected_sha256 text
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare q jsonb:=p_q; g public.weekly_source_groups%rowtype; r private.cloudtms_database_releases%rowtype;
+  executed private.cloudtms_database_releases%rowtype; native jsonb; row_value jsonb; closure jsonb;
+  needed text[]; keys text[]; remote_needed text[]:=array['CLIENT_HTTP','OFFICE_UI','MYTMS_PHONE']; origin text; n integer;
+begin
+  select * into strict g from public.weekly_source_groups where id=p_group_id and active and source_family='ROSTER' and environment='TEST';
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if current_database()<>'cloudtms_test_clone' or r.status<>'VERIFIED' or r.completed_at_utc is null
+    or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or not private.weekly_source_qualification_closed_object_v1(q,array['schema_version','phase','release_id','git_commit','contract_sha256',
+      'agency_id','environment','source_group_id','effective_from_week_ending','effective_to_week_ending','capabilities',
+      'native_execution_qualification','remote_gate_receipts','test_setup_closure','source_equivalence','activation_scope','receipt_input_commit','qualification_sha256'])
+    or q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'
+    or q->>'phase' is distinct from 'ALL_PRE_SWITCH_GATES_QUALIFIED'
+    or q->>'release_id' is distinct from r.release_id or q->>'git_commit' is distinct from r.git_commit
+    or q->>'contract_sha256' is distinct from r.installed_contract_sha256 or q->>'agency_id' is distinct from g.agency_id::text
+    or q->>'source_group_id' is distinct from g.id::text or q->>'environment' is distinct from g.environment
+    or q->>'effective_from_week_ending' is distinct from p_from::text or q->>'effective_to_week_ending' is distinct from p_to::text
+    or coalesce(p_expected_sha256,'') !~ '^[0-9a-f]{64}$' or q->>'qualification_sha256' is distinct from p_expected_sha256
+    or q->>'qualification_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1',q-'qualification_sha256'),'hex')
+    or q->'capabilities' not in ('["BULK_SIGNED"]'::jsonb,'["AUTOMATIC_RECONCILE","BULK_SIGNED"]'::jsonb) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  native:=q->'native_execution_qualification';closure:=q->'test_setup_closure';
+  select * into strict executed from private.cloudtms_database_releases where release_id=native->>'release_id';
+  if executed.status<>'VERIFIED' or executed.completed_at_utc is null
+    or executed.git_commit is distinct from native->>'git_commit'
+    or executed.installed_contract_sha256 is distinct from executed.repository_contract_sha256
+    or executed.installed_contract_sha256 is distinct from r.installed_contract_sha256
+    or executed.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}'
+      is distinct from r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}'
+    or private.weekly_source_protected_qualification_release_v1()->>'release_id' is distinct from r.release_id
+    or not private.weekly_source_qualification_closed_object_v1(native,array['schema_version','release_id','git_commit','contract_sha256','agency_id','environment',
+      'source_group_id','effective_from_week_ending','effective_to_week_ending','capabilities','gate_receipts','qualification_sha256'])
+    or native->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1'
+    or native->>'contract_sha256' is distinct from r.installed_contract_sha256
+    or native->>'agency_id' is distinct from g.agency_id::text or native->>'source_group_id' is distinct from g.id::text
+    or native->>'environment' is distinct from 'TEST' or native->>'effective_from_week_ending' is distinct from q#>>'{activation_scope,native_effective_from_week_ending}'
+    or native->>'effective_to_week_ending' is distinct from q#>>'{activation_scope,native_effective_to_week_ending}' or native->'capabilities' is distinct from q->'capabilities'
+    or native->>'qualification_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1',native-'qualification_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  needed:=array['SOURCE_CAS_NATIVE','NATIVE_PROTECTION','SECURITY','LEGACY_PAY','NEXT_PAY','CLIENT_API','DOCUMENT','OWN_STAGE_CAS','SOURCE_ROUTING'];
+  if q->'capabilities' @> '["AUTOMATIC_RECONCILE"]'::jsonb then needed:=array_append(needed,'AUTOMATIC_COMPONENT_DELTA'); end if;
+  if jsonb_typeof(native->'gate_receipts') is distinct from 'array' or jsonb_array_length(native->'gate_receipts')<>cardinality(needed)
+    or (select count(distinct value->>'gate') from jsonb_array_elements(native->'gate_receipts') value)<>cardinality(needed) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  for row_value in select value from jsonb_array_elements(native->'gate_receipts') value loop
+    if not private.weekly_source_qualification_closed_object_v1(row_value,array['gate','status','execution','database','receipt_id','receipt_sha256',
+        'source_commit','contract_sha256','source_group_id','agency_id','environment'])
+      or not(coalesce(row_value->>'gate','')=any(needed)) or row_value->>'status' is distinct from 'PASS'
+      or row_value->>'execution' is distinct from 'AGENCY_TEST_NATIVE' or row_value->>'database' is distinct from current_database()
+      or row_value->>'source_commit' is distinct from executed.git_commit or row_value->>'contract_sha256' is distinct from executed.installed_contract_sha256
+      or row_value->>'source_group_id' is distinct from g.id::text or row_value->>'agency_id' is distinct from g.agency_id::text
+      or row_value->>'environment' is distinct from 'TEST' or nullif(row_value->>'receipt_id','') is null
+      or coalesce(row_value->>'receipt_sha256','') !~ '^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  end loop;
+  if not private.weekly_source_qualification_closed_object_v1(closure,array['scope_id','scope_sha256','setup_authorization_sha256',
+      'original_census_sha256','actor_user_id','source_cycle_id','week_ending','execution_release_id','execution_source_commit',
+      'execution_contract_sha256','closure_audit_id','closure_audit_sha256','state','closed_at_utc','all_assignments_disabled','all_operational_producers_false'])
+    or exists(select 1 from unnest(array['scope_id','actor_user_id','source_cycle_id','closure_audit_id']) k
+      where coalesce(closure->>k,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['scope_sha256','setup_authorization_sha256','original_census_sha256','closure_audit_sha256']) k
+      where coalesce(closure->>k,'') !~ '^[0-9a-f]{64}$')
+    or coalesce(closure->>'week_ending','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    or coalesce(closure->>'closed_at_utc','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+    or closure->>'state' is distinct from 'CLOSED' or closure->'all_assignments_disabled' is distinct from 'true'::jsonb
+    or closure->'all_operational_producers_false' is distinct from 'true'::jsonb
+    or closure->>'execution_release_id' is distinct from executed.release_id
+    or closure->>'execution_source_commit' is distinct from executed.git_commit
+    or closure->>'execution_contract_sha256' is distinct from executed.installed_contract_sha256
+    or (closure->>'week_ending')::date<(native->>'effective_from_week_ending')::date
+    or (native->>'effective_to_week_ending' is not null and (closure->>'week_ending')::date>(native->>'effective_to_week_ending')::date)
+    or not exists(select 1 from public.audit_events a where a.id=(closure->>'closure_audit_id')::uuid
+      and a.object_id_text=closure->>'scope_id' and a.event_sequence_is_authoritative
+      and ((a.object_type='weekly_source_protected_test_journey' and a.action='WEEKLY_SOURCE_TEST_JOURNEY_CLOSED')
+        or (a.object_type='weekly_source_off_rule_test_journey' and a.action='WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED'))
+      and a.after_json=closure-'closure_audit_id'-'closure_audit_sha256'
+      and encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED_V1',a.after_json),'hex')=closure->>'closure_audit_sha256') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  if jsonb_typeof(q->'remote_gate_receipts') is distinct from 'array' or jsonb_array_length(q->'remote_gate_receipts')<>3
+    or (select count(distinct value->>'gate') from jsonb_array_elements(q->'remote_gate_receipts') value)<>3 then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  for row_value in select value from jsonb_array_elements(q->'remote_gate_receipts') value loop
+    origin:=case row_value->>'gate' when 'CLIENT_HTTP' then 'AUTHENTICATED_DEPLOYED_HTTP'
+      when 'OFFICE_UI' then 'DEPLOYED_OFFICE_BROWSER_UI' when 'MYTMS_PHONE' then 'PHYSICAL_TESTFLIGHT_MYTMS_PHONE' end;
+    keys:=case row_value->>'gate'
+      when 'CLIENT_HTTP' then array['real_authenticated_session','trusted_actor_injected','closed_browser_payload','native_preview_commit_retry',
+        'native_source_cas_error_order','foreign_actor_and_scope_refused','operational_readiness_false']
+      when 'OFFICE_UI' then array['actual_deployed_bundle','deep_link_scope','actual_preview_and_confirmation','native_partial_retry_display',
+        'unauthorised_controls_absent','operational_readiness_false']
+      when 'MYTMS_PHONE' then array['actual_installed_test_build','actual_candidate_authenticated_session','genuine_signed_submission_bytes',
+        'native_signature_authority','actual_approved_hours_display','actual_document_bytes_and_hash','operational_readiness_false'] end;
+    if not private.weekly_source_qualification_closed_object_v1(row_value,array['schema_version','gate','origin','execution_release_id',
+        'execution_source_commit','execution_contract_sha256','environment','database','agency_id','source_group_id','source_cycle_id',
+        'actor_user_id','week_ending','scope_id','scope_sha256','original_census_sha256','server_request_ids','server_trace_sha256',
+        'native_result_receipts_sha256','capture_sha256','deployments','assertions','receipt_id','receipt_sha256'])
+      or origin is null or row_value->>'origin' is distinct from origin
+      or row_value->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_REMOTE_GATE_RECEIPT_V1'
+      or row_value->>'execution_release_id' is distinct from executed.release_id or row_value->>'execution_source_commit' is distinct from executed.git_commit
+      or row_value->>'execution_contract_sha256' is distinct from executed.installed_contract_sha256
+      or row_value->>'source_group_id' is distinct from g.id::text or row_value->>'agency_id' is distinct from g.agency_id::text
+      or row_value->>'environment' is distinct from 'TEST' or row_value->>'database' is distinct from current_database()
+      or exists(select 1 from unnest(array['source_cycle_id','actor_user_id','week_ending','scope_id','scope_sha256','original_census_sha256']) k
+        where row_value->>k is distinct from closure->>k)
+      or not private.weekly_source_qualification_closed_object_v1(row_value->'assertions',keys)
+      or exists(select 1 from unnest(keys) k where row_value#>array['assertions',k] is distinct from 'true'::jsonb)
+      or exists(select 1 from unnest(array['receipt_sha256','server_trace_sha256','native_result_receipts_sha256','capture_sha256']) k
+        where coalesce(row_value->>k,'') !~ '^[0-9a-f]{64}$')
+      or coalesce(row_value->>'receipt_id','') !~ '^[A-Za-z0-9_./:@-]{1,256}$'
+      or jsonb_typeof(row_value->'server_request_ids') is distinct from 'array'
+      or jsonb_array_length(row_value->'server_request_ids') not between 1 and 100
+      or (select count(distinct value) from jsonb_array_elements(row_value->'server_request_ids') value)
+        <>jsonb_array_length(row_value->'server_request_ids')
+      or exists(select 1 from jsonb_array_elements(row_value->'server_request_ids') request_id
+        where jsonb_typeof(request_id)<>'string' or request_id#>>'{}' !~ '^[A-Za-z0-9:_-]{1,128}$')
+      or not private.weekly_source_qualification_closed_object_v1(row_value->'deployments',array['worker_script','worker_version_id',
+        'worker_source_commit','office_source_commit','office_bundle_sha256','mytms_source_commit','mytms_build_id',
+        'mytms_bundle_identifier','mytms_build_artifact_sha256'])
+      or coalesce(row_value#>>'{deployments,worker_version_id}','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      or exists(select 1 from unnest(array['office_source_commit','mytms_source_commit']) k
+        where coalesce(row_value#>>array['deployments',k],'') !~ '^[0-9a-f]{40}$')
+      or exists(select 1 from unnest(array['office_bundle_sha256','mytms_build_artifact_sha256']) k
+        where coalesce(row_value#>>array['deployments',k],'') !~ '^[0-9a-f]{64}$')
+      or nullif(row_value#>>'{deployments,mytms_build_id}','') is null
+      or row_value#>>'{deployments,worker_script}' is distinct from 'test-cloudtms-backend'
+      or row_value#>>'{deployments,worker_source_commit}' is distinct from executed.git_commit
+      or row_value#>>'{deployments,mytms_bundle_identifier}' is distinct from 'net.cloudtms.mytms.test' then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  end loop;
+  if (select count(distinct value->'deployments') from jsonb_array_elements(q->'remote_gate_receipts') value)<>1 then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  if coalesce(q->>'receipt_input_commit','') !~ '^[0-9a-f]{40}$' then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  perform private.weekly_source_activation_window_binding_assert_v1(q->'activation_scope',native,closure,g.id,p_from,p_to);
+  -- Installed execution is immutable. Only receipt-input Git data differs.
+  perform private.weekly_source_protected_execution_tree_assert_v2(q->'source_equivalence',executed.git_commit,q->>'receipt_input_commit');
+  return q;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000';
+end;
+$function$;

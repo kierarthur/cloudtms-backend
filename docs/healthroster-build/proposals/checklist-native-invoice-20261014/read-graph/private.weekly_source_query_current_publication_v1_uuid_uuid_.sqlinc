@@ -1,0 +1,79 @@
+create or replace function private.weekly_source_query_current_publication_v1(
+  p_source_cycle_id uuid,
+  p_projection_publication_id uuid
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_publication_cycle public.weekly_source_cycles%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+begin
+  if p_source_cycle_id is null or p_projection_publication_id is null then
+    raise exception 'WEEKLY_SOURCE_QUERY_PUBLICATION_REQUIRED' using errcode='22023';
+  end if;
+  select * into v_cycle
+  from public.weekly_source_cycles
+  where id=p_source_cycle_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CYCLE_NOT_FOUND' using errcode='22023';
+  end if;
+  select * into v_publication
+  from public.weekly_source_projection_publications
+  where id=p_projection_publication_id;
+  if not found or v_publication.state<>'CURRENT' then
+    raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
+  end if;
+  select * into strict v_publication_cycle
+  from public.weekly_source_cycles
+  where id=v_publication.source_cycle_id;
+  if v_publication_cycle.source_group_id<>v_cycle.source_group_id
+     or v_publication_cycle.scope_client_id is distinct from v_cycle.scope_client_id
+     or v_publication_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending then
+    raise exception 'WEEKLY_SOURCE_QUERY_PUBLICATION_SCOPE_INVALID' using errcode='55000';
+  end if;
+  select * into strict v_upload
+  from public.weekly_source_uploads
+  where id=v_publication.upload_id and state='CURRENT';
+  if v_publication.authority_scope_kind='CYCLE' then
+    if v_publication.report_scope_id is not null
+       or v_publication_cycle.current_complete_upload_id is distinct from v_publication.upload_id
+       or v_publication_cycle.current_projection_publication_id is distinct from v_publication.id
+       or v_publication_cycle.version is distinct from v_publication.authority_scope_version
+       or v_publication_cycle.projection_state<>'CURRENT' then
+      raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
+    end if;
+  elsif v_publication.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    select * into v_scope
+    from public.weekly_source_report_scopes
+    where id=v_publication.report_scope_id
+      and source_cycle_id=v_publication_cycle.id;
+    if not found
+       or v_scope.current_complete_upload_id is distinct from v_publication.upload_id
+       or v_scope.current_projection_publication_id is distinct from v_publication.id
+       or v_scope.version is distinct from v_publication.authority_scope_version
+       or v_scope.projection_state<>'CURRENT' then
+      raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
+    end if;
+  else
+    raise exception 'WEEKLY_SOURCE_QUERY_PUBLICATION_SCOPE_INVALID' using errcode='55000';
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'source_cycle_id',v_publication_cycle.id,
+    'origin_source_cycle_id',v_cycle.id,
+    'source_group_id',v_cycle.source_group_id,
+    'scope_client_id',v_publication_cycle.scope_client_id,
+    'finalisation_week_ending',v_publication_cycle.finalisation_week_ending,
+    'publication_id',v_publication.id,
+    'upload_id',v_publication.upload_id,
+    'authority_scope_kind',v_publication.authority_scope_kind,
+    'report_scope_id',v_publication.report_scope_id,
+    'authority_scope_version',v_publication.authority_scope_version
+  );
+end;
+$function$;

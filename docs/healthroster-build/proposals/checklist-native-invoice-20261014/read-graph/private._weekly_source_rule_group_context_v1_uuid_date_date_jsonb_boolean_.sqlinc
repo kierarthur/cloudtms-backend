@@ -1,0 +1,138 @@
+create or replace function private._weekly_source_rule_group_context_v1(
+  p_group_id uuid,p_from date,p_to date,p_values jsonb,p_require_live boolean default false
+) returns void language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_group public.weekly_source_groups%rowtype;
+  v_row record; v_policy jsonb; v_settings jsonb; v_scope_date date;
+  v_contract_context record; v_contract_policy jsonb;
+  v_agency boolean:=p_values->>'invoice_sender'='AGENCY_INVOICE';
+  v_count integer:=0;
+begin
+  select * into v_group from public.weekly_source_groups where id=p_group_id and active;
+  if not found or v_group.source_family<>'ROSTER' then
+    raise exception 'WEEKLY_SOURCE_RULE_R10' using errcode='22023';
+  end if;
+  if v_agency and exists(select 1 from public.weekly_source_uploads u
+    join public.weekly_source_cycles c on c.id=u.source_cycle_id
+    join public.weekly_source_format_profiles f on f.id=u.source_format_profile_id
+    where c.source_group_id=p_group_id and f.profile_code<>'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1'
+      and u.state in ('SEALED','CURRENT','SUPERSEDED','CORRECTION_READY')) then
+    raise exception 'WEEKLY_SOURCE_RULE_AGENCY_PROFILE_CONFLICT' using errcode='22023';
+  end if;
+  if p_values is not null and p_values->>'checking_profile_kind'<>'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' and not v_agency
+    and (((p_values->>'earliest_final_weekday')::integer+6)%7*1440
+      +extract(hour from (p_values->>'earliest_final_local_time')::time)::integer*60
+      +extract(minute from (p_values->>'earliest_final_local_time')::time)::integer
+      <(v_group.cutoff_weekday+6)%7*1440+extract(hour from v_group.cutoff_local_time)::integer*60
+      +extract(minute from v_group.cutoff_local_time)::integer) then
+    raise exception 'WEEKLY_SOURCE_RULE_R9' using errcode='22023';
+  end if;
+  -- Evaluate every effective policy boundary in the requested dated interval.
+  -- Membership and policy tables already exclude overlap; missing coverage is
+  -- refused rather than being filled with a guessed policy.
+  for v_row in
+    select gc.client_id,greatest(gc.valid_from,p_from) as scope_date
+    from public.weekly_source_group_clients gc
+    where gc.source_group_id=p_group_id and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]')
+      && daterange(p_from,coalesce(p_to,'infinity'::date),'[]')
+    union
+    select gc.client_id,cp.effective_from
+    from public.weekly_source_group_clients gc join public.weekly_source_client_policies cp
+      on cp.client_id=gc.client_id and cp.source_group_id=gc.source_group_id
+    where gc.source_group_id=p_group_id and cp.effective_from>=p_from
+      and cp.effective_from<=coalesce(p_to,'infinity'::date)
+      and cp.effective_from between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+    union
+    select gc.client_id,cp.effective_to+1
+    from public.weekly_source_group_clients gc join public.weekly_source_client_policies cp
+      on cp.client_id=gc.client_id and cp.source_group_id=gc.source_group_id
+    where gc.source_group_id=p_group_id and cp.effective_to is not null and cp.effective_to+1>=p_from
+      and cp.effective_to+1<=coalesce(p_to,'infinity'::date)
+      and cp.effective_to+1 between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+    order by client_id,scope_date
+  loop
+    v_count:=v_count+1; v_scope_date:=v_row.scope_date;
+    if not exists(select 1 from public.weekly_source_client_policies cp where cp.source_group_id=p_group_id
+      and cp.client_id=v_row.client_id and v_scope_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date)) then
+      raise exception 'WEEKLY_SOURCE_RULE_R8' using errcode='22023';
+    end if;
+    v_policy:=private._weekly_source_effective_policy_v1(v_row.client_id,null,v_scope_date);
+    if p_values is null then
+      if v_policy->>'authority_mode'<>'TIMESHEET_AUTHORITY' or v_policy->>'document_mode'<>'INVOICE_EVIDENCE_REQUIRED'
+        or (v_policy->>'self_bill_enabled')::boolean then
+        raise exception 'WEEKLY_SOURCE_RULE_SIGNED_GROUP_REQUIRED' using errcode='22023';
+      end if;
+      if p_require_live then
+        v_settings:=private._contract_settings_effective_core_v1(v_row.client_id,null,v_scope_date,'DAILY',null);
+        if not coalesce((v_settings->'applicability'->>'configuration_valid')::boolean,false)
+          or not coalesce((v_settings->'values'->>'requires_hr')::boolean,false)
+          or not coalesce((v_settings->'values'->>'autoprocess_hr')::boolean,false)
+          or coalesce((v_settings->'values'->>'no_timesheet_required')::boolean,true)
+          or coalesce((v_settings->'values'->>'is_nhsp')::boolean,true)
+          or coalesce((v_settings->'values'->>'self_bill')::boolean,true) then
+          raise exception 'WEEKLY_SOURCE_RULE_SIGNED_GROUP_REQUIRED' using errcode='22023'; end if;
+      end if;
+    elsif v_agency then
+      if (v_policy->>'self_bill_enabled')::boolean
+        or (p_require_live and (v_policy->>'authority_mode'<>'SOURCE_AUTHORITY' or v_policy->>'document_mode'<>'CHECK_ONLY'))
+        or (not p_require_live and not ((v_policy->>'authority_mode'='SOURCE_AUTHORITY' and v_policy->>'document_mode'='CHECK_ONLY')
+          or (v_policy->>'authority_mode'='TIMESHEET_AUTHORITY' and v_policy->>'document_mode'='INVOICE_EVIDENCE_REQUIRED'))) then
+        raise exception 'WEEKLY_SOURCE_RULE_R14' using errcode='22023';
+      end if;
+      if exists(select 1 from public.weekly_source_group_rule_assignments a
+        where a.source_group_id=p_group_id and a.feature_purpose='SIGNED_CHECK_ONLY'
+          and daterange(a.effective_from_week_ending,coalesce(a.effective_to_week_ending,'infinity'::date),'[]')
+            && daterange(p_from,coalesce(p_to,'infinity'::date),'[]')) then
+        raise exception 'WEEKLY_SOURCE_RULE_R14' using errcode='22023';
+      end if;
+    elsif v_policy->>'authority_mode'<>'SOURCE_AUTHORITY' or v_policy->>'document_mode'<>'CHECK_ONLY'
+      or not (v_policy->>'self_bill_enabled')::boolean then
+      raise exception 'WEEKLY_SOURCE_RULE_R15' using errcode='22023';
+    end if;
+    -- SP-20 has no installed first-use witness in this source stage. Fail closed.
+    if p_values is not null and (v_policy->>'source_fixed_expenses_enabled')::boolean then
+      raise exception 'WEEKLY_SOURCE_RULE_R7' using errcode='22023';
+    end if;
+    perform private.weekly_source_magnit_contract_price_assert_v1(p_values,v_policy);
+    if v_agency and coalesce((select cs.self_bill_no_invoices_sent from public.client_settings cs
+      where cs.client_id=v_row.client_id and (cs.effective_from is null or cs.effective_from<=v_scope_date)
+      order by cs.effective_from desc nulls last,cs.updated_at desc,cs.id desc limit 1),false) then
+      raise exception 'WEEKLY_SOURCE_RULE_R14' using errcode='22023';
+    end if;
+    if v_agency and exists(select 1 from public.contracts c where c.client_id=v_row.client_id
+      and c.weekly_timesheet_source::text='HEALTHROSTER'
+      and daterange(c.start_date,c.end_date,'[]') && daterange(v_scope_date,coalesce(p_to,'infinity'::date),'[]')
+      and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=p_group_id
+        and gc.client_id=c.client_id and greatest(c.start_date,v_scope_date) between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))
+      and (coalesce(c.self_bill,false) or coalesce(c.no_timesheet_required,false) or coalesce(c.is_nhsp,false))) then
+      raise exception 'WEEKLY_SOURCE_RULE_R14' using errcode='22023';
+    end if;
+    -- Contract overrides are resolved by the established dated settings owner.
+    for v_contract_context in select c.id,greatest(c.start_date,v_scope_date) as work_date
+      from public.contracts c where c.client_id=v_row.client_id and c.weekly_timesheet_source::text='HEALTHROSTER'
+        and daterange(c.start_date,c.end_date,'[]') && daterange(v_scope_date,coalesce(p_to,'infinity'::date),'[]')
+        and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=p_group_id
+          and gc.client_id=c.client_id and greatest(c.start_date,v_scope_date) between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))
+    loop
+      v_settings:=private._contract_settings_effective_core_v1(v_row.client_id,v_contract_context.id,v_contract_context.work_date,'WEEKLY',null);
+      v_contract_policy:=private._weekly_source_effective_policy_v1(v_row.client_id,v_contract_context.id,v_contract_context.work_date);
+      if p_values is not null and coalesce((v_contract_policy->>'source_fixed_expenses_enabled')::boolean,false) then
+        raise exception 'WEEKLY_SOURCE_RULE_R7' using errcode='22023'; end if;
+      perform private.weekly_source_magnit_contract_price_assert_v1(p_values,v_contract_policy);
+      if v_agency and (coalesce((v_settings->'values'->>'self_bill')::boolean,true)
+        or coalesce((v_settings->'values'->>'no_timesheet_required')::boolean,true)
+        or coalesce((v_settings->'values'->>'is_nhsp')::boolean,true)
+        or not coalesce((v_settings->'values'->>'requires_hr')::boolean,false)
+        or not coalesce((v_settings->'values'->>'autoprocess_hr')::boolean,false)
+        or not coalesce((v_settings->'applicability'->>'configuration_valid')::boolean,false)) then
+        raise exception 'WEEKLY_SOURCE_RULE_R14' using errcode='22023';
+      end if;
+    end loop;
+  end loop;
+  if p_require_live and v_count=0 then
+    raise exception 'WEEKLY_SOURCE_RULE_GROUP_MEMBERS_REQUIRED' using errcode='22023';
+  end if;
+end;
+$function$;

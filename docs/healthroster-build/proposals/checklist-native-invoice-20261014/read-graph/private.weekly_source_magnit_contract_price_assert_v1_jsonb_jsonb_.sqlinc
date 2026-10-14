@@ -1,0 +1,21 @@
+create or replace function private.weekly_source_magnit_contract_price_assert_v1(p_rule_values jsonb,p_effective_policy jsonb)
+returns boolean language plpgsql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_rule_values is null or p_rule_values->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or p_rule_values->>'checking_profile_kind' is distinct from 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' then return false; end if;
+  if p_rule_values->>'self_bill_source' is distinct from 'SAME_FILE'
+    or p_rule_values->>'final_report_profile_kind' is distinct from 'NONE'
+    or p_rule_values->>'invoice_membership' is distinct from 'FINALISED_IN_CYCLE_WINDOW'
+    or p_rule_values->>'pay_membership' is distinct from 'ALL_FINALISED_IN_FILE'
+    or p_rule_values->>'invoice_amount_basis' is distinct from 'CONTRACT_CALCULATION'
+    or p_rule_values->>'source_amount_basis' is distinct from 'NONE'
+    or p_rule_values->>'rate_difference_policy' is distinct from 'NOT_APPLICABLE'
+    or p_rule_values->'earliest_final_weekday' is distinct from 'null'::jsonb
+    or p_rule_values->'earliest_final_local_time' is distinct from 'null'::jsonb then
+    raise exception 'WEEKLY_SOURCE_MAGNIT_PRESET_INVALID' using errcode='22023'; end if;
+  if p_effective_policy->>'weekly_rate_classification_method' is distinct from 'WHOLE_SHIFT_START_DAY' then
+    raise exception 'WEEKLY_SOURCE_MAGNIT_WHOLE_SHIFT_REQUIRED' using errcode='22023'; end if;
+  return true;
+end;
+$function$;

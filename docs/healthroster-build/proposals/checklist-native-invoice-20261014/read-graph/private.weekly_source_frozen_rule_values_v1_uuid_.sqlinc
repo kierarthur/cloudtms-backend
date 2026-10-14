@@ -1,0 +1,11 @@
+create or replace function private.weekly_source_frozen_rule_values_v1(p_final_revision_id uuid)
+returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select version.values_json from public.weekly_source_final_revisions revision
+    join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+    join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+    join public.weekly_source_rule_set_versions version on version.id=revision.rule_set_version_id
+    join public.weekly_source_rule_sets rules on rules.id=version.rule_set_id
+      and rules.agency_id=source_group.agency_id and rules.environment=source_group.environment
+  where revision.id=p_final_revision_id and source_group.source_family='ROSTER';
+$function$;

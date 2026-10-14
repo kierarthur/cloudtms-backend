@@ -1,0 +1,200 @@
+create or replace function private.weekly_source_finalisation_economic_assert_v1(
+  p_row_resolution_id uuid,
+  p_source_cycle_id uuid,
+  p_expected_source_mode text
+) returns uuid
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_row public.weekly_source_upload_rows%rowtype;
+  v_economic public.weekly_source_row_economic_snapshots%rowtype;
+  v_expected_pay bigint;
+  v_expected_charge bigint;
+  v_expected_sign smallint;
+begin
+  if p_row_resolution_id is null or p_source_cycle_id is null
+     or p_expected_source_mode not in ('NHSP_WEEKLY','HEALTHROSTER_WEEKLY') then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_ASSERT_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into v_resolution
+  from public.weekly_source_row_resolutions where id=p_row_resolution_id;
+  if not found or v_resolution.mapping_state<>'RESOLVED' then
+    raise exception 'WEEKLY_SOURCE_RESOLUTION_NOT_FINALISABLE' using errcode='55000';
+  end if;
+  select * into strict v_row
+  from public.weekly_source_upload_rows where id=v_resolution.upload_row_id;
+  select * into v_economic
+  from public.weekly_source_row_economic_snapshots
+  where row_resolution_id=v_resolution.id;
+  if not found or (select pg_catalog.count(*) from public.weekly_source_row_economic_snapshots
+                    where row_resolution_id=v_resolution.id)<>1 then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_CARDINALITY' using errcode='55000';
+  end if;
+
+  -- A valid zero-charge NHSP row is a positive worked row whose exact source
+  -- invoice value happens to be £0.  Only a negative physical source amount is
+  -- a reversal; Candidate entitlement remains independently calculated.
+  v_expected_sign:=case when p_expected_source_mode='NHSP_WEEKLY' then
+    case when v_row.source_shift_charge_pence<0 then -1 else 1 end
+    else 1 end;
+  if v_expected_sign not in (-1,1)
+     or v_economic.row_sign is distinct from v_expected_sign
+     or v_economic.source_mode is distinct from p_expected_source_mode
+     or v_economic.upload_row_id is distinct from v_row.id
+     or not exists(
+       select 1
+       from public.weekly_source_uploads upload
+       where upload.id=v_row.upload_id
+         and upload.source_cycle_id=p_source_cycle_id
+     )
+     or v_economic.generation is distinct from v_resolution.generation
+     or v_economic.work_event_id is distinct from v_resolution.work_event_id
+     or v_economic.candidate_id is distinct from v_resolution.candidate_id
+     or v_economic.client_id is distinct from v_resolution.client_id
+     or v_economic.contract_id is distinct from v_resolution.contract_id
+     or v_economic.paid_minutes is distinct from v_row.actual_net_minutes
+     or v_economic.break_minutes is distinct from v_row.break_minutes
+     or v_resolution.paid_minutes is distinct from v_row.actual_net_minutes
+     or v_resolution.contract_and_rate_fingerprint is distinct from v_economic.contract_and_rate_fingerprint
+     or v_resolution.effective_policy_fingerprint is distinct from v_economic.effective_policy_fingerprint then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_IDENTITY_MISMATCH' using errcode='55000';
+  end if;
+
+  if pg_catalog.jsonb_typeof(v_economic.canonical_result_json) is distinct from 'object'
+     or pg_catalog.jsonb_typeof(v_economic.canonical_result_json->'bucket_minutes') is distinct from 'object'
+     or pg_catalog.jsonb_typeof(v_economic.canonical_result_json->'hours') is distinct from 'object'
+     or pg_catalog.jsonb_typeof(v_economic.canonical_result_json->'pay_rates') is distinct from 'object'
+     or pg_catalog.jsonb_typeof(v_economic.canonical_result_json->'charge_rates') is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_INCOMPLETE' using errcode='55000';
+  end if;
+  if not (v_economic.canonical_result_json ?& array[
+       'schema_version','calculator_version','source_mode','rate_method','sign',
+       'paid_minutes','break_minutes','bucket_minutes','hours','pay_rates','charge_rates',
+       'total_pay_pence','calculated_charge_pence','invoice_vat_chargeable',
+       'invoice_vat_rate_pct','source_expense_vat_enabled','contract_and_rate_fingerprint',
+       'effective_policy_fingerprint','invoice_vat_policy_fingerprint','break_allocation'
+     ]::text[])
+     or exists(
+       select 1
+       from pg_catalog.jsonb_object_keys(v_economic.canonical_result_json) key_name
+       where not (key_name=any(array[
+         'schema_version','calculator_version','source_mode','rate_method','sign',
+         'paid_minutes','break_minutes','bucket_minutes','hours','pay_rates','charge_rates',
+         'total_pay_pence','calculated_charge_pence','invoice_vat_chargeable',
+         'invoice_vat_rate_pct','source_expense_vat_enabled','contract_and_rate_fingerprint',
+         'effective_policy_fingerprint','invoice_vat_policy_fingerprint','break_allocation'
+       ]::text[]))
+     )
+     or exists(
+       select 1
+       from (values ('bucket_minutes'),('hours'),('pay_rates'),('charge_rates')) object_name(name)
+       where not ((v_economic.canonical_result_json->object_name.name) ?&
+                    array['day','night','sat','sun','bh']::text[])
+          or exists(
+            select 1
+            from pg_catalog.jsonb_object_keys(
+              v_economic.canonical_result_json->object_name.name
+            ) bucket_name
+            where not (bucket_name=any(array['day','night','sat','sun','bh']::text[]))
+          )
+     ) then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_SHAPE_MISMATCH' using errcode='55000';
+  end if;
+
+  perform private.weekly_source_magnit_bucket_assert_v1(
+    private.weekly_source_effective_rule_set_v1(v_resolution.client_id,p_source_cycle_id)->'values',
+    v_economic.canonical_result_json);
+  v_expected_pay:=(pg_catalog.round(pg_catalog.round(
+    pg_catalog.abs(v_economic.hours_day)*v_economic.pay_day+
+    pg_catalog.abs(v_economic.hours_night)*v_economic.pay_night+
+    pg_catalog.abs(v_economic.hours_sat)*v_economic.pay_sat+
+    pg_catalog.abs(v_economic.hours_sun)*v_economic.pay_sun+
+    pg_catalog.abs(v_economic.hours_bh)*v_economic.pay_bh,2)*100,0)::bigint)*v_expected_sign;
+  v_expected_charge:=(pg_catalog.round(pg_catalog.round(
+    pg_catalog.abs(v_economic.hours_day)*v_economic.charge_day+
+    pg_catalog.abs(v_economic.hours_night)*v_economic.charge_night+
+    pg_catalog.abs(v_economic.hours_sat)*v_economic.charge_sat+
+    pg_catalog.abs(v_economic.hours_sun)*v_economic.charge_sun+
+    pg_catalog.abs(v_economic.hours_bh)*v_economic.charge_bh,2)*100,0)::bigint)*v_expected_sign;
+  if v_economic.canonical_result_json->>'schema_version'
+       is distinct from 'WEEKLY_SOURCE_CANONICAL_ECONOMIC_SNAPSHOT_V1'
+     or v_economic.canonical_result_json->>'rate_method' is distinct from v_economic.rate_method
+     or (v_economic.canonical_result_json#>>'{bucket_minutes,day}')::integer
+          is distinct from v_economic.minutes_day
+     or (v_economic.canonical_result_json#>>'{bucket_minutes,night}')::integer
+          is distinct from v_economic.minutes_night
+     or (v_economic.canonical_result_json#>>'{bucket_minutes,sat}')::integer
+          is distinct from v_economic.minutes_sat
+     or (v_economic.canonical_result_json#>>'{bucket_minutes,sun}')::integer
+          is distinct from v_economic.minutes_sun
+     or (v_economic.canonical_result_json#>>'{bucket_minutes,bh}')::integer
+          is distinct from v_economic.minutes_bh
+     or (v_economic.canonical_result_json#>>'{hours,day}')::numeric
+          is distinct from v_economic.hours_day
+     or (v_economic.canonical_result_json#>>'{hours,night}')::numeric
+          is distinct from v_economic.hours_night
+     or (v_economic.canonical_result_json#>>'{hours,sat}')::numeric
+          is distinct from v_economic.hours_sat
+     or (v_economic.canonical_result_json#>>'{hours,sun}')::numeric
+          is distinct from v_economic.hours_sun
+     or (v_economic.canonical_result_json#>>'{hours,bh}')::numeric
+          is distinct from v_economic.hours_bh
+     or (v_economic.canonical_result_json#>>'{pay_rates,day}')::numeric
+          is distinct from v_economic.pay_day
+     or (v_economic.canonical_result_json#>>'{pay_rates,night}')::numeric
+          is distinct from v_economic.pay_night
+     or (v_economic.canonical_result_json#>>'{pay_rates,sat}')::numeric
+          is distinct from v_economic.pay_sat
+     or (v_economic.canonical_result_json#>>'{pay_rates,sun}')::numeric
+          is distinct from v_economic.pay_sun
+     or (v_economic.canonical_result_json#>>'{pay_rates,bh}')::numeric
+          is distinct from v_economic.pay_bh
+     or (v_economic.canonical_result_json#>>'{charge_rates,day}')::numeric
+          is distinct from v_economic.charge_day
+     or (v_economic.canonical_result_json#>>'{charge_rates,night}')::numeric
+          is distinct from v_economic.charge_night
+     or (v_economic.canonical_result_json#>>'{charge_rates,sat}')::numeric
+          is distinct from v_economic.charge_sat
+     or (v_economic.canonical_result_json#>>'{charge_rates,sun}')::numeric
+          is distinct from v_economic.charge_sun
+     or (v_economic.canonical_result_json#>>'{charge_rates,bh}')::numeric
+          is distinct from v_economic.charge_bh
+     or v_economic.total_pay_pence is distinct from v_expected_pay
+     or v_economic.calculated_charge_pence is distinct from v_expected_charge
+     or v_economic.calculation_fingerprint is distinct from
+       private.weekly_source_sha256_jsonb_v1(
+         'WEEKLY_SOURCE_CANONICAL_ECONOMIC_SNAPSHOT_V1',v_economic.canonical_result_json
+       )
+     or v_economic.canonical_result_json->>'calculator_version' is distinct from v_economic.calculator_version
+     or v_economic.canonical_result_json->>'source_mode' is distinct from v_economic.source_mode
+     or v_economic.canonical_result_json->>'rate_method' is distinct from v_economic.rate_method
+     or (v_economic.canonical_result_json->>'sign')::smallint is distinct from v_economic.row_sign
+     or (v_economic.canonical_result_json->>'paid_minutes')::integer is distinct from v_economic.paid_minutes
+     or (v_economic.canonical_result_json->>'break_minutes')::integer is distinct from v_economic.break_minutes
+     or (v_economic.canonical_result_json->>'total_pay_pence')::bigint is distinct from v_economic.total_pay_pence
+     or (v_economic.canonical_result_json->>'calculated_charge_pence')::bigint is distinct from v_economic.calculated_charge_pence
+     or (v_economic.canonical_result_json->>'invoice_vat_chargeable')::boolean is distinct from v_economic.invoice_vat_chargeable
+     or (v_economic.canonical_result_json->>'invoice_vat_rate_pct')::numeric is distinct from v_economic.invoice_vat_rate_pct
+     or (v_economic.canonical_result_json->>'source_expense_vat_enabled')::boolean is distinct from v_economic.source_expense_vat_enabled
+     or private.weekly_source_finalisation_hex32_v1(
+          v_economic.canonical_result_json->>'contract_and_rate_fingerprint',
+          'WEEKLY_SOURCE_CONTRACT_RATE_FINGERPRINT_INVALID'
+        ) is distinct from v_economic.contract_and_rate_fingerprint
+     or private.weekly_source_finalisation_hex32_v1(
+          v_economic.canonical_result_json->>'effective_policy_fingerprint',
+          'WEEKLY_SOURCE_POLICY_FINGERPRINT_INVALID'
+        ) is distinct from v_economic.effective_policy_fingerprint
+     or private.weekly_source_finalisation_hex32_v1(
+          v_economic.canonical_result_json->>'invoice_vat_policy_fingerprint',
+          'WEEKLY_SOURCE_VAT_FINGERPRINT_INVALID'
+        ) is distinct from v_economic.invoice_vat_policy_fingerprint then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_INCONSISTENT' using errcode='55000';
+  end if;
+  return v_economic.id;
+exception
+  when invalid_text_representation or numeric_value_out_of_range then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_INCONSISTENT' using errcode='55000';
+end;
+$function$;

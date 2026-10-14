@@ -1,0 +1,51 @@
+create or replace function private.weekly_source_invoice_movement_money_v1(p_movement_id uuid,p_invoice_hold_release_id uuid default null)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare m public.weekly_source_billing_movements%rowtype; s public.weekly_source_upload_rows%rowtype;
+  receipt public.weekly_source_invoice_hold_releases%rowtype; release_id uuid:=p_invoice_hold_release_id;
+  ids uuid[]; rules jsonb; authority jsonb;
+begin
+  select * into strict m from public.weekly_source_billing_movements where weekly_source_billing_movements.id=p_movement_id;
+  if release_id is null then
+    -- Historical money follows its exact admitted presentation. An unadmitted
+    -- live receipt or today's settings never reprices a prior movement.
+    select array_agg(distinct p.invoice_hold_release_id) into ids
+      from public.weekly_source_invoice_line_bindings b join public.weekly_source_invoice_presentation_lines p on p.id=b.presentation_line_id
+      where b.billing_movement_id=m.id and b.state='CURRENT' and p.invoice_hold_release_id is not null
+        and m.movement_role in ('POSITIVE','REPLACEMENT') and m.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION');
+    if cardinality(ids)>1 then raise exception 'WEEKLY_SOURCE_INVOICE_RELEASE_PRESENTATION_AMBIGUOUS' using errcode='55000'; end if;
+    release_id:=ids[1];
+    if release_id is null and exists(select 1 from public.weekly_source_invoice_line_bindings old_binding
+      join public.weekly_source_invoice_presentation_lines old_presentation on old_presentation.id=old_binding.presentation_line_id
+      where old_binding.billing_movement_id=m.id and old_presentation.invoice_hold_release_id is not null) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_RELEASE_HISTORICAL_IDENTITY_UNAVAILABLE' using errcode='55000'; end if;
+  end if;
+  if release_id is null then return jsonb_build_object('net_pence',m.invoice_presentation_charge_pence,
+    'vat_pence',(m.vat_amount*100)::bigint,'gross_pence',(m.total_inc_vat*100)::bigint,'release_authority',null); end if;
+  select * into strict receipt from public.weekly_source_invoice_hold_releases where weekly_source_invoice_hold_releases.id=release_id;
+  select * into strict s from public.weekly_source_upload_rows where weekly_source_upload_rows.id=receipt.upload_row_id;
+  rules:=private.weekly_source_frozen_rule_values_v1(m.final_revision_id);
+  if receipt.hold_kind<>'VAT_FIT' or m.source_facts_json->>'upload_row_id' is distinct from s.id::text
+    or m.source_profile_kind<>'HEALTHROSTER_ACTUAL_ROWS'
+    or not ((m.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE') and m.movement_role in ('POSITIVE','REPLACEMENT'))
+      or (m.source_line_kind='SOURCE_INVOICE_CORRECTION' and m.movement_role='REPLACEMENT'))
+    or rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or rules->>'invoice_amount_basis' is distinct from 'SOURCE_AMOUNT'
+    or rules->>'source_amount_basis' is distinct from 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+    or s.source_shift_charge_pence is distinct from receipt.net_pence or m.invoice_presentation_charge_pence is distinct from receipt.net_pence
+    or s.source_gross_pence is null or s.source_vat_pence is null
+    or abs(5::numeric*s.source_gross_pence-6::numeric*s.source_shift_charge_pence)<=5
+    or receipt.vat_pence is distinct from (case receipt.action when 'BILL_AT_NET_PLUS_20' then round(receipt.net_pence::numeric*20/100)::bigint
+      when 'BILL_AS_FILE' then s.source_vat_pence else null end)
+    or receipt.gross_pence is distinct from receipt.net_pence+receipt.vat_pence
+    or receipt.release_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_V1',jsonb_build_object(
+      'upload_row_id',s.id,'source_row_hash',encode(s.normalised_row_hash,'hex'),'hold_kind',receipt.hold_kind,'action',receipt.action,
+      'net_pence',receipt.net_pence,'vat_pence',receipt.vat_pence,'gross_pence',receipt.gross_pence,'actor_user_id',receipt.actor_user_id)) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_RELEASE_AUTHORITY_INVALID' using errcode='55000'; end if;
+  authority:=jsonb_build_object('invoice_hold_release_id',receipt.id,'release_hash',encode(receipt.release_hash,'hex'),
+    'upload_row_id',s.id,'source_row_hash',encode(s.normalised_row_hash,'hex'),'original_movement_id',m.id,
+    'original_movement_hash',encode(m.movement_economic_hash,'hex'),'net_pence',receipt.net_pence,
+    'vat_pence',receipt.vat_pence,'gross_pence',receipt.gross_pence);
+  return jsonb_build_object('net_pence',receipt.net_pence,'vat_pence',receipt.vat_pence,'gross_pence',receipt.gross_pence,'release_authority',authority);
+end;
+$function$;
