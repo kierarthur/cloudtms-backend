@@ -1,0 +1,25 @@
+{
+  "schema_version": "MANAGED_QUALIFICATION_CURRENT_ROOT_SOURCE_CHECK_V1",
+  "source_only": true,
+  "current_shared_source_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "current_dependency_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "complete_current_owners": 3,
+  "entire_current_reverse_proofs": 3,
+  "preserved_complete_native_helpers": 16,
+  "current_import_dependency_modules": 20,
+  "source_tests_pass": 10,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 25,
+  "whole_packet_credential_scan": "PASS",
+  "no_new_cli_env_option_or_bundle": true,
+  "recorder_request_response_fields": [
+    9,
+    13
+  ],
+  "old198_and_a0_108_frozen_artifacts_preserved": true,
+  "protected_recording_entry_separate_required": true,
+  "independent_critic": false,
+  "postgresql_compile": false,
+  "managed_release_or_recorder_invoked": false,
+  "actual_database_runtime_business_action": false
+}

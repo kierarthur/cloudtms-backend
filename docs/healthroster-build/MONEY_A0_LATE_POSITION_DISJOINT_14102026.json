@@ -1,0 +1,653 @@
+{
+  "source_only": true,
+  "current_foundation_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "a0_commit": "7b57afc6e501e859e88e5988943812415162ec01",
+  "a0_literal_definition_occurrences": 24,
+  "a0_distinct_definitions": 24,
+  "a0_definitions": [
+    {
+      "signature": "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc",
+      "definition_sha256": "b070daf83e30b09dc5b530a621808556cf47a646690aa5e16f1e5b071f5bbcb3"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_clock_scope_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc",
+      "definition_sha256": "bee469c4378f6833c225cb5b33abc92f09defa3030011e1a3fbdd3635e978ce9"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_input_witness_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc",
+      "definition_sha256": "b031aa825c79a163b7e4f278fcbd273fc2958b0e06a387c92dda6125d249d4dd"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc",
+      "definition_sha256": "d9979f3a2ee5bad9586311658ed96d8a916148243dfdf0396160338469e1ec79"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_signed_precursor_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "5dcec85bf84b29dff1e964c9d6d2bb111a1880bc88a396a9a2b962f2c8c9f0fe"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "f319ef939bfed68ae1993c235ad669ac00dada9211ac615b724ae2f8a092e59f"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_reference_before_v1()",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "f2d7da1041ce597b297db122d97ae80119191da3c9aacfe46fcf84c16520df6e"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_booking_before_v1()",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "abf554cb4aa709e028058b06cfe00514acbdf9bd2da54ca11fa03d68c8c0f23b"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_candidate_before_v1()",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "56cf26fb2d5ec4a2fa746ba452c4ac494581327f46cdbc8749ca4161002c8be1"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc",
+      "definition_sha256": "390774562934db2f6d57194bdf44ecdca16c7b29251b06b78fc56ba183823960"
+    },
+    {
+      "signature": "private.timesheet_correction_component_negate_v1(jsonb,text[])",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "6236c659d6aa3e49c1788461629512df2f8ba6f8501e8a129451db8af591bd26"
+    },
+    {
+      "signature": "private.timesheet_correction_native_original_reversal_v1(jsonb,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "742707242e3461c6bec8907189be9e8962213247180a59bb3a2d0ebc1d354fdb"
+    },
+    {
+      "signature": "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "553372cec3e8d692137b2b66b2b94299b776bc0d38203c1a4062034c1c33ff59"
+    },
+    {
+      "signature": "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "628cdc33b1c43b26437225f25f702f9e374182aa3f504ad958242c37516bf890"
+    },
+    {
+      "signature": "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "3b78069ced74f885c8a25d4b62aacb8f278622cfbd5b95ae9cc57a5b12bbc273"
+    },
+    {
+      "signature": "public.timesheet_correction_prepare_v1(uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "86da044d0e3a0fe64b2240e3235dfa939726b48dd56880058ce09640e64efb67"
+    },
+    {
+      "signature": "public.timesheet_correction_authorise_atomic_v1(uuid,bigint,jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "definition_sha256": "bf79eb605fda9f71811670dcfae5706d0fd83713301671ab1530c6cbe084c461"
+    },
+    {
+      "signature": "private.timesheet_correction_week_allocate_v1(uuid,date,public.submission_mode_enum,uuid,timestamp with time zone)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "c5f030444562a02a6885c261fecb6c5a74a762e18971fe543dfef94f1b489fd0"
+    },
+    {
+      "signature": "public.timesheet_correction_workflow_projection_v1(uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "769fb71da588f74e29899a89a899e556fb39a25a1dc8a0594099c27b4c867060"
+    },
+    {
+      "signature": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76"
+    },
+    {
+      "signature": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "b4d90e94d55b16536f72f278bb8c6933a45f91638fa218423d0bab36735f35e7"
+    },
+    {
+      "signature": "private.timesheet_correction_projection_by_request_v1(uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "03764c08819bfa3f2c938c4316b2369d8bbbd6569c326f3b797421f7f9f3d970"
+    },
+    {
+      "signature": "public.timesheet_correction_request_projection_v1(uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "946f8db3f61de501320af3f91bf5639d0a89335c4901e2c41c70b190297fe723"
+    },
+    {
+      "signature": "public.timesheet_correction_create_projection_v1(uuid,uuid,uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "definition_sha256": "475c7d89f9ba05da4a80218b3ec218a1ec4ddf8277b0d26d6191aecb108c523c"
+    }
+  ],
+  "foundation_intersections": [
+    {
+      "root": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "definition_occurrences": 79,
+      "distinct_definitions": 38,
+      "intersections": []
+    },
+    {
+      "root": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+      "definition_occurrences": 5,
+      "distinct_definitions": 5,
+      "intersections": []
+    },
+    {
+      "root": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "definition_occurrences": 47,
+      "distinct_definitions": 47,
+      "intersections": []
+    }
+  ],
+  "all_full_source_input_pins": [
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "sha256": "49fa65c7d185ad57f27d444585d79488715492c9f579206c4ddd84e99d6d8b0f",
+      "bytes": 9950
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/ORIGINAL_PREREQUISITES_SOURCE_FORWARD.sqlinc",
+      "sha256": "1ec71ddb192128b78a02e8ea11a7d5afd2797116e2d954b7cb7a03b9b2be74bc",
+      "bytes": 4078
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/01_cap_original_functions_02_source_cas.sqlinc",
+      "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b",
+      "bytes": 17435
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/02_cap_original_functions_03_capability_owners.sqlinc",
+      "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23",
+      "bytes": 14714
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/03_cap_original_functions_04_original_clients.sqlinc",
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+      "bytes": 3530
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/04_cap_original_functions_11_non_self_bill_admission.sqlinc",
+      "sha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632",
+      "bytes": 2123
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+      "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc",
+      "bytes": 20106
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/06_cap_original_functions_06_complete_selection.sqlinc",
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1",
+      "bytes": 8378
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/07_cap_original_functions_07_complete_stage_proof.sqlinc",
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861",
+      "bytes": 4480
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/08_cap_original_functions_08_complete_bulk_command.sqlinc",
+      "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf",
+      "bytes": 14792
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/09_cap_original_functions_12_complete_17_prepare_family.sqlinc",
+      "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be",
+      "bytes": 28806
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/10_cap_original_functions_12_complete_18_prepare_action.sqlinc",
+      "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5",
+      "bytes": 13428
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/11_cap_original_functions_12_complete_19_action_context.sqlinc",
+      "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11",
+      "bytes": 24978
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/12_cap_original_functions_12_complete_20_stage_request.sqlinc",
+      "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254",
+      "bytes": 55130
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/13_q25_owner_xid_qualification_00_complete_current_catalogue.sqlinc",
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+      "bytes": 14686
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+      "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746",
+      "bytes": 19844
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/15_q25_owner_xid_qualification_QUALIFICATION_STEP.sqlinc",
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+      "bytes": 9896
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+      "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342",
+      "bytes": 2028
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/17_q25_owner_xid_qualification_04_complete_non_self_bill_admission.sqlinc",
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "bytes": 2234
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+      "bytes": 1034
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+      "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15",
+      "bytes": 10132
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/20_q25_owner_xid_qualification_08_complete_capability_release_reader.sqlinc",
+      "sha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85",
+      "bytes": 6111
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/21_q45_actor_event_closed_dto_cross_session_00_complete_current_catalogue.sqlinc",
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+      "bytes": 14686
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "bytes": 20104
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66",
+      "bytes": 14636
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/24_q45_actor_event_closed_dto_cross_session_04_original_clients.sqlinc",
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+      "bytes": 3530
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/25_q45_actor_event_closed_dto_cross_session_04_complete_non_self_bill_admission.sqlinc",
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "bytes": 2234
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+      "bytes": 9896
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+      "bytes": 1034
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/28_q45_actor_event_closed_dto_cross_session_CLOSED_DTO.sqlinc",
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "bytes": 381
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/29_q45_actor_event_closed_dto_cross_session_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99",
+      "bytes": 18341
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "bytes": 20026
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/31_q45_actor_event_closed_dto_cross_session_02_complete_prerequisite_reader.sqlinc",
+      "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0",
+      "bytes": 8874
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+      "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+      "bytes": 18451
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/33_q45_actor_event_closed_dto_cross_session_03_complete_operational_release_reader.sqlinc",
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "bytes": 6266
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "bytes": 2849
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3",
+      "bytes": 615
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456",
+      "bytes": 1843
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+      "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "bytes": 20906
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4",
+      "bytes": 3409
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/39_q45_actor_event_closed_dto_cross_session_09_complete_actor_non_self_bill_admission.sqlinc",
+      "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4",
+      "bytes": 2861
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+      "bytes": 8394
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+      "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "bytes": 6416
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+      "sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d",
+      "bytes": 28838
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+      "sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea",
+      "bytes": 13447
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+      "sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
+      "bytes": 24997
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/45_q45_actor_event_closed_dto_cross_session_12_complete_actor_20_stage_request.sqlinc",
+      "sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019",
+      "bytes": 55162
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/46_q45_actor_event_closed_dto_cross_session_07_complete_stage_proof.sqlinc",
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861",
+      "bytes": 4480
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/47_q45_actor_event_closed_dto_cross_session_16_complete_bulk_command_presentation.sqlinc",
+      "sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e",
+      "bytes": 15449
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/48_f12_first_use_full_inventory_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "bytes": 18377
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+      "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "bytes": 18453
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "bytes": 20104
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+      "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+      "bytes": 48358
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+      "sha256": "39dfc2377184d170450d4028de43791d6561755d844cd5f2d4b12be2d7f178a1",
+      "bytes": 2257
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+      "sha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d",
+      "bytes": 31460
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_manual_review_resolve_v1.complete.sqlinc",
+      "sha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796",
+      "bytes": 15156
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+      "sha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5",
+      "bytes": 55307
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "sha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f",
+      "bytes": 40147
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_manual_reviews_finalised_v1.complete.sqlinc",
+      "sha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32",
+      "bytes": 5190
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "sha256": "bd93165a3c30a35aea8775bef8fb4234d1901b362fc69c3cda26ef9b8de8ae9d",
+      "bytes": 14562
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b",
+      "bytes": 21135
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202",
+      "bytes": 15114
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/03_HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28",
+      "bytes": 7932
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433",
+      "bytes": 20020
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585",
+      "bytes": 22606
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360",
+      "bytes": 18928
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/07_OFF_RULE_STATUS.sqlinc",
+      "sha256": "8eb29b29ffe55dc406dfadc4c84ff389ca493b62d0b331a15981e01fc3e0f97b",
+      "bytes": 2578
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8",
+      "bytes": 3929
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/09_01_operational_rule_projection.sqlinc",
+      "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a",
+      "bytes": 1367
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0",
+      "bytes": 1820
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "bytes": 20116
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/12_04_final_revision_rule_guard.sqlinc",
+      "sha256": "e2349dc619a7b30c74328d62a8f1aace2435a361d30309b9c43e3ff543fef3a3",
+      "bytes": 1530
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/13_05_coverage_floor_owner.sqlinc",
+      "sha256": "6f34e8d9ab9bf08a7bb0fc240fea49a35edc420ff7b7d1f98210a697476f34f3",
+      "bytes": 6533
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/14_07_automatic_capability_admission.sqlinc",
+      "sha256": "b08e604e3df9b13eaeb1b0e7ab635e85a0a80d94785ecb76327d35b14a866ac4",
+      "bytes": 1029
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/15_08_cas_admission_owner.sqlinc",
+      "sha256": "c5e3217b5ad271d66614ad3df0ad80870f57817fb18e042b9dcb43339a69e285",
+      "bytes": 2312
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6",
+      "bytes": 18455
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/17_ACTIVATION_WINDOW_BINDING.sqlinc",
+      "sha256": "883eab37fd437a4b802c2f6331de865b7eb0e1bca8d5ec12d2624d9a950604a4",
+      "bytes": 6391
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/18_FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "9ba9d59f3168492d53cf38c003e5a7cca117aa627edcbfe211061a0d628e8c2f",
+      "bytes": 19095
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/19_ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
+      "sha256": "9a4698490f95584ed2e94ea58e1a6a9312c52b3a55f3109f067e9e3be3ba88b9",
+      "bytes": 18557
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/20_ACTIVATION_PROBE_SCOPE.sqlinc",
+      "sha256": "03e72b4f50fe5716f5baf206e4979a799da161f365a5b8338792308c5b408bf6",
+      "bytes": 16557
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e",
+      "bytes": 5863
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "sha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0",
+      "bytes": 7474
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/23_POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "sha256": "81fbe2c9cd141d10a909072f140a734e8a759a39ce5102691b57ed25fd40982d",
+      "bytes": 7129
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/24_POST_VERIFIED_PARTIAL_ASSERT.sqlinc",
+      "sha256": "9eb4bff291bccd7127df1cf878854ffe896dacd24f0c68264690496188398724",
+      "bytes": 4196
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/25_REPORT_FIXTURE_REFERENCE.sqlinc",
+      "sha256": "697d3ca1fe0d9af1588d9e71c0b25c69b2dc48effd86e01dccc05aec65e28031",
+      "bytes": 7539
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/26_NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "sha256": "c0c7b32a56ad4974759932c38214691888d3bd4a8d5400838ceb24943cde110d",
+      "bytes": 8838
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/27_POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "sha256": "9f8e8a6448ead46d3d35e539938a6d1b36996d3a39ce8688645d4db806e12238",
+      "bytes": 13750
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/28_12_complete_report_nullable_rounding_owner.sqlinc",
+      "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312",
+      "bytes": 11611
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/29_11_complete_historical_fixture_native_assignment.sqlinc",
+      "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac",
+      "bytes": 7213
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+      "sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f",
+      "bytes": 22825
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/31_OWNER_ONLY_ADDITIONS_ACL.sqlinc",
+      "sha256": "acfbbf1b156ac7d9183185ed52b4b240f4543b404498732510e9ad526a2f6a25",
+      "bytes": 10198
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/A0_CURRENT_ROOT_SOURCE_FORWARD.sqlinc",
+      "sha256": "249fc03bb5b3e15ff99164244d5686fddb932e5c580cd7bbcb5f9425d9ac050f",
+      "bytes": 403
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc",
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39",
+      "bytes": 1528
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc",
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+      "bytes": 9527
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc",
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+      "bytes": 4526
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "bytes": 12314
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "bytes": 19166
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "bytes": 5935
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+      "bytes": 35853
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "bytes": 23160
+    }
+  ],
+  "actual_after_0430_mount_does_not_replace_any_0410_0420_0430_routine_body": true,
+  "source_only_no_physical_registry_acl_or_native_schedule_claim": true
+}

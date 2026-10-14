@@ -1,0 +1,142 @@
+{
+  "source_only": true,
+  "absolute_retained_scratch": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\managed-key-source-gCW1f5",
+  "files": [
+    {
+      "relative_file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/broker/src/weekly-source/off-rule-native-proxy.mjs"
+    },
+    {
+      "relative_file": "scripts/bpay-next-final-definers.mjs",
+      "bytes": 13413,
+      "sha256": "4d7ad99b9af129bb3d641a03e9f6ec13c29a7527cea47470713b57fda52c4e8d",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/bpay-next-final-definers.mjs"
+    },
+    {
+      "relative_file": "scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-db-release-lib.mjs"
+    },
+    {
+      "relative_file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "bytes": 11421,
+      "sha256": "0098adfeb34f7765373a1b6db79cbbb4e9650d837963293004e8a44663841c01",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-execution-policy.mjs"
+    },
+    {
+      "relative_file": "scripts/cloudtms-managed-psql.mjs",
+      "bytes": 5398,
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-psql.mjs"
+    },
+    {
+      "relative_file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-release-sql.mjs"
+    },
+    {
+      "relative_file": "scripts/cloudtms-managed-release.mjs",
+      "bytes": 44665,
+      "sha256": "d1a1c9b956e6f2ffa5b1500bc7d6dd2c665e0d3089335f360b7e95eedc03f9cb",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "relative_file": "scripts/predecessor-managed.mjs",
+      "bytes": 44663,
+      "sha256": "15dae11fc5ea465d3d7abb6ee3780cf341c66528ec2854cd5d90b417c7969c78",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-activation-window-binding.mjs",
+      "bytes": 3778,
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-activation-window-binding.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-external-approval.mjs",
+      "bytes": 1903,
+      "sha256": "f8e66de262fdb802747e2e8274af8b41085a391786ec46662a512f4eb2862b47",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-external-approval.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "bytes": 6878,
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-off-rule-setup-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "bytes": 15228,
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-post-verified-evidence-controller.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "bytes": 9395,
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-activation-probe-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "bytes": 11842,
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-execution-tree.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "bytes": 18719,
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-operational-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "bytes": 1718,
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-partial-native-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 17331,
+      "sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-prerequisite-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "bytes": 5751,
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-probe-native-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-release-qualification.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "bytes": 5203,
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-test-setup-evidence.mjs"
+    },
+    {
+      "relative_file": "scripts/weekly-source-reader-release.mjs",
+      "bytes": 2834,
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313",
+      "exact_source_reference": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-reader-release.mjs"
+    }
+  ],
+  "total_bytes": 274116,
+  "attempted_action": "PowerShell Remove-Item -LiteralPath of resolved task-owned directory -Recurse -Force following an own .codex-tmp confinement check",
+  "automatic_approval_review_result": "Rejected: blocked by policy",
+  "deletion_occurred": false,
+  "retry_or_bypass": false,
+  "all_files_match_exact_source_modules": true,
+  "private_business_data_or_secrets_written": false,
+  "native_session_or_database_action": false,
+  "failed_before_model_or_git_or_native_test_creation": true,
+  "retained_for_owner_root_leftover_index": true
+}

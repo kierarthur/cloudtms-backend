@@ -1,0 +1,45 @@
+{
+  "schema_version": "MANAGED_SETUP_MODE_SUCCESSOR_FROZEN_SOURCE_REVIEW_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_BOTH_MANAGED32_FINDINGS_FIXED_NATIVE_GATES_HELD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/COMPLETE_CURRENT_MANAGED_REVERSE.json",
+      "bytes": 11308,
+      "sha256": "4763800e67ece33541f429d3212446deea233d6af353bbb6f86ee41ea215cae0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 830,
+      "sha256": "8c16f299938c17de49df942ec925e5f0c767935ae5fdfe5200d9d93124864fdb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/SOURCE_REVIEW_READY.md",
+      "bytes": 1892,
+      "sha256": "03bf18427aee0edb52167aa5266a978f15c343597d0f0b14822d2b3c9eff6917"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/freeze-setup-mode-successor.mjs",
+      "bytes": 2931,
+      "sha256": "a826901113d66305b8fd66f9d27fbfe79a55099f5cf069194ea47e197326941d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/generate-setup-mode-successor.mjs",
+      "bytes": 2343,
+      "sha256": "fc566346f0db125708e486bc1a3bbe8e02edc693b2303537b4824c91a5ffb6ef"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/scripts/cloudtms-managed-release.mjs",
+      "bytes": 44678,
+      "sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/setup-mode-source.test.mjs",
+      "bytes": 6978,
+      "sha256": "70869f0a85c6383291f448a5ecfd305d64e509b922a89b8e4a61a2e217a90190"
+    }
+  ],
+  "source_check_sha256": "8c16f299938c17de49df942ec925e5f0c767935ae5fdfe5200d9d93124864fdb",
+  "independent_critic": false,
+  "actual_database_release_runtime_or_business_action": false
+}

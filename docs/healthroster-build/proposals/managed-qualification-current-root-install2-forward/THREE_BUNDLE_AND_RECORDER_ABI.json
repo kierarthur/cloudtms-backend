@@ -1,0 +1,46 @@
+{
+  "source_only": true,
+  "existing_receipt_bundle_keys": [
+    "weeklySourceProtectedPrerequisites",
+    "weeklySourceProtectedOperational",
+    "weeklySourceProtectedTestSetup"
+  ],
+  "new_bundle_or_cli_option": false,
+  "shared_operational_qualifications_may_be_empty": true,
+  "optional_report_fin_native_artifacts_preserved_by_current_money_loader": true,
+  "post_verified_controller": {
+    "commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+    "bytes": 15228,
+    "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b"
+  },
+  "request_fields": [
+    "schema_version",
+    "expected_execution",
+    "expected_evidence_sha256",
+    "receipt_input_commit",
+    "receipt_tree_proof",
+    "artifact_slot",
+    "artifacts",
+    "reason",
+    "turn_backend_pid"
+  ],
+  "response_fields": [
+    "schema_version",
+    "execution",
+    "receipt_input_commit",
+    "receipt_tree_sha256",
+    "artifact_slot",
+    "artifacts_sha256",
+    "prior_evidence_sha256",
+    "evidence_sha256",
+    "actor_user_id",
+    "recorded_at_utc",
+    "replayed",
+    "operational_settings_changed",
+    "receipt_sha256"
+  ],
+  "actual_verified_installation_source_contract_catalogue_owner_session_and_send7_required": true,
+  "concrete_test_only_protected_entry_followup_required": true,
+  "no_native_or_recording_invocation": true
+}

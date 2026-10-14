@@ -1,0 +1,236 @@
+name: Database Release (manual and protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Exact target environment
+        required: true
+        type: choice
+        options: [TEST, LIVE]
+      mode:
+        description: NEW blank, UPGRADE managed, ADOPT exact, or one-time LEGACY_UPGRADE
+        required: true
+        type: choice
+        options: [UPGRADE, NEW, ADOPT, LEGACY_UPGRADE]
+      phase:
+        description: PLAN is read-only; APPLY is full verification; AUTO selects the safe TEST route
+        required: true
+        type: choice
+        options: [PLAN, APPLY, AUTO_PLAN, AUTO, RECORD_EVIDENCE]
+      record_actor_user_id:
+        description: Actual active TEST Office admin UUID for RECORD_EVIDENCE
+        required: false
+        type: string
+      record_artifact_slot:
+        description: One existing receipt slot for RECORD_EVIDENCE
+        required: false
+        type: choice
+        options: [weekly_source_protected_test_setup_authorizations, weekly_source_off_rule_test_controls, weekly_source_protected_partial_native_evidence, weekly_source_protected_activation_probe_authorizations, weekly_source_protected_capability_qualifications, weekly_source_protected_prerequisite_qualifications, weekly_source_report_fin_native_comparisons, weekly_source_report_fin_qualifications]
+      record_reason:
+        description: Purpose of recording committed evidence against the same VERIFIED installation
+        required: false
+        type: string
+      customer_key:
+        description: Optional non-secret tenant key for a dedicated customer database
+        required: false
+        type: string
+      approval:
+        description: Required for APPLY except managed TEST UPGRADE, which uses standing TEST authority
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-database-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  source-gate:
+    name: Prove repository release authority
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - name: Scan the exact dependency lockfile for known vulnerabilities
+        uses: google/osv-scanner-action/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1 # v2.5.0
+        with:
+          scan-args: |-
+            --config=./osv-scanner.toml
+            --lockfile=./package-lock.json
+      - run: npm ci --engine-strict
+      - run: npm run security:dependencies
+      - run: npm run security:secrets
+      - run: npm run db:check
+      - run: npm run db:contract:coupling
+      - name: Verify Banking Pay NEXT source boundaries and exact route exemptions
+        run: node --test tests/bpay-next-source-gates.test.js tests/bpay-next-legacy-fence.test.js
+      - name: Verify final function authority for the reviewed release range
+        shell: bash
+        run: |
+          base="$(node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('docs/bpay-next/final-definer-closures.json','utf8')); if(!/^[0-9a-f]{40}$/.test(r.releaseBaseCommit))process.exit(1); console.log(r.releaseBaseCommit)")"
+          CLOUDTMS_FINAL_DEFINER_BASE="$base" node --test tests/bpay-next-final-definers.test.js
+      - run: node --test tests/database-release-system.test.mjs
+      - run: node --test tests/automatic-test-release-policy.test.mjs
+      - id: commit
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: ${{ inputs.phase }} ${{ inputs.mode }} ${{ inputs.environment }}
+    needs: source-gate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}
+    env:
+      CLOUDTMS_DATABASE_URL: ${{ (inputs.environment == 'TEST' && secrets.MIGET_DATABASE_URL_TEST) || (inputs.environment == 'LIVE' && secrets.MIGET_DATABASE_URL_LIVE) }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_TARGET_TEST) || (inputs.environment == 'LIVE' && vars.MIGET_DATABASE_TARGET_LIVE) }}
+      CLOUDTMS_EXPECTED_DATABASE: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_NAME_TEST) || (inputs.environment == 'LIVE' && vars.MIGET_DATABASE_NAME_LIVE) }}
+      CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
+      CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
+      CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
+      CLOUDTMS_RELEASE_REQUESTED_APPROVAL: ${{ inputs.approval }}
+      CLOUDTMS_PROTECTED_ENVIRONMENT: ${{ inputs.environment == 'TEST' && 'database-test' || 'database-live' }}
+      CLOUDTMS_RECORD_INPUT_COMMIT: ${{ needs.source-gate.outputs.commit }}
+      CLOUDTMS_RECORD_ACTOR_USER_ID: ${{ inputs.record_actor_user_id }}
+      CLOUDTMS_RECORD_ARTIFACT_SLOT: ${{ inputs.record_artifact_slot }}
+      CLOUDTMS_RECORD_REASON: ${{ inputs.record_reason }}
+      # Miget preloads pg_show_plans. Keep its diagnostic plan collector off for
+      # protected TEST release sessions, as for the TEST PostgREST connections;
+      # every SQL verifier still runs normally. Disable optional JIT compilation
+      # only in these TEST release sessions: temporary capture-trigger fixtures
+      # otherwise spend their bounded statement budget compiling repeated plans.
+      # This matches the proved local NEW profile; no timeout or assertion changes.
+      PGOPTIONS: ${{ inputs.environment == 'TEST' && '-c pg_show_plans.is_enabled=off -c jit=off' || '' }}
+      # The repository's logical `postgres` owner maps to the authenticated
+      # provider database owner. On Supabase this is a no-op; on Miget it avoids
+      # requiring membership in the platform-reserved postgres superuser role.
+      CLOUDTMS_LOGICAL_POSTGRES_OWNER: CURRENT_USER
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.source-gate.outputs.commit }}
+          # Source-equivalence evidence reads actual historical R1 Git objects.
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - run: npm ci --engine-strict
+      - run: npm run security:dependencies
+      - name: Install PostgreSQL client
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get update -qq \
+              -o Acquire::Retries=3 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get install -y -qq \
+              -o Acquire::Retries=3 \
+              postgresql-client
+          psql --version
+      - name: Validate protected target configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
+          if [[ "${{ inputs.phase }}" == "RECORD_EVIDENCE" ]]; then
+            [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" && "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" ]] || { echo "Recording is restricted to protected TEST on the canonical repository"; exit 1; }
+            test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected exact TEST database"; exit 1; }
+            expected="RECORD_EVIDENCE TEST ${{ needs.source-gate.outputs.commit }} ${CLOUDTMS_RECORD_ARTIFACT_SLOT} ${CLOUDTMS_RECORD_ACTOR_USER_ID}"
+            [[ "${CLOUDTMS_RELEASE_REQUESTED_APPROVAL:-}" == "$expected" ]] || { echo "Exact RECORD_EVIDENCE approval does not match commit, slot and Office actor"; exit 1; }
+          fi
+          if [[ "${{ inputs.phase }}" == "AUTO" || "${{ inputs.phase }}" == "AUTO_PLAN" ]]; then
+            [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" && "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" && "$GITHUB_REF" == "refs/heads/test" ]] || { echo "AUTO is restricted to canonical managed TEST UPGRADE"; exit 1; }
+          fi
+          if [[ "${{ inputs.mode }}" == "NEW" || "${{ inputs.mode }}" == "UPGRADE" ]]; then
+            test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected exact database name"; exit 1; }
+          fi
+          if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
+            expected="APPLY ${{ inputs.environment }} ${{ inputs.mode }} ${{ needs.source-gate.outputs.commit }}"
+            if [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" ]]; then
+              [[ "${GITHUB_REPOSITORY}" == "kierarthur/cloudtms-backend" ]] || { echo "Standing TEST UPGRADE authority is restricted to the canonical repository"; exit 1; }
+              [[ "${GITHUB_REF}" == "refs/heads/test" ]] || { echo "Standing TEST UPGRADE authority is restricted to the test branch head"; exit 1; }
+              echo "Using standing managed TEST UPGRADE authority for the exact source-gated commit."
+            else
+              [[ "${CLOUDTMS_RELEASE_REQUESTED_APPROVAL:-}" == "$expected" ]] || { echo "Exact APPLY approval phrase does not match this commit"; exit 1; }
+            fi
+            echo "CLOUDTMS_RELEASE_APPROVAL=$expected" >> "$GITHUB_ENV"
+          fi
+      - name: Confirm TEST release session leaves plan collection and JIT off
+        if: inputs.environment == 'TEST'
+        shell: bash
+        run: |
+          set -euo pipefail
+          setting="$(psql "$CLOUDTMS_DATABASE_URL" -X -Atqc 'show pg_show_plans.is_enabled')"
+          [[ "$setting" == "off" ]] || { echo "TEST diagnostic plan collector is not disabled"; exit 1; }
+          jit_setting="$(psql "$CLOUDTMS_DATABASE_URL" -X -Atqc 'show jit')"
+          [[ "$jit_setting" == "off" ]] || { echo "TEST release-session JIT is not disabled"; exit 1; }
+      - name: Read-only release plan
+        if: inputs.phase != 'RECORD_EVIDENCE'
+        run: npm run db:plan -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Apply verified release
+        if: inputs.phase == 'APPLY'
+        run: npm run db:apply -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Automatically select and execute the protected TEST database route
+        if: inputs.phase == 'AUTO'
+        run: node scripts/cloudtms-auto-test-release.mjs apply
+      - name: Preview automatic TEST database decision without installing
+        if: inputs.phase == 'AUTO_PLAN'
+        run: node scripts/cloudtms-auto-test-release.mjs plan
+      - name: Record committed evidence against the same VERIFIED TEST installation
+        if: inputs.phase == 'RECORD_EVIDENCE' && inputs.environment == 'TEST' && inputs.mode == 'UPGRADE'
+        timeout-minutes: 10
+        run: node scripts/weekly-source-protected-record-evidence.mjs record
+      - name: Preserve exact same-installed recording receipt
+        if: always() && inputs.phase == 'RECORD_EVIDENCE'
+        uses: actions/upload-artifact@v4
+        with:
+          name: same-installed-recording-${{ needs.source-gate.outputs.commit }}
+          path: .codex-tmp/weekly-source-post-verified-record-receipt.json
+          if-no-files-found: warn
+      - name: Preserve bounded automatic release evidence
+        if: always() && (inputs.phase == 'AUTO' || inputs.phase == 'AUTO_PLAN')
+        uses: actions/upload-artifact@v4
+        with:
+          name: automatic-test-release-${{ needs.source-gate.outputs.commit }}
+          path: .codex-tmp/automatic-test-release.json
+          if-no-files-found: warn
+      - name: Release evidence
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### CloudTMS database release"
+            echo "- Phase: ${{ inputs.phase }}"
+            echo "- Mode: ${{ inputs.mode }}"
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Commit: ${{ needs.source-gate.outputs.commit }}"
+            echo "- Protected GitHub Environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}"
+            echo "- Authority: ${{ inputs.phase == 'RECORD_EVIDENCE' && 'exact same-installed recording approval' || (inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval') }}"
+          } >> "$GITHUB_STEP_SUMMARY"

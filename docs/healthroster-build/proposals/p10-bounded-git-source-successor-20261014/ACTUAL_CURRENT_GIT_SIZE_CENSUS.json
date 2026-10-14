@@ -1,0 +1,13 @@
+{
+  "source_only": true,
+  "exact_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "tracked_path_count": 8474,
+  "unique_blob_count": 7518,
+  "total_raw_blob_bytes": 588719665,
+  "largest_single_blob_bytes": 12188292,
+  "original_stdout_capture_limit_bytes": 268435456,
+  "original_aggregate_limit_exceeded": true,
+  "data_free_size_metadata_only": true,
+  "no_raw_blob_or_large_cat_file_read": true,
+  "no_database_native_runtime_or_business_action": true
+}

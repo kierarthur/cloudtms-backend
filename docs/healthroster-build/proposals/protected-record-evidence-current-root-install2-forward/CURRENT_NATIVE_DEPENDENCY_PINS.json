@@ -1,0 +1,201 @@
+{
+  "source_only": true,
+  "dependencies": [
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "imports": [
+        "./cloudtms-managed-psql.mjs"
+      ]
+    },
+    {
+      "file": "scripts/cloudtms-managed-psql.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/cloudtms-managed-psql.mjs",
+      "bytes": 5398,
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "imports": []
+    },
+    {
+      "file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "imports": []
+    },
+    {
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "bytes": 15228,
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-off-rule-setup-evidence.mjs",
+        "./weekly-source-protected-partial-native-evidence.mjs",
+        "./weekly-source-protected-operational-evidence.mjs",
+        "./weekly-source-protected-activation-probe-evidence.mjs",
+        "./weekly-source-protected-prerequisite-evidence.mjs",
+        "./weekly-source-protected-test-setup-evidence.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "bytes": 11842,
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "bytes": 6878,
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "../broker/src/weekly-source/off-rule-native-proxy.mjs"
+      ]
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "imports": []
+    },
+    {
+      "file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "bytes": 1718,
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-probe-native-evidence.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "bytes": 5751,
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "bytes": 18719,
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-activation-window-binding.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-activation-window-binding.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-activation-window-binding.mjs",
+      "bytes": 3778,
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "bytes": 9395,
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-protected-probe-native-evidence.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 17331,
+      "sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "imports": [
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "source_file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "bytes": 5203,
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "source_commit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "source_file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "bytes": 30888,
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-protected-execution-tree.mjs",
+        "./weekly-source-report-fin-native-collector.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-collector.mjs",
+      "source_commit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "source_file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "bytes": 49303,
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-report-fin-native-mapper.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-mapper.mjs",
+      "source_commit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "source_file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "bytes": 39600,
+      "sha256": "63e884f9e812234690ef62a59151d807099069c8a2e57b308ac0e44c15cea6a2",
+      "imports": [
+        "./weekly-source-protected-release-qualification.mjs",
+        "./weekly-source-report-fin-native-seal.mjs"
+      ]
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-seal.mjs",
+      "source_commit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "source_file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "bytes": 258,
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5",
+      "imports": []
+    }
+  ],
+  "report_source_commit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+  "report_final_collector_and_mapper_seal_still_required": true,
+  "relative_import_closure_complete": true,
+  "current_module_copies_are_test_input_references_only": true
+}
