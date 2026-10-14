@@ -1,0 +1,38 @@
+{
+  "capturedAt": "2026-10-14T16:03:02.753Z",
+  "databaseVerified": true,
+  "completeRuntimeOfficeReleaseClaim": false,
+  "runId": 38583323424,
+  "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "verifierPassCount": 158,
+  "verifierFailedCount": 0,
+  "protectedCompletedAt": "2026-10-14T15:47:03.625Z",
+  "installedReadback": "2026-10-14T15:53:26.649049+00:00",
+  "files": [
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\install1-protected-result-38583323424\\automatic-test-release.json",
+      "file": "AUTOMATIC_TEST_RELEASE.json",
+      "bytes": 1393,
+      "sha256": "a8aebe7028a9ef691f4cdc3e84f096219b2c4f247baaeb49dfd03112c2a25252"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\install1-protected-verifier-events-38583323424.txt",
+      "file": "PROTECTED_VERIFIER_EVENTS.txt",
+      "bytes": 69884,
+      "sha256": "a09cb44b93a80cb87597ee67e68e78220d20bb2b35e0caa29fe71eeb5ad00d5a"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\install1-wp-pp-installed-readback.json",
+      "file": "WP_PP_INSTALLED_READBACK.json",
+      "bytes": 1164,
+      "sha256": "cd3cfc5c082c2cd617deb1994c1b80f2ee2badcc0dd4ef74ed8aa8ae9bee21e7"
+    },
+    {
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\install1-wp-pp-readback.mjs",
+      "file": "INSTALLED_READBACK_SOURCE.mjs.txt",
+      "bytes": 3497,
+      "sha256": "e2b118f902aff7796161cbe4b28fbd480e5d075c4af704799a03b7236cb4edce"
+    }
+  ],
+  "scope": "Genuine protected database success. Remaining ordered application publication and functional qualification are separate."
+}
