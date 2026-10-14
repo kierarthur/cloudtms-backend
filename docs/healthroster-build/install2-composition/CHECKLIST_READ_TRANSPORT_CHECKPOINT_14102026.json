@@ -1,0 +1,112 @@
+{
+  "status": "ACTUAL_CHECKLIST_READ_TRANSPORT_SOURCE_WIP_SQL_UI_AND_NATIVE_UNFINISHED",
+  "beforeCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "pins": [
+    {
+      "file": "broker/src/weekly-source/checklist-read.mjs",
+      "bytes": 5969,
+      "sha256": "ccb0ed5dc56fc11e33d4b16828dc4f7a3f365cfa1a7ccd788ab57c2dedf4b26a"
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "bytes": 66355,
+      "sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef"
+    },
+    {
+      "file": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "bytes": 23981,
+      "sha256": "26183c8d70890079400118a61c87eee1cdaa6d92cf088f90b670414ee2c522b6"
+    },
+    {
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "bytes": 10192,
+      "sha256": "f04a169cc8aa936b7f5b9fbc5635e90968b8d48fc86c2b794ee84f470d3831ed"
+    },
+    {
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "bytes": 20123,
+      "sha256": "b93a73a6e76e3aeda2f53dc82f42e53e0d9e22068fcbb3e300cf691129898e74"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/CHECKLIST_READ_TRANSPORT_WIP_14102026.md",
+      "bytes": 3176,
+      "sha256": "1e91c1efb9d8a09bc64dc41ebc7990a95eb6ea9b337ef5dff16fbe9d35597f62"
+    },
+    {
+      "file": "scripts/healthroster-checklist-read-checkpoint.mjs",
+      "bytes": 3802,
+      "sha256": "5ac5e5b780b6ef7e6099d7aea54356dc30f7f019c68db99f0d2e4d87c349ff8b"
+    }
+  ],
+  "syntax": [
+    {
+      "file": "broker/src/weekly-source/checklist-read.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "exitCode": 0
+    },
+    {
+      "file": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-checklist-read-checkpoint.mjs",
+      "exitCode": 0
+    }
+  ],
+  "wholeChangedOwnerReversePassed": true,
+  "reverseDiffSha256": "0fd0f79d76cda070ff7b3b88c0d6253e2610da1d5ba71e04857362cab5d6dcd4",
+  "rawStagedWhitespaceExitCode": 0,
+  "selectedCredentialFindings": 0,
+  "observedRootSourceGroups": [
+    {
+      "files": [
+        "tests/healthroster-checklist-read-transport.test.mjs",
+        "tests/healthroster-checklist-source.test.mjs",
+        "tests/weekly-source/weekly-source-routes.test.mjs"
+      ],
+      "tests": 58,
+      "pass": 58,
+      "fail": 0,
+      "exitCode": 0
+    },
+    {
+      "files": [
+        "tests/weekly-source/weekly-source-pay-auth-transport.test.mjs",
+        "tests/weekly-source/weekly-source-pay-view.test.mjs",
+        "tests/weekly-source/weekly-source-settings-routes.test.mjs",
+        "tests/healthroster-checklist-sql-source.test.mjs"
+      ],
+      "tests": 22,
+      "pass": 22,
+      "fail": 0,
+      "exitCode": 0
+    }
+  ],
+  "observedDatabaseSource": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "exitCode": 0
+  },
+  "observedContractCoupling": {
+    "exitCode": 0
+  },
+  "databaseSignaturesAdded": 0,
+  "nativeRowsManufactured": false,
+  "newStore": false,
+  "native": false,
+  "installation": false,
+  "publication": false,
+  "independentSourceReview": "PENDING",
+  "requiredNext": "Implement real single native Checklist owner with all selection before keyset and anchored refresh; compose native process/monetary/permission facts and actual Office consumer; final classification/contract and genuine acceptance."
+}

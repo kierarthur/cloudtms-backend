@@ -42,7 +42,8 @@ const request = () => ({command:'CHECKLIST',sort:'week_ending',direction:'DESC',
 const rejects=(fn,code)=>assert.rejects(fn,e=>e instanceof ChecklistSourceError&&e.code===code);
 
 test('withheld unknown stays null, and false requires exact actual known zero evidence',()=>{
-  const unknown=decodeChecklistHold(unavailableChecklistHold()); assert.equal(unknown.holds_pay,null); assert.equal(unknown.withheld_amount_pence,null);
+  const unknown=decodeChecklistHold(unavailableChecklistHold()); assert.equal(unknown.holds_pay,null); assert.equal(unknown.withheld_amount_pence,null); assert.equal(unknown.pending_decision,null);
+  assert.throws(()=>decodeChecklistHold({...unavailableChecklistHold(),pending_decision:true}),/EVIDENCE_INVALID/);
   for(const h of [{...zeroHold(),withheld_amount_pence:null},{...zeroHold(),withheld_amount_pence:'125'},
     {...zeroHold(),authority:{owner:'UNAVAILABLE',hash:null,withholding_known:false}}]) {
     assert.throws(()=>decodeChecklistHold(h),ChecklistSourceError);

@@ -8,6 +8,7 @@ import { isActivePaymentActor } from '../payment-actor-permission.js';
 import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs';
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 import { validateRuleSetValues } from './rule-set-validation.js';
+import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -564,6 +565,17 @@ async function handleWorkspace(req, env, dependencies, user) {
     queryRequest(url, user.id),
   );
   return jsonResponse(200, result);
+}
+
+async function handleChecklistRead(req, dependencies, user) {
+  try {
+    const request=checklistReadRequest(new URL(req.url));
+    const result=await callRpc(dependencies,'weekly_source_checklist_v1',{...request,actor_user_id:user.id});
+    return jsonResponse(200,decodeChecklistRead(result,request,user));
+  } catch(error) {
+    if(error instanceof ChecklistReadError) fail(error.code,error.status===409?'Checklist information changed. Refresh the current list.':error.status===400?'The Checklist request is invalid.':'Checklist information is unavailable. Refresh the current list.',error.status);
+    throw error;
+  }
 }
 
 async function handleOfficeNotifications(req, env, dependencies, user) {
@@ -1244,13 +1256,16 @@ export async function dispatchWeeklySourceRequest(req, env, ctx, dependencies = 
   try {
     const user = await requireOfficeUser(req, env, dependencies);
     if (user.payView && !(
-      (req.method === 'GET' && [ `${officePrefix}/workspace`, `${officePrefix}/notifications` ].includes(path))
+      (req.method === 'GET' && [ `${officePrefix}/workspace`, `${officePrefix}/notifications`, `${officePrefix}/checklist` ].includes(path))
       || (req.method === 'POST' && path === `${officePrefix}/commands`)
     )) {
       fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
     }
     if (req.method === 'GET' && path === `${officePrefix}/workspace`) {
       return await handleWorkspace(req, env, dependencies, user);
+    }
+    if (req.method === 'GET' && path === `${officePrefix}/checklist`) {
+      return await handleChecklistRead(req,dependencies,user);
     }
     if (req.method === 'GET' && path === `${officePrefix}/notifications`) {
       return await handleOfficeNotifications(req, env, dependencies, user);
@@ -1348,6 +1363,7 @@ export const WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT = Object.freeze({
   // WP-23 / WP-19b G2 and G11.  Gate 11's audit chronology and hours export, and
   // round 5 Part E's outstanding-successor-inputs read.
   readRoutes: Object.freeze([
+    '/checklist',
     '/timesheets/:timesheetId/presentation',
     '/timesheets/:timesheetId/audit',
     '/timesheets/:timesheetId/hours-export',

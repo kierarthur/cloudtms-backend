@@ -50,7 +50,7 @@ export function decodeChecklistHold(value) {
       typeof value.authority.withholding_known !== 'boolean') fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   if (value.authority.owner === 'UNAVAILABLE') {
     if (value.authority.hash !== null || value.authority.withholding_known !== false || value.holds_invoice !== null ||
-        value.pending_decision !== true) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
+        value.pending_decision !== null) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   } else if (typeof value.authority.hash !== 'string' || !HASH.test(value.authority.hash)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   if (value.holds_pay === null) {
     if (value.withheld_amount_pence !== null || value.authority.withholding_known !== false) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
@@ -67,7 +67,7 @@ export function decodeChecklistHold(value) {
 }
 
 export function unavailableChecklistHold() {
-  return { holds_pay: null, holds_pay_scope: null, withheld_amount_pence: null, holds_invoice: null, pending_decision: true,
+  return { holds_pay: null, holds_pay_scope: null, withheld_amount_pence: null, holds_invoice: null, pending_decision: null,
     authority: { owner: 'UNAVAILABLE', hash: null, withholding_known: false } };
 }
 function link(l, scope) {
