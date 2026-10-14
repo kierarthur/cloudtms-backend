@@ -24,12 +24,12 @@ export function verifierClosure(file,base=root,stack=[]){
 
 // Keep dollar-quoted SQL/PLpgSQL code; mask comments and ordinary literals.
 // Literal routine identities are retained separately as catalogue references.
-export function executableText(sql){
+export function executableText(sql,literalSink=[]){
  let out='',i=0;
  while(i<sql.length){
   if(sql.startsWith('--',i)){const e=sql.indexOf('\n',i);const end=e<0?sql.length:e;out+=' '.repeat(end-i);i=end;continue;}
   if(sql.startsWith('/*',i)){let d=1,j=i+2;while(j<sql.length&&d){if(sql.startsWith('/*',j)){d++;j+=2;}else if(sql.startsWith('*/',j)){d--;j+=2;}else j++;}if(d)throw Error('CENSUS_COMMENT_UNCLOSED');out+=' '.repeat(j-i);i=j;continue;}
-  if(sql[i]==="'"){let j=i+1;while(j<sql.length){if(sql[j]==="'"){if(sql[j+1]==="'"){j+=2;continue;}j++;break;}if(sql[j]==='\\'&&/[eE]/.test(sql[i-1]??''))j+=2;else j++;}out+=' '.repeat(j-i);i=j;continue;}
+  if(sql[i]==="'"){let j=i+1;while(j<sql.length){if(sql[j]==="'"){if(sql[j+1]==="'"){j+=2;continue;}j++;break;}if(sql[j]==='\\'&&/[eE]/.test(sql[i-1]??''))j+=2;else j++;}literalSink.push(sql.slice(i+1,j-1).replaceAll("''","'"));out+=' '.repeat(j-i);i=j;continue;}
   const tag=sql.slice(i).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/)?.[0];
   if(tag){out+=' '.repeat(tag.length);i+=tag.length;continue;}
   out+=sql[i++];
@@ -38,16 +38,20 @@ export function executableText(sql){
 }
 const unique=xs=>[...new Set(xs)].sort();
 export function effectCensus(sql){
- const code=executableText(sql);
+ const literals=[],code=executableText(sql,literals);
  const writes=unique([...code.matchAll(/\b(?:insert\s+into|update|delete\s+from|truncate(?:\s+table)?)\s+((?:public|private|pg_temp)\.[a-z_][a-z0-9_]*)/gi)].map(x=>x[1].toLowerCase()));
  const declarations=unique([...code.matchAll(/\b(?:create\s+(?:(?:temporary|temp|unlogged)\s+)?table(?:\s+if\s+not\s+exists)?|references)\s+((?:public|private|pg_temp)\.[a-z_][a-z0-9_]*)\s*\(/gi)].map(x=>x[1].toLowerCase()));
  return {calls:unique([...code.matchAll(/\b((?:public|private|pg_temp|net|http|cron|extensions)\.[a-z_][a-z0-9_]*)\s*\(/gi)].map(x=>x[1].toLowerCase())).filter(name=>!writes.includes(name)&&!declarations.includes(name)),
-  literalRoutineReferences:unique([...sql.matchAll(/'((?:public|private)\.[a-z_][a-z0-9_]*)\s*\(/gi)].map(x=>x[1].toLowerCase())),
+  literalRoutineReferences:unique(literals.flatMap(value=>{
+   const relations=new Set([...value.matchAll(/\b(?:insert\s+into|update|delete\s+from|truncate(?:\s+table)?|create\s+(?:(?:temporary|temp|unlogged)\s+)?table(?:\s+if\s+not\s+exists)?|references)\s+((?:public|private)\.[a-z_][a-z0-9_]*)\b/gi)].map(x=>x[1].toLowerCase()));
+   return [...value.matchAll(/\b((?:public|private)\.[a-z_][a-z0-9_]*)\s*\(/gi)].map(x=>x[1].toLowerCase()).filter(name=>!relations.has(name));
+  })),
   writes,
   dynamicExecute:/\bexecute\b/i.test(code),
   networkCalls:unique([...code.matchAll(/\b((?:net|http|extensions)\.[a-z_][a-z0-9_]*(?:http|request|send)[a-z0-9_]*)\s*\(/gi)].map(x=>x[1].toLowerCase())),
   sequenceCalls:/\b(?:nextval|setval)\s*\(/i.test(code)};
 }
+export const potentialCalleeNames=effects=>unique([...effects.calls,...effects.dynamicExecute?effects.literalRoutineReferences:[]]);
 
 export function buildVerifierCensus(base=root){
  if(base!==root)throw Error('CENSUS_LIBRARY_ROOT_MISMATCH');
@@ -80,7 +84,8 @@ export function buildVerifierCensus(base=root){
   }
  }
  const verifiers=release.verificationFiles.map((file,index)=>{
-  const closure=verifierClosure(file,base),effects=effectCensus(closure.expanded),queue=[...effects.calls],visited=new Set(),callees=[],unknown=[];
+  const closure=verifierClosure(file,base),effects=effectCensus(closure.expanded),
+   queue=potentialCalleeNames(effects),visited=new Set(),callees=[],unknown=[];
   const fixtureDefinitions=new Map();
   for(const statement of scanManagedSql(closure.expanded).statements){
    const sql=closure.expanded.slice(statement.start,statement.end);
@@ -97,7 +102,13 @@ export function buildVerifierCensus(base=root){
   while(queue.length){const name=queue.shift();if(visited.has(name))continue;visited.add(name);
    const candidates=fixtureDefinitions.has(name)?[fixtureDefinitions.get(name)]:[...definitions.get(name)?.values()??[]];
    if(!candidates.length){unknown.push(name);continue;}
-   for(const record of candidates){const key=record.signature+'@'+record.statementSha256;dictionary.set(key,record);callees.push(key);queue.push(...record.calls.filter(x=>x!==name));addTriggers(record.writes);}
+   for(const record of candidates){const key=record.signature+'@'+record.statementSha256;dictionary.set(key,record);callees.push(key);
+    // EXECUTE can call a source-owned routine through an ordinary SQL literal,
+    // or an assertion helper can execute a caller's literal. Keep the whole
+    // potential literal edge set whenever dynamic execution is present; a
+    // reviewer then distinguishes executed SQL from catalogue/negative probes.
+    // A literal is never silently treated as inert merely because it was masked.
+    queue.push(...potentialCalleeNames(record).filter(x=>x!==name));addTriggers(record.writes);}
   }
   const parsed=scanManagedSql(closure.expanded);
   return {index,file,sourceSqlHash:closure.sourceSqlHash,closureHash:closure.closureHash,files:closure.files,bytes:Buffer.byteLength(closure.expanded),

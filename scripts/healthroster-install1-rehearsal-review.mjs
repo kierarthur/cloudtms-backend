@@ -23,6 +23,20 @@ const exclusions=new Map([
  ['supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql','ACTUAL_QUEUE_PROCESSING: executed paid-fixture preparation invokes pay_workbench_dirty_apply_jobs_chunk. The separate pg_temp drain helper is fixture DML, but cannot legitimise the actual processor call.'],
  ['supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql','ACTUAL_QUEUE_PROCESSING: executes email_outbox_claim_ready_batch for copy probes; fixture ordering/sentinels do not confine the generic mail owner.'],
 ]);
+// Conservative dynamic closure also retains inert catalogue identities. These
+// are exact body dispositions, never permission to execute the named drains.
+const potentialCatalogueDispositions=new Map([
+ ['supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql',{
+  sourceSqlHash:'ad10ad9f3cadeab76dd049f6a6cc002b8ce2217d3e77a913357ed9ee9f453763',
+  names:['public.pay_workbench_dirty_apply_jobs_chunk'],
+  reason:'The global dirty_apply_jobs_chunk and worker_drain_chunk identities occur only in the expected regprocedure/hash/ACL catalogue census. Executed dirty_apply_job_process is bound to the exact synthetic v_family_job_id selected by the inserted fixture Candidate and RUNNING transition; its first row lock is WHERE job_row.id=p_job_id. Its dynamic dependency closure and follow-on refresh target only that Candidate/family. No due-job global claim or worker drain is called.'}],
+ ['supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql',{
+  sourceSqlHash:'6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d',
+  names:['private.weekly_source_pending_entitlement_release_apply_v1','private.weekly_source_pending_entitlement_release_claim_page_v1',
+   'public.weekly_source_message_dispatch_claim_v1','public.weekly_source_message_dispatch_target_claim_v1',
+   'public.weekly_source_pending_entitlement_release_apply_v1','public.weekly_source_pending_entitlement_release_claim_page_v1'],
+  reason:'All dispatch/pending-release strings are the finite expected function_signature ACL inventory, resolved through to_regprocedure/has_function_privilege and source-definition checks. The body never executes those SQL literals. Its explicit application calls are only synthetic immutable trigger refusal checks on pg_temp tables; no queue claimant or entitlement processor is invoked.'}],
+]);
 
 export function buildSafetyReview(census,{sourcePin}={}){
  if(census.sourceCounts.verifiers!==158||!/^[0-9a-f]{40}$/.test(sourcePin??''))throw Error('INSTALL1_REVIEW_IDENTITY_REFUSED');
@@ -34,18 +48,22 @@ export function buildSafetyReview(census,{sourcePin}={}){
   const excluded=exclusions.has(row.file);
   // Risk detection validates the separately reviewed closed exclusion list.
   // A newly introduced real effect stops this writer; it is never auto-included.
-  if((row.prohibitedCandidates.length||row.applyingReferences)&&!excluded)throw Error('INSTALL1_NEW_EFFECT_REQUIRES_REVIEW '+row.file);
+  const catalogue=potentialCatalogueDispositions.get(row.file);
+  const potentialReviewed=catalogue&&row.sourceSqlHash===catalogue.sourceSqlHash
+   &&JSON.stringify(row.prohibitedCandidates)===JSON.stringify([...catalogue.names].sort());
+  if((row.prohibitedCandidates.length||row.applyingReferences)&&!excluded&&!potentialReviewed)throw Error('INSTALL1_NEW_EFFECT_REQUIRES_REVIEW '+row.file);
   const catalogueOnly=row.writes.length===0&&row.callees.length===0;
   return {index:row.index,file:row.file,decision:excluded?'EXCLUDE':'INCLUDE',
-   reason:exclusions.get(row.file)??(catalogueOnly?'Complete installed definition, security, ACL, shape and effective-privilege assertions only; no application owner is invoked.':
+   reason:exclusions.get(row.file)??catalogue?.reason??(catalogueOnly?'Complete installed definition, security, ACL, shape and effective-privilege assertions only; no application owner is invoked.':
     row.index===157?'Complete WP-PP fixture actor matrix and reduced/combined PAY read first use. Direct owners are pay_actor_allowed, office_authority, office_workspace and combined_review_workspace; current source hashes and trigger effects are captured. No protected publication, Draft, payment, provider, communications sender or queue claim is called.':
-    'Complete native fixture/census body retained. Explicit application/read/authority calls, source-owned trigger effects, fixture DML and dynamic assertion helpers were censused. No payment/provider/settlement execution, external sender or actual queue processor is invoked; fixture state is rolled back to its per-verifier savepoint.'),
+    'Complete native fixture/census body retained. Explicit application/read/authority calls, source-owned trigger effects, fixture DML and dynamic assertion helpers were censused. No payment/provider/settlement execution, external sender or global queue drain is invoked. Any fixture job lifecycle is purpose-bound to synthetic rows; fixture state is rolled back to its per-verifier savepoint.'),
    sourceSqlHash:row.sourceSqlHash,closureHash:row.closureHash,executableSqlHash:digest(sql),effectGraphHash:row.effectGraphHash,
    completeClosureFiles:row.files,expandedBytes:row.bytes,statementCount:row.statements,
    removedCommands:commands.map(x=>x.command),readOnlyBodyReviewed:row.envelopes.includes('BEGIN READ ONLY'),
    nativeIsolationRequirements:row.envelopes.filter(x=>x.startsWith('BEGIN ISOLATION LEVEL ')),
    explicitCalls:row.calls,calleeKeys:row.callees,prohibitedCalls:row.prohibitedCandidates,
    genuineApplyingReleaseRequired:row.applyingReferences,sequenceGapPossible:row.sequenceCalls,
+   potentialCatalogueDisposition:catalogue??null,
    unresolvedLexicalCandidates:row.unknownCalls,
    assertionBodyDisposition:'KEEP_COMPLETE',fixtureDisposition:excluded?'DO_NOT_EXECUTE':'SAVEPOINT_AND_ROLLBACK',
    pendingIndependentReview:false};
@@ -58,7 +76,7 @@ export function buildSafetyReview(census,{sourcePin}={}){
   included:verifiers.filter(x=>x.decision==='INCLUDE').length,excluded:verifiers.filter(x=>x.decision==='EXCLUDE').length,
   calleeDictionarySha256:digest(JSON.stringify(census.calleeDictionary)),sourceFiles:[...sourceFiles].sort(([a],[b])=>a.localeCompare(b)).map(([file,sha256])=>({file,sha256})),
   newUpgradePpVerifierParity:census.newVerifierParity,nativeFull:'NOT_RUN',mutationsAuthorised:false,
-  lexicalLimit:'Callee dictionary is a conservative potential source graph, including trigger branches and every overload. It does not prove a live catalogue or infer that every branch executes. Dynamic/catalogue literal candidates and renamed/builtin nodes need the documented source dispositions; root binds fresh catalogue before native work.',
+  lexicalLimit:'Callee dictionary is a conservative potential source graph, including trigger branches, every overload and ordinary-literal routine references whenever EXECUTE or an assertion-controlled dynamic body is present. It does not prove a live catalogue or infer that every branch/literal executes. Exact catalogue-only potential effects have hash-bound source dispositions; root binds the complete temporary installed catalogue before native qualification.',
   archivedHistory:'168/152/16 and 172-root-cause source reviews in the broad 13102026 rehearsal history remain untouched. Their old pins and fingerprint vectors confer no current execution authority.',
   verifiers};
 }

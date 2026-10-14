@@ -120,7 +120,7 @@ export function closedRehearsalDiagnostic(line, lineMap, allowedCodes = new Set(
   if (!match) return null;
   const number = Number(match[1]);
   const location = lineMap.find(x => number >= x.startLine && number <= x.endLine);
-  const code = match[4].match(/^([A-Z][A-Z0-9_]{5,})(?:\s|$)/)?.[1] ?? null;
+  const code = match[4].match(/^([A-Z][A-Z0-9_]{5,})(?:\s|:|$)/)?.[1] ?? null;
   return {file:location?.file ?? 'HARNESS_CONTROL', kind:location?.kind ?? 'control',
     statement:location?.statement ?? null, object:location?.object ?? null,
     line:number, sqlstate:match[3], error:code && allowedCodes.has(code) ? code : 'DATABASE_DIAGNOSTIC_WITHHELD'};
