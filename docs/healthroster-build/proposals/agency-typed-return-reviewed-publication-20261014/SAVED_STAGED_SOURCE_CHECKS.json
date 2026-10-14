@@ -1,0 +1,19 @@
+{
+  "schema": "AGENCY_TYPED_RETURN_SAVED_COMMITTED_SOURCE_V1",
+  "source_only": true,
+  "native": false,
+  "prior_own_commit": "383c0be17b772fa42a5baff71494135273a47884",
+  "committed_checkpoint": "3cc9c472a2a151556e3fd7f0603eeb3e6c09dc1c",
+  "committed_paths_before_receipt": 45,
+  "saved_committed_raw_mismatches": 0,
+  "tracked_predecessor_changes": 0,
+  "raw_whitespace_pass": false,
+  "trailing_space_findings": 0,
+  "reviewed_evidence_eof_findings": [
+    "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/current-native/current_invoice_apply_edits.sql.txt:3411: new blank line at EOF.",
+    "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/primary/primary_25_2.md.txt:32: new blank line at EOF.",
+    "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/primary/primary_26_4.md.txt:85: new blank line at EOF."
+  ],
+  "checker_correction": "Initial stage checker accepted45 raw paths then incorrectly expected whitespace exit1; Git returned2. Subsequent commit is verified here directly without rewriting its frozen bytes.",
+  "disposition": "Exact reviewed frozen evidence bytes retained. These three additional evidence EOF blank lines are recorded; not whitespace PASS."
+}
