@@ -1,0 +1,330 @@
+{
+  "schema_version": "REPORT_AB_SOURCE_PIN_FORWARD_AND_LEXICAL_V1",
+  "prior_root_commit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "current_root_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+      "prior_git_sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+      "current_git_sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+      "saved_sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+      "prior_git_sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+      "current_git_sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+      "saved_sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "prior_git_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "current_git_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "saved_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+      "prior_git_sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "current_git_sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "saved_sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+      "prior_git_sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "current_git_sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "saved_sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "prior_git_sha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495",
+      "current_git_sha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495",
+      "saved_sha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "prior_git_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "current_git_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "saved_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "prior_git_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "current_git_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "saved_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "prior_git_sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7",
+      "current_git_sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7",
+      "saved_sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "prior_git_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "current_git_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "saved_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "equal": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "prior_git_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "current_git_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "saved_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "equal": true
+    },
+    {
+      "path": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "prior_git_sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "current_git_sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "saved_sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "equal": true
+    },
+    {
+      "path": "scripts/cloudtms-managed-release.mjs",
+      "prior_git_sha256": "1eb863f9be8021e93c1f6de149660fbb843b1ce3c00409d83bb83feee0d5bd60",
+      "current_git_sha256": "1eb863f9be8021e93c1f6de149660fbb843b1ce3c00409d83bb83feee0d5bd60",
+      "saved_sha256": "1eb863f9be8021e93c1f6de149660fbb843b1ce3c00409d83bb83feee0d5bd60",
+      "equal": true
+    },
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "prior_git_sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "current_git_sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "saved_sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "equal": true
+    },
+    {
+      "path": "scripts/cloudtms-db-release.mjs",
+      "prior_git_sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "current_git_sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "saved_sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "equal": true
+    },
+    {
+      "path": "supabase/release/current-release.json",
+      "prior_git_sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "current_git_sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "saved_sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "equal": true
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "prior_git_sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334",
+      "current_git_sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334",
+      "saved_sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/01_complete_qualification_scope.sqlinc",
+      "prior_git_sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "current_git_sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "saved_sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/03_complete_operational_release_reader.sqlinc",
+      "prior_git_sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "current_git_sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "saved_sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/04_complete_capability_receipt.sqlinc",
+      "prior_git_sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "current_git_sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "saved_sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/07_complete_existing_feature_setup.sqlinc",
+      "prior_git_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "current_git_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "saved_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/14_complete_managed_release.mjs",
+      "prior_git_sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
+      "current_git_sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
+      "saved_sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/15_complete_current_release_caller.mjs",
+      "prior_git_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "current_git_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "saved_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-operational-evidence.mjs",
+      "prior_git_sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f",
+      "current_git_sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f",
+      "saved_sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-release-qualification.mjs",
+      "prior_git_sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "current_git_sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "saved_sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/CLOSED_DTO.sqlinc",
+      "prior_git_sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "current_git_sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "saved_sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/strict-qualification-git-path-parser-forward/weekly-source-protected-execution-tree.mjs",
+      "prior_git_sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "current_git_sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "saved_sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/OPERATIONAL_CERTIFICATE.sqlinc",
+      "prior_git_sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "current_git_sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "saved_sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "equal": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/TEST_JOURNEY_SCOPE.sqlinc",
+      "prior_git_sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "current_git_sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "saved_sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "equal": true
+    }
+  ],
+  "changed_tracked_paths": [
+    "docs/healthroster-build/INSTALL1_SELECTION_14102026.md",
+    "docs/healthroster-build/PROGRESS.md",
+    "docs/healthroster-build/TEST_INSTALL_PLAN.md",
+    "docs/healthroster-build/checkpoint13102026/A0_ISOLATION_FOLLOWUP_PRESERVATION.json",
+    "docs/healthroster-build/checkpoint13102026/A0_ISOLATION_FOLLOWUP_SOURCE_CRITIC.md",
+    "docs/healthroster-build/checkpoint13102026/A0_ISOLATION_SOURCE_FOLLOWUP.md",
+    "docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26.json",
+    "docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26_GIT_PINNED.json",
+    "docs/healthroster-build/checkpoint13102026/FULL_VERIFIER_SOURCE_PROTOCOL_CENSUS_V2.json",
+    "docs/healthroster-build/checkpoint13102026/INSTALL1_NATIVE_TURN_PRECHECK_14102026.json",
+    "docs/healthroster-build/checkpoint13102026/INSTALL1_SOURCE_READINESS_REVIEW.md",
+    "docs/healthroster-build/checkpoint13102026/NEW_VERIFIER_SOURCE_SAFETY_REVIEW_AB26.json",
+    "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2.sql",
+    "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2_FRESH.sql",
+    "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2_PLAN.json",
+    "docs/healthroster-build/checkpoint13102026/audit_full_verifier_source_protocol_v2.mjs",
+    "docs/healthroster-build/checkpoint13102026/census_frozen_private_union_ab26.mjs",
+    "docs/healthroster-build/checkpoint13102026/prepare_prepared_codec_datatype_short_v2.mjs",
+    "docs/healthroster-build/checkpoint13102026/preserve_a0_isolation_followup.mjs",
+    "docs/healthroster-build/checkpoint13102026/record_new_verifier_source_safety_ab26.mjs",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/APPLICATION_ISOLATION_AND_LOCK_REVIEW.json",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/ISOLATION_SOURCE_MANIFEST.json",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SCANNER_SUCCESSOR_PROOF.json",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_CALLEE_LOCK_GRAPH.json",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_CHECKS.json",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_REVIEW_AND_NATIVE_RECIPES.md",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/UNMOUNTED_PROPOSAL_CALL_LOCK_GRAPH.json",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-caller-review.mjs",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-source-successor.mjs",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/freeze-source-followup.mjs",
+    "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/sql-function-source-index.mjs",
+    "scripts/healthroster-rehearsal-turn.mjs",
+    "tests/healthroster-cn-a0-isolation-source-followup.test.mjs",
+    "tests/healthroster-rehearsal-turn.test.mjs"
+  ],
+  "lexical": [
+    {
+      "file": "01_certificate.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "02_release_feature_strategy.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "03_operational_dispatch.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "04_complete_fin.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "05_complete_feature_setup.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "07_owner_acl.sqlinc",
+      "statements": 16,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "08_datafree_verifier.sqlinc",
+      "statements": 4,
+      "meta": 1,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "11_complete_registry_current_union.sqlinc",
+      "statements": 9,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "12_complete_acl_current_union.sqlinc",
+      "statements": 21,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "13_slot_validators.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "14_complete_native_snapshot_assembler.sqlinc",
+      "statements": 4,
+      "meta": 1,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "15_complete_native_report_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "ROOT_CLOSURE_TEMPLATE.sqlinc",
+      "statements": 3,
+      "meta": 10,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    }
+  ],
+  "native_compile": "NOT_RUN",
+  "native_ab_financial": "NOT_RUN",
+  "off_prerequisite": "FINAL_SOURCE_PINS_SEPARATELY_MEASURED_ROOT_COMPOSITION_NATIVE_ACCEPTANCE_HELD",
+  "statement": "All 29 controlling saved/native/proposal inputs remain byte-identical across this input pin-forward; the complete tracked execution tree differs and requires genuine same-Install2 execution proof. Paired current native owners have separate complete reverse proofs."
+}

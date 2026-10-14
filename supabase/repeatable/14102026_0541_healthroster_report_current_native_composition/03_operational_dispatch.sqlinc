@@ -1,0 +1,38 @@
+-- Called by the unchanged-error-order three-argument engine, after native
+-- pay_query_admit_v2. Not a public RPC and not the explicit A/B test overload.
+create or replace function private.weekly_source_report_fin_dispatch_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare before_value jsonb; after_value jsonb; result jsonb; cycle_id uuid; scope_id uuid; actor_id uuid;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or jsonb_typeof(p_request) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_request) k
+    where k not in ('actor_user_id','source_cycle_id','authority_scope_kind','report_scope_id','upload_id','projection_publication_id',
+      'expected_authority_scope_version','expected_row_manifest_hash','expected_comparison_manifest_hash','expected_issue_set_hash',
+      'exclude_unfinalised_acknowledged')) or upper(btrim(p_request->>'authority_scope_kind')) is distinct from 'SELF_BILL_REPORT_SCOPE' then
+    raise exception 'WEEKLY_SOURCE_FINALISE_REQUEST_INVALID' using errcode='22023'; end if;
+  cycle_id:=(p_request->>'source_cycle_id')::uuid; scope_id:=(p_request->>'report_scope_id')::uuid; actor_id:=(p_request->>'actor_user_id')::uuid;
+  -- Retain the actual protected release writer's mutex as a shared transaction
+  -- guard. No new lock namespace/store; ordinary/NHSP do not take this arm.
+  if not pg_try_advisory_xact_lock_shared(hashtextextended('cloudtms_database_release_admission_v1',0)) then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_WRITER_BUSY' using errcode='55000'; end if;
+  before_value:=private.weekly_source_report_fin_strategy_v1(scope_id);
+  if cycle_id is null or actor_id is null or before_value->>'source_cycle_id' is distinct from cycle_id::text then
+    raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_MISMATCH' using errcode='22023'; end if;
+  -- G1, including replay: group UPDATE -> cycle UPDATE -> exact Report UPDATE.
+  perform 1 from public.weekly_source_groups where id=(before_value->>'source_group_id')::uuid for update;
+  perform 1 from public.weekly_source_cycles where id=cycle_id for update;
+  perform 1 from public.weekly_source_report_scopes where id=scope_id for update;
+  after_value:=private.weekly_source_report_fin_strategy_v1(scope_id);
+  if before_value is distinct from after_value then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_STRATEGY_CHANGED_DURING_LOCK' using errcode='40001'; end if;
+  -- Native leaf retains frozen rules, F8, complete Report/source CAS, original
+  -- literal-vs-invoice totals, movement/hash/manifest and zero-pay assertions.
+  result:=private.weekly_source_self_bill_report_finalise_v1(p_request,after_value->>'selected_variant');
+  if result->'ok' is distinct from 'true'::jsonb or result->>'status' is distinct from 'FINALISED'
+    or result->'invoice_only' is distinct from 'true'::jsonb
+    or result->>'source_cycle_id' is distinct from cycle_id::text or result->>'report_scope_id' is distinct from scope_id::text then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_RESULT_INVALID' using errcode='55000'; end if;
+  return result;
+end;
+$function$;

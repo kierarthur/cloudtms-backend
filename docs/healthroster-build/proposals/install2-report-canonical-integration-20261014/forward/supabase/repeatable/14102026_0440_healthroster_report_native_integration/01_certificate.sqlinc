@@ -1,0 +1,93 @@
+-- Source proposal only. No native qualification or operational selection.
+create or replace function private.weekly_source_report_fin_certificate_assert_v1(
+  p_certificate jsonb,p_group uuid,p_version uuid,p_from date,p_to date
+) returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare latest jsonb; recorded private.cloudtms_database_releases%rowtype;
+  installation jsonb; execution jsonb; scope_value jsonb; decision jsonb;
+  case_value text; required_cases constant text[]:=array[
+    'BOUND_NEGATIVE','D_NEGATIVE','D_POSITIVE','D_ZERO','NEXT_ACTIVE','ORDINARY_NHSP_REGRESSION','STANDALONE_NEGATIVE'];
+
+begin
+  if p_group is null or p_version is null or p_from is null or not private.weekly_source_qualification_closed_object_v1(p_certificate,
+    array['schema_version','phase','installation','receipt_input_commit','scope','execution','native_comparisons','decision','decision_binding','source_equivalence','qualification_sha256'])
+    or p_certificate->>'schema_version' is distinct from 'WEEKLY_SOURCE_REPORT_FIN_AB_QUALIFICATION_V1'
+    or p_certificate->>'phase' is distinct from 'BOTH_NATIVE_VARIANTS_QUALIFIED'
+    or p_certificate->>'qualification_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_REPORT_FIN_AB_QUALIFICATION_V1',p_certificate-'qualification_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  -- Close array type before any SRF/cardinality use; planner order within a
+  -- compound SQL expression is not an admission guarantee.
+  if jsonb_typeof(p_certificate->'native_comparisons') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
+  if jsonb_array_length(p_certificate->'native_comparisons')<>cardinality(required_cases)*2 then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
+  installation:=p_certificate->'installation'; execution:=p_certificate->'execution'; scope_value:=p_certificate->'scope';
+  decision:=p_certificate->'decision'; latest:=private.weekly_source_protected_qualification_release_v1();
+  if not private.weekly_source_qualification_closed_object_v1(scope_value,array['agency_id','source_group_id','rule_set_version_id',
+      'rule_set_values_sha256','effective_from_week_ending','effective_to_week_ending'])
+    or scope_value->>'source_group_id' is distinct from p_group::text or scope_value->>'rule_set_version_id' is distinct from p_version::text
+    or scope_value->>'effective_from_week_ending' is distinct from p_from::text
+    or scope_value->>'effective_to_week_ending' is distinct from p_to::text
+    or scope_value->>'rule_set_values_sha256' is distinct from (select v.values_sha256 from public.weekly_source_rule_set_versions v where v.id=p_version)
+    or not exists(select 1 from public.weekly_source_groups g join public.weekly_source_rule_set_versions v on v.id=p_version
+      join public.weekly_source_rule_sets r on r.id=v.rule_set_id and r.agency_id=g.agency_id and r.environment=g.environment
+      where g.id=p_group and g.active and g.source_family='ROSTER' and g.environment='TEST'
+        and scope_value->>'agency_id'=g.agency_id::text)
+    or installation is distinct from latest or execution is distinct from installation
+    or coalesce(p_certificate->>'receipt_input_commit','') !~ '^[0-9a-f]{40}$'
+    or execution->>'contract_sha256' is distinct from installation->>'contract_sha256'
+    or execution->>'installation_id' is distinct from installation->>'installation_id'
+    or execution->>'installed_catalogue_jsonb_sha256' is distinct from installation->>'installed_catalogue_jsonb_sha256'
+    or not private.weekly_source_qualification_closed_object_v1(execution,array['release_id','source_commit','contract_sha256','installation_id',
+      'environment','database','managed_manifest_sha256','installed_catalogue_jsonb_sha256']) then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  select * into strict recorded from private.cloudtms_database_releases where release_id=execution->>'release_id';
+  if recorded.status is distinct from 'VERIFIED' or recorded.completed_at_utc is null
+    or recorded.git_commit is distinct from execution->>'source_commit'
+    or recorded.installed_contract_sha256 is distinct from execution->>'contract_sha256'
+    or recorded.installed_contract_sha256 is distinct from recorded.repository_contract_sha256
+    or recorded.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or recorded.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or recorded.evidence_json#>>'{managed_release,manifest_sha256}' is distinct from execution->>'managed_manifest_sha256'
+    or recorded.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}' is distinct from execution->>'installed_catalogue_jsonb_sha256'
+    or jsonb_typeof(recorded.evidence_json->'weekly_source_report_fin_native_comparisons') is distinct from 'array'
+    or execution->>'environment' is distinct from 'TEST' or execution->>'database' is distinct from current_database()
+    or execution->>'source_commit' !~ '^[0-9a-f]{40}$' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RECORDED_EXECUTION_CHANGED' using errcode='55000'; end if;
+  if exists(select 1 from jsonb_array_elements(p_certificate->'native_comparisons') certificate_case
+    where not exists(select 1 from jsonb_array_elements(recorded.evidence_json->'weekly_source_report_fin_native_comparisons') retained_case
+      where retained_case=certificate_case)) then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RECORDED_EXECUTION_CHANGED' using errcode='55000'; end if;
+  perform private.weekly_source_protected_execution_tree_assert_v2(p_certificate->'source_equivalence',
+    execution->>'source_commit',p_certificate->>'receipt_input_commit');
+  if not private.weekly_source_qualification_closed_object_v1(decision,array['schema_version','selected_variant','native_comparison_sha256','reason'])
+    or decision->>'schema_version' is distinct from 'WEEKLY_SOURCE_REPORT_FIN_REVIEWED_DECISION_V1'
+    or decision->>'selected_variant' is null or decision->>'selected_variant' not in ('A','B')
+    or decision->>'native_comparison_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISONS_V1',p_certificate->'native_comparisons'),'hex')
+    or coalesce(length(btrim(decision->>'reason')),0) not between 1 and 1000
+    or not private.weekly_source_qualification_closed_object_v1(p_certificate->'decision_binding',array['path','blob_oid','sha256','json_pointer'])
+    or p_certificate#>>'{decision_binding,path}' is distinct from 'supabase/release/weekly-source-protected-operational.json'
+    or coalesce(p_certificate#>>'{decision_binding,json_pointer}','') !~ '^/report_fin_qualifications/(0|[1-9][0-9]?)/decision$'
+    or coalesce(p_certificate#>>'{decision_binding,blob_oid}','') !~ '^[0-9a-f]{40}$'
+    or coalesce(p_certificate#>>'{decision_binding,sha256}','') !~ '^[0-9a-f]{64}$'
+    or not exists(select 1 from jsonb_array_elements(p_certificate#>'{source_equivalence,receipt_bindings}') binding
+      where binding->>'role'='INSTALLATION' and binding->>'key'='weeklySourceProtectedOperational'
+        and binding->>'path'=p_certificate#>>'{decision_binding,path}'
+        and binding->>'blob_oid'=p_certificate#>>'{decision_binding,blob_oid}'
+        and binding->>'sha256'=p_certificate#>>'{decision_binding,sha256}') then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
+  for case_value in select unnest(required_cases) loop
+    if (select count(*) from jsonb_array_elements(p_certificate->'native_comparisons') e
+      where e->>'case_id'=case_value and e->>'variant'='A')<>1
+      or (select count(*) from jsonb_array_elements(p_certificate->'native_comparisons') e
+      where e->>'case_id'=case_value and e->>'variant'='B')<>1 then
+      raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
+  end loop;
+  perform private.weekly_source_report_fin_native_comparisons_assert_v1(p_certificate->'native_comparisons',
+    execution,p_certificate->>'receipt_input_commit');
+exception when undefined_function or undefined_table or no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;

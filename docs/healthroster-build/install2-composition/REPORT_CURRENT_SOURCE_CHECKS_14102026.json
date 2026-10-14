@@ -1,0 +1,47 @@
+{
+  "sourceOnly": true,
+  "priorHeldSteps": [
+    {
+      "exitCode": 1,
+      "outputSha256": "7f88c72215a8aa9b59353fe65534e117234dc5f728bd099b1783000d6303ad5b",
+      "summary": [
+        "# tests 14",
+        "# suites 0",
+        "# pass 13",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0",
+        "# duration_ms 130.1447"
+      ],
+      "failures": [
+        "#   code: 'ERR_MODULE_NOT_FOUND',",
+        "not ok 2 - docs\\\\healthroster-build\\\\install2-composition\\\\report-current-collector.test.mjs"
+      ]
+    }
+  ],
+  "rootFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+  "canonicalClosureSha256": "7078f5280e09afb24a2bc893371fdc6a113b55ee4d3fdc05fa26bb84393b4ddf",
+  "closureFiles": 11,
+  "atomicPackaging": true,
+  "statements": 59,
+  "bodySha256": "6ad2f7db2926f94858a27fb50de8d25dcffcd447eefbe4e20af782a34e143a28",
+  "scriptSyntax": 6,
+  "sourceTests": {
+    "exitCode": 0,
+    "outputSha256": "41ecad1547347a2554d0c8c7c7f9246eae65b82be518dcb585c21a8766b97b54",
+    "summary": [
+      "# tests 30",
+      "# suites 0",
+      "# pass 30",
+      "# fail 0",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 248.419"
+    ],
+    "failures": []
+  },
+  "nativeSeal": null,
+  "nativeGatesRun": false
+}

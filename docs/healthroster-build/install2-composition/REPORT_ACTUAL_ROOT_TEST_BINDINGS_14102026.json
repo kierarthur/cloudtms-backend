@@ -1,0 +1,46 @@
+{
+  "sourceOnly": true,
+  "rows": [
+    {
+      "source": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/collector-forward.test.mjs",
+      "sourceSha256": "2205327342266c4222cce2d9845479d73336b82b76c1c1925bd5a7e168f884cb",
+      "target": "docs/healthroster-build/install2-composition/report-current-collector.test.mjs",
+      "targetSha256": "8e93f8081aa95cf067d6cf74c5d06e7dda64fe1e908115ccf7557f2a8fbbba86",
+      "hunks": [
+        [
+          "from '../report-ab-protected-dispatch/",
+          "from '../proposals/report-ab-protected-dispatch/"
+        ],
+        [
+          "const dir=path.dirname(fileURLToPath(import.meta.url)),mount=path.join(dir,'.merge-inputs/test-mount/scripts');",
+          "const dir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../proposals/install2-shared-runtime-forward-20261014'),mount=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../../scripts');"
+        ]
+      ],
+      "fullReverse": true,
+      "onlyImportAndTestPathBindings": true
+    },
+    {
+      "source": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/native-btrim.test.mjs",
+      "sourceSha256": "92b9c84ee6d7b31354689129c897a1f346f9b15da9ded82428454e58e717ce4c",
+      "target": "docs/healthroster-build/install2-composition/report-current-btrim.test.mjs",
+      "targetSha256": "2ccdc8d9e0c53302a5ce29bf6a208a271bac10d3fdd3f9362c2a22cb3fd9e952",
+      "hunks": [
+        [
+          "from './forward/scripts/",
+          "from '../../../scripts/"
+        ],
+        [
+          "from '../install2-shared-runtime-forward-20261014/",
+          "from '../proposals/install2-shared-runtime-forward-20261014/"
+        ],
+        [
+          "dir=path.dirname(fileURLToPath(import.meta.url));",
+          "dir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../proposals/install2-report-native-btrim-successor-20261014');"
+        ]
+      ],
+      "fullReverse": true,
+      "onlyImportAndTestPathBindings": true
+    }
+  ],
+  "noNativeProof": true
+}

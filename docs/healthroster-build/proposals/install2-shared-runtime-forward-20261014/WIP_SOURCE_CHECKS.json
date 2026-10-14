@@ -1,0 +1,15 @@
+{
+  "schema_version": "INSTALL2_SHARED_RUNTIME_WIP_SOURCE_BACKUP_CHECK_V1",
+  "source_only": true,
+  "frozen_report49_unchanged": true,
+  "runtime_regression_tests_passed": 10,
+  "runtime_import_objects": 136,
+  "runtime_import_syntax_passed": 135,
+  "proposal_syntax_passed": 14,
+  "proposal_credential_scan_files": 22,
+  "credential_findings": 0,
+  "collector_status": "INCOMPLETE_NULL_SEAL_NON_RECORDABLE",
+  "no_native_execution": true,
+  "full_new_file_diff_check": "PRESERVED_INHERITED_RUNTIME_WHITESPACE",
+  "reviewed_runtime_sha_unchanged": true
+}

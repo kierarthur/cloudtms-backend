@@ -1,0 +1,22 @@
+{
+  "schema_version": "INSTALL2_SHARED_RUNTIME_NATIVE_MAPPER_SOURCE_CHECKS_V1",
+  "status": "SOURCE_ONLY_NATIVE_ROOT_SEAL_AND_ALL_REAL_GATES_HELD",
+  "unit_only_tests_passed": 27,
+  "runtime_import_objects": 136,
+  "runtime_import_syntax_passed": 135,
+  "proposal_syntax_passed": 19,
+  "runtime_complete_reverse_hunks": 61,
+  "fin4_complete_reverse_hunks": 2,
+  "fin4_input_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+  "fin4_output_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+  "frozen_report49_unchanged": true,
+  "credential_scan_files": 33,
+  "credential_findings": 0,
+  "new_database_signatures": 0,
+  "new_gucs": 0,
+  "new_selectors": 0,
+  "new_recorder_slots": 0,
+  "new_bundle_exceptions": 0,
+  "seal_literal_null": true,
+  "no_native_execution": true
+}

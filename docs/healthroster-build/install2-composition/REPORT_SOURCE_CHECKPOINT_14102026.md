@@ -1,0 +1,9 @@
+# Report current-source checkpoint
+
+Input c432594d9203421f009d3c7f21780f8c7df4f24e; reviewed author publication 52adf06e10fcefdbf43f53dfcc911deedcf2b1f0.
+
+The four separate immutable packets35/28/10/9 are retained exactly. The original49 predecessor is archived solely for provenance and fabricated unit-vector dependencies; its old writers, registry/ACL and native prototypes are not installed. The canonical0541 stage follows actual A00519 and Money0430, with ten literal contained leaves. Five complete owner replacements and all32 full hunks reverse exactly to saved current owners. All12 definitions have explicit atomic-stage ACL reassertion: nine owner-only and three existing service signatures, including the private invoice snapshot helper. Seven helpers are new. No browser authority or table is added. The declaration verifier remains separate because its own rollback must never enter the install wrapper.
+
+Five actual Report modules use the reviewed mapper/collector and native-btrim successor. The seal constructor has one fully reversible root mapper-import rebinding; the exact frozen constructor remains archived. Six module syntax checks and30 actual-root source tests pass. The first test run lacked the old frozen fixture dependency; that failure and its correction are retained in the checks. Literal native seal remains null, so traces cannot become recordable evidence.
+
+No old Broker index, managed writer or recorder is copied. Recorder9/13, the two existing Report slots and only three bundle exceptions remain. The managed concrete entry, streamed all-tracked tree proof, final literal registry/ACL union, native compilation/contract/tool/catalogue seal, real role/session/isolation/lock/admission/FIN/document equality, API/UI/phone/NEXT/activation and final Part B critics remain held. Features stay off. No native builder, SQL connection, installed command, runtime or deployment was invoked.

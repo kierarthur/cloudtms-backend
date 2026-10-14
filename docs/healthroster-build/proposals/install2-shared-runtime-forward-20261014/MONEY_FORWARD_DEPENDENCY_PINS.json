@@ -1,0 +1,12 @@
+{
+  "source_only": true,
+  "money_corrective98_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "money_install1_forward27_commit": "e9deed4f1c6da8e79f77f6262c9c10cb699b2f1b",
+  "manifest_sha256": "bc31de1017d896910b138f6a05cf95cac744fea2d501625c14184f02f057b04f",
+  "artifacts_measured": 27,
+  "adapter_sha256": "f8e7461ca3ed4b46f2f2050b1c23858b051af17fe5de9f9379e9df8c9b62af70",
+  "original_support73_commit": "d6ffd1fd971664f7fb2a7ecc65bad86fff328262",
+  "original_support73_manifest_sha256": "5bf0c84bfac484bd7c46014c768b208dcc6baa4834e074bebabde989e5fff084",
+  "old_frozen_packets_unchanged": true,
+  "recorder9_13_report_two_slots_and_three_raw_keys_unchanged": true
+}

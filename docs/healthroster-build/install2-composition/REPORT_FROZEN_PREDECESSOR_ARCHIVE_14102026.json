@@ -1,0 +1,205 @@
+{
+  "sourceOnly": true,
+  "commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+  "manifestSha256": "000b8db40dac31bbc89b1a2f0298b19d60d23e80ce4616e3882aa4fb3f984e51",
+  "status": "ARCHIVE_AND_UNIT_VECTOR_DEPENDENCY_ONLY_NEVER_EXECUTABLE_INSTALL_INPUT",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/01_certificate.sqlinc",
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/02_release_feature_strategy.sqlinc",
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/03_operational_dispatch.sqlinc",
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/04_complete_fin.sqlinc",
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/05_complete_feature_setup.sqlinc",
+      "sha256": "e1ad74dc0620e7dc40b12b0f25ea2303ce1163d99dc57e9b876b6fb81731497a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/06_complete_managed_release.mjs",
+      "sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/07_owner_acl.sqlinc",
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/08_datafree_verifier.sqlinc",
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/09_complete_operational_evidence.mjs",
+      "sha256": "bd980105941083067da15044aa8f7c5744cce505e3f41d7730da4e6961542a5f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/10_complete_current_release_caller.mjs",
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/11_complete_registry_current_union.sqlinc",
+      "sha256": "4480742d7f10283e77131666d8b142533cc5cffe19bf432dcbbffe854c83180c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/12_complete_acl_current_union.sqlinc",
+      "sha256": "0ecd4a95e02a927ba89a2874493ded15bd9e705418fcb217c7c3849fa33b8299"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/13_slot_validators.sqlinc",
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/CONTROLLING_INPUTS.json",
+      "sha256": "b5096f40c8f1d7a348b384f6dc612e9cdc8fbe687978fe61f20bc912f09ede04"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/FULL_REVERSE_RECEIPT.json",
+      "sha256": "2247590a19bb9410f4fb7bdc3b451802464b5fc1857f64a0a99ebb90175ba2fd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/HISTORICAL_FIXTURE_GUARD_TRACE.md",
+      "sha256": "47d0ea8dc896d807d9f8f8325196adb90cce65ac21f3e0b3a7cb71fe15790d2c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/METADATA_PIN_FORWARD_AND_LEXICAL_RECEIPT.json",
+      "sha256": "de2a04e59b107702999c4c49a2603379816d6879cded0b97fc30789579015046"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/MONEY_DEPENDENCY_PINS.json",
+      "sha256": "edc6bae5d96c8caf23e3bd40609c985561e515671f81a28f32b9a7c3230736a2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/NATIVE_CAPTURE_ABI.md",
+      "sha256": "2171f5146d99eb7aa02b7920357160bf4226693b15e7bd88e74f04a7a9ca7c20"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/NATIVE_PROOF_RECIPE.md",
+      "sha256": "4d7078133e0e10db24b0bd80d594db9afd84491b11b3f6bfc4634a565c23a8aa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/OFF_CONTEXT_PREREQUISITE.md",
+      "sha256": "c97aa2b3675a7612fa20380ad4a9349aa67b9a78e1c3604be82e5ec5bf1cfa22"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/PRIVATE_SIGNATURES.json",
+      "sha256": "ef88e0aa587bbc6d293698aaa450ac1940512d65508cd84939eed434afd28d49"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/README.md",
+      "sha256": "80584024366ffc8fb67ecdb02d517cccbb2aa5f4490585468e037a8292bbb410"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/RECORDER_ABI.md",
+      "sha256": "20f9f49f17dea203fe146be46d016d5a86cf4cd993a9d2f7a65ec274dfe06734"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/REPORT_ADMISSION_REVERSE.json",
+      "sha256": "1aaf3946e4e3f2cacf068ed8f8693abfd38fe8e476089eb4b926eee57f10fb7a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/REPORT_ORDER_REVERSE.json",
+      "sha256": "92c06022589ec9cd4d2410c5bf48719f82207fbcc0184c250389953ea6be8283"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/RESUMED_SOURCE_HANDOFF_20261014.md",
+      "sha256": "8989419f539e15f164bebd27b36fef4ce7b177f3840a592bc4391219e4e20c2e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/ROOT_CLOSURE_TEMPLATE.sqlinc",
+      "sha256": "c9fa44a6b6afa9322e3ec6f0b8071446a962c0656b57e971f74f5c2bbb815c5d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/SOURCE_TEST_RESULTS.txt",
+      "sha256": "22d603de07423595d6572b024ce12424672a65b7d39821a3d5c3faf1c71f8b2b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/TWO_INSTALL_RECONCILIATION.md",
+      "sha256": "1c0f87451b363296ebdda0839c3442b7c0e2e7d25b25a9f8302b0e7a9f181f5c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/adapt-same-install.mjs",
+      "sha256": "3616f0c7bb642d70e264d05b51680fa219176e9c56298ccd4aaff9d1142ea8cf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/build-proposal.mjs",
+      "sha256": "98f55b0e847ad837f21cfb7dabd80734f9f04b0abb74a28f588bfa480338dd7d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/compose-report-native-admission.mjs",
+      "sha256": "cc66dbf5b9390d463632cf06cef2a3bd5a23dc9ca022b330b7c67121d49532c9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/compose-report-native-order.mjs",
+      "sha256": "082f7cdbdaef04f254304d9eb8aa1ad0c7d566d499c8cb17fad3b3f687a56603"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/freeze.mjs",
+      "sha256": "687584f23cc97ba4bbf12c2d3e0edc2c40b73c2edacebd2dea3beefd6767c0d3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/pin-inputs.mjs",
+      "sha256": "7d10bbb0a69f18507bfe168d5af5c8c5af197268cca98b3de5e9ff56d6b5eacc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/pin-money-inputs.mjs",
+      "sha256": "36d2864565dc5f5b13d82054c155d27250d80d481fcfb96bcf6d37da8c8afafd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/report-ab-dispatch.test.mjs",
+      "sha256": "0e5233a5ac773c655c113645405e33540f0ec2ff4a82fe27388c27b74b0e56ab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/report-fin-native-collector.test.mjs",
+      "sha256": "5d74535b133adb3c1ec943888715ed822428f7e7c385a58766d1c243e1a35c8b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/unit-raw-collector-fixture.mjs",
+      "sha256": "b304bf0459d3b1bbe9acaa4ee86119af1bbc4bfcf419d795f78b6de778619fc7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/update-native-capture-forward.mjs",
+      "sha256": "a4dab659393cea7c0bb7da6c632c8546c0d668cecbb965dce83a76bcc9d2a893"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/verify-source.mjs",
+      "sha256": "7f1ae65eec31712f169b9bd5d53d4f1818154f203b5249d4c49f27909cd28889"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/weekly-source-protected-execution-tree.mjs",
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/weekly-source-report-fin-native-collector.mjs",
+      "sha256": "cdc27a729099c77a455ac5eb588b70eb4da5131080aa08e6d82fccb1e2e41b34"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/SOURCE_MANIFEST.json",
+      "sha256": "000b8db40dac31bbc89b1a2f0298b19d60d23e80ce4616e3882aa4fb3f984e51"
+    }
+  ],
+  "nativeSeal": null
+}

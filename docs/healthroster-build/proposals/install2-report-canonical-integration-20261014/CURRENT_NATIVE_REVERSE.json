@@ -1,0 +1,264 @@
+{
+  "schema_version": "INSTALL2_REPORT_CURRENT_COMPLETE_NATIVE_REVERSE_V1",
+  "base_current_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "current_foundation_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "owners": [
+    {
+      "input_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "input": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+      "output": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc",
+      "input_bytes": 102228,
+      "output_bytes": 103480,
+      "input_sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+      "output_sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e",
+      "full_reverse": true,
+      "hunks": [
+        {
+          "id": "REPORT_SCOPE_ONLY",
+          "old": "     or v_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE')\n     or (v_scope_kind='NHSP_REPORT_SCOPE') is distinct from (v_report_scope_id is not null)",
+          "new": "     or v_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE','SELF_BILL_REPORT_SCOPE')\n     or (v_scope_kind in ('NHSP_REPORT_SCOPE','SELF_BILL_REPORT_SCOPE')) is distinct from (v_report_scope_id is not null)"
+        },
+        {
+          "id": "POST_NATIVE_ADMISSION_REPORT_ARM",
+          "old": "  perform private.weekly_source_pay_query_admit_v2();\n",
+          "new": "  perform private.weekly_source_pay_query_admit_v2();\n\n  -- Qualified operational Report arm AFTER unchanged payload/ID/hash/native admission.\n  -- The exact explicit four-argument A/B qualification owner remains unchanged.\n  if v_scope_kind='SELF_BILL_REPORT_SCOPE' then\n    select * into v_scope from public.weekly_source_report_scopes where id=v_report_scope_id;\n    select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id;\n    if v_scope.id is null or v_cycle.id is null or v_scope.self_bill_report_id is null\n      or v_scope.source_cycle_id is distinct from v_cycle.id\n      or v_scope.source_group_id is distinct from v_cycle.source_group_id then\n      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_MISMATCH' using errcode='22023'; end if;\n    perform private.weekly_source_office_authority_v1(v_actor,\n      case when p_prepare_only then 'CORRECT_FINAL_SOURCE' else 'FINALISE_WEEK' end,\n      v_cycle.source_group_id,v_scope.client_id,v_cycle.finalisation_week_ending);\n    if p_prepare_only or p_correction_session_id is not null then\n      raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CORRECT_FINAL_UNSUPPORTED' using errcode='55000'; end if;\n    return private.weekly_source_report_fin_dispatch_v1(p_request);\n  end if;\n"
+        }
+      ]
+    },
+    {
+      "input_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "input": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+      "output": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc",
+      "input_bytes": 22825,
+      "output_bytes": 24054,
+      "input_sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f",
+      "output_sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667",
+      "full_reverse": true,
+      "hunks": [
+        {
+          "id": "REPORT_LOCAL",
+          "old": "v_agency_invoice boolean:=false; v_qualification jsonb;",
+          "new": "v_agency_invoice boolean:=false; v_qualification jsonb; v_report_qualification jsonb;"
+        },
+        {
+          "id": "REPLAY_REPORT_CERTIFICATE",
+          "old": "    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);",
+          "new": "    if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'report_fin_qualification' then\n      if v_assignment.feature_receipt_json->'report_fin_qualification' is distinct from\n        private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,\n          v_assignment.feature_receipt_json->'protected_capability_qualification') then\n        raise exception 'WEEKLY_SOURCE_REPORT_FIN_FEATURE_RECEIPT_UNQUALIFIED' using errcode='55000';\n      end if;\n    end if;\n    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);"
+        },
+        {
+          "id": "LOCKED_ACTUAL_REPORT_BINDING",
+          "old": "  if v_assignment.feature_enabled=v_enabled then\n",
+          "new": "  -- Server-derived Report binding, using only the actual saved immutable\n  -- version/range. No browser strategy/hash field and no default A/B.\n  if v_enabled and v_purpose='RULE_SET' then\n    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,v_qualification);\n  end if;\n  if v_assignment.feature_enabled=v_enabled then\n"
+        },
+        {
+          "id": "REPORT_REQUALIFICATION_RECEIPT",
+          "old": "      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false);",
+          "new": "      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false)\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"
+        },
+        {
+          "id": "REPORT_INITIAL_RECEIPT",
+          "old": "      jsonb_build_object('protected_capability_qualification',v_qualification) end;",
+          "new": "      jsonb_build_object('protected_capability_qualification',v_qualification) end\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"
+        }
+      ]
+    },
+    {
+      "input_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "input": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "output": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc",
+      "input_bytes": 40040,
+      "output_bytes": 47770,
+      "input_sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "output_sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "full_reverse": true,
+      "hunks": [
+        {
+          "id": "REPORT_NATIVE_LOCALS",
+          "old": "  v_count integer;",
+          "new": "  v_count integer;\n  v_is_report boolean:=false; v_report_scope public.weekly_source_report_scopes%rowtype;\n  v_report_header public.weekly_source_self_bill_reports%rowtype;"
+        },
+        {
+          "id": "REPORT_FINAL_AUTHORITY_WITHOUT_EXPORT_COMPLETION",
+          "old": "  if v_revision.state<>'CURRENT'\n     or v_revision.source_cycle_id is distinct from v_cycle.id",
+          "new": "  v_is_report:=v_revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE';\n  if v_is_report then\n    select * into strict v_report_scope from public.weekly_source_report_scopes where id=v_revision.report_scope_id for share;\n    select * into strict v_report_header from public.weekly_source_self_bill_reports where id=v_report_scope.self_bill_report_id;\n    if v_report_scope.current_final_revision_id is distinct from v_revision.id or v_report_scope.source_cycle_id<>v_cycle.id\n      or v_report_scope.source_group_id<>v_manifest.source_group_id or v_report_scope.client_id<>v_manifest.client_id\n      or v_report_scope.current_complete_upload_id is distinct from v_revision.upload_id or v_report_scope.state<>'FINALISED'\n      or v_report_header.source_cycle_id<>v_cycle.id or v_report_header.source_group_id<>v_manifest.source_group_id\n      or v_report_header.client_id<>v_manifest.client_id or v_revision.reason<>'INITIAL_FINALISATION'\n      or coalesce(v_manifest.invoice_window_cycle_id,v_cycle.id)<>v_cycle.id then\n      raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_FINAL_AUTHORITY_STALE' using errcode='40001'; end if;\n  end if;\n  if v_revision.state<>'CURRENT'\n     or v_revision.source_cycle_id is distinct from v_cycle.id"
+        },
+        {
+          "id": "RETAIN_ORDINARY_COMPLETION_ARM",
+          "old": "     or not exists(\n       select 1 from public.weekly_source_client_cycle_completions completion",
+          "new": "     or (not v_is_report and not exists(\n       select 1 from public.weekly_source_client_cycle_completions completion"
+        },
+        {
+          "id": "CLOSE_ORDINARY_COMPLETION_ARM",
+          "old": "         and completion.completion_kind='FINAL_SOURCE' and completion.state='CURRENT'\n     ) then",
+          "new": "         and completion.completion_kind='FINAL_SOURCE' and completion.state='CURRENT'\n     )) then"
+        },
+        {
+          "id": "REPORT_COMPLETE_SOURCE_MEMBERSHIP",
+          "old": "  if v_manifest.invoice_state='ADMITTED' then",
+          "new": "  if v_is_report then\n    if exists(select 1 from public.weekly_source_manifest_movements mm\n      join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id\n      left join public.weekly_source_upload_rows row_value on row_value.id=movement.self_bill_report_row_id\n      where mm.client_manifest_id=v_manifest.id and\n       (movement.source_profile_kind<>'SELF_BILL_REPORT' or movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING')\n        or movement.total_pay_ex_vat<>0 or movement.canonical_pay_vector_json is distinct from private.weekly_source_invoice_only_vector_v1('PAY',0)\n        or (movement.source_line_kind='SELF_BILL_REPORT_LINE' and (row_value.id is null or row_value.upload_id<>v_revision.upload_id\n          or row_value.row_finalisation_state<>'SOURCE_REPORT_LINE'\n          or movement.source_facts_json->>'upload_row_id' is distinct from row_value.id::text\n          or movement.source_facts_json->>'source_row_ordinal' is distinct from row_value.source_row_ordinal::text\n          or movement.source_facts_json->>'request_id' is distinct from row_value.external_source_key\n          or movement.source_facts_json->>'report_scope_id' is distinct from v_report_scope.id::text\n          or movement.source_facts_json->>'self_bill_report_id' is distinct from v_report_header.id::text\n          or movement.source_facts_json->>'rule_set_version_id' is distinct from v_revision.rule_set_version_id::text\n          or movement.invoice_presentation_charge_pence<>row_value.source_shift_charge_pence\n          or movement.vat_amount*100<>row_value.source_vat_pence or movement.total_inc_vat*100<>row_value.source_gross_pence))\n        or (movement.source_line_kind='INVOICE_VAT_ROUNDING' and movement.vat_rounding_revision_id is distinct from v_revision.id)))\n      or exists(select 1 from public.weekly_source_upload_rows row_value where row_value.upload_id=v_revision.upload_id and\n        (select count(*) from public.weekly_source_manifest_movements mm\n          join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id\n          where mm.client_manifest_id=v_manifest.id and movement.self_bill_report_row_id=row_value.id)<>1)\n      or (select count(*) from public.weekly_source_upload_rows row_value where row_value.upload_id=v_revision.upload_id)<>v_report_header.line_count\n      or (select count(*) from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id\n        where mm.client_manifest_id=v_manifest.id and movement.source_line_kind='INVOICE_VAT_ROUNDING')>1 then\n      raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_MANIFEST_INVALID' using errcode='55000'; end if;\n  end if;\n  if v_manifest.invoice_state='ADMITTED' then"
+        },
+        {
+          "id": "REPORT_ORIGINAL_HEADER_FACTS",
+          "old": "      'automatic_consolidation','ONE_CLIENT_ONE_FINALISED_CYCLE'\n    )||case when v_manifest.invoice_window_cycle_id is null",
+          "new": "      'automatic_consolidation','ONE_CLIENT_ONE_FINALISED_CYCLE'\n    )||case when not v_is_report then '{}'::jsonb else jsonb_build_object('self_bill_report_id',v_report_header.id,\n      'report_scope_id',v_report_scope.id,'report_invoice_date',v_report_header.invoice_date) end||case when v_manifest.invoice_window_cycle_id is null"
+        },
+        {
+          "id": "REPORT_NULL_EVENT_SINGLE_MEMBER_ONLY",
+          "old": "       or (select pg_catalog.count(distinct movement.work_event_id)\n           from public.weekly_source_billing_movements movement where movement.id=any(v_ids))<>1",
+          "new": "       or ((select pg_catalog.count(distinct movement.work_event_id)\n           from public.weekly_source_billing_movements movement where movement.id=any(v_ids))<>1 and not(v_is_report and v_count=1))"
+        },
+        {
+          "id": "REPORT_STANDALONE_REAL_NULL_IDENTITY",
+          "old": "    if not (v_is_rounding and v_movement.candidate_id is null) then",
+          "new": "    if not ((v_is_rounding or (v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE'\n      and v_movement.movement_role='STANDALONE_NEGATIVE')) and v_movement.candidate_id is null) then"
+        },
+        {
+          "id": "REPORT_FROZEN_BOUND_OR_ACTUAL_STANDALONE_PRESENTATION",
+          "old": "        select snapshot.* into strict v_snapshot from public.weekly_source_state_transitions transition_row\n          join public.weekly_source_final_snapshot_lines snapshot on snapshot.id=coalesce(transition_row.new_snapshot_line_id,transition_row.previous_snapshot_line_id)\n          where transition_row.id=v_identity_movement.transition_id;",
+          "new": "        if v_is_report and v_identity_movement.source_line_kind='SELF_BILL_REPORT_LINE' then\n          if v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id' is not null then\n            select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot\n              where snapshot.id=(v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid\n                and snapshot.final_revision_id=(v_identity_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid\n                and snapshot.client_id=v_manifest.client_id and snapshot.contract_id=v_identity_movement.contract_id\n                and snapshot.work_event_id=v_identity_movement.work_event_id;\n          else\n            if v_identity_movement.movement_role<>'STANDALONE_NEGATIVE' then\n              raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_BOUND_PRESENTATION_REQUIRED' using errcode='55000'; end if;\n            select * into strict v_source_row from public.weekly_source_upload_rows where id=v_identity_movement.self_bill_report_row_id and upload_id=v_revision.upload_id;\n            v_snapshot.work_date:=v_source_row.work_date;v_snapshot.start_at_local:=v_source_row.start_at_local;\n            v_snapshot.end_at_local:=v_source_row.end_at_local;v_snapshot.break_minutes:=null;v_snapshot.external_event_identity:=v_source_row.external_source_key;\n          end if;\n        else\n        select snapshot.* into strict v_snapshot from public.weekly_source_state_transitions transition_row\n          join public.weekly_source_final_snapshot_lines snapshot on snapshot.id=coalesce(transition_row.new_snapshot_line_id,transition_row.previous_snapshot_line_id)\n          where transition_row.id=v_identity_movement.transition_id;\n        end if;"
+        },
+        {
+          "id": "REPORT_INVOICE_LINE_PRESENTATION_ARM",
+          "old": "    elsif v_is_expense then\n      select source_row.* into strict v_source_row",
+          "new": "    elsif v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE' then\n      if v_movement.source_facts_json->>'bound_pay_snapshot_line_id' is not null then\n        select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot\n          where snapshot.id=(v_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid\n            and snapshot.final_revision_id=(v_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid\n            and snapshot.client_id=v_manifest.client_id and snapshot.contract_id=v_movement.contract_id and snapshot.work_event_id=v_movement.work_event_id;\n        v_work_date:=v_snapshot.work_date;v_start:=v_snapshot.start_at_local;v_end:=v_snapshot.end_at_local;\n        v_break:=v_snapshot.break_minutes;v_reference:=v_snapshot.external_event_identity;\n      else\n        if v_movement.movement_role<>'STANDALONE_NEGATIVE' then\n          raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_BOUND_PRESENTATION_REQUIRED' using errcode='55000'; end if;\n        select * into strict v_source_row from public.weekly_source_upload_rows where id=v_movement.self_bill_report_row_id and upload_id=v_revision.upload_id;\n        v_work_date:=v_source_row.work_date;v_start:=v_source_row.start_at_local;v_end:=v_source_row.end_at_local;\n        v_break:=null;v_reference:=v_source_row.external_source_key;\n      end if;\n    elsif v_is_expense then\n      select source_row.* into strict v_source_row"
+        },
+        {
+          "id": "REPORT_NATIVE_LINE_KIND",
+          "old": "      when v_movement.source_line_kind in ('INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') then v_movement.source_line_kind",
+          "new": "      when v_movement.source_line_kind in ('INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION','SELF_BILL_REPORT_LINE') then v_movement.source_line_kind"
+        },
+        {
+          "id": "REPORT_NATIVE_ORIGIN_KIND",
+          "old": "      when v_is_rounding then 'INVOICE_VAT_ROUNDING'\n      when v_is_expense then 'SOURCE_FIXED_EXPENSE'",
+          "new": "      when v_is_rounding then 'INVOICE_VAT_ROUNDING'\n      when v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE' then\n        case when v_movement.movement_role='STANDALONE_NEGATIVE' then 'SELF_BILL_REPORT_STANDALONE_CREDIT' else 'SELF_BILL_REPORT_LINE' end\n      when v_is_expense then 'SOURCE_FIXED_EXPENSE'"
+        },
+        {
+          "id": "REPORT_LITERAL_PROFILE",
+          "old": "then 'NHSP_TWO_COMPONENT_PENCE_V1' when private.weekly_source_invoice_source_amount_movement_valid_v1(v_movement.id)",
+          "new": "then 'NHSP_TWO_COMPONENT_PENCE_V1' when v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE' then 'SOURCE_INVOICE_MONEY_PENCE_V1' when private.weekly_source_invoice_source_amount_movement_valid_v1(v_movement.id)"
+        },
+        {
+          "id": "REPORT_LITERAL_AMOUNT_AUTHORITY",
+          "old": "      case when v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' or v_is_expense\n        or private.weekly_source_invoice_source_amount_movement_valid_v1(v_movement.id)",
+          "new": "      case when v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' or v_is_expense\n        or (v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE')\n        or private.weekly_source_invoice_source_amount_movement_valid_v1(v_movement.id)"
+        }
+      ]
+    },
+    {
+      "input_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "input": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+      "output": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc",
+      "input_bytes": 113770,
+      "output_bytes": 123180,
+      "input_sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "output_sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "full_reverse": true,
+      "hunks": [
+        {
+          "id": "REPORT_ONLY_ORDER_LOCAL",
+          "old": "  v_now timestamptz := coalesce(p_now_utc, now());",
+          "new": "  v_now timestamptz := coalesce(p_now_utc, now());\n  v_report_invoice record; v_report_revision public.weekly_source_final_revisions%rowtype;\n  v_report_scope public.weekly_source_report_scopes%rowtype; v_report_header public.weekly_source_self_bill_reports%rowtype;\n  v_report_upload public.weekly_source_uploads%rowtype;"
+        },
+        {
+          "id": "REPORT_FULL_NATIVE_MEMBERSHIP_GUARD",
+          "old": "  return query\n  with recursive raw_requests as materialized (",
+          "new": "  -- Report order is native immutable source order. A full same-Report invoice\n  -- must prove every row/member; no subset, timestamp, UUID or hash sorting\n  -- supplies B's last actual line. Ordinary/NHSP/mixed-origin paths are retained.\n  for v_report_invoice in\n    select distinct invoice.id,invoice.client_id,invoice.header_snapshot_json\n    from public.invoices invoice\n    join (select case when coalesce(value->>'entity_id','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'\n      and upper(coalesce(value->>'entity_type',''))='INVOICE' then (value->>'entity_id')::uuid end invoice_id\n      from jsonb_array_elements(p_requests)) requested on requested.invoice_id=invoice.id\n    where exists(select 1 from public.weekly_source_invoice_line_bindings binding\n      join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n      join public.weekly_source_final_revisions revision on revision.id=movement.final_revision_id\n      where binding.invoice_id=invoice.id and binding.state='CURRENT' and revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE')\n      or exists(select 1 from public.weekly_source_final_revisions revision\n        where revision.id::text=invoice.header_snapshot_json#>>'{meta,final_revision_id}' and revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE')\n  loop\n    perform 1 from public.invoices where id=v_report_invoice.id for share;\n    perform 1 from public.invoice_lines where invoice_id=v_report_invoice.id for share;\n    select revision.* into strict v_report_revision\n      from public.weekly_source_final_revisions revision\n      where revision.id in(select distinct movement.final_revision_id from public.weekly_source_invoice_line_bindings binding\n        join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n        where binding.invoice_id=v_report_invoice.id and binding.state='CURRENT') for share;\n    select * into strict v_report_scope from public.weekly_source_report_scopes where id=v_report_revision.report_scope_id for share;\n    select * into strict v_report_header from public.weekly_source_self_bill_reports where id=v_report_scope.self_bill_report_id;\n    select * into strict v_report_upload from public.weekly_source_uploads where id=v_report_revision.upload_id;\n    -- Rendering binds the retained invoice authority, never the current scope\n    -- head. Admission owns CURRENT; an immutable historical document keeps its\n    -- original revision/upload after any later permitted native transition.\n    if v_report_revision.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' or v_report_revision.state not in ('CURRENT','PREPARED','SUPERSEDED')\n      or v_report_revision.reason<>'INITIAL_FINALISATION'\n      or v_report_invoice.header_snapshot_json#>>'{meta,final_revision_id}' is distinct from v_report_revision.id::text\n      or v_report_invoice.client_id is distinct from v_report_header.client_id\n      or v_report_scope.source_cycle_id<>v_report_revision.source_cycle_id\n      or v_report_scope.source_group_id<>v_report_header.source_group_id or v_report_scope.client_id<>v_report_header.client_id\n      or v_report_header.source_cycle_id<>v_report_revision.source_cycle_id\n      or v_report_upload.report_scope_id is distinct from v_report_scope.id\n      or v_report_upload.source_cycle_id is distinct from v_report_revision.source_cycle_id\n      or v_report_upload.content_sha256 is distinct from v_report_header.content_sha256\n      or (v_report_invoice.header_snapshot_json#>>'{meta,report_scope_id}' is not null\n        and v_report_invoice.header_snapshot_json#>>'{meta,report_scope_id}' is distinct from v_report_scope.id::text)\n      or (v_report_invoice.header_snapshot_json#>>'{meta,self_bill_report_id}' is not null\n        and v_report_invoice.header_snapshot_json#>>'{meta,self_bill_report_id}' is distinct from v_report_header.id::text)\n      or exists(select 1 from public.invoice_lines line where line.invoice_id=v_report_invoice.id and\n        (select count(*) from public.weekly_source_invoice_line_bindings binding where binding.invoice_line_id=line.id\n          and binding.invoice_id=line.invoice_id and binding.state='CURRENT')<>1)\n      or exists(select 1 from public.weekly_source_invoice_line_bindings binding\n        join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n        left join public.weekly_source_upload_rows row_value on row_value.id=movement.self_bill_report_row_id\n        where binding.invoice_id=v_report_invoice.id and binding.state='CURRENT' and\n          (movement.final_revision_id<>v_report_revision.id or movement.actual_client_id<>v_report_header.client_id\n           or movement.source_profile_kind<>'SELF_BILL_REPORT' or movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING')\n           or movement.total_pay_ex_vat<>0 or movement.canonical_pay_vector_json is distinct from private.weekly_source_invoice_only_vector_v1('PAY',0)\n           or (movement.source_line_kind='SELF_BILL_REPORT_LINE' and (row_value.id is null or row_value.upload_id<>v_report_revision.upload_id\n             or row_value.row_finalisation_state<>'SOURCE_REPORT_LINE' or movement.source_facts_json->>'upload_row_id' is distinct from row_value.id::text\n             or movement.source_facts_json->>'source_row_ordinal' is distinct from row_value.source_row_ordinal::text\n             or movement.source_facts_json->>'report_scope_id' is distinct from v_report_scope.id::text\n             or movement.source_facts_json->>'self_bill_report_id' is distinct from v_report_header.id::text\n             or movement.source_facts_json->>'rule_set_version_id' is distinct from v_report_revision.rule_set_version_id::text\n             or movement.invoice_presentation_charge_pence is distinct from row_value.source_shift_charge_pence\n             or movement.vat_amount*100 is distinct from row_value.source_vat_pence::numeric\n             or movement.total_inc_vat*100 is distinct from row_value.source_gross_pence::numeric))\n           or (movement.source_line_kind='INVOICE_VAT_ROUNDING' and movement.vat_rounding_revision_id is distinct from v_report_revision.id)))\n      or (select count(*) from public.weekly_source_upload_rows row_value where row_value.upload_id=v_report_revision.upload_id)<>v_report_header.line_count\n      or exists(select 1 from public.weekly_source_upload_rows row_value where row_value.upload_id=v_report_revision.upload_id and\n        (select count(*) from public.weekly_source_invoice_line_bindings binding\n          join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n          where binding.invoice_id=v_report_invoice.id and binding.state='CURRENT' and movement.self_bill_report_row_id=row_value.id)<>1)\n      or (select count(*) from public.weekly_source_invoice_line_bindings binding\n        join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n        where binding.invoice_id=v_report_invoice.id and binding.state='CURRENT' and movement.source_line_kind='INVOICE_VAT_ROUNDING')>1 then\n      raise exception 'WEEKLY_SOURCE_REPORT_PRESENTATION_ORDER_UNQUALIFIED' using errcode='55000';\n    end if;\n    perform private.weekly_source_invoice_allocation_assert_v1(v_report_invoice.id);\n  end loop;\n  return query\n  with recursive raw_requests as materialized ("
+        },
+        {
+          "id": "REPORT_NATIVE_ORDINAL_CTE",
+          "old": "  reference_scope as materialized (",
+          "new": "  report_invoice_order as materialized (\n    select binding.invoice_id,binding.invoice_line_id,presentation.candidate_display_snapshot report_worker_name,\n      presentation.booking_reference_snapshot report_reference,\n      case when movement.source_line_kind='SELF_BILL_REPORT_LINE' then row_value.source_row_ordinal::bigint\n        when movement.source_line_kind='INVOICE_VAT_ROUNDING' then\n          (select max(last_row.source_row_ordinal)::bigint+1 from public.weekly_source_upload_rows last_row where last_row.upload_id=revision.upload_id)\n      end report_source_ordinal\n    from requested_invoices requested\n    join public.weekly_source_invoice_line_bindings binding on binding.invoice_id=requested.invoice_id and binding.state='CURRENT'\n    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n    join public.weekly_source_invoice_presentation_lines presentation on presentation.id=binding.presentation_line_id\n    join public.weekly_source_final_revisions revision on revision.id=movement.final_revision_id and revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE'\n    left join public.weekly_source_upload_rows row_value on row_value.id=movement.self_bill_report_row_id\n  ),\n  reference_scope as materialized ("
+        },
+        {
+          "id": "REPORT_ACTUAL_DISPLAY_ORDINAL",
+          "old": "           row_number() over(partition by il.invoice_id order by il.created_at,il.id)::integer base_display_order,",
+          "new": "           row_number() over(partition by il.invoice_id order by report_order.report_source_ordinal nulls last,il.created_at,il.id)::integer base_display_order,"
+        },
+        {
+          "id": "REPORT_IMMUTABLE_NATIVE_WORKER",
+          "old": "           coalesce(nullif(btrim(vs.candidate_name),''),nullif(btrim(t.occupant_key_norm),'')) worker_name,",
+          "new": "           case when report_order.invoice_line_id is not null then report_order.report_worker_name\n             else coalesce(nullif(btrim(vs.candidate_name),''),nullif(btrim(t.occupant_key_norm),'')) end worker_name,"
+        },
+        {
+          "id": "REPORT_IMMUTABLE_NATIVE_REFERENCE",
+          "old": "           case when il.timesheet_id is null\n             then coalesce(nullif(btrim(il.meta_json->>'reference'),''),",
+          "new": "           case when report_order.invoice_line_id is not null then report_order.report_reference\n             when il.timesheet_id is null\n             then coalesce(nullif(btrim(il.meta_json->>'reference'),''),"
+        },
+        {
+          "id": "REPORT_EXACT_NATIVE_LINE_JOIN",
+          "old": "    from public.invoice_lines il\n    left join public.timesheets t on t.timesheet_id=il.timesheet_id and t.is_current",
+          "new": "    from public.invoice_lines il\n    left join report_invoice_order report_order on report_order.invoice_id=il.invoice_id and report_order.invoice_line_id=il.id\n    left join public.timesheets t on t.timesheet_id=il.timesheet_id and t.is_current"
+        },
+        {
+          "id": "REPORT_ACTUAL_RENDER_ARRAY_ORDER",
+          "old": "           ) order by c.created_at,c.id,c.base_display_order) lines,",
+          "new": "           ) order by case when exists(select 1 from report_invoice_order report_order where report_order.invoice_id=c.invoice_id)\n             then c.base_display_order end nulls last,c.created_at,c.id,c.base_display_order) lines,"
+        },
+        {
+          "id": "PACKET_EOF_ONLY_NO_BODY_CHANGE",
+          "old": "grant execute on function private._invoice_presentation_snapshot_batch(jsonb,timestamptz)\n  to service_role;\n\n\n",
+          "new": "grant execute on function private._invoice_presentation_snapshot_batch(jsonb,timestamptz)\n  to service_role;\n"
+        }
+      ]
+    },
+    {
+      "input_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "input": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "output": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc",
+      "input_bytes": 103685,
+      "output_bytes": 109868,
+      "input_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "output_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "full_reverse": true,
+      "hunks": [
+        {
+          "id": "FIN4_OBSERVATION_1",
+          "old": "  v_finalisation_lock_result jsonb;",
+          "new": "  v_finalisation_lock_result jsonb;\n  v_report_native_context jsonb;\n  v_report_native_command jsonb;\n  v_report_native_frame jsonb;\n  v_report_native_command_count integer;"
+        },
+        {
+          "id": "FIN4_OBSERVATION_2",
+          "old": "  -- One transaction at a time may decide the final order for a logical",
+          "new": "  -- Owner-only native observation at the actual under-lock recheck. The\n  -- Report arm returned earlier; this captures the ordinary FIN4 ladder only.\n  -- Existing command context validates the real OFF admission/XID/PID/stack.\n  -- Normal calls have no context and acquire no additional audit/economic fact.\n  v_report_native_context:=private.weekly_source_rule_qualification_context_v1(v_client_id,v_cycle.id);\n  if v_report_native_context is not null then\n    select count(*),jsonb_agg(audit.after_json)->0 into v_report_native_command_count,v_report_native_command\n      from public.audit_events audit\n      where audit.object_type='weekly_source_off_rule_command' and audit.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED'\n        and audit.event_sequence_is_authoritative and audit.actor_user_id=v_actor\n        and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text\n        and audit.after_json->>'backend_pid'=pg_backend_pid()::text\n        and not exists(select 1 from public.audit_events completed where completed.object_type=audit.object_type\n          and completed.object_id_text=audit.object_id_text and completed.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED'\n          and completed.event_sequence_is_authoritative);\n    if v_report_native_command_count<>1 then\n      raise exception 'REPORT_NATIVE_OFF_FIN_SCOPE_UNPROVED' using errcode='55000';\n    end if;\n    if v_report_native_command->>'native_operation'='weekly_source_finalise_atomic_v1' then\n    if v_report_native_command->>'schema_version' is distinct from 'WEEKLY_SOURCE_OFF_RULE_COMMAND_V1'\n      or v_report_native_command->>'native_operation' is distinct from 'weekly_source_finalise_atomic_v1'\n      or v_report_native_command->>'actor_user_id' is distinct from v_actor::text\n      or v_report_native_command->>'source_cycle_id' is distinct from v_cycle.id::text\n      or v_report_native_command->'authorization' is distinct from v_report_native_context\n      or v_report_native_command->'operational_ready' is distinct from 'false'::jsonb\n      or v_report_native_command#>>'{native_parent_scope,schema_version}' is distinct from 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_SCOPE_V1'\n      or v_report_native_command#>>'{native_parent_scope,source_cycle_id}' is distinct from v_cycle.id::text\n      or v_report_native_command#>'{native_parent_scope,ambiguous}' is distinct from 'false'::jsonb\n      or v_report_native_command->>'native_request_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_OFF_RULE_NATIVE_REQUEST_V1',p_request),'hex')\n      or v_report_native_command->>'command_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_OFF_RULE_COMMAND_V1',v_report_native_command-'command_sha256'),'hex') then\n      raise exception 'REPORT_NATIVE_OFF_FIN_SCOPE_UNPROVED' using errcode='55000';\n    end if;\n    v_report_native_frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_REPORT_FIN_NATIVE_LOCK_CONTEXT_V1',\n      'execution',private.weekly_source_protected_qualification_release_v1(),\n      'command_id',v_report_native_command->>'command_id','command_sha256',v_report_native_command->>'command_sha256',\n      'authorization_sha256',v_report_native_context->>'authorization_sha256','native_operation',v_report_native_command->>'native_operation',\n      'actor_user_id',v_actor,'source_cycle_id',v_cycle.id,'upload_id',v_upload.id,'projection_publication_id',v_publication.id,\n      'generation',v_generation,'authority_scope_kind',v_scope_kind,'prepare_only',p_prepare_only,\n      'native_argument_bytes',jsonb_build_object('p_request',p_request,'p_correction_session_id',p_correction_session_id,\n        'p_prepare_only',p_prepare_only,'p_report_vat_rounding_variant',p_report_vat_rounding_variant)::text,\n      'backend_pid',pg_backend_pid()::text,'transaction_id',pg_current_xact_id_if_assigned()::text,\n      'active_owner',(select active_owner from private.bpay_next_module_control where id=1),\n      'original_root_ids',to_jsonb(v_finalisation_root_ids),\n      'rechecked_root_ids',to_jsonb(v_finalisation_root_recheck),\n      'root_set_setting',current_setting('cloudtms.weekly_source_finalisation_root_set',true),\n      'operation_id',v_finalisation_lock_operation,'operation_setting',current_setting('cloudtms.weekly_source_finalisation_lock_operation',true),\n      'operation',(select to_jsonb(operation) from private.bpay_next_source_current_lock_operations operation where operation.id=v_finalisation_lock_operation),\n      'operation_members',coalesce((select jsonb_agg(to_jsonb(member) order by member.canonical_booking_id,member.raw_booking_id,member.root_timesheet_id)\n        from private.bpay_next_source_current_lock_members member where member.operation_id=v_finalisation_lock_operation),'[]'::jsonb),\n      'lock_result',v_finalisation_lock_result,'source_lock_discovery',v_lock_discovery,'source_lock_observed',v_lock_observed,\n      'window_lock_discovery',v_window_discovery,'window_lock_observed',v_window_observed,\n      'source_cas',private.weekly_source_bulk_source_cas_v1(v_cycle.id,\n        array(select value::uuid from jsonb_array_elements_text(v_report_native_context#>'{fixture_manifest,client_ids}') value)),\n      'source_facts_bytes',private.weekly_source_bulk_source_facts_v1(v_cycle.id,\n        array(select value::uuid from jsonb_array_elements_text(v_report_native_context#>'{fixture_manifest,client_ids}') value))::text,\n      'operational_ready',false);\n    v_report_native_frame:=v_report_native_frame||jsonb_build_object('frame_sha256',encode(private.weekly_source_sha256_jsonb_v1(\n      'WEEKLY_SOURCE_REPORT_FIN_NATIVE_LOCK_CONTEXT_V1',v_report_native_frame),'hex'));\n    perform public._audit_insert('weekly_source_off_rule_native_fin',v_report_native_command->>'command_id',\n      'WEEKLY_SOURCE_REPORT_FIN_NATIVE_LOCK_OBSERVED',v_report_native_command,v_report_native_frame,\n      'Native ordinary FIN4 under-lock observation; non-operational fixture only',v_actor);\n    end if;\n  end if;\n\n  -- One transaction at a time may decide the final order for a logical"
+        }
+      ]
+    }
+  ],
+  "byte_identical_frozen_copies": [
+    {
+      "source_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+      "source_path": "docs/healthroster-build/proposals/report-ab-protected-dispatch/01_certificate.sqlinc",
+      "destination": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc",
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3",
+      "byte_identical": true
+    },
+    {
+      "source_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+      "source_path": "docs/healthroster-build/proposals/report-ab-protected-dispatch/02_release_feature_strategy.sqlinc",
+      "destination": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc",
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a",
+      "byte_identical": true
+    },
+    {
+      "source_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+      "source_path": "docs/healthroster-build/proposals/report-ab-protected-dispatch/03_operational_dispatch.sqlinc",
+      "destination": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc",
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142",
+      "byte_identical": true
+    },
+    {
+      "source_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+      "source_path": "docs/healthroster-build/proposals/report-ab-protected-dispatch/13_slot_validators.sqlinc",
+      "destination": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc",
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12",
+      "byte_identical": true
+    },
+    {
+      "source_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+      "source_path": "docs/healthroster-build/proposals/report-ab-protected-dispatch/07_owner_acl.sqlinc",
+      "destination": "supabase/repeatable/14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc",
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724",
+      "byte_identical": true
+    }
+  ]
+}

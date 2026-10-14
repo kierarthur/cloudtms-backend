@@ -1,0 +1,1930 @@
+{
+  "sourceOnly": true,
+  "status": "SOURCE_TESTS_DATABASE_INTEGRITY_AND_CREDENTIALS_PASS_EXACT_FROZEN_WHITESPACE_RETAINED",
+  "rootFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+  "canonicalClosureSha256": "7078f5280e09afb24a2bc893371fdc6a113b55ee4d3fdc05fa26bb84393b4ddf",
+  "closureFiles": 11,
+  "atomicPackaging": true,
+  "statements": 59,
+  "bodySha256": "6ad2f7db2926f94858a27fb50de8d25dcffcd447eefbe4e20af782a34e143a28",
+  "steps": [
+    {
+      "name": "actual-root-unit-vectors",
+      "exitCode": 0,
+      "outputSha256": "eedfe7122194de6b01ad1ca4cc2eb8a32d2a1246daadf68f5521a6a709e1c307",
+      "summary": [
+        "# tests 30",
+        "# suites 0",
+        "# pass 30",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0",
+        "# duration_ms 233.8181"
+      ],
+      "failures": []
+    },
+    {
+      "name": "db:check",
+      "exitCode": 0,
+      "outputSha256": "6235327e37c0097c9d9eaf51739e23444ed16d0e0a20e4fe434953941b535e0b",
+      "summary": [
+        "Database source integrity passed: 399 migrations, 1057 repeatables."
+      ],
+      "failures": []
+    },
+    {
+      "name": "security:secrets",
+      "exitCode": 0,
+      "outputSha256": "8882b32d264f68dd80180ef19bd7a56347971b9fbdd64c270308b683f56771ae",
+      "summary": [
+        "Tracked source credential scan: PASS (8760 files)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "staged-whitespace",
+      "exitCode": 2,
+      "outputSha256": "3f618fa2cb88ab53a1ed5c79e455426d407cd4694c159eee9aef6175cefda3ba",
+      "summary": [
+        "+     ",
+        "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js:200956: trailing whitespace.",
+        "+   ",
+        "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js:201008: trailing whitespace.",
+        "+      ",
+        "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js:201014: trailing whitespace.",
+        "+        if (m && req.method === 'PUT')    return handleContractsReplace(env, req, m.id); ",
+        "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js:201027: trailing whitespace.",
+        "+ ",
+        "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js:201248: trailing whitespace.",
+        "+  ",
+        "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/candidate-broker/src/candidate-broker.js:3597: new blank line at EOF."
+      ],
+      "failures": []
+    }
+  ],
+  "whitespace": {
+    "status": "EXACT_FROZEN_SOURCE_WHITESPACE_RETAINED_NOT_RAW_WHITESPACE_PASS",
+    "findings": [
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 22,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 623,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 6373,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56275,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56278,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56285,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56319,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56390,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56460,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56478,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56481,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56485,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56489,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56499,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56512,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56518,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56524,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56533,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56536,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56543,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56547,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56552,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56565,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56570,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56575,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56578,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56603,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56728,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56737,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56798,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56804,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56808,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56812,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56820,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56823,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56838,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56852,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56861,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56875,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56888,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56903,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56918,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56939,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56951,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56966,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56973,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56984,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 56995,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57003,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57017,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57020,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57024,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57030,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57033,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57036,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57043,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57052,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57063,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57082,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57148,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57190,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57193,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57218,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57296,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57483,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57492,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57497,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57507,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57516,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57524,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57532,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57544,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57557,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57560,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57578,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57580,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57603,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57614,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57617,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57624,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57630,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57633,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57644,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57651,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57663,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57665,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57676,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57679,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57685,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57690,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57695,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57697,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57710,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57814,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57826,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57847,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57849,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57858,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57868,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57876,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57879,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57891,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57896,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57899,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57902,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57907,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57917,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57926,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57936,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57946,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57949,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57954,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57957,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57960,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57964,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57979,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 57983,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58002,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58014,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58026,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58036,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58052,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58066,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58068,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58084,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58097,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58099,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58108,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58117,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58122,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58129,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58134,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58137,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58140,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58143,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58146,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58150,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58175,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58180,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58187,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58203,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58205,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58212,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58215,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58227,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58231,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58238,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58242,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58252,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58261,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58279,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58295,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58322,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58325,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58333,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58335,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58342,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58349,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58355,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58366,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58376,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58381,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58415,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58428,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58439,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58453,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58462,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58467,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58472,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58475,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58516,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58520,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58526,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58538,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58543,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58545,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58549,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58559,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58561,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58565,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58575,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58578,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58582,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58586,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58603,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58609,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58618,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58621,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58626,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58631,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58633,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58648,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58656,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58658,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58662,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58666,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58673,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58676,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58681,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58690,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58702,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58710,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58713,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58721,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58729,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58732,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58734,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58753,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58756,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58757,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58769,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58781,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58828,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58835,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58842,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58849,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58853,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58857,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58861,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58865,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58872,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58875,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58882,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58886,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58891,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58907,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 58925,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59012,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59027,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59099,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59193,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59234,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59270,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59310,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59326,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59338,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59364,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59383,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59424,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59500,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59503,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 59739,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 70013,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 106557,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 106558,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 110094,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 110095,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 135641,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 135668,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 152681,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 155666,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 198190,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 198375,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 199731,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 200289,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 200290,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 200476,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 200495,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 200877,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 200956,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 201008,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 201014,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 201027,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+        "line": 201248,
+        "finding": "trailing whitespace.",
+        "exactFrozenSourceSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      },
+      {
+        "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/candidate-broker/src/candidate-broker.js",
+        "line": 3597,
+        "finding": "new blank line at EOF.",
+        "exactFrozenSourceSha256": "0d1f0435872793ed0cb1021b7c9122151891c0c5bfd915c7d73de47f95df07ea",
+        "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0"
+      }
+    ],
+    "newAuthoredUnclassifiedFindings": 0,
+    "rawExitCode": 2
+  },
+  "nativeSeal": null,
+  "noDatabaseOrNativeInvocation": true
+}

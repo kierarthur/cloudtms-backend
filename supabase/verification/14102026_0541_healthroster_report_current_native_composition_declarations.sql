@@ -1,0 +1,47 @@
+-- Data-free declaration/body/registration/ACL and early null refusal only.
+-- No financial, A/B, release, activation, feature, business or network call.
+\set ON_ERROR_STOP on
+begin;
+do $report_ab_declarations$
+declare expected record; actual pg_catalog.pg_proc%rowtype;
+begin
+ for expected in select * from (values
+  ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)','828084d89b42c3d542fc4539ab00e6b18f7a318025b275260dc00ba29401880b','void','s'),
+  ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)','125b353359a8936598602e71659eeda7b0a721c4ab1baeb063477ddca6635ce9','jsonb','s'),
+  ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)','7c24438d704470dc258b32a4ee7746dc70f619741682bb2efb3cc866cd6d781c','jsonb','s'),
+  ('private.weekly_source_report_fin_strategy_v1(uuid)','d3b51ab042ee542993ff42a2562a0fd2baa1567515cd89b49b1bdc9f44c6562f','jsonb','s'),
+  ('private.weekly_source_report_fin_dispatch_v1(jsonb)','624a5c55dbc6134f0a0d9c1c3035439d11e4f16362d1cbee41e93d0570a3b4f7','jsonb','v'),
+  ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)','a98a610ae93401d2a2e31e1da5eb9ad2b78a1942f6675761918c408640840a41','void','s'),
+  ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)','26e82a5b951bf8f4e0a1b241f8ef5c5204caed4f670fba065c669645a15b08fe','void','s')
+ ) items(signature,body_sha256,return_type,volatility) loop
+  select * into actual from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure(expected.signature);
+  if not found or actual.proowner<>current_user::regrole::oid or not actual.prosecdef or actual.prokind<>'f'
+   or actual.provolatile::text<>expected.volatility or actual.pronargdefaults<>0 or actual.prorettype<>pg_catalog.to_regtype(expected.return_type)::oid
+   or actual.proconfig is distinct from array['search_path=pg_catalog, pg_temp']::text[]
+   or encode(sha256(convert_to(actual.prosrc,'UTF8')),'hex')<>expected.body_sha256
+   or has_function_privilege('anon',actual.oid,'EXECUTE') or has_function_privilege('authenticated',actual.oid,'EXECUTE')
+   or has_function_privilege('service_role',actual.oid,'EXECUTE')
+   or exists(select 1 from aclexplode(coalesce(actual.proacl,acldefault('f',actual.proowner))) acl where acl.grantee=0 and acl.privilege_type='EXECUTE')
+   or not exists(select 1 from private._weekly_source_acl_private_helper_contract_v1() registry where registry.function_signature=expected.signature) then
+   raise exception 'REPORT_AB_PRIVATE_DECLARATION_FAILED' using errcode='55000',detail=expected.signature;
+  end if;
+ end loop;
+end;
+$report_ab_declarations$;
+do $report_ab_early_refusal$
+begin
+ begin
+  perform private.weekly_source_report_fin_certificate_assert_v1(null,null,null,null,null);
+  raise exception 'REPORT_AB_NULL_CERTIFICATE_NOT_REFUSED';
+ exception when sqlstate '55000' then
+  if sqlerrm<>'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' then raise; end if;
+ end;
+ begin
+  perform private.weekly_source_report_fin_strategy_v1(null);
+  raise exception 'REPORT_AB_MISSING_REPORT_NOT_REFUSED';
+ exception when sqlstate '55000' then
+  if sqlerrm<>'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' then raise; end if;
+ end;
+end;
+$report_ab_early_refusal$;
+rollback;

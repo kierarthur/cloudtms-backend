@@ -1,0 +1,807 @@
+{
+  "sourceOnly": true,
+  "status": "MOUNTED_SOURCE_FINAL_REGISTRY_CONTRACT_NATIVE_AND_ACCEPTANCE_HELD",
+  "rootInputCommit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "publication": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+  "packets": [
+    {
+      "name": "install2-shared-runtime-forward-20261014",
+      "manifestSha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+      "count": 35
+    },
+    {
+      "name": "install2-report-canonical-integration-20261014",
+      "manifestSha256": "6b16dda5df21ea961086c2336ada3e6337f482d244f0137acd1a6142d82eec75",
+      "count": 28
+    },
+    {
+      "name": "install2-report-canonical-seal-successor-20261014",
+      "manifestSha256": "db40c675781b557f8954bdb102735203587320f6769f870908e58527f3592247",
+      "count": 10
+    },
+    {
+      "name": "install2-report-native-btrim-successor-20261014",
+      "manifestSha256": "5286c539a3d0bf1df3ac233a3daf1d2945381b7a7dad83a71467ac5eed9136d9",
+      "count": 9
+    }
+  ],
+  "rootFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+  "generatedAtUtc": "2026-10-14T04:41:10.268Z",
+  "completeOwnerHunks": 32,
+  "completeOwnerInputsVerifiedAgainstSavedRoot": true,
+  "definitions": [
+    {
+      "signature": "private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_report_fin_strategy_v1(uuid)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_report_fin_dispatch_v1(jsonb)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "serviceExecute": true
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "serviceExecute": false
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "serviceExecute": true
+    },
+    {
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "serviceExecute": true
+    }
+  ],
+  "stageDefinitions": 12,
+  "newOwnerPrivateHelpers": 7,
+  "existingServiceGrants": 3,
+  "allStageAclReasserted": true,
+  "standaloneRollbackVerifierExcludedFromInstall": true,
+  "nativeSeal": null,
+  "brokerAndManagedOwnersUnchanged": true,
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/.gitignore",
+      "sha256": "8bd3cd6a638eef58cb97f57875a539e316da4010aac8f0559f8a72eb491772ae",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/.gitignore",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/COLLECTOR_FORWARD_REVERSE.json",
+      "sha256": "f371168528df89c50b15db77f2ecd05cdd50fb52feb224aa97c94baf721b59b9",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/COLLECTOR_FORWARD_REVERSE.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/FIN4_NATIVE_LOCK_OBSERVATION_REVERSE.json",
+      "sha256": "eabdcbd1b27cec60ec30b888f143d5342bcdf50192f00391a79c235a907bd363",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/FIN4_NATIVE_LOCK_OBSERVATION_REVERSE.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/FINAL_SOURCE_CHECKS.json",
+      "sha256": "6f33f9da35243f85a266bf61fbf36157cddb0d2537d90a49605cca2749b0bc43",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/FINAL_SOURCE_CHECKS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/FULL_RUNTIME_REVERSE.json",
+      "sha256": "5d3f1af6ca06262a78b4e05ec94b2536decf6b421be6b600f91e23e5a2d4b10f",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/FULL_RUNTIME_REVERSE.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/MONEY_FORWARD_DEPENDENCY_PINS.json",
+      "sha256": "69a556fa4674bf8a7d9e89dc101f61f309bbce108ed4a6e6602a9f5bf7532844",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/MONEY_FORWARD_DEPENDENCY_PINS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/NATIVE_MAPPER_HANDOFF.md",
+      "sha256": "bf1dc90485dc9330a89f347b00e349e6e4e4cdec68ccb12cbfd7e07e4edf3a46",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/NATIVE_MAPPER_HANDOFF.md",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/RUNTIME_DEPENDENCY_PINS.json",
+      "sha256": "ae23166cf422196913914f76de57167bb1a8779abdd0c4dbf1054671a68d8de2",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/RUNTIME_DEPENDENCY_PINS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/SOURCE_BACKUP_STATUS.md",
+      "sha256": "ca11154f20e281e73a393821fd02f25db61cc47f670bbf8602f117353964a005",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/SOURCE_BACKUP_STATUS.md",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/THREE_WAY_INPUTS.json",
+      "sha256": "2b1efb9790b196915caec4165e702e1cdfde63136194d1c77253a0a0fb122fda",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/THREE_WAY_INPUTS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/WIP_SOURCE_CHECKS.json",
+      "sha256": "d46e67a8bf38571b8059259914e220f4b63e4fff29bd38084e40bb6fd449a5a1",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/WIP_SOURCE_CHECKS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/WORKERS_REFERENCE_CHECK.json",
+      "sha256": "3060602e8613c67663d433dc24694a214b7b616846e3a568dc3a02575659c297",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/WORKERS_REFERENCE_CHECK.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/build-native-seal.mjs",
+      "sha256": "ec975bb7aaa2419ced511dec6362afb13308fa24fa693b73065cb7f82876673b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/build-native-seal.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/check-backup.mjs",
+      "sha256": "9b7ef2c72a2376aaf8a21c0bffeaf59a600c59c064b28bf8dec82b82ed4eca33",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/check-backup.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/collector-forward.test.mjs",
+      "sha256": "2205327342266c4222cce2d9845479d73336b82b76c1c1925bd5a7e168f884cb",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/collector-forward.test.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/compose-fin4-observation.mjs",
+      "sha256": "d563a704bc1637fe5f6dac1acea3ab9bfb701d1ffc51a82e6037f72a27920e81",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/compose-fin4-observation.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/compose-shared-runtime.mjs",
+      "sha256": "63da6ce521f2155906ba2e7817d2767584d04be711a12616d00a27bf32d7d831",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/compose-shared-runtime.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/candidate-app-backend.js",
+      "sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/candidate-app-backend.js",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+      "sha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/weekly-source/routes.js",
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/weekly-source/routes.js",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/candidate-broker/src/candidate-broker.js",
+      "sha256": "0d1f0435872793ed0cb1021b7c9122151891c0c5bfd915c7d73de47f95df07ea",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/candidate-broker/src/candidate-broker.js",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-protected-release-qualification.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "sha256": "9154c3e8939c92b284e0c22349465c8e9c51b6867bc6a7cf656564d6068be457",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/freeze-source.mjs",
+      "sha256": "1424d6b62917ca8969709beae511f3ac3658a8d1dbe4fb114deac28b10f9738a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/freeze-source.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/mount-collector-source-tests.mjs",
+      "sha256": "82c2b9ec1cefd32917f08995d6fa1afe386757abcb8e40920a6c541892835c81",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/mount-collector-source-tests.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/mount-source-tests.mjs",
+      "sha256": "70456564813e0697b73ef2c793a0b7aff6797c6c1677ce3d8fa1dcbef2c1fb9b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/mount-source-tests.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/prepare-collector-forward.mjs",
+      "sha256": "a6c37b21c01bb4722da10e94e11f050c9477361cb94fa82c9bd2114a714f33aa",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/prepare-collector-forward.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/prove-shared-runtime.mjs",
+      "sha256": "b2846d0e2f76e20ffa45825b9b1875cf799be3e4ab30aa161943b3835813b2ef",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/prove-shared-runtime.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/shared-runtime.test.mjs",
+      "sha256": "9babbcb6a5025f4da768500e4569f0680ec64f8c3dd2cfd35a4f9285a4d9238b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/shared-runtime.test.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/REVIEW_MANIFEST.json",
+      "sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/REVIEW_MANIFEST.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/CANONICAL_REPORT_HANDOFF.md",
+      "sha256": "9a44b50d91f95c0e40ea0adee2ec675ca9fcc313665bae19ee65574b353716bf",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/CANONICAL_REPORT_HANDOFF.md",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/CURRENT_NATIVE_RETAINED_PINS.json",
+      "sha256": "2589122b2ccecad2b82e776fbc24e98b7c64af4c856c3e34a785e5c3019cea80",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/CURRENT_NATIVE_RETAINED_PINS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/CURRENT_NATIVE_REVERSE.json",
+      "sha256": "0f71cce1b6c6a81afffe4cbb685ae95a316bb9359d43d1281886f4897b133275",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/CURRENT_NATIVE_REVERSE.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/INTEGRATION_ORDER.json",
+      "sha256": "1b8f1d89f9d1785af56059bf8a881d39ed91d4b09daff238361d6e7b058cb73a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/INTEGRATION_ORDER.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/REPORT_PRIVATE_CLASSIFICATION_DELTA.json",
+      "sha256": "8bbd88fa0432d1ce71f51b28188be5176b05f20ba9c3a01611ebd674f510fecf",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/REPORT_PRIVATE_CLASSIFICATION_DELTA.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/SCRIPT_AND_RECEIPT_DEPENDENCY_PINS.json",
+      "sha256": "de47b4a34f89dcbcf5d3603a704ad4d395bbc7a35fef385ac5652606bd7710f2",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/SCRIPT_AND_RECEIPT_DEPENDENCY_PINS.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "37e9e6bdbe96766893ccac4e01caab1822c55945c2eb03d8a6f49f0fb5b8f6b4",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/SOURCE_CHECK_RESULT.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "sha256": "9154c3e8939c92b284e0c22349465c8e9c51b6867bc6a7cf656564d6068be457",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc",
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc",
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc",
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc",
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc",
+      "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc",
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc",
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration_v1.sql",
+      "sha256": "d0fdb943bff8c22e00713358c4100808fe64496af5c7bfc98fa25de8e6bc7601",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration_v1.sql",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/verification/14102026_0440_healthroster_report_native_integration_declarations.sql",
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/verification/14102026_0440_healthroster_report_native_integration_declarations.sql",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/freeze-canonical-integration.mjs",
+      "sha256": "84b933855a680e280501a765f3529abba3da93626e635c92387bcbea0ae6ac93",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/freeze-canonical-integration.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/prepare-canonical-integration.mjs",
+      "sha256": "76aef2234081a5a85c72bc8d1ef4f65ca6b11cd6afe8fa9a89e7cd3364740a52",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/prepare-canonical-integration.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/verify-canonical-integration.mjs",
+      "sha256": "b607ca7436aee01dcbdb90411946a306143cc61d81f81acaa0ab89e84568f465",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/verify-canonical-integration.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/REVIEW_MANIFEST.json",
+      "sha256": "6b16dda5df21ea961086c2336ada3e6337f482d244f0137acd1a6142d82eec75",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/REVIEW_MANIFEST.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/SEAL_CONSTRUCTOR_REVERSE.json",
+      "sha256": "a484bdbdb4f2eee51bd6549371dcd7e39ea5541f6399c103b839483bc717d6be",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/SEAL_CONSTRUCTOR_REVERSE.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/SEAL_SUCCESSOR_HANDOFF.md",
+      "sha256": "d662b6cb21c0a154fed954e93d4c21d26bcb16b835b225e5b66b8fb339de545e",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/SEAL_SUCCESSOR_HANDOFF.md",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "48f1885e114aa18221a20ba475ca1071e1fb5ada1b25b515bf3161367379a720",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/build-native-seal.mjs",
+      "sha256": "cbb5c29aea680fbd83fab583c871350b7913ed0df8bd9bade1487b99931e53de",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/build-native-seal.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/freeze-seal-successor.mjs",
+      "sha256": "a2be41d46a0bf58294566a984ae1edf62562ceb8a9ff61b47ac3bc98a654dba8",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/freeze-seal-successor.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/preparation-archive/SEAL_CONSTRUCTOR_REVERSE.json.txt",
+      "sha256": "a59331c675a4894ec4251191f0c370ffa4fcb1eb954e39c98912b15010095e9a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/preparation-archive/SEAL_CONSTRUCTOR_REVERSE.json.txt",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/preparation-archive/build-native-seal.mjs.txt",
+      "sha256": "7a9c6e20166b6211f16a63343efbc74d747830c86c85733a4255cfbd828d7ae6",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/preparation-archive/build-native-seal.mjs.txt",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/prepare-seal-successor.mjs",
+      "sha256": "d6bb45ee75e1616ba94511ecc72ae1c3c3009b53217955f6d3a0ab2bd0cbf09c",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/prepare-seal-successor.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/verify-seal-successor.mjs",
+      "sha256": "ba6e2b7720b2d8559f921145a14f5c830d5542023cab0a1541d154e72bb3d622",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/verify-seal-successor.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "db40c675781b557f8954bdb102735203587320f6769f870908e58527f3592247",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/REVIEW_MANIFEST.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/NATIVE_BTRIM_COMPLETE_REVERSE.json",
+      "sha256": "ee25b86c06fa0b8f745408af6daaf712ed06c6950cf3ee045a8b9a03260c2025",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/NATIVE_BTRIM_COMPLETE_REVERSE.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/NATIVE_BTRIM_HANDOFF.md",
+      "sha256": "b097ac2b52bf2f66ac38da134609ff36e6454b2b456c8ce12c5b32daf2afe3d3",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/NATIVE_BTRIM_HANDOFF.md",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "505b782dc45aece029ca29b9bf8eb5c217b73a1d5e4a8af8476c24719d135c96",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/forward/scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/forward/scripts/weekly-source-protected-release-qualification.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "sha256": "34a0093ee48aa74a949ed7600ee187913f30e8d7a4d1591167e3863db20f2c77",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/freeze-btrim-successor.mjs",
+      "sha256": "5d009faee6ab7630d550b9d67c3a2fcd031904a9c27b7fe19d94243bb050d02c",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/freeze-btrim-successor.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/native-btrim.test.mjs",
+      "sha256": "92b9c84ee6d7b31354689129c897a1f346f9b15da9ded82428454e58e717ce4c",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/native-btrim.test.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/prepare-btrim-successor.mjs",
+      "sha256": "edcc2123ab4ed5e94a8746edccb309b8175391ba0c712f4a7dd30ea74542494b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/prepare-btrim-successor.mjs",
+      "derivative": null
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "5286c539a3d0bf1df3ac233a3daf1d2945381b7a7dad83a71467ac5eed9136d9",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/REVIEW_MANIFEST.json",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/13_slot_validators.sqlinc",
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/01_certificate.sqlinc",
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/02_release_feature_strategy.sqlinc",
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/03_operational_dispatch.sqlinc",
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/05_complete_current_feature_setup.sqlinc",
+      "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/07_owner_acl.sqlinc",
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc",
+      "derivative": null
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+      "sha256": "bf5a185e43e565afa45e9282d2bb9bca454a258b47bbd38cfa06ad2876339d23",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/repeatable/14102026_0440_healthroster_report_native_integration_v1.sql",
+      "derivative": {
+        "includeStemOnly": {
+          "before": "14102026_0440_healthroster_report_native_integration",
+          "after": "14102026_0541_healthroster_report_current_native_composition"
+        },
+        "stageAclAdded": 12,
+        "existingServiceGrants": 3
+      }
+    },
+    {
+      "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/supabase/verification/14102026_0440_healthroster_report_native_integration_declarations.sql",
+      "derivative": null
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "derivative": null
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-collector.mjs",
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "derivative": null
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "sha256": "34a0093ee48aa74a949ed7600ee187913f30e8d7a4d1591167e3863db20f2c77",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-native-btrim-successor-20261014/forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "derivative": null
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-mapper.mjs",
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "derivative": null
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-seal.mjs",
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "derivative": null
+    },
+    {
+      "file": "scripts/weekly-source-report-fin-native-seal-build.mjs",
+      "sha256": "913fc5fb93748ad86efb0a87731bedaa26d5bb34236b7a1fc3ba603581f55656",
+      "sourceCommit": "52adf06e10fcefdbf43f53dfcc911deedcf2b1f0",
+      "sourceFile": "docs/healthroster-build/proposals/install2-report-canonical-seal-successor-20261014/build-native-seal.mjs",
+      "derivative": {
+        "hunks": [
+          {
+            "old": "from '../install2-report-canonical-integration-20261014/forward/scripts/weekly-source-report-fin-native-mapper.mjs';",
+            "new": "from './weekly-source-report-fin-native-mapper.mjs';"
+          }
+        ],
+        "fullReverse": true
+      }
+    }
+  ],
+  "noDatabaseNativeBuilderOrRuntimeInvocation": true
+}

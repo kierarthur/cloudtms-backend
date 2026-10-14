@@ -1,0 +1,56 @@
+{
+  "schema_version": "INSTALL2_REPORT_CANONICAL_SEAL_SUCCESSOR_FREEZE_V1",
+  "status": "FROZEN_FOR_INDEPENDENT_SOURCE_CRITIC_ACTUAL_NATIVE_SEAL_AND_REAL_GATES_HELD",
+  "prior35_manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+  "canonical28_manifest_sha256": "6b16dda5df21ea961086c2336ada3e6337f482d244f0137acd1a6142d82eec75",
+  "source_checks_sha256": "48f1885e114aa18221a20ba475ca1071e1fb5ada1b25b515bf3161367379a720",
+  "artifacts": [
+    {
+      "path": "SEAL_CONSTRUCTOR_REVERSE.json",
+      "bytes": 2400,
+      "sha256": "a484bdbdb4f2eee51bd6549371dcd7e39ea5541f6399c103b839483bc717d6be"
+    },
+    {
+      "path": "SEAL_SUCCESSOR_HANDOFF.md",
+      "bytes": 2670,
+      "sha256": "d662b6cb21c0a154fed954e93d4c21d26bcb16b835b225e5b66b8fb339de545e"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 988,
+      "sha256": "48f1885e114aa18221a20ba475ca1071e1fb5ada1b25b515bf3161367379a720"
+    },
+    {
+      "path": "build-native-seal.mjs",
+      "bytes": 4640,
+      "sha256": "cbb5c29aea680fbd83fab583c871350b7913ed0df8bd9bade1487b99931e53de"
+    },
+    {
+      "path": "freeze-seal-successor.mjs",
+      "bytes": 2397,
+      "sha256": "a2be41d46a0bf58294566a984ae1edf62562ceb8a9ff61b47ac3bc98a654dba8"
+    },
+    {
+      "path": "preparation-archive/SEAL_CONSTRUCTOR_REVERSE.json.txt",
+      "bytes": 1870,
+      "sha256": "a59331c675a4894ec4251191f0c370ffa4fcb1eb954e39c98912b15010095e9a"
+    },
+    {
+      "path": "preparation-archive/build-native-seal.mjs.txt",
+      "bytes": 4592,
+      "sha256": "7a9c6e20166b6211f16a63343efbc74d747830c86c85733a4255cfbd828d7ae6"
+    },
+    {
+      "path": "prepare-seal-successor.mjs",
+      "bytes": 4139,
+      "sha256": "d6bb45ee75e1616ba94511ecc72ae1c3c3009b53217955f6d3a0ab2bd0cbf09c"
+    },
+    {
+      "path": "verify-seal-successor.mjs",
+      "bytes": 3759,
+      "sha256": "ba6e2b7720b2d8559f921145a14f5c830d5542023cab0a1541d154e72bb3d622"
+    }
+  ],
+  "credential_findings": 0,
+  "no_native_execution": true
+}

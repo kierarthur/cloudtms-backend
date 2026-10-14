@@ -1,0 +1,111 @@
+create or replace function private.weekly_source_report_fin_release_evidence_v1(p_group uuid,p_version uuid,p_from date,p_to date,p_operational jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare latest jsonb; evidence jsonb; result jsonb; activation jsonb; native_from date; native_to date;
+begin
+  if p_operational is null then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  perform private.weekly_source_protected_operational_certificate_assert_v1(p_operational,p_group,p_from,p_to,
+    p_operational->>'qualification_sha256');
+  activation:=p_operational->'activation_scope';
+  if activation->>'feature_purpose' is distinct from 'RULE_SET'
+    or activation->>'rule_set_version_id' is distinct from p_version::text
+    or activation->>'fixture_rule_set_version_id' is distinct from p_version::text
+    or activation->>'rule_values_sha256' is distinct from (select values_sha256 from public.weekly_source_rule_set_versions where id=p_version)
+    or activation->>'fixture_rule_values_sha256' is distinct from activation->>'rule_values_sha256' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  native_from:=(activation->>'native_effective_from_week_ending')::date;
+  native_to:=(activation->>'native_effective_to_week_ending')::date;
+  if native_from is null then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
+  latest:=private.weekly_source_protected_qualification_release_v1();
+  select evidence_json->'weekly_source_report_fin_qualifications' into evidence
+    from private.cloudtms_database_releases where release_id=latest->>'release_id';
+  if jsonb_typeof(evidence) is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  if (select count(*) from jsonb_array_elements(evidence) q
+    where q#>>'{scope,source_group_id}'=p_group::text and q#>>'{scope,rule_set_version_id}'=p_version::text
+      and q#>>'{scope,effective_from_week_ending}'=native_from::text
+      and q#>>'{scope,effective_to_week_ending}' is not distinct from native_to::text)<>1 then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  select value into strict result from jsonb_array_elements(evidence) q(value)
+    where value#>>'{scope,source_group_id}'=p_group::text and value#>>'{scope,rule_set_version_id}'=p_version::text
+      and value#>>'{scope,effective_from_week_ending}'=native_from::text
+      and value#>>'{scope,effective_to_week_ending}' is not distinct from native_to::text;
+  perform private.weekly_source_report_fin_certificate_assert_v1(result,p_group,p_version,native_from,native_to);
+  return result;
+exception when undefined_function or undefined_table or no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;
+
+-- Adjacent F1 owner calls this only with actual immutable saved version/range.
+-- Native F1 permission/gates are retained. This return value supplies no
+-- bootstrap/fixture or durable activation authority. Root's actual OFF fixture
+-- owner/calendar and D9 acceptance remain mandatory before any setup/action.
+-- Non-Report versions return no binding. Actual Report versions refuse missing
+-- full operational/finance proof; the OFF fixture owner is a separate path.
+create or replace function private.weekly_source_report_fin_feature_binding_v1(p_group uuid,p_version uuid,p_from date,p_to date,p_operational jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare values_value jsonb;
+begin
+  if p_version is null then return null; end if;
+  select values_json into strict values_value from public.weekly_source_rule_set_versions where id=p_version;
+  if values_value->>'self_bill_source' is distinct from 'SEPARATE_FINAL_REPORT' then return null; end if;
+  if values_value->>'final_report_profile_kind' is distinct from 'ACACIUM_SELF_BILL_REPORT_V1' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  -- Non-Report versions retain native F1 behaviour above. Actual Report
+  -- enable/requalification requires both finance and full D9 proof, even when
+  -- no certificate is present; absence is never bootstrap permission.
+  return private.weekly_source_report_fin_release_evidence_v1(p_group,p_version,p_from,p_to,p_operational);
+exception when undefined_function or undefined_table or no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;
+
+create or replace function private.weekly_source_report_fin_strategy_v1(p_report_scope_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare report_scope public.weekly_source_report_scopes%rowtype; cycle_row public.weekly_source_cycles%rowtype;
+  assignment public.weekly_source_group_rule_assignments%rowtype; rules jsonb; qualified jsonb; receipt jsonb;
+begin
+  select * into strict report_scope from public.weekly_source_report_scopes where id=p_report_scope_id and self_bill_report_id is not null;
+  select * into strict cycle_row from public.weekly_source_cycles where id=report_scope.source_cycle_id
+    and source_group_id=report_scope.source_group_id;
+  rules:=private.weekly_source_self_bill_report_rules_assert_v1(report_scope.client_id,cycle_row.id);
+  select * into strict assignment from public.weekly_source_group_rule_assignments where id=(rules->>'assignment_id')::uuid;
+  receipt:=assignment.feature_receipt_json;
+  -- Exact native F1 record; no settings/GUC/hash-only readiness substitute.
+  if not assignment.feature_enabled or assignment.feature_purpose is distinct from 'RULE_SET'
+    or assignment.source_group_id is distinct from cycle_row.source_group_id
+    or assignment.rule_set_version_id is distinct from (rules->>'rule_set_version_id')::uuid
+    or assignment.version is distinct from (rules->>'assignment_version')::bigint
+    or receipt->>'contract' is distinct from 'WEEKLY_SOURCE_RULE_FEATURE_RECEIPT_V1'
+    or receipt->>'assignment_id' is distinct from assignment.id::text
+    or receipt->>'assignment_version' is distinct from assignment.version::text
+    or receipt->>'source_group_id' is distinct from assignment.source_group_id::text
+    or receipt->>'rule_set_version_id' is distinct from assignment.rule_set_version_id::text
+    or receipt->>'effective_from_week_ending' is distinct from assignment.effective_from_week_ending::text
+    or receipt->'feature_enabled' is distinct from 'true'::jsonb or receipt->>'feature_purpose' is distinct from assignment.feature_purpose
+    or receipt->>'release_id' is distinct from assignment.feature_release_id
+    or receipt->>'actor_user_id' is distinct from assignment.feature_changed_by_user_id::text
+    or receipt->>'request_id' is distinct from assignment.feature_request_id::text
+    or (receipt->>'changed_at_utc')::timestamptz is distinct from assignment.feature_changed_at_utc
+    or assignment.feature_request_sha256 is null or assignment.feature_request_id is null
+    or assignment.feature_changed_at_utc is null or assignment.feature_changed_by_user_id is null
+    or not exists(select 1 from public.tms_users actor where actor.id=assignment.feature_changed_by_user_id and actor.is_active and actor.role='admin') then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_FEATURE_RECEIPT_UNQUALIFIED' using errcode='55000'; end if;
+  qualified:=private.weekly_source_report_fin_release_evidence_v1(assignment.source_group_id,assignment.rule_set_version_id,
+    assignment.effective_from_week_ending,assignment.effective_to_week_ending,receipt->'protected_capability_qualification');
+  if receipt->'report_fin_qualification' is distinct from qualified
+    or assignment.feature_release_id is distinct from qualified#>>'{installation,release_id}' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_FEATURE_RECEIPT_UNQUALIFIED' using errcode='55000'; end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_REPORT_FIN_STRATEGY_V1','source_group_id',cycle_row.source_group_id,
+    'source_cycle_id',cycle_row.id,'report_scope_id',report_scope.id,'assignment_id',assignment.id,'assignment_version',assignment.version::text,
+    'rule_set_version_id',assignment.rule_set_version_id,'qualification_sha256',qualified->>'qualification_sha256',
+    'selected_variant',qualified#>>'{decision,selected_variant}');
+exception when undefined_function or undefined_table or no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;

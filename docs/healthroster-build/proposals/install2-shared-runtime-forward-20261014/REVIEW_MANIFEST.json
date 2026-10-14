@@ -1,0 +1,181 @@
+{
+  "schema_version": "INSTALL2_SHARED_RUNTIME_NATIVE_MAPPER_CORRECTION_FREEZE_V1",
+  "status": "FROZEN_FOR_INDEPENDENT_SOURCE_CRITIC_ROOT_COMPOSITION_AND_REAL_GATES_HELD",
+  "reviewed_runtime_backup_commit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+  "prior_frozen_report_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+  "prior_frozen_report_manifest_sha256": "000b8db40dac31bbc89b1a2f0298b19d60d23e80ce4616e3882aa4fb3f984e51",
+  "source_checks_sha256": "6f33f9da35243f85a266bf61fbf36157cddb0d2537d90a49605cca2749b0bc43",
+  "artifacts": [
+    {
+      "path": ".gitignore",
+      "bytes": 15,
+      "sha256": "8bd3cd6a638eef58cb97f57875a539e316da4010aac8f0559f8a72eb491772ae"
+    },
+    {
+      "path": "COLLECTOR_FORWARD_REVERSE.json",
+      "bytes": 6943,
+      "sha256": "f371168528df89c50b15db77f2ecd05cdd50fb52feb224aa97c94baf721b59b9"
+    },
+    {
+      "path": "FIN4_NATIVE_LOCK_OBSERVATION_REVERSE.json",
+      "bytes": 7766,
+      "sha256": "eabdcbd1b27cec60ec30b888f143d5342bcdf50192f00391a79c235a907bd363"
+    },
+    {
+      "path": "FINAL_SOURCE_CHECKS.json",
+      "bytes": 828,
+      "sha256": "6f33f9da35243f85a266bf61fbf36157cddb0d2537d90a49605cca2749b0bc43"
+    },
+    {
+      "path": "FULL_RUNTIME_REVERSE.json",
+      "bytes": 53914,
+      "sha256": "5d3f1af6ca06262a78b4e05ec94b2536decf6b421be6b600f91e23e5a2d4b10f"
+    },
+    {
+      "path": "MONEY_FORWARD_DEPENDENCY_PINS.json",
+      "bytes": 680,
+      "sha256": "69a556fa4674bf8a7d9e89dc101f61f309bbce108ed4a6e6602a9f5bf7532844"
+    },
+    {
+      "path": "NATIVE_MAPPER_HANDOFF.md",
+      "bytes": 6296,
+      "sha256": "bf1dc90485dc9330a89f347b00e349e6e4e4cdec68ccb12cbfd7e07e4edf3a46"
+    },
+    {
+      "path": "RUNTIME_DEPENDENCY_PINS.json",
+      "bytes": 62350,
+      "sha256": "ae23166cf422196913914f76de57167bb1a8779abdd0c4dbf1054671a68d8de2"
+    },
+    {
+      "path": "SOURCE_BACKUP_STATUS.md",
+      "bytes": 2011,
+      "sha256": "ca11154f20e281e73a393821fd02f25db61cc47f670bbf8602f117353964a005"
+    },
+    {
+      "path": "THREE_WAY_INPUTS.json",
+      "bytes": 34036,
+      "sha256": "2b1efb9790b196915caec4165e702e1cdfde63136194d1c77253a0a0fb122fda"
+    },
+    {
+      "path": "WIP_SOURCE_CHECKS.json",
+      "bytes": 556,
+      "sha256": "d46e67a8bf38571b8059259914e220f4b63e4fff29bd38084e40bb6fd449a5a1"
+    },
+    {
+      "path": "WORKERS_REFERENCE_CHECK.json",
+      "bytes": 3449,
+      "sha256": "3060602e8613c67663d433dc24694a214b7b616846e3a568dc3a02575659c297"
+    },
+    {
+      "path": "build-native-seal.mjs",
+      "bytes": 4397,
+      "sha256": "ec975bb7aaa2419ced511dec6362afb13308fa24fa693b73065cb7f82876673b"
+    },
+    {
+      "path": "check-backup.mjs",
+      "bytes": 2481,
+      "sha256": "9b7ef2c72a2376aaf8a21c0bffeaf59a600c59c064b28bf8dec82b82ed4eca33"
+    },
+    {
+      "path": "collector-forward.test.mjs",
+      "bytes": 11121,
+      "sha256": "2205327342266c4222cce2d9845479d73336b82b76c1c1925bd5a7e168f884cb"
+    },
+    {
+      "path": "compose-fin4-observation.mjs",
+      "bytes": 8464,
+      "sha256": "d563a704bc1637fe5f6dac1acea3ab9bfb701d1ffc51a82e6037f72a27920e81"
+    },
+    {
+      "path": "compose-shared-runtime.mjs",
+      "bytes": 7332,
+      "sha256": "63da6ce521f2155906ba2e7817d2767584d04be711a12616d00a27bf32d7d831"
+    },
+    {
+      "path": "forward/broker/src/candidate-app-backend.js",
+      "bytes": 601690,
+      "sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587"
+    },
+    {
+      "path": "forward/broker/src/index.js",
+      "bytes": 8913148,
+      "sha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785"
+    },
+    {
+      "path": "forward/broker/src/weekly-source/routes.js",
+      "bytes": 62448,
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53"
+    },
+    {
+      "path": "forward/candidate-broker/src/candidate-broker.js",
+      "bytes": 160758,
+      "sha256": "0d1f0435872793ed0cb1021b7c9122151891c0c5bfd915c7d73de47f95df07ea"
+    },
+    {
+      "path": "forward/scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "bytes": 30888,
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "bytes": 49303,
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "bytes": 11774,
+      "sha256": "9154c3e8939c92b284e0c22349465c8e9c51b6867bc6a7cf656564d6068be457"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "bytes": 47129,
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "bytes": 258,
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5"
+    },
+    {
+      "path": "forward/supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "bytes": 109868,
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+    },
+    {
+      "path": "freeze-source.mjs",
+      "bytes": 5820,
+      "sha256": "1424d6b62917ca8969709beae511f3ac3658a8d1dbe4fb114deac28b10f9738a"
+    },
+    {
+      "path": "mount-collector-source-tests.mjs",
+      "bytes": 519,
+      "sha256": "82c2b9ec1cefd32917f08995d6fa1afe386757abcb8e40920a6c541892835c81"
+    },
+    {
+      "path": "mount-source-tests.mjs",
+      "bytes": 3618,
+      "sha256": "70456564813e0697b73ef2c793a0b7aff6797c6c1677ce3d8fa1dcbef2c1fb9b"
+    },
+    {
+      "path": "prepare-collector-forward.mjs",
+      "bytes": 4887,
+      "sha256": "a6c37b21c01bb4722da10e94e11f050c9477361cb94fa82c9bd2114a714f33aa"
+    },
+    {
+      "path": "prove-shared-runtime.mjs",
+      "bytes": 2836,
+      "sha256": "b2846d0e2f76e20ffa45825b9b1875cf799be3e4ab30aa161943b3835813b2ef"
+    },
+    {
+      "path": "shared-runtime.test.mjs",
+      "bytes": 7960,
+      "sha256": "9babbcb6a5025f4da768500e4569f0680ec64f8c3dd2cfd35a4f9285a4d9238b"
+    }
+  ],
+  "no_native_execution": true
+}

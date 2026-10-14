@@ -1,0 +1,19 @@
+{
+  "schema_version": "INSTALL2_REPORT_NATIVE_BTRIM_SOURCE_CHECKS_V1",
+  "status": "SOURCE_ONLY_CRITIC_REVIEW_AND_ALL_NATIVE_GATES_HELD",
+  "unit_only_tests_passed": 13,
+  "test_output_sha256": "4e2cfa02b24bd28fca88bbe40a9cedab17dba487ab1ee646f7cbb03cacafc1d7",
+  "complete_reverse_hunks": 2,
+  "decoder_sha256": "34a0093ee48aa74a949ed7600ee187913f30e8d7a4d1591167e3863db20f2c77",
+  "prior_frozen_artifacts_checked": 70,
+  "prior_freezes_unchanged": true,
+  "native_ascii_space_constraint_source": {
+    "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "path": "supabase/migrations/04102026_0500_banking_pay_next_source_current_hooks.sql",
+    "sha256": "dc6150316e0095ab9397ccaad05c82e184d60a776370757bb3547f2f88bfcf86",
+    "constraint": "canonical_booking_id=pg_catalog.btrim(raw_booking_id)"
+  },
+  "literal_native_seals_changed": 0,
+  "new_native_signatures_or_gucs_or_slots_or_exceptions": 0,
+  "no_native_execution": true
+}

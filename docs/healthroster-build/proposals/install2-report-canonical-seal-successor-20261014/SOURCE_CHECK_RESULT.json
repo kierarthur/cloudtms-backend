@@ -1,0 +1,19 @@
+{
+  "schema_version": "INSTALL2_REPORT_SEAL_CANONICAL_SOURCE_CHECKS_V1",
+  "status": "SOURCE_ONLY_AWAITING_INDEPENDENT_REVIEW_ACTUAL_ROOT_COMPILE_CATALOGUE_TOOL_AND_NATIVE_SEAL",
+  "complete_constructor_reverse_hunks": 5,
+  "prior35_and_canonical28_all_manifest_hashes_unchanged": true,
+  "constructor_syntax_passed": true,
+  "dated_source_contract_vector": {
+    "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "path": "supabase/release/current-contract.json",
+    "raw_preparation_sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+    "canonical_authority_formula_sha256": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+    "formatting_changes_preserve_canonical_formula": true,
+    "not_an_install2_compile_or_acceptance": true
+  },
+  "actual_future_execution_contract_sha256": null,
+  "literal_native_seals_changed": 0,
+  "new_native_functions_or_gucs_or_slots_or_bundle_exceptions": 0,
+  "no_native_execution": true
+}

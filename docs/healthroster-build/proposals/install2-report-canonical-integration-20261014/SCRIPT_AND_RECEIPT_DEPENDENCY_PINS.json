@@ -1,0 +1,81 @@
+{
+  "schema_version": "INSTALL2_REPORT_SCRIPT_RECEIPT_DEPENDENCY_PINS_V1",
+  "correction_manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+  "correction_source_checks_sha256": "6f33f9da35243f85a266bf61fbf36157cddb0d2537d90a49605cca2749b0bc43",
+  "corrected_source_files": [
+    {
+      "destination": "scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "origin": "CORRECTION35",
+      "origin_path": "forward/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8"
+    },
+    {
+      "destination": "scripts/weekly-source-report-fin-native-collector.mjs",
+      "origin": "CORRECTION35",
+      "origin_path": "forward/scripts/weekly-source-report-fin-native-collector.mjs",
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3"
+    },
+    {
+      "destination": "scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "origin": "CORRECTION35",
+      "origin_path": "forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "sha256": "9154c3e8939c92b284e0c22349465c8e9c51b6867bc6a7cf656564d6068be457"
+    },
+    {
+      "destination": "scripts/weekly-source-report-fin-native-mapper.mjs",
+      "origin": "CORRECTION35",
+      "origin_path": "forward/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426"
+    },
+    {
+      "destination": "scripts/weekly-source-report-fin-native-seal.mjs",
+      "origin": "CORRECTION35",
+      "origin_path": "forward/scripts/weekly-source-report-fin-native-seal.mjs",
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5"
+    }
+  ],
+  "preserved_root_scripts": [
+    {
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "path": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "action": "PRESERVE_CURRENT_ROOT_BYTES"
+    },
+    {
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "path": "scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "action": "PRESERVE_CURRENT_ROOT_BYTES"
+    },
+    {
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "path": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "action": "PRESERVE_CURRENT_ROOT_BYTES"
+    },
+    {
+      "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+      "path": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "action": "PRESERVE_CURRENT_ROOT_BYTES"
+    }
+  ],
+  "preserved_renderer": {
+    "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "path": "broker/src/invoice-presentation-contract.js",
+    "sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1"
+  },
+  "seal_literal_null": true,
+  "receipt_bundle_paths": [
+    "supabase/release/weekly-source-protected-prerequisites.json",
+    "supabase/release/weekly-source-protected-operational.json",
+    "supabase/release/weekly-source-protected-test-setup.json"
+  ],
+  "protected_operational_required_qualifications": [],
+  "report_optional_member": "report_fin_native_artifacts",
+  "recorder_slots": [
+    "weekly_source_report_fin_native_comparisons",
+    "weekly_source_report_fin_qualifications"
+  ],
+  "normal_install_writer_or_caller_changes": 0
+}

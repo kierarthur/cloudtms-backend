@@ -1,0 +1,663 @@
+{
+  "schema_version": "INSTALL2_SHARED_RUNTIME_ENTIRE_SOURCE_REVERSE_V1",
+  "input_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "common_commit": "e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92",
+  "broad_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
+  "files": [
+    {
+      "file": "broker/src/candidate-app-backend.js",
+      "input_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+      "input_sha256": "2be91ef454edb41feba0bb1ce603762dac253f2a2e8394cdf172fcf49aabb5db",
+      "output_sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587",
+      "hunk_count": 15,
+      "hunks": [
+        {
+          "old_line_start": 8,
+          "old_line_count": 0,
+          "new_line_start": 8,
+          "new_line_count": 4,
+          "before": "",
+          "after": "import {\n  correctionCapability, correctionPresentation, correctionSchedule,\n  serializeCandidateCorrection, serializeManagerCorrection\n} from './candidate-correction-v1.js';\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "de30e22a8d9e7614344c79832d0619e2b54fe4aa84aae0196112ecfac2d8a362"
+        },
+        {
+          "old_line_start": 141,
+          "old_line_count": 0,
+          "new_line_start": 145,
+          "new_line_count": 2,
+          "before": "",
+          "after": "const CORRECTION_CONVERTERS = Object.freeze({ segmentBreak, normaliseAdaptiveBreakEntry });\nCONFLICT_ERROR_CODES.add('CANDIDATE_CORRECTION_CLIENT_REQUIRED');\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "512cb137c5459facb6b687715bf8aaff2ce741fed9d93a3d3ea5f9c310f2369e"
+        },
+        {
+          "old_line_start": 2781,
+          "old_line_count": 0,
+          "new_line_start": 2787,
+          "new_line_count": 3,
+          "before": "",
+          "after": "    if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {\n      await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);\n    }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "6c3ae36a5a6138422a2f991dc9d1ddee35e693d9245a5a6d895b9cc7b8c83dbf"
+        },
+        {
+          "old_line_start": 3085,
+          "old_line_count": 0,
+          "new_line_start": 3094,
+          "new_line_count": 7,
+          "before": "",
+          "after": "  if (ticket.owner === 'candidate' && ticket.workflow_id !== GENERIC_DOCUMENT_WORKFLOW_ID\n      && UUID_RE.test(text(ticket.candidate_account_id)) && UUID_RE.test(text(ticket.candidate_id))) {\n    // authenticateUploadOwner already proves this encrypted stable binding\n    // against the currently selected Candidate before the purpose read.\n    await admitCandidateCorrectionWorkflow(request, env, deps,\n      { selected_candidate_id: ticket.candidate_id }, ticket.workflow_id);\n  }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "4caa21a156591e4cbb76d64e21ef1bd98838851fc9f6f760d015f6cb7036fdae"
+        },
+        {
+          "old_line_start": 3846,
+          "old_line_count": 1,
+          "new_line_start": 3862,
+          "new_line_count": 9,
+          "before": "  const rawSchedule = scheduleFromImmutable(workflow, timesheet);\n",
+          "after": "  const rawSchedule = frozenPresentation.correction\n    ? correctionSchedule(frozenPresentation.correction.reviewed_schedule, CORRECTION_CONVERTERS)\n    : scheduleFromImmutable(workflow, timesheet);\n  if (frozenPresentation.correction) {\n    const submitted = correctionSchedule(scheduleFromImmutable(workflow, null), CORRECTION_CONVERTERS);\n    if (canonicalJson(submitted) !== canonicalJson(rawSchedule)) {\n      throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');\n    }\n  }\n",
+          "before_sha256": "ffc58cfb4431505f2d39605fd2f60e32fb6ae8f97141ebc9d55db08f6e72952d",
+          "after_sha256": "723ba7dc468117ded516a655b003700726f685d9b43acaf690145d46bae8ecf6"
+        },
+        {
+          "old_line_start": 6262,
+          "old_line_count": 0,
+          "new_line_start": 6286,
+          "new_line_count": 68,
+          "before": "",
+          "after": "async function correctionProjection(deps, timesheetId, candidateId) {\n  if (!timesheetId) return null;\n  return rpcCall(deps, 'timesheet_correction_request_projection_v1', {\n    p_timesheet_id: requireUuid(timesheetId),\n    p_candidate_id: requireUuid(candidateId, 'CANDIDATE_SELECTION_REQUIRED')\n  });\n}\n\nfunction admitCorrectionReplacement(request, raw, timesheetId, mutation = false) {\n  const compatible = correctionCapability(request);\n  if (!raw || raw.replacement_timesheet_id !== timesheetId) return compatible;\n  correctionCapability(request, raw.state === 'WAITING');\n  if (mutation && raw.state !== 'WAITING') {\n    throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n  }\n  return compatible;\n}\n\nasync function admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId) {\n  const raw = await rpcCall(deps, 'timesheet_correction_workflow_projection_v1', {\n    p_workflow_id: workflowId, p_candidate_id: access.selected_candidate_id\n  });\n  const id = raw?.replacement_timesheet_id;\n  admitCorrectionReplacement(request, raw, id, true);\n  if (raw && raw.replacement_timesheet_id === id) {\n    serializeCandidateCorrection(raw, id, CORRECTION_CONVERTERS);\n  }\n  return raw;\n}\n\nfunction frozenCorrectionDailyShift(raw) {\n  const source = raw.frozen_daily_shift;\n  if (!isObject(source) || source.booking_id !== raw.original_booking_id\n      || !/^\\d{4}-\\d{2}-\\d{2}$/.test(text(source.work_date))\n      || !/^\\d{4}-\\d{2}-\\d{2}$/.test(text(source.week_ending_date))) {\n    throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n  }\n  const output = {};\n  for (const key of ['booking_id', 'work_date', 'week_ending_date', 'hospital', 'ward', 'job_title',\n    'shift_type', 'shift_starts_at', 'shift_ends_at']) {\n    const value = source[key];\n    if (!Object.hasOwn(source, key) || (value !== null && typeof value !== 'string')) {\n      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n    }\n    output[key] = value;\n  }\n  for (const key of ['shift_starts_at', 'shift_ends_at']) {\n    if (output[key] !== null && !Number.isFinite(Date.parse(output[key]))) {\n      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n    }\n  }\n  return output;\n}\n\nasync function enrichCandidateCorrection(request, deps, access, detail) {\n  const id = detail?.timesheet?.id;\n  const raw = await correctionProjection(deps, id, access.selected_candidate_id);\n  const compatible = admitCorrectionReplacement(request, raw, id);\n  if (!raw || !compatible) return detail;\n  // R0 is an authorized ordinary history record, but is outside the public\n  // V1 fragment's declared root/reversed/P0 identity set.\n  if (![raw.root_timesheet_id, raw.reversed_timesheet_id, raw.replacement_timesheet_id].includes(id)) return detail;\n  const correction = serializeCandidateCorrection(raw, id, CORRECTION_CONVERTERS);\n  const replacement = correction.replacement_timesheet_id === id;\n  return { ...detail, correction, ...(replacement && detail.timesheet.sheet_scope === 'DAILY'\n    ? { daily_shift: frozenCorrectionDailyShift(raw) } : {}) };\n}\n\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "369340f04eb45b6874144c1c5f372e8125c63cd8d9e555ffda54a32c9d3234b8"
+        },
+        {
+          "old_line_start": 6317,
+          "old_line_count": 1,
+          "new_line_start": 6409,
+          "new_line_count": 2,
+          "before": "    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, expenseClaims));\n",
+          "after": "    const corrected = await enrichCandidateCorrection(request, deps, access, expenseClaims);\n    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, corrected));\n",
+          "before_sha256": "b219678dc10c6cf566333d1b92e941f75f5cb2eef342e2229f13f60c2325d62e",
+          "after_sha256": "f68289caa6c65f2aaa32c3c7ea043296e3ff3b7ff1731c8a8fbcc968e7de6d2f"
+        },
+        {
+          "old_line_start": 6426,
+          "old_line_count": 0,
+          "new_line_start": 6519,
+          "new_line_count": 26,
+          "before": "",
+          "after": "  const correction = await rpcCall(deps, 'timesheet_correction_create_projection_v1', {\n    p_candidate_id: access.selected_candidate_id,\n    p_contract_week_id: payload.contract_week_id || null,\n    p_target_timesheet_id: payload.target_timesheet_id || (payload.anchor_timesheet_id ? null : payload.timesheet_id) || null,\n    p_anchor_timesheet_id: payload.anchor_timesheet_id || null\n  });\n  const targetId = correction?.replacement_timesheet_id;\n  admitCorrectionReplacement(request, correction, targetId, true);\n  if (correction) {\n    serializeCandidateCorrection(correction, targetId, CORRECTION_CONVERTERS);\n    if (correction.candidate_id !== access.selected_candidate_id) {\n      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n    }\n    // The purpose RPC proves each supplied selector before returning these\n    // server-owned identities. Preserve the native CREATE owner and replay\n    // hash while binding its worked target to the exact physical P0.\n    payload.target_timesheet_id = requireUuid(targetId, 'CANDIDATE_CONTEXT_STALE');\n    if (correction.replacement_week_id != null) {\n      if (upper(payload.scope) !== 'WEEKLY') {\n        throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n      }\n      payload.contract_week_id = requireUuid(correction.replacement_week_id, 'CANDIDATE_CONTEXT_STALE');\n    } else if (upper(payload.scope) !== 'DAILY') {\n      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n    }\n  }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "58a239f40accbff359c201a499911b76430736d1fa98d1c320bbe744e840438f"
+        },
+        {
+          "old_line_start": 6441,
+          "old_line_count": 0,
+          "new_line_start": 6560,
+          "new_line_count": 1,
+          "before": "",
+          "after": "  await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "b7997627bcd2199716866273c81a2faf5be9bd81e2d75fd2209f793157420a95"
+        },
+        {
+          "old_line_start": 6536,
+          "old_line_count": 0,
+          "new_line_start": 6656,
+          "new_line_count": 14,
+          "before": "",
+          "after": "  const presentation = await buildOfficialPresentationSnapshot(env, workflow);\n  const id = workflow.target_timesheet_id || workflow.anchor_timesheet_id;\n  const rawCorrection = await correctionProjection(deps, id, workflow.candidate_id);\n  if (rawCorrection && rawCorrection.replacement_timesheet_id === id) {\n    const correction = serializeCandidateCorrection(rawCorrection, id, CORRECTION_CONVERTERS);\n    if (correction.state !== 'WAITING') throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n    // Read only the canonical producer's actual submitted schedule. Never the\n    // Office proposal, mutable Rota, or the earlier signed record's schedule.\n    const reviewed = scheduleFromImmutable({ ...workflow, immutable_submission_json: authoritySubmission }, null);\n    if (!reviewed.length) throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');\n    const frozen = correctionPresentation(rawCorrection, reviewed, CORRECTION_CONVERTERS);\n    presentation.correction = frozen;\n    presentation.wording.header.lines = [...frozen.header_lines, ...presentation.wording.header.lines];\n  }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "21e05f42b1717e095e6a90d2cd22769fd292dc7e0285bbfc673744e5d38c4899"
+        },
+        {
+          "old_line_start": 6538,
+          "old_line_count": 1,
+          "new_line_start": 6672,
+          "new_line_count": 1,
+          "before": "    official_presentation: await buildOfficialPresentationSnapshot(env, workflow)\n",
+          "after": "    official_presentation: presentation\n",
+          "before_sha256": "b61c4261b9e7dc66aa8fec9a5895d1bc7502f476dd79df3f3abf2bd404096e76",
+          "after_sha256": "44c1a0c2bd108b6e038a9c59b5adf33b4ecb60b44e7e8e51f6cd183ea538970d"
+        },
+        {
+          "old_line_start": 8328,
+          "old_line_count": 0,
+          "new_line_start": 8462,
+          "new_line_count": 3,
+          "before": "",
+          "after": "  if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {\n    await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);\n  } else correctionCapability(request);\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "033e8a5c848cf4dcd577025c4b0f2380c5b007920148a728928c77bee710cb13"
+        },
+        {
+          "old_line_start": 8977,
+          "old_line_count": 0,
+          "new_line_start": 9114,
+          "new_line_count": 36,
+          "before": "",
+          "after": "async function enrichManagerCorrection(deps, env, result, request) {\n  let raw;\n  try {\n    raw = await managerRpcCall(deps, 'correction-summary', 'timesheet_correction_manager_summary_v1', {\n      p_workflow_id: result.workflow_id, p_workflow_generation: result.workflow_generation,\n      p_approval_request_id: result.approval_request_id, p_manifest_sha256: result.manifest_sha256\n    });\n  } catch {\n    throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');\n  }\n  // The SQL owner authenticates the exact approval/render witness; this read\n  // uses that existing manager authority, never a Candidate session/detail API.\n  const owner = await restOne(env, 'candidate_submission_workflows',\n    `id=eq.${encodeURIComponent(result.workflow_id)}&generation=eq.${result.workflow_generation}&select=id,generation,immutable_submission_json`);\n  const presentation = owner?.immutable_submission_json?.official_presentation?.correction;\n  if (raw == null) {\n    if (presentation) throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');\n    return result;\n  }\n  try {\n    const summary = serializeManagerCorrection(raw, result, CORRECTION_CONVERTERS);\n    if (!presentation || presentation.request_id !== summary.request_id || presentation.correction_id !== summary.correction_id\n        || presentation.reason !== summary.reason\n        || canonicalJson(presentation.original_schedule) !== canonicalJson(summary.original_schedule)\n        || canonicalJson(presentation.reviewed_schedule) !== canonicalJson(summary.reviewed_schedule)) {\n      throw new Error('Frozen correction presentation changed');\n    }\n    // Legacy manager clients still see the same authoritative PDF; the optional\n    // phone summary is sent only to a client declaring this exact contract.\n    return correctionCapability(request) ? { ...result, correction: summary } : result;\n  } catch (error) {\n    if (knownErrorCode(error) === 'CANDIDATE_CORRECTION_CLIENT_REQUIRED') throw error;\n    throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');\n  }\n}\n\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "f70a8f8595a281f77733489cf6ba69b05ece842a213e924c4bf97ebc74225b12"
+        },
+        {
+          "old_line_start": 9087,
+          "old_line_count": 1,
+          "new_line_start": 9260,
+          "new_line_count": 3,
+          "before": "  if (action === 'start') return jsonResponse(200, managerStartResult(result, routeAuthority));\n",
+          "after": "  if (action === 'start') return jsonResponse(200, await enrichManagerCorrection(\n    deps, env, managerStartResult(result, routeAuthority), request\n  ));\n",
+          "before_sha256": "9a0a7f97f47268a06ea84c2f86a3b146c168414c23f906c244472673ef9fb095",
+          "after_sha256": "4ab4484c7e6ec5956e625433ea640d4de92608d4037123e35c1db1decb621975"
+        },
+        {
+          "old_line_start": 12539,
+          "old_line_count": 0,
+          "new_line_start": 12714,
+          "new_line_count": 1,
+          "before": "",
+          "after": "  enrichCandidateCorrection, enrichManagerCorrection, prepareImmutableSubmission,\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "c8c88ff32600ff9de803799fd160cc67d30ad2a25af376c1bab6dcf0e328b5ad"
+        }
+      ],
+      "complete_reverse_matches_current_git": true,
+      "complete_forward_matches_saved": true
+    },
+    {
+      "file": "broker/src/index.js",
+      "input_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+      "input_sha256": "5d6912b6e502af72b586d6205dd6f99fdc1347c73e4bdeae98dc36b6c73ba5d8",
+      "output_sha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+      "hunk_count": 25,
+      "hunks": [
+        {
+          "old_line_start": 1,
+          "old_line_count": 0,
+          "new_line_start": 1,
+          "new_line_count": 1,
+          "before": "",
+          "after": "import { validateLegacyInvoiceManifestSuppressions } from './weekly-source/invoice-render-qualification.js';\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "2e79c98b9d37a6840225e72e62f53a66e1871f270d12746370ab20bcfb8e17a2"
+        },
+        {
+          "old_line_start": 95,
+          "old_line_count": 1,
+          "new_line_start": 96,
+          "new_line_count": 2,
+          "before": "import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';\n",
+          "after": "import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';\r\nimport { createOffRuleTransportRpc } from './weekly-source/off-rule-transport-rpc.mjs';\n",
+          "before_sha256": "b14398de39dafd9947c501a083d25852e769cb48bc9e987fe87dbde3a1d158e0",
+          "after_sha256": "3d377196da3a13656616d10bda1fe078f56bc09d22d5c1fff75901874c723857"
+        },
+        {
+          "old_line_start": 198,
+          "old_line_count": 0,
+          "new_line_start": 200,
+          "new_line_count": 1,
+          "before": "",
+          "after": "import { readContractWorkedDateBoundary, readContractWorkedDatePage, contractWorkedDateRefusal } from './contract-worked-date-guard.js';\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "ff2d5194b8dcf5f38749aeaf46aefbc4faf52aad04608746697018279270fa13"
+        },
+        {
+          "old_line_start": 11161,
+          "old_line_count": 0,
+          "new_line_start": 11164,
+          "new_line_count": 7,
+          "before": "",
+          "after": "async function contractWorkedDateBoundary(env, contractId) {\n  return readContractWorkedDateBoundary({\n    baseUrl: env.SUPABASE_URL, contractId,\n    readPage: (url, options) => readContractWorkedDatePage(url, { ...options, headers: sbHeaders(env), fetcher: fetch })\n  });\n}\n\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "a917229cfc92419119b8e165284d296b1a2a7c85a9a1d691165b60b5ac981e6a"
+        },
+        {
+          "old_line_start": 11549,
+          "old_line_count": 0,
+          "new_line_start": 11559,
+          "new_line_count": 9,
+          "before": "",
+          "after": "  let protectedWorkBoundary;\n  try {\n    protectedWorkBoundary = await contractWorkedDateBoundary(env, contractId);\n    const refusal = contractWorkedDateRefusal(protectedWorkBoundary, newStart, newEnd);\n    if (refusal) return withCORS(env, req, badRequest(refusal));\n  } catch (error) {\n    return withCORS(env, req, serverError(error.message));\n  }\n\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "eb5f8ee9983a4569fe8f369c2d50513c2ab43b0d2d39c39b3a1c736a4e431d15"
+        },
+        {
+          "old_line_start": 11604,
+          "old_line_count": 18,
+          "new_line_start": 11623,
+          "new_line_count": 1,
+          "before": "  let min_ts_date = null, max_ts_date = null;\n  try {\n    const { rows: tsRows } = await sbFetch(\n      env,\n      `${env.SUPABASE_URL}/rest/v1/timesheets` +\n      `?contract_id=eq.${enc(contractId)}` +\n      `&select=work_date,status`\n    );\n    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);\n    for (const r of (tsRows||[])) {\n      const st = String(r?.status||'').toUpperCase();\n      if (bad.has(st)) continue;\n      const d = r?.work_date;\n      if (!d) continue;\n      if (!min_ts_date || d < min_ts_date) min_ts_date = d;\n      if (!max_ts_date || d > max_ts_date) max_ts_date = d;\n    }\n  } catch {}\n",
+          "after": "  const { min_ts_date, max_ts_date } = protectedWorkBoundary;\n",
+          "before_sha256": "48717087a7021df133a0f0d4cec33159132837f4b719a99c309d407f3aebc44a",
+          "after_sha256": "1d87f8ffb95e16e4a7c9564e4152997ababac7b2356cb3d2f589fbc57caafe03"
+        },
+        {
+          "old_line_start": 11754,
+          "old_line_count": 1,
+          "new_line_start": 11756,
+          "new_line_count": 1,
+          "before": "  let tsRows = [];\n",
+          "after": "  let protectedWorkBoundary;\n",
+          "before_sha256": "02c901220e87b84178540a5199a9814b73a62ddae07eddf7cea7500082d8caab",
+          "after_sha256": "852096a24fbc326cb5d0422f2b7541c5c1456b6c9399b70c9afc3bd13990ca13"
+        },
+        {
+          "old_line_start": 11756,
+          "old_line_count": 7,
+          "new_line_start": 11758,
+          "new_line_count": 1,
+          "before": "    const { rows } = await sbFetch(\n      env,\n      `${env.SUPABASE_URL}/rest/v1/timesheets` +\n      `?contract_id=eq.${enc(contract_id)}` +\n      `&select=id,timesheet_id,work_date,status,client_id`\n    );\n    tsRows = rows || [];\n",
+          "after": "    protectedWorkBoundary = await contractWorkedDateBoundary(env, contract_id);\n",
+          "before_sha256": "c04bf51920915f43c4a09b468b8dfe2d4ca17c2ce3204d70f3be7028e3653463",
+          "after_sha256": "afe8350af49ef81951f46bfd392889df8dd5c5a4bd436795009487e348df7e7c"
+        },
+        {
+          "old_line_start": 11764,
+          "old_line_count": 1,
+          "new_line_start": 11760,
+          "new_line_count": 1,
+          "before": "    return withCORS(env, req, serverError('Boundary check failed to load timesheets'));\n",
+          "after": "    return withCORS(env, req, serverError(e.message));\n",
+          "before_sha256": "005396f26925855b9a885b8d9b4b6cc80d80ca1f398c3b6fdb073594ae79839b",
+          "after_sha256": "cf46a157442c083dcb0f2ad5d82b3e75693e5fb2599f38989a459d2a4f6cbaae"
+        },
+        {
+          "old_line_start": 11767,
+          "old_line_count": 21,
+          "new_line_start": 11763,
+          "new_line_count": 2,
+          "before": "  const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);\n  const realTs = (tsRows || []).filter(r => {\n    const st = String(r?.status || '').toUpperCase();\n    return !st || !badStatuses.has(st);\n  });\n\n  let min_ts_date = null, max_ts_date = null;\n  for (const r of realTs) {\n    const d = r?.work_date || null;\n    if (!d) continue;\n    if (!min_ts_date || d < min_ts_date) min_ts_date = d;\n    if (!max_ts_date || d > max_ts_date) max_ts_date = d;\n  }\n\n  const violations = realTs.filter(r => {\n    const d = r?.work_date;\n    if (!d) return false;\n    if (d < start_date) return true;\n    if (d > end_date)   return true;\n    return false;\n  });\n",
+          "after": "  const { min_ts_date, max_ts_date } = protectedWorkBoundary;\n  const violations = protectedWorkBoundary.records.filter(record => record.date < start_date || record.date > end_date);\n",
+          "before_sha256": "4c1a381e1508842027a6eff51c80c7922b142f106d95e8e021175a0dea54a72c",
+          "after_sha256": "e72706fe5d69bf2f62f8087edcabb4f9fe06e0a787179131473b5e0b33fa559c"
+        },
+        {
+          "old_line_start": 11809,
+          "old_line_count": 1,
+          "new_line_start": 11786,
+          "new_line_count": 1,
+          "before": "      date: v?.work_date ?? null,\n",
+          "after": "      date: v?.date ?? null,\n",
+          "before_sha256": "45d29ce180c3c9475c8f4f9336d995feb4147230bd5bb34aa7014b1fb421497b",
+          "after_sha256": "8990b5039372b4c9154fc67faee2d5d4cf4824eae1ebe70fd48089153cfbb5e6"
+        },
+        {
+          "old_line_start": 12117,
+          "old_line_count": 1,
+          "new_line_start": 12094,
+          "new_line_count": 1,
+          "before": "  let minProtectedWorkDate = null, maxProtectedWorkDate = null;\n",
+          "after": "  let protectedWorkBoundary;\n",
+          "before_sha256": "95150bafe2c629ed3bbcb87f51f132973ef853ce222fd50a612b6674171459d3",
+          "after_sha256": "852096a24fbc326cb5d0422f2b7541c5c1456b6c9399b70c9afc3bd13990ca13"
+        },
+        {
+          "old_line_start": 12119,
+          "old_line_count": 25,
+          "new_line_start": 12096,
+          "new_line_count": 5,
+          "before": "    const { rows: protectedRows } = await sbFetch(\n      env,\n      `${env.SUPABASE_URL}/rest/v1/timesheets` +\n      `?contract_id=eq.${enc(contractId)}` +\n      `&select=work_date,status`\n    );\n    const nonProtectedStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);\n    for (const row of (protectedRows || [])) {\n      const status = String(row?.status || '').trim().toUpperCase();\n      const workDate = toYmd(row?.work_date);\n      if (!workDate || nonProtectedStatuses.has(status)) continue;\n      if (!minProtectedWorkDate || workDate < minProtectedWorkDate) minProtectedWorkDate = workDate;\n      if (!maxProtectedWorkDate || workDate > maxProtectedWorkDate) maxProtectedWorkDate = workDate;\n    }\n  } catch {}\n\n  if (minProtectedWorkDate && newStart > minProtectedWorkDate) {\n    return withCORS(env, req, badRequest(\n      `start_date cannot be after earliest protected work date (${minProtectedWorkDate})`\n    ));\n  }\n  if (maxProtectedWorkDate && newEnd < maxProtectedWorkDate) {\n    return withCORS(env, req, badRequest(\n      `end_date cannot be before latest protected work date (${maxProtectedWorkDate})`\n    ));\n",
+          "after": "    protectedWorkBoundary = await contractWorkedDateBoundary(env, contractId);\n    const refusal = contractWorkedDateRefusal(protectedWorkBoundary, newStart, newEnd);\n    if (refusal) return withCORS(env, req, badRequest(refusal));\n  } catch (error) {\n    return withCORS(env, req, serverError(error.message));\n",
+          "before_sha256": "c1ef688a08f0ba4bf9212c255cc2fd7edc08b9ad853adb377a5f0fe045123e80",
+          "after_sha256": "1ef38a49c1aaea31d1d8dc3261cf8a8f1be1c937e7baf47336b0e3ab6957b702"
+        },
+        {
+          "old_line_start": 12369,
+          "old_line_count": 18,
+          "new_line_start": 12326,
+          "new_line_count": 1,
+          "before": "  let min_ts_date = null, max_ts_date = null;\n  try {\n    const { rows: tsRows } = await sbFetch(\n      env,\n      `${env.SUPABASE_URL}/rest/v1/timesheets` +\n      `?contract_id=eq.${enc(contractId)}` +\n      `&select=work_date,status`\n    );\n    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);\n    for (const r of (tsRows||[])) {\n      const st = String(r?.status||'').toUpperCase();\n      if (bad.has(st)) continue;\n      const d = r?.work_date;\n      if (!d) continue;\n      if (!min_ts_date || d < min_ts_date) min_ts_date = d;\n      if (!max_ts_date || d > max_ts_date) max_ts_date = d;\n    }\n  } catch {}\n",
+          "after": "  const { min_ts_date, max_ts_date } = protectedWorkBoundary;\n",
+          "before_sha256": "48717087a7021df133a0f0d4cec33159132837f4b719a99c309d407f3aebc44a",
+          "after_sha256": "1d87f8ffb95e16e4a7c9564e4152997ababac7b2356cb3d2f589fbc57caafe03"
+        },
+        {
+          "old_line_start": 155388,
+          "old_line_count": 0,
+          "new_line_start": 155328,
+          "new_line_count": 1,
+          "before": "",
+          "after": "    validateLegacyInvoiceManifestSuppressions(manifest);\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "0d975c170107903988e29bb313c1ee29630a282eff8b2e12b76932cf9f3af144"
+        },
+        {
+          "old_line_start": 157209,
+          "old_line_count": 0,
+          "new_line_start": 157150,
+          "new_line_count": 1,
+          "before": "",
+          "after": "    validateLegacyInvoiceManifestSuppressions(manifest);\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "0d975c170107903988e29bb313c1ee29630a282eff8b2e12b76932cf9f3af144"
+        },
+        {
+          "old_line_start": 198972,
+          "old_line_count": 0,
+          "new_line_start": 198914,
+          "new_line_count": 10,
+          "before": "",
+          "after": "      let weeklySourceAuthenticatedActorId = null;\r\n      const weeklySourceOffScope = {\r\n        getActor: () => weeklySourceAuthenticatedActorId,\r\n        agencyId: String(env.MYTMS_OFFICE_AGENCY_ID || '').trim().toLowerCase(),\r\n        environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase()\r\n      };\r\n      const weeklySourceOffRpc = createOffRuleTransportRpc({ ...weeklySourceOffScope,\r\n        baseRpc: (functionName, args, options) => sbRpc(env, functionName, args, options) });\r\n      const weeklySourceOffRecordingRpc = createOffRuleTransportRpc({ ...weeklySourceOffScope,\r\n        baseRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options) });\r\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "746c22014d07381d28eb8a997715791779429999467e275bd1e0d6fb6ca91c00"
+        },
+        {
+          "old_line_start": 198973,
+          "old_line_count": 1,
+          "new_line_start": 198925,
+          "new_line_count": 1,
+          "before": "        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),\n",
+          "after": "        rpc: weeklySourceOffRpc,\n",
+          "before_sha256": "cc6736e3a25466b6930e6aa2672d891336fbae4f063582a9f55c55b7e55b85bc",
+          "after_sha256": "10eaef42f21621e454bc0e89b27f16e2ee3277c4f919b6665d3e155cf63736ca"
+        },
+        {
+          "old_line_start": 198979,
+          "old_line_count": 1,
+          "new_line_start": 198931,
+          "new_line_count": 5,
+          "before": "        requireUser: (runtimeEnv, request, roles) => requireUser(runtimeEnv, request, roles),\n",
+          "after": "        requireUser: async (runtimeEnv, request, roles) => {\r\n          const actor = await requireUser(runtimeEnv, request, roles);\r\n          weeklySourceAuthenticatedActorId = actor?.is_active === true ? actor.id : null;\r\n          return actor;\r\n        },\n",
+          "before_sha256": "98ebc7a58fc8a325e8eb3511c491e5d28e83295e34cf932162544ea3bc69b250",
+          "after_sha256": "d7100212723fb4794286aa37bb069f62ed617470bf43a16158a2f0534fea4592"
+        },
+        {
+          "old_line_start": 198981,
+          "old_line_count": 1,
+          "new_line_start": 198937,
+          "new_line_count": 1,
+          "before": "        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),\n",
+          "after": "        rpc: weeklySourceOffRpc,\n",
+          "before_sha256": "cc6736e3a25466b6930e6aa2672d891336fbae4f063582a9f55c55b7e55b85bc",
+          "after_sha256": "10eaef42f21621e454bc0e89b27f16e2ee3277c4f919b6665d3e155cf63736ca"
+        },
+        {
+          "old_line_start": 198999,
+          "old_line_count": 1,
+          "new_line_start": 198955,
+          "new_line_count": 1,
+          "before": "            dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),\n",
+          "after": "            dataRpc: weeklySourceOffRecordingRpc,\n",
+          "before_sha256": "06eb9dfce1aa950f4c3c544ac4c5379163328b759afbf32177bf6203e278a4b1",
+          "after_sha256": "794d8ced7461c640db49c8cf15364f2fe85f3c9f035c1abb4e6d970ea0d73571"
+        },
+        {
+          "old_line_start": 199016,
+          "old_line_count": 1,
+          "new_line_start": 198972,
+          "new_line_count": 1,
+          "before": "              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),\n",
+          "after": "              dataRpc: weeklySourceOffRecordingRpc,\n",
+          "before_sha256": "b3ca6e8b2337791754be75b18485127f904cc6b842d13c5269c6f4d451211030",
+          "after_sha256": "98f0d50770f248f0203290327166f4188292bbfc84c2a032ca9ad46ff05ed393"
+        },
+        {
+          "old_line_start": 199028,
+          "old_line_count": 1,
+          "new_line_start": 198984,
+          "new_line_count": 1,
+          "before": "              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),\n",
+          "after": "              dataRpc: weeklySourceOffRecordingRpc,\n",
+          "before_sha256": "b3ca6e8b2337791754be75b18485127f904cc6b842d13c5269c6f4d451211030",
+          "after_sha256": "98f0d50770f248f0203290327166f4188292bbfc84c2a032ca9ad46ff05ed393"
+        },
+        {
+          "old_line_start": 199040,
+          "old_line_count": 1,
+          "new_line_start": 198996,
+          "new_line_count": 1,
+          "before": "              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),\n",
+          "after": "              dataRpc: weeklySourceOffRecordingRpc,\n",
+          "before_sha256": "b3ca6e8b2337791754be75b18485127f904cc6b842d13c5269c6f4d451211030",
+          "after_sha256": "98f0d50770f248f0203290327166f4188292bbfc84c2a032ca9ad46ff05ed393"
+        },
+        {
+          "old_line_start": 199054,
+          "old_line_count": 1,
+          "new_line_start": 199010,
+          "new_line_count": 1,
+          "before": "              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),\n",
+          "after": "              dataRpc: weeklySourceOffRecordingRpc,\n",
+          "before_sha256": "b3ca6e8b2337791754be75b18485127f904cc6b842d13c5269c6f4d451211030",
+          "after_sha256": "98f0d50770f248f0203290327166f4188292bbfc84c2a032ca9ad46ff05ed393"
+        }
+      ],
+      "complete_reverse_matches_current_git": true,
+      "complete_forward_matches_saved": true
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "input_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+      "input_sha256": "034b96260f679a4c320648ec29a9ff1d19f982d800c50c6aceccfb69ea99fc67",
+      "output_sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53",
+      "hunk_count": 14,
+      "hunks": [
+        {
+          "old_line_start": 9,
+          "old_line_count": 0,
+          "new_line_start": 9,
+          "new_line_count": 1,
+          "before": "",
+          "after": "import { validateRuleSetValues } from './rule-set-validation.js';\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "6d47da7d1a7ee0b109dd4d9496b4680085ed5708fecd71a4ad7a0a69e0755d54"
+        },
+        {
+          "old_line_start": 36,
+          "old_line_count": 0,
+          "new_line_start": 37,
+          "new_line_count": 1,
+          "before": "",
+          "after": "  RELEASE_INVOICE_HOLD: 'weekly_source_invoice_hold_release_atomic_v1',\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "a8a894b2992e4287b722c7443e652573b56799746315d642d9d99b3efbb29da9"
+        },
+        {
+          "old_line_start": 447,
+          "old_line_count": 0,
+          "new_line_start": 449,
+          "new_line_count": 41,
+          "before": "",
+          "after": "const RULE_SETTINGS_REFUSALS = Object.freeze({\n  WEEKLY_SOURCE_RULE_R1: 'These rules need a separate final report.',\n  WEEKLY_SOURCE_RULE_R2: 'Choose the separate final-report layout first.',\n  WEEKLY_SOURCE_RULE_R3: 'The selected file must contain the chosen invoice amount.',\n  WEEKLY_SOURCE_RULE_R4: 'This VAT method needs amounts supplied by the file or the Contract calculation.',\n  WEEKLY_SOURCE_RULE_R6: 'Contract-rate differences apply only to source amounts.',\n  WEEKLY_SOURCE_RULE_R7: 'Source expenses are waiting for compatible Banking Pay support and the weekly summary layout.',\n  WEEKLY_SOURCE_RULE_R8: 'Every member needs a dated Weekly Source policy for these rules.',\n  WEEKLY_SOURCE_RULE_R9: 'Choose an earliest final-upload time at or after the group cut-off; weekly summaries and agency invoices use Not used.',\n  WEEKLY_SOURCE_RULE_R10: 'NHSP keeps its existing source rules.',\n  WEEKLY_SOURCE_RULE_R13: 'This agency-invoice preset has one setting: attach the HealthRoster section.',\n  WEEKLY_SOURCE_RULE_R14: 'This client cannot use the unsigned agency-invoice preset.',\n  WEEKLY_SOURCE_RULE_R15: 'Every member must have self-bill enabled for these rules.',\n  WEEKLY_SOURCE_RULE_SET_STALE: 'The rule set changed. Refresh it before saving.',\n  WEEKLY_SOURCE_RULE_GROUP_STALE: 'The source group changed. Refresh it before assigning rules.',\n  WEEKLY_SOURCE_RULE_FINALISED_WEEK_REFUSED: 'Rules cannot change for a week already finalised for any member.',\n  WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED: 'Choose a future, unfinalised week for the new rules.',\n  WEEKLY_SOURCE_RULE_ASSIGNMENT_OVERLAP: 'These rule dates overlap another saved assignment.',\n  WEEKLY_SOURCE_RULE_ACTIVE_AGENCY_TRANSITION_REQUIRED: 'The agency-invoice rules are enabled. A reviewed setup transition is needed before changing their dates.',\n  WEEKLY_SOURCE_RULE_AGENCY_PROFILE_CONFLICT: 'This group has used another file layout. Its source history cannot be changed by this preset.',\n  WEEKLY_SOURCE_RULE_GROUP_NOT_APPLICABLE: 'Choose an active Roster source group in this Office.',\n  WEEKLY_SOURCE_RULE_VERSION_NOT_FOUND: 'The selected rule version is unavailable in this Office.',\n  WEEKLY_SOURCE_RULE_SET_NOT_FOUND: 'The selected rule set is unavailable in this Office.',\n  WEEKLY_SOURCE_RULE_REQUEST_REUSED: 'This save request was already used with different values. Refresh before trying again.',\n});\n\nasync function callRuleSettingsRpc(dependencies, name, request) {\n  try { return await callRpc(dependencies, name, request); }\n  catch (error) {\n    const apiCode = String(error?.json?.code || error?.code || '');\n    if (apiCode === 'PGRST202') {\n      fail('WEEKLY_SOURCE_RULE_DEPENDENCY_UNAVAILABLE', 'Source rules cannot be confirmed right now. Retry after the service refreshes.', 503);\n    }\n    const reason = String(error?.json?.message || error?.message || '');\n    if (Object.hasOwn(RULE_SETTINGS_REFUSALS, reason)) {\n      fail(reason, RULE_SETTINGS_REFUSALS[reason], /STALE|FINALISED|OVERLAP|TRANSITION_REQUIRED/.test(reason) ? 409 : 400);\n    }\n    throw error;\n  }\n}\n\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "0662cd1a34dfbf5b7fceabd6d09d120d2e66491af64a002422aa64e88a64eec0"
+        },
+        {
+          "old_line_start": 453,
+          "old_line_count": 0,
+          "new_line_start": 496,
+          "new_line_count": 1,
+          "before": "",
+          "after": "    rules: ['weekly_source_rule_sets_get_v1', null],\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "7308c4df7df7a76e5fceb12420fce3d181cf0e7a3c91cddab8839074168fd71f"
+        },
+        {
+          "old_line_start": 458,
+          "old_line_count": 1,
+          "new_line_start": 502,
+          "new_line_count": 1,
+          "before": "  const result = await callRpc(dependencies, rpcName, {\n",
+          "after": "  const result = await (kind === 'rules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {\n",
+          "before_sha256": "2bd3849d864f4ea316126ddaadac278c70d219a913e0912376ae958be044ca65",
+          "after_sha256": "3a7b0c0f57c5e3e3a3eddf235e338fe74ae84ff6bc82769ed017eb43f7d6339f"
+        },
+        {
+          "old_line_start": 473,
+          "old_line_count": 0,
+          "new_line_start": 517,
+          "new_line_count": 15,
+          "before": "",
+          "after": "  if (kind === 'rules' || kind === 'groupRules') {\n    const keys = kind === 'rules'\n      ? ['source_group_id', 'rule_set', 'values', 'request_id']\n      : ['rule_set_version_id', 'effective_from_week_ending', 'effective_to_week_ending', 'expected_group_version', 'request_id'];\n    if (Object.keys(body).some((key) => !keys.includes(key))) {\n      fail('WEEKLY_SOURCE_RULE_SETTINGS_REQUEST_INVALID', 'The source rules request is invalid.', 400);\n    }\n    if (kind === 'rules') {\n      // Syntax only. The DB owner resolves group, membership, cutoff and NEXT\n      // readiness again under locks; none comes from browser context.\n      body.values = validateRuleSetValues(body.values);\n      body.source_group_id = canonicalUuid(body.source_group_id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', 'Source group');\n    }\n    body.request_id = canonicalUuid(body.request_id, 'WEEKLY_SOURCE_RULE_REQUEST_INVALID', 'Request');\n  }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "ca7b93c61086b4683feb23743dc804f982bfc9f60ed767c367cabf9a1727369f"
+        },
+        {
+          "old_line_start": 476,
+          "old_line_count": 0,
+          "new_line_start": 535,
+          "new_line_count": 2,
+          "before": "",
+          "after": "    rules: ['weekly_source_rule_set_version_save_atomic_v1', null],\n    groupRules: ['weekly_source_group_rule_assign_atomic_v1', 'source_group_id'],\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "ddedbcc1550d6647bc734974c90442c5fee42d90bb3afad68e678f57cc7066d5"
+        },
+        {
+          "old_line_start": 481,
+          "old_line_count": 1,
+          "new_line_start": 542,
+          "new_line_count": 1,
+          "before": "  const result = await callRpc(dependencies, rpcName, {\n",
+          "after": "  const result = await (kind === 'rules' || kind === 'groupRules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {\n",
+          "before_sha256": "2bd3849d864f4ea316126ddaadac278c70d219a913e0912376ae958be044ca65",
+          "after_sha256": "45e1fe8e90bf00ebe047228f0bffe5dc340d96217132341c4da07d993297da00"
+        },
+        {
+          "old_line_start": 834,
+          "old_line_count": 0,
+          "new_line_start": 895,
+          "new_line_count": 1,
+          "before": "",
+          "after": "  let coverageWarnings;\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "26904624d2ca41b8f98a3fda08d519a2f6ff3d39f44c44e5654277dc1ae42b15"
+        },
+        {
+          "old_line_start": 840,
+          "old_line_count": 0,
+          "new_line_start": 902,
+          "new_line_count": 1,
+          "before": "",
+          "after": "    coverageWarnings = result?.coverage_warnings;\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "43b8ced5fba21bb22985f6d77d47efab9a21a6a6e5bf734ba6b893bd929ab8b0"
+        },
+        {
+          "old_line_start": 853,
+          "old_line_count": 0,
+          "new_line_start": 916,
+          "new_line_count": 1,
+          "before": "",
+          "after": "    ...(coverageWarnings === undefined ? {} : { coverage_warnings: coverageWarnings }),\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "c6c61fe195a5f12421a2441b6e711e92682e2511893443a14753110fcd9995e7"
+        },
+        {
+          "old_line_start": 1084,
+          "old_line_count": 0,
+          "new_line_start": 1148,
+          "new_line_count": 19,
+          "before": "",
+          "after": "  // Only the declared F8 refusals use their purpose-bound SQL detail as product\n  // wording. Unrelated RPC errors retain the established transport verbatim.\n  const f8Code = String(error?.json?.message || error?.code || '');\n  const f8Messages = {\n    WEEKLY_SOURCE_FINAL_UPLOAD_CONTEXT_INVALID: 'The final file could not be checked. Refresh the import before trying again.',\n    WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE: 'The import period could not be checked. Refresh the upload before trying again.',\n    WEEKLY_SOURCE_CLIENT_GROUP_HAS_CURRENT_FINAL_REVISION: 'This client has a finalised report in its current group and cannot be moved.',\n  };\n  const f8Patterns = {\n    WEEKLY_SOURCE_FINAL_FILE_UPLOADED_TOO_EARLY: /^The final file can be uploaded from (?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) [0-2]\\d:[0-5]\\d \\(\\d{2}\\/\\d{2}\\/\\d{4}\\)\\.$/,\n    WEEKLY_SOURCE_FINAL_FILE_COVERAGE_INCOMPLETE: /^(?:Upload an export covering the whole week\\.|The current file covers \\d{2}\\/\\d{2}\\/\\d{4}–\\d{2}\\/\\d{2}\\/\\d{4} only\\. Upload an export covering the whole week\\.)$/,\n    WEEKLY_SOURCE_COVERAGE_BEFORE_RULE_SET: /^Import coverage starts from \\d{2}\\/\\d{2}\\/\\d{4}, the first week using these settings\\.$/,\n  };\n  if (Object.hasOwn(f8Messages, f8Code) || Object.hasOwn(f8Patterns, f8Code)) {\n    const detail = String(error?.json?.details || error?.message || '');\n    return jsonResponse(409, { ok: false, error_code: f8Code,\n      message: f8Messages[f8Code] || (f8Patterns[f8Code].test(detail) ? detail\n        : 'The final file could not be checked. Refresh the import before trying again.') });\n  }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "fbd28c9d5b4448ee617773512e76e9dec5c18714dc25b5226d22a5f2c06a6891"
+        },
+        {
+          "old_line_start": 1167,
+          "old_line_count": 0,
+          "new_line_start": 1250,
+          "new_line_count": 10,
+          "before": "",
+          "after": "    if (path === `${officePrefix}/settings/rule-sets` && req.method === 'GET') {\n      return await handleSettingsGet(req, env, dependencies, user, 'rules');\n    }\n    if (path === `${officePrefix}/settings/rule-sets` && req.method === 'PUT') {\n      return await handleSettingsPut(req, env, dependencies, user, 'rules');\n    }\n    const groupRulesMatch = path.match(/^\\/api\\/weekly-source\\/v1\\/settings\\/source-groups\\/([0-9a-f-]+)\\/rules$/i);\n    if (groupRulesMatch && req.method === 'PUT') {\n      return await handleSettingsPut(req, env, dependencies, user, 'groupRules', groupRulesMatch[1]);\n    }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "bed52f653ed96ccbd6d50feb9e4e2141bd5c24f537cdabb7cfdd7f59baa5e102"
+        },
+        {
+          "old_line_start": 1229,
+          "old_line_count": 0,
+          "new_line_start": 1322,
+          "new_line_count": 2,
+          "before": "",
+          "after": "    '/settings/rule-sets',\n    '/settings/source-groups/:sourceGroupId/rules',\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "982c6dd22f9f0ac002662c55b5e072c07bf94715186ec7ad7bb1bdae0d40e892"
+        }
+      ],
+      "complete_reverse_matches_current_git": true,
+      "complete_forward_matches_saved": true
+    },
+    {
+      "file": "candidate-broker/src/candidate-broker.js",
+      "input_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+      "input_sha256": "4b8904edf3dc787ffdd04f3ed89afa19d9fe236ee35506e0dba20b1154976685",
+      "output_sha256": "0d1f0435872793ed0cb1021b7c9122151891c0c5bfd915c7d73de47f95df07ea",
+      "hunk_count": 7,
+      "hunks": [
+        {
+          "old_line_start": 1,
+          "old_line_count": 0,
+          "new_line_start": 1,
+          "new_line_count": 2,
+          "before": "",
+          "after": "import { CORRECTION_CAPABILITY_HEADER, CORRECTION_CAPABILITY } from '../../broker/src/candidate-correction-v1.js';\nimport { validateCandidateCorrectionV1, validateManagerCorrectionV1 } from '../../broker/src/candidate-correction-v1.validator.js';\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "adfcb5bba3774810220b091db239eb3149d5862ca120b03c5e1d7cf81de65064"
+        },
+        {
+          "old_line_start": 256,
+          "old_line_count": 1,
+          "new_line_start": 258,
+          "new_line_count": 1,
+          "before": "    'x-candidate-session-token', 'x-candidate-device-id'\n",
+          "after": "    'x-candidate-session-token', 'x-candidate-device-id', CORRECTION_CAPABILITY_HEADER\n",
+          "before_sha256": "58bbeae07dc85f919bf6106a581e379458199360f066c54cf770ced461c645ff",
+          "after_sha256": "410d6ed5947ca0c38e28779bc2d026034a8737c6367bffb0d0b8080e4795afe3"
+        },
+        {
+          "old_line_start": 965,
+          "old_line_count": 0,
+          "new_line_start": 967,
+          "new_line_count": 7,
+          "before": "",
+          "after": "  const correctionContract = request.headers.get(CORRECTION_CAPABILITY_HEADER);\n  if (correctionContract !== null) {\n    if (correctionContract !== CORRECTION_CAPABILITY) {\n      throw new CandidateBrokerError(409, 'CANDIDATE_CORRECTION_CLIENT_REQUIRED');\n    }\n    headers.set(CORRECTION_CAPABILITY_HEADER, correctionContract);\n  }\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "06b434c0909639230ccde1a561507ba77e812f2710a672a4de66de6b94c515c5"
+        },
+        {
+          "old_line_start": 1084,
+          "old_line_count": 1,
+          "new_line_start": 1093,
+          "new_line_count": 1,
+          "before": "    if (!controller) return await destination.fetch(signed);\n",
+          "after": "    if (!controller) return await correctionPrivateResponse(await destination.fetch(signed), operation, request);\n",
+          "before_sha256": "3b54fc7eb5517c06490d83a559f980ce6bd54c0dc8c6367016f5fbf972851ae1",
+          "after_sha256": "103309a09edca65dcfde4d4a0d76e7c0902a35cc10c763eb43d3d2ebca2f3fb7"
+        },
+        {
+          "old_line_start": 1091,
+          "old_line_count": 1,
+          "new_line_start": 1100,
+          "new_line_count": 1,
+          "before": "    return await Promise.race([destination.fetch(signed), deadline]);\n",
+          "after": "    return await correctionPrivateResponse(await Promise.race([destination.fetch(signed), deadline]), operation, request);\n",
+          "before_sha256": "68e367c92ba212293da186c9accdbd07b367175374eed293e6c45e2c72050cdf",
+          "after_sha256": "0ccb8649b2827516b8a1c6b029fed714eb24a08eab84009c917120f6755a3bbc"
+        },
+        {
+          "old_line_start": 1103,
+          "old_line_count": 0,
+          "new_line_start": 1112,
+          "new_line_count": 22,
+          "before": "",
+          "after": "async function correctionPrivateResponse(response, operation, request) {\n  if (response.status !== 200 || !['getCandidateTimesheet', 'getCandidateContractWeekDetail',\n    'getCandidateWorkflowTimesheetDetail', 'startManagerReview'].includes(operation?.operation_id)\n      || !text(response.headers.get('content-type')).includes('application/json')) return response;\n  let body;\n  try { body = await response.clone().json(); } catch { return response; }\n  if (!isObject(body) || !Object.hasOwn(body, 'correction')) return response;\n  if (encoder.encode(JSON.stringify(body.correction)).byteLength > MAX_PUBLIC_JSON_BYTES) {\n    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');\n  }\n  const manager = operation.operation_id === 'startManagerReview';\n  if (!(manager ? validateManagerCorrectionV1(body.correction) : validateCandidateCorrectionV1(body.correction))) {\n    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');\n  }\n  if (!manager && body.correction.state === 'WAITING' && body.timesheet?.id === body.correction.replacement_timesheet_id\n      && request.headers.get(CORRECTION_CAPABILITY_HEADER) !== CORRECTION_CAPABILITY) {\n    throw new CandidateBrokerError(409, 'CANDIDATE_CORRECTION_CLIENT_REQUIRED');\n  }\n  // Keep the original response bytes and headers for every successful read.\n  return response;\n}\n\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "8afb04e9dd78c14b1c0dca321859741064017fe0dd2749996e4375883483d202"
+        },
+        {
+          "old_line_start": 3528,
+          "old_line_count": 0,
+          "new_line_start": 3559,
+          "new_line_count": 1,
+          "before": "",
+          "after": "  correctionPrivateResponse,\n",
+          "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after_sha256": "a6c3410c096a2282ceed27f2de877cbb38b870ccc24545210a6b4c2e36d9d797"
+        }
+      ],
+      "complete_reverse_matches_current_git": true,
+      "complete_forward_matches_saved": true
+    }
+  ],
+  "no_native_execution": true
+}

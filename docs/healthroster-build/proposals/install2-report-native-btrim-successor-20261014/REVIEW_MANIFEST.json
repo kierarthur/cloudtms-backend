@@ -1,0 +1,63 @@
+{
+  "schema_version": "INSTALL2_REPORT_NATIVE_BTRIM_SUCCESSOR_FREEZE_V1",
+  "status": "FROZEN_FOR_INDEPENDENT_SOURCE_CRITIC_ALL_NATIVE_EVIDENCE_HELD",
+  "earlier_freezes": [
+    {
+      "name": "install2-shared-runtime-forward-20261014",
+      "manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50"
+    },
+    {
+      "name": "install2-report-canonical-integration-20261014",
+      "manifest_sha256": "6b16dda5df21ea961086c2336ada3e6337f482d244f0137acd1a6142d82eec75"
+    },
+    {
+      "name": "install2-report-canonical-seal-successor-20261014",
+      "manifest_sha256": "db40c675781b557f8954bdb102735203587320f6769f870908e58527f3592247"
+    }
+  ],
+  "source_checks_sha256": "505b782dc45aece029ca29b9bf8eb5c217b73a1d5e4a8af8476c24719d135c96",
+  "artifacts": [
+    {
+      "path": "NATIVE_BTRIM_COMPLETE_REVERSE.json",
+      "bytes": 2740,
+      "sha256": "ee25b86c06fa0b8f745408af6daaf712ed06c6950cf3ee045a8b9a03260c2025"
+    },
+    {
+      "path": "NATIVE_BTRIM_HANDOFF.md",
+      "bytes": 2037,
+      "sha256": "b097ac2b52bf2f66ac38da134609ff36e6454b2b456c8ce12c5b32daf2afe3d3"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 947,
+      "sha256": "505b782dc45aece029ca29b9bf8eb5c217b73a1d5e4a8af8476c24719d135c96"
+    },
+    {
+      "path": "forward/scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "path": "forward/scripts/weekly-source-report-fin-native-lock-observation.mjs",
+      "bytes": 12142,
+      "sha256": "34a0093ee48aa74a949ed7600ee187913f30e8d7a4d1591167e3863db20f2c77"
+    },
+    {
+      "path": "freeze-btrim-successor.mjs",
+      "bytes": 3613,
+      "sha256": "5d009faee6ab7630d550b9d67c3a2fcd031904a9c27b7fe19d94243bb050d02c"
+    },
+    {
+      "path": "native-btrim.test.mjs",
+      "bytes": 6405,
+      "sha256": "92b9c84ee6d7b31354689129c897a1f346f9b15da9ded82428454e58e717ce4c"
+    },
+    {
+      "path": "prepare-btrim-successor.mjs",
+      "bytes": 4209,
+      "sha256": "edcc2123ab4ed5e94a8746edccb309b8175391ba0c712f4a7dd30ea74542494b"
+    }
+  ],
+  "credential_findings": 0,
+  "no_native_execution": true
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": "INSTALL2_REPORT_CANONICAL_INTEGRATION_ORDER_V1",
+  "status": "SOURCE_ONLY_AWAITING_CORRECTION35_CRITIC_AND_ROOT_FINAL_COMPILE",
+  "base_current_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "current_foundation_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "prior_frozen_report_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+  "correction_manifest_sha256": "df1431cae0169faf922e209e677d5a09d753742426597c9e24beaa352c1a7a50",
+  "canonical_repeatable": "supabase/repeatable/14102026_0440_healthroster_report_native_integration_v1.sql",
+  "literal_relative_include_order": [
+    "14102026_0440_healthroster_report_native_integration/13_slot_validators.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/01_certificate.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/02_release_feature_strategy.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/03_operational_dispatch.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/04_complete_fin3_dispatch.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/05_complete_current_feature_setup.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/06_complete_fin4_lock_observation.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/15_complete_native_report_admission.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/14_complete_native_snapshot_assembler.sqlinc",
+    "14102026_0440_healthroster_report_native_integration/07_owner_acl.sqlinc"
+  ],
+  "prior_root_stages": [
+    "14102026_0400_healthroster_original_prerequisites_v1.sql",
+    "14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+    "14102026_0415_healthroster_a0_source_context_v1.sql (root-owned separate A0 if present)",
+    "14102026_0420_healthroster_current_native_composition_v1.sql",
+    "14102026_0430_healthroster_money_native_interfaces_v1.sql"
+  ],
+  "after_stage": "Root actual final literal private/service/browser/table union and verifier classification; never old239 registry/ACL.",
+  "data_free_verifier": {
+    "path": "supabase/verification/14102026_0440_healthroster_report_native_integration_declarations.sql",
+    "standalone": true,
+    "uses_own_rollback_transaction": true,
+    "run_after_actual_final_acl": true,
+    "not_in_install_wrapper": true
+  },
+  "native_seal": null,
+  "no_native_execution": true
+}

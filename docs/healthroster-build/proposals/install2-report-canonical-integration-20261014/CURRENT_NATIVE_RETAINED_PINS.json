@@ -1,0 +1,28 @@
+{
+  "schema_version": "INSTALL2_REPORT_CURRENT_NATIVE_RETAINED_PINS_V1",
+  "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "unchanged_native_document_owners": [
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+      "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+      "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+      "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+      "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5"
+    }
+  ],
+  "bank_pp_runtime_action": "Four reviewed ae499 forwards already mounted in a634/fe7. Preserve those entire current files; this proposal contains no controller/index forward.",
+  "money_nullable_clone": {
+    "source_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/28_12_complete_report_nullable_rounding_owner.sqlinc",
+    "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312"
+  }
+}
