@@ -1,0 +1,922 @@
+{
+  "source_only": true,
+  "native": false,
+  "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "mapping_commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+  "mapping_input": "docs/healthroster-build/proposals/agency-source-dependency-current-reader-forward-20261014/construction/SOURCE_RAW_ID_DDL_MAPPING.json",
+  "mapping_sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804",
+  "verified_current_source_pins": 22,
+  "additional_current_rules_schema": {
+    "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+    "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+  },
+  "checkpoint_note": "Initial older mapping lacks new rule-set header; exact current1133 CREATE supplements its declaration. No relation skipped.",
+  "required_relations": 38,
+  "raw_column_evidence": [
+    {
+      "relation": "public.weekly_source_groups",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 11,
+          "statement_raw_sha256": "30ec18a063bf1ec4bebff2bf23c2528304fa09eca56ed46263d8a0218b9fa2f7"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_cycles",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 161,
+          "statement_raw_sha256": "d03e5da2758a01345a790e71aa078daa42a1de98704bebd343c58c3b00d77693"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_uploads",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 260,
+          "statement_raw_sha256": "7745375b5987a2f63403768f163a7562229eb821669d57e27e73f8ede2e3c16a"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_upload_rows",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 374,
+          "statement_raw_sha256": "967d3de3c6274a65bd8059f20b1de5b9281764df9bae1efd74c17b8a321f3e4d"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_upload_rows",
+      "column": "upload_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 374,
+          "statement_raw_sha256": "967d3de3c6274a65bd8059f20b1de5b9281764df9bae1efd74c17b8a321f3e4d"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_projection_publications",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 457,
+          "statement_raw_sha256": "dfaafa874d11b513ddf4d7932dceec56dea10e07284dde3c299291a4f19cc2f8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 584,
+          "statement_raw_sha256": "443f40c6006f097e8bd4700870405eadf764a6e2c90ccf26004a1efe6d0720c8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "upload_row_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 584,
+          "statement_raw_sha256": "443f40c6006f097e8bd4700870405eadf764a6e2c90ccf26004a1efe6d0720c8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "generation",
+      "type": "integer",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 584,
+          "statement_raw_sha256": "443f40c6006f097e8bd4700870405eadf764a6e2c90ccf26004a1efe6d0720c8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 584,
+          "statement_raw_sha256": "443f40c6006f097e8bd4700870405eadf764a6e2c90ccf26004a1efe6d0720c8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 622,
+          "statement_raw_sha256": "fc9b0c3c6e7321025fddce8d6d640042dfb57c40ae76478c0c86d801770c6d98"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "column": "row_resolution_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 622,
+          "statement_raw_sha256": "fc9b0c3c6e7321025fddce8d6d640042dfb57c40ae76478c0c86d801770c6d98"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_expense_policy_snapshots",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 689,
+          "statement_raw_sha256": "4e5b81203acf93e549d44db5caab6808311aa7981502ed4a20909fa504275a87"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_expense_policy_snapshots",
+      "column": "row_resolution_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 689,
+          "statement_raw_sha256": "4e5b81203acf93e549d44db5caab6808311aa7981502ed4a20909fa504275a87"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_expense_authority_generations",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1334,
+          "statement_raw_sha256": "9e564dae86b6ca2cca8e22ba41f6ca3ad65f0b601bf57ea50735388c593149a8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_expense_authority_generations",
+      "column": "final_revision_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1334,
+          "statement_raw_sha256": "9e564dae86b6ca2cca8e22ba41f6ca3ad65f0b601bf57ea50735388c593149a8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_expense_authority_generations",
+      "column": "work_event_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1334,
+          "statement_raw_sha256": "9e564dae86b6ca2cca8e22ba41f6ca3ad65f0b601bf57ea50735388c593149a8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_expense_cell_evidence",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 435,
+          "statement_raw_sha256": "0e6c98fa6b835c9a05fa56a4427ee492b5612d7001b9ac6469503f177454509c"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_expense_cell_evidence",
+      "column": "upload_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 435,
+          "statement_raw_sha256": "0e6c98fa6b835c9a05fa56a4427ee492b5612d7001b9ac6469503f177454509c"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_charge_checks",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 766,
+          "statement_raw_sha256": "d376619aad9b20201afe43e555745a9c91ad84cdf6f00270252d7dd4a6261beb"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_charge_checks",
+      "column": "row_resolution_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 766,
+          "statement_raw_sha256": "d376619aad9b20201afe43e555745a9c91ad84cdf6f00270252d7dd4a6261beb"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_charge_acceptances",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 815,
+          "statement_raw_sha256": "f9a88981887bc7cce1b9e20e403c0afce6944c32a9441d7d2958ef5344ff6f88"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_charge_acceptances",
+      "column": "row_resolution_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 815,
+          "statement_raw_sha256": "f9a88981887bc7cce1b9e20e403c0afce6944c32a9441d7d2958ef5344ff6f88"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_invoice_hold_releases",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "source_line": 64,
+          "statement_raw_sha256": "f52d3292999fefd151444e5424ed29ca408728b45c97cdb16423da777b536945"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_invoice_hold_releases",
+      "column": "upload_row_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "source_line": 64,
+          "statement_raw_sha256": "f52d3292999fefd151444e5424ed29ca408728b45c97cdb16423da777b536945"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 967,
+          "statement_raw_sha256": "e4fa733b729e9c466860b951aa6817720e1f45e5294f257e6383d12d165cc809"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "final_revision_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 967,
+          "statement_raw_sha256": "e4fa733b729e9c466860b951aa6817720e1f45e5294f257e6383d12d165cc809"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "work_event_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 967,
+          "statement_raw_sha256": "e4fa733b729e9c466860b951aa6817720e1f45e5294f257e6383d12d165cc809"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 180,
+          "statement_raw_sha256": "f53c87ee6adb7d8817fd68ae031866d294709072ac1df4b98f68d3f467be8e9d"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 180,
+          "statement_raw_sha256": "f53c87ee6adb7d8817fd68ae031866d294709072ac1df4b98f68d3f467be8e9d"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 180,
+          "statement_raw_sha256": "f53c87ee6adb7d8817fd68ae031866d294709072ac1df4b98f68d3f467be8e9d"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "self_bill_report_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 65,
+          "statement_raw_sha256": "3c396f81a0c242fb78c42ccbfc46caee9d4e7cc35736e6de65cf31ac1e314747"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 9,
+          "statement_raw_sha256": "1724da965628def2621d2ff39d9effd4423cd7e6eda527b4fac721b25484db1f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 9,
+          "statement_raw_sha256": "1724da965628def2621d2ff39d9effd4423cd7e6eda527b4fac721b25484db1f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 9,
+          "statement_raw_sha256": "1724da965628def2621d2ff39d9effd4423cd7e6eda527b4fac721b25484db1f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 31,
+          "statement_raw_sha256": "c9ab3ba2e2a85d4f4a19e08f7ca1203736e468b2b34f07d2994d50b8a99bacf9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "state",
+      "type": "text",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 31,
+          "statement_raw_sha256": "c9ab3ba2e2a85d4f4a19e08f7ca1203736e468b2b34f07d2994d50b8a99bacf9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "self_bill_report_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 31,
+          "statement_raw_sha256": "c9ab3ba2e2a85d4f4a19e08f7ca1203736e468b2b34f07d2994d50b8a99bacf9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_work_events",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 535,
+          "statement_raw_sha256": "f39ab3107b25a9f70321531047aa33dab730f201ae4fe551004eb3c453ae421c"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 839,
+          "statement_raw_sha256": "3887a93eddf6bdbab3ff55ffc56ff8b287835023a2a0945e5e65d3ce700535c8"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 934,
+          "statement_raw_sha256": "8f60eecf47b51e0e6928e22003fdf24e277610ccea03a6f76f22feda14684a89"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "final_revision_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 934,
+          "statement_raw_sha256": "8f60eecf47b51e0e6928e22003fdf24e277610ccea03a6f76f22feda14684a89"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 934,
+          "statement_raw_sha256": "8f60eecf47b51e0e6928e22003fdf24e277610ccea03a6f76f22feda14684a89"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 722,
+          "statement_raw_sha256": "fd992df1a0c8dc2f1013ef5d0e2c1d70e4fafd8753f2f9aa14e591744f7ec020"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1000,
+          "statement_raw_sha256": "66998f2b749e89225bcc82aa427823d7794faedf983f2796d2fe7aa638398f4f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "column": "final_revision_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1000,
+          "statement_raw_sha256": "66998f2b749e89225bcc82aa427823d7794faedf983f2796d2fe7aa638398f4f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1000,
+          "statement_raw_sha256": "66998f2b749e89225bcc82aa427823d7794faedf983f2796d2fe7aa638398f4f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1416,
+          "statement_raw_sha256": "41b61e17f735a25fec0c9fe91c831e192b57c0c0d393babcb9a5662c95493429"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "column": "source_cycle_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1416,
+          "statement_raw_sha256": "41b61e17f735a25fec0c9fe91c831e192b57c0c0d393babcb9a5662c95493429"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1416,
+          "statement_raw_sha256": "41b61e17f735a25fec0c9fe91c831e192b57c0c0d393babcb9a5662c95493429"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_issue_comparison_revisions",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1444,
+          "statement_raw_sha256": "b9223d53132b875c92a7fdd44fe046d11bfe1e1173e104d34d8a6c6bf882840a"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_billing_movements",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 1084,
+          "statement_raw_sha256": "a794755874456ff35765994312cde5c151a8c2810b9ef2e1060c680d68b570f9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 32,
+          "statement_raw_sha256": "41831a2138d6fa79d4e5c3ac2ebf4fc80004f0c8485e8d1dc92a9c74ef1a3b82"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 32,
+          "statement_raw_sha256": "41831a2138d6fa79d4e5c3ac2ebf4fc80004f0c8485e8d1dc92a9c74ef1a3b82"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 32,
+          "statement_raw_sha256": "41831a2138d6fa79d4e5c3ac2ebf4fc80004f0c8485e8d1dc92a9c74ef1a3b82"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 53,
+          "statement_raw_sha256": "333eef15ec9a45888b8b75770b83b241e9ace83e5b95cc8db9b3390e0c504cc2"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 53,
+          "statement_raw_sha256": "333eef15ec9a45888b8b75770b83b241e9ace83e5b95cc8db9b3390e0c504cc2"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 53,
+          "statement_raw_sha256": "333eef15ec9a45888b8b75770b83b241e9ace83e5b95cc8db9b3390e0c504cc2"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_contract_policies",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 92,
+          "statement_raw_sha256": "3cb6d59e96436de0c6d7dacb383d88a6fc11de7cf9290a776efadba7e542d61f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_contract_policies",
+      "column": "contract_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 92,
+          "statement_raw_sha256": "3cb6d59e96436de0c6d7dacb383d88a6fc11de7cf9290a776efadba7e542d61f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 85,
+          "statement_raw_sha256": "dc5f4dac64696ac9e9b7cdcccdc9ff26f2bc28f18b79000c4cfa1b8f249c587b"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 85,
+          "statement_raw_sha256": "dc5f4dac64696ac9e9b7cdcccdc9ff26f2bc28f18b79000c4cfa1b8f249c587b"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_rule_set_versions",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 24,
+          "statement_raw_sha256": "dec2220922f614d2a34a061837cc316306bce4d40e5c0abc964875cb86d74c94"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_rule_sets",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 7,
+          "statement_raw_sha256": "318a2c1c102c798e7443b588a14a7779115d128f635724d28a733197c12d4539"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_format_profiles",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 121,
+          "statement_raw_sha256": "4595978a703ed432e47befe5c6e64b11f5f19b07a53f9aee391c5f6925f9fe42"
+        }
+      ]
+    },
+    {
+      "relation": "public.clients",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 2033,
+          "statement_raw_sha256": "c20166cd7bc7519ad8bc09e1cd7b432584185c182cd09358c09ecb46d7881966"
+        }
+      ]
+    },
+    {
+      "relation": "public.client_settings",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 1969,
+          "statement_raw_sha256": "95310c473acd42befd826b0f47b8c21620938a05f4afef8dfad179602b9b914e"
+        }
+      ]
+    },
+    {
+      "relation": "public.client_settings",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 1969,
+          "statement_raw_sha256": "95310c473acd42befd826b0f47b8c21620938a05f4afef8dfad179602b9b914e"
+        }
+      ]
+    },
+    {
+      "relation": "public.contracts",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 2123,
+          "statement_raw_sha256": "fe4ff38b38e54338f9315a27cb53d15c804f9df11bc9642e202946d1efe81bca"
+        }
+      ]
+    },
+    {
+      "relation": "public.contracts",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 2123,
+          "statement_raw_sha256": "fe4ff38b38e54338f9315a27cb53d15c804f9df11bc9642e202946d1efe81bca"
+        }
+      ]
+    },
+    {
+      "relation": "public.contracts",
+      "column": "start_date",
+      "type": "date",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 2123,
+          "statement_raw_sha256": "fe4ff38b38e54338f9315a27cb53d15c804f9df11bc9642e202946d1efe81bca"
+        }
+      ]
+    },
+    {
+      "relation": "public.contracts",
+      "column": "end_date",
+      "type": "date",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 2123,
+          "statement_raw_sha256": "fe4ff38b38e54338f9315a27cb53d15c804f9df11bc9642e202946d1efe81bca"
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "timesheet_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 4276,
+          "statement_raw_sha256": "37f77ae682ffd1ffef2cd9394790334207010d0c622d5f429dcfe442e1da8d4d"
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+          "source_line": 4364,
+          "statement_raw_sha256": "4506e3720c67982801f4e677758519c838f70cbff3575f49c889698bdc831e7d"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_global_settings",
+      "column": "singleton",
+      "type": "boolean",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+          "source_line": 146,
+          "statement_raw_sha256": "8b604804e62dcb730a5931feac68ca35d975123bbdcf94af70a0074956f0dd79"
+        }
+      ]
+    }
+  ],
+  "compiled_catalogue": false,
+  "limitations": [
+    "literal raw CREATE/ALTER declarations; no compiled physical catalogue or late dynamic-DDL proof",
+    "nested revision/lineage and transitive dependencies remain unimplemented"
+  ]
+}

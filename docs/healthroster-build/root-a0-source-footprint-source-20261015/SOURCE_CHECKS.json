@@ -1,0 +1,45 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "source_tests": 33,
+  "new_cases": 18,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "raw_relations": 38,
+  "raw_column_declarations": 75,
+  "manifests": [
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-native-footprint-construction-20261015/SOURCE_MANIFEST.json",
+      "sha256": "f38e664070beab8c2bb2f9d5c0de765c94d69ef5420edf5cab34aa0887460dc6",
+      "artifacts": 5
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-raw-selector-guard-construction-20261015/SOURCE_MANIFEST.json",
+      "sha256": "e71e59029a1307c8bac12d08b778601f125aa5f30cbcf668435d4a4beb0a7251",
+      "artifacts": 7
+    }
+  ],
+  "lexical": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-native-footprint-construction-20261015/construction/01_native_source_footprint.sqlinc",
+      "bytes": 8311,
+      "sha256": "5255bf5e318079518c7a7159842a8a8ae75d4194a82ba0d373aaaf8773255b35",
+      "statements": 3
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-raw-selector-guard-construction-20261015/construction/01_raw_selector_helpers.sqlinc",
+      "bytes": 8634,
+      "sha256": "ea99ef7b74e949610650a2387259934934503133b7df91438aef6cf1863cb765",
+      "statements": 6
+    }
+  ],
+  "unfinished": [
+    "nested revision and lineage phantom predicates",
+    "transitive policy and claim dependencies",
+    "complete raw trigger registration/source-order catalogue",
+    "actual actor/Candidate/I1/family/allocated Source CAS caller",
+    "durable ACTIVE between-RPC refusal/recovery",
+    "native locking/dirty/RR/role/security/contract/verifier/acceptance"
+  ]
+}

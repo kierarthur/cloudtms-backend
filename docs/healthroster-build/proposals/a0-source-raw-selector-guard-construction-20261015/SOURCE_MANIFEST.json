@@ -1,0 +1,42 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "artifacts": [
+    {
+      "file": "INPUT_PINS.json",
+      "bytes": 1178,
+      "sha256": "7b88446055f8f14fa76fe5f00db712394ae5afd0efed7b70f38d72e77b476812"
+    },
+    {
+      "file": "RAW_COLUMN_SOURCE_EVIDENCE.json",
+      "bytes": 31026,
+      "sha256": "e77212aadfe5e7a8a954d7c2279574161ad4de8b19b2e304eb10c0042635c304"
+    },
+    {
+      "file": "SOURCE_BOUNDARY.md",
+      "bytes": 1102,
+      "sha256": "b8baf77cb3e216db2e16f8706098b3b3e965087ad7530ef8b36907ee240b50dd"
+    },
+    {
+      "file": "construction/01_raw_selector_helpers.sqlinc",
+      "bytes": 8634,
+      "sha256": "ea99ef7b74e949610650a2387259934934503133b7df91438aef6cf1863cb765"
+    },
+    {
+      "file": "reference/13102026_1133_weekly_source_rule_sets_schema.sql.txt",
+      "bytes": 14951,
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "file": "reference/SOURCE_OBJECT_RELATIONS.json",
+      "bytes": 1535,
+      "sha256": "9874f3b5019c1a1d52fad778e93fb9c710a88aa0ba2d32f130de38bb7eb32420"
+    },
+    {
+      "file": "reference/SOURCE_RAW_ID_DDL_MAPPING.json",
+      "bytes": 325875,
+      "sha256": "de04f6f89eb1bcb67176812b4ad93ba591a91f67862ecf12698b53c50d136804"
+    }
+  ]
+}

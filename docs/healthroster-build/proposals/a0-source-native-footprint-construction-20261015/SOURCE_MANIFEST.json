@@ -1,0 +1,32 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "artifacts": [
+    {
+      "file": "INPUT_PINS.json",
+      "bytes": 897,
+      "sha256": "1efd000f74e679aa447633021dc3d65214037ec87bd2be3cd5e2598143e711ad"
+    },
+    {
+      "file": "SOURCE_BOUNDARY.md",
+      "bytes": 1255,
+      "sha256": "c77ce601de148fb04e128d94d4a74533ce66aa37930d5f603dac9ea841e6f84d"
+    },
+    {
+      "file": "construction/01_native_source_footprint.sqlinc",
+      "bytes": 8311,
+      "sha256": "5255bf5e318079518c7a7159842a8a8ae75d4194a82ba0d373aaaf8773255b35"
+    },
+    {
+      "file": "reference/02_source_facts.sqlinc",
+      "bytes": 19291,
+      "sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60"
+    },
+    {
+      "file": "reference/85_source_dependency_witness.sqlinc",
+      "bytes": 14843,
+      "sha256": "d3e032b911499cfe0563a4f21f55643b05b51ebd6cb8c1313f112ea04f2fca2b"
+    }
+  ]
+}

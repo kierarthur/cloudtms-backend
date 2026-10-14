@@ -1,0 +1,35 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "SOURCE_CHECKS.json",
+      "bytes": 1704,
+      "sha256": "ca5d8d9ac0793bf768b09dda6fa74925d86119bff38bc18ddef5d06f1528cb78"
+    },
+    {
+      "file": "SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "SOURCE_TEST_OUTPUT.txt",
+      "bytes": 8540,
+      "sha256": "39f1bb7506fb4fc971a92adc7800d8b230076c42cfd9d7991f02effdfb3b822c"
+    },
+    {
+      "file": "attach-raw-schema.mjs",
+      "bytes": 6169,
+      "sha256": "e1dbe108847eed1bead8bfd552aad14ded05a5f0c7910c61e291024c20b91331"
+    },
+    {
+      "file": "build-raw-guards.mjs",
+      "bytes": 10018,
+      "sha256": "b2ebf14a1d543a86fdffe8dd81d3525402d84fdecc28c2611e58d6491735d0d0"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 11293,
+      "sha256": "63dde8732a89f760da83349026dc5d46ab67796a0fa5430a079cc72702d5b6ab"
+    }
+  ]
+}

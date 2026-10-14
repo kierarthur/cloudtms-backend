@@ -1,0 +1,19 @@
+{
+  "source_only": true,
+  "pins": [
+    {
+      "file": "reference/85_source_dependency_witness.sqlinc",
+      "source_commit": "8291f6290044e21a3210bd04a8db0d9cfd2f81e8",
+      "source_path": "docs/healthroster-build/proposals/agency-source-selector-precision-forward-20261014/construction/85_complete_source_dependency_witness_with_exact_selector_tuples.sqlinc",
+      "bytes": 14843,
+      "sha256": "d3e032b911499cfe0563a4f21f55643b05b51ebd6cb8c1313f112ea04f2fca2b"
+    },
+    {
+      "file": "reference/02_source_facts.sqlinc",
+      "source_commit": "8291f6290044e21a3210bd04a8db0d9cfd2f81e8",
+      "source_path": "docs/healthroster-build/proposals/agency-source-selector-precision-forward-20261014/reference/02_complete_current_source_facts_with_contract_client.sqlinc",
+      "bytes": 19291,
+      "sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# Raw Source selector guard construction
+
+Unreviewed source only; not mounted. Two owner-private helpers extract the actual physical primary identity and selected predicate-shaped dependency domains from raw OLD and NEW, then delegate their union to the same native arbiter before any parent/request lookup. Resolution slots and revision conjunctions remain exact; excluded generation/Client/event children do not emit broad raw parent identities. All incident states remain relevant. Exact report-bound resolutions retain their own primary keys. Existing business rules and eight-domain guards remain separate.
+
+Trigger registration/source-order catalogue is intentionally not installed by this packet. The paired schema and raw-column census, nested revision and lineage phantom predicates, transitive policy/claim dependencies, actor/Candidate/I1/family/allocated phase and full Source CAS caller, ACTIVE between-RPC refusal/recovery, actual native dirty/RR schedules and registry/verifier/contract/acceptance remain required. No SQL/lab/lock, fixture, release, external effect or cleanup occurred.
