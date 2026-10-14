@@ -1,0 +1,32 @@
+### 25.2 Round 20 extension — a payment authoriser may run the unissued-draft round trip (owner R8-Q1, binding; R-239)
+
+**Rule (`OWNER_ANSWERS_ROUND20_20261012.md`, R8-Q1).** An active user who is admin **or** payment authoriser **or** golden-key holder may run the one-click unissued-draft round trip of §26.5 item 5 — remove the Timesheet from the draft, amend it, return it to the **same** draft — **for that Timesheet only**. All other invoice editing, `public.invoice_apply_edits` in general included, stays **admin-only**. This applies the round 7/8 rule that one person may make any pay change.
+
+**Today (verified at `2c907ece`).** `public.invoice_apply_edits(p_invoice_id, p_payload, p_actor_user_id)` (controlling body `23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql`) refuses a non-admin actor with `INVOICE_ADMINISTRATOR_PERMISSION_REQUIRED`. It accepts any mix of edits (`remove_invoice_line_ids`, `add_timesheet_ids` and others) on a DRAFT/ON_HOLD invoice (`:348`).
+
+**Design — REUSE/EXTEND; no general widening.**
+- **One narrow wrapper (NEW-JUSTIFIED, service-only):** `private.weekly_source_agency_draft_round_trip_v1(p_request_key text, p_step text, p_actor_user_id uuid)`, with `p_step` in (`REMOVE`, `RETURN`). Only the change owner `weekly_source_agency_timesheet_change_v1` (§26.5 item 1) calls it.
+  - **The caller supplies no line ids, Timesheet ids or invoice id.** The wrapper reads them from the change owner's request row: T0 (resolved fresh, R-230) and D1.
+  - **Permission.** The shared pay-change predicate of §25, `private.weekly_source_pay_actor_allowed_v1(p_actor_user_id)`.
+  - **REMOVE** builds the payload `{"remove_invoice_line_ids": [every line of T0 on D1]}` and nothing else. It refuses:
+    - when D1 is not DRAFT/ON_HOLD — an issued invoice is refused (`AGENCY_ROUND_TRIP_INVOICE_NOT_DRAFT`);
+    - when T0 is neither a preset Timesheet nor a check-only client's Timesheet (owner R-249, §28.6 states C and D2);
+    - when D1 already has a return hold for another Timesheet.
+
+    It records the return hold T0 → D1 (§26.5 item 5 step 4).
+  - **RETURN** builds `{"add_timesheet_ids": [T0]}` (for a check-only correction, R-250: the signed replacement P0 instead of T0) and nothing else, for the D1 recorded on the return hold. It refuses any other invoice (`AGENCY_ROUND_TRIP_TARGET_MISMATCH`).
+- **The unchanged invoice editor (REUSE; Codex R2 C02).** `public.invoice_apply_edits` is not changed. The Worker's trusted call reaches it through the service transport, and its admin check applies only on the non-service branch (`23072026_2207_invoice_apply_edits.sql:257-275`), so an actor exception placed beneath that branch would be inert. Every guard therefore sits in the narrow wrapper and in the authorised Worker route:
+  - the server binds the real actor, the change owner's ACTIVE request, the current T0 (resolved fresh, R-230) and the original unissued D1;
+  - the caller cannot choose actor, payload, T0 or D1;
+  - stale requests or signatures, foreign or other-family targets, issued invoices and other lines on the same draft are refused (`INVOICE_ADMINISTRATOR_PERMISSION_REQUIRED` / `AGENCY_ROUND_TRIP_TARGET_MISMATCH`).
+
+  The invoice audit records the real actor. The general invoice-edit Worker route stays admin-only (`index.js:110159-110161`).
+- **Proof.** Historical R2 proves owner-connection remove/return mechanics with a synthetic service-role JWT claim. It does not prove:
+  - the new wrapper's effective service ACL/RLS or PostgREST visibility;
+  - authenticated Worker actor binding or current-family resolution;
+  - T0 amend/recompute/re-authorise, D1 numbering or interruption recovery.
+
+  DA-1…DA-6 must exercise the implemented route: authenticated Worker route → exact PostgREST public service entry → single private request-bound wrapper → unchanged editor and CALL-ONLY owners. **DA-6** interrupts after REMOVE, amend, recompute, authorise and RETURN. Each replay recovers exactly the same current T0 and the same D1, or truthfully keeps its recoverable return hold. Unrelated draft lines and issued or paid history are unchanged.
+- **Worker.** The change owner's route admits the shared Worker predicate (`payment-actor-permission.js`, §25) for the round trip only. Every other invoice route keeps its admin check.
+- **Tests:** DA-1…DA-6.
+

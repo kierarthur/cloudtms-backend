@@ -1,0 +1,181 @@
+CREATE OR REPLACE FUNCTION public.timesheet_weekly_chain_delete_apply(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_now timestamptz := now();
+
+  v_preview jsonb;
+  v_eligible boolean := false;
+
+  v_contract_id uuid := null;
+  v_week_ending_date date := null;
+
+  v_timesheet_ids uuid[] := array[]::uuid[];
+  v_contract_week_ids uuid[] := array[]::uuid[];
+
+  v_deleted_timesheets int := 0;
+  v_deleted_contract_weeks int := 0;
+  v_deleted_shifts int := 0;
+
+  v_current_timesheet_id uuid := null;
+  v_invalid_parent_target boolean := false;
+  v_manual_contract_week_targeted boolean := false;
+
+  v_before jsonb := null;
+  v_after jsonb := null;
+begin
+  if p_timesheet_id is null then
+    raise exception 'timesheet_weekly_chain_delete_apply: timesheet_id is required';
+  end if;
+
+  v_preview := public.timesheet_weekly_chain_delete_preview(p_timesheet_id, p_actor_user_id);
+
+  if coalesce(v_preview->>'kind', '') <> 'WEEKLY_CHAIN_DELETE_PARENT' then
+    raise exception 'timesheet_weekly_chain_delete_apply: unexpected preview kind: %', coalesce(v_preview->>'kind', '');
+  end if;
+
+  v_eligible := coalesce((v_preview->>'eligible')::boolean, false);
+
+  if not v_eligible then
+    raise exception 'timesheet_weekly_chain_delete_apply: not eligible: %', v_preview::text;
+  end if;
+
+  v_current_timesheet_id := nullif(v_preview->>'current_timesheet_id','')::uuid;
+  v_contract_id := nullif(v_preview->>'contract_id','')::uuid;
+  v_week_ending_date := (v_preview->>'week_ending_date')::date;
+
+  select coalesce(array_agg(timesheet_id_values.timesheet_id_value::uuid), array[]::uuid[])
+  into v_timesheet_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'timesheet_ids','[]'::jsonb)) as timesheet_id_values(timesheet_id_value);
+
+  select coalesce(array_agg(contract_week_id_values.contract_week_id_value::uuid), array[]::uuid[])
+  into v_contract_week_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'contract_week_ids','[]'::jsonb)) as contract_week_id_values(contract_week_id_value);
+
+  select exists(
+    select 1
+    from public.timesheets as current_timesheet_check
+    left join public.contract_weeks as current_contract_week_check
+      on current_contract_week_check.timesheet_id = current_timesheet_check.timesheet_id
+    where current_timesheet_check.timesheet_id = v_current_timesheet_id
+      and (
+        current_timesheet_check.is_adjustment is true
+        or coalesce(current_contract_week_check.is_adjustment, false) = true
+        or coalesce(current_contract_week_check.additional_seq, 0) > 0
+      )
+  )
+  into v_invalid_parent_target;
+
+  if coalesce(v_invalid_parent_target, false) = true then
+    raise exception 'timesheet_weekly_chain_delete_apply: refusing parent-chain delete for an adjustment/additional timesheet %', v_current_timesheet_id;
+  end if;
+
+  select exists(
+    select 1
+    from public.contract_weeks as guarded_contract_week
+    left join public.timesheets as guarded_timesheet
+      on guarded_timesheet.timesheet_id = guarded_contract_week.timesheet_id
+    where guarded_contract_week.id = any(v_contract_week_ids)
+      and (coalesce(guarded_contract_week.is_adjustment, false) = true or coalesce(guarded_contract_week.additional_seq, 0) > 0)
+      and not (
+        upper(coalesce(guarded_timesheet.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
+        or nullif(btrim(coalesce(guarded_timesheet.correction_kind,'')),'') is not null
+        or guarded_timesheet.correction_id is not null
+      )
+  )
+  into v_manual_contract_week_targeted;
+
+  if coalesce(v_manual_contract_week_targeted, false) = true then
+    raise exception 'timesheet_weekly_chain_delete_apply: refusing parent-chain delete because the target set contains a manual additional contract_week: %', to_jsonb(v_contract_week_ids)::text;
+  end if;
+
+  v_before := jsonb_build_object(
+    'requested_timesheet_id', p_timesheet_id::text,
+    'current_timesheet_id', v_current_timesheet_id::text,
+    'contract_id', case when v_contract_id is null then null else v_contract_id::text end,
+    'week_ending_date', case when v_week_ending_date is null then null else v_week_ending_date::text end,
+    'timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
+  );
+
+  -- NHSP/HR shifts: delete week truth rows only for verified parent-chain deletes.
+  if v_contract_id is not null and v_week_ending_date is not null then
+    delete from public.nhsp_shifts as nhsp_shift_delete
+    where (nhsp_shift_delete.contract_id = v_contract_id
+           and nhsp_shift_delete.week_ending_date = v_week_ending_date
+           and nhsp_shift_delete.source_system in ('NHSP'::public.hr_source_enum, 'HEALTHROSTER'::public.hr_source_enum))
+       or (nhsp_shift_delete.timesheet_id = any(v_timesheet_ids));
+  else
+    update public.nhsp_shifts as nhsp_shift_detach
+    set timesheet_id = null
+    where nhsp_shift_detach.timesheet_id = any(v_timesheet_ids);
+  end if;
+
+  get diagnostics v_deleted_shifts = row_count;
+
+  delete from public.pay_item_snoozes as pay_item_snooze_delete where pay_item_snooze_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.pay_batch_items as pay_batch_item_delete where pay_batch_item_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_pay_adjustments as ts_pay_adjustment_delete where ts_pay_adjustment_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_pay_state_history as timesheet_pay_state_history_delete where timesheet_pay_state_history_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_pay_state as timesheet_pay_state_delete where timesheet_pay_state_delete.timesheet_id = any(v_timesheet_ids);
+
+  delete from public.timesheet_validations as timesheet_validation_delete where timesheet_validation_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.hr_results as hr_result_delete where hr_result_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.hr_issue_emails as hr_issue_email_delete where hr_issue_email_delete.timesheet_id = any(v_timesheet_ids);
+
+  delete from public.timesheet_evidence as timesheet_evidence_delete where timesheet_evidence_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.manual_timesheet_queue as manual_timesheet_queue_delete where manual_timesheet_queue_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_pdfs_outbox as ts_pdfs_outbox_delete where ts_pdfs_outbox_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_financials_outbox as ts_financials_outbox_delete where ts_financials_outbox_delete.timesheet_id = any(v_timesheet_ids);
+
+  delete from public.timesheets_financials as timesheet_financials_delete where timesheet_financials_delete.timesheet_id = any(v_timesheet_ids);
+
+  delete from public.contract_weeks as contract_week_delete
+  where contract_week_delete.id = any(v_contract_week_ids);
+
+  get diagnostics v_deleted_contract_weeks = row_count;
+
+  delete from public.timesheets as timesheet_delete where timesheet_delete.timesheet_id = any(v_timesheet_ids);
+
+  get diagnostics v_deleted_timesheets = row_count;
+
+  v_after := jsonb_build_object(
+    'deleted_timesheets', v_deleted_timesheets,
+    'deleted_contract_weeks', v_deleted_contract_weeks,
+    'deleted_nhsp_shifts', v_deleted_shifts,
+    'deleted_timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'deleted_contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
+  );
+
+  begin
+    perform public._audit_insert(
+      'timesheets',
+      coalesce(v_current_timesheet_id::text, p_timesheet_id::text),
+      'WEEKLY_CHAIN_DELETE_APPLIED',
+      v_before,
+      v_after,
+      null,
+      p_actor_user_id
+    );
+  exception when others then
+    null;
+  end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'kind', 'WEEKLY_CHAIN_DELETE_PARENT',
+    'current_timesheet_id', coalesce(v_current_timesheet_id::text, p_timesheet_id::text),
+    'deleted_timesheets', v_deleted_timesheets,
+    'deleted_contract_weeks', v_deleted_contract_weeks,
+    'deleted_nhsp_shifts', v_deleted_shifts,
+    'deleted_timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'deleted_contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
+  );
+end;
+$function$;

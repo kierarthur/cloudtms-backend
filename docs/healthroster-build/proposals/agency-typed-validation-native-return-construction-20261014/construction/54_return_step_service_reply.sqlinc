@@ -1,0 +1,22 @@
+-- Mechanical service continuation of the one business request. This reply
+-- gives no invoice edit payload/financial preparation/private authority frame.
+create or replace function public.weekly_source_agency_change_return_step_v1(p_request_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.weekly_source_agency_timesheet_change_requests%rowtype;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ r:=private.weekly_source_agency_change_return_step_v1(p_request_id,p_actor_user_id);
+ return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_RETURN_STEP_RESULT_V1',
+  'request_id',r.id,'request_version',r.version,'phase',r.phase,'view_actor_user_id',p_actor_user_id,
+  'timesheet_id',r.current_timesheet_id,'timesheet_version',r.current_timesheet_version,
+  'completed',r.state='COMPLETED','last_refusal_code',r.last_refusal_code,
+  'completed_actor_user_id',r.completed_by_user_id,'return_invoice_no',case when r.state='COMPLETED' then r.original_draft_invoice_no end,
+  'completion_sha256',case when r.state='COMPLETED' then encode(private.weekly_source_sha256_jsonb_v1(
+     'WEEKLY_SOURCE_AGENCY_NATIVE_COMPLETED_RECEIPT_V1',r.completed_receipt),'hex') end);
+end;
+$function$;
+alter function public.weekly_source_agency_change_return_step_v1(uuid,uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_change_return_step_v1(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_change_return_step_v1(uuid,uuid) to service_role;

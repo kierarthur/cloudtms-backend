@@ -1,0 +1,34 @@
+✔ UNIT_ONLY transport: truthful native validation hold never becomes a complete return (0.9145ms)
+✔ UNIT_ONLY transport: completed replay retains its real step actor independently from the current viewer (0.1775ms)
+✔ UNIT_ONLY transport: genuine no-original-draft completion permits a null invoice number (0.139ms)
+✔ UNIT_ONLY actual decoder refuses foreign request (0.3559ms)
+✔ UNIT_ONLY actual decoder refuses foreign actor (0.1126ms)
+✔ UNIT_ONLY actual decoder refuses foreign physical target (0.1004ms)
+✔ UNIT_ONLY actual decoder refuses stale physical version (0.0911ms)
+✔ UNIT_ONLY actual decoder refuses numeric version string (0.0732ms)
+✔ UNIT_ONLY actual decoder refuses unknown phase (0.1322ms)
+✔ UNIT_ONLY actual decoder refuses queue success relabeled completion (0.1541ms)
+✔ UNIT_ONLY actual decoder refuses completed with causal refusal (0.7223ms)
+✔ UNIT_ONLY actual decoder refuses raw private frame (0.1693ms)
+✔ UNIT_ONLY actual decoder refuses invoice choice (0.0957ms)
+✔ UNIT_ONLY actual decoder refuses array completion actor (0.0756ms)
+✔ UNIT_ONLY actual decoder refuses array invoice number (0.0586ms)
+✔ UNIT_ONLY actual decoder refuses array completion hash (0.0474ms)
+✔ UNIT_ONLY actual decoder refuses absent completion hash (0.042ms)
+✔ UNIT_ONLY actual decoder refuses oversized invoice text (0.0898ms)
+✔ UNIT_ONLY actual decoder refuses empty completed actor (0.0469ms)
+✔ UNIT_ONLY actual decoder refuses wrong completed type (0.0578ms)
+✔ UNIT_ONLY actual decoder refuses scalar-array caller binding rather than coercing UUIDs (0.0892ms)
+✔ UNIT_ONLY actual decoder requires a closed causal hold and no stored completion fields (0.1465ms)
+✔ SOURCE whole wrapper reverse preserves prior actor, original-D1, unrelated-lines and native REMOVE guards (1.2378ms)
+✔ SOURCE Return delegates money to the unchanged editor and verifies complete actual native segment locks (0.5818ms)
+✔ SOURCE typed discriminator preserves legacy UUID/FK and cannot admit a null Agency facts hash (0.3964ms)
+✔ SOURCE completion requires rederived whole-week facts and the full genuine native validation-recompute cut (0.4128ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 142.3227

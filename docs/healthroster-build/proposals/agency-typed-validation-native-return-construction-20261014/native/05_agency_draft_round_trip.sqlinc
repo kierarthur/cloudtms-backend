@@ -1,0 +1,123 @@
+-- R239 owner-private same-original-D1 operation. Called only by the single
+-- native change owner; caller cannot choose invoice, Timesheet, line or payload.
+create or replace function private.weekly_source_agency_draft_round_trip_v1(
+  p_request_key text,p_step text,p_actor_user_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_request private.weekly_source_agency_timesheet_change_requests%rowtype;
+  v_invoice public.invoices%rowtype; v_fin public.timesheets_financials%rowtype;
+  v_step text:=upper(btrim(p_step)); v_ids jsonb; v_result jsonb; v_plan jsonb;
+  v_unrelated bytea; v_actual jsonb; v_expected jsonb; v_signature jsonb;
+  v_columns constant text[]:=array['invoice_id','timesheet_id','booking_id','description',
+    'hours_day','hours_night','hours_sat','hours_sun','hours_bh','pay_day','pay_night','pay_sat','pay_sun','pay_bh',
+    'charge_day','charge_night','charge_sat','charge_sun','charge_bh','total_pay_ex_vat','total_charge_ex_vat',
+    'margin_ex_vat','vat_rate_pct','vat_amount','total_inc_vat','paper_ts_r2_key','meta_json','source_key'];
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if v_step is null or v_step not in('REMOVE','RETURN') then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_STEP_INVALID' using errcode='22023'; end if;
+  select * into strict v_request from private.weekly_source_agency_timesheet_change_requests where request_key=p_request_key;
+  v_request:=private.weekly_source_agency_change_request_assert_v1(v_request.contract_week_id,v_request.reason,
+    v_request.initial_row_signature,v_request.request_key,p_actor_user_id);
+  if v_request.state is distinct from 'ACTIVE'
+    or(v_step='REMOVE' and v_request.phase is distinct from 'CAPTURED')
+    or(v_step='RETURN' and v_request.phase is distinct from 'AUTHORISED') then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_PHASE_INVALID' using errcode='55000'; end if;
+  if v_request.original_draft_invoice_id is null then
+    if exists(select 1 from public.invoice_lines l where l.timesheet_id in(v_request.initial_timesheet_id,v_request.current_timesheet_id)) then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_FOREIGN_PLACEMENT' using errcode='55000'; end if;
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_DRAFT_ROUND_TRIP_RECEIPT_V1',
+      'ok',true,'request_id',v_request.id,'step',v_step,'phase_actor_user_id',p_actor_user_id,'not_required',true,
+      'original_draft_invoice_id',null,'original_draft_invoice_no',null); end if;
+  select * into strict v_invoice from public.invoices where id=v_request.original_draft_invoice_id for update;
+  if v_invoice.type is distinct from 'INVOICE' or v_invoice.status not in('DRAFT','ON_HOLD')
+    or v_invoice.issued_at_utc is not null or v_invoice.paid_at_utc is not null
+    or v_invoice.client_id is distinct from v_request.client_id
+    or v_invoice.invoice_no is distinct from v_request.original_draft_invoice_no then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_ORIGINAL_D1_CHANGED' using errcode='40001'; end if;
+  if jsonb_array_length(private.timesheet_correction_draft_holds_v1(v_invoice.id))>0
+    or exists(select 1 from private.weekly_source_agency_timesheet_change_requests other_request
+      where other_request.id<>v_request.id and other_request.return_hold and other_request.original_draft_invoice_id=v_invoice.id) then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_OTHER_RETURN_HOLD' using errcode='55000'; end if;
+  if exists(select 1 from public.invoice_lines l where l.timesheet_id in(v_request.initial_timesheet_id,v_request.current_timesheet_id)
+    and l.invoice_id<>v_invoice.id) then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_FOREIGN_PLACEMENT' using errcode='55000'; end if;
+  select * into strict v_fin from public.timesheets_financials
+    where timesheet_id=v_request.current_timesheet_id and is_current for update;
+  v_unrelated:=private.weekly_source_sha256_jsonb_v1('AGENCY_DRAFT_UNRELATED_NATIVE_LINES_V1',
+    coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.invoice_id=v_invoice.id
+      and l.timesheet_id is distinct from v_request.initial_timesheet_id
+      and l.timesheet_id is distinct from v_request.current_timesheet_id),'[]'::jsonb));
+  if v_step='REMOVE' then
+    if v_request.return_hold or v_request.current_timesheet_id is distinct from v_request.initial_timesheet_id
+      or v_fin.id::text is distinct from v_request.native_receipts#>>'{original_capture,current_financial_id}' then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_ORIGINAL_FINANCIAL_CUT_CHANGED' using errcode='40001'; end if;
+    select coalesce(jsonb_agg(l.id order by l.id),'[]'::jsonb) into v_ids
+      from public.invoice_lines l where l.invoice_id=v_invoice.id and l.timesheet_id=v_request.current_timesheet_id;
+    if jsonb_array_length(v_ids)=0 or jsonb_array_length(v_ids)>100 then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_ORIGINAL_PLACEMENT_UNPROVED' using errcode='55000'; end if;
+    v_result:=public.invoice_apply_edits(v_invoice.id,jsonb_build_object('remove_invoice_line_ids',v_ids),p_actor_user_id);
+    if exists(select 1 from public.invoice_lines l where l.timesheet_id=v_request.current_timesheet_id)
+      or exists(select 1 from public.timesheets_financials tf where tf.timesheet_id=v_request.current_timesheet_id
+        and tf.is_current and tf.locked_by_invoice_id is not null) then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_REMOVE_NOT_PROVED' using errcode='55000'; end if;
+  else
+    if v_request.return_hold is distinct from true or v_fin.id is distinct from v_request.current_financial_id
+      or v_fin.timesheet_version is distinct from v_request.current_timesheet_version
+      or v_fin.is_stale is distinct from false or v_fin.authorised_at_utc is null
+      or v_fin.processing_status::text is distinct from 'READY_FOR_INVOICE'
+      or v_fin.locked_by_invoice_id is not null then
+      raise exception 'AGENCY_INVOICE_TSFIN_NOT_READY' using errcode='55000'; end if;
+    if exists(select 1 from public.invoice_lines l where l.timesheet_id=v_request.current_timesheet_id) then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_RETURN_PLACEMENT_CHANGED' using errcode='40001'; end if;
+    v_plan:=private.weekly_source_agency_invoice_line_plan_v1(v_request.current_timesheet_id,v_fin.id,v_invoice.id);
+    if v_plan->>'schema_version' is distinct from 'INVOICE_EDIT_NATIVE_TIMESHEET_LINE_PLAN_V1'
+      or v_plan->>'timesheet_id' is distinct from v_request.current_timesheet_id::text
+      or v_plan->>'financial_id' is distinct from v_fin.id::text or v_plan->>'invoice_id' is distinct from v_invoice.id::text
+      or jsonb_typeof(v_plan->'segments') is distinct from 'array' or jsonb_typeof(v_plan->'lines') is distinct from 'array'
+      or jsonb_array_length(v_plan->'lines')>100 or octet_length(v_plan::text)>32768 then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_NATIVE_LINE_PLAN_INVALID' using errcode='55000'; end if;
+    -- Every actual native financial segment must belong to this same D1.
+    -- Native delayed/reference/locked filtering cannot qualify a subset as full.
+    if jsonb_typeof(v_fin.invoice_breakdown_json->'segments') is distinct from 'array'
+      or v_plan->'segments' is distinct from v_fin.invoice_breakdown_json->'segments' then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_NATIVE_COMPONENT_SUBSET_REFUSED' using errcode='55000'; end if;
+    select coalesce(jsonb_agg(line order by line->>'source_key'),'[]'::jsonb) into v_expected
+      from jsonb_array_elements(v_plan->'lines') line;
+    if (select count(*) from jsonb_array_elements(v_expected))
+      <> (select count(distinct line->>'source_key') from jsonb_array_elements(v_expected) line) then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_NATIVE_COMPONENT_KEYS_INVALID' using errcode='55000'; end if;
+    if jsonb_array_length(v_expected)>0 then
+      v_result:=public.invoice_apply_edits(v_invoice.id,jsonb_build_object('add_timesheet_ids',jsonb_build_array(v_request.current_timesheet_id)),p_actor_user_id);
+    end if;
+    select coalesce(jsonb_agg((select jsonb_object_agg(key,value) from jsonb_each(to_jsonb(l))
+      where key=any(v_columns)) order by l.source_key),'[]'::jsonb) into v_actual
+      from public.invoice_lines l where l.invoice_id=v_invoice.id and l.timesheet_id=v_request.current_timesheet_id;
+    if v_actual is distinct from v_expected then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_COMPLETE_NATIVE_COMPONENTS_UNPROVED' using errcode='55000'; end if;
+  end if;
+  if (v_result is not null and jsonb_typeof(v_result) is distinct from 'object')
+    or v_result->>'ok'='false' or v_result->>'success'='false'
+    or (select invoice_no from public.invoices where id=v_invoice.id) is distinct from v_request.original_draft_invoice_no
+    or private.weekly_source_sha256_jsonb_v1('AGENCY_DRAFT_UNRELATED_NATIVE_LINES_V1',
+      coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.invoice_id=v_invoice.id
+        and l.timesheet_id is distinct from v_request.initial_timesheet_id
+        and l.timesheet_id is distinct from v_request.current_timesheet_id),'[]'::jsonb)) is distinct from v_unrelated then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_UNRELATED_D1_CHANGED' using errcode='55000'; end if;
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_request.current_timesheet_id,v_request.contract_week_id,false);
+  if nullif(btrim(coalesce(v_signature->>'backend_row_signature',v_signature->>'row_signature',v_signature->>'signature')),'') is null then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_NATIVE_SIGNATURE_UNAVAILABLE' using errcode='55000'; end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_DRAFT_ROUND_TRIP_RECEIPT_V1',
+    'ok',true,'request_id',v_request.id,'step',v_step,'phase_actor_user_id',p_actor_user_id,
+    'original_draft_invoice_id',v_invoice.id,'original_draft_invoice_no',v_invoice.invoice_no,
+    'timesheet_id',v_request.current_timesheet_id,'financial_id',v_fin.id,'native_result',v_result,
+    'unrelated_lines_sha256',encode(v_unrelated,'hex'),'native_line_plan',v_plan,
+    'current_row_signature',btrim(coalesce(v_signature->>'backend_row_signature',v_signature->>'row_signature',v_signature->>'signature')));
+exception when no_data_found or too_many_rows then
+  raise exception 'AGENCY_DRAFT_ROUND_TRIP_NATIVE_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_draft_round_trip_v1(text,text,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_draft_round_trip_v1(text,text,uuid) from public,anon,authenticated,service_role;

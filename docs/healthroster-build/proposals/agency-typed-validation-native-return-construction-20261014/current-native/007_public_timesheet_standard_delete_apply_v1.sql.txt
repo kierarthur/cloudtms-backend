@@ -1,0 +1,665 @@
+CREATE OR REPLACE FUNCTION public.timesheet_standard_delete_apply_v1(p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_expected_row_signature text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_preview jsonb;
+  v_recheck jsonb;
+  v_decision text := 'BLOCKED';
+  v_current_timesheet_id uuid := NULL;
+  v_recheck_current_timesheet_id uuid := NULL;
+  v_initial_row_signature text := NULL;
+  v_recheck_row_signature text := NULL;
+  v_booking_id text := NULL;
+  v_recheck_booking_id text := NULL;
+
+  v_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_contract_week_ids uuid[] := ARRAY[]::uuid[];
+  v_nhsp_shift_ids uuid[] := ARRAY[]::uuid[];
+  v_preserved_source_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_preserved_source_contract_week_ids uuid[] := ARRAY[]::uuid[];
+  v_all_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_all_contract_week_ids uuid[] := ARRAY[]::uuid[];
+  v_contract_ids uuid[] := ARRAY[]::uuid[];
+
+  v_recheck_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_recheck_contract_week_ids uuid[] := ARRAY[]::uuid[];
+  v_recheck_nhsp_shift_ids uuid[] := ARRAY[]::uuid[];
+  v_recheck_preserved_source_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_recheck_preserved_source_contract_week_ids uuid[] := ARRAY[]::uuid[];
+
+  v_r2_keys text[] := ARRAY[]::text[];
+  v_locked_contracts integer := 0;
+  v_locked_timesheets integer := 0;
+  v_locked_contract_weeks integer := 0;
+  v_locked_nhsp_shifts integer := 0;
+  v_detached_contract_weeks integer := 0;
+  v_detached_nhsp_shifts integer := 0;
+  v_deleted_count integer := 0;
+
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E21).
+  v_weekly_source_guard jsonb;
+  v_weekly_source_root uuid;
+BEGIN
+  PERFORM set_config('lock_timeout', '750ms', true);
+
+  IF p_timesheet_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ID_REQUIRED';
+  END IF;
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'ACTOR_USER_ID_REQUIRED';
+  END IF;
+  IF p_expected_timesheet_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'EXPECTED_TIMESHEET_ID_REQUIRED';
+  END IF;
+  IF NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '') IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'EXPECTED_ROW_SIGNATURE_REQUIRED';
+  END IF;
+
+  v_preview := public.timesheet_standard_delete_preview_v1(
+    p_timesheet_id,
+    p_actor_user_id,
+    p_expected_timesheet_id,
+    p_expected_row_signature
+  );
+  v_decision := COALESCE(v_preview ->> 'decision', 'BLOCKED');
+
+  IF v_decision <> 'PERMANENT_DELETE' THEN
+    RETURN v_preview || jsonb_build_object(
+      'ok', false,
+      'apply_performed', false,
+      'error_code', CASE
+        WHEN v_decision = 'ARCHIVE_REQUIRED' THEN 'ARCHIVE_REQUIRED'
+        ELSE 'DELETE_BLOCKED'
+      END
+    );
+  END IF;
+
+  v_current_timesheet_id := NULLIF(v_preview ->> 'current_timesheet_id', '')::uuid;
+  v_initial_row_signature := NULLIF(BTRIM(COALESCE(v_preview ->> 'current_row_signature', '')), '');
+  v_booking_id := NULLIF(v_preview ->> 'booking_id', '');
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_timesheet_ids
+  FROM jsonb_array_elements_text(COALESCE(v_preview -> 'timesheet_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_contract_week_ids
+  FROM jsonb_array_elements_text(COALESCE(v_preview -> 'contract_week_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_nhsp_shift_ids
+  FROM jsonb_array_elements_text(COALESCE(v_preview -> 'nhsp_shift_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_preserved_source_timesheet_ids
+  FROM jsonb_array_elements_text(COALESCE(v_preview -> 'preserved_source_timesheet_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_preserved_source_contract_week_ids
+  FROM jsonb_array_elements_text(COALESCE(v_preview -> 'preserved_source_contract_week_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(DISTINCT all_timesheet_ids.id ORDER BY all_timesheet_ids.id), ARRAY[]::uuid[])
+    INTO v_all_timesheet_ids
+  FROM unnest(v_timesheet_ids || v_preserved_source_timesheet_ids) AS all_timesheet_ids(id)
+  WHERE all_timesheet_ids.id IS NOT NULL;
+
+  SELECT COALESCE(array_agg(DISTINCT all_contract_week_ids.id ORDER BY all_contract_week_ids.id), ARRAY[]::uuid[])
+    INTO v_all_contract_week_ids
+  FROM unnest(v_contract_week_ids || v_preserved_source_contract_week_ids) AS all_contract_week_ids(id)
+  WHERE all_contract_week_ids.id IS NOT NULL;
+
+  SELECT COALESCE(array_agg(DISTINCT represented_contract.contract_id ORDER BY represented_contract.contract_id), ARRAY[]::uuid[])
+    INTO v_contract_ids
+  FROM (
+    SELECT represented_contract_week.contract_id
+    FROM public.contract_weeks AS represented_contract_week
+    WHERE represented_contract_week.id = ANY(v_all_contract_week_ids)
+      AND represented_contract_week.contract_id IS NOT NULL
+  ) AS represented_contract;
+
+  IF v_current_timesheet_id IS NULL
+     OR NULLIF(BTRIM(COALESCE(v_booking_id, '')), '') IS NULL
+     OR v_current_timesheet_id IS DISTINCT FROM p_expected_timesheet_id
+     OR v_initial_row_signature IS DISTINCT FROM BTRIM(p_expected_row_signature) THEN
+    RETURN v_preview || jsonb_build_object(
+      'ok', false,
+      'apply_performed', false,
+      'error_code', 'DELETE_PREVIEW_STALE'
+    );
+  END IF;
+
+  IF COALESCE(array_length(v_timesheet_ids, 1), 0) = 0 THEN
+    RETURN v_preview || jsonb_build_object(
+      'ok', false,
+      'apply_performed', false,
+      'error_code', 'REMOVAL_UNIT_EMPTY'
+    );
+  END IF;
+
+  IF COALESCE(array_length(v_all_timesheet_ids, 1), 0) > 64
+     OR COALESCE(array_length(v_all_contract_week_ids, 1), 0) > 64
+     OR COALESCE(array_length(v_nhsp_shift_ids, 1), 0) > 512 THEN
+    RAISE EXCEPTION USING MESSAGE = 'REMOVAL_UNIT_TOO_LARGE';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM unnest(v_timesheet_ids) AS target_timesheet(id)
+    WHERE target_timesheet.id = ANY(v_preserved_source_timesheet_ids)
+  ) OR EXISTS (
+    SELECT 1
+    FROM unnest(v_contract_week_ids) AS target_contract_week(id)
+    WHERE target_contract_week.id = ANY(v_preserved_source_contract_week_ids)
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_OVERLAPS_DELETE_TARGET';
+  END IF;
+
+  -- Use the same booking-series advisory authority as Timesheet rotation.
+  -- A concurrent rotation must finish before this Delete can confirm its removal unit.
+  IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtext(v_booking_id)::bigint) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55P03',
+      MESSAGE = 'BOOKING_LOCK_NOT_AVAILABLE';
+  END IF;
+
+  -- Lock every represented Contract root before its child rows. A Contract Week
+  -- insert or contract reassignment must take a foreign-key key-share lock on the
+  -- destination Contract, so it cannot create a preserved-source phantom after
+  -- these roots have been locked.
+  SELECT COUNT(*)::integer
+    INTO v_locked_contracts
+  FROM (
+    SELECT contract_root.id
+    FROM public.contracts AS contract_root
+    WHERE contract_root.id = ANY(v_contract_ids)
+    ORDER BY contract_root.id
+    FOR UPDATE NOWAIT
+  ) AS locked_contracts;
+
+  IF v_locked_contracts <> COALESCE(array_length(v_contract_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_CHANGED';
+  END IF;
+
+  -- Freeze all existing Contract Weeks below the represented Contract roots.
+  -- This prevents an existing sibling week from changing date/sequence/type and
+  -- entering or leaving the canonical preserved-source predicate after recheck.
+  PERFORM 1
+  FROM public.contract_weeks AS contract_week_predicate_row
+  WHERE contract_week_predicate_row.contract_id = ANY(v_contract_ids)
+  ORDER BY contract_week_predicate_row.contract_id,
+           contract_week_predicate_row.week_ending_date,
+           contract_week_predicate_row.additional_seq,
+           contract_week_predicate_row.id
+  FOR UPDATE NOWAIT;
+
+  -- Lock the complete booking series together with every target or preserved
+  -- Timesheet in deterministic UUID order. The advisory lock serialises standard
+  -- rotation authorities; the row locks freeze exact identity and parent links.
+  SELECT COUNT(*) FILTER (
+           WHERE locked_timesheet.timesheet_id = ANY(v_all_timesheet_ids)
+         )::integer
+    INTO v_locked_timesheets
+  FROM (
+    SELECT target_timesheet.timesheet_id
+    FROM public.timesheets AS target_timesheet
+    WHERE target_timesheet.booking_id = v_booking_id
+       OR target_timesheet.timesheet_id = ANY(v_all_timesheet_ids)
+    ORDER BY target_timesheet.timesheet_id
+    FOR UPDATE NOWAIT
+  ) AS locked_timesheet;
+
+  IF v_locked_timesheets <> COALESCE(array_length(v_all_timesheet_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_CHANGED';
+  END IF;
+
+  PERFORM 1
+  FROM public.timesheets_financials AS target_financial
+  WHERE target_financial.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY target_financial.timesheet_id, target_financial.id
+  FOR UPDATE;
+
+  SELECT COUNT(*)::integer
+    INTO v_locked_contract_weeks
+  FROM (
+    SELECT target_contract_week.id
+    FROM public.contract_weeks AS target_contract_week
+    WHERE target_contract_week.id = ANY(v_all_contract_week_ids)
+    ORDER BY target_contract_week.id
+    FOR UPDATE NOWAIT
+  ) AS locked_contract_weeks;
+
+  IF v_locked_contract_weeks <> COALESCE(array_length(v_all_contract_week_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_CHANGED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.contract_weeks AS represented_contract_week
+    WHERE represented_contract_week.id = ANY(v_all_contract_week_ids)
+      AND NOT (represented_contract_week.contract_id = ANY(v_contract_ids))
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_CHANGED';
+  END IF;
+
+  SELECT COUNT(*)::integer
+    INTO v_locked_nhsp_shifts
+  FROM (
+    SELECT target_shift.id
+    FROM public.nhsp_shifts AS target_shift
+    WHERE target_shift.id = ANY(v_nhsp_shift_ids)
+    ORDER BY target_shift.id
+    FOR UPDATE
+  ) AS locked_nhsp_shifts;
+
+  IF v_locked_nhsp_shifts <> COALESCE(array_length(v_nhsp_shift_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'NHSP_SHIFT_TARGET_SET_CHANGED';
+  END IF;
+
+  PERFORM 1
+  FROM public.manual_timesheet_queue AS queue_row
+  WHERE queue_row.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY queue_row.id
+  FOR UPDATE;
+
+  PERFORM 1
+  FROM public.timesheet_evidence AS evidence_row
+  WHERE evidence_row.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY evidence_row.id
+  FOR UPDATE;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.contract_weeks AS target_contract_week
+    WHERE target_contract_week.id = ANY(v_contract_week_ids)
+      AND (
+        target_contract_week.timesheet_id IS NULL
+        OR target_contract_week.timesheet_id <> ALL(v_timesheet_ids)
+      )
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'CONTRACT_WEEK_TARGET_SET_CHANGED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.nhsp_shifts AS target_shift
+    WHERE target_shift.id = ANY(v_nhsp_shift_ids)
+      AND (
+        target_shift.timesheet_id IS NULL
+        OR target_shift.timesheet_id <> ALL(v_timesheet_ids)
+      )
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'NHSP_SHIFT_TARGET_SET_CHANGED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.contract_weeks AS source_contract_week
+    WHERE source_contract_week.id = ANY(v_preserved_source_contract_week_ids)
+      AND (
+        COALESCE(source_contract_week.is_adjustment, false)
+        OR COALESCE(source_contract_week.additional_seq, 0) <> 0
+        OR NOT EXISTS (
+          SELECT 1
+          FROM public.contract_weeks AS target_contract_week
+          WHERE target_contract_week.id = ANY(v_contract_week_ids)
+            AND target_contract_week.contract_id = source_contract_week.contract_id
+            AND target_contract_week.week_ending_date = source_contract_week.week_ending_date
+        )
+        OR (
+          source_contract_week.timesheet_id IS NOT NULL
+          AND source_contract_week.timesheet_id <> ALL(v_preserved_source_timesheet_ids)
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_CHANGED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.timesheets AS source_timesheet
+    WHERE source_timesheet.timesheet_id = ANY(v_preserved_source_timesheet_ids)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.timesheets AS target_timesheet
+        WHERE target_timesheet.timesheet_id = ANY(v_timesheet_ids)
+          AND target_timesheet.parent_timesheet_id = source_timesheet.timesheet_id
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.contract_weeks AS source_contract_week
+        WHERE source_contract_week.id = ANY(v_preserved_source_contract_week_ids)
+          AND source_contract_week.timesheet_id = source_timesheet.timesheet_id
+      )
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PRESERVED_SOURCE_CHANGED';
+  END IF;
+
+  v_recheck := public.timesheet_standard_delete_preview_v1(
+    p_timesheet_id,
+    p_actor_user_id,
+    p_expected_timesheet_id,
+    p_expected_row_signature
+  );
+  v_decision := COALESCE(v_recheck ->> 'decision', 'BLOCKED');
+  v_recheck_current_timesheet_id := NULLIF(v_recheck ->> 'current_timesheet_id', '')::uuid;
+  v_recheck_row_signature := NULLIF(BTRIM(COALESCE(v_recheck ->> 'current_row_signature', '')), '');
+  v_recheck_booking_id := NULLIF(v_recheck ->> 'booking_id', '');
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_timesheet_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'timesheet_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_contract_week_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'contract_week_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_nhsp_shift_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'nhsp_shift_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_preserved_source_timesheet_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'preserved_source_timesheet_ids', '[]'::jsonb)) AS ids(value);
+
+  SELECT COALESCE(array_agg(ids.value::uuid ORDER BY ids.value::uuid), ARRAY[]::uuid[])
+    INTO v_recheck_preserved_source_contract_week_ids
+  FROM jsonb_array_elements_text(COALESCE(v_recheck -> 'preserved_source_contract_week_ids', '[]'::jsonb)) AS ids(value);
+
+  IF v_decision <> 'PERMANENT_DELETE'
+     OR v_recheck_current_timesheet_id IS DISTINCT FROM v_current_timesheet_id
+     OR v_recheck_booking_id IS DISTINCT FROM v_booking_id
+     OR v_recheck_row_signature IS DISTINCT FROM v_initial_row_signature
+     OR v_recheck_row_signature IS DISTINCT FROM BTRIM(p_expected_row_signature)
+     OR v_recheck_timesheet_ids IS DISTINCT FROM v_timesheet_ids
+     OR v_recheck_contract_week_ids IS DISTINCT FROM v_contract_week_ids
+     OR v_recheck_nhsp_shift_ids IS DISTINCT FROM v_nhsp_shift_ids
+     OR v_recheck_preserved_source_timesheet_ids IS DISTINCT FROM v_preserved_source_timesheet_ids
+     OR v_recheck_preserved_source_contract_week_ids IS DISTINCT FROM v_preserved_source_contract_week_ids THEN
+    RETURN v_recheck || jsonb_build_object(
+      'ok', false,
+      'apply_performed', false,
+      'error_code', 'REMOVAL_UNIT_CHANGED',
+      'locked_target_set', jsonb_build_object(
+        'timesheet_ids', to_jsonb(v_timesheet_ids),
+        'contract_week_ids', to_jsonb(v_contract_week_ids),
+        'nhsp_shift_ids', to_jsonb(v_nhsp_shift_ids),
+        'preserved_source_timesheet_ids', to_jsonb(v_preserved_source_timesheet_ids),
+        'preserved_source_contract_week_ids', to_jsonb(v_preserved_source_contract_week_ids)
+      )
+    );
+  END IF;
+
+  SELECT COALESCE(
+           array_agg(exact_key.queue_key ORDER BY convert_to(exact_key.queue_key, 'UTF8')),
+           ARRAY[]::text[]
+         )
+    INTO v_r2_keys
+  FROM (
+    SELECT DISTINCT ON (convert_to(raw_key.queue_key, 'UTF8')) raw_key.queue_key
+    FROM (
+      SELECT direct_key.key_value AS queue_key
+      FROM public.timesheets AS target_timesheet
+      CROSS JOIN LATERAL unnest(ARRAY[
+        target_timesheet.manual_pdf_r2_key,
+        target_timesheet.r2_nurse_key,
+        target_timesheet.r2_auth_key,
+        target_timesheet.qr_r2_key
+      ]) AS direct_key(key_value)
+      WHERE target_timesheet.timesheet_id = ANY(v_timesheet_ids)
+
+      UNION ALL
+
+      SELECT evidence_row.storage_key AS queue_key
+      FROM public.timesheet_evidence AS evidence_row
+      WHERE evidence_row.timesheet_id = ANY(v_timesheet_ids)
+
+      UNION ALL
+
+      SELECT queue_row.r2_key AS queue_key
+      FROM public.manual_timesheet_queue AS queue_row
+      WHERE queue_row.timesheet_id = ANY(v_timesheet_ids)
+
+      UNION ALL
+
+      SELECT financial_key.key_value AS queue_key
+      FROM public.timesheets_financials AS target_financial
+      CROSS JOIN LATERAL unnest(ARRAY[
+        target_financial.expenses_evidence_r2_key,
+        target_financial.mileage_evidence_r2_key
+      ]) AS financial_key(key_value)
+      WHERE target_financial.timesheet_id = ANY(v_timesheet_ids)
+
+      UNION ALL
+
+      SELECT manifest_key.key_value AS queue_key
+      FROM public.timesheets_financials AS target_financial
+      CROSS JOIN LATERAL (
+        WITH RECURSIVE manifest_roots(root_value) AS (
+          SELECT COALESCE(target_financial.expenses_evidence_manifest, 'null'::jsonb)
+          UNION ALL
+          SELECT COALESCE(target_financial.mileage_evidence_manifest, 'null'::jsonb)
+        ), manifest_walk(value, edge_key, depth) AS (
+          SELECT manifest_roots.root_value, NULL::text, 0
+          FROM manifest_roots
+
+          UNION ALL
+
+          SELECT manifest_child.value, manifest_child.edge_key, manifest_walk.depth + 1
+          FROM manifest_walk
+          CROSS JOIN LATERAL (
+            SELECT object_entry.key AS edge_key, object_entry.value
+            FROM jsonb_each(
+              CASE
+                WHEN jsonb_typeof(manifest_walk.value) = 'object' THEN manifest_walk.value
+                ELSE '{}'::jsonb
+              END
+            ) AS object_entry(key, value)
+
+            UNION ALL
+
+            SELECT NULL::text AS edge_key, array_entry.value
+            FROM jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(manifest_walk.value) = 'array' THEN manifest_walk.value
+                ELSE '[]'::jsonb
+              END
+            ) AS array_entry(value)
+          ) AS manifest_child
+          WHERE manifest_walk.depth < 8
+        )
+        SELECT manifest_walk.value #>> '{}' AS key_value
+        FROM manifest_walk
+        WHERE LOWER(COALESCE(manifest_walk.edge_key, '')) IN (
+          'r2_key',
+          'storage_key',
+          'file_key',
+          'canonical_key',
+          'object_key'
+        )
+          AND jsonb_typeof(manifest_walk.value) = 'string'
+      ) AS manifest_key
+      WHERE target_financial.timesheet_id = ANY(v_timesheet_ids)
+    ) AS raw_key
+    WHERE raw_key.queue_key IS NOT NULL
+      AND BTRIM(raw_key.queue_key) <> ''
+    ORDER BY convert_to(raw_key.queue_key, 'UTF8')
+  ) AS exact_key;
+
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E21): permanent deletion
+  -- destroys the physical Timesheet identity a Weekly Source root is bound to,
+  -- so an authorised Weekly-Source-managed root refuses here: before this
+  -- owner's first write and while it holds the booking-series advisory lock
+  -- and every target row FOR UPDATE.  An unmanaged family is unaffected.
+  FOREACH v_weekly_source_root IN ARRAY COALESCE(v_timesheet_ids, ARRAY[]::uuid[])
+  LOOP
+    v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(v_weekly_source_root);
+    -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+    -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+    -- protected family whose identity cannot be resolved, to a family carrying
+    -- protected pay evidence but no authorisation row
+    -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+    -- unauthorised-Timesheet contradiction, which must never be allowed to
+    -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+    -- family -- including a malformed one -- keeps exactly the behaviour it had
+    -- before this feature was installed.  Absent, null and non-boolean take the
+    -- unsafe value at every read (Part 1 addendum rule 4).
+    IF (COALESCE((v_weekly_source_guard->>'managed')::boolean, true)
+         and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
+              or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+       or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+       or (v_weekly_source_guard->>'protected_target_ownership_state') is not null THEN
+      RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+        USING ERRCODE = '55000',
+              DETAIL = jsonb_build_object(
+                'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+                'entry_point','E21:public.timesheet_standard_delete_apply_v1',
+                'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+                'refusal_basis', case
+                  -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                  -- canonical booking-reference collision and must be named as one.
+                  -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                  -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                  -- which Office stops seeing the ruled name.
+                  when v_weekly_source_guard->>'reason' in (
+                         'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                    then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                  when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                    then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                  when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                    then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                  when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                    then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                  else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+                'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+                'timesheet_id', v_weekly_source_root,
+                'reason', v_weekly_source_guard->>'reason'
+              )::text;
+    END IF;
+  END LOOP;
+
+  INSERT INTO public.audit_events (
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  ) VALUES (
+    p_actor_user_id,
+    'timesheets',
+    v_current_timesheet_id::text,
+    'TIMESHEET_PERMANENT_DELETE_APPLIED',
+    jsonb_build_object(
+      'timesheet_ids', to_jsonb(v_timesheet_ids),
+      'contract_week_ids', to_jsonb(v_contract_week_ids),
+      'nhsp_shift_ids', to_jsonb(v_nhsp_shift_ids),
+      'preserved_source_timesheet_ids', to_jsonb(v_preserved_source_timesheet_ids),
+      'preserved_source_contract_week_ids', to_jsonb(v_preserved_source_contract_week_ids),
+      'decision', 'PERMANENT_DELETE'
+    ),
+    jsonb_build_object('deleted', true),
+    'FINANCIALLY_CLEAN_TIMESHEET'
+  );
+
+  UPDATE public.contract_weeks AS target_contract_week
+  SET timesheet_id = NULL,
+      status = 'OPEN'::public.contract_week_status_enum,
+      updated_at = now()
+  WHERE target_contract_week.id = ANY(v_contract_week_ids)
+    AND target_contract_week.timesheet_id = ANY(v_timesheet_ids);
+  GET DIAGNOSTICS v_detached_contract_weeks = ROW_COUNT;
+
+  IF v_detached_contract_weeks <> COALESCE(array_length(v_contract_week_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'CONTRACT_WEEK_TARGET_SET_CHANGED';
+  END IF;
+
+  UPDATE public.nhsp_shifts AS target_shift
+  SET timesheet_id = NULL,
+      updated_at = now()
+  WHERE target_shift.id = ANY(v_nhsp_shift_ids)
+    AND target_shift.timesheet_id = ANY(v_timesheet_ids);
+  GET DIAGNOSTICS v_detached_nhsp_shifts = ROW_COUNT;
+
+  IF v_detached_nhsp_shifts <> COALESCE(array_length(v_nhsp_shift_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'NHSP_SHIFT_TARGET_SET_CHANGED';
+  END IF;
+
+  DELETE FROM public.manual_timesheet_queue AS queue_row
+  WHERE queue_row.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.timesheet_evidence AS evidence_row
+  WHERE evidence_row.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.ts_pdfs_outbox AS pdf_outbox
+  WHERE pdf_outbox.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.ts_financials_outbox AS financial_outbox
+  WHERE financial_outbox.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.timesheet_validations AS validation_row
+  WHERE validation_row.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.hr_results AS result_row
+  WHERE result_row.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.hr_issue_emails AS issue_email
+  WHERE issue_email.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.pay_item_snoozes AS snooze_row
+  WHERE snooze_row.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.timesheet_summary_pay_state_cache AS pay_state_cache
+  WHERE pay_state_cache.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.timesheets_financials AS target_financial
+  WHERE target_financial.timesheet_id = ANY(v_timesheet_ids);
+
+  DELETE FROM public.timesheets AS target_timesheet
+  WHERE target_timesheet.timesheet_id = ANY(v_timesheet_ids);
+  GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+
+  IF v_deleted_count <> COALESCE(array_length(v_timesheet_ids, 1), 0) THEN
+    RAISE EXCEPTION USING MESSAGE = 'DELETE_COUNT_MISMATCH';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'kind', 'STANDARD_DELETE',
+    'decision', 'PERMANENT_DELETE',
+    'apply_performed', true,
+    'deleted', true,
+    'committed', true,
+    'database_commit_confirmed', true,
+    'current_timesheet_id', v_current_timesheet_id,
+    'current_row_signature', v_initial_row_signature,
+    'timesheet_ids', to_jsonb(v_timesheet_ids),
+    'contract_week_ids', to_jsonb(v_contract_week_ids),
+    'nhsp_shift_ids', to_jsonb(v_nhsp_shift_ids),
+    'preserved_source_timesheet_ids', to_jsonb(v_preserved_source_timesheet_ids),
+    'preserved_source_contract_week_ids', to_jsonb(v_preserved_source_contract_week_ids),
+    'deleted_timesheet_ids', to_jsonb(v_timesheet_ids),
+    'deleted_contract_week_ids', '[]'::jsonb,
+    'detached_contract_week_ids', to_jsonb(v_contract_week_ids),
+    'detached_nhsp_shift_ids', to_jsonb(v_nhsp_shift_ids),
+    'detached_contract_weeks', v_detached_contract_weeks,
+    'detached_nhsp_shifts', v_detached_nhsp_shifts,
+    'deleted_timesheets', v_deleted_count,
+    'r2_cleanup_keys', to_jsonb(v_r2_keys),
+    'r2_cleanup_required', COALESCE(array_length(v_r2_keys, 1), 0) > 0
+  );
+EXCEPTION
+  WHEN lock_not_available OR deadlock_detected THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'kind', 'STANDARD_DELETE',
+      'decision', 'BLOCKED',
+      'apply_performed', false,
+      'error_code', 'LOCK_TIMEOUT',
+      'message', 'The Timesheet is currently being changed. Refresh and try again.'
+    );
+END;
+$function$;

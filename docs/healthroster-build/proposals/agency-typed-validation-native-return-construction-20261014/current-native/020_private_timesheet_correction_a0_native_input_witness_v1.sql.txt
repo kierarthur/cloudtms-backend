@@ -1,0 +1,52 @@
+create or replace function private.timesheet_correction_a0_native_input_witness_v1(p_request_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.timesheet_correction_requests%rowtype; v_rows jsonb; v_result jsonb;
+  v_ids uuid[]; v_weekly jsonb; v_imports jsonb; v_validations jsonb;
+begin
+  select q.* into strict r from private.timesheet_correction_requests q where q.id=p_request_id;
+  if r.state<>'WAITING' or r.origin<>'SIGNED_TIMESHEET_CORRECTION' or r.reversed_financial_id is not null
+    or r.frozen_original_json#>>'{timesheet,sheet_scope}' is distinct from 'WEEKLY' then
+    raise exception 'CORRECTION_A0_NATIVE_INPUT_UNPROVED' using errcode='55000'; end if;
+  v_ids:=array[r.reversed_timesheet_id,r.replacement_timesheet_id];
+  select jsonb_agg(to_jsonb(ctx) order by ctx.effective_timesheet_id) into v_rows
+    from public.tsfin_load_context_batch(v_ids) ctx;
+  if v_rows is null or jsonb_array_length(v_rows)<>2
+    or exists(select 1 from jsonb_array_elements(v_rows) ctx(value)
+      where ctx.value#>>'{out_candidate,id}' is distinct from r.candidate_id::text
+        or ctx.value->>'out_client_id' is distinct from r.client_id::text
+        or ctx.value#>>'{out_timesheet,contract_id}' is distinct from r.contract_id::text
+        or ctx.value->>'effective_timesheet_id' not in(r.reversed_timesheet_id::text,r.replacement_timesheet_id::text))
+    or (select count(distinct ctx.value->>'effective_timesheet_id') from jsonb_array_elements(v_rows) ctx(value))<>2 then
+    raise exception 'CORRECTION_A0_NATIVE_INPUT_UNPROVED' using errcode='55000'; end if;
+  select jsonb_agg(to_jsonb(ctx) order by ctx.timesheet_id) into v_weekly
+    from public.tsfin_load_weekly_context_batch(v_ids) ctx;
+  select jsonb_agg(to_jsonb(ctx) order by ctx.timesheet_id) into v_imports
+    from public.tsfin_load_nhsp_shifts_batch(v_ids) ctx;
+  if v_weekly is null or jsonb_array_length(v_weekly)<>2 or v_imports is null or jsonb_array_length(v_imports)<>2
+    or exists(select 1 from jsonb_array_elements(v_weekly) ctx(value)
+      where ctx.value->>'timesheet_id' not in(r.reversed_timesheet_id::text,r.replacement_timesheet_id::text)
+        or ctx.value#>>'{out_cw,timesheet_id}' is distinct from ctx.value->>'timesheet_id'
+        or ctx.value#>>'{out_cw,contract_id}' is distinct from r.contract_id::text
+        or ctx.value#>>'{out_contract,id}' is distinct from r.contract_id::text
+        or ctx.value#>>'{out_contract,candidate_id}' is distinct from r.candidate_id::text
+        or ctx.value#>>'{out_contract,client_id}' is distinct from r.client_id::text)
+    or (select count(distinct ctx.value->>'timesheet_id') from jsonb_array_elements(v_weekly) ctx(value))<>2
+    or exists(select 1 from jsonb_array_elements(v_imports) ctx(value)
+      where ctx.value->>'timesheet_id' not in(r.reversed_timesheet_id::text,r.replacement_timesheet_id::text)
+        or jsonb_typeof(ctx.value->'shifts') is distinct from 'array')
+    or (select count(distinct ctx.value->>'timesheet_id') from jsonb_array_elements(v_imports) ctx(value))<>2 then
+    raise exception 'CORRECTION_A0_NATIVE_INPUT_UNPROVED' using errcode='55000'; end if;
+  -- Exact fields/order used by the existing Worker readWeeklyValidation path.
+  -- Empty succeeds as an explicit successful read, never missing authority.
+  select jsonb_agg(jsonb_build_object('timesheet_id',input.id,'rows',coalesce(read_rows.rows,'[]'::jsonb)) order by input.id)
+    into v_validations from unnest(v_ids) input(id)
+    left join lateral(select jsonb_agg(to_jsonb(v) order by v.updated_at desc) rows from(
+      select tv.timesheet_id,tv.status,tv.reason_code,tv.validated_at_utc,tv.updated_at
+      from public.timesheet_validations tv where tv.timesheet_id=input.id order by tv.updated_at desc limit 2
+    ) v) read_rows on true;
+  v_result:=jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_NATIVE_INPUT_WITNESS_V1',
+    'request_id',r.id,'contexts',v_rows,'weekly_contexts',v_weekly,'import_contexts',v_imports,'validations',v_validations);
+  return v_result||jsonb_build_object('sha256',encode(extensions.digest(convert_to(v_result::text,'UTF8'),'sha256'),'hex'));
+end;
+$function$;

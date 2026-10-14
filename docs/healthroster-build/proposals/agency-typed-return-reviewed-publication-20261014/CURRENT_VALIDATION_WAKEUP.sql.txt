@@ -1,0 +1,60 @@
+create or replace function public.trg_tsfin_timesheet_validations_wakeup()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ts_id uuid;
+  v_skip boolean := false;
+begin
+  v_ts_id := coalesce(new.timesheet_id, old.timesheet_id);
+
+  if v_ts_id is null then
+    return coalesce(new, old);
+  end if;
+
+  -- ------------------------------------------------------------
+  -- Skip if timesheet is invoice-locked (issued/paid etc), or revoked, or missing
+  -- We gate on timesheets_financials.is_current + locked_by_invoice_id
+  -- and also ensure the timesheet exists and is current.
+  -- ------------------------------------------------------------
+  select
+    (
+      tf.timesheet_id is null
+      or tf.is_current is not true
+      or tf.locked_by_invoice_id is not null
+      or ts.timesheet_id is null
+      or ts.is_current is not true
+      or ts.revoked_at is not null
+    ) as should_skip
+  into v_skip
+  from public.timesheets ts
+  left join public.timesheets_financials tf
+    on tf.timesheet_id = ts.timesheet_id
+   and tf.is_current = true
+  where ts.timesheet_id = v_ts_id
+  limit 1;
+
+  if coalesce(v_skip, true) then
+    return coalesce(new, old);
+  end if;
+
+  -- Priority TSFIN enqueue (idempotent on (timesheet_id, reason))
+  perform public.enqueue_ts_financials_priority(
+    array[v_ts_id],
+    'CONTEXT_CHANGED'::public.ts_fin_reason_enum
+  );
+
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists trg_tsfin_timesheet_validations_wakeup
+  on public.timesheet_validations;
+
+create trigger trg_tsfin_timesheet_validations_wakeup
+after insert or update
+on public.timesheet_validations
+for each row
+execute function public.trg_tsfin_timesheet_validations_wakeup();

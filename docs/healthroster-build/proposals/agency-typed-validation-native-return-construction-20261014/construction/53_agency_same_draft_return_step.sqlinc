@@ -1,0 +1,122 @@
+-- Mechanical RETURN after genuine typed validation AND its native recompute.
+-- The whole-week producer/writer/authorised Worker mode are required source
+-- dependencies, not supplied by an asserted readiness flag in this function.
+create or replace function private.weekly_source_agency_change_return_step_v1(
+ p_request_id uuid,p_actual_actor_user_id uuid
+) returns private.weekly_source_agency_timesheet_change_requests
+language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ actor public.tms_users%rowtype; ts public.timesheets%rowtype;
+ fin public.timesheets_financials%rowtype; validation public.timesheet_validations%rowtype;
+ week_facts record; receipt jsonb; stored_validation jsonb; completion jsonb;
+ signature jsonb; actual_signature text; error_code text; error_state text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,
+  r.initial_row_signature,r.request_key,p_actual_actor_user_id);
+ select * into strict actor from public.tms_users where id=p_actual_actor_user_id and is_active;
+ if r.state='COMPLETED' then
+  if r.completed_receipt->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_NATIVE_COMPLETED_V1'
+   or r.completed_receipt->>'request_id' is distinct from r.id::text
+   or r.completed_receipt->>'request_sha256' is distinct from encode(r.request_sha256,'hex')
+   or r.completed_receipt->>'timesheet_id' is distinct from r.current_timesheet_id::text
+   or r.completed_receipt->>'timesheet_version' is distinct from r.current_timesheet_version::text
+   or r.completed_receipt->>'original_draft_invoice_id' is distinct from r.original_draft_invoice_id::text
+   or r.completed_receipt->>'original_creator_user_id' is distinct from r.actor_user_id::text
+   or r.completed_receipt->>'completed_actor_user_id' is distinct from r.completed_by_user_id::text
+   or r.return_hold or r.completed_at_utc is null or r.phase<>'COMPLETED'
+   or (r.completed_receipt->>'completed_at_utc')::timestamptz is distinct from r.completed_at_utc then
+   raise exception 'AGENCY_CHANGE_GENUINE_COMPLETED_RECEIPT_REQUIRED' using errcode='55000';end if;
+  return r; -- Current reader authority was checked; original step actor stays immutable.
+ end if;
+ if r.phase<>'AUTHORISED' then raise exception 'AGENCY_CHANGE_RETURN_PHASE_NOT_READY' using errcode='55000';end if;
+ begin
+  select * into strict ts from public.timesheets where timesheet_id=r.current_timesheet_id for update;
+  select * into strict fin from public.timesheets_financials where id=r.current_financial_id and is_current for update;
+  select * into strict validation from public.timesheet_validations where timesheet_id=ts.timesheet_id for update;
+  select * into strict week_facts from private.weekly_source_agency_week_complete_v1(ts.timesheet_id);
+  if ts.timesheet_id is distinct from r.initial_timesheet_id or ts.version is distinct from r.current_timesheet_version
+   or ts.is_current is distinct from true or ts.revoked_at is not null or ts.archived_at_utc is not null
+   or ts.authorised_at_server is null or fin.authorised_at_utc is distinct from ts.authorised_at_server
+   or fin.authorised_by_user_id::text is distinct from r.native_receipts#>>'{authorise,phase_actor_user_id}'
+   or (r.native_receipts#>>'{authorise,authorised_at_server}')::timestamptz is distinct from ts.authorised_at_server
+   or fin.timesheet_version is distinct from ts.version or fin.is_stale is distinct from false
+   or fin.processing_status::text is distinct from 'READY_FOR_INVOICE' or fin.locked_by_invoice_id is not null
+   or validation.validation_source_kind is distinct from 'AGENCY_INVOICE_WEEK'
+   or validation.validation_source_publication_id is distinct from r.source_publication_id
+   or validation.last_source is not null or validation.status::text is distinct from 'VALIDATION_OK'
+   or validation.pre_validated or validation.validated_at_utc is null
+   or week_facts.complete is distinct from true or week_facts.reasons is distinct from array[]::text[]
+   or week_facts.facts_hash is null or week_facts.facts_hash!~'^[0-9a-f]{64}$'
+   or encode(validation.validation_source_facts_sha256,'hex') is distinct from week_facts.facts_hash then
+   raise exception 'AGENCY_CHANGE_CURRENT_NATIVE_WEEK_VALIDATION_REQUIRED' using errcode='55000';end if;
+  stored_validation:=r.native_receipts->'validation_recompute';
+  if jsonb_typeof(stored_validation) is distinct from 'object'
+   or stored_validation->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_NATIVE_VALIDATION_RECOMPUTE_V1'
+   or stored_validation->>'request_id' is distinct from r.id::text
+   or stored_validation->>'timesheet_id' is distinct from ts.timesheet_id::text
+   or stored_validation->>'timesheet_version' is distinct from ts.version::text
+   or stored_validation->>'financial_id' is distinct from fin.id::text
+   or stored_validation->>'publication_id' is distinct from r.source_publication_id::text
+   or stored_validation->>'facts_sha256' is distinct from week_facts.facts_hash
+   or stored_validation->>'validation_actor_user_id' is distinct from validation.validation_source_actor_user_id::text
+   or stored_validation->>'native_ok_count' is distinct from '1'
+   or stored_validation->>'native_fail_count' is distinct from '0'
+   or stored_validation->>'observed_outbox_id' is null
+   or stored_validation->>'financial_row_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_AGENCY_VALIDATION_RECOMPUTE_ROW_V1',to_jsonb(fin)),'hex') then
+   raise exception 'AGENCY_CHANGE_GENUINE_VALIDATION_RECOMPUTE_RECEIPT_REQUIRED' using errcode='55000';end if;
+  -- This native readiness read does not advance from queue absence or TSFIN status.
+  -- Receipt production must be mounted from the actual canonical writer/complete owner.
+  receipt:=private.weekly_source_agency_draft_round_trip_v1(r.request_key,'RETURN',p_actual_actor_user_id);
+  if receipt->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_DRAFT_ROUND_TRIP_RECEIPT_V1'
+   or receipt->>'ok' is distinct from 'true' or receipt->>'request_id' is distinct from r.id::text
+   or receipt->>'step' is distinct from 'RETURN'
+   or receipt->>'phase_actor_user_id' is distinct from p_actual_actor_user_id::text
+   or receipt->>'original_draft_invoice_id' is distinct from r.original_draft_invoice_id::text
+   or receipt->>'original_draft_invoice_no' is distinct from r.original_draft_invoice_no
+   or (r.original_draft_invoice_id is null and receipt->>'not_required' is distinct from 'true')
+   or (r.original_draft_invoice_id is not null and
+      (receipt->>'timesheet_id' is distinct from r.current_timesheet_id::text
+       or receipt->>'financial_id' is distinct from r.current_financial_id::text)) then
+   raise exception 'AGENCY_CHANGE_GENUINE_SAME_D1_RETURN_RECEIPT_REQUIRED' using errcode='55000';end if;
+  signature:=public.timesheet_lifecycle_guard_signature_v1(r.current_timesheet_id,r.contract_week_id,false);
+  actual_signature:=nullif(btrim(coalesce(signature->>'backend_row_signature',signature->>'row_signature',signature->>'signature')),'');
+  if actual_signature is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE' using errcode='55000';end if;
+  completion:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_COMPLETED_V1','request_id',r.id,
+   'request_sha256',encode(r.request_sha256,'hex'),'original_creator_user_id',r.actor_user_id,
+   'completed_actor_user_id',p_actual_actor_user_id,'timesheet_id',ts.timesheet_id,'timesheet_version',ts.version,
+   'financial_id',fin.id,'original_draft_invoice_id',r.original_draft_invoice_id,
+   'original_draft_invoice_no',r.original_draft_invoice_no,'publication_id',r.source_publication_id,
+   'week_facts_sha256',week_facts.facts_hash,'validation_recompute',stored_validation,'return_receipt',receipt,
+   'completed_at_utc',transaction_timestamp(),'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid());
+  if octet_length(completion::text)>16384 or octet_length((r.native_receipts||jsonb_build_object('return',receipt))::text)>65536 then
+   raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED' using errcode='54000';end if;
+  update private.weekly_source_agency_timesheet_change_requests set state='COMPLETED',phase='COMPLETED',return_hold=false,
+   native_receipts=native_receipts||jsonb_build_object('return',receipt),completed_receipt=completion,
+   current_row_signature=actual_signature,completed_at_utc=transaction_timestamp(),completed_by_user_id=p_actual_actor_user_id,
+   updated_by_user_id=p_actual_actor_user_id,updated_at_utc=transaction_timestamp(),version=version+1,last_refusal_code=null
+   where id=r.id returning * into r;
+  insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)
+  values(gen_random_uuid(),transaction_timestamp(),p_actual_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,
+   'NATIVE_SAME_D1_RETURN_COMPLETED',jsonb_build_object('phase',r.phase,'original_draft_invoice_id',r.original_draft_invoice_id,
+    'original_creator_user_id',r.actor_user_id,'actual_phase_actor_user_id',p_actual_actor_user_id),r.reason,r.request_key);
+ exception when others then
+  get stacked diagnostics error_code=MESSAGE_TEXT,error_state=RETURNED_SQLSTATE;
+  if error_state='55P03' then raise;end if;
+  update private.weekly_source_agency_timesheet_change_requests set last_refusal_code=case
+   when error_state='42883' then 'AGENCY_CHANGE_NATIVE_WEEK_PRODUCER_UNAVAILABLE'
+   when error_code~'^[A-Z][A-Z0-9_]{0,199}$' then error_code else 'AGENCY_CHANGE_NATIVE_RETURN_FAILED' end,
+   version=version+1,updated_at_utc=transaction_timestamp() where id=p_request_id returning * into r;
+ end;
+ return r;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NATIVE_RETURN_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_change_return_step_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_change_return_step_v1(uuid,uuid) from public,anon,authenticated,service_role;

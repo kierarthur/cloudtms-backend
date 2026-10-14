@@ -1,0 +1,398 @@
+CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_signature_v1(p_timesheet_id uuid DEFAULT NULL::uuid, p_contract_week_id uuid DEFAULT NULL::uuid, p_include_payload boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_requested_ts public.timesheets%ROWTYPE;
+  v_current_ts public.timesheets%ROWTYPE;
+  v_week public.contract_weeks%ROWTYPE;
+  v_tsfin public.timesheets_financials%ROWTYPE;
+  v_validation public.timesheet_validations%ROWTYPE;
+
+  v_resolved_booking_id text := NULL;
+  v_target_exists boolean := FALSE;
+  v_invoice_segments_locked integer := 0;
+
+  v_evidence_payload jsonb := '{}'::jsonb;
+  v_staged_payload jsonb := '{}'::jsonb;
+  v_validation_payload jsonb := '{}'::jsonb;
+  v_timesheet_payload jsonb := '{}'::jsonb;
+  v_contract_week_payload jsonb := '{}'::jsonb;
+  v_tsfin_payload jsonb := '{}'::jsonb;
+  v_identity_payload jsonb := '{}'::jsonb;
+  v_signature_payload jsonb := '{}'::jsonb;
+  v_signature text := NULL;
+BEGIN
+  IF COALESCE(p_include_payload, false) IS NOT TRUE THEN
+    RETURN public.timesheet_lifecycle_guard_signature_v1(p_timesheet_id, p_contract_week_id, false);
+  END IF;
+  IF p_timesheet_id IS NULL AND p_contract_week_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', 'INVALID_PAYLOAD',
+      'message', 'timesheet_id or contract_week_id is required',
+      'signature', NULL,
+      'backend_row_signature', NULL,
+      'row_signature', NULL
+    );
+  END IF;
+
+  IF p_contract_week_id IS NOT NULL THEN
+    SELECT cw.*
+      INTO v_week
+    FROM public.contract_weeks AS cw
+    WHERE cw.id = p_contract_week_id
+    LIMIT 1;
+  END IF;
+
+  IF p_timesheet_id IS NOT NULL THEN
+    SELECT ts.*
+      INTO v_requested_ts
+    FROM public.timesheets AS ts
+    WHERE ts.timesheet_id = p_timesheet_id
+    LIMIT 1;
+
+    IF v_requested_ts.timesheet_id IS NOT NULL THEN
+      v_resolved_booking_id := v_requested_ts.booking_id;
+    END IF;
+  END IF;
+
+  IF v_resolved_booking_id IS NULL AND v_week.timesheet_id IS NOT NULL THEN
+    SELECT ts.*
+      INTO v_requested_ts
+    FROM public.timesheets AS ts
+    WHERE ts.timesheet_id = v_week.timesheet_id
+    LIMIT 1;
+
+    IF v_requested_ts.timesheet_id IS NOT NULL THEN
+      v_resolved_booking_id := v_requested_ts.booking_id;
+    END IF;
+  END IF;
+
+  IF v_resolved_booking_id IS NOT NULL THEN
+    SELECT ts.*
+      INTO v_current_ts
+    FROM public.timesheets AS ts
+    WHERE ts.booking_id = v_resolved_booking_id
+      AND ts.is_current = true
+    ORDER BY ts.version DESC, ts.updated_at DESC NULLS LAST, ts.created_at DESC NULLS LAST, ts.timesheet_id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NULL AND v_requested_ts.timesheet_id IS NOT NULL THEN
+    v_current_ts := v_requested_ts;
+  END IF;
+
+  IF v_week.id IS NULL AND v_current_ts.timesheet_id IS NOT NULL THEN
+    SELECT cw.*
+      INTO v_week
+    FROM public.contract_weeks AS cw
+    WHERE cw.timesheet_id = v_current_ts.timesheet_id
+    ORDER BY cw.updated_at DESC NULLS LAST, cw.created_at DESC NULLS LAST, cw.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_week.id IS NOT NULL AND v_resolved_booking_id IS NULL AND v_current_ts.booking_id IS NOT NULL THEN
+    v_resolved_booking_id := v_current_ts.booking_id;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NOT NULL THEN
+    SELECT tf.*
+      INTO v_tsfin
+    FROM public.timesheets_financials AS tf
+    WHERE tf.timesheet_id = v_current_ts.timesheet_id
+      AND tf.is_current = true
+    ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.updated_at DESC NULLS LAST, tf.created_at DESC NULLS LAST, tf.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NOT NULL OR v_resolved_booking_id IS NOT NULL THEN
+    SELECT tv.*
+      INTO v_validation
+    FROM public.timesheet_validations AS tv
+    WHERE (
+        v_current_ts.timesheet_id IS NOT NULL
+        AND tv.timesheet_id = v_current_ts.timesheet_id
+      )
+       OR (
+        v_resolved_booking_id IS NOT NULL
+        AND tv.booking_id = v_resolved_booking_id
+      )
+    ORDER BY tv.updated_at DESC NULLS LAST, tv.created_at DESC NULLS LAST, tv.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_tsfin.id IS NOT NULL THEN
+    SELECT COUNT(*)::integer
+      INTO v_invoice_segments_locked
+    FROM jsonb_array_elements(
+      CASE
+        WHEN v_tsfin.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+        WHEN jsonb_typeof(v_tsfin.invoice_breakdown_json) = 'array' THEN v_tsfin.invoice_breakdown_json
+        WHEN jsonb_typeof(v_tsfin.invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(v_tsfin.invoice_breakdown_json -> 'segments') = 'array' THEN v_tsfin.invoice_breakdown_json -> 'segments'
+        ELSE '[]'::jsonb
+      END
+    ) AS invoice_segment(segment_json)
+    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NOT NULL THEN
+    WITH evidence_rows AS (
+      SELECT
+        ev.id,
+        ev.kind,
+        ev.storage_key,
+        ev.created_at,
+        ev.display_name
+      FROM public.timesheet_evidence AS ev
+      WHERE ev.timesheet_id = v_current_ts.timesheet_id
+    ), evidence_ordered AS (
+      SELECT
+        er.id,
+        er.kind,
+        er.storage_key,
+        er.created_at,
+        er.display_name,
+        ROW_NUMBER() OVER (
+          PARTITION BY UPPER(COALESCE(NULLIF(BTRIM(er.kind), ''), 'OTHER'))
+          ORDER BY er.created_at ASC NULLS LAST, er.id ASC
+        ) AS kind_rank
+      FROM evidence_rows AS er
+    )
+    SELECT jsonb_strip_nulls(
+      jsonb_build_object(
+        'count', COUNT(*)::integer,
+        'updated_at', MAX(eo.created_at),
+        'timesheet_count', COUNT(*) FILTER (WHERE UPPER(COALESCE(NULLIF(BTRIM(eo.kind), ''), 'OTHER')) = 'TIMESHEET')::integer,
+        'mileage_count', COUNT(*) FILTER (WHERE UPPER(COALESCE(NULLIF(BTRIM(eo.kind), ''), 'OTHER')) = 'MILEAGE')::integer,
+        'travel_count', COUNT(*) FILTER (WHERE UPPER(COALESCE(NULLIF(BTRIM(eo.kind), ''), 'OTHER')) = 'TRAVEL')::integer,
+        'accommodation_count', COUNT(*) FILTER (WHERE UPPER(COALESCE(NULLIF(BTRIM(eo.kind), ''), 'OTHER')) = 'ACCOMMODATION')::integer,
+        'other_count', COUNT(*) FILTER (WHERE UPPER(COALESCE(NULLIF(BTRIM(eo.kind), ''), 'OTHER')) NOT IN ('TIMESHEET','MILEAGE','TRAVEL','ACCOMMODATION'))::integer,
+        'primary_timesheet_storage_key', MIN(eo.storage_key) FILTER (WHERE UPPER(COALESCE(NULLIF(BTRIM(eo.kind), ''), 'OTHER')) = 'TIMESHEET' AND eo.kind_rank = 1),
+        'primary_storage_key', MIN(eo.storage_key) FILTER (WHERE eo.kind_rank = 1)
+      )
+    )
+      INTO v_evidence_payload
+    FROM evidence_ordered AS eo;
+  ELSE
+    v_evidence_payload := jsonb_build_object(
+      'count', 0,
+      'timesheet_count', 0,
+      'mileage_count', 0,
+      'travel_count', 0,
+      'accommodation_count', 0,
+      'other_count', 0
+    );
+  END IF;
+
+  IF v_week.id IS NOT NULL THEN
+    WITH staged_rows AS (
+      SELECT
+        mq.id,
+        mq.timesheet_id,
+        mq.r2_key,
+        mq.status,
+        mq.uploaded_at_utc,
+        mq.last_rotation_deg,
+        mq.meta_json,
+        UPPER(COALESCE(
+          NULLIF(BTRIM(mq.meta_json ->> 'staged_kind'), ''),
+          NULLIF(BTRIM(mq.meta_json ->> 'kind'), ''),
+          NULLIF(BTRIM(mq.meta_json ->> 'attached_kind'), ''),
+          'TIMESHEET'
+        )) AS staged_kind,
+        NULLIF(regexp_replace(COALESCE(
+          NULLIF(BTRIM(COALESCE(mq.r2_key, '')), ''),
+          NULLIF(BTRIM(COALESCE(mq.meta_json ->> 'r2_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(mq.meta_json ->> 'storage_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(mq.meta_json ->> 'file_key', '')), ''),
+          NULLIF(BTRIM(COALESCE(mq.meta_json ->> 'canonical_key', '')), ''),
+          ''
+        ), '^/+', ''), '') AS storage_key
+      FROM public.manual_timesheet_queue AS mq
+      WHERE mq.status = 'STAGED'
+        AND NULLIF(BTRIM(COALESCE(mq.meta_json ->> 'contract_week_id', '')), '') = v_week.id::text
+    ), staged_key_rows AS (
+      SELECT DISTINCT sr.storage_key
+      FROM staged_rows AS sr
+      WHERE sr.staged_kind = 'TIMESHEET'
+        AND sr.storage_key IS NOT NULL
+      ORDER BY sr.storage_key
+    )
+    SELECT jsonb_strip_nulls(
+      jsonb_build_object(
+        'contract_week_id', v_week.id,
+        'staged_count', COUNT(*)::integer,
+        'staged_updated_at', MAX(sr.uploaded_at_utc),
+        'active_staged_timesheet_count', COUNT(*) FILTER (WHERE sr.staged_kind = 'TIMESHEET')::integer,
+        'active_staged_timesheet_storage_key_count', (SELECT COUNT(*)::integer FROM staged_key_rows),
+        'active_staged_timesheet_storage_keys', COALESCE((SELECT jsonb_agg(skr.storage_key ORDER BY skr.storage_key) FROM staged_key_rows AS skr), '[]'::jsonb),
+        'has_staged_timesheet', COUNT(*) FILTER (WHERE sr.staged_kind = 'TIMESHEET') > 0,
+        'has_staged_mileage', COUNT(*) FILTER (WHERE sr.staged_kind = 'MILEAGE') > 0,
+        'has_staged_travel', COUNT(*) FILTER (WHERE sr.staged_kind = 'TRAVEL') > 0,
+        'has_staged_accommodation', COUNT(*) FILTER (WHERE sr.staged_kind = 'ACCOMMODATION') > 0,
+        'has_staged_other', COUNT(*) FILTER (WHERE sr.staged_kind NOT IN ('TIMESHEET','MILEAGE','TRAVEL','ACCOMMODATION')) > 0,
+        'primary_staged_timesheet_storage_key', MIN(sr.storage_key) FILTER (WHERE sr.staged_kind = 'TIMESHEET'),
+        'primary_staged_timesheet_rotation_degrees', MIN(sr.last_rotation_deg) FILTER (WHERE sr.staged_kind = 'TIMESHEET' AND sr.storage_key = (SELECT MIN(skr.storage_key) FROM staged_key_rows AS skr))
+      )
+    )
+      INTO v_staged_payload
+    FROM staged_rows AS sr;
+  ELSE
+    v_staged_payload := jsonb_build_object(
+      'staged_count', 0,
+      'active_staged_timesheet_count', 0,
+      'active_staged_timesheet_storage_key_count', 0,
+      'active_staged_timesheet_storage_keys', '[]'::jsonb,
+      'has_staged_timesheet', false,
+      'has_staged_mileage', false,
+      'has_staged_travel', false,
+      'has_staged_accommodation', false,
+      'has_staged_other', false
+    );
+  END IF;
+
+  v_identity_payload := jsonb_strip_nulls(
+    jsonb_build_object(
+      'requested_timesheet_id', p_timesheet_id,
+      'requested_contract_week_id', p_contract_week_id,
+      'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+      'booking_id', COALESCE(v_current_ts.booking_id, v_resolved_booking_id),
+      'target_exists', (v_current_ts.timesheet_id IS NOT NULL OR v_week.id IS NOT NULL)
+    )
+  );
+
+  v_timesheet_payload := jsonb_strip_nulls(
+    jsonb_build_object(
+      'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      'booking_id', NULLIF(v_current_ts.booking_id, ''),
+      'version', v_current_ts.version,
+      'is_current', v_current_ts.is_current,
+    'archived_at_utc', v_current_ts.archived_at_utc,
+    'archived_by_user_id', v_current_ts.archived_by_user_id,
+    'archived_reason_code', v_current_ts.archived_reason_code,
+      'status', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.status::text END,
+      'sheet_scope', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.sheet_scope::text END,
+      'submission_mode', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.submission_mode::text END,
+      'line_type', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.line_type::text END,
+      'updated_at', v_current_ts.updated_at,
+      'authorised_at_server', v_current_ts.authorised_at_server,
+      'manual_pdf_r2_key', NULLIF(v_current_ts.manual_pdf_r2_key, ''),
+      'manual_pdf_rotation_degrees', v_current_ts.manual_pdf_rotation_degrees,
+      'qr_status', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.qr_status::text END,
+      'qr_generated_at', v_current_ts.qr_generated_at,
+      'qr_scanned_at', v_current_ts.qr_scanned_at,
+      'qr_signed_at_utc', v_current_ts.qr_signed_at_utc,
+      'generated_pdf_at_utc', v_current_ts.generated_pdf_at_utc,
+      'reference_number', NULLIF(v_current_ts.reference_number, ''),
+      'is_adjustment', v_current_ts.is_adjustment,
+      'parent_timesheet_id', v_current_ts.parent_timesheet_id
+    )
+  );
+
+  v_contract_week_payload := jsonb_strip_nulls(
+    jsonb_build_object(
+      'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+      'contract_id', v_week.contract_id,
+      'week_ending_date', v_week.week_ending_date,
+      'additional_seq', v_week.additional_seq,
+      'status', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.status::text END,
+      'submission_mode_snapshot', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.submission_mode_snapshot::text END,
+      'timesheet_id', v_week.timesheet_id,
+      'uploaded_pdf_r2_key', NULLIF(v_week.uploaded_pdf_r2_key, ''),
+      'updated_at', v_week.updated_at,
+      'is_adjustment', v_week.is_adjustment,
+      'enforce_day_partition', v_week.enforce_day_partition,
+      'allowed_days_mask', NULLIF(v_week.allowed_days_mask, ''),
+      'split_boundary_date', v_week.split_boundary_date,
+      'split_group_key', NULLIF(v_week.split_group_key, '')
+    )
+  );
+
+  v_tsfin_payload := jsonb_strip_nulls(
+    jsonb_build_object(
+      'timesheet_financials_id', CASE WHEN v_tsfin.id IS NULL THEN NULL ELSE v_tsfin.id END,
+      'timesheet_version', v_tsfin.timesheet_version,
+      'is_current', v_tsfin.is_current,
+      'is_stale', v_tsfin.is_stale,
+      'processing_status', CASE WHEN v_tsfin.id IS NULL THEN NULL ELSE v_tsfin.processing_status::text END,
+      'candidate_assignment', CASE WHEN v_tsfin.id IS NULL THEN NULL ELSE v_tsfin.candidate_assignment::text END,
+      'basis', CASE WHEN v_tsfin.id IS NULL THEN NULL ELSE v_tsfin.basis::text END,
+      'updated_at', v_tsfin.updated_at,
+      'computed_at_utc', v_tsfin.computed_at_utc,
+      'locked_by_invoice_id', v_tsfin.locked_by_invoice_id,
+      'locked_at_utc', v_tsfin.locked_at_utc,
+      'invoice_segments_locked', v_invoice_segments_locked,
+      'paid_at_utc', v_tsfin.paid_at_utc,
+      'pay_on_hold', v_tsfin.pay_on_hold,
+      'candidate_id', v_tsfin.candidate_id,
+      'client_id', v_tsfin.client_id,
+      'pay_method', NULLIF(v_tsfin.pay_method, ''),
+      'has_rate_issue', v_tsfin.has_rate_issue,
+      'has_pay_channel_issue', v_tsfin.has_pay_channel_issue,
+      'hr_crosscheck_status', NULLIF(v_tsfin.hr_crosscheck_status, ''),
+      'total_hours', v_tsfin.total_hours,
+      'total_pay_ex_vat', v_tsfin.total_pay_ex_vat,
+      'total_charge_ex_vat', v_tsfin.total_charge_ex_vat,
+      'margin_ex_vat', v_tsfin.margin_ex_vat,
+      'expenses_pay_ex_vat', v_tsfin.expenses_pay_ex_vat,
+      'expenses_charge_ex_vat', v_tsfin.expenses_charge_ex_vat,
+      'mileage_units', v_tsfin.mileage_units,
+      'mileage_pay_ex_vat', v_tsfin.mileage_pay_ex_vat,
+      'mileage_charge_ex_vat', v_tsfin.mileage_charge_ex_vat
+    )
+  );
+
+  v_validation_payload := jsonb_strip_nulls(
+    jsonb_build_object(
+      'validation_id', CASE WHEN v_validation.id IS NULL THEN NULL ELSE v_validation.id END,
+      'status', CASE WHEN v_validation.id IS NULL THEN NULL ELSE v_validation.status::text END,
+      'reason_code', NULLIF(v_validation.reason_code, ''),
+      'pre_validated', v_validation.pre_validated,
+      'validated_at_utc', v_validation.validated_at_utc,
+      'override_confirmed_at_utc', v_validation.override_confirmed_at_utc,
+      'updated_at', v_validation.updated_at,
+      'hr_request_source', CASE WHEN v_validation.id IS NULL THEN NULL ELSE v_validation.hr_request_source::text END
+    )
+  );
+
+  v_signature_payload :=
+    jsonb_build_object(
+      'identity', v_identity_payload,
+      'timesheet', v_timesheet_payload,
+      'contract_week', v_contract_week_payload
+    )
+    || jsonb_build_object(
+      'tsfin', v_tsfin_payload,
+      'validation', v_validation_payload,
+      'evidence', COALESCE(v_evidence_payload, '{}'::jsonb),
+      'staged_evidence', COALESCE(v_staged_payload, '{}'::jsonb)
+    );
+
+  v_signature := md5(v_signature_payload::text);
+  v_target_exists := (v_current_ts.timesheet_id IS NOT NULL OR v_week.id IS NOT NULL);
+
+  RETURN jsonb_strip_nulls(
+    jsonb_build_object(
+      'ok', v_target_exists,
+      'signature', v_signature,
+      'backend_row_signature', v_signature,
+      'row_signature', v_signature,
+      'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+      'booking_id', COALESCE(v_current_ts.booking_id, v_resolved_booking_id),
+      'target_exists', v_target_exists
+    )
+    || CASE
+      WHEN COALESCE(p_include_payload, false) THEN jsonb_build_object('signature_payload', v_signature_payload)
+      ELSE '{}'::jsonb
+    END
+  );
+END;
+$function$;

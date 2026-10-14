@@ -1,0 +1,85 @@
+### 26.4 B2 — the whole week must be complete: the preset FEEDS the existing HealthRoster-validation hold (WP-AI-2, blocker; R-200, R-215)
+
+**Re-planned on the existing hold (round-5 critic M5/A2; owner reuse rule).** The new classification blocker and the send check of the earlier draft are **withdrawn**. The existing HealthRoster-validation hold is already active on preset Contracts, and it does the holding.
+
+**Why the hold is already active.** The preset needs `autoprocess_hr=true` and `no_timesheet_required=false`. The settings core accepts that combination only with `requires_hr=true` (`06102026_1214…:152-154`), and `hr_validation_required_for_invoice` follows it (`:226-228`).
+
+**Where the existing hold acts today (all REUSE):**
+1. **Authorise:** puts the TSFIN in `READY_FOR_HR` (`03102026_0500…:8846-8860`).
+2. **Worker TSFIN recompute:** keeps `READY_FOR_HR` until the latest `timesheet_validations.status` is `VALIDATION_OK` or `OVERRIDDEN` (`broker/src/index.js:171983-171988`; also `:172757-172765`).
+3. **Batch classification:** `NOT_READY_FOR_INVOICE` / `HR_VALIDATION_BLOCKED` (WSISO `:271-273, 534-548, 667-668`).
+4. **Generation:** `HEALTHROSTER_VALIDATION_REQUIRED` on `tf.hr_crosscheck_status` (GEN `03092026_1645…:284-288, 675-677`).
+5. **Crosscheck enrichment:** `enrichTsfinWithHrCrosscheck` (`index.js:117260-117805`). Once validation is OK it clears the mismatch issues and sets `hr_crosscheck_status='OK'` (`:117785-117797`).
+
+**Without a writer, every preset invoice blocks for ever.** So the preset adds exactly **one writer** and no new gate.
+
+**The completeness function — NEW-JUSTIFIED (it is the writer, not a gate).** `private.weekly_source_agency_week_complete_v1(p_timesheet_id) → (complete boolean, reasons text[], facts_hash text)`. The id is checked against the main Contract week's `contract_weeks.timesheet_id` (`is_current`, single current row). A stale or revoked id is refused `AGENCY_INVOICE_TIMESHEET_ROTATED` (R-230); the writer is re-run for the new current row after any rotation. Nothing existing computes a whole-week result across coverage, finalisation, queries, rule 4 and authorisation. It shares one per-shift derivation with the pay-state function of §26.5 (round-5 SHOULD).
+
+**The week is complete only when all eight conditions hold:**
+1. **Coverage.** Ticked COMPLETE-coverage publications cover every day of the client week (round 9 item 3).
+2. **Finalised.** Every shift **on the Timesheet** is finalised. T0 holds finalised shifts only (§26.5 item 1), so an unfinalised shift never holds the invoice (round 15 item 2).
+3. **No unresolved query raised before authorisation about a shift that is on T0** (round 9 item 1; round 14 item 6). This reads the comparison rows (§26.3) and the open QD incidents. Only a query about a **finalised** shift whose hours the worker disputes counts. A query about an **unfinalised or missing, unprotected** shift never counts: that shift is not on T0 and never holds the invoice (round 14 item 4; round 15 reconciliation item 4); its query stays open for pay only ("Protect pay" or "Accept source hours") until the week's invoice is issued, when it closes by itself (R-233). After authorisation no worker query exists (round 17 item 3).
+4. **Matching.** Every T0 shift equals the finalised hours (`EXACT_MATCH`), or HealthRoster is higher and T0 has been aligned (R-209). Protection never counts for or against this, because it is pay-only.
+5. **Records equal HealthRoster.** The current records of the week (T0, plus additional or replacement records, minus reversed ones) equal the finalised shifts they carry.
+6. **Authorised.** Every current record is authorised. A reversal/replacement pair counts only as one authorised unit (R-214).
+7. **No pending correction decision.**
+8. **No protected shift is still waiting, and none is finalised at different hours unresolved** (round 15 reconciliation item 4; round 17 item 4; reason `PROTECTED_SHIFT_WAITING` / `PROTECTED_HOURS_DIFFER`). A protected shift that HealthRoster has not finalised holds the week (reason `PROTECTED_SHIFT_WAITING`) until it is finalised and added to T0, or Office unprotects it. An **unprotected** waiting shift never holds the week.
+
+**Reminders never count** (round 14 item 6): the earlier rule-4 condition and the `REMINDER_OPEN` reason are removed.
+
+There is no cut-off and no membership window, so R-070's cycle-final close does not apply. Instead the query closes when the week's invoice is issued (below; R-233).
+
+**Closing a never-finalised shift's query when the invoice is issued (owner round 19, CR8-Q2; R-233).**
+- **When.** In the same transaction that sets to ISSUED an invoice carrying a preset T0.
+- **What closes.** Each OPEN `HEALTHROSTER_NOT_FINALISED` or `SOURCE_MISSING_OR_NOT_AUTHORISED` query for that worker and client week whose shift meets all three conditions:
+  - it is not on T0;
+  - it is not protected (no ACTIVE row in the protection store, and no qualified WAIT);
+  - it has no other Office decision pending (no open "! Decision needed" row and no open manual pay review for it).
+- **How.**
+  - The query is set to `state='CANCELLED'` with no message. This goes through the shared per-incident retirement helper of §7 (REUSE), which makes the same five retirements as R-070's close.
+  - An audit event records "Deemed not worked — invoice INV-… issued DD/MM/YYYY hh:mm:ss".
+  - A new service-only `private.weekly_source_agency_issue_close_v1(p_invoice_id)` selects the queries and changes nothing else.
+  - It is replay-safe: a second call finds nothing open.
+- **What stays open.** Any query with an outstanding issue stays open. Examples:
+  - The shift is protected. It then lives in Protected shifts, and a waiting protection already holds the invoice, so the issue cannot happen.
+  - Another Office decision is pending.
+- **Afterwards.**
+  - If HealthRoster later finalises the shift, it comes in as a new shift on a new Timesheet and invoice (R-204, §26.6).
+  - Before the issue, Office can protect the shift at any time.
+  - After the issue, the existing *Add protected shift* is still available. That is the cross-work case PX-7.
+- **Where it is called (WP-0 census; corrected by critic R8 item 18).** Two issue paths set an invoice to ISSUED today:
+  - the controlling `public.invoice_issue_one` (`21072026_1235_59_invoice_issue_one.sql:600`), which `public.invoice_issue_batch` also reaches by looping over it (`08012026…:131-182`, call `:166`);
+  - the async issue core `private._invoice_issue_advance_core_v8` (`27072026_1042_13…:448`).
+  - **Not issue events, never call the helper:** `invoice_mark_unpaid_one` (`08012026…:614`, PAID → ISSUED revert), `invoice_unhold_one` (`:449-453`, restores a previously issued invoice) and the ISSUED credit-note insert (`:1806`).
+
+  WP-0 confirms which of these are live successors. Each live path calls the helper with one line after its ISSUED update. If they share a later common step, the call goes there once instead. These are invoice files, not Banking Pay files.
+- **Ordinary invoices only (Codex R2 C04).** The helper returns at once unless the issued document is an ordinary `INVOICE` carrying a preset T0. A credit note never closes a query: async DRAFT credits clone lines and are issued through the genuine issue owners, so excluding the older direct-ISSUED credit insert alone would not protect the queries. Tests QZ-4 (a credit issued through both issue paths, plus the mark-unpaid and unhold negatives).
+- **Other clients.** The helper also returns at once for any invoice without a preset T0, so the issue path is unchanged for them.
+- **Tests:** QZ-1…QZ-4.
+
+**The single writer — EXTEND the existing store `public.timesheet_validations`** (columns `status`, `reason_code`, `validated_at_utc`, `last_source`, `pre_validated`; the existing upsert shape is `21072026_1820_06_hr_weekly_apply_transactional.sql:2524-2547`, on conflict `timesheet_id`).
+- **Owner:** `public.weekly_source_agency_week_validation_refresh_v1(p_timesheet_id, p_publication_id)`, service-only. The id is checked against the main Contract week's `contract_weeks.timesheet_id` (`is_current`, single current row). A stale or revoked id is refused `AGENCY_INVOICE_TIMESHEET_ROTATED` (R-230); the writer is re-run for the new current row after any rotation.
+- **When it runs:** the Mode A dispatch arm (§26.3) calls it after each covering publication. It is also called after every Authorise, pair Authorise, `weekly_source_agency_timesheet_change_v1` action and Use-HealthRoster-hours on a preset Timesheet.
+- **What it writes:**
+  - `VALIDATION_OK` (with `last_source='AGENCY_INVOICE_WEEK'`) **only** when the function returns complete;
+  - `VALIDATION_ERROR` with the first reason otherwise (for example `COVERAGE_MISSING`, `NOT_FINALISED`, `HOURS_DIFFER`, `RECORDS_NOT_ALIGNED`, `NOT_AUTHORISED`, `CORRECTION_PENDING`);
+  - `VALIDATION_ERROR`/`SUPERSEDED_BY_CORRECTION` for a T0 superseded by R0 and for R0 itself, as a second line of defence beside the standalone blocker and T0's kept lock (§26.6.3).
+  - For a complete week, `VALIDATION_OK` for every current invoiceable record of that week (the latest replacement P0, additional records T1), keyed through the main week. An empty P0 needs no row because it is never a candidate (critic R21 S7).
+- **Recompute:** it then enqueues the existing TSFIN recompute (`enqueue_ts_financials`), so the existing Worker sets `READY_FOR_INVOICE` or `READY_FOR_HR` and the crosscheck status.
+- **Statuses:** the values are members of the existing `validation_status_enum` ('PENDING','VALIDATION_OK','VALIDATION_ERROR','OVERRIDE_AWAITING_CONFIRM','OVERRIDDEN'; `supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql:124`), written exactly as the existing Mode A writer does (`21072026_1820_06…:2485-2486`).
+
+**One writer only (R-200, R-215).**
+- **The legacy route cannot write.** The legacy `/api/healthroster/:import_id/validate` route (`handleHRValidate`, `index.js:153689`, routed at `:201251-201252`) refuses preset Timesheets with `AGENCY_INVOICE_USES_COMPLETENESS_WRITER`. This is a Worker guard outside the handler's existing logic. It also covers `hr_weekly_apply_transactional` reached through Mode A reference apply (§26.3 item 3).
+- **No override.** `OVERRIDDEN` and `OVERRIDE_AWAITING_CONFIRM` are refused for preset Timesheets at every override route that writes them, because R-200 allows no override.
+
+**Issue and send — EXTEND the existing validator only.** The one issue-time arm is a later successor of `private._invoice_issue_validate_batch` (controlling `02092026_1834_candidate_expense_separation_delivery_v1.sql:727`, the definer later than `23072026_2207_private_invoice_issue_validate_batch.sql:3`). No issue-time HealthRoster recheck exists there today. For an invoice that contains a preset Timesheet, it adds three hard blockers:
+- `HEALTHROSTER_VALIDATION_REQUIRED`: a member's latest `timesheet_validations.status` is not `VALIDATION_OK` (OVERRIDDEN not accepted for the preset). This catches a week that stopped being complete after placement. It applies only to issuing an ordinary `INVOICE`. It never applies to a `CREDIT_NOTE`, and never to the delivery of an invoice that is already ISSUED or PAID, where a member superseded by correction (`SUPERSEDED_BY_CORRECTION`) is expected. `AGENCY_INVOICE_CREDIT_NOTE_NOT_ISSUED` likewise applies only to the invoice holding the replacement P0, never to the credit note itself.
+- `AGENCY_INVOICE_CREDIT_NOTE_NOT_ISSUED` (§26.6.2).
+- `HEALTHROSTER_EVIDENCE_MISSING` (§26.7).
+
+The same function returns `delivery_blocker_codes` and `can_issue_and_deliver`, so the send path is enforced by the same arm, with **no separate send check**. WP-0 proves that the deliver route (`handleDeliverOne`, `invoice-async-http.js:4833-4835`) reads this validator. If it does not, the three codes are added to the same function's `delivery_blocker_codes` output, never to a new gate.
+
+**What Office sees.**
+- **Batch Generate** shows the existing `HR_VALIDATION_BLOCKED` reason. Its sub-line reads the `reason_code`: "Waiting for HealthRoster: ‹reason›".
+- **A placed but unissued week that stops being complete** has its validation flipped to `VALIDATION_ERROR` by the writer. Issue is then refused by the existing validator arm until the week is complete again or the draft is regenerated, and the draft stays amendable (round 9 item 8).
+

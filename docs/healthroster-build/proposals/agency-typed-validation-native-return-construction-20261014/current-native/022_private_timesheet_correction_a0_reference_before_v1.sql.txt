@@ -1,0 +1,22 @@
+create or replace function private.timesheet_correction_a0_reference_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ids uuid[]; v_bookings text[];
+begin
+  if tg_table_schema<>'public' or tg_table_name not in('timesheet_validations','invoice_lines') or tg_op not in('INSERT','UPDATE') then
+    raise exception 'CORRECTION_A0_WRITER_TRIGGER_CONTEXT_INVALID' using errcode='55000'; end if;
+  if tg_table_name='invoice_lines' then
+    if tg_op='UPDATE' then
+      if new.timesheet_id is not distinct from old.timesheet_id and new.booking_id is not distinct from old.booking_id then return new; end if;
+      v_bookings:=array[old.booking_id,new.booking_id];
+    else v_bookings:=array[new.booking_id]; end if;
+  elsif tg_op='UPDATE' and new.timesheet_id is not distinct from old.timesheet_id then return new;
+  end if;
+  if tg_op='UPDATE' then
+    select array_agg(distinct x.id order by x.id) into v_ids from unnest(array[old.timesheet_id,new.timesheet_id]) x(id) where x.id is not null;
+  else v_ids:=case when new.timesheet_id is null then null else array[new.timesheet_id] end; end if;
+  if v_ids is not null or v_bookings is not null then perform private.timesheet_correction_a0_writer_admit_v1(v_ids,v_bookings,
+    case when tg_table_name='invoice_lines' then 'INVOICE_REFERENCE' else 'VALIDATION_REFERENCE' end); end if;
+  return new;
+end;
+$function$;

@@ -1,0 +1,51 @@
+{
+  "schema": "AGENCY_TYPED_VALIDATION_NATIVE_RETURN_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "consumer_owner_count": 22,
+  "literal_writers": 9,
+  "runtime_uses": 10,
+  "input_hashes": 1722,
+  "complete_reverse_hunks": 4,
+  "unchanged_editor_sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+  "tests": 26,
+  "unit_only": true,
+  "syntax_files": 2,
+  "sql": [
+    {
+      "file": "52_same_validation_store_typed_source.sqlinc",
+      "sha256": "c97fe113d927023fea276c492eb23e9803e9082d762bfe16fe656c4114df38c3",
+      "lexical_statements": 4
+    },
+    {
+      "file": "53_agency_same_draft_return_step.sqlinc",
+      "sha256": "f4d7100d119f1afd2f9e47ead804a605773ef17b7499480395db15ec51cdc804",
+      "lexical_statements": 3
+    },
+    {
+      "file": "54_return_step_service_reply.sqlinc",
+      "sha256": "9b4cac9d661e390272b25b84e02771d0aabd9c809961a67fcdffb3a8ee088fcb",
+      "lexical_statements": 4
+    },
+    {
+      "file": "56_native_invoice_segment_selection.sqlinc",
+      "sha256": "b8e79f777558b7a7f5930c96ea58b552e4eb8afcfbfdfa6cfd9b4dabba7232f7",
+      "lexical_statements": 3
+    },
+    {
+      "file": "57_complete_same_draft_with_unchanged_editor.sqlinc",
+      "sha256": "dc4a48d5f0b8345da3e27995cae81cfcee2a48146c53b1bfba236d91be9d3a9f",
+      "lexical_statements": 3
+    }
+  ],
+  "sql_scope": "lexical envelopes only",
+  "required_missing_native_producer": "private.weekly_source_agency_week_complete_v1(uuid)",
+  "whole_week_producer_complete": false,
+  "authorised_validation_mode_complete": false,
+  "all_consumer_composition_complete": false,
+  "independent_review_pending": true,
+  "mount_ready": false,
+  "qualification_receipt": null,
+  "compiled_contract_sha256": null
+}
