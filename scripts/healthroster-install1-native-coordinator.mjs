@@ -7,7 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {withSharedRehearsalTurn,agencyChildEnvironment,assertNoProtectedRelease} from './healthroster-rehearsal-turn.mjs';
 import {abortableDelay} from './healthroster-turn-control.mjs';
-import {runFullRehearsalWithinOwnedTurn,executePsqlWithinOwnedTurn,restorationSnapshotSql,identityProbeSql,rehearsalSourceBinding,assertRehearsalSourceBinding,expectedContractDigestSql} from './healthroster-install1-full-rehearsal.mjs';
+import {runFullRehearsalWithinOwnedTurn,executePsqlWithinOwnedTurn,restorationSnapshotSql,identityProbeSql,rehearsalSourceBinding,assertRehearsalSourceBinding,expectedContractDigestSql,assertFreshNativeGate} from './healthroster-install1-full-rehearsal.mjs';
 import {validateConnectionProof} from './automatic-test-release-policy.mjs';
 import {canonical,digest} from './cloudtms-managed-release-sql.mjs';
 
@@ -49,7 +49,10 @@ export async function runNativeInstall1(){
  const archiveProof=JSON.parse(fs.readFileSync(path.join(root,'.codex-tmp/healthroster-install1-archive-preflight.json'),'utf8'));
  requireThat(archiveProof.status==='SOURCE_PREFLIGHT_PASS'&&archiveProof.commit===candidatePin&&archiveProof.linearAncestryPassed===true
   &&archiveProof.source==='EXACT_COMMITTED_GIT_ARCHIVE'&&archiveProof.sqlCarriageReturnFiles?.length===0
-  &&archiveProof.steps?.length===9&&archiveProof.steps.every(row=>row.exitCode===0)&&archiveProof.cleanup?.removed===true,
+  &&archiveProof.steps?.length===9&&archiveProof.steps.every(row=>row.exitCode===0)&&archiveProof.cleanup?.removed===true
+  &&archiveProof.dependencyProvisioning?.exitCode===0&&archiveProof.dependencyProvisioning.installerHooks===false
+  &&archiveProof.dependencyProvisioning.lockUnchanged===true
+  &&archiveProof.dependencyProvisioning.packageLockSha256===digest(canonical(fs.readFileSync(path.join(root,'package-lock.json'),'utf8'))),
   'INSTALL1_COMMITTED_ARCHIVE_PREFLIGHT_REQUIRED');
  requireThat(digest(JSON.stringify(JSON.parse(fs.readFileSync(path.join(root,'supabase/release/current-contract.json'),'utf8'))))===contract,'INSTALL1_SEALED_CONTRACT_CHANGED');
  process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';
@@ -87,10 +90,11 @@ export async function runNativeInstall1(){
      const binding=assertRehearsalSourceBinding(sourceBinding,{review,expectedContractHash:contract});
      requireThat(remote('test')===(published?candidatePin:predecessor),'INSTALL1_SHARED_TEST_MOVED');
      const identity=await probe(identityProbeSql(marker));
-     return {...identity,checkedAt:new Date().toISOString(),environment:'TEST',candidatePin,pushedCandidatePin:remote('codex/healthroster-install1-14102026'),
+     const observed={...identity,checkedAt:new Date().toISOString(),environment:'TEST',candidatePin,pushedCandidatePin:remote('codex/healthroster-install1-14102026'),
       cleanGit:true,sourceStaged:true,reviewedSqlRuntimeMatch:true,sourceBindingSha256:binding.sha256,expectedContractHash:contract,remoteTestPin:predecessor,bank,
       protectedRunsChecked:true,protectedActiveCount:0,phoneOrAcceptanceActive:false,route:'APPROVED_MACHINE_LOCAL_FALLBACK_PROCESS_ENV',
       borrowedLabCapability:false,secretsInArgvOrFiles:false,ownerNativeCallbackAuthorised:true};
+     return assertFreshNativeGate(observed,{candidatePin,currentRemoteTestPin:predecessor,expectedContractHash:contract});
     };
     const snapshot=async()=>{
      const census=await probe("select coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'name',c.relname,'kind',c.relkind::text) order by n.nspname,c.relname),'[]'::jsonb) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p');");

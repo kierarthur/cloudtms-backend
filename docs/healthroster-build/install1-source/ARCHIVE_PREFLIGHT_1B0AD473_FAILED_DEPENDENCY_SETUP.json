@@ -1,0 +1,143 @@
+{
+  "status": "SOURCE_PREFLIGHT_HOLD",
+  "commit": "1b0ad473e887499474bd17023aa9f9349af7ec18",
+  "predecessor": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "beganAt": "2026-10-14T00:47:58.104Z",
+  "source": "EXACT_COMMITTED_GIT_ARCHIVE",
+  "runtime": "Windows Node/npm running the same portable protected-workflow source commands; not a Linux runtime claim",
+  "linearAncestryPassed": true,
+  "steps": [
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "security:toolchain"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 443,
+      "outputSha256": "28e756e8bfa18ebf880b1961546f02610d1d978a83c307722f31f68a6f843525",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "security:dependencies"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 368,
+      "outputSha256": "f39223686b58ad74b13d80fa1055db5878371e0b90b3ca9e70fb753a8c788610",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "security:secrets"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 4633,
+      "outputSha256": "2d74ea14968923d6f6ba536859f9fa7153d680eed77c0d8bf594afd66ee696a7",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "db:check"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 1393,
+      "outputSha256": "1a788795b407640f4b8607c1d3a0473d2f4831ecb8af4f1b1bd37934415a20cd",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "db:contract:coupling"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 11096,
+      "outputSha256": "2f254526cd6ea17a61c45e760a713ae64871b99ff8eb47bcf353a85a88c709db",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/bpay-next-source-gates.test.js",
+        "tests/bpay-next-legacy-fence.test.js",
+        "tests/bpay-next-final-definers.test.js"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 62970,
+      "outputSha256": "afae2c89acc998601b6fde342dda4c2b5078b2ba3ce15a60b9e9b37f170de1e6",
+      "tests": 32,
+      "pass": 32,
+      "fail": 0
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/database-release-system.test.mjs",
+        "tests/automatic-test-release-policy.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 5261,
+      "outputSha256": "ee7f38d1efce3b679b8fe8a5864e30bc3455318ff64ead0cc931a5b90f9d50fd",
+      "tests": 42,
+      "pass": 42,
+      "fail": 0
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/healthroster-install1-full-rehearsal.test.mjs",
+        "tests/healthroster-install1-native-coordinator.test.mjs",
+        "tests/healthroster-turn-control.test.mjs",
+        "tests/healthroster-rehearsal-turn.test.mjs",
+        "tests/healthroster-full-rehearsal-protocol.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 19027,
+      "outputSha256": "4059f256348e3b5d8dc140a3b1e8e6b5d14553b8280efd35c0fbb653f005b34f",
+      "tests": 58,
+      "pass": 58,
+      "fail": 0
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/weekly-source/weekly-source-pay-authority-sql.test.mjs",
+        "tests/weekly-source/weekly-source-pay-view.test.mjs",
+        "tests/weekly-source/weekly-source-pay-auth-transport.test.mjs",
+        "tests/weekly-source/weekly-source-office-presentation-integration.test.mjs"
+      ],
+      "exitCode": 1,
+      "elapsedMs": 281,
+      "outputSha256": "5d2a4c6b79a16d23fc861b68dafa0895997668573ea696a0ee5c07ac9f812eb2",
+      "tests": 6,
+      "pass": 3,
+      "fail": 3
+    }
+  ],
+  "temporaryFolder": "C:\\tmp\\healthroster-install1-preflight-1b0ad473e887-AvL0xw",
+  "cleanup": {
+    "removed": true,
+    "deletionRefused": false
+  },
+  "sqlFiles": 1840,
+  "sqlCarriageReturnFiles": [],
+  "failure": "ARCHIVE_SOURCE_CHECK_FAILED",
+  "endedAt": "2026-10-14T00:50:04.300Z"
+}

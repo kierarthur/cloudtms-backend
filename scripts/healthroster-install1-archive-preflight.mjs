@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {sourceCheckEnvironment} from './healthroster-source-check-environment.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const base='07e66fb2b2742fbe634a41582f2ad3e004eed3b9';
@@ -29,14 +30,13 @@ try{
  const expanded=spawnSync('tar.exe',['-xf',tar,'-C',archive],{windowsHide:true,encoding:'utf8'});
  if(expanded.status!==0)throw Error('ARCHIVE_EXTRACTION_FAILED');
  const files=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);
- const sql=files.filter(file=>/\.sql$/i.test(file));
+ const sql=files.filter(file=>/\.(?:sql|sqlinc|inc)$/i.test(file));
  const carriageReturns=sql.filter(file=>fs.readFileSync(path.join(archive,file)).includes(13));
  receipt.sqlFiles=sql.length;receipt.sqlCarriageReturnFiles=carriageReturns;
  if(carriageReturns.length)throw Error('ARCHIVE_SQL_LF_ONLY_REQUIRED');
  const gitDir=git(['rev-parse','--absolute-git-dir']);
- const cleanEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^PG|^CLOUDTMS_.*(?:TOKEN|SECRET)|^MIGET|^EXPO_|^E2E_/i.test(key)));
  const registry=JSON.parse(fs.readFileSync(path.join(archive,'docs/bpay-next/final-definer-closures.json'),'utf8'));
- const env={...cleanEnv,GIT_DIR:gitDir,GIT_WORK_TREE:archive,CLOUDTMS_FINAL_DEFINER_BASE:registry.releaseBaseCommit};
+ const env=sourceCheckEnvironment(process.env,{gitDir,workTree:archive,finalDefinerBase:registry.releaseBaseCommit});
  const npmCli='C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js';
  const checks=[
   [npmCli,['run','security:toolchain']],
@@ -46,18 +46,34 @@ try{
   [npmCli,['run','db:contract:coupling']],
   ['--test',['tests/bpay-next-source-gates.test.js','tests/bpay-next-legacy-fence.test.js','tests/bpay-next-final-definers.test.js']],
   ['--test',['tests/database-release-system.test.mjs','tests/automatic-test-release-policy.test.mjs']],
-  ['--test',['tests/healthroster-install1-full-rehearsal.test.mjs','tests/healthroster-install1-native-coordinator.test.mjs','tests/healthroster-turn-control.test.mjs','tests/healthroster-rehearsal-turn.test.mjs','tests/healthroster-full-rehearsal-protocol.test.mjs']],
+  ['--test',['tests/healthroster-install1-full-rehearsal.test.mjs','tests/healthroster-install1-native-coordinator.test.mjs','tests/healthroster-source-check-environment.test.mjs','tests/healthroster-turn-control.test.mjs','tests/healthroster-rehearsal-turn.test.mjs','tests/healthroster-full-rehearsal-protocol.test.mjs']],
   ['--test',['tests/weekly-source/weekly-source-pay-authority-sql.test.mjs','tests/weekly-source/weekly-source-pay-view.test.mjs','tests/weekly-source/weekly-source-pay-auth-transport.test.mjs','tests/weekly-source/weekly-source-office-presentation-integration.test.mjs']]
  ];
- for(const [entry,args] of checks){const began=Date.now();
+ for(const [checkIndex,[entry,args]] of checks.entries()){const began=Date.now();
   const result=spawnSync(process.execPath,[entry,...args],{cwd:archive,env,windowsHide:true,encoding:'utf8',maxBuffer:8000000});
-  const output=result.stdout??'';
+  const output=result.stdout??'',diagnostic=(result.stderr??'')+output;
   const row={entry:entry===npmCli?'npm':entry,args,exitCode:result.status,elapsedMs:Date.now()-began,
    outputSha256:crypto.createHash('sha256').update(output+(result.stderr??'')).digest('hex'),
    tests:Number(output.match(/(?:#|ℹ) tests (\d+)/)?.[1]??0),pass:Number(output.match(/(?:#|ℹ) pass (\d+)/)?.[1]??0),
-   fail:Number(output.match(/(?:#|ℹ) fail (\d+)/)?.[1]??0)};
+   fail:Number(output.match(/(?:#|ℹ) fail (\d+)/)?.[1]??0),
+   diagnosticCodes:[...new Set(diagnostic.match(/\bERR_[A-Z0-9_]+\b/g)??[])],
+   missingPackages:[...new Set([...diagnostic.matchAll(/Cannot find package ['"]([@a-z0-9._/-]+)['"]/g)].map(match=>match[1]))]};
   receipt.steps.push(row);save();console.log(JSON.stringify(row));
   if(result.status!==0||result.error)throw Error('ARCHIVE_SOURCE_CHECK_FAILED');
+  if(checkIndex===0){
+   // Exact lockfile install inside the disposable archive. Installer hooks are
+   // suppressed for portable source tests; the protected workflow is unchanged.
+   const lockFile=path.join(archive,'package-lock.json');
+   const hashFile=()=>crypto.createHash('sha256').update(fs.readFileSync(lockFile)).digest('hex');
+   const lockBefore=hashFile(),start=Date.now();
+   const installed=spawnSync(process.execPath,[npmCli,'ci','--engine-strict','--ignore-scripts','--no-audit','--no-fund'],
+    {cwd:archive,env,windowsHide:true,encoding:'utf8',maxBuffer:8000000});
+   receipt.dependencyProvisioning={method:'EXACT_ARCHIVED_LOCK_NPM_CI_SOURCE_ONLY',installerHooks:false,
+    exitCode:installed.status,elapsedMs:Date.now()-start,packageLockSha256:lockBefore,lockUnchanged:hashFile()===lockBefore,
+    outputSha256:crypto.createHash('sha256').update((installed.stdout??'')+(installed.stderr??'')).digest('hex')};
+   save();console.log(JSON.stringify(receipt.dependencyProvisioning));
+   if(installed.status!==0||installed.error||!receipt.dependencyProvisioning.lockUnchanged)throw Error('ARCHIVE_DEPENDENCY_PROVISIONING_FAILED');
+  }
  }
  receipt.status='SOURCE_PREFLIGHT_PASS';
 }catch(error){receipt.status='SOURCE_PREFLIGHT_HOLD';receipt.failure=/^[A-Z_]+$/.test(error.message)?error.message:'ARCHIVE_FAILURE_WITHHELD';process.exitCode=1;
