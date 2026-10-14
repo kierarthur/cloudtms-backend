@@ -1,0 +1,69 @@
+{
+  "source_only": true,
+  "current_root_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "bytes": 32206,
+      "sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/05102026_1112_bpay_next_source_paid_evidence_page_v1.sql",
+      "bytes": 48233,
+      "sha256": "42feb18efe21530f0299e693df4447363ba91f837d8d1154e1cb322b96c30432"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "bytes": 70504,
+      "sha256": "e1a210e31046137b4f08c540cd1025674e0f3eaa57bf6a00978d8f0d0f31f447"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+      "bytes": 4464,
+      "sha256": "bf5a185e43e565afa45e9282d2bb9bca454a258b47bbd38cfa06ad2876339d23"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+      "bytes": 514,
+      "sha256": "58af5fef09190f8343397013dc931521ea060579f0ad2be5c7ecf415f9ea6787"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/01102026_1201_weekly_source_client_cycle_scope.sql",
+      "bytes": 2211,
+      "sha256": "b2105f82bdc592dc4312837648f7fe4ab7c421016f3b1160c8c97fc61b088a47"
+    }
+  ],
+  "final_owner_order_and_later_overrides_not_yet_sealed": true,
+  "canonical_mounted": false,
+  "native_proof": false
+}

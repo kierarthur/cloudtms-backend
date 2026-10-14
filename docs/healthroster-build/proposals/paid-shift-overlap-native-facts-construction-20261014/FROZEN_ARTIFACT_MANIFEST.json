@@ -1,0 +1,85 @@
+{
+  "schema_version": "SOURCE_PAYMENT_FACTS_EXTRACTION_PAID_OVERLAP_INPUTS_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_proof": false,
+  "artifact_count": 15,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CONTEXT_REVERSE.json",
+      "bytes": 11088,
+      "sha256": "85a928db62a14ae68725e89cd6d4f16cfa49fb01d4968a5aa540f12a1a873f2c"
+    },
+    {
+      "file": "CURRENT_EFFECTIVE_OWNER_PINS.json",
+      "bytes": 3027280,
+      "sha256": "b4bcb31378e7f994baa4808b5b5a4c5ee41fddb887b281f0a5c567dbbfb319f0"
+    },
+    {
+      "file": "CURRENT_NATIVE_INPUT_PINS.json",
+      "bytes": 3001,
+      "sha256": "0a85c0b58a504af09a28d6a8fbd8a1e2cee675b591a2bb2d0431e13abb4463f5"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 1233,
+      "sha256": "34a6fd475fc1dd6a120b91e19cca4ad908a6b05a75c6d202a6311a93b9829bf5"
+    },
+    {
+      "file": "SOURCE_BOUNDARY_AND_NEXT_WRITER.md",
+      "bytes": 5200,
+      "sha256": "29ffb46aee2fcbbd2d77ce63ce9655fa5c86e3b8e2ece174878cf391c4385946"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 957,
+      "sha256": "45d93ceb654fafda213a36f923491ca5604871442616a8ebbe2bc68af46def76"
+    },
+    {
+      "file": "before/02_complete_keep_context.sqlinc",
+      "bytes": 30042,
+      "sha256": "33be64afc12c627db61902a92d511e9db41886d497d949fba05ac7c374dc6d51"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 8308,
+      "sha256": "f35d63663530445b2d3acf99546cb02787a9007f114e4bcb82ed7abdf47de5e7"
+    },
+    {
+      "file": "facts-source.test.mjs",
+      "bytes": 10173,
+      "sha256": "8f0c45a67cbb171c5adf63fc8549f23be52b33024d683cfe799b43528ac8c387"
+    },
+    {
+      "file": "forward/01_work_event_payment_facts.sqlinc",
+      "bytes": 12479,
+      "sha256": "19619923daac1059be9d4ac719cbcf42b5721a08d4b39e82a79e187a537cc2d5"
+    },
+    {
+      "file": "forward/02_complete_keep_context.sqlinc",
+      "bytes": 21427,
+      "sha256": "ea04c89d2854f9733bf52dda908a1e4887703f118288ee8411f421a0457630b4"
+    },
+    {
+      "file": "forward/03_paid_overlap_source_inputs.sqlinc",
+      "bytes": 6755,
+      "sha256": "4a0fb36b169fd35db727c152175979fe9ec1b5d4724a90e0202e8323513a1ac4"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2779,
+      "sha256": "e7e5ed0a80f6f126ae0cef9840dc0ee8872db2e0ecf9914efe84f081262b2da2"
+    },
+    {
+      "file": "input/exact_native_payment_block.sqlinc",
+      "bytes": 9199,
+      "sha256": "4ffdcd066ef249ee8b5db5aaa1eb176329b1ccdfdae5981a6ce63956d244c733"
+    },
+    {
+      "file": "pin-current-owners.mjs",
+      "bytes": 5767,
+      "sha256": "1b5f9f9c58bc4309a6d81ad971e3d11ef28172cd1f6396be1b7b37a982de14b7"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "listed_artifacts": 15,
+  "manifests": 1,
+  "source_scan_files": 21,
+  "credential_rules": 4,
+  "credential_findings": 0,
+  "raw_hash_length_mismatches": 0,
+  "critic_sha256": "82878a47e4b14eb8f721e5e28d4e125ca0f20603657deda9ed06a2d507bc583e",
+  "bounded_source_accepted": true,
+  "whole_context_reversals": 1,
+  "unique_hunks": 2,
+  "exact_native_block_bytes": 9199,
+  "source_cases": 14,
+  "syntax_passed": 4,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "paid_same_separate_writer_complete": false,
+  "full_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "whitespace": {
+    "status": "RETAINED_RAW_ARCHIVE_EXCEPTIONS_NOT_PASS",
+    "exit_code": 2,
+    "findings": [
+      "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc:377: new blank line at EOF.",
+      "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/02_complete_keep_context.sqlinc:263: new blank line at EOF."
+    ]
+  }
+}
