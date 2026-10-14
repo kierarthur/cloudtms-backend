@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "bytes": 173042,
+      "sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "bytes": 149803,
+      "sha256": "177400e1d5f1be23e789ef4cd3596cdac1f9860fe94602a5a031bdd1142488c6"
+    }
+  ],
+  "chain_helper_from_frozen_predecessor": {
+    "file": "forward/00_missing_accept_head_chain.sqlinc",
+    "sha256": "4b3ee3f211698b5d9787a4057eaf5fa76efdff267ffb8376e27c99605d06979b"
+  },
+  "canonical_mounted": false,
+  "native_proof": false
+}

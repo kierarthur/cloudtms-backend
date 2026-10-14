@@ -1,0 +1,50 @@
+{
+  "source_only": true,
+  "own_input_commit": "f1aa8d578b34d2016e916f29c43e5b0c617ed1e8",
+  "input": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/04_missing_accept_current_removal.sqlinc",
+  "before_bytes": 12921,
+  "before_sha256": "6bd583dc9262d7ddd81dece2bb41ac7c58329fb94ff59cf34bbcde4ab8bb5110",
+  "after_bytes": 14439,
+  "after_sha256": "768d81a741c8237c2527b1c3cbe72749ad3e85c7e9d7b31e5aec9a4c8a02825e",
+  "hunks": [
+    {
+      "name": "actual current and anchor locals",
+      "before": "  v_count integer;v_inventory jsonb;",
+      "after": "  v_current_head public.weekly_source_entitlement_heads%rowtype;\n  v_chain jsonb;v_current_receipt jsonb;v_current_components jsonb;\n  v_count integer;v_inventory jsonb;"
+    },
+    {
+      "name": "current native protected head may retain the genuine accepted removal",
+      "before": "if v_head.state is distinct from 'COMMITTED_CURRENT' or v_head.authority_kind is distinct from 'LOCKED_FINAL_SOURCE'",
+      "after": "if v_head.state is distinct from 'COMMITTED_CURRENT' or v_head.authority_kind not in ('LOCKED_FINAL_SOURCE','PROTECTED')"
+    },
+    {
+      "name": "derive genuine linked acceptance before original proof validation",
+      "before": "  select count(*) into v_count from private.weekly_source_accepted_publication_actions_v1 action\n    where action.planned_head_id=v_head.id;",
+      "after": "  v_current_head:=v_head;\n  v_chain:=private.weekly_source_missing_accept_head_chain_v1(v_current_head.id,v_event.id);\n  if v_chain is null then return null;end if;\n  if v_chain->>'current_head_id' is distinct from v_current_head.id::text or v_chain->>'work_event_id' is distinct from v_event.id::text then\n    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_PROOF_UNBOUND' using errcode='55000';end if;\n  select * into strict v_head from public.weekly_source_entitlement_heads where id=(v_chain->>'anchor_head_id')::uuid;\n  if v_head.authority_kind is distinct from 'LOCKED_FINAL_SOURCE' then\n    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_PROOF_UNBOUND' using errcode='55000';end if;\n  v_current_receipt:=v_chain#>'{native_head_chain,0,native_receipt}';\n  v_current_components:=v_chain#>'{native_head_chain,0,canonical_components}';\n  select count(*) into v_count from private.weekly_source_accepted_publication_actions_v1 action\n    where action.planned_head_id=v_head.id;"
+    },
+    {
+      "name": "anchor native components still equal actual accepted canonical vector",
+      "before": "  for v_component in select value,ordinality from jsonb_array_elements(v_inventory->'components') with ordinality order by ordinality loop",
+      "after": "  if (v_chain->'native_head_chain'->(jsonb_array_length(v_chain->'native_head_chain')-1)->'canonical_components')\n    is distinct from v_canonical#>'{financial_request,member_entitlements,0,components}' then\n    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_COMPONENTS_CHANGED' using errcode='55000';end if;\n  for v_component in select value,ordinality from jsonb_array_elements(v_inventory->'components') with ordinality order by ordinality loop"
+    },
+    {
+      "name": "current descendant complete components remain independently proved",
+      "before": "  if v_components is distinct from v_canonical#>'{financial_request,member_entitlements,0,components}'\n    or v_head.component_count is distinct from jsonb_array_length(v_components)\n    or v_head.certified_zero is distinct from (jsonb_array_length(v_components)=0) then",
+      "after": "  if v_components is distinct from v_current_components\n    or v_current_head.component_count is distinct from jsonb_array_length(v_components)\n    or v_current_head.certified_zero is distinct from (jsonb_array_length(v_components)=0) then"
+    },
+    {
+      "name": "result head and receipt are actual current publication",
+      "before": "'accepted_source_removed',true,'head',to_jsonb(v_head),'accepted_action',to_jsonb(v_action),\n    'native_publication_receipt',to_jsonb(v_receipt)",
+      "after": "'accepted_source_removed',true,'head',to_jsonb(v_current_head),'accepted_action',to_jsonb(v_action),\n    'native_publication_receipt',v_current_receipt"
+    },
+    {
+      "name": "descendant adds full genuine continuity without changing direct result domain",
+      "before": "  return v_result||jsonb_build_object('removal_sha256'",
+      "after": "  if v_current_head.id is distinct from v_head.id then\n    v_result:=v_result||jsonb_build_object('acceptance_head',to_jsonb(v_head),'acceptance_publication_receipt',to_jsonb(v_receipt),\n      'native_head_continuity',v_chain);\n  end if;\n  return v_result||jsonb_build_object('removal_sha256'"
+    }
+  ],
+  "unique_hunks": 7,
+  "whole_reverse_verified": true,
+  "canonical_mounted": false,
+  "native_proof": false
+}

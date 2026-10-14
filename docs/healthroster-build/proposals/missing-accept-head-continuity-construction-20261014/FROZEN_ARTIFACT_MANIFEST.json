@@ -1,0 +1,70 @@
+{
+  "schema_version": "MISSING_ACCEPT_NATIVE_HEAD_CONTINUITY_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_proof": false,
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSE.json",
+      "bytes": 4848,
+      "sha256": "697dd50045dea4edc1cebdff4107c92cd885eae1dd8da4c66269f1a345a33069"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 3480,
+      "sha256": "bf451febae77978dde5931fd8714275bd09980d8ebb90578b32c8a36bf7cc03e"
+    },
+    {
+      "file": "CURRENT_INPUT_PINS.json",
+      "bytes": 1545,
+      "sha256": "c670faa06537641301c9d5e16592bf52b5fa5bf386665538a23e884cb8b1a4a3"
+    },
+    {
+      "file": "NEW_INTERFACES_AND_RECIPE.json",
+      "bytes": 952,
+      "sha256": "a7412e79e1628beba62f3462d721463ade691be30c9f63363e77db819ebde33f"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 482,
+      "sha256": "79004b98f3d331e3b8e06af767c1f6972335b4684f09af70540f8f58980ad362"
+    },
+    {
+      "file": "before/01_complete_current_removal.sqlinc",
+      "bytes": 12921,
+      "sha256": "6bd583dc9262d7ddd81dece2bb41ac7c58329fb94ff59cf34bbcde4ab8bb5110"
+    },
+    {
+      "file": "build-continuity.mjs",
+      "bytes": 7748,
+      "sha256": "52ca2d840dda2dfc0855b70644535d75e2fb4db243ae9a6dc259e8db5ced6e71"
+    },
+    {
+      "file": "continuity-source.test.mjs",
+      "bytes": 8627,
+      "sha256": "0355edda40e38c5d238f4542dc56b807145ffd292ef8d115b76aeecd8dcffdef"
+    },
+    {
+      "file": "forward/00_missing_accept_head_chain.sqlinc",
+      "bytes": 14594,
+      "sha256": "4b3ee3f211698b5d9787a4057eaf5fa76efdff267ffb8376e27c99605d06979b"
+    },
+    {
+      "file": "forward/01_complete_current_removal.sqlinc",
+      "bytes": 14439,
+      "sha256": "768d81a741c8237c2527b1c3cbe72749ad3e85c7e9d7b31e5aec9a4c8a02825e"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2360,
+      "sha256": "8d263b46543249b06292937a40cc4db4e2a091c8edefc33105fc5c0789ce8c02"
+    },
+    {
+      "file": "input/native_head_components_assembly.sqlinc",
+      "bytes": 3012,
+      "sha256": "5ed0b54474e861dcb8490c08ab11d630ac31e4473c8b8da1a8283cff6e77a987"
+    }
+  ]
+}

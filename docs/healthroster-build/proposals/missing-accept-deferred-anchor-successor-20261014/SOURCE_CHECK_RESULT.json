@@ -1,0 +1,22 @@
+{
+  "source_only": true,
+  "finding": "P1-CONT1",
+  "effect_free_source_schema_predicate_cases": 14,
+  "passed": 14,
+  "failed": 0,
+  "syntax_passed": 3,
+  "whole_existing_owner_reversal": 1,
+  "unique_hunks": 5,
+  "chained_predecessor_hunks": 7,
+  "actual_native_input_pins": 3,
+  "unchanged_native_head_chain": true,
+  "immutable_immediate_action_canonical_checks_preserved": true,
+  "new_signatures": 0,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "real_database_or_lab_calls": 0,
+  "scratch_created": false,
+  "remaining_gates": "CONSTRUCTION_BOUNDARY.md"
+}

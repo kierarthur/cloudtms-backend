@@ -1,0 +1,19 @@
+{
+  "source_only": true,
+  "effect_free_cases": 13,
+  "passed": 13,
+  "failed": 0,
+  "syntax_passed": 3,
+  "whole_owner_reversals": 1,
+  "unique_hunks": 7,
+  "new_private_signatures": 1,
+  "new_public_signatures": 0,
+  "native_assembly_byte_exact": true,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "scratch_created": false,
+  "real_database_or_lab_calls": 0,
+  "remaining_gates": "CONSTRUCTION_BOUNDARY.md"
+}

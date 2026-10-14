@@ -1,0 +1,43 @@
+{
+  "source_only": true,
+  "finding": "P1-CONT1",
+  "predecessor_folder": "missing-accept-head-continuity-construction-20261014",
+  "predecessor_manifest_sha256": "2d33b9542057ed971dbe57a60fdec1c946905a1c273ffdf5ba387b7ee97b9d5a",
+  "before_bytes": 14439,
+  "before_sha256": "768d81a741c8237c2527b1c3cbe72749ad3e85c7e9d7b31e5aec9a4c8a02825e",
+  "after_bytes": 17443,
+  "after_sha256": "533f3371b90eeb46fa78385c87e9d0661fe07cdf061c1c986d7ae270ed898a34",
+  "unique_hunks": 5,
+  "hunks": [
+    {
+      "name": "actual pending and deferred canonical locals",
+      "before": "  v_chain jsonb;v_current_receipt jsonb;v_current_components jsonb;",
+      "after": "  v_chain jsonb;v_current_receipt jsonb;v_current_components jsonb;\n  v_pending public.weekly_source_pending_entitlement_bundles%rowtype;v_deferred_canonical jsonb;"
+    },
+    {
+      "name": "select real anchor publication receipt by the head digest",
+      "before": "  select count(*) into v_count from private.weekly_source_entitlement_publication_receipts receipt\n    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision\n      and receipt.request_digest=v_action.accepted_canonical_sha256;\n  if v_count<>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;\n  select * into strict v_receipt from private.weekly_source_entitlement_publication_receipts receipt\n    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision\n      and receipt.request_digest=v_action.accepted_canonical_sha256;",
+      "after": "  select count(*) into v_count from private.weekly_source_entitlement_publication_receipts receipt\n    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision\n      and receipt.request_digest=v_head.publication_receipt_digest;\n  if v_count<>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;\n  select * into strict v_receipt from private.weekly_source_entitlement_publication_receipts receipt\n    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision\n      and receipt.request_digest=v_head.publication_receipt_digest;"
+    },
+    {
+      "name": "independent anchor mode pending and whole native dual-canonical proof",
+      "before": "  if v_bundle.state is distinct from 'COMMITTED' or v_bundle.request_digest is distinct from v_action.accepted_canonical_sha256",
+      "after": "  if to_jsonb(v_receipt) is distinct from (v_chain->'native_head_chain'->(jsonb_array_length(v_chain->'native_head_chain')-1)->'native_receipt') then\n    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;\n  if v_receipt.publication_mode='IMMEDIATE' then\n    if v_receipt.pending_bundle_id is not null or v_receipt.request_digest is distinct from v_action.accepted_canonical_sha256 then\n      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;\n  elsif v_receipt.publication_mode='DEFERRED' then\n    select * into strict v_pending from public.weekly_source_pending_entitlement_bundles where id=v_receipt.pending_bundle_id;\n    v_deferred_canonical:=private.weekly_source_publication_request_canonical_v1(v_pending.request_json,'DEFERRED',v_pending.id);\n    if v_pending.state is distinct from 'RELEASED'\n      or v_pending.released_receipt_id is distinct from v_receipt.id\n      or v_pending.released_receipt_digest is distinct from v_receipt.request_digest\n      or v_pending.request_digest is distinct from v_receipt.request_digest\n      or (v_pending.decision_bundle_id,v_pending.bundle_revision,v_pending.candidate_id,v_pending.decision_id,v_pending.decided_by_user_id)\n        is distinct from (v_receipt.decision_bundle_id,v_receipt.bundle_revision,v_receipt.candidate_id,v_receipt.decision_id,v_receipt.decided_by_user_id)\n      or v_pending.member_root_ids is distinct from v_receipt.member_root_ids\n      or v_pending.member_family_booking_ids is distinct from v_receipt.member_family_booking_ids\n      or v_pending.member_root_versions is distinct from v_receipt.member_root_versions\n      or v_pending.proposed_head_ids is distinct from v_receipt.head_ids\n      or v_pending.source_revision_digest is distinct from v_bundle.source_revision_digest\n      or v_pending.contract_choice_digest is distinct from v_bundle.contract_choice_digest\n      or v_pending.released_by_worker_id is distinct from v_receipt.released_by_worker_id\n      or v_pending.released_by_worker_run_id is distinct from v_receipt.released_by_worker_run_id\n      or private.weekly_source_publication_request_digest_v1(v_deferred_canonical) is distinct from v_receipt.request_digest\n      or private.weekly_source_publication_request_canonical_v1(v_pending.request_json,'IMMEDIATE',null::uuid) is distinct from v_canonical then\n      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;\n  else raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;\n  if v_bundle.state is distinct from 'COMMITTED' or v_bundle.request_digest is distinct from v_action.accepted_canonical_sha256"
+    },
+    {
+      "name": "remove obsolete immediate-only clause while retaining all common member bindings",
+      "before": "    or v_receipt.publication_mode is distinct from 'IMMEDIATE' or v_receipt.pending_bundle_id is not null\n    or v_receipt.member_root_ids is distinct from array[v_head.root_timesheet_id]",
+      "after": "    or v_receipt.member_root_ids is distinct from array[v_head.root_timesheet_id]"
+    },
+    {
+      "name": "retain actual deferred publication proof in the removal CAS result",
+      "before": "  if v_current_head.id is distinct from v_head.id then",
+      "after": "  if v_receipt.publication_mode='DEFERRED' then\n    v_result:=v_result||jsonb_build_object('deferred_acceptance_publication',jsonb_build_object(\n      'pending_bundle_id',v_pending.id,'released_receipt_id',v_pending.released_receipt_id,\n      'immediate_canonical',v_canonical,'deferred_canonical',v_deferred_canonical,\n      'receipt_sha256',encode(v_receipt.request_digest,'hex')));\n  end if;\n  if v_current_head.id is distinct from v_head.id then"
+    }
+  ],
+  "whole_reverse_verified": true,
+  "accepted_immediate_action_and_bundle_hash_checks_unchanged": true,
+  "no_new_signatures": true,
+  "canonical_mounted": false,
+  "native_proof": false
+}

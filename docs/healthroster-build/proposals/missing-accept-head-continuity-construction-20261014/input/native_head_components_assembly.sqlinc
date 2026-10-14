@@ -1,0 +1,43 @@
+    select coalesce(pg_catalog.jsonb_agg(
+             pg_catalog.jsonb_build_object(
+               'component_ordinal',component.component_ordinal,
+               'component_id',component.component_id,
+               'component_sha256',pg_catalog.encode(component.component_sha256,'hex'),
+               'component_kind',component.component_kind,
+               'economic_key_type',component.economic_key_type,
+               'economic_key_value',component.economic_key_value,
+               'component_member_identity',component.component_member_identity,
+               'segment_id',component.segment_id,
+               'segment_key',component.segment_key,
+               'segment_stable_key',component.segment_stable_key,
+               'work_date',component.work_date,
+               'reference_number',component.reference_number,
+               'hours_day',case when component.hours_day is null then null
+                 else pg_catalog.to_char(component.hours_day,'FM9999999999990.000000') end,
+               'hours_night',case when component.hours_night is null then null
+                 else pg_catalog.to_char(component.hours_night,'FM9999999999990.000000') end,
+               'hours_sat',case when component.hours_sat is null then null
+                 else pg_catalog.to_char(component.hours_sat,'FM9999999999990.000000') end,
+               'hours_sun',case when component.hours_sun is null then null
+                 else pg_catalog.to_char(component.hours_sun,'FM9999999999990.000000') end,
+               'hours_bh',case when component.hours_bh is null then null
+                 else pg_catalog.to_char(component.hours_bh,'FM9999999999990.000000') end,
+               'additional_code_raw',component.additional_code_raw,
+               'unit_count',case when component.unit_count is null then null
+                 else pg_catalog.to_char(component.unit_count,'FM9999999999990.000000') end,
+               'unit_pay_rate',case when component.unit_pay_rate is null then null
+                 else pg_catalog.to_char(component.unit_pay_rate,'FM9999999999990.000000') end,
+               'unit_charge_rate',case when component.unit_charge_rate is null then null
+                 else pg_catalog.to_char(component.unit_charge_rate,'FM9999999999990.000000') end,
+               'expense_code',component.expense_code,
+               'pay_ex_vat',pg_catalog.to_char(component.pay_ex_vat,'FM9999999999990.00'),
+               'charge_ex_vat',case when component.charge_ex_vat is null then null
+                 else pg_catalog.to_char(component.charge_ex_vat,'FM9999999999990.00') end,
+               'exclude_from_pay',component.exclude_from_pay,
+               'origin',component.origin,
+               'movement_id',component.movement_id,
+               'movement_group_id',component.movement_group_id
+             ) order by component.component_ordinal),'[]'::jsonb)
+      into v_hashed
+    from public.weekly_source_entitlement_head_components component
+    where component.head_id=v_head.id;

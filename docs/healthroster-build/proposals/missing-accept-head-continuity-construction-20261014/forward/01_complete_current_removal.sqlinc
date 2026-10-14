@@ -1,0 +1,158 @@
+-- Current accepted entitlement removal, not a cash/paid/recovery classifier.
+-- Only the real committed head plus immutable accepted action and native
+-- publication receipt establish this fact. Historical proposals alone do not.
+create or replace function private.weekly_source_missing_accept_current_removal_v1(
+  p_work_event_id uuid,p_root_timesheet_id uuid,p_projection_publication_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_event public.weekly_work_events%rowtype;v_root public.timesheets%rowtype;v_contract public.contracts%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;v_cycle public.weekly_source_cycles%rowtype;
+  v_head public.weekly_source_entitlement_heads%rowtype;v_bundle public.weekly_source_entitlement_decision_bundles%rowtype;
+  v_action private.weekly_source_accepted_publication_actions_v1%rowtype;
+  v_receipt private.weekly_source_entitlement_publication_receipts%rowtype;v_audit public.audit_events%rowtype;
+  v_current_head public.weekly_source_entitlement_heads%rowtype;
+  v_chain jsonb;v_current_receipt jsonb;v_current_components jsonb;
+  v_count integer;v_inventory jsonb;v_identity jsonb;v_family uuid[];v_canonical jsonb;v_reviewed jsonb;
+  v_proof jsonb;v_components jsonb:='[]'::jsonb;v_component record;v_value jsonb;v_result jsonb;
+begin
+  if p_actor_user_id is null then return null;end if;
+  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;
+  select * into strict v_root from public.timesheets where timesheet_id=p_root_timesheet_id;
+  select * into strict v_contract from public.contracts where id=v_root.contract_id;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_projection_publication_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  -- Reuse exact genuine target-export validation, with no Source context
+  -- recursion or preparer-actor substitution. This fact does not assert cash.
+  perform private.weekly_source_kept_as_paid_facts_for_publication_v1(v_event.id,'NOT_INVOICED_DISAPPEARED',v_publication.id);
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+    v_event.first_source_group_id,v_event.client_id,v_cycle.finalisation_week_ending);
+  if (v_contract.candidate_id,v_contract.client_id) is distinct from (v_event.candidate_id,v_event.client_id)
+    or v_cycle.source_group_id is distinct from v_event.first_source_group_id or not v_root.is_current then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_SCOPE_UNBOUND' using errcode='42501';end if;
+  if exists(select 1 from public.weekly_source_upload_rows row
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=row.id
+      and resolution.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)
+    where row.upload_id=v_publication.upload_id and resolution.work_event_id=v_event.id)
+    or (v_event.identity_kind='PROFILE_EXTERNAL_KEY' and exists(select 1 from public.weekly_source_upload_rows row
+      where row.upload_id=v_publication.upload_id and row.external_source_key=v_event.profile_external_key)) then return null;end if;
+  v_identity:=private.weekly_source_resolve_root_identity_v1(v_root.timesheet_id);
+  if v_identity->>'ok' is distinct from 'true' or v_identity->>'canonical_timesheet_id' is distinct from v_root.timesheet_id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_SCOPE_UNBOUND' using errcode='55000';end if;
+  v_inventory:=private.weekly_source_effective_inventory_v1(v_root.timesheet_id);
+  if v_inventory->>'ok' is distinct from 'true' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_INVENTORY_UNAVAILABLE' using errcode='55000';end if;
+  if v_inventory->'head_id' is null or v_inventory->'head_id'='null'::jsonb then return null;end if;
+  select * into strict v_head from public.weekly_source_entitlement_heads where id=(v_inventory->>'head_id')::uuid;
+  v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_root.timesheet_id);
+  if v_head.state is distinct from 'COMMITTED_CURRENT' or v_head.authority_kind not in ('LOCKED_FINAL_SOURCE','PROTECTED')
+    or not coalesce(v_head.root_timesheet_id=any(v_family),false)
+    or (v_head.candidate_id,v_head.contract_id,v_head.week_ending_date,v_head.root_family_booking_id)
+      is distinct from (v_contract.candidate_id,v_contract.id,v_root.week_ending_date,v_root.booking_id) then return null;end if;
+  v_current_head:=v_head;
+  v_chain:=private.weekly_source_missing_accept_head_chain_v1(v_current_head.id,v_event.id);
+  if v_chain is null then return null;end if;
+  if v_chain->>'current_head_id' is distinct from v_current_head.id::text or v_chain->>'work_event_id' is distinct from v_event.id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_PROOF_UNBOUND' using errcode='55000';end if;
+  select * into strict v_head from public.weekly_source_entitlement_heads where id=(v_chain->>'anchor_head_id')::uuid;
+  if v_head.authority_kind is distinct from 'LOCKED_FINAL_SOURCE' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_PROOF_UNBOUND' using errcode='55000';end if;
+  v_current_receipt:=v_chain#>'{native_head_chain,0,native_receipt}';
+  v_current_components:=v_chain#>'{native_head_chain,0,canonical_components}';
+  select count(*) into v_count from private.weekly_source_accepted_publication_actions_v1 action
+    where action.planned_head_id=v_head.id;
+  if v_count=0 then return null;end if;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_ACTION_AMBIGUOUS' using errcode='55000';end if;
+  select * into strict v_action from private.weekly_source_accepted_publication_actions_v1 where planned_head_id=v_head.id;
+  select count(*) into v_count from public.audit_events audit
+    where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.object_id_text=v_action.decision_bundle_id::text
+      and audit.after_json->>'bundle_revision'=(v_action.bundle_revision-1)::text
+      and audit.after_json->>'work_event_id'=v_event.id::text;
+  if v_count=0 then return null;end if;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_PROOF_AMBIGUOUS' using errcode='55000';end if;
+  select * into strict v_audit from public.audit_events audit
+    where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.object_id_text=v_action.decision_bundle_id::text
+      and audit.after_json->>'bundle_revision'=(v_action.bundle_revision-1)::text
+      and audit.after_json->>'work_event_id'=v_event.id::text;
+  v_proof:=v_audit.after_json;
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(v_action.accepted_canonical_json,'IMMEDIATE',null::uuid);
+  v_reviewed:=jsonb_set(jsonb_set(v_canonical,'{bundle_revision}',to_jsonb(v_action.bundle_revision-1)),
+    '{financial_request,source_revision}',v_canonical#>'{financial_request,source_revision}'-'origin_kind'-'accepted_action_id');
+  if v_action.action is distinct from 'APPROVE_UPDATED_HOURS'
+    or (v_action.decision_bundle_id,v_action.bundle_revision,v_action.actor_user_id,v_action.planned_head_id)
+      is distinct from (v_head.decision_bundle_id,v_head.bundle_revision,v_head.decided_by_user_id,v_head.id)
+    or (v_action.root_timesheet_id,v_action.family_booking_id,v_action.candidate_id,v_action.client_id,v_action.contract_id,v_action.week_ending_date)
+      is distinct from (v_head.root_timesheet_id,v_head.root_family_booking_id,v_event.candidate_id,v_event.client_id,v_head.contract_id,v_head.week_ending_date)
+    or v_action.accepted_canonical_sha256 is distinct from private.weekly_source_publication_request_digest_v1(v_canonical)
+    or v_canonical is distinct from v_action.accepted_canonical_json
+    or v_canonical#>>'{financial_request,source_revision,origin_kind}' is distinct from 'CURRENT_FINAL_SOURCE_V1'
+    or v_canonical#>>'{financial_request,source_revision,accepted_action_id}' is distinct from v_action.action_id::text
+    or v_canonical#>>'{financial_request,source_revision,final_revision_id}' is distinct from v_action.final_revision_id::text
+    or v_action.expected_prior_origin is distinct from v_proof#>'{inputs,current_inventory,approval_basis,origin}'
+    or encode(v_action.before_inventory_sha256,'hex') is distinct from v_proof#>>'{inputs,current_inventory,approval_basis,inventory_digest}'
+    or encode(v_action.before_entitlement_sha256,'hex') is distinct from v_proof#>>'{inputs,current_inventory,approval_basis,entitlement_digest}'
+    or v_reviewed is distinct from v_proof->'canonical_proposal'
+    or v_proof->>'actor_user_id' is distinct from v_audit.actor_user_id::text
+    or v_proof->>'proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',v_proof-'proof_sha256'),'hex')
+    or v_proof#>>'{inputs,work_event_id}' is distinct from v_event.id::text
+    or v_proof#>>'{inputs,contract_id}' is distinct from v_head.contract_id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_PROOF_UNBOUND' using errcode='55000';end if;
+  select * into strict v_bundle from public.weekly_source_entitlement_decision_bundles bundle
+    where bundle.decision_bundle_id=v_head.decision_bundle_id and bundle.bundle_revision=v_head.bundle_revision;
+  select count(*) into v_count from private.weekly_source_entitlement_publication_receipts receipt
+    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision
+      and receipt.request_digest=v_action.accepted_canonical_sha256;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;
+  select * into strict v_receipt from private.weekly_source_entitlement_publication_receipts receipt
+    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision
+      and receipt.request_digest=v_action.accepted_canonical_sha256;
+  if v_bundle.state is distinct from 'COMMITTED' or v_bundle.request_digest is distinct from v_action.accepted_canonical_sha256
+    or v_bundle.decided_by_user_id is distinct from v_head.decided_by_user_id
+    or (v_bundle.source_root_timesheet_id,v_bundle.source_root_family_booking_id,v_bundle.source_contract_id,v_bundle.week_ending_date)
+      is distinct from (v_head.root_timesheet_id,v_head.root_family_booking_id,v_head.contract_id,v_head.week_ending_date)
+    or v_receipt.publication_mode is distinct from 'IMMEDIATE' or v_receipt.pending_bundle_id is not null
+    or v_receipt.member_root_ids is distinct from array[v_head.root_timesheet_id]
+    or v_receipt.member_family_booking_ids is distinct from array[v_head.root_family_booking_id]
+    or v_receipt.member_root_versions is distinct from array[v_head.root_timesheet_version]
+    or to_jsonb(v_receipt.member_root_versions) is distinct from v_canonical->'member_root_versions'
+    or v_receipt.head_ids is distinct from array[v_head.id]
+    or v_receipt.candidate_id is distinct from v_head.candidate_id
+    or v_receipt.decision_id is distinct from v_head.decision_id
+    or v_receipt.decided_by_user_id is distinct from v_head.decided_by_user_id
+    or v_receipt.scope_change_tx_token is distinct from v_head.scope_change_tx_token
+    or v_head.publication_receipt_digest is distinct from v_receipt.request_digest then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_RECEIPT_UNBOUND' using errcode='55000';end if;
+  if (v_chain->'native_head_chain'->(jsonb_array_length(v_chain->'native_head_chain')-1)->'canonical_components')
+    is distinct from v_canonical#>'{financial_request,member_entitlements,0,components}' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_COMPONENTS_CHANGED' using errcode='55000';end if;
+  for v_component in select value,ordinality from jsonb_array_elements(v_inventory->'components') with ordinality order by ordinality loop
+    v_value:=private.weekly_source_publication_component_canonical_v1(v_component.value-'component_sha256','missing_accept.current_component');
+    if v_value->>'component_member_identity'=v_event.id::text and (
+      v_value->>'economic_key_value'='weekly-source-event:'||v_event.id::text
+      or v_value->>'economic_key_value'='weekly-source-expense:'||v_event.id::text) then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_COMPONENT_REINTRODUCED' using errcode='55000';end if;
+    v_components:=v_components||jsonb_build_array(v_value);
+  end loop;
+  if v_components is distinct from v_current_components
+    or v_current_head.component_count is distinct from jsonb_array_length(v_components)
+    or v_current_head.certified_zero is distinct from (jsonb_array_length(v_components)=0) then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_COMPONENTS_CHANGED' using errcode='55000';end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_REMOVAL_V1',
+    'work_event_id',v_event.id,'root_timesheet_id',v_root.timesheet_id,'projection_publication_id',v_publication.id,
+    'accepted_source_removed',true,'head',to_jsonb(v_current_head),'accepted_action',to_jsonb(v_action),
+    'native_publication_receipt',v_current_receipt,'current_inventory',v_inventory,'reserved_proof_sha256',v_proof->'proof_sha256',
+    'cash_recovered',null,'paid_quantity_known',false,'withheld_quantity_known',false,'writer_permission',null);
+  if v_current_head.id is distinct from v_head.id then
+    v_result:=v_result||jsonb_build_object('acceptance_head',to_jsonb(v_head),'acceptance_publication_receipt',to_jsonb(v_receipt),
+      'native_head_continuity',v_chain);
+  end if;
+  return v_result||jsonb_build_object('removal_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_REMOVAL_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid) from public,anon,authenticated,service_role;

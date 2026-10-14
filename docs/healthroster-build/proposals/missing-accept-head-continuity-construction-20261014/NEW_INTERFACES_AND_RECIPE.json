@@ -1,0 +1,20 @@
+{
+  "source_only": true,
+  "own_predecessor_commit": "f1aa8d578b34d2016e916f29c43e5b0c617ed1e8",
+  "new_private_signatures": ["private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)"],
+  "complete_existing_private_owner": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+  "selected_source_order": ["forward/00_missing_accept_head_chain.sqlinc", "forward/01_complete_current_removal.sqlinc"],
+  "logical_owner": "postgres",
+  "execution_acl": "PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "new_public_signatures": [],
+  "new_tables": 0,
+  "new_columns": 0,
+  "shared_banking_owner_changes": 0,
+  "current_before_after_reverse": "COMPLETE_CURRENT_REVERSE.json",
+  "native_inputs": "CURRENT_INPUT_PINS.json",
+  "runtime_forward_changes": 0,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "remaining_source_and_native_gates": "CONSTRUCTION_BOUNDARY.md"
+}
