@@ -1,0 +1,14 @@
+{
+  "schema_version": "A0_CURRENT_REFUSAL_SUCCESSOR_SOURCE_CHECKS_V1",
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "unique_hunks": 2,
+  "full_current_reverse": true,
+  "prior19_artifacts_unchanged": 19,
+  "unit_tests": 21,
+  "unit_pass": 21,
+  "syntax_files": 4,
+  "exact_current_guard_wrapper": true,
+  "native_calls": 0,
+  "output_sha256": "7579ca54ce24d8ea8f87e8364bf1947583c701fc8bd634618146757446266e76",
+  "native_contract": null
+}

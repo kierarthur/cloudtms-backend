@@ -1,0 +1,18 @@
+{
+  "sourceOnly": true,
+  "status": "47_EXACT_SAVED_STAGED_PUBLISHED_ARCHIVE_PINS_PASS_INHERITED_WHITESPACE_RETAINED",
+  "files": 47,
+  "priorHeldCheck": {
+    "cause": "Root checker initially omitted line-ending bytes from the author line hash.",
+    "archiveChanged": false,
+    "correction": "Use the exact newline-preserving line tokenizer employed by the frozen author proof."
+  },
+  "rawWhitespacePass": false,
+  "rawWhitespaceExit": 2,
+  "rawWhitespaceOutputSha256": "2cb53941c6948962190cb6d985a2553680e5050a9a42f6831f5be2c40dd80a49",
+  "inheritedFindings": 528,
+  "introducedFindings": 0,
+  "parentCommit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "rootExecutableChanges": 0,
+  "nativeCalls": 0
+}

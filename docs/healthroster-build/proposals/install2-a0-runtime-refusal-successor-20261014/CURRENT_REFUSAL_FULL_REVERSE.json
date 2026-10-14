@@ -1,0 +1,19 @@
+{
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "prior19_manifest_sha256": "0bd3742eca2bc387d3dcfd521ea4b1c7de7d559aa479aee598ebd593fefca9c9",
+  "before_sha256": "42c67a57ee089ad45cad4a0d583ed5d68eaecca8013b23d8869ba6989bc0baee",
+  "after_sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052",
+  "current_input_sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+  "hunks": [
+    {
+      "original": "return sbRpc(env, name, args, { timeoutMs: 20000 });",
+      "replacement": "return sbRpcRecordingGuardRefusal(env, name, args, { timeoutMs: 20000 });"
+    },
+    {
+      "original": "const result = await sbRpc(env, action === 'AUTHORISE' ? 'timesheet_authorise_bulk_atomic' : 'timesheet_unauthorise_bulk_atomic', {",
+      "replacement": "const result = await sbRpcRecordingGuardRefusal(env, action === 'AUTHORISE' ? 'timesheet_authorise_bulk_atomic' : 'timesheet_unauthorise_bulk_atomic', {"
+    }
+  ],
+  "prior_three_hunks_preserved": true,
+  "full_current_reverse": true
+}

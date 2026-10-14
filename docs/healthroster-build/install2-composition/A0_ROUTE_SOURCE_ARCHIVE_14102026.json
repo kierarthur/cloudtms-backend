@@ -1,0 +1,250 @@
+{
+  "sourceOnly": true,
+  "status": "ARCHIVED_ACCEPTED_SOURCE_RUNTIME_MOUNT_HELD_FOR_SCOPED_PERMISSION_SUCCESSOR",
+  "rootInputCommit": "efc03dc5f540ac128838b34376790a9aa49fc166",
+  "authorPublication": "126e25d0d9b1acebc331603cbd5a22970b559342",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/AUTH_TENANT_FULL_REVERSE.json",
+      "sha256": "75873f288b5d47adf3c051bedf07fbb2523d2a850bca001ba3a6866b35f3484f",
+      "bytes": 1755
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/CURRENT_AUTH_OWNER_SOURCE.json",
+      "sha256": "f0e483280d7d20ca2608ed8cb8c5092518e05f67dc9a5b0e855e401dcdc85b9c",
+      "bytes": 2946
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "313d6f10623780b04c79e7c29bf2bfd990d0e0873b084725654050d42c043647",
+      "bytes": 2059
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "df7e3e5108f86d791391e071a84cc2f1aae78c87e0676cfa4f7ef875a2c06089",
+      "bytes": 566
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/SOURCE_HANDOFF.md",
+      "sha256": "ae6b5f44d6f1677a8e916074a5068b7abbec0130c7e031c0665b640d67732ad8",
+      "bytes": 2335
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/actual-auth-owner.test.mjs",
+      "sha256": "877ad97af301a5b76c87cc8f4b78b368781b80b4c24d2b9d2639993cdcc23a29",
+      "bytes": 2250
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/forward/broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "2930371dc338c1d5a864b584f789db4ad959b4972ddf52bf518f51bd80954ced",
+      "bytes": 12517
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/freeze-auth-tenant-successor.mjs",
+      "sha256": "2faae2f1c5564992fe210958502ffeee65c229e4efb310bf6c76c55f806590cc",
+      "bytes": 1637
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/office-auth-tenant-successor.test.mjs",
+      "sha256": "b660b739ab518da2884ff06e2bc8fb8e55a61daec2e86ee735d6a6652d995b47",
+      "bytes": 24867
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/prepare-auth-tenant-successor.mjs",
+      "sha256": "ff097f5d201ff523d2d3886d64ef68a438165c86c990edc0800d4a29b3790f7c",
+      "bytes": 7083
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/verify-auth-tenant-successor.mjs",
+      "sha256": "95aa99dd6f9aee59535c8220905c04136921f4985659ce25190ab211be060731",
+      "bytes": 3140
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-publication-checkpoint-20261014/FINAL_A0_MOUNT_PINS.json",
+      "sha256": "6dec4e14c1b4789946d9e652c91405802fd86a25897b143014ccf69d5b7dcb89",
+      "bytes": 47199
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-publication-checkpoint-20261014/INHERITED_WHITESPACE_PROOF.json",
+      "sha256": "cc4a7496bdd0c5255e795f6bc947b096e1102eca9185c4207c9282ffba090747",
+      "bytes": 121489
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-publication-checkpoint-20261014/SOURCE_HANDOFF.md",
+      "sha256": "58efb114a92c7eb14b14dfd4fbf7b170d2a9536bdc55e3210fbe205970335a1e",
+      "bytes": 3464
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-publication-checkpoint-20261014/prepare-final-mount-pins.mjs",
+      "sha256": "90c12af19b1a7057173ca4f0191b723d782deaeb305d58ae2f11807b56c7f028",
+      "bytes": 2255
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-publication-checkpoint-20261014/prove-inherited-whitespace.mjs",
+      "sha256": "7ce6825d9c5c4215eed2ad397ef4d0847bfbda68ae80cfa4d98b019ecd5578a5",
+      "bytes": 2833
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/CURRENT_GUARD_REFUSAL_OWNER.json",
+      "sha256": "7f67a3c257358ff1d91ab02fb6377566dd4c916446ca1848572bade4f005be35",
+      "bytes": 938
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/CURRENT_REFUSAL_FULL_REVERSE.json",
+      "sha256": "c58de556826b63f468777cec1b5807576517ca8bf57e807629c206995cbb6da3",
+      "bytes": 1043
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "471786b4e046e3b4a49093ac9d2665550f25c6ab97a76da0df4de999d50eba10",
+      "bytes": 1934
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "9fa2df0931b26d02298220c2e61c6e606a3d19d603879ff710cf5430a96500ae",
+      "bytes": 458
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/SOURCE_HANDOFF.md",
+      "sha256": "4f05d9ae660982ffa9f2724e29f09775c31378c2f0360059d5ea1ccb5a6d4e82",
+      "bytes": 1371
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/forward/broker/src/index.js",
+      "sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052",
+      "bytes": 8922018
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/freeze-refusal-successor.mjs",
+      "sha256": "1a3194337f0c731daba96945ca507ad13a314d95b1e367a5b7d3159b704b35e8",
+      "bytes": 1759
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/office-route-wiring-successor.test.mjs",
+      "sha256": "9b185e8da6f043684fd8332dbe00e35bf7b886fd0d1db8cc914f35b712e37f23",
+      "bytes": 23448
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/prepare-refusal-successor.mjs",
+      "sha256": "81cebeb61fe2a9db689fa915abe0919ba9b9e4220a7231afb827091a2a91e8f7",
+      "bytes": 5552
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/verify-refusal-successor.mjs",
+      "sha256": "9699584f63994c1b9aa073e6b5bca1f1215f6e89aeb5d83dafc6fd27d235614f",
+      "bytes": 2638
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/CURRENT_INDEX_FULL_REVERSE.json",
+      "sha256": "517510930d9dbbc860dc773ff4e47d281d85601215dc2d5a4eaa3a4b21a2b409",
+      "bytes": 9899
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/NATIVE_OWNER_SOURCE_PINS.json",
+      "sha256": "7fba6f0be758e9d6d9ecd1a1bebe13516a9404b734b39c6c28e438b737037a1b",
+      "bytes": 7712
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/PRESERVED_PRIOR_SOURCE.json",
+      "sha256": "8bf5b1bff200f459748970dbcda48d257e87e252a19388963528e79a66f922f3",
+      "bytes": 31067
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/REVIEW_MANIFEST.json",
+      "sha256": "0bd3742eca2bc387d3dcfd521ea4b1c7de7d559aa479aee598ebd593fefca9c9",
+      "bytes": 3649
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/RUNTIME_IMPORT_CLOSURE.json",
+      "sha256": "c4aebfc13006791f9db57a653da37abd6d8386a25f1033a22d4140829e14d1c7",
+      "bytes": 44241
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "6271053e31f2472d15a31da6feca0c88a92c8d277c9656c75f86fd7686a7b135",
+      "bytes": 619
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/SOURCE_HANDOFF.md",
+      "sha256": "c3b9163ddab6cef4b98ed80a94808dc2093ba86e0918f8b3731c73f10cb2762d",
+      "bytes": 8253
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/forward/broker/src/index.js",
+      "sha256": "42c67a57ee089ad45cad4a0d583ed5d68eaecca8013b23d8869ba6989bc0baee",
+      "bytes": 8921976
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/forward/broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "b828121d410bfba13e55b429ea57c2c576a25680fcc7b7b3d15c39db2e38b938",
+      "bytes": 12202
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/freeze-a0-route-wiring.mjs",
+      "sha256": "42d9af37c8ac84fe746c96e3fe755e5a89e7042d7b841fbf999290de6cb56ce7",
+      "bytes": 1995
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/office-route-wiring.test.mjs",
+      "sha256": "77bd6d77026b9a7c807178883ef1d8023b294d9830fcb206e1d90f758bc4e470",
+      "bytes": 21818
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/prepare-a0-route-wiring.mjs",
+      "sha256": "d1d5a75c99797a336cbe6521cfb39d2530c5eda65a93f9975530d10939a09546",
+      "bytes": 11799
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/reference/broker/src/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "bytes": 6085
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/reference/broker/src/native-correction-snapshot-producers.mjs",
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "bytes": 15646
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/reference/broker/src/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "bytes": 980
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/reference/broker/src/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "bytes": 13634
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/reference/broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "bytes": 43934
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/unit-fixtures.mjs",
+      "sha256": "b712715b970af8b9ccb70ca566409949bd0fcd7c45b051e6057fe80ede630bbc",
+      "bytes": 7325
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/verify-a0-route-wiring.mjs",
+      "sha256": "35924b00fb6c49853678648be88a3b4dfbb6f8774743dd28c7e87841bc1615b8",
+      "bytes": 7954
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-consumer-forward-20261014/CHECKLIST_SOURCE_CENSUS.json",
+      "sha256": "634913c5e864f120e35127dc6568659c899734518d156a7bd1a57001d2a353ae",
+      "bytes": 68456
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-consumer-forward-20261014/census-checklist-source.mjs",
+      "sha256": "6f64f2767997a188a9758194414a2d1bfebfb542ce4cf3d6d927328a89bf241a",
+      "bytes": 3809
+    }
+  ],
+  "frozenArtifacts": 40,
+  "additionalSourceRecords": 7,
+  "rootExecutableChanges": 0,
+  "nativeCalls": 0,
+  "configurationChanges": 0,
+  "hold": "Scoped AUTHORISE/LIFECYCLE permission successor and concrete Office/native reader consumers remain under construction. This archive does not mount or expose an older route.",
+  "whitespace": "Exact frozen snapshots retain inherited whitespace; no raw whitespace PASS is claimed."
+}

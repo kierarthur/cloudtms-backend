@@ -1,0 +1,17 @@
+{
+  "schema_version": "A0_AUTH_TENANT_SOURCE_SUCCESSOR_CHECKS_V1",
+  "source_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "unique_hunks": 2,
+  "full_module_reverse": true,
+  "prior19_plus10_unchanged": 29,
+  "current_auth_source_exact": true,
+  "actual_distinct_config_vector": true,
+  "actual_require_user_owner_tested": true,
+  "unit_tests": 26,
+  "unit_pass": 26,
+  "syntax_files": 5,
+  "configuration_mutations": 0,
+  "native_calls": 0,
+  "native_contract": null,
+  "output_sha256": "fbc4deaebdcd3bb48aa8912806443602a6c66d59cd6a870c14f7db78cf6c4c2a"
+}

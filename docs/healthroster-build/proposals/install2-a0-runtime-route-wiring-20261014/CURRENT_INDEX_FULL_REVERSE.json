@@ -1,0 +1,62 @@
+{
+  "schema_version": "A0_OFFICE_CURRENT_RUNTIME_REVERSE_V1",
+  "source_only": true,
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "owner": "broker/src/index.js",
+  "before_sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+  "before_bytes": 8915506,
+  "after_sha256": "42c67a57ee089ad45cad4a0d583ed5d68eaecca8013b23d8869ba6989bc0baee",
+  "after_bytes": 8921976,
+  "hunks": [
+    {
+      "original": "import { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';",
+      "replacement": "import { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';\nimport { assertTimesheetCorrectionOfficeActor, createTimesheetCorrectionLifecycleResolver, handleTimesheetCorrectionOfficeAction, matchTimesheetCorrectionOfficeRoute } from './timesheet-correction-office-routes.mjs';"
+    },
+    {
+      "original": "// Root's guarded route mounting supplies its existing qualified Office actor,\n// RPC, request-read, cleanup and ordinary lifecycle dependencies to this factory.\n// They remain exactly the original adapter dependencies; no new route/auth is\n// mounted by this source proposal.\n\nasync function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {",
+      "replacement": "// This finite Office consumer binds existing native owners. Feature/certificate,\n// actual actor, CAS and isolation admission remain inside those native owners.\nfunction createTimesheetCorrectionOfficeOrchestrator(env, req, ctx, admittedActor) {\n  const nativeNames = new Set(['timesheet_correction_send_v1', 'timesheet_correction_prepare_v1',\n    'timesheet_correction_authorise_atomic_v1', 'timesheet_correction_cancel_atomic_v1',\n    'timesheet_correction_return_to_draft_v1']);\n  const error = (code, status = 409) => { const e = new Error(code); e.code = code; e.status = status; throw e; };\n  let orchestrator;\n  const resolveLifecycleItem = createTimesheetCorrectionLifecycleResolver({\n    readContexts: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),\n    readProjection: (timesheetId, candidateId) => sbRpc(env, 'timesheet_correction_request_projection_v1', {\n      p_timesheet_id: timesheetId, p_candidate_id: candidateId\n    }),\n    readPrepare: payload => orchestrator.prepare(payload, req),\n    readTransition: (timesheetId, action, actor) => sbRpc(env, 'timesheet_correction_pair_transition_v1', {\n      p_timesheet_id: timesheetId, p_action: action, p_actor_user_id: actor.actor_user_id,\n      p_operation_id: null, p_expected_chain_fingerprint: null, p_lock_rows: false, p_max_members: 100\n    })\n  });\n  orchestrator = createTimesheetCorrectionNativeOrchestrator(env, {\n    assertActor: async (context, action) => {\n      if (context !== req || !['SEND', 'PREPARE', 'AUTHORISE', 'CANCEL', 'RETURN', 'UNAUTHORISE'].includes(action))\n        error('CORRECTION_ACTOR_NOT_ALLOWED', 403);\n      const actor = assertTimesheetCorrectionOfficeActor(env, await requireUser(env, req, ['admin']));\n      if (actor.actor_user_id !== admittedActor.actor_user_id) error('CORRECTION_ACTOR_NOT_ALLOWED', 403);\n      return actor;\n    },\n    rpc: (name, args) => {\n      if (!nativeNames.has(name)) error('CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE', 503);\n      return sbRpc(env, name, args, { timeoutMs: 20000 });\n    },\n    readRequestAuthority: ({ requestId, actor }) => sbRpc(env, 'timesheet_correction_request_authority_v1', {\n      p_request_id: requestId, p_actor_user_id: actor.actor_user_id\n    }),\n    deleteCommittedTimesheetR2Keys: (result, options) => deleteCommittedTimesheetR2Keys(env, result, options),\n    resolveLifecycleItem,\n    runOrdinaryLifecycle: async ({ items, action, actor }) => {\n      if (!['AUTHORISE', 'UNAUTHORISE'].includes(action)) error('CORRECTION_PAYLOAD_INVALID', 400);\n      if (action === 'UNAUTHORISE') {\n        // Identical current Source/NEXT preflight, including native expanded whole members.\n        const scope = await weeklySourceUnauthorisePairPreflight({\n          rpc: (name, args, options) => sbRpc(env, name, args, options), ownerStatusRpc: bpayNextOwnerStatusRpc(env),\n          actorUserId: actor.actor_user_id, readPhysicalTimesheet: id => sbGetOne(env,\n            env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id'),\n          timesheetIds: [...new Set(items.map(item => item.timesheet_id || item.timesheetId || item.current_timesheet_id ||\n            item.currentTimesheetId || item.requested_timesheet_id || item.requestedTimesheetId || item.row_key?.slice(10)))]\n        });\n        if (!scope.ordinary) error(scope.body?.code || scope.body?.error_code || 'CORRECTION_LIFECYCLE_SCOPE_UNPROVED', scope.status || 409);\n      }\n      const result = await sbRpc(env, action === 'AUTHORISE' ? 'timesheet_authorise_bulk_atomic' : 'timesheet_unauthorise_bulk_atomic', {\n        p_items: items, p_actor_user_id: actor.actor_user_id, p_now_utc: nowIso()\n      }, { timeoutMs: 20000 });\n      requestTimesheetLifecycleWorkbenchWake(env, ctx, { action, sourceRoute: 'TIMESHEET_CORRECTION_NATIVE_LIFECYCLE',\n        lifecycleChangedCount: timesheetLifecycleMutationChangedCount(result), actorUserId: actor.actor_user_id });\n      return result;\n    }\n  });\n  return orchestrator;\n}\n\nfunction timesheetCorrectionOfficeFailure(error) {\n  const values = [error?.json?.error_code, error?.json?.message, error?.error_code, error?.code, error?.message];\n  const code = values.find(value => typeof value === 'string' && /^(?:CORRECTION_|WEEKLY_SOURCE_|BPAY_NEXT_|CANDIDATE_CONTEXT_)[A-Z0-9_]+$/.test(value))\n    || 'CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE';\n  const sqlstate = error?.json?.code || error?.code;\n  const explicitStatus = Number(error?.status);\n  const status = code === 'CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE' ? 503\n    : Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus <= 599 ? explicitStatus\n    : sqlstate === '42501' ? 403 : sqlstate === '22023' ? 400 : sqlstate === 'P0002' ? 404 : 409;\n  return new Response(JSON.stringify({ ok: false, error_code: code }), {\n    status, headers: { ...JSON_HEADERS, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }\n  });\n}\n\nasync function handleTimesheetCorrectionOfficeRoute(env, req, action, ctx) {\n  try {\n    const result = await handleTimesheetCorrectionOfficeAction(env, req, action, {\n      requireUser,\n      createOrchestrator: ({ actor }) => createTimesheetCorrectionOfficeOrchestrator(env, req, ctx, actor),\n      afterAuthorise: (receipt, actor) => {\n        const receipts = Array.isArray(receipt.results) ? receipt.results.filter(result => result.kind === 'CORRECTION_REQUEST' &&\n          result.success === true).map(result => result.receipt) : [receipt];\n        for (const applied of receipts) {\n          if (applied?.state !== 'APPLIED' || applied.replayed === true) continue;\n          // The orchestrator already requires the exact native singleton P0 list.\n          requestTimesheetLifecycleWorkbenchWake(env, ctx, { action: 'AUTHORISE',\n            sourceRoute: 'TIMESHEET_CORRECTION_NATIVE_APPROVAL', lifecycleChangedCount: 1,\n            actorUserId: actor.actor_user_id, timesheetId: applied.ordinary_notification_timesheet_ids[0] });\n        }\n      }\n    });\n    return withCORS(env, req, new Response(JSON.stringify(result.body), {\n      status: result.status, headers: { ...JSON_HEADERS, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }\n    }));\n  } catch (error) { return withCORS(env, req, timesheetCorrectionOfficeFailure(error)); }\n}\n\nasync function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {"
+    },
+    {
+      "original": "if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {",
+      "replacement": "const correctionOfficeAction = matchTimesheetCorrectionOfficeRoute(req.method, p);\nif (correctionOfficeAction) return handleTimesheetCorrectionOfficeRoute(env, req, correctionOfficeAction, ctx);\n\nif (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {"
+    }
+  ],
+  "unchanged_modules": [
+    {
+      "path": "broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "bytes": 43934,
+      "action": "PRESERVE_CURRENT_SOURCE"
+    },
+    {
+      "path": "broker/src/native-correction-snapshot-producers.mjs",
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "bytes": 15646,
+      "action": "PRESERVE_CURRENT_SOURCE"
+    },
+    {
+      "path": "broker/src/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "bytes": 980,
+      "action": "PRESERVE_CURRENT_SOURCE"
+    },
+    {
+      "path": "broker/src/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "bytes": 13634,
+      "action": "PRESERVE_CURRENT_SOURCE"
+    },
+    {
+      "path": "broker/src/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "bytes": 6085,
+      "action": "PRESERVE_CURRENT_SOURCE"
+    }
+  ],
+  "unit_fixture_original": {
+    "path": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-callbacks.test.mjs",
+    "sha256": "ba22ebf63a5977e6f23019695fad3c55bf317174def8a84010dfc69b7f23a6d5",
+    "classification": "UNIT_ONLY_SYNTHETIC_TEST_SOURCE",
+    "change": "Exact synthetic helper extraction; no identity, money or semantic change."
+  }
+}

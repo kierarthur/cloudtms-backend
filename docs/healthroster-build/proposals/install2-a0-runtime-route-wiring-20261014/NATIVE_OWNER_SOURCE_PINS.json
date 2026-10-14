@@ -1,0 +1,168 @@
+{
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "status": "SOURCE_ONLY_NATIVE_CONTRACT_AND_CALLS_HELD",
+  "files": [
+    {
+      "path": "docs/healthroster-build/install2-composition/A0_CURRENT_SOURCE_COMPOSITION_14102026.json",
+      "sha256": "2d5afb3597d61719112eac235db02ff7aa0bebbe47c231f0248ed17a7a3c318a",
+      "bytes": 62745,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "docs/healthroster-build/install2-composition/A0_CURRENT_SOURCE_CHECKS_14102026.json",
+      "sha256": "5fe86fd51a99f7d025540c9e2ca8827bae386c2bc27ba33b2840e900764dd3c2",
+      "bytes": 768,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+      "sha256": "6199a03d706976e2166eddaaa230e87326568c6a0cce2de876067bd8afad17bc",
+      "bytes": 7368,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/01_canonical_input_assert.sqlinc",
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39",
+      "bytes": 1528,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+      "bytes": 9527,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/03_native_input_witness.sqlinc",
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+      "bytes": 4526,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "bytes": 12314,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "bytes": 19166,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "bytes": 5935,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+      "bytes": 35853,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "bytes": 23160,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+      "sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94",
+      "bytes": 1668,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+      "bytes": 10590,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+      "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f",
+      "bytes": 6955,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+      "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e",
+      "bytes": 10882,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3",
+      "bytes": 15408,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc",
+      "bytes": 8829,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_acl.sqlinc",
+      "sha256": "c082c64392a26268a0a344f6c101a7fc62a2e537d1cbe6582fdb613c72ad8a93",
+      "bytes": 13022,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "bytes": 101268,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "bytes": 311541,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/09_01_operational_rule_projection.sqlinc",
+      "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a",
+      "bytes": 1367,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0",
+      "bytes": 1820,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/18_FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "9ba9d59f3168492d53cf38c003e5a7cca117aa627edcbfe211061a0d628e8c2f",
+      "bytes": 19095,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+      "sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f",
+      "bytes": 22825,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_32_timesheet_authorise_bulk_atomic.sql",
+      "sha256": "aedb4e3d7f08ce148d44630f4a877021dd013935535004d9aa1584927ed7f2cc",
+      "bytes": 25620,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql",
+      "sha256": "c38879ec244ab3dbc6c0f58f4b2569f5252246a2765b381e78d306f0621106db",
+      "bytes": 28253,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+      "sha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+      "bytes": 14256,
+      "origin": "EXACT_CURRENT_GIT_SOURCE_ONLY"
+    }
+  ]
+}

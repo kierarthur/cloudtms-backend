@@ -1,0 +1,8 @@
+{
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "path": "broker/src/index.js",
+  "source": "async function sbRpcRecordingGuardRefusal(env, fn, args, opts, context = null) {\n  const correlationId = (context && typeof context === 'object' && context.correlationId)\n    ? String(context.correlationId)\n    : weeklySourceGuardRefusalCorrelationId('broker');\n  try {\n    return await sbRpc(env, fn, args, opts);\n  } catch (error) {\n    await recordWeeklySourceGuardRefusal(\n      env,\n      error,\n      correlationId,\n      `broker:${String(fn || '').trim() || 'unknown'}`,\n      (context && typeof context === 'object' && context.actorUserId !== undefined)\n        ? context.actorUserId\n        : weeklySourceGuardRefusalActor(args)\n    );\n    throw error;\n  }\n}\n\n",
+  "sha256": "44a66cc97b06f098b07c4ed25fe1ffab017641d1969fc726697757048a260354",
+  "actor_key": "p_actor_user_id",
+  "unchanged": true
+}

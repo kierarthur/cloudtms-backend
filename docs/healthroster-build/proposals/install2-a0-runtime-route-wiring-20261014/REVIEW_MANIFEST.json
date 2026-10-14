@@ -1,0 +1,106 @@
+{
+  "schema_version": "A0_OFFICE_CURRENT_RUNTIME_WIRING_FREEZE_V1",
+  "status": "FROZEN_FOR_INDEPENDENT_SOURCE_CRITIC_NATIVE_AND_OFFICE_CONSUMER_ACCEPTANCE_HELD",
+  "source_only": true,
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "source_check_sha256": "6271053e31f2472d15a31da6feca0c88a92c8d277c9656c75f86fd7686a7b135",
+  "credential_scan": {
+    "scope": "ALL_PACKET_ARTIFACT_BYTES_INCLUDING_COMPLETE_CURRENT_INDEX",
+    "artifacts": 18,
+    "findings": 0
+  },
+  "native_compiled_contract": null,
+  "native_calls": 0,
+  "artifacts": [
+    {
+      "path": "CURRENT_INDEX_FULL_REVERSE.json",
+      "bytes": 9899,
+      "sha256": "517510930d9dbbc860dc773ff4e47d281d85601215dc2d5a4eaa3a4b21a2b409"
+    },
+    {
+      "path": "forward/broker/src/index.js",
+      "bytes": 8921976,
+      "sha256": "42c67a57ee089ad45cad4a0d583ed5d68eaecca8013b23d8869ba6989bc0baee"
+    },
+    {
+      "path": "forward/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 12202,
+      "sha256": "b828121d410bfba13e55b429ea57c2c576a25680fcc7b7b3d15c39db2e38b938"
+    },
+    {
+      "path": "freeze-a0-route-wiring.mjs",
+      "bytes": 1995,
+      "sha256": "42d9af37c8ac84fe746c96e3fe755e5a89e7042d7b841fbf999290de6cb56ce7"
+    },
+    {
+      "path": "NATIVE_OWNER_SOURCE_PINS.json",
+      "bytes": 7712,
+      "sha256": "7fba6f0be758e9d6d9ecd1a1bebe13516a9404b734b39c6c28e438b737037a1b"
+    },
+    {
+      "path": "office-route-wiring.test.mjs",
+      "bytes": 21818,
+      "sha256": "77bd6d77026b9a7c807178883ef1d8023b294d9830fcb206e1d90f758bc4e470"
+    },
+    {
+      "path": "prepare-a0-route-wiring.mjs",
+      "bytes": 11799,
+      "sha256": "d1d5a75c99797a336cbe6521cfb39d2530c5eda65a93f9975530d10939a09546"
+    },
+    {
+      "path": "PRESERVED_PRIOR_SOURCE.json",
+      "bytes": 31067,
+      "sha256": "8bf5b1bff200f459748970dbcda48d257e87e252a19388963528e79a66f922f3"
+    },
+    {
+      "path": "reference/broker/src/exact-request-a0-weekly-clock-arm.mjs",
+      "bytes": 6085,
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6"
+    },
+    {
+      "path": "reference/broker/src/native-correction-snapshot-producers.mjs",
+      "bytes": 15646,
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf"
+    },
+    {
+      "path": "reference/broker/src/native-daily-role-helpers.mjs",
+      "bytes": 980,
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06"
+    },
+    {
+      "path": "reference/broker/src/native-weekly-correction-dispatch.mjs",
+      "bytes": 13634,
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c"
+    },
+    {
+      "path": "reference/broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 43934,
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced"
+    },
+    {
+      "path": "RUNTIME_IMPORT_CLOSURE.json",
+      "bytes": 44241,
+      "sha256": "c4aebfc13006791f9db57a653da37abd6d8386a25f1033a22d4140829e14d1c7"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 619,
+      "sha256": "6271053e31f2472d15a31da6feca0c88a92c8d277c9656c75f86fd7686a7b135"
+    },
+    {
+      "path": "SOURCE_HANDOFF.md",
+      "bytes": 8253,
+      "sha256": "c3b9163ddab6cef4b98ed80a94808dc2093ba86e0918f8b3731c73f10cb2762d"
+    },
+    {
+      "path": "unit-fixtures.mjs",
+      "bytes": 7325,
+      "sha256": "b712715b970af8b9ccb70ca566409949bd0fcd7c45b051e6057fe80ede630bbc"
+    },
+    {
+      "path": "verify-a0-route-wiring.mjs",
+      "bytes": 7954,
+      "sha256": "35924b00fb6c49853678648be88a3b4dfbb6f8774743dd28c7e87841bc1615b8"
+    }
+  ]
+}
