@@ -1,0 +1,27 @@
+✔ actual52-statement rolled-back helper receipt validates only the bounded claim (3.7657ms)
+✔ refuses wrong database (1.1456ms)
+✔ refuses different SQL (0.2143ms)
+✔ refuses missing statement (0.1674ms)
+✔ refuses unexpected SQL error (0.4654ms)
+✔ refuses truncated result (0.2653ms)
+✔ refuses not rolled back (0.1988ms)
+✔ refuses wrong final marker (0.1911ms)
+✔ refuses not fresh (0.2145ms)
+✔ refuses fixture present (0.3219ms)
+✔ refuses duplicate relation hides another (0.2242ms)
+✔ refuses postmaster restarted (0.1775ms)
+✔ refuses legacy owner changed (0.142ms)
+✔ atomic file completion returns after both ownership gates without stdin (18.1795ms)
+✔ no receipt reaches bounded deadline and caller receives failure (25.7191ms)
+✔ existing receipt cannot qualify a new turn (7.9506ms)
+✔ own turn loss stops waiting immediately (1.637ms)
+✔ publisher cannot overwrite another completed result (7.421ms)
+✔ publisher refuses failed native result before writing files (2.2449ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 244.7111

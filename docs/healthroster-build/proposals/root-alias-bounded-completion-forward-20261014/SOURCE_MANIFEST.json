@@ -1,0 +1,63 @@
+{
+  "status": "SOURCE_SUCCESSOR_NOT_NATIVE_EXECUTION",
+  "sourceUnitCasesPassed": 19,
+  "wholeRunnerReverseMatched": true,
+  "independentReviewPending": true,
+  "nativeRunnerExecuted": false,
+  "canonicalSqlUnchanged": true,
+  "credentialValuesIncluded": false,
+  "artifacts": [
+    {
+      "file": "README.md",
+      "bytes": 2001,
+      "sha256": "9b7e97c1c85c0c1bde5ffc5396c4bc250d8d7d02d2bf2dec22d8c04e03517f2c"
+    },
+    {
+      "file": "RUNNER_FORWARD.mjs.txt",
+      "bytes": 7073,
+      "sha256": "44512e6e288f1752c81c522600e6b1c65adae80db11c84ed03938d2a69da8592"
+    },
+    {
+      "file": "SOURCE_TEST_RESULT.txt",
+      "bytes": 1126,
+      "sha256": "56eb85216677d3736e0bd880c6c40c0d1f93512f5ae416bed4e8214ff1c1dc4f"
+    },
+    {
+      "file": "WHOLE_RUNNER_REVERSE.json",
+      "bytes": 2774,
+      "sha256": "0705ae1652b818ce3ce1b7fb4ad852ca2e09aa98be408ed605ff2509db97a897"
+    }
+  ],
+  "dependencies": [
+    {
+      "file": "scripts/healthroster-external-lab-completion.mjs",
+      "bytes": 6127,
+      "sha256": "4861e94175ecf0fd41a062e2bc9463dae40463d6d6f8ee4507c27292061d4129"
+    },
+    {
+      "file": "scripts/healthroster-external-lab-completion.test.mjs",
+      "bytes": 5067,
+      "sha256": "573b0f180a27c4d8aa4a011f9f02db956ad594e77cfba6fa2163a64c087719c5"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/root-alias-native-lab-preparation-20261014/prepare-lab-input.mjs",
+      "bytes": 6044,
+      "sha256": "7c47f4d115f95e4f3c8d8df14fcd08b5b8341fad39330f396a167fb64b596585"
+    },
+    {
+      "file": "docs/healthroster-build/native-alias-first-use-20261014/NATIVE_LAB_RESULT.json",
+      "bytes": 12832,
+      "sha256": "d34d7223c37b7b297abd85b33e952021f310f8cd4c7109546203048935d0f984"
+    },
+    {
+      "file": "docs/healthroster-build/native-alias-first-use-20261014/PREPARATION.json",
+      "bytes": 1398,
+      "sha256": "ae1e7f762c1c1ecb182b9c495155b36189f71123575745bb01d36330cf3e5b30"
+    }
+  ]
+}

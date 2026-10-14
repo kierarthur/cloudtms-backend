@@ -1,0 +1,37 @@
+{
+  "beforeSha256": "6ef9ecf7e684cdd1e673925ca53382cae0f1983edf17d9d9cb8b056555d48a53",
+  "forwardSha256": "44512e6e288f1752c81c522600e6b1c65adae80db11c84ed03938d2a69da8592",
+  "hunks": 7,
+  "completeReverseMatched": true,
+  "nativeExecuted": false,
+  "changes": [
+    [
+      "import {restorationSnapshotSql} from '../scripts/healthroster-install1-full-rehearsal.mjs';",
+      "import {restorationSnapshotSql} from '../scripts/healthroster-install1-full-rehearsal.mjs';\nimport {awaitExternalLabCompletion} from '../../healthroster-install2-14102026/scripts/healthroster-external-lab-completion.mjs';\nimport {prepareAliasLab} from '../../healthroster-install2-14102026/docs/healthroster-build/proposals/root-alias-native-lab-preparation-20261014/prepare-lab-input.mjs';"
+    ],
+    [
+      "const receiptDir=path.join(workspace,'.codex-worktrees/healthroster-install2-14102026/.codex-tmp/alias-native-first-use-attempt2-20261014');",
+      "const receiptDir=path.join(workspace,'.codex-worktrees/healthroster-install2-14102026/.codex-tmp/alias-native-bounded-turn-20261014-'+crypto.randomBytes(8).toString('hex'));"
+    ],
+    [
+      "const marker='hr_alias_lab_'+crypto.randomBytes(16).toString('hex');",
+      "const marker='hr_alias_lab_'+crypto.randomBytes(16).toString('hex');\nconst prepared=prepareAliasLab({marker});"
+    ],
+    [
+      "+snapshotSql+'\\nrollback;\\n'",
+      "+snapshotSql+\"\\nselect json_build_object('postmasterStart',pg_postmaster_start_time());\\nrollback;\\n\""
+    ],
+    [
+      "if(lines.length!==1)throw Error('ALIAS_CORE_SNAPSHOT_ENVELOPE');return JSON.parse(lines[0]);",
+      "if(lines.length!==2)throw Error('ALIAS_CORE_SNAPSHOT_ENVELOPE');return {...JSON.parse(lines[0]),...JSON.parse(lines[1])};"
+    ],
+    [
+      "await new Promise((resolve,reject)=>{let text='';const onData=chunk=>{text+=chunk.toString();if(text.includes('END')){process.stdin.removeListener('data',onData);process.stdin.pause();resolve();}};process.stdin.on('data',onData);process.stdin.resume();turn.signal.addEventListener('abort',()=>reject(turn.signal.reason),{once:true});});",
+      "const completion=await awaitExternalLabCompletion({receiptDir,expected:{marker,sqlSha256:prepared.preparation.sqlSha256,statementCount:52,postmasterStart:before.postmasterStart},signal:turn.signal,assertHeld:turn.assertHeld,timeoutMs:180000});\n fs.writeFileSync(path.join(receiptDir,'LAB_COMPLETION_VALIDATED.json'),JSON.stringify(completion.validation,null,2)+'\\n',{flag:'wx'});"
+    ],
+    [
+      "if(!receipt.unchangedCore||after.physicalDatabase!=='cloudtms_test_clone'",
+      "if(after.postmasterStart!==before.postmasterStart)throw Error('ALIAS_POSTMASTER_CHANGED');\n if(!receipt.unchangedCore||after.physicalDatabase!=='cloudtms_test_clone'"
+    ]
+  ]
+}
