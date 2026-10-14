@@ -1,0 +1,40 @@
+{
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "BUILD_AGENCY_TYPED_VALIDATION_RETURN_SOURCE_CRITIC_14102026.md",
+      "bytes": 11165,
+      "sha256": "46864658bac8cddb7c8c350437f603f1bc1365e592150ee10afd56442acf3145"
+    },
+    {
+      "file": "BUILD_CHECKLIST_NATIVE_PRODUCER_SOURCE_CRITIC_14102026.md",
+      "bytes": 12432,
+      "sha256": "7a3ed6745a589c0fcf05ef8cd7b25eec1aa613e7fe38ca392350d3a33078711c"
+    },
+    {
+      "file": "BUILD_MONEY_PAID_OVERLAP_FACTS_SOURCE_CRITIC_14102026.md",
+      "bytes": 5428,
+      "sha256": "82878a47e4b14eb8f721e5e28d4e125ca0f20603657deda9ed06a2d507bc583e"
+    },
+    {
+      "file": "BUILD_MONEY_REKEY_SOURCE_ALIAS_SOURCE_CRITIC_14102026.md",
+      "bytes": 13596,
+      "sha256": "72662d08c841ce001ddadf48f9a32b29ade6e913c5953e83a0d9fdfb6342e53e"
+    },
+    {
+      "file": "CHECKLIST_NATIVE_PUBLISHED_SOURCE_PINS.json",
+      "bytes": 15710,
+      "sha256": "1dd45521bd1fc739520b6f286a97b1b79c96c4219f700ef4c8129dafc1eb239b"
+    },
+    {
+      "file": "REKEY_NATIVE_FIXTURE_PUBLISHED_MANIFEST.json",
+      "bytes": 1386,
+      "sha256": "7e9107c891a12f999a7e48bcad0f2208a81ead5d129669f7a2e9d13b4fc26e51"
+    },
+    {
+      "file": "SOURCE_STATUS.json",
+      "bytes": 4752,
+      "sha256": "59a181e38d3c29c9f0433a7e7be1143d162f45521592d1a57fbc23f50d1a31d2"
+    }
+  ]
+}

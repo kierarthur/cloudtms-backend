@@ -1,0 +1,95 @@
+{
+  "checkedAt": "2026-10-14T18:03:02.973Z",
+  "status": "SOURCE_CONSTRUCTION_NOT_INSTALL2_QUALIFICATION",
+  "installedBackend": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "installedOffice": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "publishedTestReceipt": "912297ab79b48633b66d806d128ff00a9a9cd83d",
+  "normalInstallsRemaining": 1,
+  "noOwnerAnswerPending": true,
+  "lanes": [
+    {
+      "lane": "install2",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "reviewedCommit": "2cb3642ec9e49e9e54187e9a0ae6c1a4ed3a5937",
+      "observedHead": "2cb3642ec9e49e9e54187e9a0ae6c1a4ed3a5937",
+      "branch": "codex/healthroster-install2-14102026",
+      "reviewedCommitExists": true
+    },
+    {
+      "lane": "money",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "reviewedCommit": "4c63b81b94406da7d750746520b2ae57b9b24a80",
+      "observedHead": "4c63b81b94406da7d750746520b2ae57b9b24a80",
+      "branch": "codex/healthroster-v2-money-build-13102026",
+      "reviewedCommitExists": true
+    },
+    {
+      "lane": "native",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+      "reviewedCommit": "4084befffd78361938f81dded7f876e3c65dac64",
+      "observedHead": "4084befffd78361938f81dded7f876e3c65dac64",
+      "branch": "codex/healthroster-checklist-native-14102026",
+      "reviewedCommitExists": true
+    },
+    {
+      "lane": "agency",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "reviewedCommit": "383c0be17b772fa42a5baff71494135273a47884",
+      "observedHead": "9fd542e8fcf25d646ce0f04736466f3da251faee",
+      "branch": "codex/healthroster-v2-report-build-13102026",
+      "reviewedCommitExists": true
+    }
+  ],
+  "reports": [
+    {
+      "file": "BUILD_MONEY_REKEY_SOURCE_ALIAS_SOURCE_CRITIC_14102026.md",
+      "sha256": "72662d08c841ce001ddadf48f9a32b29ade6e913c5953e83a0d9fdfb6342e53e"
+    },
+    {
+      "file": "BUILD_CHECKLIST_NATIVE_PRODUCER_SOURCE_CRITIC_14102026.md",
+      "sha256": "7a3ed6745a589c0fcf05ef8cd7b25eec1aa613e7fe38ca392350d3a33078711c"
+    },
+    {
+      "file": "BUILD_AGENCY_TYPED_VALIDATION_RETURN_SOURCE_CRITIC_14102026.md",
+      "sha256": "46864658bac8cddb7c8c350437f603f1bc1365e592150ee10afd56442acf3145"
+    },
+    {
+      "file": "BUILD_MONEY_PAID_OVERLAP_FACTS_SOURCE_CRITIC_14102026.md",
+      "sha256": "82878a47e4b14eb8f721e5e28d4e125ca0f20603657deda9ed06a2d507bc583e"
+    }
+  ],
+  "findings": {
+    "closed": "Money P1-REKEY1 owner conflict/ambiguous all-owner census; Checklist P1-QTARGET1 producer parent ABI.",
+    "open": "Checklist P1 retention and P2 scalar witness hashes; Agency P2 historical/final census wording.",
+    "sourceRejected": "Historical decoder comparison was rejected: actual native producer and its own decoder both allow genuine pending_decision null."
+  },
+  "currentRelease": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "mandatoryVerifiers": 173,
+    "historicalSafetyReviewRefuses": true,
+    "sourceCensusBackedAt": "fa66183f01913e86651e82816f5e88f97e07123c",
+    "canonicalContractSealed": false,
+    "newNativeProducerMounted": false
+  },
+  "fixture": {
+    "selected": "02_NATIVE_HELPER_FIXTURE_OWNER_CONFLICT_FORWARD.sql",
+    "sourceAssertions": 13,
+    "statements": 43,
+    "wholeReverseHunks": 6,
+    "publishedCommit": "2cb3642ec9e49e9e54187e9a0ae6c1a4ed3a5937",
+    "independentFixtureReview": false,
+    "schemaAndTriggerReview": false,
+    "nativeExecuted": false
+  },
+  "cleanupRefusal": {
+    "absolutePath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\install2-current-verifier-review-20261014",
+    "purpose": "Duplicate source-only verifier census already preserved in GitHub commit fa661; approximately 10.7 MB.",
+    "deletionAttempt": "Exact scoped PowerShell deletion was rejected by automatic approval before execution.",
+    "reason": "blocked by policy",
+    "deleted": false,
+    "retried": false,
+    "containsCredentialsOrBusinessRowExport": false
+  },
+  "remaining": "Actual Same/Separate writer and all NONE consequences; all-eight-week/typed writer/observer/routed Return; native retention and strict DTO fixes; final PPv2/D10/Tracker/U3 owner composition; A0/native financial qualification; current safety review/contract/full rehearsal/Install2/eligible activation/genuine past-week acceptance/EAS/phone/final PartB. NEXT requires actual F17."
+}
