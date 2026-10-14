@@ -1,0 +1,32 @@
+{
+  "sourceOnly": true,
+  "nativeExecuted": false,
+  "credentialPatterns": 0,
+  "files": [
+    {
+      "file": "BODY_AMENDMENT_CENSUS.json",
+      "bytes": 437551,
+      "sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d"
+    },
+    {
+      "file": "INVENTORY_CASE_COVERAGE_CHECK.json",
+      "bytes": 492,
+      "sha256": "f37f35ea9a328808abb9a470e1e0dc92525f1ad496109c18b39e4288be5bd17a"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1228,
+      "sha256": "ceee5a706ffccf8bd15b511f04de4b7519c57e98547a2f30fa84c5aeaf17fbf2"
+    },
+    {
+      "file": "WHOLE_SCANNER_REVERSE.json",
+      "bytes": 246,
+      "sha256": "1f50b8de4048833837c7ab481336e4bcf54ad5f1091e0def3a6155329b0ee9b3"
+    },
+    {
+      "file": "scan-effective-body-amendment-coverage-20261014.mjs.txt",
+      "bytes": 5234,
+      "sha256": "fa5b676e51e698c1fabda5714628e9a4bdab38588f2449235bdc4d5472cca196"
+    }
+  ]
+}

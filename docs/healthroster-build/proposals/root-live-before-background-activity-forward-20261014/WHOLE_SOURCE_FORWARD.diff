@@ -1,0 +1,75 @@
+diff --git a/scripts/healthroster-install1-full-rehearsal.mjs b/scripts/healthroster-install1-full-rehearsal.mjs
+index 81a7a8f6..8ca3eabb 100644
+--- a/scripts/healthroster-install1-full-rehearsal.mjs
++++ b/scripts/healthroster-install1-full-rehearsal.mjs
+@@ -344,7 +344,8 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
+  await gate('install1-before');
+  const before=await callbacks.before({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
+  requireThat(before.physicalDatabase==='cloudtms_test_clone'&&before.identityTest===true&&before.customerKeyNull===true&&before.module==='LEGACY:1'
+-  &&before.applyingCount===0&&before.otherActivityCount===0&&before.markerAbsent===true,'REHEARSAL_BEFORE_REFUSED');
++  &&before.applyingCount===0&&Number.isSafeInteger(before.otherActivityCount)&&before.otherActivityCount>=0
++  &&(before.otherActivityCount===0||before.observeLiveBusiness===true)&&before.markerAbsent===true,'REHEARSAL_BEFORE_REFUSED');
+  const plan=compilePlan({candidatePin,currentRemoteTestPin,expectedContractHash,contractDigest:before.contractDigest,installed:before.installed,review,marker,observeLiveBusiness:before.observeLiveBusiness===true});
+  requireThat(plan.sourceBinding?.sha256===bindingHash,'REHEARSAL_COMPILED_SOURCE_BINDING_DRIFT');
+  await gate('install1-full');
+@@ -368,7 +369,13 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
+  // Even a failed SQL pass requires fresh rollback evidence, under the held turn.
+  await turn.assertHeld('install1-fresh');
+  const after=await callbacks.freshAfter({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
+- try{restoration=assertFreshRestoration(before,after,marker);}catch(error){
++ try{
++  // Admitting existing background activity before the rehearsal requires its
++  // complete, freshly branded fixture/restoration proof afterward, even when
++  // the sampled fingerprints happen to match and the later activity is zero.
++  requireThat(before.observeLiveBusiness!==true||after.liveRestoration!==undefined,'REHEARSAL_LIVE_RESTORATION_REQUIRED');
++  restoration=assertFreshRestoration(before,after,marker);
++ }catch(error){
+   await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:'RESTORATION_FAILED_HOLD_INSTALL',candidatePin,currentRemoteTestPin,
+    sqlHash:plan.sqlHash,execution:execution??null,restorationProved:false,turnId:turn.identity.turnId});throw error;
+  }
+diff --git a/tests/healthroster-install1-full-rehearsal.test.mjs b/tests/healthroster-install1-full-rehearsal.test.mjs
+index 0ae10fbf..a912718c 100644
+--- a/tests/healthroster-install1-full-rehearsal.test.mjs
++++ b/tests/healthroster-install1-full-rehearsal.test.mjs
+@@ -134,10 +134,10 @@ test('source-only actual current Install1 plan retains full 142 verifier bodies,
+  }finally{if(old===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=old;}
+ });
+ 
+-function model({executionDelta={},afterDelta={},publishFailure=false,executionFailure=null}={}){
++function model({executionDelta={},beforeDelta={},afterDelta={},publishFailure=false,executionFailure=null}={}){
+  const events=[],receipts=[],controller=new AbortController();
+  const turn={identity,signal:controller.signal,assertHeld:async phase=>events.push('held:'+phase)};
+- const callbacks={freshGate:async phase=>{events.push('gate:'+phase);return gate();},before:async()=>{events.push('before');return before();},
++ const callbacks={freshGate:async phase=>{events.push('gate:'+phase);return gate();},before:async()=>{events.push('before');return {...before(),...beforeDelta};},
+   executeSameSession:async args=>{events.push('execute');assert.equal(args.noHarnessDeadline,true);assert.equal(args.settings.statementTimeout,0);
+    if(executionFailure)throw executionFailure;
+    return {sameSession:true,explicitRollback:true,exitCode:0,errorCollectionComplete:true,errors:[],installedContract:{matched:true,sha256:hash},...executionDelta};},
+@@ -156,6 +156,28 @@ test('one supplied retained turn spans before/full/explicit rollback/fresh and c
+  assert.equal(m.events.at(-1),'held:install1-after-managed-release');
+ });
+ 
++test('live observation admits active background sessions before SQL but requires genuine restoration before publication',async()=>{
++ for(const otherActivityCount of [0,1,17]){
++  const m=model({beforeDelta:{otherActivityCount,observeLiveBusiness:true}});
++  const compiled=m.options.compilePlan;
++  m.options.compilePlan=input=>{assert.equal(input.observeLiveBusiness,true);return {...compiled(),observeLiveBusiness:true};};
++  const execute=m.options.callbacks.executeSameSession;
++  m.options.callbacks.executeSameSession=input=>{assert.equal(input.observeLiveBusiness,true);return execute(input);};
++  await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/LIVE_RESTORATION_REQUIRED/);
++  assert.ok(m.events.includes('execute'));assert.ok(m.events.includes('fresh'));
++  assert.ok(m.receipts.some(r=>r.status==='RESTORATION_FAILED_HOLD_INSTALL'));assert.ok(!m.events.includes('publish'));
++ }
++});
++
++test('before activity without complete observation and malformed activity counts fail before SQL',async()=>{
++ for(const beforeDelta of [{otherActivityCount:1},{otherActivityCount:-1,observeLiveBusiness:true},
++  {otherActivityCount:1.5,observeLiveBusiness:true},{otherActivityCount:'1',observeLiveBusiness:true},
++  {applyingCount:1,otherActivityCount:0,observeLiveBusiness:true}]){
++  const m=model({beforeDelta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/BEFORE_REFUSED/);
++  assert.ok(!m.events.includes('execute'));assert.ok(!m.events.includes('publish'));
++ }
++});
++
+ test('SQL errors or missing explicit rollback always get fresh proof and hold publication',async()=>{
+  for(const executionDelta of [{errors:[{sqlstate:'23514'}]},{explicitRollback:false},{errorCollectionComplete:false},{exitCode:1}]){
+   const m=model({executionDelta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/HOLD_INSTALL|INCOMPLETE/);

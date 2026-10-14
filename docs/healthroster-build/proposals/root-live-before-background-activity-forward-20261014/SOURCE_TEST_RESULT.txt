@@ -1,0 +1,10 @@
+✔ live observation admits active background sessions before SQL but requires genuine restoration before publication (4.7347ms)
+✔ before activity without complete observation and malformed activity counts fail before SQL (0.8109ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 210.7309

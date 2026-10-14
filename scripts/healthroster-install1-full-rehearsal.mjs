@@ -344,7 +344,8 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
  await gate('install1-before');
  const before=await callbacks.before({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
  requireThat(before.physicalDatabase==='cloudtms_test_clone'&&before.identityTest===true&&before.customerKeyNull===true&&before.module==='LEGACY:1'
-  &&before.applyingCount===0&&before.otherActivityCount===0&&before.markerAbsent===true,'REHEARSAL_BEFORE_REFUSED');
+  &&before.applyingCount===0&&Number.isSafeInteger(before.otherActivityCount)&&before.otherActivityCount>=0
+  &&(before.otherActivityCount===0||before.observeLiveBusiness===true)&&before.markerAbsent===true,'REHEARSAL_BEFORE_REFUSED');
  const plan=compilePlan({candidatePin,currentRemoteTestPin,expectedContractHash,contractDigest:before.contractDigest,installed:before.installed,review,marker,observeLiveBusiness:before.observeLiveBusiness===true});
  requireThat(plan.sourceBinding?.sha256===bindingHash,'REHEARSAL_COMPILED_SOURCE_BINDING_DRIFT');
  await gate('install1-full');
@@ -368,7 +369,13 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
  // Even a failed SQL pass requires fresh rollback evidence, under the held turn.
  await turn.assertHeld('install1-fresh');
  const after=await callbacks.freshAfter({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
- try{restoration=assertFreshRestoration(before,after,marker);}catch(error){
+ try{
+  // Admitting existing background activity before the rehearsal requires its
+  // complete, freshly branded fixture/restoration proof afterward, even when
+  // the sampled fingerprints happen to match and the later activity is zero.
+  requireThat(before.observeLiveBusiness!==true||after.liveRestoration!==undefined,'REHEARSAL_LIVE_RESTORATION_REQUIRED');
+  restoration=assertFreshRestoration(before,after,marker);
+ }catch(error){
   await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:'RESTORATION_FAILED_HOLD_INSTALL',candidatePin,currentRemoteTestPin,
    sqlHash:plan.sqlHash,execution:execution??null,restorationProved:false,turnId:turn.identity.turnId});throw error;
  }

@@ -1,0 +1,19 @@
+{
+  "sourceOnly": true,
+  "actualInventory": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "baselineFiles": 25
+  },
+  "allCanonicalRootsIncluded": true,
+  "rootCount": 1484,
+  "uniqueSourceInputs": 1745,
+  "sourceOccurrences": 2160,
+  "missingPriorRoots": [
+    "supabase/migrations/26052026_1525_INDEX_OUTBOX.SQL",
+    "supabase/migrations/13072026_1648_MIGRATION.SQL"
+  ],
+  "unchanged22DoReadIdentities": true,
+  "statementOrderOffsetsCorrected": true,
+  "nativeExecuted": false
+}

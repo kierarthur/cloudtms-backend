@@ -1,0 +1,10 @@
+{
+  "sourceOnly": true,
+  "reviewedBeforeCommit": "3c5090a7bdd2f64ebcfb0810f86693f10a0295e9",
+  "beforeModuleSha256": "e8066e76234be3443c7cdbcb5a351638c2788a7570251adf6d292cb12eaf2c9a",
+  "forwardModuleSha256": "69649a35d52b0f54896bfc06f8caa150d97a0849deac256515a0abc95c1601fd",
+  "targetedTestsPassed": 2,
+  "existingLiveRestorationTestsPassed": 21,
+  "nativeExecuted": false,
+  "independentReviewPending": true
+}

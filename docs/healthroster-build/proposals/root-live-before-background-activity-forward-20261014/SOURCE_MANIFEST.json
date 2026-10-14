@@ -1,0 +1,32 @@
+{
+  "sourceOnly": true,
+  "nativeExecuted": false,
+  "credentialPatterns": 0,
+  "files": [
+    {
+      "file": "EVIDENCE_WHITESPACE_AND_REVERSE_CHECK.json",
+      "bytes": 509,
+      "sha256": "1a2fc3fe686ddf87e63d320922a94e016402be1ad4bcacd673c352fec0d05669"
+    },
+    {
+      "file": "MODULE_SOURCE_PINS.json",
+      "bytes": 415,
+      "sha256": "e5a32a3f83a57938ec1b04631ee6740b23f3a241fe91d689b3e00ef48b033536"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1853,
+      "sha256": "efdf6226011a336b5d23fce8f0b94e41a7d8c7ea3dc373b092eb98be8198c0dd"
+    },
+    {
+      "file": "SOURCE_TEST_RESULT.txt",
+      "bytes": 348,
+      "sha256": "3f84b932dfd8723356c2fd647ab3543770f6dffbecc86d84c666671effd70bf7"
+    },
+    {
+      "file": "WHOLE_SOURCE_FORWARD.diff",
+      "bytes": 6104,
+      "sha256": "bdc5477f2ba69fa9f8f090391277a53e7e3564e9d9fe03aad872a08d718ae40e"
+    }
+  ]
+}

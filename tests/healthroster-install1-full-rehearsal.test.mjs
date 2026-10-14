@@ -134,10 +134,10 @@ test('source-only actual current Install1 plan retains full 142 verifier bodies,
  }finally{if(old===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=old;}
 });
 
-function model({executionDelta={},afterDelta={},publishFailure=false,executionFailure=null}={}){
+function model({executionDelta={},beforeDelta={},afterDelta={},publishFailure=false,executionFailure=null}={}){
  const events=[],receipts=[],controller=new AbortController();
  const turn={identity,signal:controller.signal,assertHeld:async phase=>events.push('held:'+phase)};
- const callbacks={freshGate:async phase=>{events.push('gate:'+phase);return gate();},before:async()=>{events.push('before');return before();},
+ const callbacks={freshGate:async phase=>{events.push('gate:'+phase);return gate();},before:async()=>{events.push('before');return {...before(),...beforeDelta};},
   executeSameSession:async args=>{events.push('execute');assert.equal(args.noHarnessDeadline,true);assert.equal(args.settings.statementTimeout,0);
    if(executionFailure)throw executionFailure;
    return {sameSession:true,explicitRollback:true,exitCode:0,errorCollectionComplete:true,errors:[],installedContract:{matched:true,sha256:hash},...executionDelta};},
@@ -154,6 +154,28 @@ test('one supplied retained turn spans before/full/explicit rollback/fresh and c
  assert.ok(m.events.indexOf('before')<m.events.indexOf('execute'));assert.ok(m.events.indexOf('execute')<m.events.indexOf('fresh'));
  assert.ok(m.events.indexOf('fresh')<m.events.indexOf('publish'));assert.equal(m.events.filter(x=>x==='publish').length,1);
  assert.equal(m.events.at(-1),'held:install1-after-managed-release');
+});
+
+test('live observation admits active background sessions before SQL but requires genuine restoration before publication',async()=>{
+ for(const otherActivityCount of [0,1,17]){
+  const m=model({beforeDelta:{otherActivityCount,observeLiveBusiness:true}});
+  const compiled=m.options.compilePlan;
+  m.options.compilePlan=input=>{assert.equal(input.observeLiveBusiness,true);return {...compiled(),observeLiveBusiness:true};};
+  const execute=m.options.callbacks.executeSameSession;
+  m.options.callbacks.executeSameSession=input=>{assert.equal(input.observeLiveBusiness,true);return execute(input);};
+  await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/LIVE_RESTORATION_REQUIRED/);
+  assert.ok(m.events.includes('execute'));assert.ok(m.events.includes('fresh'));
+  assert.ok(m.receipts.some(r=>r.status==='RESTORATION_FAILED_HOLD_INSTALL'));assert.ok(!m.events.includes('publish'));
+ }
+});
+
+test('before activity without complete observation and malformed activity counts fail before SQL',async()=>{
+ for(const beforeDelta of [{otherActivityCount:1},{otherActivityCount:-1,observeLiveBusiness:true},
+  {otherActivityCount:1.5,observeLiveBusiness:true},{otherActivityCount:'1',observeLiveBusiness:true},
+  {applyingCount:1,otherActivityCount:0,observeLiveBusiness:true}]){
+  const m=model({beforeDelta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/BEFORE_REFUSED/);
+  assert.ok(!m.events.includes('execute'));assert.ok(!m.events.includes('publish'));
+ }
 });
 
 test('SQL errors or missing explicit rollback always get fresh proof and hold publication',async()=>{

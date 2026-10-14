@@ -1,0 +1,19 @@
+{
+  "rawStagedWhitespacePass": false,
+  "rawFindings": 2,
+  "exceptions": [
+    {
+      "file": "WHOLE_SOURCE_FORWARD.diff",
+      "line": 37,
+      "reason": "literal unchanged unified-diff context blank line"
+    },
+    {
+      "file": "WHOLE_SOURCE_FORWARD.diff",
+      "line": 50,
+      "reason": "literal unchanged unified-diff context blank line"
+    }
+  ],
+  "actualProductionAndTestStagedWhitespacePass": true,
+  "wholePatchReverseCheckPassed": true,
+  "filesRestoredOrChangedByReverseCheck": false
+}
