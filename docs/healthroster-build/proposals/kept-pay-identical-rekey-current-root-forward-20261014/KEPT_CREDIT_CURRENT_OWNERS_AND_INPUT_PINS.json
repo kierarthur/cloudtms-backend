@@ -1,0 +1,172 @@
+{
+  "source_only": true,
+  "unfinished_construction": true,
+  "current_selected_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "inputs": [
+    {
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "input_bytes": 148338,
+      "input_sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+      "definition_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "body_sha256": "ecec58ad8d04780b5bc3f213db3b80de8f802878c8e3b5714309bef71ae0d2cd"
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "input_bytes": 16376,
+      "input_sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "definition_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "body_sha256": "20689ef037df058ae42cb96dfc3de048d5ebcf6f92ebe133e2326d34dba1dd2c"
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "input_bytes": 16376,
+      "input_sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "definition_sha256": "5a4142c7f9e26861401dab3570a08cd88f31564353c29165dc89d2dfc93baa03",
+      "body_sha256": "7631481b20a4d346a7aa1117b9ac04edc7ca7efca678ec8b5d19c700d7001c49"
+    },
+    {
+      "id": "private._weekly_source_immutable_record_guard_v1()",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "input_bytes": 58831,
+      "input_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "definition_sha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d",
+      "body_sha256": "34cfb47b73e45a5da42fe8c2484a5f46d2cd7bae6440eb5561a9d08b3e119d19"
+    }
+  ],
+  "changes": [
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "before_file": "before/09_complete_invoice_apply_edits.sqlinc",
+      "forward_file": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "before_sha256": "6ab4e16d569e3dddfa48de9b3b09a94328d6f4a9571039cf56edc014bfc5a204",
+      "after_sha256": "e74ed7ae0769bbad783c7fb1b8b3d28fc18d6c6c0a8f0f9dfdd6668cce89100c",
+      "hunks": [
+        {
+          "before": "  perform public._ctms_assert_invoice_mutable_draft_v1(",
+          "after": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id') then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1("
+        }
+      ],
+      "whole_definition_unique_reverse": true
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "before_file": "before/10_complete_adjustments_apply.sqlinc",
+      "forward_file": "forward/10_complete_adjustments_apply.sqlinc",
+      "before_sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86",
+      "after_sha256": "25b4b20c1741afe1b542d4551ce26ea6c0c21ea26fae189aad3531ac01e6a2a0",
+      "hunks": [
+        {
+          "before": "  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;",
+          "after": "  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;\n  v_credit_frame jsonb; v_pg_context text; v_credit_context jsonb;"
+        },
+        {
+          "before": "  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);",
+          "after": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id') then\n    get diagnostics v_pg_context=PG_CONTEXT;\n    v_credit_frame:=nullif(current_setting('cloudtms.weekly_source_credit_target_frame',true),'')::jsonb;\n    if v_pg_context !~* 'PL/pgSQL function (public[.])?invoice_apply_edits[(]uuid,jsonb,uuid[)]'\n      or jsonb_typeof(v_credit_frame) is distinct from 'object'\n      or v_credit_frame->>'schema_version' is distinct from 'WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1'\n      or v_credit_frame->>'invoice_id' is distinct from p_invoice_id::text\n      or v_credit_frame->>'actor_user_id' is distinct from p_actor_user_id::text\n      or v_credit_frame->>'native_backend_pid' is distinct from pg_backend_pid()::text\n      or v_credit_frame->>'native_transaction_id' is distinct from txid_current()::text\n      or v_credit_frame->>'payload_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CREDIT_TARGET_PAYLOAD_V1',p_payload),'hex')\n      or v_credit_frame->>'frame_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1',v_credit_frame-'frame_sha256'),'hex') then\n      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_NATIVE_FRAME_REQUIRED' using errcode='55000'; end if;\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);"
+        },
+        {
+          "before": "  if v_authority->>'allowed' is distinct from 'true' then",
+          "after": "  if v_credit_frame is not null and v_credit_frame->'adjustment_authority' is distinct from v_authority then\n    raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n  if v_authority->>'allowed' is distinct from 'true' then"
+        },
+        {
+          "before": "      if item ? 'credited_work_event_id' then\n        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;",
+          "after": "      if item ? 'credited_work_event_id' then\n        if jsonb_typeof(item->'credited_work_event_id') is distinct from 'string'\n          or pg_input_is_valid(item->>'credited_work_event_id','uuid') is distinct from true then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_INVALID' using errcode='22023'; end if;\n        select saved into v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;\n        if v_credit_context is null or v_credit_context->>'facts_fingerprint' is distinct from encode(\n          private.weekly_source_kept_as_paid_facts_v1((item->>'credited_work_event_id')::uuid,'CREDITED'),'hex') then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n      end if;"
+        },
+        {
+          "before": "        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority);",
+          "after": "        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority)\n        ||case when item ? 'credited_work_event_id' then jsonb_build_object('credited_work_event_id',(item->>'credited_work_event_id')::uuid) else '{}'::jsonb end;"
+        }
+      ],
+      "whole_definition_unique_reverse": true
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "before_file": "before/11_complete_adjustment_line_valid.sqlinc",
+      "forward_file": "forward/11_complete_adjustment_line_valid.sqlinc",
+      "before_sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140",
+      "after_sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc",
+      "hunks": [
+        {
+          "before": "    or line.meta_json ? 'credited_work_event_id' then return false; end if;",
+          "after": "    then return false; end if;"
+        },
+        {
+          "before": "    'vat_overridden','weekly_source_adjustment_authority')) then return false; end if;",
+          "after": "    'vat_overridden','weekly_source_adjustment_authority','credited_work_event_id')) then return false; end if;"
+        },
+        {
+          "before": "  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority",
+          "after": "  -- A retained issued credit re-proves immutable actual target identity, not\n  -- today's Keep availability. Changed facts cannot erase a genuine credit.\n  if v_meta ? 'credited_work_event_id' and (jsonb_typeof(v_meta->'credited_work_event_id') is distinct from 'string'\n    or pg_input_is_valid(v_meta->>'credited_work_event_id','uuid') is distinct from true\n    or not exists(select 1 from public.weekly_work_events event\n      join public.invoices invoice on invoice.id=p_invoice_id and invoice.client_id=event.client_id\n        and invoice.header_snapshot_json#>>'{meta,source_group_id}'=event.first_source_group_id::text\n      where event.id=(v_meta->>'credited_work_event_id')::uuid\n        and exists(select 1 from public.weekly_source_row_resolutions resolution\n          join public.contracts contract on contract.id=resolution.contract_id\n          where resolution.work_event_id=event.id and resolution.mapping_state='RESOLVED'\n            and resolution.candidate_id=event.candidate_id and resolution.client_id=event.client_id\n            and contract.candidate_id=event.candidate_id and contract.client_id=event.client_id))) then return false; end if;\n  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority"
+        }
+      ],
+      "whole_definition_unique_reverse": true
+    },
+    {
+      "runtime_file": "broker/src/weekly-source/routes.js",
+      "input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "before_file": "before/routes.js",
+      "forward_file": "forward/routes.js",
+      "before_sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5",
+      "after_sha256": "e42fda1f0af93d63f30ee3fa862a7ef7ffed5e7a5a11d06f21d934e10aac1440",
+      "hunks": [
+        {
+          "before": "  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',",
+          "after": "  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',\n  'KEEP_AS_PAID',"
+        },
+        {
+          "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+          "after": "  if (action === 'KEEP_AS_PAID') {\n    const keys = ['schema_version', 'work_event_id', 'decision', 'reason',\n      'credit_invoice_line_id', 'expected_facts_fingerprint', 'idempotency_key'];\n    const sourceUuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;\n    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'payload')\n        || Object.keys(payload).length !== keys.length || !keys.every((key) => Object.hasOwn(payload, key))\n        || payload.schema_version !== 'WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_V1'\n        || typeof payload.work_event_id !== 'string' || !sourceUuid.test(payload.work_event_id)\n        || payload.decision !== 'KEEP_AS_PAID' || !['CREDITED', 'NOT_INVOICED_DISAPPEARED'].includes(payload.reason)\n        || (payload.reason === 'CREDITED' ? typeof payload.credit_invoice_line_id !== 'string'\n          || !sourceUuid.test(payload.credit_invoice_line_id) : payload.credit_invoice_line_id !== null)\n        || typeof payload.expected_facts_fingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(payload.expected_facts_fingerprint)\n        || typeof payload.idempotency_key !== 'string' || payload.idempotency_key !== payload.idempotency_key.trim()\n        || payload.idempotency_key.length < 16 || payload.idempotency_key.length > 200) {\n      fail('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_INVALID', 'This decision could not be prepared.', 400);\n    }\n    const result = await withRefusalRecording(dependencies,\n      'broker:weekly-source:weekly_source_keep_as_paid_decide_atomic_v1', user.id,\n      () => callRpc(dependencies, 'weekly_source_keep_as_paid_decide_atomic_v1', request));\n    return jsonResponse(200, result);\n  }\n\n  if (action === 'LATER_CHANGE_DECISION') {"
+        }
+      ],
+      "whole_definition_unique_reverse": true
+    }
+  ],
+  "auxiliary": [
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/05102026_1112_bpay_next_source_paid_evidence_page_v1.sql",
+      "bytes": 48233,
+      "sha256": "42feb18efe21530f0299e693df4447363ba91f837d8d1154e1cb322b96c30432"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/05102026_1242_weekly_source_office_next_paid_context_v1.sql",
+      "bytes": 7445,
+      "sha256": "e254d7d64a07ff95092c68193250319ed8a598200d88874661e0693599a41645"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql",
+      "bytes": 150162,
+      "sha256": "d62a8132bf7ca319637b9d32af5e2d80860e4ca8342e24ad95854847dd8bc411"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/routes.js",
+      "bytes": 65443,
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5"
+    }
+  ],
+  "complete_owner_unique_reversals": 4,
+  "bank_owned_sources_changed": false,
+  "bank_public_page_permissions_unchanged": true,
+  "source_next_nonadmin_pure_kernel": "PRECODE_SHARED_OWNER_REVIEW_REQUIRED",
+  "sql_compiled": false,
+  "native_proof": false,
+  "all_remaining_original_pipeline_owners": "NOT_YET_COMPLETED_OR_FROZEN"
+}

@@ -1,0 +1,57 @@
+
+
+-- 24 section 4.3: one complete current entitlement head for the immutable
+-- ordinary root, supporting PROTECTED and LOCKED_FINAL_SOURCE through one
+-- common interface; at most one committed current head per root across both
+-- authority kinds.  WB-009: certified zero is an explicit head, never an
+-- absent one.  27 section 5.2: every fingerprint fact here is fixed size.
+create table public.weekly_source_entitlement_heads (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  authority_kind text not null check (authority_kind in ('PROTECTED','LOCKED_FINAL_SOURCE')),
+  agency_id uuid not null,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  contract_id uuid not null references public.contracts(id) on delete restrict,
+  week_ending_date date not null,
+  root_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  root_family_booking_id text not null check (pg_catalog.char_length(root_family_booking_id) between 1 and 200),
+  root_timesheet_version integer not null check (root_timesheet_version>=1),
+  head_revision bigint not null check (head_revision>=1),
+  prior_head_id uuid,
+  state text not null check (state in ('STAGED','COMMITTED_CURRENT','SUPERSEDED')),
+  certified_zero boolean not null,
+  component_count integer not null check (component_count>=0),
+  entitlement_digest bytea not null check (pg_catalog.octet_length(entitlement_digest)=32),
+  inventory_digest bytea not null check (pg_catalog.octet_length(inventory_digest)=32),
+  source_generation_digest bytea not null check (pg_catalog.octet_length(source_generation_digest)=32),
+  publication_receipt_digest bytea check (publication_receipt_digest is null or pg_catalog.octet_length(publication_receipt_digest)=32),
+  -- Every head originates from an accepted Office decision bundle, immediate or
+  -- deferred: proof/32 section 9 makes decision_bundle_id NOT NULL on the
+  -- receipt for both modes.  Keeping the pair mandatory here is what lets the
+  -- H2-024 index on the component relation bind at all (a nullable tag never
+  -- conflicts in a B-tree unique index).
+  decision_bundle_id uuid not null,
+  bundle_revision bigint not null,
+  decision_id uuid not null,
+  decided_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  scope_change_tx_token uuid,
+  staged_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  committed_at_utc timestamptz,
+  superseded_at_utc timestamptz,
+  superseded_by_head_id uuid,
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check (certified_zero=(component_count=0)),
+  check ((head_revision=1)=(prior_head_id is null)),
+  check ((state='STAGED')=(committed_at_utc is null and superseded_at_utc is null)),
+  check ((state='COMMITTED_CURRENT')=(committed_at_utc is not null and superseded_at_utc is null)),
+  check ((state='SUPERSEDED')=(superseded_at_utc is not null)),
+  check ((superseded_at_utc is null)=(superseded_by_head_id is null)),
+  check (superseded_by_head_id is distinct from id),
+  check (committed_at_utc is null or committed_at_utc>=staged_at_utc),
+  check (superseded_at_utc is null or superseded_at_utc>=staged_at_utc),
+  check ((publication_receipt_digest is not null)=(committed_at_utc is not null)),
+  -- 24 section 4.5 step 6 and 27 section 4 step 5 require the one aligned
+  -- invalidation to have succeeded before the head becomes current, so a
+  -- committed head always carries its token and a staged one never does.
+  check ((scope_change_tx_token is not null)=(committed_at_utc is not null)),
+  unique (id,decision_bundle_id,bundle_revision)
+);

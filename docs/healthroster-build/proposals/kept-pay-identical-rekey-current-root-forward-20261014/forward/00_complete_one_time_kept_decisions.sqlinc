@@ -1,0 +1,52 @@
+create or replace function private._weekly_source_immutable_record_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  raise exception 'WEEKLY_SOURCE_IMMUTABLE_RECORD'
+    using errcode='55000',
+          detail=pg_catalog.jsonb_build_object(
+            'reason_code','WEEKLY_SOURCE_IMMUTABLE_RECORD',
+            'table_name',tg_table_name,
+            'operation',tg_op
+          )::text;
+end;
+$function$;
+alter function private._weekly_source_immutable_record_guard_v1() owner to postgres;
+revoke all on function private._weekly_source_immutable_record_guard_v1() from public,anon,authenticated,service_role;
+-- One explicitly planned immutable acknowledgement decision store, Primary03
+-- section6.2/26.11. Re-acknowledgements use the existing native audit owner.
+create table public.weekly_source_kept_as_paid_decisions (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,
+  decision text not null check (decision='KEEP_AS_PAID'),
+  reason text not null check (reason in ('CREDITED','NOT_INVOICED_DISAPPEARED')),
+  credit_invoice_line_id uuid references public.invoice_lines(id) on delete restrict,
+  facts_fingerprint bytea not null check (pg_catalog.octet_length(facts_fingerprint)=32),
+  actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check ((reason='CREDITED')=(credit_invoice_line_id is not null))
+);
+create unique index weekly_source_kept_as_paid_decisions_identity
+  on public.weekly_source_kept_as_paid_decisions(work_event_id,reason,
+    coalesce(credit_invoice_line_id,'00000000-0000-0000-0000-000000000000'::uuid),facts_fingerprint);
+alter table public.weekly_source_kept_as_paid_decisions owner to postgres;
+alter table public.weekly_source_kept_as_paid_decisions enable row level security;
+alter table public.weekly_source_kept_as_paid_decisions force row level security;
+revoke all on public.weekly_source_kept_as_paid_decisions from public,anon,authenticated,service_role;
+-- The managed Miget compiler maps only the audited logical owner postgres.
+do $kept_rls$
+begin
+  execute pg_catalog.format('create policy cloudtms_miget_service_owner_all on public.weekly_source_kept_as_paid_decisions for all to %I,service_role using (true) with check (true)',current_user);
+end;
+$kept_rls$;
+create trigger weekly_source_kept_as_paid_decisions_immutable
+  before update or delete on public.weekly_source_kept_as_paid_decisions
+  for each row execute function private._weekly_source_immutable_record_guard_v1();
+create trigger weekly_source_kept_as_paid_decisions_truncate_immutable
+  before truncate on public.weekly_source_kept_as_paid_decisions
+  for each statement execute function private._weekly_source_immutable_record_guard_v1();
+comment on table public.weekly_source_kept_as_paid_decisions is
+  'IMMUTABLE_APPEND_ONLY: one primary-plan Keep decision per exact native facts identity. No pay, invoice, queue or Source-presence authority. Latest genuine acknowledgement is the typed native audit, not a matching-hash history filter.';

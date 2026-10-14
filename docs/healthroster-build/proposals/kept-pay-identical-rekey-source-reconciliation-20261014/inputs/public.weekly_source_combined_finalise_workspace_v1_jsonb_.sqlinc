@@ -1,0 +1,138 @@
+create or replace function public.weekly_source_combined_finalise_workspace_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_scope_request jsonb;
+  v_scope_page jsonb;
+  v_scopes jsonb:='[]'::jsonb;
+  v_scope jsonb;
+  v_workspace jsonb;
+  v_plans jsonb:='[]'::jsonb;
+  v_obligations jsonb:='[]'::jsonb;
+  v_rows jsonb:='[]'::jsonb;
+  v_page jsonb;
+  v_versions jsonb:='[]'::jsonb;
+  v_phase text;
+  v_sort text;
+  v_direction text;
+  v_seek text;
+  v_limit integer;
+  v_offset integer:=0;
+  v_cursor jsonb;
+  v_version text;
+  v_counts jsonb;
+  v_total integer;
+  v_meta jsonb;
+  v_seek_base integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','client_id','week_ending','list','sort_key',
+      'sort_direction','seek','cursor','limit'],'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID');
+  v_scope_request:=p_request-'list'-'sort_key'-'sort_direction'-'seek'-'cursor'-'limit';
+  v_phase:=coalesce(nullif(p_request->>'list',''),'ready');
+  v_sort:=coalesce(nullif(p_request->>'sort_key',''),case when nullif(p_request->>'client_id','') is null then 'client' else 'candidate' end);
+  v_direction:=coalesce(nullif(p_request->>'sort_direction',''),'asc');
+  v_seek:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
+  v_limit:=coalesce((p_request->>'limit')::integer,50);
+  if v_phase not in ('ready','blocked','complete') or v_sort not in
+    ('client','source','period','candidate','day_date','status','system_hours','movement','commission','total_cost','invoice_charge','finalised_at')
+    or v_direction not in ('asc','desc') or v_limit not between 1 and 100 or length(v_seek)>100 then
+    raise exception 'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID' using errcode='22023';
+  end if;
+  loop
+    v_scope_page:=public.weekly_source_workspace_scopes_v1(v_scope_request);
+    v_meta:=v_scope_page-'rows'-'next_cursor'-'has_more';
+    v_scopes:=v_scopes||(v_scope_page->'rows');
+    exit when not (v_scope_page->>'has_more')::boolean;
+    v_scope_request:=v_scope_request||jsonb_build_object('cursor',v_scope_page->>'next_cursor');
+  end loop;
+  for v_scope in select item from jsonb_array_elements(v_scopes) item
+  loop
+    -- Completed report evidence lives in History; outstanding approved-hours
+    -- work has its independent Office-check projection in Queries.
+    if coalesce((v_scope->>'completed')::boolean,false) then continue; end if;
+    v_workspace:=public.weekly_source_office_workspace_v1(jsonb_build_object(
+      'actor_user_id',p_request->>'actor_user_id','tab','finalise',
+      'source_group_id',v_scope->>'source_group_id','source_cycle_id',v_scope->>'source_cycle_id',
+      'client_id',v_scope->>'client_id','report_scope_id',v_scope->>'report_scope_id'));
+    v_versions:=v_versions||jsonb_build_array(jsonb_build_array(v_scope->>'key',v_workspace->>'workspace_version'));
+    v_obligations:=v_obligations||jsonb_build_array(v_scope||jsonb_build_object('scope',v_workspace->'selected',
+      'progress',coalesce((select tracker from jsonb_array_elements(v_workspace#>'{finalise,tracker,rows}') tracker
+        where tracker->>'row_key'='tracker-'||(v_scope->>'client_id')),'{}'::jsonb)));
+    if not (v_scope->>'prepared')::boolean and not (v_scope->>'completed')::boolean then continue; end if;
+    v_plans:=v_plans||jsonb_build_array(jsonb_build_object(
+      'key',v_scope->>'key','client',v_scope->>'client','period',v_scope->>'period',
+      'week_ending',v_scope->>'week_ending',
+      'missing_previous_report',v_scope->'missing_previous_report',
+      'progress',coalesce((select tracker from jsonb_array_elements(v_workspace#>'{finalise,tracker,rows}') tracker
+        where tracker->>'row_key'='tracker-'||(v_scope->>'client_id')),'{}'::jsonb),
+      'source',v_scope->>'source','scope',v_workspace->'selected',
+      'prepared',v_workspace#>'{finalise,prepared}','completed',v_scope->'completed',
+      'finalise_enabled',v_workspace#>'{finalise,finalise_enabled}',
+      'blocked_count',v_workspace#>'{finalise,blocked,total_count}',
+      'ready_count',v_workspace#>'{finalise,ready,total_count}',
+      'complete_count',v_workspace#>'{finalise,complete,total_count}',
+      'finalise_payload',v_workspace#>'{finalise,finalise_payload}',
+      'exclusion_confirmation',v_workspace#>'{finalise,exclusion_confirmation}',
+      'excluded_rows',v_workspace#>'{finalise,excluded_rows}',
+      'rate_warnings',v_workspace#>'{finalise,rate_warnings}',
+      'approved_hours_follow_up',v_workspace#>'{finalise,approved_hours_follow_up}'));
+    select v_rows||coalesce(jsonb_agg(item||jsonb_build_object(
+      'scope_key',v_scope->>'key','client',v_scope->>'client','source',v_scope->>'source',
+      'period',v_scope->>'period','profile_id',v_workspace#>>'{profile,id}')),'[]'::jsonb)
+    into v_rows from jsonb_array_elements(coalesce(v_workspace#>array['finalise',v_phase,'rows'],'[]'::jsonb)) item;
+  end loop;
+  v_version:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_COMBINED_FINALISE_V1',
+    jsonb_build_object('scopes_version',v_meta->>'version','reports',v_versions,
+      'filter',p_request-'cursor'-'limit')),'hex');
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      v_offset:=(v_cursor->>'offset')::integer;
+      if v_offset is null or v_offset<0 or v_cursor->>'version' is distinct from v_version then
+        raise exception 'stale cursor';
+      end if;
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001';
+    end;
+  end if;
+  with keyed as (
+    select item,private.weekly_source_query_ascii_fold_v1(coalesce(case v_sort
+      when 'candidate' then item->>'candidate_sort' when 'client' then item->>'client'
+      when 'day_date' then item->>'work_date' when 'status' then item#>>'{status,text}'
+      when 'finalised_at' then item->>'finalised_at_utc' else item->>v_sort end,'')) sort_value,
+      case when v_sort in ('commission','total_cost','invoice_charge')
+        then nullif(regexp_replace(item->>v_sort,'[^0-9.\-]','','g'),'')::numeric end sort_amount
+    from jsonb_array_elements(v_rows) item
+  ), ordered as (
+    select *,row_number() over(order by
+      case when v_direction='asc' then sort_amount end asc nulls last,
+      case when v_direction='desc' then sort_amount end desc nulls last,
+      case when v_direction='asc' then sort_value end collate "C" asc,
+      case when v_direction='desc' then sort_value end collate "C" desc,
+      private.weekly_source_query_ascii_fold_v1(item->>'client') collate "C",
+      private.weekly_source_query_ascii_fold_v1(item->>'candidate_sort') collate "C",
+      item->>'work_date',item->>'scope_key',item->>'row_key') ordinal
+    from keyed
+  ), origin as (
+    select coalesce(min(ordinal) filter(where v_seek<>'' and starts_with(sort_value,v_seek)),1)-1 base
+    from ordered
+  )
+  select count(*)::integer,coalesce(max(origin.base),0)::integer,coalesce(jsonb_agg(item order by ordinal)
+    filter(where ordinal>origin.base+v_offset and ordinal<=origin.base+v_offset+v_limit),'[]'::jsonb)
+    into v_total,v_seek_base,v_page from ordered cross join origin;
+  -- Counts remain whole-result counts even after a type-to-jump seek.
+  select jsonb_build_object('ready',count(*) filter(where item->>'finalise_enabled'='true' and (item->>'blocked_count')::integer=0),
+    'blocked',count(*) filter(where item->>'finalise_enabled' is distinct from 'true' or coalesce((item->>'blocked_count')::integer,0)>0),
+    'complete',0) into v_counts
+  from jsonb_array_elements(v_plans) item;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_COMBINED_FINALISE_V1',
+    'version',v_version,'scopes',v_plans,'obligations',v_obligations,'scope_options',v_scopes,'summary',v_meta,'counts',v_counts,'list',v_phase,
+    'rows',v_page,'total_count',v_total,'sort_key',v_sort,'sort_direction',v_direction,
+    'has_more',v_seek_base+v_offset+v_limit<v_total,
+    'next_cursor',case when v_seek_base+v_offset+v_limit<v_total then
+      encode(convert_to(jsonb_build_object('offset',v_offset+v_limit,'version',v_version)::text,'UTF8'),'base64') else '' end);
+end;
+$function$;

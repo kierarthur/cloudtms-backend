@@ -1,0 +1,8 @@
+create or replace function public.weekly_source_finalise_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language sql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_finalise_core_v1(p_request,null::uuid);
+$function$;

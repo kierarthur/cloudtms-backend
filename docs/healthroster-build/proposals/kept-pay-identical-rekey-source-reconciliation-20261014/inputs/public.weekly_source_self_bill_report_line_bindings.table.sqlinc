@@ -1,0 +1,15 @@
+
+
+create table public.weekly_source_self_bill_report_line_bindings (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  report_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,
+  export_upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,
+  bound_row_resolution_id uuid not null references public.weekly_source_row_resolutions(id) on delete restrict,
+  export_projection_publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,
+  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,
+  self_bill_report_id uuid not null references public.weekly_source_self_bill_reports(id) on delete restrict,
+  state text not null check (state in ('CURRENT','SUPERSEDED')),
+  bound_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  superseded_at_utc timestamptz,
+  check ((state='SUPERSEDED')=(superseded_at_utc is not null))
+);

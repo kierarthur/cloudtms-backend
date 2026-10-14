@@ -1,0 +1,247 @@
+create or replace function private.weekly_source_office_lifecycle_phase_v1(
+  p_root_timesheet_id uuid,
+  p_facts jsonb
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_members uuid[];
+  v_canonical uuid;
+  v_member_count integer:=0;
+  v_authorisation_state text;
+  v_live_count integer:=0;
+  v_withdrawn_count integer:=0;
+  v_head_count integer:=0;
+  v_head public.weekly_source_entitlement_heads%rowtype;
+  v_allocation jsonb;
+  v_payment jsonb;
+  v_invoices jsonb;
+  v_proposal jsonb;
+  v_phase text;
+  v_ui_state text;
+  v_overlays jsonb:='[]'::jsonb;
+  v_errors jsonb:='[]'::jsonb;
+  v_policy_row jsonb;
+  v_settled boolean:=false;
+  v_position_withheld boolean:=false;
+  v_batch_count integer:=0;
+  v_settlement_count integer:=0;
+  v_comparison text;
+  v_authority_mode text;
+  v_protected_items integer:=0;
+  v_next boolean:=false;
+begin
+  v_comparison:=p_facts->>'comparison_state';
+  v_authority_mode:=p_facts->>'authority_mode';
+  v_protected_items:=coalesce((p_facts->>'protected_wait_items')::integer,0);
+
+  -- The two bypasses first: for these the Weekly Source component must not
+  -- mount at all and this owner supplies no heading (matrix UI-016, UI-017).
+  if coalesce(p_facts->>'scope','')='DAILY' then
+    return private.weekly_source_office_lifecycle_result_v1('DAILY','[]'::jsonb,'[]'::jsonb,null);
+  end if;
+  if coalesce((p_facts->>'applicable')::boolean,false) is not true then
+    return private.weekly_source_office_lifecycle_result_v1('STANDARD_WEEKLY','[]'::jsonb,'[]'::jsonb,null);
+  end if;
+
+  select pg_catalog.array_agg(distinct scope_row.family_timesheet_id),
+         pg_catalog.min(scope_row.canonical_timesheet_id::text)::uuid,
+         pg_catalog.count(distinct scope_row.family_timesheet_id)::integer
+    into v_members,v_canonical,v_member_count
+  from public._pay_timesheet_rotation_scope(array[p_root_timesheet_id]) as scope_row;
+  if v_members is null or v_member_count=0 then
+    return private.weekly_source_office_lifecycle_result_v1(
+      null,'[]'::jsonb,
+      pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'code','FAMILY_UNRESOLVED',
+        'detail','The installed rotation resolver returned no member for this root.')),
+      null);
+  end if;
+
+  -- One live authorisation per root family, or the projection is contradictory.
+  select pg_catalog.count(*) filter (where authorisation_row.withdrawn_at_utc is null)::integer,
+         pg_catalog.count(*) filter (where authorisation_row.withdrawn_at_utc is not null)::integer
+    into v_live_count,v_withdrawn_count
+  from public.weekly_source_root_authorisations as authorisation_row
+  where authorisation_row.root_timesheet_id=any(v_members);
+  v_authorisation_state:=private.weekly_source_office_authorisation_state_v1(p_root_timesheet_id);
+  if v_live_count>1 then
+    v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'code','MULTIPLE_LIVE_ROOT_AUTHORISATIONS',
+      'detail','More than one not-withdrawn authorisation generation exists for this family.',
+      'live_count',v_live_count));
+  end if;
+  if v_authorisation_state='UNKNOWN' then
+    v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'code','AUTHORISATION_STATE_UNKNOWN',
+      'detail','The authorisation-state owner could not answer for this root.'));
+  end if;
+
+  select pg_catalog.count(*)::integer into v_head_count
+  from public.weekly_source_entitlement_heads as head_row
+  where head_row.root_timesheet_id=any(v_members)
+    and head_row.state='COMMITTED_CURRENT';
+  if v_head_count>1 then
+    v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'code','MULTIPLE_COMMITTED_CURRENT_HEADS',
+      'detail','One root has at most one committed current head (24 section 4.3).',
+      'head_count',v_head_count));
+  elsif v_head_count=1 then
+    select head_row.* into v_head
+    from public.weekly_source_entitlement_heads as head_row
+    where head_row.root_timesheet_id=any(v_members)
+      and head_row.state='COMMITTED_CURRENT';
+  end if;
+
+  v_next:=private.weekly_source_office_next_owner_v1();
+  if v_next then
+    -- NEXT never writes the retained allocation ledger. Its absence cannot
+    -- establish no payment or no processing. Preserve genuine Source facts
+    -- below, but keep the independent payment leaf explicitly unknown.
+    v_allocation:=jsonb_build_object('ok',false,'reason','ROOT_ACTIVITY_NOT_INDEXED',
+      'unavailable_class','POSITION_WITHHELD','batch_count',null,'settlement_count',null);
+    v_payment:=jsonb_build_object('ok',false,'reason','ROOT_ACTIVITY_NOT_INDEXED','state',null);
+  else
+    v_allocation:=private.weekly_source_settlement_allocation_v1(p_root_timesheet_id);
+    v_payment:=private.weekly_source_office_payment_progress_v1(v_members);
+  end if;
+  v_invoices:=private.weekly_source_office_invoice_movements_v1(v_members);
+  v_proposal:=private.weekly_source_office_proposal_view_v1(p_root_timesheet_id,v_members);
+
+  v_settled:=coalesce((v_allocation->>'ok')::boolean,false)
+    and v_allocation->>'state'='AVAILABLE';
+  if not v_next then
+  v_batch_count:=coalesce((v_allocation->>'batch_count')::integer,0);
+  -- `settlement_count` and `batch_count` are JSON numbers on AVAILABLE,
+  -- NO_SETTLEMENT and BOTH unavailable classes (WP-11d D4), so the phase can be
+  -- resolved unconditionally.  They are counts of financial EVENTS and are never
+  -- conflated with an amount or an hours figure.
+  v_settlement_count:=coalesce((v_allocation->>'settlement_count')::integer,0);
+  end if;
+  -- The class is READ, not derived.  WP-11d publishes `unavailable_class` with
+  -- exactly the distinction this projection needs, present and null on AVAILABLE
+  -- and NO_SETTLEMENT so it can be read unconditionally:
+  --
+  --   POSITION_WITHHELD  the evidence is sound and only the position cannot be
+  --                      stated.  NOT a contradiction: resolve the phase, keep
+  --                      the heading, mark the paid schedules unavailable and
+  --                      carry the reason and its plain-English detail.
+  --   EVIDENCE_DAMAGED   every other reason.  A contradiction; fail closed.
+  --
+  -- Deriving the class here from a list of reason codes would put the same rule
+  -- in two packages and let them drift the first time a reason is added.
+  v_position_withheld:=v_allocation->>'unavailable_class'='POSITION_WITHHELD';
+
+  -- Settlement evidence that cannot be read is never guessed at.  It is only
+  -- an error when the phase would have had to state a paid figure.
+  if coalesce((v_allocation->>'ok')::boolean,false) is not true
+     and not v_position_withheld then
+    v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'code','SETTLEMENT_ALLOCATION_UNAVAILABLE',
+      -- The detail is the READER's own sentence for this exact reason, which it
+      -- guarantees is true of the state and safe to show an Office user.  A
+      -- generic sentence written here would drift from the reason beside it.
+      'detail',coalesce(v_allocation->>'reason_detail',
+        'Hours paid cannot be stated from the immutable settlement allocation.'),
+      'reason',v_allocation->>'reason',
+      'unavailable_class',v_allocation->>'unavailable_class'));
+  end if;
+  if not v_next and coalesce((v_payment->>'ok')::boolean,false) is not true then
+    v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'code','PAYMENT_PROGRESS_UNAVAILABLE','reason',v_payment->>'reason'));
+  end if;
+  -- Settled money with no authorisation at all is a contradiction: money moved
+  -- for a week nobody approved.
+  if (v_settled or v_settlement_count>0)
+     and v_authorisation_state='NEVER_AUTHORISED' then
+    v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'code','SETTLEMENT_WITHOUT_AUTHORISATION',
+      'detail','Settlement evidence exists for a root that was never authorised.'));
+  end if;
+
+  if pg_catalog.jsonb_array_length(v_errors)>0 then
+    return private.weekly_source_office_lifecycle_result_v1(null,v_overlays,v_errors,null)
+      ||pg_catalog.jsonb_build_object(
+        'member_timesheet_ids',pg_catalog.to_jsonb(v_members),
+        'authorisation_state',v_authorisation_state,
+        'settlement',v_allocation,'payment',v_payment,
+        'invoice_movements',v_invoices,'proposal',v_proposal);
+  end if;
+
+  -- `UI-018` is an overlay on whatever phase the week is really in.
+  if coalesce((p_facts->>'source_fixed_expenses')::boolean,false) then
+    v_overlays:=v_overlays||pg_catalog.jsonb_build_array('UI-018');
+  end if;
+
+  if v_authorisation_state='WITHDRAWN'
+     and coalesce((v_invoices->>'invoiced_from_source')::boolean,false) then
+    -- DEC-061 Option A (proof/36 section 7): withdrawal stops Candidate payment
+    -- only.  The finalised source movement stays on the exact self-bill and the
+    -- Office Weekly detail says so until the week is authorised again.
+    v_phase:='OFFICE_WITHDRAWN_INVOICED_FROM_SOURCE';
+  elsif v_authorisation_state<>'AUTHORISED' then
+    -- Never authorised, or withdrawn with no source invoice line: the week is
+    -- back in front of Office for a first authorisation (proof/36 section 5.8).
+    if v_authority_mode='TIMESHEET_AUTHORITY' then
+      v_phase:=case when v_comparison='MATCH' then 'TIMESHEET_AUTHORITY_MATCH'
+        else 'TIMESHEET_AUTHORITY_MISMATCH' end;
+    elsif v_protected_items>0 then
+      v_phase:='FIRST_ALTERNATE_HOURS_PENDING';
+    elsif v_comparison='NO_TIMESHEET' then
+      v_phase:='FIRST_AUTHORISATION_PENDING_NO_SUBMISSION';
+    elsif v_comparison='MISMATCH' then
+      v_phase:='FIRST_AUTHORISATION_PENDING_MISMATCH';
+    else
+      v_phase:='FIRST_AUTHORISATION_PENDING';
+    end if;
+  -- A decision that is SAVED and frozen outranks an undecided one: `24 section
+  -- 4.4` says the previous entitlement stays current until the release
+  -- condition is observed, so the screen must say the decision is already made.
+  elsif coalesce((v_proposal->>'present')::boolean,false)
+        and coalesce(v_proposal->>'pending_state','') in ('PENDING','RELEASING') then
+    v_phase:='LATER_CHANGE_APPROVED_FROZEN';
+  -- The cross-Contract bundle is told apart by its RECORDED kind, never by
+  -- whether its content could be displayed: a bundle whose entitlement cannot
+  -- be stated is still one atomic two-root decision.
+  elsif coalesce((v_proposal->>'present')::boolean,false)
+        and coalesce(v_proposal->>'bundle_kind','SINGLE_ROOT')='CROSS_CONTRACT_A_B' then
+    v_phase:='CROSS_CONTRACT_PENDING';
+  elsif v_next then
+    -- Existing unresolved representation, not a new Stage and not an unpaid
+    -- claim. Independent approved/paid informational leaves remain readable.
+    v_phase:=null;
+    v_errors:=jsonb_build_array(jsonb_build_object('code','ROOT_ACTIVITY_NOT_INDEXED',
+      'detail','The complete payment-processing status is not yet available.'));
+  elsif coalesce((v_proposal->>'present')::boolean,false) then
+    v_phase:=case when v_settlement_count>0 then 'LATER_CHANGE_PENDING_PAID'
+      else 'LATER_CHANGE_PENDING_UNPAID' end;
+  elsif v_head_count=1 and v_head.prior_head_id is not null then
+    v_phase:=case when v_settlement_count>0 and v_batch_count>1
+      then 'ADJUSTMENT_SETTLED' else 'LATER_CHANGE_PUBLISHED_UNSETTLED' end;
+  elsif v_settlement_count>0 then
+    v_phase:=case when v_batch_count>1 then 'ADJUSTMENT_SETTLED' else 'PAID' end;
+  elsif coalesce(v_payment->>'state','NONE')='IN_FLIGHT' then
+    v_phase:='PAYMENT_PROCESSING';
+  else
+    v_phase:='AUTHORISED_NOT_PAID';
+  end if;
+
+  return private.weekly_source_office_lifecycle_result_v1(v_phase,v_overlays,v_errors,null)
+    ||pg_catalog.jsonb_build_object(
+      'member_timesheet_ids',pg_catalog.to_jsonb(v_members),
+      'canonical_timesheet_id',v_canonical,
+      'authorisation_state',v_authorisation_state,
+      'authorisation_generations',pg_catalog.jsonb_build_object(
+        'live',v_live_count,'withdrawn',v_withdrawn_count),
+      'current_head',case when v_head_count=1 then pg_catalog.jsonb_build_object(
+        'head_id',v_head.id,'authority_kind',v_head.authority_kind,
+        'head_revision',v_head.head_revision,'prior_head_id',v_head.prior_head_id,
+        'certified_zero',v_head.certified_zero,'component_count',v_head.component_count,
+        'committed_at_utc',v_head.committed_at_utc) else null end,
+      'settlement',v_allocation,'payment',v_payment,
+      'invoice_movements',v_invoices,'proposal',v_proposal);
+end;
+$function$;

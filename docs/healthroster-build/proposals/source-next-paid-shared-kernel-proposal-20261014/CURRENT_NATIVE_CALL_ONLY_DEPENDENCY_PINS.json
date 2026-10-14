@@ -1,0 +1,92 @@
+{
+  "proposal_only": true,
+  "source_only": true,
+  "current": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "complete_current_native_reader": {
+    "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+    "file": "supabase/repeatable/05102026_1112_bpay_next_source_paid_evidence_page_v1.sql",
+    "bytes": 48233,
+    "sha256": "42feb18efe21530f0299e693df4447363ba91f837d8d1154e1cb322b96c30432",
+    "signature": "public.bpay_next_source_paid_evidence_page_v1(jsonb)",
+    "definition_sha256": "1e5f13514735e552bd1e5095e4b08ae7b305746515ec5a7fe3f8a5bfdb99fa67",
+    "body_sha256": "2ac9b232381e96e125a9a220b6e550aea2a456d0f72807a10f1f59d09ed529b7"
+  },
+  "selected_native_owner_pins": [
+    {
+      "signature": "public._pay_timesheet_rotation_scope(uuid[])",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "input_bytes": 9214490,
+      "input_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f",
+      "definition_sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "body_sha256": "1d9633d261ed9b5c9985278f460da3beddf61ceaed633e4e1f4a90857acdfdf8"
+    },
+    {
+      "signature": "private.weekly_source_query_require_service_v1()",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "input_bytes": 268078,
+      "input_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "body_sha256": "379fbd7c0113eada17adab3ce212f1e719a7b4c0c26d2c00d6fc79650f3bf237"
+    },
+    {
+      "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "input_bytes": 311541,
+      "input_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "body_sha256": "5cc2197010d7ddc639ab540ae221c7852bd1b862fad76ddf75bb869e34ecdb53"
+    },
+    {
+      "signature": "private.weekly_source_office_next_owner_v1()",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/05102026_1242_weekly_source_office_next_paid_context_v1.sql",
+      "input_bytes": 7445,
+      "input_sha256": "e254d7d64a07ff95092c68193250319ed8a598200d88874661e0693599a41645",
+      "definition_sha256": "2b6285472cde60f3534ab3def5d4bd8e22ec26e563f9b0fee2791834b183adb9",
+      "body_sha256": "44e00649c8622c70a0855c13eb177487582da00a8c3c86dcd5d0aef1473018e1"
+    },
+    {
+      "signature": "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "input_bytes": 249666,
+      "input_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "definition_sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8",
+      "body_sha256": "09dcd82d4bbb581a1f7547d453882fc6a280a0d1f1ba1f60067b4a16c43e41a2"
+    },
+    {
+      "signature": "private.bpay_next_source_origin_state_v1(uuid,uuid)",
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
+      "input_bytes": 11550,
+      "input_sha256": "08c7ec51a1fcaeac01057f82337682a49b71b19d62cb311a37627337b44f7930",
+      "definition_sha256": "3edf037f0b72fc55b17f7260e22cd5239c31509ef63f8ff6bc80de241d5ca293",
+      "body_sha256": "e78a712f047dbc37870c8aca740a27f8d0bee3c8bfceba60ae575032958ca2a6"
+    }
+  ],
+  "source_context_dependency": {
+    "input_packet_manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+    "input_file": "forward/06_kept_as_paid_context.sqlinc",
+    "input_bytes": 20324,
+    "input_sha256": "b6328f6f2ed70e3c6c47a1d924a866ac30d0db420e39ab2a7795b48bbc16c4bd",
+    "before_file": "before/04_complete_frozen_keep_context.sqlinc",
+    "forward_file": "forward/04_complete_source_keep_context.sqlinc",
+    "after_sha256": "ad73cb33a890771f0dab30ac0c08473ef08c3dea5d03f9feded537274249e68b",
+    "hunks": [
+      {
+        "before": "      select count(*) into v_component_count from public.weekly_source_entitlement_head_components component\n      join public.weekly_source_entitlement_heads head on head.id=component.head_id\n      where head.root_timesheet_id=any(v_members) and component.component_id=v_component\n        and component.component_kind='WORKED_TIME' and component.economic_key_type='SEGMENT'\n        and component.economic_key_value='weekly-source-event:'||v_event.id::text\n        and component.component_member_identity=v_event.id::text;\n      if v_component_count=0 or p_actor_user_id is null or not exists(select 1 from public.tms_users\n        where id=p_actor_user_id and is_active and lower(btrim(role))='admin') then\n        -- The current Bank public reader has an admin-only authority boundary.\n        -- A non-admin payment actor needs the reviewed native pure-kernel seam\n        -- in SOURCE_NEXT_PAID_PERMISSION_SEAM.md; no actor substitution here.\n",
+        "after": "      if p_actor_user_id is null then\n        -- No actor substitution; the separate Source purpose owner requires\n        -- genuine VIEW_PAY_WORK and native root/work/component/revision.\n"
+      },
+      {
+        "before": "v_page:=private.weekly_source_office_next_paid_evidence_page_v1(p_actor_user_id,v_root,'COMPONENTS',null,v_after,100);",
+        "after": "v_page:=private.weekly_source_kept_paid_components_page_v1(p_actor_user_id,v_event.id,v_root,v_after,100);"
+      }
+    ],
+    "whole_reverse": true
+  },
+  "full_transitive_physical_catalogue_or_final_seal_claim": false,
+  "native_proof": false
+}

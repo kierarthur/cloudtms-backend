@@ -1,0 +1,16 @@
+create or replace function private._weekly_source_immutable_record_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  raise exception 'WEEKLY_SOURCE_IMMUTABLE_RECORD'
+    using errcode='55000',
+          detail=pg_catalog.jsonb_build_object(
+            'reason_code','WEEKLY_SOURCE_IMMUTABLE_RECORD',
+            'table_name',tg_table_name,
+            'operation',tg_op
+          )::text;
+end;
+$function$;

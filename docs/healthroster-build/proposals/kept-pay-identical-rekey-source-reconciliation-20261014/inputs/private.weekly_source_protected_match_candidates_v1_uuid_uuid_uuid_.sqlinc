@@ -1,0 +1,36 @@
+create or replace function private.weekly_source_protected_match_candidates_v1(
+  p_upload_row_id uuid,p_candidate_id uuid,p_client_id uuid
+) returns jsonb language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'work_event_id',event.id,'contract_id',family.contract_id,
+    'start',to_char(protected.start_at_local,'HH24:MI'),'end',to_char(protected.end_at_local,'HH24:MI'),
+    'break_minutes',protected.break_minutes,'protected_state',protected.state,
+    'schedule_compatible',protected.start_at_local<source_row.end_at_local
+      and source_row.start_at_local<protected.end_at_local,
+    'retained_source_identity',exists(
+      select 1 from public.weekly_work_event_source_links retained
+      join public.weekly_source_upload_rows previous on previous.id=retained.upload_row_id
+      join public.weekly_source_uploads previous_upload on previous_upload.id=previous.upload_id
+      where retained.work_event_id=event.id
+        and previous_upload.source_format_profile_id=upload.source_format_profile_id
+        and previous.work_date=source_row.work_date
+        and nullif(previous.external_source_key,'')=nullif(source_row.external_source_key,'')
+    )
+  ) order by protected.start_at_local,event.id),'[]'::jsonb)
+  from public.weekly_source_upload_rows source_row
+  join public.weekly_source_uploads upload on upload.id=source_row.upload_id
+  join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+  join public.weekly_work_events event on event.candidate_id=p_candidate_id and event.client_id=p_client_id
+    and event.work_date=source_row.work_date and event.first_source_group_id=cycle.source_group_id
+  join lateral (select item.* from public.weekly_exceptional_pay_family_events item
+    where item.durable_work_event_id=event.id
+    order by item.occurred_at_utc desc,item.event_sequence desc,item.id desc limit 1) protected on true
+  join public.weekly_exceptional_pay_target_families family on family.id=protected.family_id
+  join public.contracts contract on contract.id=family.contract_id
+    and contract.candidate_id=p_candidate_id and contract.client_id=p_client_id
+    and source_row.work_date between contract.start_date and coalesce(contract.end_date,'infinity'::date)
+  where source_row.id=p_upload_row_id
+    and (private._weekly_source_effective_policy_v1(p_client_id,contract.id,source_row.work_date)->>'authority_mode')='SOURCE_AUTHORITY';
+$function$;

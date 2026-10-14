@@ -1,0 +1,43 @@
+create or replace function private._weekly_source_immutable_fact_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_old_facts jsonb;
+  v_new_facts jsonb;
+  v_index integer;
+begin
+  if tg_op='DELETE' then
+    raise exception 'WEEKLY_SOURCE_IMMUTABLE_RECORD'
+      using errcode='55000',
+            detail=pg_catalog.jsonb_build_object(
+              'reason_code','WEEKLY_SOURCE_IMMUTABLE_RECORD',
+              'table_name',tg_table_name,
+              'operation',tg_op
+            )::text;
+  end if;
+
+  v_old_facts:=pg_catalog.to_jsonb(old);
+  v_new_facts:=pg_catalog.to_jsonb(new);
+  if tg_nargs>0 then
+    for v_index in 0..tg_nargs-1 loop
+      v_old_facts:=v_old_facts-tg_argv[v_index];
+      v_new_facts:=v_new_facts-tg_argv[v_index];
+    end loop;
+  end if;
+
+  if v_old_facts is distinct from v_new_facts then
+    raise exception 'WEEKLY_SOURCE_IMMUTABLE_FACT'
+      using errcode='55000',
+            detail=pg_catalog.jsonb_build_object(
+              'reason_code','WEEKLY_SOURCE_IMMUTABLE_FACT',
+              'table_name',tg_table_name,
+              'operation',tg_op
+            )::text;
+  end if;
+
+  return new;
+end;
+$function$;

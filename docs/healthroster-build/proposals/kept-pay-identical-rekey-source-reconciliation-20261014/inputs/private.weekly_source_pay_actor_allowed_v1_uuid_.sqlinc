@@ -1,0 +1,10 @@
+create or replace function private.weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid)
+returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(select 1 from public.tms_users actor
+    where actor.id=p_actor_user_id and actor.is_active is true
+      and (lower(btrim(coalesce(actor.role,'')))='admin'
+        or coalesce(actor.payment_authoriser,false)
+        or coalesce(actor.payment_golden_key,false)));
+$function$;

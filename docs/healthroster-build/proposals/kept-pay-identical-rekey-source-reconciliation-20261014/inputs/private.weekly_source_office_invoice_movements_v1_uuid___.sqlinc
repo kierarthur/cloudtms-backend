@@ -1,0 +1,83 @@
+create or replace function private.weekly_source_office_invoice_movements_v1(
+  p_member_timesheet_ids uuid[]
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_movements jsonb:='[]'::jsonb;
+  v_count integer:=0;
+  v_bound integer:=0;
+  v_ordinary_lines integer:=0;
+begin
+  if p_member_timesheet_ids is null
+     or pg_catalog.cardinality(p_member_timesheet_ids)=0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','FAMILY_UNRESOLVED','invoiced_from_source',false,
+      'movement_count',0,'bound_line_count',0,'ordinary_invoice_line_count',0,
+      'movements','[]'::jsonb);
+  end if;
+
+  select pg_catalog.count(*)::integer into v_count
+  from public.weekly_source_billing_movements as movement_row
+  where movement_row.invoice_timesheet_id=any(p_member_timesheet_ids);
+
+  if v_count>500 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','MOVEMENT_HISTORY_EXCEEDS_BOUND','invoiced_from_source',null,
+      'movement_count',v_count,'bound_line_count',0,'ordinary_invoice_line_count',0,
+      'movements','[]'::jsonb);
+  end if;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'billing_movement_id',movement_row.id,
+      'work_event_id',movement_row.work_event_id,
+      'movement_role',movement_row.movement_role,
+      'source_line_kind',movement_row.source_line_kind,
+      'source_profile_kind',movement_row.source_profile_kind,
+      'final_revision_id',movement_row.final_revision_id,
+      'placement_state',movement_row.placement_state,
+      'created_at_utc',movement_row.created_at_utc,
+      'binding',case when binding_row.id is null then null
+        else pg_catalog.jsonb_build_object(
+          'invoice_id',binding_row.invoice_id,
+          'invoice_line_id',binding_row.invoice_line_id,
+          'presentation_line_id',binding_row.presentation_line_id,
+          'binding_version',binding_row.binding_version,
+          'state',binding_row.state,
+          'bound_at_utc',binding_row.bound_at_utc) end,
+      'invoice_status',invoice_row.status,
+      'note','Invoice movement history. Never Candidate paid hours.')
+      order by movement_row.created_at_utc,movement_row.id),'[]'::jsonb),
+    pg_catalog.count(*) filter (where binding_row.id is not null)::integer
+    into v_movements,v_bound
+  from public.weekly_source_billing_movements as movement_row
+  left join public.weekly_source_invoice_line_bindings as binding_row
+    on binding_row.billing_movement_id=movement_row.id and binding_row.state='CURRENT'
+  left join public.invoices as invoice_row on invoice_row.id=binding_row.invoice_id
+  where movement_row.invoice_timesheet_id=any(p_member_timesheet_ids);
+
+  select pg_catalog.count(*)::integer into v_ordinary_lines
+  from public.invoice_lines as line_row
+  where line_row.timesheet_id=any(p_member_timesheet_ids);
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'reason',null,
+    -- DEC-061 Option A: the finalised source movement stays on the exact
+    -- self-bill.  "Invoiced from source" is TRUE when a movement of this root
+    -- is currently bound to an invoice line, whatever the invoice's own status;
+    -- an unissued DRAFT invoice still holds the line.
+    'invoiced_from_source',v_bound>0,
+    'movement_count',v_count,'bound_line_count',v_bound,
+    'ordinary_invoice_line_count',v_ordinary_lines,
+    'movements',v_movements);
+exception
+  when undefined_table or undefined_column or insufficient_privilege then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','INVOICE_EVIDENCE_UNREADABLE','invoiced_from_source',null,
+      'movement_count',0,'bound_line_count',0,'ordinary_invoice_line_count',0,
+      'movements','[]'::jsonb);
+end;
+$function$;

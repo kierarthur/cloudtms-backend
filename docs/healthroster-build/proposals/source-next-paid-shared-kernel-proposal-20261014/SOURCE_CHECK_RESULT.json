@@ -1,0 +1,46 @@
+{
+  "schema_version": "SHARED_OWNER_NATIVE_PAID_KERNEL_PROPOSAL_SOURCE_CHECK_V1",
+  "proposal_only": true,
+  "source_only": true,
+  "current": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "tests": {
+    "count": 7,
+    "pass": 7,
+    "fail": 0,
+    "kind": "Inspected lexical/full reverse source tests only, not functional SQL or native financial/security proof",
+    "output_sha256": "acf44c0c297ca91ea3175a04801d1e2dc2e5aac9f11ed16c54bbe50fb983989d"
+  },
+  "inert_syntax_files": [
+    "build-shared-proposal.mjs",
+    "shared-proposal-source.test.mjs",
+    "freeze-shared-proposal.mjs"
+  ],
+  "complete_unique_reversals": 3,
+  "financial_suffix_and_three_branches_byte_identical": true,
+  "public_prefix_both_admin_checks_byte_identical": true,
+  "public_request_response_fields_cursor_acl_unchanged_at_source": true,
+  "proposed_new_private_signatures": [
+    "private.bpay_next_source_paid_evidence_kernel_v1(jsonb)",
+    "private.weekly_source_kept_paid_components_page_v1(uuid,uuid,uuid,jsonb,integer)"
+  ],
+  "new_table_or_service_public_signature_count": 0,
+  "shared_banking_owner_change_proposed": true,
+  "shared_banking_owner_change_approved": false,
+  "canonical_source_modified": false,
+  "installed_or_mounted": false,
+  "credential_scan": {
+    "files": 12,
+    "rules": [
+      "PRIVATE_KEY",
+      "JWT_LITERAL",
+      "GITHUB_TOKEN"
+    ],
+    "findings": []
+  },
+  "sql_compiled": false,
+  "sql_executed": false,
+  "native_proof": false,
+  "native_permission_positive_negative_error_order_current_scope_snapshot_component_all_pages_money_cursor_role_catalogue": "HOLD",
+  "default_missing_exclusion_accept_overlap_prepared_and_agency_paid_amendment_authority": "UNCHANGED_SOURCE_ENGINEERING_GAPS",
+  "final_literal_classification_and_full_verifier_body_source_contract_tool_catalogue_installed_seal": "REQUIRED_AFTER_OWNER_APPROVAL"
+}

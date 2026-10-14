@@ -1,0 +1,170 @@
+{
+  "schema_version": "INDEPENDENT_KEEP_REKEY_CREDIT_PARTIAL_SOURCE_FREEZE_V1",
+  "root_input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "source_only": true,
+  "partial_implementation": true,
+  "shared_owner_extraction_or_default_disposition_implemented": false,
+  "artifact_count": 32,
+  "artifacts": [
+    {
+      "file": "CONSTRUCTION_STATUS.md",
+      "bytes": 6931,
+      "sha256": "0e5290f123736c491fe23ae47de74c1e3f1fafcb26f3d72223ca735d712c05b0"
+    },
+    {
+      "file": "DEFAULT_EXCLUSION_AND_ACCEPT_SOURCE_RECONCILIATION.md",
+      "bytes": 6727,
+      "sha256": "649e094f93f2f309e84be0f504db9ab38e60b0bdd923c9f7ef9a9094122bdbd4"
+    },
+    {
+      "file": "INDEPENDENT_PARTS_FREEZE_AND_GAPS.md",
+      "bytes": 5767,
+      "sha256": "352bc25e0d2a3f06c99af14be0d14d3801ec5aa52d09730eba0eece0e91af330"
+    },
+    {
+      "file": "KEPT_CREDIT_CURRENT_OWNERS_AND_INPUT_PINS.json",
+      "bytes": 15043,
+      "sha256": "e2ed162fe92311f0728d4a70d38a10f73af1c593e271b4c14173c37cdbf8c4a3"
+    },
+    {
+      "file": "LITERAL_DECLARATIONS_AND_DIRECT_INPUT_PINS.json",
+      "bytes": 48799,
+      "sha256": "3d556e9f4c7f5e199f77a25fffd5d0b8f6594349e361c123c3966a090ac3ac64"
+    },
+    {
+      "file": "REKEY_CURRENT_CALLERS_AND_INPUT_PINS.json",
+      "bytes": 7349,
+      "sha256": "85b7b1c8b14debc31e0c117eeaeb14bd80de4602017707efd09a9366250f2768"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1926,
+      "sha256": "25a79a3f079b88fc3b8a1faad0b30c3ff3b22d8d71f580ab7a5c9d0d9770eb11"
+    },
+    {
+      "file": "SOURCE_NEXT_PAID_PERMISSION_SEAM.md",
+      "bytes": 3753,
+      "sha256": "46f4f195cc37d254db3615b2f188726045b6b9104ba2200f31f8270865b4c40a"
+    },
+    {
+      "file": "before/02_complete_upload_context.sqlinc",
+      "bytes": 27420,
+      "sha256": "c0c4dad0e0445c98a45a59e9e6c5956abe6716d69bcda9ce7a3ca5e83cf8835b"
+    },
+    {
+      "file": "before/03_complete_projection_rows.sqlinc",
+      "bytes": 67447,
+      "sha256": "a03883d889e614ea7c72cdd2cdd13cf6a2b39cf8f8259e49dfd8160eeb88b689"
+    },
+    {
+      "file": "before/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 148095,
+      "sha256": "6ab4e16d569e3dddfa48de9b3b09a94328d6f4a9571039cf56edc014bfc5a204"
+    },
+    {
+      "file": "before/10_complete_adjustments_apply.sqlinc",
+      "bytes": 6441,
+      "sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86"
+    },
+    {
+      "file": "before/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 3067,
+      "sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140"
+    },
+    {
+      "file": "before/routes.js",
+      "bytes": 65443,
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5"
+    },
+    {
+      "file": "build-kept-current-owners.mjs",
+      "bytes": 13625,
+      "sha256": "2d3549e25753d426dafdaa84425be01eec2142250070a0273a4838c999535d6f"
+    },
+    {
+      "file": "build-rekey-callers.mjs",
+      "bytes": 7628,
+      "sha256": "df634f75b33d9b09f94d26dfd6615419a41ba3287a756344c146c819668414a8"
+    },
+    {
+      "file": "forward/00_complete_one_time_kept_decisions.sqlinc",
+      "bytes": 3242,
+      "sha256": "37190979970529385c5488a7709a36a6c5b0565dc8fa25aa9bd94336568d1634"
+    },
+    {
+      "file": "forward/01_identical_rekey_prior.sqlinc",
+      "bytes": 9377,
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0"
+    },
+    {
+      "file": "forward/02_complete_upload_context.sqlinc",
+      "bytes": 28514,
+      "sha256": "879d5956940041ad1d91a4900ceb8b7df3baa3ab178bcbe4ff85630461937de3"
+    },
+    {
+      "file": "forward/03_complete_projection_rows.sqlinc",
+      "bytes": 68884,
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35"
+    },
+    {
+      "file": "forward/04_kept_as_paid_decisions_schema.sqlinc",
+      "bytes": 2556,
+      "sha256": "9d54880ab9b1e138a6c9ec24ec8bc5e79fc270e006d109b932a305196c4b3699"
+    },
+    {
+      "file": "forward/05_kept_as_paid_facts.sqlinc",
+      "bytes": 9220,
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa"
+    },
+    {
+      "file": "forward/06_kept_as_paid_context.sqlinc",
+      "bytes": 20324,
+      "sha256": "b6328f6f2ed70e3c6c47a1d924a866ac30d0db420e39ab2a7795b48bbc16c4bd"
+    },
+    {
+      "file": "forward/07_keep_as_paid_decide.sqlinc",
+      "bytes": 10595,
+      "sha256": "cb5b7f6e74731e9b6b8b6d6f7748106d48b324c7cfd2e4bca85bc9f519b8fab2"
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "bytes": 7524,
+      "sha256": "e6e725b0b51b45abb8ee836fac0086924ac134910b2a8c37565a767e04dc7a47"
+    },
+    {
+      "file": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 148842,
+      "sha256": "e74ed7ae0769bbad783c7fb1b8b3d28fc18d6c6c0a8f0f9dfdd6668cce89100c"
+    },
+    {
+      "file": "forward/10_complete_adjustments_apply.sqlinc",
+      "bytes": 9032,
+      "sha256": "25b4b20c1741afe1b542d4551ce26ea6c0c21ea26fae189aad3531ac01e6a2a0"
+    },
+    {
+      "file": "forward/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 4213,
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc"
+    },
+    {
+      "file": "forward/12_keep_ack_native_guard.sqlinc",
+      "bytes": 7316,
+      "sha256": "1111f7dd1e88c06649d496c6622b90b6b7e38ed6c402efc96eb59742ac36ee6b"
+    },
+    {
+      "file": "forward/routes.js",
+      "bytes": 67147,
+      "sha256": "e42fda1f0af93d63f30ee3fa862a7ef7ffed5e7a5a11d06f21d934e10aac1440"
+    },
+    {
+      "file": "freeze-independent-source.mjs",
+      "bytes": 8138,
+      "sha256": "06b265657828878de3ee91b463da593215e1ba17396ce7a0c8f155759f5ac444"
+    },
+    {
+      "file": "kept-construction-source.test.mjs",
+      "bytes": 15551,
+      "sha256": "c62b2e3eea281370441e50776f6d1a07fe04d3e34a320f3b42e8d4683208c0a2"
+    }
+  ]
+}

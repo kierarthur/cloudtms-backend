@@ -1,0 +1,97 @@
+-- F4 optional pointer: factual target selection only. Existing native invoice
+-- edits/mutability/adjustment/issue/allocator still own every financial write.
+create or replace function private.weekly_source_invoice_credited_targets_admit_v1(
+  p_invoice_id uuid,p_payload jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_invoice public.invoices%rowtype; v_authority jsonb; v_ids uuid[]; v_id uuid; v_candidate uuid;
+  v_context jsonb; v_contexts jsonb:='[]'::jsonb; v_roots uuid[]; v_locks jsonb;
+  v_group uuid; v_cycle uuid; v_before jsonb; v_after jsonb:='[]'::jsonb; v_observation jsonb;
+  v_frame jsonb; v_frame_hash bytea;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if not exists(select 1 from public.tms_users where id=p_actor_user_id and is_active and lower(btrim(role))='admin') then
+    raise exception 'WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED' using errcode='42501'; end if;
+  select * into strict v_invoice from public.invoices where id=p_invoice_id;
+  v_authority:=private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,null);
+  if v_authority->>'allowed' is distinct from 'true' or v_invoice.type::text is distinct from 'INVOICE'
+    or v_invoice.header_snapshot_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+    or v_invoice.header_snapshot_json#>>'{meta,source}' is distinct from 'WEEKLY_FINAL_SOURCE' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENTS_NOT_ALLOWED' using errcode='55000'; end if;
+  if jsonb_typeof(p_payload) is distinct from 'object' or jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+  if exists(select 1 from jsonb_array_elements(p_payload->'add_adjustments') item
+    where item ? 'credited_work_event_id' and (jsonb_typeof(item->'credited_work_event_id') is distinct from 'string'
+      or pg_input_is_valid(item->>'credited_work_event_id','uuid') is distinct from true)) then
+    raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_INVALID' using errcode='22023'; end if;
+  select array_agg(distinct (item->>'credited_work_event_id')::uuid order by (item->>'credited_work_event_id')::uuid)
+    into v_ids from jsonb_array_elements(p_payload->'add_adjustments') item where item ? 'credited_work_event_id';
+  if v_ids is null then return null; end if;
+  if cardinality(v_ids)>100 then raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_SCOPE_EXCEEDS_BOUND' using errcode='22023'; end if;
+  v_group:=(v_authority->>'source_group_id')::uuid;
+  foreach v_id in array v_ids loop
+    v_context:=private.weekly_source_kept_as_paid_context_v1(v_id,p_actor_user_id);
+    if v_context->>'client_id' is distinct from v_invoice.client_id::text
+      or v_context->>'source_group_id' is distinct from v_group::text
+      or v_context->'source_present' is distinct from 'false'::jsonb
+      or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb)
+      or v_context->'current_pay_head_movement_id'='null'::jsonb
+      or jsonb_array_length(v_context->'root_timesheet_ids')=0 then
+      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_NOT_ELIGIBLE' using errcode='55000'; end if;
+    v_contexts:=v_contexts||jsonb_build_array(jsonb_build_object('work_event_id',v_id,
+      'candidate_id',v_context->>'candidate_id','root_timesheet_ids',v_context->'root_timesheet_ids',
+      'source_cycle_id',v_context->>'source_cycle_id',
+      'facts_fingerprint',encode(private.weekly_source_kept_as_paid_facts_v1(v_id,'CREDITED'),'hex'),
+      'native_paid_basis_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_CREDIT_TARGET_NATIVE_PAID_BASIS_V1',v_context->'native_paid_basis'),'hex')));
+  end loop;
+  v_before:=v_contexts;
+  -- Complete all Candidate root sets first, in native deterministic order,
+  -- before source group/cycles and before the caller's first invoice row lock.
+  for v_candidate in select distinct (item->>'candidate_id')::uuid from jsonb_array_elements(v_contexts) item
+    order by (item->>'candidate_id')::uuid loop
+    select array_agg(distinct root.value::uuid order by root.value::uuid) into v_roots
+    from jsonb_array_elements(v_contexts) item cross join lateral jsonb_array_elements_text(item->'root_timesheet_ids') root(value)
+    where item->>'candidate_id'=v_candidate::text;
+    v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_candidate,v_roots,
+      'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',gen_random_uuid(),'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+    if v_locks->>'ok' is distinct from 'true' or v_locks->>'gate' is distinct from 'GRANTED' then
+      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  end loop;
+  perform 1 from public.weekly_source_groups where id=v_group for update;
+  for v_cycle in select distinct (item->>'source_cycle_id')::uuid from jsonb_array_elements(v_contexts) item
+    order by (item->>'source_cycle_id')::uuid loop
+    perform 1 from public.weekly_source_cycles where id=v_cycle for update;
+  end loop;
+  foreach v_id in array v_ids loop
+    v_context:=private.weekly_source_kept_as_paid_context_v1(v_id,p_actor_user_id);
+    if v_context->>'client_id' is distinct from v_invoice.client_id::text
+      or v_context->>'source_group_id' is distinct from v_group::text
+      or v_context->'source_present' is distinct from 'false'::jsonb
+      or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb) then
+      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;
+    v_after:=v_after||jsonb_build_array(jsonb_build_object('work_event_id',v_id,
+      'candidate_id',v_context->>'candidate_id','root_timesheet_ids',v_context->'root_timesheet_ids',
+      'source_cycle_id',v_context->>'source_cycle_id',
+      'facts_fingerprint',encode(private.weekly_source_kept_as_paid_facts_v1(v_id,'CREDITED'),'hex'),
+      'native_paid_basis_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_CREDIT_TARGET_NATIVE_PAID_BASIS_V1',v_context->'native_paid_basis'),'hex')));
+  end loop;
+  if v_before is distinct from v_after or v_authority is distinct from
+    private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,null) then
+    raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;
+  v_frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1',
+    'invoice_id',p_invoice_id,'actor_user_id',p_actor_user_id,'source_group_id',v_group,'client_id',v_invoice.client_id,
+    'native_backend_pid',pg_backend_pid(),'native_transaction_id',txid_current()::text,
+    'payload_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CREDIT_TARGET_PAYLOAD_V1',p_payload),'hex'),
+    'native_contexts',v_after,'adjustment_authority',v_authority);
+  v_frame_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1',v_frame);
+  perform set_config('cloudtms.weekly_source_credit_target_frame',
+    (v_frame||jsonb_build_object('frame_sha256',encode(v_frame_hash,'hex')))::text,true);
+  return v_frame;
+end;
+$function$;
+alter function private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;

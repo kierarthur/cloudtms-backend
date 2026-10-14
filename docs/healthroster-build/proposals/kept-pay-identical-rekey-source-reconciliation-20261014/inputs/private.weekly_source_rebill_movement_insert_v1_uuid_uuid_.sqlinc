@@ -1,0 +1,62 @@
+create or replace function private.weekly_source_rebill_movement_insert_v1(p_transition_id uuid,p_final_revision_id uuid)
+returns uuid language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare t public.weekly_source_state_transitions%rowtype; revision public.weekly_source_final_revisions%rowtype;
+  current_line public.weekly_source_final_snapshot_lines%rowtype; prior_line public.weekly_source_final_snapshot_lines%rowtype;
+  r public.weekly_source_row_resolutions%rowtype; e public.weekly_source_row_economic_snapshots%rowtype;
+  rules jsonb; amounts jsonb; id uuid; facts jsonb; pay jsonb; charge jsonb; h bytea; mapping bytea; ts uuid; net bigint; vat bigint;
+begin
+  select * into strict t from public.weekly_source_state_transitions where weekly_source_state_transitions.id=p_transition_id;
+  select * into strict revision from public.weekly_source_final_revisions where weekly_source_final_revisions.id=p_final_revision_id;
+  rules:=private.weekly_source_frozen_rule_values_v1(revision.id);
+  if rules is null or rules->>'invoice_sender'<>'CLIENT_SELF_BILL' or rules->>'self_bill_source' is distinct from 'SAME_FILE' then return null; end if;
+  if t.final_revision_id<>revision.id or t.outcome<>'NO_CHANGE' or t.source_profile_kind<>'HEALTHROSTER_ACTUAL_ROWS' then
+    raise exception 'WEEKLY_SOURCE_REBILL_SCOPE_INVALID' using errcode='55000'; end if;
+  select * into strict current_line from public.weekly_source_final_snapshot_lines where weekly_source_final_snapshot_lines.id=t.new_snapshot_line_id;
+  select * into strict prior_line from public.weekly_source_final_snapshot_lines where weekly_source_final_snapshot_lines.id=t.previous_snapshot_line_id;
+  if current_line.work_event_id<>prior_line.work_event_id or current_line.external_event_identity is not distinct from prior_line.external_event_identity
+    or current_line.external_event_identity is null or prior_line.external_event_identity is null then
+    raise exception 'WEEKLY_SOURCE_REBILL_REKEY_NOT_PROVED' using errcode='55000'; end if;
+  select m.id into id from public.weekly_source_billing_movements m where m.transition_id=t.id and m.source_line_kind='SOURCE_REBILL_LINE';
+  if found then return id; end if;
+  if not coalesce((private.weekly_source_shift_on_self_bill_v1(current_line.work_event_id,revision.source_cycle_id)->>'s25_pay_selected')::boolean,false)
+    or not exists(select 1 from public.weekly_source_billing_movements prior_movement
+      join public.weekly_source_final_revisions prior_revision on prior_revision.id=prior_movement.final_revision_id and prior_revision.state='CURRENT'
+      join public.weekly_source_cycles prior_cycle on prior_cycle.id=prior_movement.finalisation_cycle_id
+      join public.weekly_source_invoice_line_bindings binding on binding.billing_movement_id=prior_movement.id and binding.state='CURRENT'
+      where prior_movement.work_event_id=current_line.work_event_id and prior_movement.actual_client_id=current_line.client_id
+        and prior_movement.placement_state in ('PLACED','ISSUED')
+        and prior_cycle.source_group_id=(select source_group_id from public.weekly_source_cycles where weekly_source_cycles.id=revision.source_cycle_id)
+        and prior_cycle.finalisation_week_ending<(select finalisation_week_ending from public.weekly_source_cycles where weekly_source_cycles.id=revision.source_cycle_id)) then return null; end if;
+  amounts:=private.weekly_source_invoice_line_amounts_v1(current_line.row_resolution_id,revision.id);
+  select * into strict r from public.weekly_source_row_resolutions where weekly_source_row_resolutions.id=current_line.row_resolution_id;
+  select * into strict e from public.weekly_source_row_economic_snapshots where row_resolution_id=r.id;
+  ts:=private.weekly_source_finalisation_lineage_assert_v1(r.id,revision.source_cycle_id);
+  net:=(amounts->>'net_pence')::bigint; vat:=(amounts->>'vat_pence')::bigint;
+  pay:=private.weekly_source_invoice_only_vector_v1('PAY',0); charge:=private.weekly_source_invoice_only_vector_v1('CHARGE',net);
+  mapping:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_MAPPING_RATE_POLICY_V1',jsonb_build_object(
+    'row_resolution_id',r.id,'work_event_id',r.work_event_id,'candidate_id',r.candidate_id,'client_id',r.client_id,'contract_id',r.contract_id,
+    'contract_and_rate_fingerprint',encode(e.contract_and_rate_fingerprint,'hex'),'effective_policy_fingerprint',encode(e.effective_policy_fingerprint,'hex'),
+    'invoice_vat_policy_fingerprint',encode(e.invoice_vat_policy_fingerprint,'hex'),'calculation_fingerprint',encode(e.calculation_fingerprint,'hex')));
+  facts:=jsonb_build_object('schema_version','WEEKLY_SOURCE_REBILL_FACTS_V1','snapshot_line_id',current_line.id,'prior_snapshot_line_id',prior_line.id,
+    'upload_row_id',current_line.upload_row_id,'bound_row_resolution_id',r.id,'old_request_id',prior_line.external_event_identity,
+    'new_request_id',current_line.external_event_identity,'rule_set_version_id',revision.rule_set_version_id,
+    'invoice_hold',amounts->'invoice_hold','hold_release_id',amounts->'hold_release_id');
+  h:=private.weekly_source_billing_movement_hash_v1(jsonb_build_object('transition_id',t.id,'final_revision_id',revision.id,'finalisation_cycle_id',revision.source_cycle_id,
+    'actual_client_id',r.client_id,'candidate_id',r.candidate_id,'contract_id',r.contract_id,'work_event_id',r.work_event_id,'movement_role','POSITIVE',
+    'source_profile_kind',t.source_profile_kind,'source_line_kind','SOURCE_REBILL_LINE','source_facts',facts,'pay_vector',pay,'charge_vector',charge,'total_pay_pence',0,
+    'calculated_comparison_charge_pence',e.calculated_charge_pence,'source_validation_charge_pence',case when (amounts->>'source_amount')::boolean then net else null end,
+    'invoice_presentation_charge_pence',net,'vat_rate_pct',(amounts->>'vat_rate_pct')::numeric,'vat_amount',vat::numeric/100,'total_inc_vat',(net+vat)::numeric/100,
+    'price_check_result',amounts->>'price_check_result','price_check_fingerprint',case when (amounts->>'source_amount')::boolean then encode(e.calculation_fingerprint,'hex') else null end,
+    'charge_acceptance_id',amounts->'charge_acceptance_id','mapping_rate_policy_fingerprint',encode(mapping,'hex'),'invoice_timesheet_id',ts));
+  insert into public.weekly_source_billing_movements(transition_id,final_revision_id,finalisation_cycle_id,actual_client_id,candidate_id,contract_id,work_event_id,
+    movement_role,source_profile_kind,source_line_kind,source_facts_json,canonical_pay_vector_json,canonical_charge_vector_json,total_pay_ex_vat,
+    calculated_comparison_charge_pence,source_validation_charge_pence,invoice_presentation_charge_pence,vat_rate_pct,vat_amount,total_inc_vat,price_check_result,
+    price_check_fingerprint,charge_acceptance_id,mapping_rate_policy_fingerprint,invoice_timesheet_id,original_cycle_key,movement_economic_hash)
+  values(t.id,revision.id,revision.source_cycle_id,r.client_id,r.candidate_id,r.contract_id,r.work_event_id,'POSITIVE',t.source_profile_kind,'SOURCE_REBILL_LINE',
+    facts,pay,charge,0,e.calculated_charge_pence,case when (amounts->>'source_amount')::boolean then net else null end,net,(amounts->>'vat_rate_pct')::numeric,
+    vat::numeric/100,(net+vat)::numeric/100,amounts->>'price_check_result',case when (amounts->>'source_amount')::boolean then e.calculation_fingerprint else null end,
+    nullif(amounts->>'charge_acceptance_id','')::uuid,mapping,ts,revision.source_cycle_id::text,h) returning public.weekly_source_billing_movements.id into id;
+  return id;
+end;
+$function$;

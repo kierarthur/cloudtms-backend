@@ -1,0 +1,20 @@
+{
+  "schema_version": "A0_HIDDEN_RR_DESIGN_SOURCE_CHECK_V1",
+  "source_only": true,
+  "status": "BOUNDED_DESIGN_READY_FOR_INDEPENDENT_REVIEW_NOT_IMPLEMENTED_OR_NATIVE_QUALIFIED",
+  "current_root_selected_owner_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+  "selected_actual_owner_pins": 10,
+  "individually_verified_current_source_inputs": 70,
+  "writer_source_candidates": 71,
+  "displaced_prior_writer_pins": 2,
+  "source_syntax_files": 2,
+  "credential_scan": "PASS",
+  "database_schema_sql_settings_runtime_operation": false,
+  "no_scratch_or_cleanup": true,
+  "one_family_row_complete": false,
+  "precise_supplemental_token_schema_and_native_equality_design": true,
+  "no_identity_and_sensitive_writer_field_census": "UNRESOLVED_PRECODE_REVIEW_REQUIREMENT",
+  "native_hidden_rr_schedules": "HOLD",
+  "source_classifier_verifier_canonical_native_seal_deltas": "REQUIRED_IF_IMPLEMENTED",
+  "qualification": false
+}

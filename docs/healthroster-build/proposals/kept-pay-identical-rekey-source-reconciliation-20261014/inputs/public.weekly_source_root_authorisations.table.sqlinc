@@ -1,0 +1,39 @@
+
+
+-- Decision D8 (orchestrator, 17 September 2026), from proof/34 section 4's
+-- write-set table: the Weekly Source authorisation record is per ROOT, not per
+-- source row, and generation 1 is inserted by the first-authorisation owner
+-- AFTER the ordinary Authorise succeeds.  The per-source-row binding
+-- (public.weekly_source_row_timesheet_lineages) is written by the ensure owner
+-- at projection and finalisation time, long before any Office decision, so it
+-- cannot carry the generation: a managed-root guard reading it would report a
+-- never-authorised Timesheet as managed, refuse the very write that first
+-- authorisation makes, and collide with the first-authorisation owner's own
+-- generation 1 (WP-03 review F3).
+--
+-- Immutable once written, except: current_entitlement_head_id, written only by
+-- the head-publication coordinator; and withdrawn_at_utc with
+-- withdrawn_by_user_id, written ONCE by the withdrawal owner, which clears the
+-- head pointer in the same statement.  Re-authorisation appends generation N+1;
+-- generation N stays as history.  Deletion is forbidden.
+create table public.weekly_source_root_authorisations (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  root_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  family_booking_id text not null check (pg_catalog.char_length(family_booking_id) between 1 and 200),
+  timesheet_version integer not null check (timesheet_version>=1),
+  authorisation_generation integer not null check (authorisation_generation>=1),
+  authorised_row_signature text not null check (pg_catalog.char_length(authorised_row_signature) between 1 and 512),
+  current_entitlement_head_id uuid,
+  authorised_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  authorised_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  withdrawn_at_utc timestamptz,
+  withdrawn_by_user_id uuid references public.tms_users(id) on delete restrict,
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  updated_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check ((withdrawn_at_utc is null)=(withdrawn_by_user_id is null)),
+  -- proof/36 section 5.6: the withdrawal owner clears the head pointer, so a
+  -- withdrawn generation can never keep a live entitlement head.
+  check (withdrawn_at_utc is null or current_entitlement_head_id is null),
+  check (withdrawn_at_utc is null or withdrawn_at_utc>=authorised_at_utc),
+  unique (root_timesheet_id,authorisation_generation)
+);

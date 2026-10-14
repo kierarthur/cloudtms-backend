@@ -1,0 +1,828 @@
+{
+  "schema_version": "KEPT_PAY_REKEY_CURRENT_SOURCE_DESIGN_V1",
+  "source_only": true,
+  "current_root_selected_source_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+  "primary_plan": {
+    "absolute_path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\03_IMPLEMENTATION_PLAN.md",
+    "bytes": 563296,
+    "sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+    "sections": [
+      "6.1",
+      "6.2",
+      "26.11"
+    ]
+  },
+  "source_inputs": [
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "broker/src/weekly-source/routes.js",
+      "bytes": 62448,
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "broker/src/weekly-source/rule-set-validation.js",
+      "bytes": 10329,
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/migrations/04102026_1257_weekly_source_local_protected_decision_receipts_v1.sql",
+      "bytes": 1988,
+      "sha256": "922970716a88115ff592a0d3f4c6bd900d4b32c35f8f99ecec05d18a1a3812b1"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/migrations/04102026_2155_weekly_source_accepted_publication_actions_v1.sql",
+      "bytes": 4750,
+      "sha256": "f37a15755f4863ab415b9242de9c3a38ea60369856346300aff74745742e1448"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "bytes": 8400,
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/migrations/30092026_2052_weekly_source_import_preparation.sql",
+      "bytes": 986,
+      "sha256": "9f23daa59ebd8139bc3c7a32fa641872417c76b3539d7f95e4cec09b96906041"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "bytes": 2281,
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "bytes": 105442,
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "bytes": 22317,
+      "sha256": "e397b067c2782a047633b9154b5faa5b8ef54c2c77a24d9733db2cf2fba20d9d"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/05102026_1112_bpay_next_source_paid_evidence_page_v1.sql",
+      "bytes": 48233,
+      "sha256": "42feb18efe21530f0299e693df4447363ba91f837d8d1154e1cb322b96c30432"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/05102026_1242_weekly_source_office_next_paid_context_v1.sql",
+      "bytes": 7445,
+      "sha256": "e254d7d64a07ff95092c68193250319ed8a598200d88874661e0693599a41645"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "bytes": 39828,
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "bytes": 101268,
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "bytes": 13073,
+      "sha256": "8a2021a4c239899bcf87ca9c1b910e57ba5ea326d1ee1f65fd258dd8b926887e"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+      "bytes": 5000,
+      "sha256": "770f8f09834284ca53706f398bd055edc992f6f3769ecbe5ef21b37e3e0b95a3"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+      "bytes": 13636,
+      "sha256": "0f1b080ca21de14d911bb0233db6648fca3fb8c0af77a5236ae4a422c76ee7a3"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "bytes": 83915,
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "bytes": 93531,
+      "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "bytes": 184614,
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "bytes": 16376,
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "bytes": 27489,
+      "sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "bytes": 58831,
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "bytes": 311541,
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "bytes": 103480,
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+      "bytes": 109868,
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "bytes": 154709,
+      "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "bytes": 249666,
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "bytes": 114970,
+      "sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "bytes": 345066,
+      "sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "bytes": 54323,
+      "sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b"
+    },
+    {
+      "commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "file": "supabase/repeatable/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "bytes": 70504,
+      "sha256": "e1a210e31046137b4f08c540cd1025674e0f3eaa57bf6a00978d8f0d0f31f447"
+    }
+  ],
+  "complete_existing_owners": [
+    {
+      "kind": "CREATE",
+      "name": "private._weekly_source_immutable_fact_guard_v1",
+      "inputTypes": "",
+      "id": "private._weekly_source_immutable_fact_guard_v1()",
+      "offset": 44559,
+      "header": "private._weekly_source_immutable_fact_guard_v1() returns trigger language plpgsql security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "definition_sha256": "97687ab76f9a52479ead928207ccb7b4969c23dc058043998ad434fa3fc2b198",
+      "source_body_sha256": "188ab3bab831e4d23f0f89f54e5f373ee10cad7a0af08e0a0bf73253591af885",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private._weekly_source_immutable_fact_guard_v1__.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private._weekly_source_immutable_record_guard_v1",
+      "inputTypes": "",
+      "id": "private._weekly_source_immutable_record_guard_v1()",
+      "offset": 44076,
+      "header": "private._weekly_source_immutable_record_guard_v1() returns trigger language plpgsql security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "definition_sha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d",
+      "source_body_sha256": "34cfb47b73e45a5da42fe8c2484a5f46d2cd7bae6440eb5561a9d08b3e119d19",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private._weekly_source_immutable_record_guard_v1__.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_accepted_publication_action_record_v1",
+      "inputTypes": "jsonb,jsonb,jsonb",
+      "id": "private.weekly_source_accepted_publication_action_record_v1(jsonb,jsonb,jsonb)",
+      "offset": 7581,
+      "header": "private.weekly_source_accepted_publication_action_record_v1( p_request jsonb,p_canonical_publication_request jsonb,p_before_origin jsonb ) returns uuid language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "definition_sha256": "941af9fd181d8c6fe154affe12ffda12f80f6b754ef399336971ad82d20d1fd2",
+      "source_body_sha256": "1d2b364326330cc7bb4955a87d5bfa02458aa0430c0d92c3df1b97690b6fbd6a",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_accepted_publication_action_record_v1_jsonb_jsonb_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_correct_final_prepared_context_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "offset": 138686,
+      "header": "private.weekly_source_correct_final_prepared_context_v1( p_correction_session_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "definition_sha256": "bf629c7565943e1cb654949f4af34e67b1440527e4fb7120644c06ddb421f9c8",
+      "source_body_sha256": "45a6a4b66b790a61da4b38b584af09d0d7d2c8ba060a142cafbcee346a57b234",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_correct_final_prepared_context_v1_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_entitlement_components_v1",
+      "inputTypes": "jsonb,jsonb",
+      "id": "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+      "offset": 38444,
+      "header": "private.weekly_source_entitlement_components_v1( p_segments jsonb, p_expenses jsonb ) returns jsonb language sql immutable set search_path to 'private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118",
+      "source_body_sha256": "b0f548698a04d17f078c43fba593665d801f5ae882cb9f2068a00632541b6aaf",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean,text",
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "offset": 74,
+      "header": "private.weekly_source_finalise_engine_v1( p_request jsonb, p_correction_session_id uuid, p_prepare_only boolean, p_report_vat_rounding_variant text ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+      "definition_sha256": "9ab1b93119d3f68a96e7b6c776f70863df72fa9a69cbfbb187387f724bac3b71",
+      "source_body_sha256": "3e19c93a9d7480dba427508abbc6afa21653afd5ad8479cb67ea1e1484b38fc9",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_finalise_engine_v1_jsonb_uuid_boolean_text_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean",
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "offset": 74,
+      "header": "private.weekly_source_finalise_engine_v1( p_request jsonb, p_correction_session_id uuid, p_prepare_only boolean ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "definition_sha256": "134165bb74b2cf18858ba27d82e6a35548f45d599c016dc9374f2278792adf40",
+      "source_body_sha256": "c7ed0404589f908e59c5f09fcca0338b4af6de4a09c530f2c46584b96361276c",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_finalise_engine_v1_jsonb_uuid_boolean_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_invoice_adjustment_authority_v1",
+      "inputTypes": "uuid,uuid[]",
+      "id": "private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])",
+      "offset": 157,
+      "header": "private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id uuid,p_binding_ids uuid[] default null) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "definition_sha256": "9cd3682f486ad32fbf1a18330259a44872846ed578e2996d10002a520dc90842",
+      "source_body_sha256": "839c7aceb4223d6daf633a75c564b85898fdf2b02558bfab15407aad2907767e",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_invoice_adjustment_authority_v1_uuid_uuid___.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_invoice_adjustment_line_valid_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "offset": 5328,
+      "header": "private.weekly_source_invoice_adjustment_line_valid_v1(p_invoice_line_id uuid,p_invoice_id uuid) returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "definition_sha256": "5a4142c7f9e26861401dab3570a08cd88f31564353c29165dc89d2dfc93baa03",
+      "source_body_sha256": "7631481b20a4d346a7aa1117b9ac04edc7ca7efca678ec8b5d19c700d7001c49",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_invoice_adjustment_line_valid_v1_uuid_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_invoice_adjustments_apply_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "offset": 9697,
+      "header": "private.weekly_source_invoice_adjustments_apply_v1(p_invoice_id uuid,p_payload jsonb,p_actor_user_id uuid) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "definition_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "source_body_sha256": "20689ef037df058ae42cb96dfc3de048d5ebcf6f92ebe133e2326d34dba1dd2c",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_invoice_adjustments_apply_v1_uuid_jsonb_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_is_import_authoritative_v1",
+      "inputTypes": "uuid,uuid,date",
+      "id": "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+      "offset": 17737,
+      "header": "private.weekly_source_is_import_authoritative_v1(p_client_id uuid,p_contract_id uuid,p_work_date date) returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "7861b97e31eab1c939785976219065ba3c963f5d166788ef850d335efe774794",
+      "source_body_sha256": "96b491083b061d69fd0a49054dd7d12d6ad7a015d8e69ac47ee8606f9d463354",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_is_import_authoritative_v1_uuid_uuid_date_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_lock_and_resolve_families_v1",
+      "inputTypes": "uuid,uuid[],text,uuid,text",
+      "id": "private.weekly_source_lock_and_resolve_families_v1(uuid,uuid[],text,uuid,text)",
+      "offset": 17558,
+      "header": "private.weekly_source_lock_and_resolve_families_v1( p_candidate_id uuid, p_requested_timesheet_ids uuid[], p_job_type text, p_job_id uuid, p_reason text ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "definition_sha256": "103e1ec22286beb8e83900db598ca6d96bf452e498d676faa7ea7656a64b57b5",
+      "source_body_sha256": "362be34edd812d5207738a69872afd048ef2059d5aa0af2e52b6f1606f05779d",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_lock_and_resolve_families_v1_uuid_uuid___text_uuid_text_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_missing_scope_facts_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,date",
+      "id": "private.weekly_source_missing_scope_facts_v1(uuid,uuid,uuid,uuid,date)",
+      "offset": 3648,
+      "header": "private.weekly_source_missing_scope_facts_v1( p_projection_publication_id uuid, p_candidate_id uuid, p_client_id uuid, p_contract_id uuid, p_week_ending date ) returns jsonb language sql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "definition_sha256": "b337685ef8c707149fab4d75d0b7ceb7ce9a05586380934e5dfdd4b0a6b50fba",
+      "source_body_sha256": "23076e441518a90f4ca0ebe463137ad24ad31e036a13594a8c8e29c4f006a326",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_missing_scope_facts_v1_uuid_uuid_uuid_uuid_date_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_office_authority_v1",
+      "inputTypes": "uuid,text,uuid,uuid,date",
+      "id": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "offset": 712,
+      "header": "private.weekly_source_office_authority_v1( p_actor_user_id uuid, p_operation text, p_source_group_id uuid default null, p_client_id uuid default null, p_scope_date date default null ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "source_body_sha256": "5cc2197010d7ddc639ab540ae221c7852bd1b862fad76ddf75bb869e34ecdb53",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_office_invoice_movements_v1",
+      "inputTypes": "uuid[]",
+      "id": "private.weekly_source_office_invoice_movements_v1(uuid[])",
+      "offset": 182965,
+      "header": "private.weekly_source_office_invoice_movements_v1( p_member_timesheet_ids uuid[] ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "definition_sha256": "b97f2e8294a78ff609b1c39d4c568d7dcc435cd5d8d4b56d9806c17d30c005dc",
+      "source_body_sha256": "5fb7585a7756383065e9ef6d9effa780ee75160bde26e3b4d2f6f9925ef057b3",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_office_invoice_movements_v1_uuid___.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_office_lifecycle_phase_v1",
+      "inputTypes": "uuid,jsonb",
+      "id": "private.weekly_source_office_lifecycle_phase_v1(uuid,jsonb)",
+      "offset": 238554,
+      "header": "private.weekly_source_office_lifecycle_phase_v1( p_root_timesheet_id uuid, p_facts jsonb ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "definition_sha256": "5a1294c00225457abc14729e4798d2b96dcb50c79bfb02c7b46c259ba33ab276",
+      "source_body_sha256": "9a135658d2e4a49f9c0724bc7be6d0821ff05a78b2713df324a8dd3629291845",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_office_lifecycle_phase_v1_uuid_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_office_next_paid_evidence_page_v1",
+      "inputTypes": "uuid,uuid,text,uuid,jsonb,integer",
+      "id": "private.weekly_source_office_next_paid_evidence_page_v1(uuid,uuid,text,uuid,jsonb,integer)",
+      "offset": 1276,
+      "header": "private.weekly_source_office_next_paid_evidence_page_v1( p_actor_user_id uuid,p_root_timesheet_id uuid,p_kind text, p_context_id uuid default null,p_after jsonb default null,p_limit integer default 100 ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/05102026_1242_weekly_source_office_next_paid_context_v1.sql",
+      "definition_sha256": "3c9e0bb7ce0420829f466dd9617955dae057caca19132a0e509ddd7299af039c",
+      "source_body_sha256": "299e879133273cb2ca1666c7c59069327d11e0c86a29aa70c6211ba77e81bed9",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_office_next_paid_evidence_page_v1_uuid_uuid_text_uuid_jsonb_integer_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_office_payment_progress_v1",
+      "inputTypes": "uuid[]",
+      "id": "private.weekly_source_office_payment_progress_v1(uuid[])",
+      "offset": 179691,
+      "header": "private.weekly_source_office_payment_progress_v1( p_member_timesheet_ids uuid[] ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "definition_sha256": "77443504844eb533e1ad8fa21866bd0082f07745e5cfa36546886dbcdd8bce59",
+      "source_body_sha256": "f25e298111ddd6e7f2186768f03363ea3f5925f37324b8fd1a6e2d59fccef462",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_office_payment_progress_v1_uuid___.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_ordinary_projection_active_movements_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "offset": 43335,
+      "header": "private.weekly_source_ordinary_projection_active_movements_v1( p_root_timesheet_id uuid, p_through_final_revision_id uuid ) returns setof public.weekly_source_billing_movements language sql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "definition_sha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e",
+      "source_body_sha256": "68098f9cea9bde050349c620842cc20b0286df221c03be4ff2a13c3c554a507a",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_ordinary_projection_active_movements_v1_uuid_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_ordinary_projection_current_segments_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_ordinary_projection_current_segments_v1(uuid,uuid)",
+      "offset": 199154,
+      "header": "private.weekly_source_ordinary_projection_current_segments_v1( p_root_timesheet_id uuid, p_through_final_revision_id uuid ) returns jsonb language sql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "add93f304940bf2f8c99ae5ec43b95ff44b770be268c99f642655ea55e966418",
+      "source_body_sha256": "abdc7da52a85f4212b6b1b8e98ac4b9ba81ab25c38e5f341877b2104a0739835",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_ordinary_projection_current_segments_v1_uuid_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "offset": 218,
+      "header": "private.weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid) returns boolean language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+      "source_body_sha256": "97cf8d3eeafbaa54c5cbec657e009db77fa93e100a847497132d1b1ccc6c0b94",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_protected_match_candidates_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+      "offset": 28633,
+      "header": "private.weekly_source_protected_match_candidates_v1( p_upload_row_id uuid,p_candidate_id uuid,p_client_id uuid ) returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "definition_sha256": "278444c66888cc6d14c6fd688b530e21dbf61b18bc3b2865534f6c60e3f82df1",
+      "source_body_sha256": "3d3e891e6b87424e07cdf652032d3a346b0831995a7e94ad2f45ad192f5f8824",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_protected_match_candidates_v1_uuid_uuid_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_rebill_movement_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_rebill_movement_insert_v1(uuid,uuid)",
+      "offset": 14668,
+      "header": "private.weekly_source_rebill_movement_insert_v1(p_transition_id uuid,p_final_revision_id uuid) returns uuid language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "definition_sha256": "9aaf4ec9c3995c42bc0449a8b2da73c255669879acc483d2d7761b0131130bd3",
+      "source_body_sha256": "d08015fcd56c409570f459e1e9af4a70938ac3f315d3489225c5c0cf55d10c74",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_rebill_movement_insert_v1_uuid_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_self_bill_report_projection_rows_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "id": "private.weekly_source_self_bill_report_projection_rows_v1(uuid,uuid,jsonb)",
+      "offset": 0,
+      "header": "private.weekly_source_self_bill_report_projection_rows_v1(p_actor_user_id uuid,p_publication_id uuid,p_rows jsonb) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "definition_sha256": "0f014b40539fcedc500ecbca27880eb137ef9f5418064abc9d83a2becc30e080",
+      "source_body_sha256": "53014c586d1250304a082019b6bf50432bdeaebb00031b05ab5aa29c54dad9c6",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_self_bill_report_projection_rows_v1_uuid_uuid_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_self_bill_report_workspace_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_self_bill_report_workspace_v1(jsonb)",
+      "offset": 158,
+      "header": "private.weekly_source_self_bill_report_workspace_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+      "definition_sha256": "59f3f746f22a1a7374ee3a17a5f4807c2e203907bef947c6afd6d63b50854ffb",
+      "source_body_sha256": "5e899c287f195a4124d89476312f5054ba670940d5e0d4755ab67339ea57a133",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_self_bill_report_workspace_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.weekly_source_settlement_allocation_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_settlement_allocation_v1(uuid)",
+      "offset": 36557,
+      "header": "private.weekly_source_settlement_allocation_v1( p_root_timesheet_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "definition_sha256": "844820a97605cb3bd6e6d89987f1bcc77c5c77f8097ca42556969ebeb0438b85",
+      "source_body_sha256": "060b02797aa028b56ec8c10e069cfde46841adbc61226fd2807d9783ffd26747",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/private.weekly_source_settlement_allocation_v1_uuid_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.bpay_next_source_paid_evidence_page_v1",
+      "inputTypes": "jsonb",
+      "id": "public.bpay_next_source_paid_evidence_page_v1(jsonb)",
+      "offset": 269,
+      "header": "public.bpay_next_source_paid_evidence_page_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/05102026_1112_bpay_next_source_paid_evidence_page_v1.sql",
+      "definition_sha256": "1e5f13514735e552bd1e5095e4b08ae7b305746515ec5a7fe3f8a5bfdb99fa67",
+      "source_body_sha256": "2ac9b232381e96e125a9a220b6e550aea2a456d0f72807a10f1f59d09ed529b7",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.bpay_next_source_paid_evidence_page_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_combined_finalise_workspace_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_combined_finalise_workspace_v1(jsonb)",
+      "offset": 46137,
+      "header": "public.weekly_source_combined_finalise_workspace_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "definition_sha256": "beb96427919d65acf049d80cde1f918b0fe2944bfeff1611c422b8a5a992d8eb",
+      "source_body_sha256": "e8f4e275cc89c6b7ce1e270513d213a621637710003d26b2995cdeae805bfdbd",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_combined_finalise_workspace_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_combined_review_workspace_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_combined_review_workspace_v1(jsonb)",
+      "offset": 229801,
+      "header": "public.weekly_source_combined_review_workspace_v1(p_request jsonb) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'pg_catalog', 'pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "5d8b766785991b508a582b7ca80f82ac41a959f2866341e1ffcebd0891474b85",
+      "source_body_sha256": "9ae2c11dbd6c3adb246509c4b73a1dc1a70f81b1362f79721701e838de324508",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_combined_review_workspace_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "offset": 24868,
+      "header": "public.weekly_source_correct_final_prepare_atomic_v1( p_request jsonb ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "definition_sha256": "5c4a1e776f6682efcde73327fd913d2829f0f244f79a3dfd29c0280c3f7b1be7",
+      "source_body_sha256": "d0f99e49756f8d8107992477361d1574776f5341d8623c9ef9a93219adfc44ad",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_correct_final_prepare_atomic_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_finalise_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_finalise_atomic_v1(jsonb)",
+      "offset": 150609,
+      "header": "public.weekly_source_finalise_atomic_v1( p_request jsonb ) returns jsonb language sql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "definition_sha256": "b23d4781638209a2f549cb633606fc496e625b14406fc5a902bec599cb91dda7",
+      "source_body_sha256": "1f94c76dd0a6176bda7c44d5678f40ab57d270994722bbbbe7749365e163f46e",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_finalise_atomic_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_import_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_import_prepare_atomic_v1(jsonb)",
+      "offset": 81,
+      "header": "public.weekly_source_import_prepare_atomic_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+      "definition_sha256": "260fced6251a11511029d6c426a30be05238b1fb57cc5a99f8f5598c646cde07",
+      "source_body_sha256": "becb432bf0882a6bd5d4a6b3cae7a2f97b1393df7514264bb32cda64858cab20",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_import_prepare_atomic_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_later_change_decide_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "offset": 87732,
+      "header": "public.weekly_source_later_change_decide_atomic_v1( p_request jsonb ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','extensions','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "definition_sha256": "9a52a7792164da62779a0665be87cd24bcae32e62ff307be969fae85b338e7cc",
+      "source_body_sha256": "2caf5cb421c2eb092c1788f2b114a1d6fe07b3ab187a7d9423f0273c005d4e16",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_later_change_decide_atomic_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_office_authorise_scope_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_authorise_scope_v1(jsonb)",
+      "offset": 217087,
+      "header": "public.weekly_source_office_authorise_scope_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "6af026b832ad16d2474a9dca510d12e95109ff88f7e8ef93122fb2f9a2844fa3",
+      "source_body_sha256": "0ad2c46b4c69307954a3c8eb9421af6e66654251b8f626bd376590aca3d8a62c",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_office_authorise_scope_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "offset": 27753,
+      "header": "public.weekly_source_office_recheck_begin_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "definition_sha256": "dcb2f4fb5e4e62b71a9b3ae9eac3a0c47be89ed42ddd11a782b232481144ab35",
+      "source_body_sha256": "3178d36871c4bee0d3890226f54e122fc53b00dc21d5a93f5754a047b059fe14",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_office_recheck_begin_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_office_workspace_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "offset": 91327,
+      "header": "public.weekly_source_office_workspace_v1( p_request jsonb ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+      "source_body_sha256": "28b22376ce92b4a3840e59ac66cd0988912c277c4b1b37ae00c2c04747947cc8",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_office_workspace_v1_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "offset": 13166,
+      "header": "public.weekly_source_projection_rows_apply_atomic_v1( p_actor_user_id uuid, p_publication_id uuid, p_rows jsonb ) returns jsonb language plpgsql security definer set search_path to 'public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "definition_sha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc",
+      "source_body_sha256": "a7d00b4757441513fef53c84f6774990ea40352fb054fbf5efd95726551fda00",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_projection_rows_apply_atomic_v1_uuid_uuid_jsonb_.sqlinc"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.weekly_source_upload_context_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "offset": 68,
+      "header": "public.weekly_source_upload_context_v1( p_request jsonb ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','extensions','pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "definition_sha256": "37355a64d3472dea5f2010f154925a548c3c4d8177c55a9dc9ff2dbea9ebcf57",
+      "source_body_sha256": "d7f365c8fbbea6ba1209d6f76e2a741e4c035bab7f827ac8716f27ccf7933c19",
+      "actual_current_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+      "complete_definition_file": "inputs/public.weekly_source_upload_context_v1_jsonb_.sqlinc"
+    }
+  ],
+  "selected_existing_tables": [
+    {
+      "name": "public.weekly_source_uploads",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "dd50b4a49d3509162de1f9bcffd93fe3e1201213ffad56a5b3a2f487a522a155",
+      "complete_statement_file": "inputs/public.weekly_source_uploads.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_upload_rows",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "7bee85242c4440f83941c921b22cf7afbc1821917a7adf9a03108310d20ba40c",
+      "complete_statement_file": "inputs/public.weekly_source_upload_rows.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_projection_publications",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "37d553e1f43dea444c966ef4bcb87ee76ac759a929730f3fcf584273953fc4ff",
+      "complete_statement_file": "inputs/public.weekly_source_projection_publications.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_work_events",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "ef74e40a1dfc15b7321776a682982e6f2451a536d4873b2b42de63f7b8b81847",
+      "complete_statement_file": "inputs/public.weekly_work_events.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_row_resolutions",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "b74ff0a54853c43d25693fdae070b4717a209c0115f6823fc8a7864d3f0383aa",
+      "complete_statement_file": "inputs/public.weekly_source_row_resolutions.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_final_snapshot_lines",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "eeeca279e718c7fd6c849cdb44bc71092cb4d6a50646733c1de59bc0bb8ab9ca",
+      "complete_statement_file": "inputs/public.weekly_source_final_snapshot_lines.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_state_transitions",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "5c78ebbc365a1724768efa0b868946ea4e0c4335c342c62c8bbd3bdbe40f5495",
+      "complete_statement_file": "inputs/public.weekly_source_state_transitions.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_entitlement_decision_bundles",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "32b3fc90dc9a5d6bdbd28e3374ece6c63f2e98fd4e3f3c46fa6059919320f2d8",
+      "complete_statement_file": "inputs/public.weekly_source_entitlement_decision_bundles.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_entitlement_heads",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "dbce7b94f546a6e7db029ecaa981eccd6970ea984d3fe5ef02eb36cae1c524c6",
+      "complete_statement_file": "inputs/public.weekly_source_entitlement_heads.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_entitlement_head_components",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "11815f61e80e99c3ae796d2316ea76c0436168f07ea5bbcb7ce0728abb926266",
+      "complete_statement_file": "inputs/public.weekly_source_entitlement_head_components.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_root_authorisations",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "statement_sha256": "306d3bb2a481d89b4552e8288be28bc73ed0c1e738a01f92234b918bbb7b7cdc",
+      "complete_statement_file": "inputs/public.weekly_source_root_authorisations.table.sqlinc"
+    },
+    {
+      "name": "private.weekly_source_accepted_publication_actions_v1",
+      "file": "supabase/migrations/04102026_2155_weekly_source_accepted_publication_actions_v1.sql",
+      "statement_sha256": "441cf82ade2ce3490803fd692b1b8f8ca91dc1b11a2c1af9bf871e04401c6068",
+      "complete_statement_file": "inputs/private.weekly_source_accepted_publication_actions_v1.table.sqlinc"
+    },
+    {
+      "name": "private.weekly_source_local_protected_decision_receipts",
+      "file": "supabase/migrations/04102026_1257_weekly_source_local_protected_decision_receipts_v1.sql",
+      "statement_sha256": "7b5cfa342327fe9623297a0be7b68f3f564e8c10553c7f861f185cbd1f37528b",
+      "complete_statement_file": "inputs/private.weekly_source_local_protected_decision_receipts.table.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_self_bill_report_line_bindings",
+      "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "statement_sha256": "241247619ecd01029ce7b283e6c9e83f637a37962d5b7959742f559fbfd47beb",
+      "complete_statement_file": "inputs/public.weekly_source_self_bill_report_line_bindings.table.sqlinc"
+    },
+    {
+      "name": "private.weekly_source_import_preparations",
+      "file": "supabase/migrations/30092026_2052_weekly_source_import_preparation.sql",
+      "statement_sha256": "31b3dc1ae0fac651c2a4aacfe4b9ee90d2f4f1b6f558903d54220134871d3e68",
+      "complete_statement_file": "inputs/private.weekly_source_import_preparations.table.sqlinc"
+    },
+    {
+      "name": "private.weekly_source_office_row_choices",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "statement_sha256": "cefc4be48e965b9787185d978dc84871dc00510b801fdd289bf6ad95cbb13b2e",
+      "complete_statement_file": "inputs/private.weekly_source_office_row_choices.table.sqlinc"
+    },
+    {
+      "name": "private.weekly_source_office_rechecks",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "statement_sha256": "177f3cf80faaf741b34f6f51e29c96120a0a9196c322559797624846170d0a80",
+      "complete_statement_file": "inputs/private.weekly_source_office_rechecks.table.sqlinc"
+    }
+  ],
+  "missing_planned_functions": [
+    "private.weekly_source_identical_rekey_prior_v1",
+    "private.weekly_source_kept_as_paid_facts_v1",
+    "public.weekly_source_keep_as_paid_decide_atomic_v1"
+  ],
+  "finite_index_context": "Selected exact61ce bodies individually match current b5 declaration index. No entire61ce recensus or physical catalogue claim.",
+  "native_and_implementation_qualification": false
+}

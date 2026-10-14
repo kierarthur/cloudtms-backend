@@ -1,0 +1,64 @@
+create or replace function private.weekly_source_office_payment_progress_v1(
+  p_member_timesheet_ids uuid[]
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_live integer:=0;
+  v_voided integer:=0;
+  v_unknown_status integer:=0;
+  v_batches jsonb:='[]'::jsonb;
+begin
+  if p_member_timesheet_ids is null
+     or pg_catalog.cardinality(p_member_timesheet_ids)=0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'state','UNAVAILABLE','reason','FAMILY_UNRESOLVED',
+      'live_item_count',0,'voided_item_count',0,'batches','[]'::jsonb);
+  end if;
+
+  select
+    pg_catalog.count(*) filter (
+      where item_row.is_voided is not true
+        and coalesce(batch_row.status,'UNKNOWN') not in ('SETTLED','CANCELLED','FAILED'))::integer,
+    pg_catalog.count(*) filter (where item_row.is_voided is true)::integer,
+    pg_catalog.count(*) filter (where batch_row.status is null)::integer
+    into v_live,v_voided,v_unknown_status
+  from public.pay_batch_items as item_row
+  join public.pay_batch_candidates as candidate_row
+    on candidate_row.id=item_row.pay_batch_candidate_id
+  join public.pay_batches as batch_row on batch_row.id=candidate_row.pay_batch_id
+  where item_row.timesheet_id=any(p_member_timesheet_ids);
+
+  select coalesce(pg_catalog.jsonb_agg(batch_summary order by
+           batch_summary->>'pay_batch_id'),'[]'::jsonb)
+    into v_batches
+  from (
+    select distinct pg_catalog.jsonb_build_object(
+      'pay_batch_id',batch_row.id,
+      'status',coalesce(batch_row.status,'UNKNOWN'),
+      'terminal',coalesce(batch_row.status,'UNKNOWN') in ('SETTLED','CANCELLED','FAILED')
+    ) as batch_summary
+    from public.pay_batch_items as item_row
+    join public.pay_batch_candidates as candidate_row
+      on candidate_row.id=item_row.pay_batch_candidate_id
+    join public.pay_batches as batch_row on batch_row.id=candidate_row.pay_batch_id
+    where item_row.timesheet_id=any(p_member_timesheet_ids)
+      and item_row.is_voided is not true
+  ) as distinct_batches;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,
+    'state',case when v_live>0 then 'IN_FLIGHT' else 'NONE' end,
+    'reason',case when v_unknown_status>0 then 'BATCH_STATUS_NULL_TREATED_AS_IN_FLIGHT' else null end,
+    'live_item_count',v_live,'voided_item_count',v_voided,
+    'batches',v_batches);
+exception
+  when undefined_table or undefined_column or insufficient_privilege then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'state','UNAVAILABLE','reason','BANKING_PAY_EVIDENCE_UNREADABLE',
+      'live_item_count',0,'voided_item_count',0,'batches','[]'::jsonb);
+end;
+$function$;

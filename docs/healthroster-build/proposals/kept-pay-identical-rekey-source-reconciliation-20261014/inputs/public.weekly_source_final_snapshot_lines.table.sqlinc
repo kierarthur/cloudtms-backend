@@ -1,0 +1,33 @@
+
+
+create table public.weekly_source_final_snapshot_lines (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  final_revision_id uuid not null references public.weekly_source_final_revisions(id) on delete restrict,
+  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,
+  row_resolution_id uuid not null references public.weekly_source_row_resolutions(id) on delete restrict,
+  charge_check_id uuid references public.weekly_source_charge_checks(id) on delete restrict,
+  source_profile_kind text not null check (source_profile_kind in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS')),
+  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,
+  external_event_identity text,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  client_id uuid not null references public.clients(id) on delete restrict,
+  contract_id uuid not null references public.contracts(id) on delete restrict,
+  work_date date not null,
+  start_at_local timestamp without time zone not null,
+  end_at_local timestamp without time zone not null,
+  break_minutes integer not null check (break_minutes>=0),
+  actual_net_minutes integer not null check (actual_net_minutes>0),
+  source_classifications_json jsonb not null default '{}'::jsonb check (pg_catalog.jsonb_typeof(source_classifications_json)='object'),
+  pay_vector_json jsonb not null check (pg_catalog.jsonb_typeof(pay_vector_json)='object'),
+  charge_vector_json jsonb not null check (pg_catalog.jsonb_typeof(charge_vector_json)='object'),
+  source_expense_pence bigint check (source_expense_pence between 0 and 999999999999),
+  source_fingerprint bytea not null check (pg_catalog.octet_length(source_fingerprint)=32),
+  mapping_fingerprint bytea not null check (pg_catalog.octet_length(mapping_fingerprint)=32),
+  rate_fingerprint bytea not null check (pg_catalog.octet_length(rate_fingerprint)=32),
+  policy_fingerprint bytea not null check (pg_catalog.octet_length(policy_fingerprint)=32),
+  snapshot_line_hash bytea not null check (pg_catalog.octet_length(snapshot_line_hash)=32),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check (end_at_local>start_at_local),
+  unique (final_revision_id,work_event_id),
+  unique (snapshot_line_hash)
+);

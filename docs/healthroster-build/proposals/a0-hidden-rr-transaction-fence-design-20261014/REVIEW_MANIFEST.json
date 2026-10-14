@@ -1,0 +1,40 @@
+{
+  "schema_version": "A0_HIDDEN_RR_DESIGN_FROZEN_REVIEW_V1",
+  "source_only": true,
+  "current_root_selected_owner_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/DESIGN.md",
+      "bytes": 11417,
+      "sha256": "7bb89d0928624093239d70d7526680f002f116b95ff4730c02649ff6ca330e37"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/PRECODE_SCHEMA_MEMBERSHIP_AND_NEGATIVES.md",
+      "bytes": 8700,
+      "sha256": "7fb53fd17b40a1b68aba4304280c92cd812112ed75fcf8f4001ddbb15855dadb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 926,
+      "sha256": "b7695261be9886e249c7cd524596078df52037a7fe97ef6412b4645b736a438e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/SOURCE_OWNERS_AND_WRITER_MATRIX.json",
+      "bytes": 102860,
+      "sha256": "29e91ad5e2c60a1c1ad025aa0d5e6a846046eb6d00744717530b138685448a6b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/build-design-source-pins.mjs",
+      "bytes": 4931,
+      "sha256": "01a87f3363a6c061e7dae09be4de7f0749d3144e8bea0baa9bedbf2a6800f731"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/freeze-design-source.mjs",
+      "bytes": 3311,
+      "sha256": "90be37a3b94d18a26c8f0067d29c91f5057fad94df5d47f85acbd793db38622e"
+    }
+  ],
+  "source_check_sha256": "b7695261be9886e249c7cd524596078df52037a7fe97ef6412b4645b736a438e",
+  "independent_critic": false,
+  "implementation_and_all_native_acceptance_held": true
+}

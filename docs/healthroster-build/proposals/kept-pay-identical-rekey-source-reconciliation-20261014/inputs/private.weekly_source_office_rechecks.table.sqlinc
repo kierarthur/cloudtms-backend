@@ -1,0 +1,11 @@
+
+create table private.weekly_source_office_rechecks (
+  request_id uuid primary key,
+  actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+  upload_id uuid not null references public.weekly_source_uploads(id) on delete restrict,
+  prior_publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,
+  publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,
+  request_hash bytea not null check(pg_catalog.octet_length(request_hash)=32),
+  request_json jsonb not null check(pg_catalog.jsonb_typeof(request_json)='object'),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp()
+);

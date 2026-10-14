@@ -1,0 +1,678 @@
+{
+  "schema_version": "MONEY_SOURCE_WIP_CHECKPOINT_BACKUP_V1",
+  "source_only": true,
+  "root_request": "Own feature SOURCE WIP backup then idle to free critic slot",
+  "base_own_commit": "6606b5c2617b0e8af7c07d33ac48bbb60ec6e32d",
+  "current_root_input": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "frozen_packets": [
+    {
+      "manifest": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "artifacts": 32
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "sha256": "159c60f9b685994729ca996db5314d05f0db02a2e8f9117cdf9fe4d71bf23345",
+      "artifacts": 13
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "sha256": "d0f639fa3077d517578505666f4d103dbc8ad2dc695ef1983e9873e5e01d97ce",
+      "artifacts": 66
+    },
+    {
+      "manifest": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/REVIEW_MANIFEST.json",
+      "sha256": "ea1aa874a943f7eb289cc666b290154fe3f82e1d88c11cd7dda77cb782834332",
+      "artifacts": 6
+    }
+  ],
+  "verified_artifact_and_manifest_count": 126,
+  "zero_mismatches": true,
+  "selected_files": [
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/CONSTRUCTION_STATUS.md",
+      "bytes": 6931,
+      "sha256": "0e5290f123736c491fe23ae47de74c1e3f1fafcb26f3d72223ca735d712c05b0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/DEFAULT_EXCLUSION_AND_ACCEPT_SOURCE_RECONCILIATION.md",
+      "bytes": 6727,
+      "sha256": "649e094f93f2f309e84be0f504db9ab38e60b0bdd923c9f7ef9a9094122bdbd4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/INDEPENDENT_PARTS_FREEZE_AND_GAPS.md",
+      "bytes": 5767,
+      "sha256": "352bc25e0d2a3f06c99af14be0d14d3801ec5aa52d09730eba0eece0e91af330"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/KEPT_CREDIT_CURRENT_OWNERS_AND_INPUT_PINS.json",
+      "bytes": 15043,
+      "sha256": "e2ed162fe92311f0728d4a70d38a10f73af1c593e271b4c14173c37cdbf8c4a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/LITERAL_DECLARATIONS_AND_DIRECT_INPUT_PINS.json",
+      "bytes": 48799,
+      "sha256": "3d556e9f4c7f5e199f77a25fffd5d0b8f6594349e361c123c3966a090ac3ac64"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/REKEY_CURRENT_CALLERS_AND_INPUT_PINS.json",
+      "bytes": 7349,
+      "sha256": "85b7b1c8b14debc31e0c117eeaeb14bd80de4602017707efd09a9366250f2768"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 1926,
+      "sha256": "25a79a3f079b88fc3b8a1faad0b30c3ff3b22d8d71f580ab7a5c9d0d9770eb11"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/SOURCE_NEXT_PAID_PERMISSION_SEAM.md",
+      "bytes": 3753,
+      "sha256": "46f4f195cc37d254db3615b2f188726045b6b9104ba2200f31f8270865b4c40a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/before/02_complete_upload_context.sqlinc",
+      "bytes": 27420,
+      "sha256": "c0c4dad0e0445c98a45a59e9e6c5956abe6716d69bcda9ce7a3ca5e83cf8835b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/before/03_complete_projection_rows.sqlinc",
+      "bytes": 67447,
+      "sha256": "a03883d889e614ea7c72cdd2cdd13cf6a2b39cf8f8259e49dfd8160eeb88b689"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/before/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 148095,
+      "sha256": "6ab4e16d569e3dddfa48de9b3b09a94328d6f4a9571039cf56edc014bfc5a204"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/before/10_complete_adjustments_apply.sqlinc",
+      "bytes": 6441,
+      "sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/before/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 3067,
+      "sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/before/routes.js",
+      "bytes": 65443,
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/build-kept-current-owners.mjs",
+      "bytes": 13625,
+      "sha256": "2d3549e25753d426dafdaa84425be01eec2142250070a0273a4838c999535d6f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/build-rekey-callers.mjs",
+      "bytes": 7628,
+      "sha256": "df634f75b33d9b09f94d26dfd6615419a41ba3287a756344c146c819668414a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/00_complete_one_time_kept_decisions.sqlinc",
+      "bytes": 3242,
+      "sha256": "37190979970529385c5488a7709a36a6c5b0565dc8fa25aa9bd94336568d1634"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/01_identical_rekey_prior.sqlinc",
+      "bytes": 9377,
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/02_complete_upload_context.sqlinc",
+      "bytes": 28514,
+      "sha256": "879d5956940041ad1d91a4900ceb8b7df3baa3ab178bcbe4ff85630461937de3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/03_complete_projection_rows.sqlinc",
+      "bytes": 68884,
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/04_kept_as_paid_decisions_schema.sqlinc",
+      "bytes": 2556,
+      "sha256": "9d54880ab9b1e138a6c9ec24ec8bc5e79fc270e006d109b932a305196c4b3699"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/05_kept_as_paid_facts.sqlinc",
+      "bytes": 9220,
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/06_kept_as_paid_context.sqlinc",
+      "bytes": 20324,
+      "sha256": "b6328f6f2ed70e3c6c47a1d924a866ac30d0db420e39ab2a7795b48bbc16c4bd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/07_keep_as_paid_decide.sqlinc",
+      "bytes": 10595,
+      "sha256": "cb5b7f6e74731e9b6b8b6d6f7748106d48b324c7cfd2e4bca85bc9f519b8fab2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/08_credited_targets_admit.sqlinc",
+      "bytes": 7524,
+      "sha256": "e6e725b0b51b45abb8ee836fac0086924ac134910b2a8c37565a767e04dc7a47"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 148842,
+      "sha256": "e74ed7ae0769bbad783c7fb1b8b3d28fc18d6c6c0a8f0f9dfdd6668cce89100c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/10_complete_adjustments_apply.sqlinc",
+      "bytes": 9032,
+      "sha256": "25b4b20c1741afe1b542d4551ce26ea6c0c21ea26fae189aad3531ac01e6a2a0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 4213,
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/12_keep_ack_native_guard.sqlinc",
+      "bytes": 7316,
+      "sha256": "1111f7dd1e88c06649d496c6622b90b6b7e38ed6c402efc96eb59742ac36ee6b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/routes.js",
+      "bytes": 67147,
+      "sha256": "e42fda1f0af93d63f30ee3fa862a7ef7ffed5e7a5a11d06f21d934e10aac1440"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/freeze-independent-source.mjs",
+      "bytes": 8138,
+      "sha256": "06b265657828878de3ee91b463da593215e1ba17396ce7a0c8f155759f5ac444"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/kept-construction-source.test.mjs",
+      "bytes": 15551,
+      "sha256": "c62b2e3eea281370441e50776f6d1a07fe04d3e34a320f3b42e8d4683208c0a2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 5871,
+      "sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/COMPLETE_SHARED_EXTRACTION_AND_REVERSES.json",
+      "bytes": 45670,
+      "sha256": "464c6072ee521d08bc81b103c1d4a9e4873e6bff54c7ce032c5417f6deb2bb93"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/CURRENT_NATIVE_CALL_ONLY_DEPENDENCY_PINS.json",
+      "bytes": 6129,
+      "sha256": "f3e3910f770680ea4843cb0351a275629341da64c67b4d78a720ea98acf38fad"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/REVIEW_PROPOSAL.md",
+      "bytes": 7316,
+      "sha256": "ada3a8bb96c40e3813a82a8e942589d2fde5b15f75c5d358d1b75b903deef9fe"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 1856,
+      "sha256": "4996eef413ef03f526f5bc95292c3bc3a07148fe003e0399b5c51ac87a2d5b32"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/before/01_complete_public_paid_page.sqlinc",
+      "bytes": 47617,
+      "sha256": "5227081f2bc136a4dd29395057610a0c94e205ee9d9f6945d6fdfc24f54d6535"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/before/04_complete_frozen_keep_context.sqlinc",
+      "bytes": 20324,
+      "sha256": "b6328f6f2ed70e3c6c47a1d924a866ac30d0db420e39ab2a7795b48bbc16c4bd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/build-shared-proposal.mjs",
+      "bytes": 9043,
+      "sha256": "709afc91e80016eaf6699e4f082a84865cbd55305fe781e0c00f789acacfb418"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/forward/01_complete_native_paid_kernel.sqlinc",
+      "bytes": 47578,
+      "sha256": "e62c876b85eeb8b883be6003ac484aa459b8f5c92b8860af5f5578d70491a8bf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/forward/02_complete_public_admin_wrapper.sqlinc",
+      "bytes": 9078,
+      "sha256": "5c44dee04fe6b788e9ad5bc9b18cd49728feb2ffcd740456316535eab5ffb572"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/forward/03_source_purpose_components_page.sqlinc",
+      "bytes": 8139,
+      "sha256": "73b3ab77f4f1667009b0731eba28e97053703693a5a1847aa3dd8b97c341f68a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/forward/04_complete_source_keep_context.sqlinc",
+      "bytes": 19554,
+      "sha256": "ad73cb33a890771f0dab30ac0c08473ef08c3dea5d03f9feded537274249e68b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/freeze-shared-proposal.mjs",
+      "bytes": 5792,
+      "sha256": "4ca26b5fff1f7f3a3ea4b1bd582e6ea9e01e809f4ad6bfe0bd3a7ea2623c31fa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/shared-proposal-source.test.mjs",
+      "bytes": 5882,
+      "sha256": "499a4b6de4455fd18cde42c215cab7480add1924b9d3907d811f76e498b418e5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-next-paid-shared-kernel-proposal-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 2660,
+      "sha256": "159c60f9b685994729ca996db5314d05f0db02a2e8f9117cdf9fe4d71bf23345"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/DESIGN.md",
+      "bytes": 14811,
+      "sha256": "448153c407e1675996885e1f91e2bf2caabf3ebe80bdfc950a700ca0a6b297c9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/NATIVE_QUALIFICATION_PLAN.md",
+      "bytes": 3885,
+      "sha256": "f89dd8baf6a092bd4658f75c31c14cfd0d2b2ae2009cd6a3f066290d4aac64a7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/RECONCILIATION.md",
+      "bytes": 5626,
+      "sha256": "431578c5ebf59612195e47f7ded1e7fb59c27753a94795e622ee0e21cf58afef"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 879,
+      "sha256": "bbe144f11bb6125992a620320ea9b54e2e770cecb3ab26f076ee756eae18210a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/SOURCE_INPUTS_AND_OWNER_PINS.json",
+      "bytes": 52317,
+      "sha256": "934127b655014ddb011a0495efc2c688b09c3247c64ab80af41fbdb031e449a0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/STORE_COMPARISON.md",
+      "bytes": 5409,
+      "sha256": "6cd339b21529097af02c0fd182646ff97e6c264d625b9a94e5c57a25e3a8766a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/build-source-inputs.mjs",
+      "bytes": 7166,
+      "sha256": "4d09c1e8432d53f4616b548740e67e11e4b3992924a847efd10e82e919be79ee"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/freeze-design.mjs",
+      "bytes": 3964,
+      "sha256": "8e2bba1a9d0f6df7c5037bebbed8b7040c952345e8b7eca064f12d00a58c80c7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private._weekly_source_immutable_fact_guard_v1__.sqlinc",
+      "bytes": 1224,
+      "sha256": "33b948bf27a27436371979421ab2c5158223b2c999def1a904ed5bb1206f687f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private._weekly_source_immutable_record_guard_v1__.sqlinc",
+      "bytes": 482,
+      "sha256": "307506a79826574d170f921a6d3849facee2fa6c632423fad50209be5be9e220"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_accepted_publication_action_record_v1_jsonb_jsonb_jsonb_.sqlinc",
+      "bytes": 9756,
+      "sha256": "ee6221706dfde3e9aa610d67825d3cb1a589beac7e7d4c881e1cefddad47f46c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_accepted_publication_actions_v1.table.sqlinc",
+      "bytes": 2737,
+      "sha256": "875a4a842fb0338813e86198e2b901966d44ceae216abcf97ea37f736ffbaa1f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_correct_final_prepared_context_v1_uuid_.sqlinc",
+      "bytes": 7266,
+      "sha256": "7187a5ad8fb51af32718d53cb592145878ce1862445079bf7fa19e95e5e5cc2a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5358,
+      "sha256": "4606d95fd36303235876f793f386ea07770b82c4d55feeb7ebfe624e3e4e4e22"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_finalise_engine_v1_jsonb_uuid_boolean_.sqlinc",
+      "bytes": 103406,
+      "sha256": "562dea3af3dcb33bbced25818362caed65d9740d080c5e4fb8b3c1a45f2929eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_finalise_engine_v1_jsonb_uuid_boolean_text_.sqlinc",
+      "bytes": 109794,
+      "sha256": "30b63fa323c5b1fcab25dde4bbb541d412a05280e18559762027ec64d8ed1267"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_import_preparations.table.sqlinc",
+      "bytes": 535,
+      "sha256": "371189e385cae53283db45a456da2475eba9f09f8fb39873b64b32418886754c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_invoice_adjustment_authority_v1_uuid_uuid___.sqlinc",
+      "bytes": 4934,
+      "sha256": "c848d9f098f6ebae918b81ff8280c74577474b563ce339500ffa21822e95aead"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_invoice_adjustment_line_valid_v1_uuid_uuid_.sqlinc",
+      "bytes": 3067,
+      "sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_invoice_adjustments_apply_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 6441,
+      "sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_is_import_authoritative_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 1589,
+      "sha256": "f6fd4692703449802d7b9e51596c0e2969def3f00a23d18e0ef64320a12afeab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_local_protected_decision_receipts.table.sqlinc",
+      "bytes": 1121,
+      "sha256": "81469446966f4c1592eb04ace9fec65d5457a8737153df1b4d02eaa38f8311e0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_lock_and_resolve_families_v1_uuid_uuid___text_uuid_text_.sqlinc",
+      "bytes": 903,
+      "sha256": "3eee83fd3b9b80f56c834e10d338421e2270ce0824512718ed522a290d60425a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_missing_scope_facts_v1_uuid_uuid_uuid_uuid_date_.sqlinc",
+      "bytes": 1369,
+      "sha256": "30d8fd3097cdfc3c597768ed84d90fd97c3bd634a6f815843ad703334c04fec7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_invoice_movements_v1_uuid___.sqlinc",
+      "bytes": 3789,
+      "sha256": "0c472edf0ad3bee6a180030c875d85a1b47d6eaa3d964b99159c9f725062675f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_lifecycle_phase_v1_uuid_jsonb_.sqlinc",
+      "bytes": 12595,
+      "sha256": "3be73f296a850f7ffcea07fddf20a862e46a0b1a723f4b82dfe2e8ad480e5a8d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_next_paid_evidence_page_v1_uuid_uuid_text_uuid_jsonb_integer_.sqlinc",
+      "bytes": 5676,
+      "sha256": "13fc27196115f9d51167879c9124b6d378b6aa3c16e9ff1efa09c0d7a46e6c00"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_payment_progress_v1_uuid___.sqlinc",
+      "bytes": 2693,
+      "sha256": "043ddc51fe027ec4dfd9297a680a7666bad4fc3b0126fdc2b6ab7d903b69801c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_rechecks.table.sqlinc",
+      "bytes": 733,
+      "sha256": "ddc36b66a70652bdd1bffa6347340966d9006c75e5a6f4426a6cc386171e4c53"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_office_row_choices.table.sqlinc",
+      "bytes": 825,
+      "sha256": "513553af71435675a25627c19a6375436ddd0ca440dbcb5674003c252685e058"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_ordinary_projection_active_movements_v1_uuid_uuid_.sqlinc",
+      "bytes": 12360,
+      "sha256": "47e534be7a621b29d92db76ba4a9ca229e812c1bb0e139ca45ae89014e1957fd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_ordinary_projection_current_segments_v1_uuid_uuid_.sqlinc",
+      "bytes": 6478,
+      "sha256": "7749c7cea40b43e0a6038675a7e8913e04cf4c21531f1cb2f126d4bfe065d230"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_protected_match_candidates_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 2494,
+      "sha256": "74cf86ded0e00edbc90747f98e2af684a81e221304677e659ddac52487c9be69"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_rebill_movement_insert_v1_uuid_uuid_.sqlinc",
+      "bytes": 7573,
+      "sha256": "f66e40525590bb56bb2617e08c34e77c1b49fb856f2e8b8f0f58cebbc25c56ea"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_self_bill_report_projection_rows_v1_uuid_uuid_jsonb_.sqlinc",
+      "bytes": 1958,
+      "sha256": "8b8e6d3b6b36a758ddff1e50c9d95c6da715e8d603b4869d147f9167fcff257a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_self_bill_report_workspace_v1_jsonb_.sqlinc",
+      "bytes": 13478,
+      "sha256": "eb3faa481388078eb1f1ffaa0d6b25ebdd739619ba87d4a9d70f3fb64f2e3cb7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/private.weekly_source_settlement_allocation_v1_uuid_.sqlinc",
+      "bytes": 28505,
+      "sha256": "91fcc821a90b1a4af784ca37a3a7c1fc5de1aa296e29ae6fc097ff72a62d3a4b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.bpay_next_source_paid_evidence_page_v1_jsonb_.sqlinc",
+      "bytes": 47617,
+      "sha256": "5227081f2bc136a4dd29395057610a0c94e205ee9d9f6945d6fdfc24f54d6535"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_combined_finalise_workspace_v1_jsonb_.sqlinc",
+      "bytes": 8396,
+      "sha256": "27c63805241360c13f3837c146ca78118586e66cab963e1a751dd3a304d60f82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_combined_review_workspace_v1_jsonb_.sqlinc",
+      "bytes": 31599,
+      "sha256": "3b9baf4b87f77794d35567da4bb1a101da90fa9b7e2465e88f956b0df8dfa8a9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_correct_final_prepare_atomic_v1_jsonb_.sqlinc",
+      "bytes": 16406,
+      "sha256": "640b54c2e5d8fe6c5a325c7219d89466bb42d13374a37de399eb68aed1b8fef5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_entitlement_decision_bundles.table.sqlinc",
+      "bytes": 4410,
+      "sha256": "f3b1d18a73b7aef88200c1120bd945f049686278727acf8602821115d9fd35a0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_entitlement_head_components.table.sqlinc",
+      "bytes": 2085,
+      "sha256": "239bc37b2bffaa833208e43dd77628e2d5336d2b1bfce9f49a46a68b25bd4700"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_entitlement_heads.table.sqlinc",
+      "bytes": 3661,
+      "sha256": "447dd4cb34951c0c03ca030b777744468bd1984f03cb2da2c756f221b79e2d7d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_final_snapshot_lines.table.sqlinc",
+      "bytes": 2339,
+      "sha256": "9e50a6c8c373519ec4e0a88eec9af5c1100b58f716e470ce6f75d39d238410b8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_finalise_atomic_v1_jsonb_.sqlinc",
+      "bytes": 299,
+      "sha256": "915a3acc3b908a9a4e54fcb6af9fc0415652e94c1d37dd5b44c3e0d06171f0cd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_import_prepare_atomic_v1_jsonb_.sqlinc",
+      "bytes": 4919,
+      "sha256": "c1dbd0a38a34f847154cfce4043471d5d115245cb625ebc194bb4177797f2080"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_later_change_decide_atomic_v1_jsonb_.sqlinc",
+      "bytes": 23746,
+      "sha256": "fab3a5495afc3a54d15891c9f1f65a028b4db09ba6d9daeb7b0257ed8c3425bb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_office_authorise_scope_v1_jsonb_.sqlinc",
+      "bytes": 2931,
+      "sha256": "b1f684162fbf34fa892fd14a395e1534e01f1b793693ec924ef793cfe6d0deb8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_office_recheck_begin_v1_jsonb_.sqlinc",
+      "bytes": 11738,
+      "sha256": "9ebd15c5a40ab2352973074df53b952974cf6c3fbbeb053662ddd039f7663396"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_office_workspace_v1_jsonb_.sqlinc",
+      "bytes": 117954,
+      "sha256": "34c7d3818727929bc66e8257aacf26df71844b1140ad6a28c438c302dd53fa98"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_projection_publications.table.sqlinc",
+      "bytes": 2059,
+      "sha256": "16bb6a28c15ff3b436bf2b626822483bc3691e5f7e9cb287bba8de42ff05cf59"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_projection_rows_apply_atomic_v1_uuid_uuid_jsonb_.sqlinc",
+      "bytes": 67447,
+      "sha256": "a03883d889e614ea7c72cdd2cdd13cf6a2b39cf8f8259e49dfd8160eeb88b689"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_root_authorisations.table.sqlinc",
+      "bytes": 2583,
+      "sha256": "b3206638c557f5cdbf98cbedf8eaf5c51d07edc9056fd33ea0bec2610d80a020"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_row_resolutions.table.sqlinc",
+      "bytes": 2702,
+      "sha256": "da8f64510dede0ae6ba49cf3d4e004b7b429557c975f56e19ac1fd89ffb64f5c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_self_bill_report_line_bindings.table.sqlinc",
+      "bytes": 1018,
+      "sha256": "9ef730838ed0eb9bf5e6d0f51665674d8da4a56db9a953f15e019291b1da7af8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_state_transitions.table.sqlinc",
+      "bytes": 2090,
+      "sha256": "49d71fc71afb12bed90327a2720e95874c67fee2c398594fe48b8ba6e2ceb6af"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_upload_context_v1_jsonb_.sqlinc",
+      "bytes": 27420,
+      "sha256": "c0c4dad0e0445c98a45a59e9e6c5956abe6716d69bcda9ce7a3ca5e83cf8835b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_upload_rows.table.sqlinc",
+      "bytes": 2913,
+      "sha256": "f8fa927f8dc32e2ab4078eccc4ae532f56d65a1bd19df62413fbbd936b3406e2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_source_uploads.table.sqlinc",
+      "bytes": 4205,
+      "sha256": "3a39f0a62c2dbd402cdd32ffd71c00c9e1af4106272ba67c989e60a1c8193e59"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/public.weekly_work_events.table.sqlinc",
+      "bytes": 1048,
+      "sha256": "868242d8d58cdc9568bb3a5f879a7ed30343784225cf99b27a81ba5e66532fbd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/routes.js",
+      "bytes": 62448,
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/rule-set-validation.js",
+      "bytes": 10329,
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/inputs/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-source-reconciliation-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 13644,
+      "sha256": "d0f639fa3077d517578505666f4d103dbc8ad2dc695ef1983e9873e5e01d97ce"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/DESIGN.md",
+      "bytes": 11417,
+      "sha256": "7bb89d0928624093239d70d7526680f002f116b95ff4730c02649ff6ca330e37"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/PRECODE_SCHEMA_MEMBERSHIP_AND_NEGATIVES.md",
+      "bytes": 8700,
+      "sha256": "7fb53fd17b40a1b68aba4304280c92cd812112ed75fcf8f4001ddbb15855dadb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 926,
+      "sha256": "b7695261be9886e249c7cd524596078df52037a7fe97ef6412b4645b736a438e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/SOURCE_OWNERS_AND_WRITER_MATRIX.json",
+      "bytes": 102860,
+      "sha256": "29e91ad5e2c60a1c1ad025aa0d5e6a846046eb6d00744717530b138685448a6b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/build-design-source-pins.mjs",
+      "bytes": 4931,
+      "sha256": "01a87f3363a6c061e7dae09be4de7f0749d3144e8bea0baa9bedbf2a6800f731"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/freeze-design-source.mjs",
+      "bytes": 3311,
+      "sha256": "90be37a3b94d18a26c8f0067d29c91f5057fad94df5d47f85acbd793db38622e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-transaction-fence-design-20261014/REVIEW_MANIFEST.json",
+      "bytes": 1829,
+      "sha256": "ea1aa874a943f7eb289cc666b290154fe3f82e1d88c11cd7dda77cb782834332"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_HISTORICAL_PAST_WEEK_SOURCE_DISPOSITION_14102026.md",
+      "bytes": 5267,
+      "sha256": "23e7dd31970158e908c286c0fbd90e3e903da05d2c751bfc6a33d448e2f94aae"
+    },
+    {
+      "file": "docs/healthroster-build/SOURCE_HISTORICAL_PAST_WEEK_INPUT_PINS_14102026.json",
+      "bytes": 5681,
+      "sha256": "6728de06ebb0420ba3da8296a3d188d05fb32c7dc2f9ec471e8ce0a37131b2e8"
+    },
+    {
+      "file": "docs/healthroster-build/OWNER_QUESTIONS.md",
+      "bytes": 3646,
+      "sha256": "9b7343cfc4ea796c70765d5a903f02518b27b70ef8d174002e58c541cc87018e"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_A0_HIDDEN_RR_PRECODE_FOLLOWUP_14102026.md",
+      "bytes": 4821,
+      "sha256": "0fa2e6a95ab5b2e91e8d0070424daa68884e4e8da2c77489375220f2e8f9fc64"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_KEEP_SHARED_SOURCE_WIP_HANDOFF_14102026.md",
+      "bytes": 4624,
+      "sha256": "bcaa0c2c9c0b46b44a3c6e1becbbadc80ab1f9793bc0afa44f010f85f0aa001b"
+    }
+  ],
+  "credential_scan": {
+    "file_count": 126,
+    "rule_names": [
+      "PRIVATE_KEY",
+      "JWT_LITERAL",
+      "GITHUB_TOKEN"
+    ],
+    "findings": []
+  },
+  "keep32_independent_review": "PENDING",
+  "shared13_owner_approval_and_independent_review": "PENDING",
+  "canonical_banking_root_source_changed": false,
+  "native_qualified": false,
+  "full_implementation_complete": false,
+  "cleanup_retry_or_new_scratch": false
+}

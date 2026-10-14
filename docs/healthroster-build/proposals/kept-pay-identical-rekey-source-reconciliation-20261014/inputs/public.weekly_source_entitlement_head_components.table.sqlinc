@@ -1,0 +1,49 @@
+
+
+-- WB-005: the complete record is built through an explicit schema allowlist.
+-- adjustment_id is deliberately absent - ordinary non-advance ts_pay_adjustments
+-- occurrences stay independently owned and are never copied into a head
+-- (WB-007, WB-013).  No invoice movement, source-cycle, upload, query,
+-- response, finalisation or Office-notification field appears here (WB-014).
+create table public.weekly_source_entitlement_head_components (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  head_id uuid not null references public.weekly_source_entitlement_heads(id) on delete restrict,
+  component_ordinal integer not null check (component_ordinal>=1),
+  component_id uuid not null,
+  component_kind text not null,
+  economic_key_type text not null,
+  economic_key_value text not null,
+  component_member_identity text not null,
+  segment_id text,
+  segment_key text,
+  segment_stable_key text,
+  work_date date,
+  reference_number text,
+  hours_day numeric(18,6),
+  hours_night numeric(18,6),
+  hours_sat numeric(18,6),
+  hours_sun numeric(18,6),
+  hours_bh numeric(18,6),
+  additional_code_raw text,
+  unit_count numeric(18,6),
+  unit_pay_rate numeric(18,6),
+  unit_charge_rate numeric(18,6),
+  expense_code text,
+  pay_ex_vat numeric(18,2) not null,
+  charge_ex_vat numeric(18,2),
+  exclude_from_pay boolean not null,
+  origin text not null,
+  -- Mandatory, and mandatory to equal the owning head's own pair: the H2-024
+  -- index is a B-tree unique index, and a NULL key never conflicts, so an
+  -- optional bundle tag would let the same component be retained in A and added
+  -- to B simply by omitting the tag on one of the two rows.
+  decision_bundle_id uuid not null,
+  bundle_revision bigint not null,
+  movement_id uuid,
+  movement_group_id uuid,
+  component_sha256 bytea not null check (pg_catalog.octet_length(component_sha256)=32),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check (movement_group_id is null or movement_id is not null),
+  unique (head_id,component_ordinal),
+  unique (head_id,component_id)
+);

@@ -1,0 +1,14 @@
+
+
+-- Choices apply to this immutable source row only, never to another file or
+-- every person sharing a name. Each replacement choice remains auditable.
+create table private.weekly_source_office_row_choices (
+  id bigint generated always as identity primary key,
+  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,
+  candidate_id uuid references public.candidates(id) on delete restrict,
+  client_id uuid references public.clients(id) on delete restrict,
+  contract_id uuid references public.contracts(id) on delete restrict,
+  actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+  chosen_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check(candidate_id is not null or client_id is not null or contract_id is not null)
+);

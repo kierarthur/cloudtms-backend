@@ -1,0 +1,10 @@
+
+
+create table private.weekly_source_import_preparations (
+  upload_id uuid primary key references public.weekly_source_uploads(id),
+  projection_publication_id uuid not null references public.weekly_source_projection_publications(id),
+  authority_scope_version bigint not null check (authority_scope_version>0),
+  prepared_by_user_id uuid not null references public.tms_users(id),
+  prepared_at_utc timestamptz not null default transaction_timestamp(),
+  row_manifest_hash bytea not null check (octet_length(row_manifest_hash)=32)
+);

@@ -1,0 +1,27 @@
+
+
+create table public.weekly_source_projection_publications (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,
+  authority_scope_kind text not null check (authority_scope_kind in ('CYCLE','NHSP_REPORT_SCOPE')),
+  report_scope_id uuid references public.weekly_source_report_scopes(id) on delete restrict,
+  upload_id uuid not null references public.weekly_source_uploads(id) on delete restrict,
+  correction_session_id uuid references public.weekly_final_source_correction_sessions(id) on delete restrict,
+  authority_scope_version bigint not null check (authority_scope_version>=1),
+  projection_generation integer check (projection_generation is null or projection_generation>=1),
+  rebuild_idempotency_key text check (rebuild_idempotency_key is null or pg_catalog.char_length(pg_catalog.btrim(rebuild_idempotency_key)) between 1 and 200),
+  rebuild_request_hash bytea check (rebuild_request_hash is null or pg_catalog.octet_length(rebuild_request_hash)=32),
+  ready_session_version bigint check (ready_session_version is null or ready_session_version>=1),
+  comparison_manifest_hash bytea not null check (pg_catalog.octet_length(comparison_manifest_hash)=32),
+  issue_set_hash bytea not null check (pg_catalog.octet_length(issue_set_hash)=32),
+  state text not null default 'BUILDING' check (state in ('BUILDING','CURRENT','CORRECTION_READY','STALE','FAILED')),
+  failure_code text,
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  published_at_utc timestamptz,
+  check ((authority_scope_kind='NHSP_REPORT_SCOPE')=(report_scope_id is not null)),
+  check (state<>'CORRECTION_READY' or correction_session_id is not null),
+  check (state<>'CURRENT' or published_at_utc is not null),
+  check ((rebuild_idempotency_key is null)=(rebuild_request_hash is null)),
+  check (rebuild_idempotency_key is null or correction_session_id is not null),
+  check (ready_session_version is null or correction_session_id is not null)
+);

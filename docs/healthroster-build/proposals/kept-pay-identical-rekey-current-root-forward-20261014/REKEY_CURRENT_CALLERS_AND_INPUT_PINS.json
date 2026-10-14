@@ -1,0 +1,105 @@
+{
+  "source_only": true,
+  "unfinished_construction": true,
+  "current_sql_and_runtime_selected_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "changes": [
+    {
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "input_file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "input_file_sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561",
+      "input_definition_sha256": "37355a64d3472dea5f2010f154925a548c3c4d8177c55a9dc9ff2dbea9ebcf57",
+      "after_definition_sha256": "4b1e6520180d09d1de8cd2482820480cc29590749c19c66e58cbac446370c99c",
+      "before_file": "before/02_complete_upload_context.sqlinc",
+      "forward_file": "forward/02_complete_upload_context.sqlinc",
+      "hunks": [
+        {
+          "before": "        order by event.created_at_utc,event.id limit 1;",
+          "after": "        order by event.created_at_utc,event.id limit 1;\r\n        -- Primary03 section6.1: unmatched finalised external keys use one\r\n        -- native exact-tuple/absent-old-key proof, not schedule compatibility.\r\n        if v_prior_work_event_id is null then\r\n          begin\r\n            v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\r\n          exception when sqlstate '55000' then\r\n            if SQLERRM is distinct from 'WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS' then raise; end if;\r\n            -- Keep discovery usable, but expose a real ambiguity. The native\r\n            -- projection independently repeats the helper and refuses it.\r\n            v_prior_candidate_count:=2; v_prior_work_event_id:=null;\r\n          end;\r\n          if v_prior_work_event_id is not null then\r\n            select saved.contract_id into v_prior_contract_id\r\n            from public.weekly_source_row_resolutions saved\r\n            where saved.work_event_id=v_prior_work_event_id and saved.mapping_state='RESOLVED'\r\n            order by saved.created_at_utc desc,saved.id desc limit 1;\r\n          end if;\r\n        end if;"
+        }
+      ],
+      "whole_definition_reverse": true,
+      "existing_acl_signature_unchanged": true
+    },
+    {
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "input_file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "input_file_sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "input_definition_sha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc",
+      "after_definition_sha256": "fd5857ec2b864ff479989901fa93febf8ac2fe590f5e6e1d96a97ce99134cd14",
+      "before_file": "before/03_complete_projection_rows.sqlinc",
+      "forward_file": "forward/03_complete_projection_rows.sqlinc",
+      "hunks": [
+        {
+          "before": "  v_prior_work_event_id uuid;",
+          "after": "  v_prior_work_event_id uuid;\n  v_identical_rekey_prior uuid;"
+        },
+        {
+          "before": "      if v_prior_work_event_id is not null then",
+          "after": "      -- A new external key may reuse an old event only through the native\n      -- identical proof or the independently admitted explicit Office choice.\n      -- The current protected choice above was re-proved, never caller flags.\n      if v_source_authority and v_identity_kind='PROFILE_EXTERNAL_KEY'\n        and not exists(select 1 from public.weekly_work_events key_event\n          where key_event.first_source_group_id=v_group.id\n            and key_event.source_format_profile_id=v_upload.source_format_profile_id\n            and key_event.identity_kind='PROFILE_EXTERNAL_KEY'\n            and key_event.profile_external_key=v_profile_external_key)\n        and not (v_source_authority and v_protected_choice is not null\n          and v_protected_choice=v_prior_work_event_id) then\n        v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\n        if v_identical_rekey_prior is distinct from v_prior_work_event_id\n          or (v_identical_rekey_prior is not null and (select saved.contract_id from public.weekly_source_row_resolutions saved\n            where saved.work_event_id=v_prior_work_event_id and saved.mapping_state='RESOLVED'\n            order by saved.created_at_utc desc,saved.id desc limit 1) is distinct from v_contract_id) then\n          raise exception 'WEEKLY_SOURCE_REKEY_MATCH_UNPROVEN' using errcode='40001';\n        end if;\n      end if;\n      if v_prior_work_event_id is not null then"
+        }
+      ],
+      "whole_definition_reverse": true,
+      "existing_acl_signature_unchanged": true
+    }
+  ],
+  "auxiliary_inputs": [
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "bytes": 13643,
+      "sha256": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/healthroster-normalise.js",
+      "bytes": 8831,
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/roster-summary-normalise.js",
+      "bytes": 7516,
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/routes.js",
+      "bytes": 65443,
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "broker/src/weekly-source/profiles.js",
+      "bytes": 14652,
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    }
+  ],
+  "planned_helper_signature": "private.weekly_source_identical_rekey_prior_v1(uuid)",
+  "planned_helper_definition_sha256": "110190e197fba95780caf5ed957253317ca74cf59ba581d471b680e4ef5b0bce",
+  "source_definition_lexer_checks": true,
+  "current_signature_changes": 0,
+  "full_unique_reversals": 2,
+  "sql_compiled": false,
+  "native_proof": false,
+  "paid_overlap_default_credit_prepared_and_policy_completion": "REQUIRED_BEFORE_PACKET_FREEZE_OR_MOUNT"
+}

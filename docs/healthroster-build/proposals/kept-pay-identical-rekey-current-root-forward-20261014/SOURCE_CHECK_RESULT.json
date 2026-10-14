@@ -1,0 +1,53 @@
+{
+  "schema_version": "SOURCE_INDEPENDENT_KEEP_REKEY_CREDIT_CHECK_V1",
+  "source_only": true,
+  "partial_implementation": true,
+  "root_input_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "tests": {
+    "count": 18,
+    "pass": 18,
+    "fail": 0,
+    "runner": "Inspected source + read-only in-memory current route VM; actual current permission module, mocked native transport, forbidden fetch",
+    "output_sha256": "fbbae9d1e7e8d99892b948e9d90740a4a48425dd18c55a543e50e9d317869ed1"
+  },
+  "inert_syntax_files": [
+    "build-rekey-callers.mjs",
+    "build-kept-current-owners.mjs",
+    "kept-construction-source.test.mjs",
+    "freeze-independent-source.mjs",
+    "forward/routes.js"
+  ],
+  "full_unique_current_owner_reversals": 6,
+  "new_private_owners": 5,
+  "new_service_public_owners": 1,
+  "new_planned_stores": 1,
+  "declared_direct_native_dependency_count": 58,
+  "literal_sql_delimiter_lexing": true,
+  "sql_compiled": false,
+  "sql_executed": false,
+  "native_qualified": false,
+  "banking_owner_modified": false,
+  "current_fin4_762_modified": false,
+  "source39_modified": false,
+  "recorder9_13_or_three_bundles_or_tree_exceptions_modified": false,
+  "credential_scan": {
+    "files": 31,
+    "rules": [
+      "PRIVATE_KEY",
+      "JWT_LITERAL",
+      "GITHUB_TOKEN",
+      "AWS_KEY"
+    ],
+    "findings": []
+  },
+  "outstanding_source_gaps": [
+    "NONADMIN_NEXT_NATIVE_SINGLE_KERNEL_SHARED_OWNER_REVIEW",
+    "REAL_MISSING_CANCEL_EXCLUSION_NATIVE_CAPTURE_SELECTOR",
+    "REPEATED_ABSENCE_OLD_RESOLUTION_VAT_NATIVE_BASIS",
+    "REAL_ACCEPT_SOURCE_FULL_NATIVE_PROPOSAL_BUNDLE_GATE5",
+    "ALL_PAID_SAME_SEPARATE_PAY_EFFECT_DUPLICATE_SOURCE_CENSUS",
+    "REAL_PREPARED_FROZEN_FINGERPRINT_READ_OFFICE_CHECKLIST",
+    "LATEST_FINAL_CLASSIFICATION_FULL_MANDATORY_VERIFIER_OWNER_COUPLING"
+  ],
+  "all_native_compile_catalogue_installation_contract_tool_http_office_phone_financial_security_gates": "HOLD"
+}

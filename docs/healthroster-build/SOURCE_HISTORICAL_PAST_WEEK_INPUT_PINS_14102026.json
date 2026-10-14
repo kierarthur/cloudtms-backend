@@ -1,0 +1,120 @@
+{
+  "source_only": true,
+  "current_source_commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+  "source_inputs": [
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "bytes": 21135,
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "bytes": 15114,
+      "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/03_HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "bytes": 7932,
+      "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "bytes": 18928,
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "bytes": 3929,
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/09_01_operational_rule_projection.sqlinc",
+      "bytes": 1367,
+      "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "bytes": 1820,
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/17_ACTIVATION_WINDOW_BINDING.sqlinc",
+      "bytes": 6391,
+      "sha256": "883eab37fd437a4b802c2f6331de865b7eb0e1bca8d5ec12d2624d9a950604a4"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/18_FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 19095,
+      "sha256": "9ba9d59f3168492d53cf38c003e5a7cca117aa627edcbfe211061a0d628e8c2f"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "bytes": 7474,
+      "sha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/25_REPORT_FIXTURE_REFERENCE.sqlinc",
+      "bytes": 7539,
+      "sha256": "697d3ca1fe0d9af1588d9e71c0b25c69b2dc48effd86e01dccc05aec65e28031"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/29_11_complete_historical_fixture_native_assignment.sqlinc",
+      "bytes": 7213,
+      "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+      "bytes": 22825,
+      "sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "bytes": 3520,
+      "sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "broker/src/weekly-source/finalisation-pay-orchestrator.mjs",
+      "bytes": 38429,
+      "sha256": "549e63d14c160eb1ad932089dc4febced99854f843bec7d36edb81f649dcfd0b"
+    },
+    {
+      "commit": "87b9908370d238d1af4da910b97018d19a3fd033",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    }
+  ],
+  "qualified_historical_fixture_source_feasible": true,
+  "historical_operational_activation": false,
+  "normal_past_api_via_future_floor": false,
+  "native_first_use_proved": false,
+  "unconditional22October_wait": false,
+  "old_frozen_notes_preserved": true
+}

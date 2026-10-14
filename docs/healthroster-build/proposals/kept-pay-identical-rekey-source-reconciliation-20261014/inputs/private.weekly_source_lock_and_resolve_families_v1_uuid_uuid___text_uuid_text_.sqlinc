@@ -1,0 +1,35 @@
+create or replace function private.weekly_source_lock_and_resolve_families_v1(
+  p_candidate_id uuid,
+  p_requested_timesheet_ids uuid[],
+  p_job_type text,
+  p_job_id uuid,
+  p_reason text
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_gate jsonb;
+  v_locked jsonb;
+begin
+  v_gate:=private.weekly_source_candidate_serial_gate_v1(
+    p_candidate_id,p_job_type,p_job_id,p_reason
+  );
+  if coalesce((v_gate->>'ok')::boolean,false) is not true then
+    return v_gate;
+  end if;
+
+  v_locked:=private.weekly_source_lock_family_rows_v1(
+    p_requested_timesheet_ids,p_candidate_id
+  );
+  if coalesce((v_locked->>'ok')::boolean,false) is not true then
+    return v_locked;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'gate','GRANTED','families',v_locked->'families'
+  );
+end;
+$function$;

@@ -1,0 +1,63 @@
+
+
+-- 24 section 4.5 / H2-024: one immutable bundle identity, one row per bundle
+-- revision.  The (decision_bundle_id,bundle_revision) pair is a real key so the
+-- post-decision component index below is backed by referential integrity.
+create table public.weekly_source_entitlement_decision_bundles (
+  decision_bundle_id uuid not null default pg_catalog.gen_random_uuid(),
+  bundle_revision bigint not null check (bundle_revision>=1),
+  agency_id uuid not null,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  week_ending_date date not null,
+  bundle_kind text not null check (bundle_kind in ('SINGLE_ROOT','CROSS_CONTRACT_A_B')),
+  source_root_family_booking_id text not null check (pg_catalog.char_length(source_root_family_booking_id) between 1 and 200),
+  source_root_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  source_contract_id uuid not null references public.contracts(id) on delete restrict,
+  target_root_family_booking_id text check (target_root_family_booking_id is null or pg_catalog.char_length(target_root_family_booking_id) between 1 and 200),
+  target_root_timesheet_id uuid references public.timesheets(timesheet_id) on delete restrict,
+  target_contract_id uuid references public.contracts(id) on delete restrict,
+  decision_id uuid not null,
+  decided_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  publication_mode text not null check (publication_mode in ('IMMEDIATE','DEFERRED')),
+  request_digest bytea not null check (pg_catalog.octet_length(request_digest)=32),
+  source_revision_digest bytea not null check (pg_catalog.octet_length(source_revision_digest)=32),
+  contract_choice_digest bytea not null check (pg_catalog.octet_length(contract_choice_digest)=32),
+  before_inventory_digest bytea not null check (pg_catalog.octet_length(before_inventory_digest)=32),
+  proposed_head_ids uuid[] not null,
+  -- 24 section 4.5 step 4, file 26 Gate 5 step 6, 27 section 8 step 6, H2-024:
+  -- "If B already exists unauthorised and contains unrelated content, the
+  -- bundle must either receive explicit whole-root Office review of that
+  -- content or block; it must never silently authorise B."
+  --
+  -- These three are IDENTITY columns, not lifecycle columns: the review is part
+  -- of what Office ACCEPTED, so it must be true when the bundle revision is
+  -- written and must never change afterwards.  Were they writable later, a
+  -- caller could attach the very approval it needs to a bundle it is about to
+  -- publish, which is the failure the review exists to prevent, inverted.  A
+  -- review taken after a bundle was proposed is a NEW bundle revision, exactly
+  -- as a changed request digest is.  The ACL immutable-fact guard therefore
+  -- refuses any update to them, and they are deliberately NOT registered as
+  -- lifecycle columns in the ACL closure.
+  whole_root_review_required boolean not null default false,
+  whole_root_reviewed_by_user_id uuid references public.tms_users(id) on delete restrict,
+  whole_root_reviewed_at_utc timestamptz,
+  state text not null check (state in ('PROPOSED','COMMITTED','SUPERSEDED','ABANDONED')),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  committed_at_utc timestamptz,
+  superseded_at_utc timestamptz,
+  -- A recorded review names a reviewer and a time, or it is not a review.
+  check (whole_root_review_required=(whole_root_reviewed_by_user_id is not null)),
+  check ((whole_root_reviewed_by_user_id is null)=(whole_root_reviewed_at_utc is null)),
+  -- The whole-root review is about the TARGET root, so only a cross-Contract
+  -- bundle can carry one.
+  check (not whole_root_review_required or bundle_kind='CROSS_CONTRACT_A_B'),
+  check ((bundle_kind='CROSS_CONTRACT_A_B')=(target_root_family_booking_id is not null and target_contract_id is not null)),
+  check (bundle_kind<>'CROSS_CONTRACT_A_B' or target_contract_id is distinct from source_contract_id),
+  check (pg_catalog.cardinality(proposed_head_ids)>=1),
+  check (pg_catalog.array_position(proposed_head_ids,null::uuid) is null),
+  check (private.weekly_source_uuid_array_is_distinct_v1(proposed_head_ids)),
+  check ((state='COMMITTED')=(committed_at_utc is not null)),
+  check ((state='SUPERSEDED')=(superseded_at_utc is not null)),
+  primary key (decision_bundle_id,bundle_revision),
+  unique (request_digest)
+);

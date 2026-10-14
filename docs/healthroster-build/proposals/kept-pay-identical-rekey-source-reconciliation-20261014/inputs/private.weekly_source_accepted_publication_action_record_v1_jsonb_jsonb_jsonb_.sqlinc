@@ -1,0 +1,139 @@
+create or replace function private.weekly_source_accepted_publication_action_record_v1(
+  p_request jsonb,p_canonical_publication_request jsonb,p_before_origin jsonb
+) returns uuid
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_root uuid;
+  v_bundle uuid;
+  v_revision bigint;
+  v_requested_revision bigint;
+  v_final uuid;
+  v_key text;
+  v_hash bytea;
+  v_canonical jsonb;
+  v_origin jsonb;
+  v_id uuid;
+  v_context jsonb;
+  v_basis jsonb;
+  v_scope jsonb;
+  v_lock jsonb;
+  v_saved private.weekly_source_accepted_publication_actions_v1%rowtype;
+  v_original public.weekly_source_entitlement_decision_bundles%rowtype;
+  v_original_canonical jsonb;
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),
+      nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501'; end if;
+  perform private.weekly_source_publication_require_keys_v1(p_request,array[
+    'actor_user_id','bundle_revision','decision','decision_bundle_id',
+    'final_revision_id','idempotency_key','root_timesheet_id','schema_version'],'accepted_action.request');
+  if p_request->>'schema_version' is distinct from 'WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1'
+     or p_request->>'decision' is distinct from 'APPROVE_UPDATED_HOURS' then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_INVALID' using errcode='22023'; end if;
+  v_actor:=(private.weekly_source_publication_scalar_v1(p_request->'actor_user_id','actor_user_id','UUID')#>>'{}')::uuid;
+  v_root:=(private.weekly_source_publication_scalar_v1(p_request->'root_timesheet_id','root_timesheet_id','UUID')#>>'{}')::uuid;
+  v_bundle:=(private.weekly_source_publication_scalar_v1(p_request->'decision_bundle_id','decision_bundle_id','UUID')#>>'{}')::uuid;
+  v_final:=(private.weekly_source_publication_scalar_v1(p_request->'final_revision_id','final_revision_id','UUID')#>>'{}')::uuid;
+  v_requested_revision:=(private.weekly_source_publication_scalar_v1(p_request->'bundle_revision','bundle_revision','INT')#>>'{}')::bigint;
+  v_key:=btrim(coalesce(p_request->>'idempotency_key',''));
+  if v_requested_revision<1 or jsonb_typeof(p_request->'idempotency_key')<>'string'
+     or char_length(v_key) not between 16 and 200 then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_INVALID' using errcode='22023'; end if;
+  v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1',p_request-'idempotency_key');
+  if p_canonical_publication_request->>'publication_mode' is distinct from 'IMMEDIATE'
+     or p_canonical_publication_request->'pending_bundle_id' is distinct from 'null'::jsonb then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_INVALID' using errcode='22023'; end if;
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(
+    p_canonical_publication_request,'IMMEDIATE',null::uuid);
+  v_origin:=v_canonical#>'{financial_request,source_revision}';
+  v_id:=(v_origin->>'accepted_action_id')::uuid;
+  v_revision:=(v_canonical->>'bundle_revision')::bigint;
+  if v_id is null or p_canonical_publication_request#>>'{control,bundle_kind}' is distinct from 'SINGLE_ROOT'
+     or v_origin->>'origin_kind' is distinct from 'CURRENT_FINAL_SOURCE_V1'
+     or (v_origin->>'final_revision_id')::uuid is distinct from v_final
+     or (v_canonical->>'decision_bundle_id')::uuid is distinct from v_bundle
+     or v_revision is distinct from v_requested_revision+1
+     or v_canonical->'member_root_ids' is distinct from jsonb_build_array(v_root) then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_INVALID' using errcode='22023'; end if;
+  -- Exact accepted replay is historical evidence, not a claim that the former
+  -- before-position is still current. Do not re-decide after a valid advance.
+  select * into v_saved from private.weekly_source_accepted_publication_actions_v1 a
+    where a.idempotency_key=v_key;
+  if found then
+    if v_saved.action_id is distinct from v_id or v_saved.request_sha256 is distinct from v_hash
+       or v_saved.actor_user_id is distinct from v_actor or v_saved.root_timesheet_id is distinct from v_root
+       or v_saved.decision_bundle_id is distinct from v_bundle or v_saved.bundle_revision is distinct from v_revision
+       or v_saved.expected_prior_origin is distinct from p_before_origin
+       or v_saved.accepted_canonical_json is distinct from v_canonical
+       or v_saved.accepted_canonical_sha256 is distinct from private.weekly_source_publication_request_digest_v1(v_canonical) then
+      raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_REPLAY_CONFLICT' using errcode='22023'; end if;
+    return v_saved.action_id;
+  end if;
+  -- Reuse I-1; never introduce an ad-hoc family lock class. The public owner
+  -- must take this same lock order before writing/locking a bundle revision.
+  v_lock:=private.weekly_source_lock_and_resolve_families_v1(
+    (v_canonical->>'candidate_id')::uuid,array[v_root],
+    'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',gen_random_uuid(),'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  if (v_lock->>'ok') is distinct from 'true' or v_lock->>'gate' is distinct from 'GRANTED' then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_UNAVAILABLE' using errcode='55000'; end if;
+  -- A concurrent compatible first attempt can have committed while I-1 waited.
+  -- Re-read before interpreting changed current authority as a new decision.
+  select * into v_saved from private.weekly_source_accepted_publication_actions_v1 a
+    where a.idempotency_key=v_key;
+  if found then
+    if v_saved.action_id is distinct from v_id or v_saved.request_sha256 is distinct from v_hash
+       or v_saved.actor_user_id is distinct from v_actor or v_saved.root_timesheet_id is distinct from v_root
+       or v_saved.decision_bundle_id is distinct from v_bundle or v_saved.bundle_revision is distinct from v_revision
+       or v_saved.expected_prior_origin is distinct from p_before_origin
+       or v_saved.accepted_canonical_json is distinct from v_canonical
+       or v_saved.accepted_canonical_sha256 is distinct from private.weekly_source_publication_request_digest_v1(v_canonical) then
+      raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_REPLAY_CONFLICT' using errcode='22023'; end if;
+    return v_saved.action_id;
+  end if;
+  perform 1 from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=v_bundle and b.bundle_revision=v_revision and b.state='PROPOSED'
+    for update;
+  if not found then raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_STALE' using errcode='55000'; end if;
+  -- The public request still names the proposal the user actually reviewed.
+  -- Its immutable successor names the real accepted action. Reconstruct the
+  -- former complete request by changing ONLY those explicit provenance fields;
+  -- never silently accept a newly composed different economic proposal.
+  select * into v_original from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=v_bundle and b.bundle_revision=v_requested_revision;
+  v_original_canonical:=jsonb_set(jsonb_set(v_canonical,'{bundle_revision}',to_jsonb(v_requested_revision)),
+    '{financial_request,source_revision}',v_origin-'origin_kind'-'accepted_action_id');
+  if not found or v_original.state<>'ABANDONED'
+     or v_original.bundle_kind<>'SINGLE_ROOT'
+     or v_original.source_root_timesheet_id is distinct from v_root
+     or v_original.request_digest is distinct from
+          private.weekly_source_publication_request_digest_v1(v_original_canonical)
+     or v_original.source_revision_digest is distinct from
+          private.weekly_source_publication_request_digest_v1(v_origin-'origin_kind'-'accepted_action_id') then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_STALE' using errcode='55000'; end if;
+  v_context:=private.weekly_source_accepted_publication_context_v1(p_canonical_publication_request);
+  v_basis:=v_context->'basis'; v_scope:=v_basis->'scope';
+  if v_context is null or (v_context->>'actor_user_id')::uuid is distinct from v_actor
+     or v_basis->'origin' is distinct from p_before_origin then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_STALE' using errcode='55000'; end if;
+  insert into private.weekly_source_accepted_publication_actions_v1(
+    action_id,decision_bundle_id,bundle_revision,idempotency_key,request_sha256,actor_user_id,action,
+    root_timesheet_id,family_booking_id,root_version,agency_id,candidate_id,client_id,contract_id,
+    week_ending_date,source_cycle_id,final_revision_id,finalisation_week_ending,final_revision_number,
+    manifest_hash,policy_fingerprint,expected_prior_origin,before_inventory_sha256,
+    before_entitlement_sha256,origin_sha256,planned_head_id,accepted_canonical_json,accepted_canonical_sha256
+  ) values (
+    v_id,v_bundle,v_revision,v_key,v_hash,v_actor,'APPROVE_UPDATED_HOURS',v_root,
+    v_scope->>'family_booking_id',(v_scope->>'root_version')::bigint,(v_context->>'agency_id')::uuid,
+    (v_scope->>'candidate_id')::uuid,(v_scope->>'client_id')::uuid,(v_scope->>'contract_id')::uuid,
+    (v_scope->>'week_ending_date')::date,(v_origin->>'source_cycle_id')::uuid,v_final,
+    (v_context->>'finalisation_week_ending')::date,(v_origin->>'revision_number')::bigint,
+    decode(v_origin->>'manifest_hash','hex'),decode(v_origin->>'policy_fingerprint','hex'),p_before_origin,
+    decode(v_basis->>'inventory_digest','hex'),decode(v_basis->>'entitlement_digest','hex'),
+    private.weekly_source_publication_request_digest_v1(v_origin),(v_canonical#>>'{head_ids,0}')::uuid,
+    v_canonical,private.weekly_source_publication_request_digest_v1(v_canonical));
+  return v_id;
+end;
+$function$;

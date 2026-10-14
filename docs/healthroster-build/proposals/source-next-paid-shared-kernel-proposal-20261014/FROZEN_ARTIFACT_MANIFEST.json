@@ -1,0 +1,79 @@
+{
+  "schema_version": "SHARED_OWNER_PAID_KERNEL_REVIEW_PROPOSAL_SOURCE_FREEZE_V1",
+  "proposal_only": true,
+  "source_only": true,
+  "current": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "shared_banking_owner_change_proposed": true,
+  "shared_banking_owner_change_approved": false,
+  "canonical_source_modified": false,
+  "mounted": false,
+  "native_proof": false,
+  "artifact_count": 13,
+  "artifacts": [
+    {
+      "file": "COMPLETE_SHARED_EXTRACTION_AND_REVERSES.json",
+      "bytes": 45670,
+      "sha256": "464c6072ee521d08bc81b103c1d4a9e4873e6bff54c7ce032c5417f6deb2bb93"
+    },
+    {
+      "file": "CURRENT_NATIVE_CALL_ONLY_DEPENDENCY_PINS.json",
+      "bytes": 6129,
+      "sha256": "f3e3910f770680ea4843cb0351a275629341da64c67b4d78a720ea98acf38fad"
+    },
+    {
+      "file": "REVIEW_PROPOSAL.md",
+      "bytes": 7316,
+      "sha256": "ada3a8bb96c40e3813a82a8e942589d2fde5b15f75c5d358d1b75b903deef9fe"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1856,
+      "sha256": "4996eef413ef03f526f5bc95292c3bc3a07148fe003e0399b5c51ac87a2d5b32"
+    },
+    {
+      "file": "before/01_complete_public_paid_page.sqlinc",
+      "bytes": 47617,
+      "sha256": "5227081f2bc136a4dd29395057610a0c94e205ee9d9f6945d6fdfc24f54d6535"
+    },
+    {
+      "file": "before/04_complete_frozen_keep_context.sqlinc",
+      "bytes": 20324,
+      "sha256": "b6328f6f2ed70e3c6c47a1d924a866ac30d0db420e39ab2a7795b48bbc16c4bd"
+    },
+    {
+      "file": "build-shared-proposal.mjs",
+      "bytes": 9043,
+      "sha256": "709afc91e80016eaf6699e4f082a84865cbd55305fe781e0c00f789acacfb418"
+    },
+    {
+      "file": "forward/01_complete_native_paid_kernel.sqlinc",
+      "bytes": 47578,
+      "sha256": "e62c876b85eeb8b883be6003ac484aa459b8f5c92b8860af5f5578d70491a8bf"
+    },
+    {
+      "file": "forward/02_complete_public_admin_wrapper.sqlinc",
+      "bytes": 9078,
+      "sha256": "5c44dee04fe6b788e9ad5bc9b18cd49728feb2ffcd740456316535eab5ffb572"
+    },
+    {
+      "file": "forward/03_source_purpose_components_page.sqlinc",
+      "bytes": 8139,
+      "sha256": "73b3ab77f4f1667009b0731eba28e97053703693a5a1847aa3dd8b97c341f68a"
+    },
+    {
+      "file": "forward/04_complete_source_keep_context.sqlinc",
+      "bytes": 19554,
+      "sha256": "ad73cb33a890771f0dab30ac0c08473ef08c3dea5d03f9feded537274249e68b"
+    },
+    {
+      "file": "freeze-shared-proposal.mjs",
+      "bytes": 5792,
+      "sha256": "4ca26b5fff1f7f3a3ea4b1bd582e6ea9e01e809f4ad6bfe0bd3a7ea2623c31fa"
+    },
+    {
+      "file": "shared-proposal-source.test.mjs",
+      "bytes": 5882,
+      "sha256": "499a4b6de4455fd18cde42c215cab7480add1924b9d3907d811f76e498b418e5"
+    }
+  ]
+}

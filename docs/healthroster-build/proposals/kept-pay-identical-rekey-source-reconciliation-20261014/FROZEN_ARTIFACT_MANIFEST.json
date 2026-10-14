@@ -1,0 +1,342 @@
+{
+  "schema_version": "KEPT_PAY_REKEY_DESIGN_FROZEN_SOURCE_MANIFEST_V1",
+  "source_only": true,
+  "current_root_selected_sql_commit": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+  "primary_plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+  "artifact_count": 66,
+  "artifacts": [
+    {
+      "file": "DESIGN.md",
+      "bytes": 14811,
+      "sha256": "448153c407e1675996885e1f91e2bf2caabf3ebe80bdfc950a700ca0a6b297c9"
+    },
+    {
+      "file": "NATIVE_QUALIFICATION_PLAN.md",
+      "bytes": 3885,
+      "sha256": "f89dd8baf6a092bd4658f75c31c14cfd0d2b2ae2009cd6a3f066290d4aac64a7"
+    },
+    {
+      "file": "RECONCILIATION.md",
+      "bytes": 5626,
+      "sha256": "431578c5ebf59612195e47f7ded1e7fb59c27753a94795e622ee0e21cf58afef"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 879,
+      "sha256": "bbe144f11bb6125992a620320ea9b54e2e770cecb3ab26f076ee756eae18210a"
+    },
+    {
+      "file": "SOURCE_INPUTS_AND_OWNER_PINS.json",
+      "bytes": 52317,
+      "sha256": "934127b655014ddb011a0495efc2c688b09c3247c64ab80af41fbdb031e449a0"
+    },
+    {
+      "file": "STORE_COMPARISON.md",
+      "bytes": 5409,
+      "sha256": "6cd339b21529097af02c0fd182646ff97e6c264d625b9a94e5c57a25e3a8766a"
+    },
+    {
+      "file": "build-source-inputs.mjs",
+      "bytes": 7166,
+      "sha256": "4d09c1e8432d53f4616b548740e67e11e4b3992924a847efd10e82e919be79ee"
+    },
+    {
+      "file": "freeze-design.mjs",
+      "bytes": 3964,
+      "sha256": "8e2bba1a9d0f6df7c5037bebbed8b7040c952345e8b7eca064f12d00a58c80c7"
+    },
+    {
+      "file": "inputs/private._weekly_source_immutable_fact_guard_v1__.sqlinc",
+      "bytes": 1224,
+      "sha256": "33b948bf27a27436371979421ab2c5158223b2c999def1a904ed5bb1206f687f"
+    },
+    {
+      "file": "inputs/private._weekly_source_immutable_record_guard_v1__.sqlinc",
+      "bytes": 482,
+      "sha256": "307506a79826574d170f921a6d3849facee2fa6c632423fad50209be5be9e220"
+    },
+    {
+      "file": "inputs/private.weekly_source_accepted_publication_action_record_v1_jsonb_jsonb_jsonb_.sqlinc",
+      "bytes": 9756,
+      "sha256": "ee6221706dfde3e9aa610d67825d3cb1a589beac7e7d4c881e1cefddad47f46c"
+    },
+    {
+      "file": "inputs/private.weekly_source_accepted_publication_actions_v1.table.sqlinc",
+      "bytes": 2737,
+      "sha256": "875a4a842fb0338813e86198e2b901966d44ceae216abcf97ea37f736ffbaa1f"
+    },
+    {
+      "file": "inputs/private.weekly_source_correct_final_prepared_context_v1_uuid_.sqlinc",
+      "bytes": 7266,
+      "sha256": "7187a5ad8fb51af32718d53cb592145878ce1862445079bf7fa19e95e5e5cc2a"
+    },
+    {
+      "file": "inputs/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5358,
+      "sha256": "4606d95fd36303235876f793f386ea07770b82c4d55feeb7ebfe624e3e4e4e22"
+    },
+    {
+      "file": "inputs/private.weekly_source_finalise_engine_v1_jsonb_uuid_boolean_.sqlinc",
+      "bytes": 103406,
+      "sha256": "562dea3af3dcb33bbced25818362caed65d9740d080c5e4fb8b3c1a45f2929eb"
+    },
+    {
+      "file": "inputs/private.weekly_source_finalise_engine_v1_jsonb_uuid_boolean_text_.sqlinc",
+      "bytes": 109794,
+      "sha256": "30b63fa323c5b1fcab25dde4bbb541d412a05280e18559762027ec64d8ed1267"
+    },
+    {
+      "file": "inputs/private.weekly_source_import_preparations.table.sqlinc",
+      "bytes": 535,
+      "sha256": "371189e385cae53283db45a456da2475eba9f09f8fb39873b64b32418886754c"
+    },
+    {
+      "file": "inputs/private.weekly_source_invoice_adjustment_authority_v1_uuid_uuid___.sqlinc",
+      "bytes": 4934,
+      "sha256": "c848d9f098f6ebae918b81ff8280c74577474b563ce339500ffa21822e95aead"
+    },
+    {
+      "file": "inputs/private.weekly_source_invoice_adjustment_line_valid_v1_uuid_uuid_.sqlinc",
+      "bytes": 3067,
+      "sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140"
+    },
+    {
+      "file": "inputs/private.weekly_source_invoice_adjustments_apply_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 6441,
+      "sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86"
+    },
+    {
+      "file": "inputs/private.weekly_source_is_import_authoritative_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 1589,
+      "sha256": "f6fd4692703449802d7b9e51596c0e2969def3f00a23d18e0ef64320a12afeab"
+    },
+    {
+      "file": "inputs/private.weekly_source_local_protected_decision_receipts.table.sqlinc",
+      "bytes": 1121,
+      "sha256": "81469446966f4c1592eb04ace9fec65d5457a8737153df1b4d02eaa38f8311e0"
+    },
+    {
+      "file": "inputs/private.weekly_source_lock_and_resolve_families_v1_uuid_uuid___text_uuid_text_.sqlinc",
+      "bytes": 903,
+      "sha256": "3eee83fd3b9b80f56c834e10d338421e2270ce0824512718ed522a290d60425a"
+    },
+    {
+      "file": "inputs/private.weekly_source_missing_scope_facts_v1_uuid_uuid_uuid_uuid_date_.sqlinc",
+      "bytes": 1369,
+      "sha256": "30d8fd3097cdfc3c597768ed84d90fd97c3bd634a6f815843ad703334c04fec7"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_invoice_movements_v1_uuid___.sqlinc",
+      "bytes": 3789,
+      "sha256": "0c472edf0ad3bee6a180030c875d85a1b47d6eaa3d964b99159c9f725062675f"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_lifecycle_phase_v1_uuid_jsonb_.sqlinc",
+      "bytes": 12595,
+      "sha256": "3be73f296a850f7ffcea07fddf20a862e46a0b1a723f4b82dfe2e8ad480e5a8d"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_next_paid_evidence_page_v1_uuid_uuid_text_uuid_jsonb_integer_.sqlinc",
+      "bytes": 5676,
+      "sha256": "13fc27196115f9d51167879c9124b6d378b6aa3c16e9ff1efa09c0d7a46e6c00"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_payment_progress_v1_uuid___.sqlinc",
+      "bytes": 2693,
+      "sha256": "043ddc51fe027ec4dfd9297a680a7666bad4fc3b0126fdc2b6ab7d903b69801c"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_rechecks.table.sqlinc",
+      "bytes": 733,
+      "sha256": "ddc36b66a70652bdd1bffa6347340966d9006c75e5a6f4426a6cc386171e4c53"
+    },
+    {
+      "file": "inputs/private.weekly_source_office_row_choices.table.sqlinc",
+      "bytes": 825,
+      "sha256": "513553af71435675a25627c19a6375436ddd0ca440dbcb5674003c252685e058"
+    },
+    {
+      "file": "inputs/private.weekly_source_ordinary_projection_active_movements_v1_uuid_uuid_.sqlinc",
+      "bytes": 12360,
+      "sha256": "47e534be7a621b29d92db76ba4a9ca229e812c1bb0e139ca45ae89014e1957fd"
+    },
+    {
+      "file": "inputs/private.weekly_source_ordinary_projection_current_segments_v1_uuid_uuid_.sqlinc",
+      "bytes": 6478,
+      "sha256": "7749c7cea40b43e0a6038675a7e8913e04cf4c21531f1cb2f126d4bfe065d230"
+    },
+    {
+      "file": "inputs/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "file": "inputs/private.weekly_source_protected_match_candidates_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 2494,
+      "sha256": "74cf86ded0e00edbc90747f98e2af684a81e221304677e659ddac52487c9be69"
+    },
+    {
+      "file": "inputs/private.weekly_source_rebill_movement_insert_v1_uuid_uuid_.sqlinc",
+      "bytes": 7573,
+      "sha256": "f66e40525590bb56bb2617e08c34e77c1b49fb856f2e8b8f0f58cebbc25c56ea"
+    },
+    {
+      "file": "inputs/private.weekly_source_self_bill_report_projection_rows_v1_uuid_uuid_jsonb_.sqlinc",
+      "bytes": 1958,
+      "sha256": "8b8e6d3b6b36a758ddff1e50c9d95c6da715e8d603b4869d147f9167fcff257a"
+    },
+    {
+      "file": "inputs/private.weekly_source_self_bill_report_workspace_v1_jsonb_.sqlinc",
+      "bytes": 13478,
+      "sha256": "eb3faa481388078eb1f1ffaa0d6b25ebdd739619ba87d4a9d70f3fb64f2e3cb7"
+    },
+    {
+      "file": "inputs/private.weekly_source_settlement_allocation_v1_uuid_.sqlinc",
+      "bytes": 28505,
+      "sha256": "91fcc821a90b1a4af784ca37a3a7c1fc5de1aa296e29ae6fc097ff72a62d3a4b"
+    },
+    {
+      "file": "inputs/public.bpay_next_source_paid_evidence_page_v1_jsonb_.sqlinc",
+      "bytes": 47617,
+      "sha256": "5227081f2bc136a4dd29395057610a0c94e205ee9d9f6945d6fdfc24f54d6535"
+    },
+    {
+      "file": "inputs/public.weekly_source_combined_finalise_workspace_v1_jsonb_.sqlinc",
+      "bytes": 8396,
+      "sha256": "27c63805241360c13f3837c146ca78118586e66cab963e1a751dd3a304d60f82"
+    },
+    {
+      "file": "inputs/public.weekly_source_combined_review_workspace_v1_jsonb_.sqlinc",
+      "bytes": 31599,
+      "sha256": "3b9baf4b87f77794d35567da4bb1a101da90fa9b7e2465e88f956b0df8dfa8a9"
+    },
+    {
+      "file": "inputs/public.weekly_source_correct_final_prepare_atomic_v1_jsonb_.sqlinc",
+      "bytes": 16406,
+      "sha256": "640b54c2e5d8fe6c5a325c7219d89466bb42d13374a37de399eb68aed1b8fef5"
+    },
+    {
+      "file": "inputs/public.weekly_source_entitlement_decision_bundles.table.sqlinc",
+      "bytes": 4410,
+      "sha256": "f3b1d18a73b7aef88200c1120bd945f049686278727acf8602821115d9fd35a0"
+    },
+    {
+      "file": "inputs/public.weekly_source_entitlement_head_components.table.sqlinc",
+      "bytes": 2085,
+      "sha256": "239bc37b2bffaa833208e43dd77628e2d5336d2b1bfce9f49a46a68b25bd4700"
+    },
+    {
+      "file": "inputs/public.weekly_source_entitlement_heads.table.sqlinc",
+      "bytes": 3661,
+      "sha256": "447dd4cb34951c0c03ca030b777744468bd1984f03cb2da2c756f221b79e2d7d"
+    },
+    {
+      "file": "inputs/public.weekly_source_final_snapshot_lines.table.sqlinc",
+      "bytes": 2339,
+      "sha256": "9e50a6c8c373519ec4e0a88eec9af5c1100b58f716e470ce6f75d39d238410b8"
+    },
+    {
+      "file": "inputs/public.weekly_source_finalise_atomic_v1_jsonb_.sqlinc",
+      "bytes": 299,
+      "sha256": "915a3acc3b908a9a4e54fcb6af9fc0415652e94c1d37dd5b44c3e0d06171f0cd"
+    },
+    {
+      "file": "inputs/public.weekly_source_import_prepare_atomic_v1_jsonb_.sqlinc",
+      "bytes": 4919,
+      "sha256": "c1dbd0a38a34f847154cfce4043471d5d115245cb625ebc194bb4177797f2080"
+    },
+    {
+      "file": "inputs/public.weekly_source_later_change_decide_atomic_v1_jsonb_.sqlinc",
+      "bytes": 23746,
+      "sha256": "fab3a5495afc3a54d15891c9f1f65a028b4db09ba6d9daeb7b0257ed8c3425bb"
+    },
+    {
+      "file": "inputs/public.weekly_source_office_authorise_scope_v1_jsonb_.sqlinc",
+      "bytes": 2931,
+      "sha256": "b1f684162fbf34fa892fd14a395e1534e01f1b793693ec924ef793cfe6d0deb8"
+    },
+    {
+      "file": "inputs/public.weekly_source_office_recheck_begin_v1_jsonb_.sqlinc",
+      "bytes": 11738,
+      "sha256": "9ebd15c5a40ab2352973074df53b952974cf6c3fbbeb053662ddd039f7663396"
+    },
+    {
+      "file": "inputs/public.weekly_source_office_workspace_v1_jsonb_.sqlinc",
+      "bytes": 117954,
+      "sha256": "34c7d3818727929bc66e8257aacf26df71844b1140ad6a28c438c302dd53fa98"
+    },
+    {
+      "file": "inputs/public.weekly_source_projection_publications.table.sqlinc",
+      "bytes": 2059,
+      "sha256": "16bb6a28c15ff3b436bf2b626822483bc3691e5f7e9cb287bba8de42ff05cf59"
+    },
+    {
+      "file": "inputs/public.weekly_source_projection_rows_apply_atomic_v1_uuid_uuid_jsonb_.sqlinc",
+      "bytes": 67447,
+      "sha256": "a03883d889e614ea7c72cdd2cdd13cf6a2b39cf8f8259e49dfd8160eeb88b689"
+    },
+    {
+      "file": "inputs/public.weekly_source_root_authorisations.table.sqlinc",
+      "bytes": 2583,
+      "sha256": "b3206638c557f5cdbf98cbedf8eaf5c51d07edc9056fd33ea0bec2610d80a020"
+    },
+    {
+      "file": "inputs/public.weekly_source_row_resolutions.table.sqlinc",
+      "bytes": 2702,
+      "sha256": "da8f64510dede0ae6ba49cf3d4e004b7b429557c975f56e19ac1fd89ffb64f5c"
+    },
+    {
+      "file": "inputs/public.weekly_source_self_bill_report_line_bindings.table.sqlinc",
+      "bytes": 1018,
+      "sha256": "9ef730838ed0eb9bf5e6d0f51665674d8da4a56db9a953f15e019291b1da7af8"
+    },
+    {
+      "file": "inputs/public.weekly_source_state_transitions.table.sqlinc",
+      "bytes": 2090,
+      "sha256": "49d71fc71afb12bed90327a2720e95874c67fee2c398594fe48b8ba6e2ceb6af"
+    },
+    {
+      "file": "inputs/public.weekly_source_upload_context_v1_jsonb_.sqlinc",
+      "bytes": 27420,
+      "sha256": "c0c4dad0e0445c98a45a59e9e6c5956abe6716d69bcda9ce7a3ca5e83cf8835b"
+    },
+    {
+      "file": "inputs/public.weekly_source_upload_rows.table.sqlinc",
+      "bytes": 2913,
+      "sha256": "f8fa927f8dc32e2ab4078eccc4ae532f56d65a1bd19df62413fbbd936b3406e2"
+    },
+    {
+      "file": "inputs/public.weekly_source_uploads.table.sqlinc",
+      "bytes": 4205,
+      "sha256": "3a39f0a62c2dbd402cdd32ffd71c00c9e1af4106272ba67c989e60a1c8193e59"
+    },
+    {
+      "file": "inputs/public.weekly_work_events.table.sqlinc",
+      "bytes": 1048,
+      "sha256": "868242d8d58cdc9568bb3a5f879a7ed30343784225cf99b27a81ba5e66532fbd"
+    },
+    {
+      "file": "inputs/routes.js",
+      "bytes": 62448,
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53"
+    },
+    {
+      "file": "inputs/rule-set-validation.js",
+      "bytes": 10329,
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "file": "inputs/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    }
+  ],
+  "implementation_sql_or_runtime_change": false,
+  "native_and_catalogue_qualification": false,
+  "review_scope": "Missing planned source reconciliation, closest existing store comparison, precise source design only. All actual native and separate code acceptance gates held."
+}

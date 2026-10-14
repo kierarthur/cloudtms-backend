@@ -1,0 +1,57 @@
+create or replace function private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id uuid,p_binding_ids uuid[] default null)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare inv public.invoices%rowtype; v_ids uuid[]; v_count integer; v_rates integer; v_null_rates integer;
+  v_rate numeric; v_records jsonb; v_payload jsonb; v_group uuid; v_versions uuid[];
+begin
+  select * into inv from public.invoices where id=p_invoice_id;
+  if not found or inv.type::text is distinct from 'INVOICE'
+    or inv.header_snapshot_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+    or inv.header_snapshot_json#>>'{meta,source}' is distinct from 'WEEKLY_FINAL_SOURCE' then
+    return jsonb_build_object('allowed',false); end if;
+  if pg_input_is_valid(inv.header_snapshot_json#>>'{meta,source_group_id}','uuid') is distinct from true then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;
+  v_group:=(inv.header_snapshot_json#>>'{meta,source_group_id}')::uuid;
+  if p_binding_ids is null then
+    select array_agg(id order by id) into v_ids from public.weekly_source_invoice_line_bindings where invoice_id=inv.id and state='CURRENT';
+  else
+    if cardinality(p_binding_ids)=0 or array_position(p_binding_ids,null::uuid) is not null then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;
+    select array_agg(distinct id order by id) into v_ids from unnest(p_binding_ids) id;
+  end if;
+  if v_ids is null or cardinality(v_ids)=0 then return jsonb_build_object('allowed',false); end if;
+  -- CURRENT proves new edit admission. A sealed existing adjustment can retain
+  -- its exact SUPERSEDED binding history after an ordinary Source move; it
+  -- never follows the movement to another invoice or chooses a new tax rate.
+  select count(*) into v_count from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    join public.weekly_source_final_revisions revision on revision.id=binding.original_final_revision_id and revision.id=movement.final_revision_id
+    join public.weekly_source_cycles cycle on cycle.id=binding.original_cycle_id and cycle.id=revision.source_cycle_id
+    join public.weekly_source_rule_set_versions rules on rules.id=revision.rule_set_version_id
+    where binding.id=any(v_ids) and binding.invoice_id=inv.id and binding.state in('CURRENT','SUPERSEDED')
+      and binding.client_id=inv.client_id and movement.actual_client_id=inv.client_id and cycle.source_group_id=v_group
+      and rules.values_json->>'invoice_sender'='CLIENT_SELF_BILL'
+      and rules.values_json->>'negative_adjustment_policy'='NEGATIVE_ADJUSTMENT_LINE';
+  if v_count<>cardinality(v_ids) then return jsonb_build_object('allowed',false); end if;
+  select count(distinct movement.vat_rate_pct),count(*) filter(where movement.vat_rate_pct is null),min(movement.vat_rate_pct)
+    into v_rates,v_null_rates,v_rate from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    where binding.id=any(v_ids) and movement.source_line_kind<>'INVOICE_VAT_ROUNDING';
+  if v_rates<>1 or v_null_rates<>0 or v_rate is null or v_rate<0 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_VAT_UNAVAILABLE' using errcode='55000'; end if;
+  select jsonb_agg(jsonb_build_object('binding_id',binding.id,'movement_id',movement.id,
+      'final_revision_id',revision.id,'source_cycle_id',cycle.id,'manifest_hash',encode(binding.manifest_hash,'hex'),
+      'rule_set_version_id',rules.id,'rule_values_sha256',rules.values_sha256,'vat_rate_pct',movement.vat_rate_pct) order by binding.id),
+    array_agg(distinct rules.id order by rules.id) into v_records,v_versions
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    join public.weekly_source_final_revisions revision on revision.id=binding.original_final_revision_id
+    join public.weekly_source_cycles cycle on cycle.id=binding.original_cycle_id
+    join public.weekly_source_rule_set_versions rules on rules.id=revision.rule_set_version_id where binding.id=any(v_ids);
+  v_payload:=jsonb_build_object('schema_version','WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_V1','allowed',true,
+    'invoice_id',inv.id,'client_id',inv.client_id,'source_group_id',v_group,'binding_ids',to_jsonb(v_ids),
+    'rule_set_version_ids',to_jsonb(v_versions),'vat_rate_pct',v_rate,'bound_movements',v_records);
+  return v_payload||jsonb_build_object('authority_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_V1',v_payload),'hex'));
+end;
+$function$;

@@ -1,0 +1,123 @@
+-- Primary03 section6.1: a native exact prior identity, never a schedule fallback.
+create or replace function private.weekly_source_identical_rekey_prior_v1(p_upload_row_id uuid)
+returns uuid language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_row public.weekly_source_upload_rows%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_choice private.weekly_source_office_row_choices%rowtype;
+  v_client uuid; v_candidate uuid; v_candidates uuid[];
+  v_source_name text; v_source_id text; v_source_id_2 text; v_source_id_3 text;
+  v_source_client text; v_norm_name text; v_norm_compact text;
+  v_count bigint; v_prior uuid;
+begin
+  if p_upload_row_id is null then return null; end if;
+  select * into v_row from public.weekly_source_upload_rows where id=p_upload_row_id;
+  if not found then return null; end if;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  if not v_profile.active or v_profile.version<>1
+    or not exists(select 1 from public.weekly_source_groups g where g.id=v_cycle.source_group_id and g.active and g.source_family='ROSTER')
+    or v_upload.report_scope_id is not null
+    or v_upload.state not in ('CURRENT','CORRECTION_READY') or v_upload.row_manifest_hash is null
+    or v_upload.coverage_state is distinct from 'COMPLETE' or v_upload.coverage_timezone is distinct from 'Europe/London'
+    or v_upload.confirmed_coverage_start_local_date is null or v_upload.confirmed_coverage_end_local_date is null
+    or v_row.work_date not between v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date
+    or nullif(btrim(v_row.external_source_key),'') is null or v_row.row_finalisation_state is distinct from 'SOURCE_WORKED'
+    or v_row.start_at_local is null or v_row.end_at_local is null or v_row.end_at_local<=v_row.start_at_local
+    or v_row.break_minutes is null or v_row.actual_net_minutes is null or v_row.actual_net_minutes<=0 then return null; end if;
+
+  -- Real profile/normalizer ownership differs: HealthRoster requires literal
+  -- finaliser indicators; a generic summary is a complete-file snapshot.
+  if v_profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1') then
+    if v_profile.final_authority_kind is distinct from 'HEALTHROSTER_ACTUAL_ROWS'
+      or v_profile.row_finalisation_capability is distinct from 'FINALISED_ROW_ONLY'
+      or nullif(btrim(v_row.finalised_by),'') is null
+      or v_row.bounded_raw_columns_json->>'finalised_by' is distinct from v_row.finalised_by then return null; end if;
+  elsif v_profile.profile_code='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' then
+    if v_profile.final_authority_kind is distinct from 'GENERIC_COMPLETE_SNAPSHOT'
+      or v_profile.row_finalisation_capability is distinct from 'COMPLETE_FILE_ROWS' then return null; end if;
+  else return null; end if;
+
+  if exists(select 1 from public.weekly_work_events e
+    where e.first_source_group_id=v_cycle.source_group_id and e.source_format_profile_id=v_profile.id
+      and e.identity_kind='PROFILE_EXTERNAL_KEY' and e.profile_external_key=v_row.external_source_key) then return null; end if;
+
+  select * into v_choice from private.weekly_source_office_row_choices
+    where upload_row_id=v_row.id order by id desc limit 1;
+  -- BUILD_PROJECTION's actual upload Client hint is first authority, including
+  -- its existing sole-membership fallback. An Office row choice is explicit.
+  begin v_client:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+  exception when invalid_text_representation then return null; end;
+  if v_client is null then
+    select count(*),min(gc.client_id::text)::uuid into v_count,v_client
+    from public.weekly_source_group_clients gc join public.clients c on c.id=gc.client_id
+    where gc.source_group_id=v_cycle.source_group_id and v_cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date);
+    if v_count<>1 then v_client:=null; end if;
+  end if;
+  if v_choice.client_id is not null then v_client:=v_choice.client_id; end if;
+  if v_client is null or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_client)
+    or not private.weekly_source_upload_client_eligible_v1(v_upload.id,v_client,v_row.work_date)
+    or not exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=v_cycle.source_group_id
+      and gc.client_id=v_client and v_cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)) then return null; end if;
+
+  -- These literal saved-identity comparisons are the current upload-context
+  -- comparisons, not a new Candidate name/key normalization authority.
+  v_source_name:=nullif(btrim(coalesce(v_row.bounded_raw_columns_json->>'worker_name',v_row.bounded_raw_columns_json->>'candidate',v_row.source_candidate_identity)),'');
+  v_source_id:=nullif(btrim(coalesce(v_row.bounded_raw_columns_json->>'worker_unique_id',v_row.bounded_raw_columns_json->>'candidate_id','')),'');
+  v_source_id_2:=nullif(btrim(coalesce(v_row.bounded_raw_columns_json->>'candidate_uid','')),'');
+  v_source_id_3:=nullif(btrim(coalesce(v_row.bounded_raw_columns_json->>'payroll_number','')),'');
+  v_source_client:=nullif(btrim(coalesce(v_row.bounded_raw_columns_json->>'trust',v_row.source_client_identity)),'');
+  v_norm_name:=lower(regexp_replace(btrim(coalesce(v_source_name,'')),'[[:space:]]+',' ','g'));
+  v_norm_compact:=regexp_replace(v_norm_name,'[^a-z0-9]+','','g');
+  select coalesce(array_agg(candidate_id order by candidate_id),'{}'::uuid[]) into v_candidates from (
+    select distinct c.id candidate_id from public.candidates c where c.active and (
+      (v_source_id is not null and lower(btrim(c.tms_ref))=lower(v_source_id))
+      or (v_source_id_2 is not null and lower(btrim(c.tms_ref))=lower(v_source_id_2))
+      or (v_source_id_3 is not null and lower(btrim(c.tms_ref))=lower(v_source_id_3))
+      or exists(select 1 from jsonb_array_elements_text(case when jsonb_typeof(c.nhsp_hr_name_aliases)='array' then c.nhsp_hr_name_aliases else '[]'::jsonb end) alias(value)
+        where lower(btrim(alias.value))=v_norm_name or regexp_replace(lower(alias.value),'[^a-z0-9]+','','g')=v_norm_compact)
+      or exists(select 1 from public.hr_name_mappings m where m.active and m.candidate_id=c.id
+        and (lower(btrim(m.hr_name_norm))=v_norm_name or regexp_replace(lower(m.hr_name_norm),'[^a-z0-9]+','','g')=v_norm_compact)
+        and (nullif(btrim(coalesce(m.hospital_or_trust,'')),'') is null or lower(btrim(m.hospital_or_trust))=lower(btrim(coalesce(v_source_client,'')))))
+    )
+  ) saved;
+  if v_choice.candidate_id is not null then
+    select coalesce(array_agg(id),'{}'::uuid[]) into v_candidates from public.candidates where id=v_choice.candidate_id and active;
+  end if;
+  if cardinality(v_candidates)<>1 then return null; end if;
+  v_candidate:=v_candidates[1];
+
+  select count(*),min(e.id::text)::uuid into v_count,v_prior
+  from public.weekly_work_events e
+  join lateral(select r.* from public.weekly_source_row_resolutions r where r.work_event_id=e.id and r.mapping_state='RESOLVED'
+    order by r.created_at_utc desc,r.id desc limit 1) prior on true
+  join public.weekly_source_upload_rows old_row on old_row.id=prior.upload_row_id
+  join public.contracts contract on contract.id=prior.contract_id and contract.candidate_id=v_candidate and contract.client_id=v_client
+    and v_row.work_date between contract.start_date and coalesce(contract.end_date,'infinity'::date)
+  where e.first_source_group_id=v_cycle.source_group_id and e.source_format_profile_id=v_profile.id
+    and e.identity_kind='PROFILE_EXTERNAL_KEY' and e.candidate_id=v_candidate and e.client_id=v_client
+    and prior.candidate_id=v_candidate and prior.client_id=v_client
+    and e.work_date=v_row.work_date and old_row.work_date=v_row.work_date
+    and old_row.start_at_local is not distinct from v_row.start_at_local
+    and old_row.end_at_local is not distinct from v_row.end_at_local
+    and old_row.break_minutes is not distinct from v_row.break_minutes
+    and (v_choice.contract_id is null or prior.contract_id=v_choice.contract_id)
+    and not exists(select 1 from public.weekly_source_upload_rows in_file
+      where in_file.upload_id=v_upload.id and in_file.external_source_key=e.profile_external_key);
+  if v_count>1 then
+    raise exception 'WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS' using errcode='55000',
+      detail=jsonb_build_object('upload_row_id',v_row.id,'source_row_ordinal',v_row.source_row_ordinal,
+        'candidate_id',v_candidate,'client_id',v_client,'work_date',v_row.work_date,
+        'identical_prior_work_event_count',v_count)::text;
+  end if;
+  if v_count=0 then return null; end if;
+  return v_prior;
+end;
+$function$;
+alter function private.weekly_source_identical_rekey_prior_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_identical_rekey_prior_v1(uuid) from public,anon,authenticated,service_role;
