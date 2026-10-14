@@ -1,0 +1,31 @@
+{
+  "schema": "AGENCY_SUPERSEDED_LEGACY_OVERRIDE_NATIVE_FIRST_USE_CASE_V1",
+  "source_only": true,
+  "native_executed": false,
+  "actual_case_held": true,
+  "fixture_authority": "Root-owned genuine same-installed TEST fixture, managed actor/session/turn and qualification protocol",
+  "required_actual_inputs": [
+    "Authentic historical LEGACY timesheet_validations row for the exact original T0, with its existing confirmed override timestamps, actors and reason",
+    "Genuine current native APPLIED reversal/replacement pair and whole chain identity, actual T0/R0/P0 rows and main Contract-week",
+    "Current real accepted/ticked coverage and finalised Source publication, upload and actor",
+    "Current genuine roles, READ COMMITTED session, complete family/Source38 authority and exact installed contract"
+  ],
+  "actions": [
+    "Capture the complete actual original validation row and existing native override audit before the call; no direct table fixture or invented prior override",
+    "Call public.weekly_source_agency_week_validation_refresh_v1 with the actual main Timesheet and actual publication IDs through the real service owner",
+    "Read the genuine writer result, complete T0/R0/P0 validation rows and matching native AGENCY_SUPERSEDED_VALIDATION_OVERRIDE_RETIRED audit",
+    "Replay the same actual native call after real postconditions still hold and inspect audit/queue deltas"
+  ],
+  "assertions": [
+    "Superseded T0 and native R0 have VALIDATION_ERROR/SUPERSEDED_BY_CORRECTION with genuine AGENCY_INVOICE_WEEK/publication/hash/actor, last_source SQL NULL, and current override authority fields SQL NULL",
+    "The first native retirement audit before_json exactly preserves the actual original override metadata and original actors/timestamps/reason; override_cleared_at_utc is the real server timestamp",
+    "The unchanged native guard still refuses any new preset override; the helper did not waive it",
+    "Genuine invoiceable replacement/current records receive the actual complete-week result and unchanged native wakeup protocol",
+    "Replay creates no second override-retirement audit because the old current override fields are already cleared",
+    "Native approval, original paid marker/cash, physical original identity, invoice/document history and unrelated records retain their actual expected invariants"
+  ],
+  "evidence_not_supplied": [
+    "No identifiers, actor, role, compiled contract, native result, qualification receipt or runtime observations are asserted by this source case",
+    "The pure tests inspect actual source transport and the guard/audit assignments; they do not execute this native case"
+  ]
+}

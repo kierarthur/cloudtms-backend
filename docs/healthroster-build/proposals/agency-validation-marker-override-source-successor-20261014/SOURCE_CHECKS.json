@@ -1,0 +1,21 @@
+{
+  "schema": "AGENCY_MARKER_OVERRIDE_SUCCESSOR_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "predecessor": "944b55afa58b3fa8c497f1745c72630ae8de27ab",
+  "preserved_frozen_files": 37,
+  "saved_git_mismatches": 0,
+  "unit_only_cases": 24,
+  "syntax_files": 2,
+  "sql_lexical_statements": 9,
+  "whole_owner_reversals": 2,
+  "reverse_hunks": 17,
+  "static_objects": 138,
+  "static_relative_edges": 220,
+  "sql_compiled": false,
+  "native_superseded_override_case_executed": false,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null,
+  "independent_review_pending": true,
+  "mount_ready": false
+}

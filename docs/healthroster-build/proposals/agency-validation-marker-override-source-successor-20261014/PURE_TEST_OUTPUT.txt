@@ -1,0 +1,32 @@
+✔ UNIT_ONLY actual normal covering publication, no ACTIVE request, fetched typed HOURS_DIFFER (19.8111ms)
+✔ UNIT_ONLY actual normal covering publication, no ACTIVE request, fetched typed COVERAGE_MISSING (12.7199ms)
+✔ UNIT_ONLY actual normal covering publication, no ACTIVE request, fetched typed PROTECTED_SHIFT_WAITING (11.0241ms)
+✔ UNIT_ONLY actual normal covering publication, no ACTIVE request, fetched typed CORRECTION_PENDING (11.4706ms)
+✔ UNIT_ONLY actual normal generic Authorise, no ACTIVE request, fetched typed HOURS_DIFFER (12.4122ms)
+✔ UNIT_ONLY actual normal generic Authorise, no ACTIVE request, fetched typed COVERAGE_MISSING (12.328ms)
+✔ UNIT_ONLY actual normal generic Authorise, no ACTIVE request, fetched typed PROTECTED_SHIFT_WAITING (13.3163ms)
+✔ UNIT_ONLY actual normal generic Authorise, no ACTIVE request, fetched typed CORRECTION_PENDING (11.716ms)
+✔ UNIT_ONLY actual fetched AGENCY_INVOICE_WEEK/VALIDATION_OK/null caller control (6.3186ms)
+✔ UNIT_ONLY actual fetched AGENCY_INVOICE_WEEK/OVERRIDDEN/null caller control (6.0149ms)
+✔ UNIT_ONLY actual fetched LEGACY/OVERRIDDEN/null caller control (12.5561ms)
+✔ UNIT_ONLY actual fetched LEGACY/VALIDATION_ERROR/HEALTHROSTER_WEEKLY_HOURS_DIFFER caller control (11.377ms)
+✔ UNIT_ONLY actual fetched LEGACY/VALIDATION_ERROR/HOURS_DIFFER caller control (10.5243ms)
+✔ UNIT_ONLY actual map keeps another Timesheet marker out of this normal queue target (6.2743ms)
+✔ UNIT_ONLY actual normal typed caller preserves not-authorised readiness (5.9387ms)
+✔ UNIT_ONLY complete actual cached imported builder forwards the native normal marker (6.8125ms)
+✔ UNIT_ONLY whole current enrichment AGENCY_INVOICE_WEEK override keeps its actual authority (2.7143ms)
+✔ UNIT_ONLY whole current enrichment LEGACY override keeps its actual authority (0.8307ms)
+✔ UNIT_ONLY superseded current native source clears authority fields before unchanged override guard (1.2737ms)
+✔ UNIT_ONLY full enrichment LEGACY preserves legacy provided-status semantics and fresh typed status (0.9384ms)
+✔ UNIT_ONLY full enrichment AGENCY_INVOICE_WEEK preserves legacy provided-status semantics and fresh typed status (0.6963ms)
+✔ UNIT_ONLY actual normal typed marker reaches rebuildFromExistingSegmentsEvidence readiness (8.9495ms)
+✔ UNIT_ONLY actual normal typed marker reaches buildNhspWeeklySnapshot readiness (9.3879ms)
+✔ UNIT_ONLY both full owners reverse byte-exactly to immutable37 (290.4541ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 748.0837
