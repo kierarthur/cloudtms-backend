@@ -1,0 +1,41 @@
+{
+  "review_commit": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+  "before": [
+    {
+      "packet": "paid-match-retained-current-capture-construction-20261014",
+      "artifacts": 21,
+      "manifest_sha256": "59e80944ceb41c73b037a1fe0b6fbe1e43aafbeb6aa57345ea8c6c00fa521af7"
+    },
+    {
+      "packet": "paid-match-prepared-empty-census-successor-20261014",
+      "artifacts": 16,
+      "manifest_sha256": "21d298531038df238de4fd6fadd534459052c1d07598454f50c0475dc40056a5"
+    }
+  ],
+  "after": [
+    {
+      "packet": "paid-match-retained-current-capture-construction-20261014",
+      "artifacts": 21,
+      "manifest_sha256": "59e80944ceb41c73b037a1fe0b6fbe1e43aafbeb6aa57345ea8c6c00fa521af7"
+    },
+    {
+      "packet": "paid-match-prepared-empty-census-successor-20261014",
+      "artifacts": 16,
+      "manifest_sha256": "21d298531038df238de4fd6fadd534459052c1d07598454f50c0475dc40056a5"
+    }
+  ],
+  "runs": [
+    {
+      "packet": "paid-match-retained-current-capture-construction-20261014",
+      "exit_code": 0,
+      "output_sha256": "3db6905573018f199eb24d08b660b50549af6d0ffff7d9cc2e7281b697782793"
+    },
+    {
+      "packet": "paid-match-prepared-empty-census-successor-20261014",
+      "exit_code": 0,
+      "output_sha256": "570ac809460d45b83a107b8cfb352d6456537f02ad221555cd6f63786bf03537"
+    }
+  ],
+  "source_only": true,
+  "native_proof": false
+}

@@ -1,0 +1,17 @@
+✔ five full selected owners reverse through eight unique hunks (4.5331ms)
+✔ source counterexample keeps actual original movement separate from latest NO_CHANGE snapshot (1.3723ms)
+✔ actual maintained selected-transition/snapshot map replaces independent latest ranking (0.5026ms)
+✔ genuine excluded missing pay basis retains false export presence rather than creating a new source row (0.4446ms)
+✔ unknown current snapshot remains a blocking factual overlap, not dropped or paid-false (0.9815ms)
+✔ retained NONE transition binds the complete actual B set, original NORMAL pay identity and raw clinical tuple (0.488ms)
+✔ retained journal/audit and current finaliser provenance is exact, never a guessed current reader (0.4492ms)
+✔ shared capture reproof precedes existing map and leaves ordinary/absence/cash/mapping branches exact (0.6575ms)
+✔ two new helpers are owner-only and create no business state/classifier or money (0.864ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 140.139

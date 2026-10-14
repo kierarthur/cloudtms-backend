@@ -1,0 +1,16 @@
+✔ three complete owners reverse five unique hunks to exact frozen Prepared17 (3.5939ms)
+✔ actual helper no longer returns on stored empty before real discovery (0.7641ms)
+✔ source-selected whole-census predicate catches empty additions, removal and mutation (0.4588ms)
+✔ prepared CYCLE calls actual recheck even for empty while native NHSP empty remains unchanged (0.6795ms)
+✔ apply empty proof remains after genuine root refusals before first COMMITTING and after replay (0.472ms)
+✔ optional empty DTO shape and exact actor/session/publication/CURRENT choice checks stay intact (0.5855ms)
+✔ current legal-path source pins prove ordinary/correction boundary without manufacturing a late choice (0.8772ms)
+✔ finite existing signatures and owner ACL contain no new writer or financial authority (1.7606ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 140.5545

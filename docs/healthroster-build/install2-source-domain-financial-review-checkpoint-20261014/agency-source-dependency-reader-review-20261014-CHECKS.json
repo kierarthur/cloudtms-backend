@@ -1,0 +1,15 @@
+{
+  "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+  "before": {
+    "artifacts": 19,
+    "manifest_sha256": "ada4acd2235b44406d65e59fce61664f075dcfaa1984dbabb1af4d5865eb3019"
+  },
+  "after": {
+    "artifacts": 19,
+    "manifest_sha256": "ada4acd2235b44406d65e59fce61664f075dcfaa1984dbabb1af4d5865eb3019"
+  },
+  "exit_code": 0,
+  "output_sha256": "a4be1eaa8b816e4b64582463e5236e673ded31166f1185f135c87a4cfacc03e1",
+  "source_only": true,
+  "native": false
+}

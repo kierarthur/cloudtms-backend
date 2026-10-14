@@ -1,0 +1,17 @@
+✔ two complete proposed owners reverse exactly to current A0 Git inputs (138.5885ms)
+✔ source manifest retains every raw construction byte (2.3009ms)
+✔ closed new identities are typed actual objects/pairs/singleton and native date coverage (0.5582ms)
+✔ original eight-domain path delegates once with original ABI and no Source selector (0.7908ms)
+✔ coverage schema uses one arbiter, opposite intent classes and exact retained uniqueness (0.4475ms)
+✔ UNIT_ONLY selected exclusion predicates distinguish disjoint dates and do not merge retained scopes (0.2755ms)
+✔ ordinary coverage deletes only own actual transaction range; timeout restores on either exit (0.4302ms)
+✔ new Source shape validates before scalar acquisition and range phases follow scalar identities (0.3667ms)
+✔ four construction leaves scan with no client SQL or executable database harness (2.7757ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 278.5738

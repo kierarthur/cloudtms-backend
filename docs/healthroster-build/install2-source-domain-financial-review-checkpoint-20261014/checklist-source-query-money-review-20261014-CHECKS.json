@@ -1,0 +1,19 @@
+{
+  "commit": "77eb654a72d32d88cd250e63535478495f7f5429",
+  "before": {
+    "artifacts": 107,
+    "source_pins": 183,
+    "manifest_sha256": "39b2c4f9aa37b35bf551ab56a1f7158b740e825b54b50b8b104dfa0ee782f770",
+    "pins_sha256": "eaab378082acc539e4304a7c02ec59b32b2923f2004ee4775cf8548e78ba6ca6"
+  },
+  "after": {
+    "artifacts": 107,
+    "source_pins": 183,
+    "manifest_sha256": "39b2c4f9aa37b35bf551ab56a1f7158b740e825b54b50b8b104dfa0ee782f770",
+    "pins_sha256": "eaab378082acc539e4304a7c02ec59b32b2923f2004ee4775cf8548e78ba6ca6"
+  },
+  "exit_code": 0,
+  "output_sha256": "d12c67e15e7358b535223b8a072f09d5a8366ba359b01282e15632ca327399fb",
+  "source_only": true,
+  "native_proof": false
+}

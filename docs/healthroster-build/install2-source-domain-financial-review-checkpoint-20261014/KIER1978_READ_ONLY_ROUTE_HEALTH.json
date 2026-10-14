@@ -1,0 +1,29 @@
+{
+  "source": "Actual native Kier1978 Operations tools in this session",
+  "recordedAt": "2026-10-14T22:38:09.602Z",
+  "parity": {
+    "accepted": true,
+    "authenticated": true,
+    "read_only": true,
+    "secrets_returned": false
+  },
+  "services": [
+    {
+      "database_label": "agency_test",
+      "service_id": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+      "service_label": "cloudtms-codex-poc-pg17",
+      "state": "healthy"
+    },
+    {
+      "database_label": "mytms_test",
+      "service_id": "01a03045-5d5a-7892-b555-704ba6edc733",
+      "service_label": "mytms-control-plane-pg17",
+      "state": "healthy"
+    }
+  ],
+  "observed_physical_database_names": false,
+  "native_rollback_tool_available": false,
+  "rollback_trial": false,
+  "SQL_executed": false,
+  "no_borrowed_route": true
+}

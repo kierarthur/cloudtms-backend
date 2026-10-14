@@ -1,0 +1,72 @@
+[
+  {
+    "file": "BUILD_AGENCY_SOURCE_DEPENDENCY_READER_CRITIC_14102026.md",
+    "bytes": 4066,
+    "sha256": "45dc8dc620627da84bacd1caf35f44ffc9f1426b3341b9a3b2ec9a4f1b04176f"
+  },
+  {
+    "file": "BUILD_CHECKLIST_SOURCE_QUERY_MONEY_CRITIC_14102026.md",
+    "bytes": 5921,
+    "sha256": "e7f840a1ab4ae409c75d8f1a47024b3270c4cb29a3c95dc6057c216cb2fc218c"
+  },
+  {
+    "file": "BUILD_MONEY_RETAINED_EMPTY_SOURCE_CRITIC_14102026.md",
+    "bytes": 4722,
+    "sha256": "92cf8e98ca7db90c69b917bd95d5f3c72517313e8961a812e00ef908a57dde9c"
+  },
+  {
+    "file": "BUILD_OFFICE_WORKSPACE_PAID_CALLER_UNION_CRITIC_14102026.md",
+    "bytes": 4640,
+    "sha256": "2627ea3792c1bb50e2ed1a5cbfe85218919bb720e73fa0c904bff2de9d26618c"
+  },
+  {
+    "file": "KIER1978_READ_ONLY_ROUTE_HEALTH.json",
+    "bytes": 802,
+    "sha256": "c59544b5bac45b61b03bd540901f13624e418d98a0170e8a314b4cbbcff07511"
+  },
+  {
+    "file": "agency-source-dependency-reader-review-20261014-CHECKS.json",
+    "bytes": 465,
+    "sha256": "a9ca8942a8212dfa71bc71b5b139da4a2e0785645f2cdb7018f7bb682b1f659e"
+  },
+  {
+    "file": "agency-source-dependency-reader-review-20261014-SOURCE_TEST_OUTPUT.txt",
+    "bytes": 4674,
+    "sha256": "a4be1eaa8b816e4b64582463e5236e673ded31166f1185f135c87a4cfacc03e1"
+  },
+  {
+    "file": "checklist-source-query-money-review-20261014-CHECKS.json",
+    "bytes": 695,
+    "sha256": "2b91bd530eae2b8c9306f9a00df4ea0e7b166c49460fd495c4d677529001fd48"
+  },
+  {
+    "file": "checklist-source-query-money-review-20261014-SOURCE_TEST_OUTPUT.txt",
+    "bytes": 14428,
+    "sha256": "d12c67e15e7358b535223b8a072f09d5a8366ba359b01282e15632ca327399fb"
+  },
+  {
+    "file": "money-retained-empty-source-review-20261014-CHECKS.json",
+    "bytes": 1371,
+    "sha256": "bf7e3ac002a20b8a0a06e59553475061fab6b647a9e632a8d473c9a24b2cc4f7"
+  },
+  {
+    "file": "money-retained-empty-source-review-20261014-paid-match-prepared-empty-census-successor-20261014.txt",
+    "bytes": 933,
+    "sha256": "570ac809460d45b83a107b8cfb352d6456537f02ad221555cd6f63786bf03537"
+  },
+  {
+    "file": "money-retained-empty-source-review-20261014-paid-match-retained-current-capture-construction-20261014.txt",
+    "bytes": 1064,
+    "sha256": "3db6905573018f199eb24d08b660b50549af6d0ffff7d9cc2e7281b697782793"
+  },
+  {
+    "file": "root-a0-source-selector-domain-SOURCE_CHECKS.json",
+    "bytes": 1648,
+    "sha256": "36fdf53f4225d07b34121e9d99470b4371b4e73b7686c86fb64de3bb73d3ca35"
+  },
+  {
+    "file": "root-a0-source-selector-domain-SOURCE_TEST_OUTPUT.txt",
+    "bytes": 999,
+    "sha256": "95024f73f085bafef2584a009ad158e27006e2c0105447dff269ec551f78f74d"
+  }
+]
