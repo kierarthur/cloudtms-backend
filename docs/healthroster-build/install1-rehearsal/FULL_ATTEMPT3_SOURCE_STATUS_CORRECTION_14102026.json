@@ -1,0 +1,159 @@
+{
+  "status": "SOURCE_STATUS_CORRECTION_AND_LOSS_BACKUP_READY_NATIVE_HELD",
+  "predecessor": "37643920a1f71170fe54804a9eee324a56408769",
+  "pins": [
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT3_BACKUP_CHECKPOINT_14102026.json",
+      "bytes": 4597,
+      "sha256": "c8426a0780b9fd2f2fe1d60f9f5b4ec5e617da35d5adb7e6ef88e9b9bb09dd24"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT3_LOSS_RECONCILIATION_14102026.json",
+      "bytes": 2951,
+      "sha256": "40e39354992a127f32c3f490b6244ba44005b86c0ab6521fade3806c851f042e"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT3_ORIGINAL_HELD_RECEIPT_14102026.json",
+      "bytes": 400045,
+      "sha256": "249069a914c77c02c128593cc1b2147d22d076ff65bc051bd4068f95e5fbfeef"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT3_ORIGINAL_SHARED_TURN_14102026.md",
+      "bytes": 715,
+      "sha256": "167930a29e38b8611fdf57bfbb7af52c760cda6ca9dd0484d0338be1b2a73658"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT3_RESTART_OBSERVATION_14102026.json",
+      "bytes": 3046,
+      "sha256": "698ca82dd6426479a304b7d413c22d3ef3fb25d8681aed1de607f8223ec013e6"
+    },
+    {
+      "file": "scripts/healthroster-install1-background-explain.mjs",
+      "bytes": 1666,
+      "sha256": "a62c40b278b6b3612413683d1cdeda5cfe48cf5c3eed7db3f2a36dd010823f7a"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 40919,
+      "sha256": "65cb7c993704d7ea59e8db68d1fcff4b71d17c7276e63a43854a4d971b299b77"
+    },
+    {
+      "file": "scripts/healthroster-install1-live-fields-first-use.mjs",
+      "bytes": 2856,
+      "sha256": "1e0be74f791f139febf0a81e1a96ed3a5996392457dd524afa0c7aac33a799a5"
+    },
+    {
+      "file": "scripts/healthroster-install1-loss-backup.mjs",
+      "bytes": 4681,
+      "sha256": "b62c57d06a1082e6ed132e821cc0d0bf8422c87c5d7f9da7a2b381393649d9f2"
+    },
+    {
+      "file": "scripts/healthroster-install1-loss-reconcile.mjs",
+      "bytes": 4586,
+      "sha256": "2ead99601d442f9242571b6fed516fe20cd8b872d132aaf90d80e754f1554324"
+    },
+    {
+      "file": "scripts/healthroster-install1-loss-source-checkpoint.mjs",
+      "bytes": 3124,
+      "sha256": "996fa12d0c37d21b3335e87010d5204a53be66b1715aa6a5ceb8f768ad7d922d"
+    },
+    {
+      "file": "scripts/healthroster-install1-restart-observation.mjs",
+      "bytes": 3832,
+      "sha256": "8b4a4a47e588d26dfd971b43772bde94834209039148ce15284037bf633c22a7"
+    },
+    {
+      "file": "scripts/healthroster-install1-snapshot-diagnostic.mjs",
+      "bytes": 2962,
+      "sha256": "bda9c6b955b8861607cdc482506be99c74cba4551a6fbdda6e8589bccfaf1767"
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "bytes": 23179,
+      "sha256": "c24d1e67afc5bac3211033be973b771b53eed394e160a8615fe3f05532b64ef0"
+    }
+  ],
+  "syntax": [
+    {
+      "file": "scripts/healthroster-install1-background-explain.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-live-fields-first-use.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-loss-backup.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-loss-reconcile.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-loss-source-checkpoint.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-restart-observation.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-snapshot-diagnostic.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "exitCode": 0
+    }
+  ],
+  "fullReverseDiffSha256": "dd794d9da09054505657175f2f81a358089f61e0f98ae5da9f8681bb8301779f",
+  "fullReversePassed": true,
+  "rawStagedWhitespaceExitCode": 0,
+  "observedRootSourceCommands": [
+    {
+      "command": "node --test --test-reporter=tap tests/healthroster-install1-full-rehearsal.test.mjs",
+      "tests": 19,
+      "pass": 19,
+      "fail": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "node --test --test-reporter=tap tests/healthroster-install1-native-coordinator.test.mjs",
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/cloudtms-db-release.mjs check",
+      "migrations": 389,
+      "repeatables": 1019,
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/verify-database-contract-coupling.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/verify-source-secret-safety.mjs",
+      "files": 7072,
+      "exitCode": 0
+    }
+  ],
+  "sourceOnly": true,
+  "sqlVerifierBodiesChanged": false,
+  "sharedLockPolicyChanged": false,
+  "finalNativePublicationGuardsChanged": false,
+  "contractSha256": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+  "restartCauseFixed": false,
+  "fourthRehearsalDispatched": false,
+  "installation": false,
+  "backgroundJobsPaused": false,
+  "independentSourceReview": "PENDING",
+  "exactFutureCommittedArchiveGate": "REQUIRED_BEFORE_ANY_NEW_NATIVE_WINDOW"
+}

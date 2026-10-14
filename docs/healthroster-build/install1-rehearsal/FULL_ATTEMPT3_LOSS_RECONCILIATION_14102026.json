@@ -1,0 +1,80 @@
+{
+  "status": "LOST_ATTEMPT_RECONCILED_NOT_FULL_PASS",
+  "candidatePin": "37643920a1f71170fe54804a9eee324a56408769",
+  "oldReceiptSha256": "249069a914c77c02c128593cc1b2147d22d076ff65bc051bd4068f95e5fbfeef",
+  "infrastructure": {
+    "database": "cloudtms_test_clone",
+    "checkedAt": "2026-10-14T09:13:20.752335+00:00",
+    "serverVersion": "17.11 (Debian 17.11-1.pgdg11+2)",
+    "oldTurnPresent": false,
+    "statementTimeout": "0",
+    "idleSessionTimeout": "0",
+    "oldTurnLockPresent": false,
+    "postmasterStartedAt": "2026-10-14T09:07:33.240096+00:00",
+    "ownRehearsalSessions": 0,
+    "idleTransactionTimeout": "0"
+  },
+  "identity": {
+    "module": "LEGACY:1",
+    "identityTest": true,
+    "markerAbsent": true,
+    "applyingCount": 0,
+    "latestRelease": {
+      "commit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "status": "VERIFIED"
+    },
+    "customerKeyNull": true,
+    "physicalDatabase": "cloudtms_test_clone"
+  },
+  "compared": {
+    "ledgerFingerprint": {
+      "before": "a1cb68cba0068790f06ebd177afec8ac5e157e25c243740e8a988bcb100f1b2c",
+      "after": "a1cb68cba0068790f06ebd177afec8ac5e157e25c243740e8a988bcb100f1b2c",
+      "equal": true
+    },
+    "catalogueFingerprint": {
+      "before": "e653ca31e7903877e423df0f4d67bc2961a246d7044adeb444ee23306290dc4a",
+      "after": "e653ca31e7903877e423df0f4d67bc2961a246d7044adeb444ee23306290dc4a",
+      "equal": true
+    },
+    "relationCensus": {
+      "before": "786f8ce1dfb48483494ea8df58e56a9a32bf9b250722fdae4799aa0dc6861c38",
+      "after": "786f8ce1dfb48483494ea8df58e56a9a32bf9b250722fdae4799aa0dc6861c38",
+      "equal": true
+    },
+    "businessCountsFingerprint": {
+      "before": "521090886b7382be8bacafce805810e6d64e393ba889995c9110c7adbc8ff163",
+      "after": "0ff613e9de81eef8bce11f15fae90742aaa9d24ba43d6d2501ee152fe42b1bda",
+      "equal": false
+    },
+    "businessRowsFingerprint": {
+      "before": "d89fba79d6fee39b1c098ba38bd91b72d2683016ce34a498606f3c3c6aeb49d1",
+      "after": "898451df81c1c6a58b23b5e40c9f1740aba48a46673e0599ae99212995016060",
+      "equal": false
+    }
+  },
+  "businessChanges": [
+    {
+      "relation": "private.candidate_daily_batch_receipts",
+      "beforeCount": 70116,
+      "afterCount": 70135,
+      "beforeHash": "9a948530d81fd9cd257d24a7b6d8ffab1f2ce2a3b43091f52233ecffdebc1a3c",
+      "afterHash": "b27934df36763feb1ec2cbab264d95c23e20117a40e93226f94d86e09b2a93bb"
+    },
+    {
+      "relation": "public.ts_financials_outbox",
+      "beforeCount": 20,
+      "afterCount": 20,
+      "beforeHash": "67c74810a2cb64a641daf17ca1c30c0fc21b512948087f35e0e579825f157e29",
+      "afterHash": "8b09285c22cddc7fd53244dbb9e11fb2052155ad32d5101e8ccd704e189160d9"
+    }
+  ],
+  "markerAbsent": true,
+  "module": "LEGACY:1",
+  "explicitFullRollbackProved": false,
+  "fixtureCaptureLost": true,
+  "fullSqlErrorCollectionLost": true,
+  "installation": false,
+  "otherSessionsCancelled": false,
+  "backgroundJobsPaused": false
+}

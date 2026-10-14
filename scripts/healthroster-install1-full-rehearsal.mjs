@@ -353,7 +353,8 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
   requireThat(execution.installedContract?.matched===true&&execution.installedContract.sha256===plan.expectedContractHash,
    'REHEARSAL_INSTALLED_CONTRACT_NOT_PROVED');
  }catch(error){executionFailure=error;}
- await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:'SQL_PASS_FINISHED_RESTORATION_UNVERIFIED',candidatePin,currentRemoteTestPin,
+ await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:executionFailure?'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED':execution.errors.length
+  ?'SQL_ERRORS_FINISHED_RESTORATION_UNVERIFIED':'SQL_PASS_FINISHED_RESTORATION_UNVERIFIED',candidatePin,currentRemoteTestPin,
   sqlHash:plan.sqlHash,execution:execution??null,executionFailure:executionFailure
    ?(/^REHEARSAL_[A-Z_]+$/.test(executionFailure.message)?executionFailure.message:'EXECUTION_ADAPTER_FAILED'):null,
   restorationProved:false,turnId:turn.identity.turnId});

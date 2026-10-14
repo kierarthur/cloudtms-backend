@@ -119,16 +119,17 @@ test('source-only actual current Install1 plan retains full 142 verifier bodies,
  }finally{if(old===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=old;}
 });
 
-function model({executionDelta={},afterDelta={},publishFailure=false}={}){
- const events=[],controller=new AbortController();
+function model({executionDelta={},afterDelta={},publishFailure=false,executionFailure=null}={}){
+ const events=[],receipts=[],controller=new AbortController();
  const turn={identity,signal:controller.signal,assertHeld:async phase=>events.push('held:'+phase)};
  const callbacks={freshGate:async phase=>{events.push('gate:'+phase);return gate();},before:async()=>{events.push('before');return before();},
   executeSameSession:async args=>{events.push('execute');assert.equal(args.noHarnessDeadline,true);assert.equal(args.settings.statementTimeout,0);
+   if(executionFailure)throw executionFailure;
    return {sameSession:true,explicitRollback:true,exitCode:0,errorCollectionComplete:true,errors:[],installedContract:{matched:true,sha256:hash},...executionDelta};},
   freshAfter:async()=>{events.push('fresh');return {...after(),...afterDelta};},
-  recordReceipt:async receipt=>{events.push('record:'+receipt.status);},
+  recordReceipt:async receipt=>{receipts.push(receipt);events.push('record:'+receipt.status);},
   publishManaged:async args=>{events.push('publish');assert.equal(args.turn,turn);if(publishFailure)throw Error('PROTECTED_FAILED');return {status:'ROOT_MANAGED_PUBLISHED'};}};
- return {events,controller,options:{turn,candidatePin,currentRemoteTestPin:base,expectedContractHash:hash,marker,review:{},callbacks,
+ return {events,receipts,controller,options:{turn,candidatePin,currentRemoteTestPin:base,expectedContractHash:hash,marker,review:{},callbacks,
   compilePlan:()=>({version:REHEARSAL_VERSION,sql:'begin; rollback;',sqlHash:hash,lineMap:[],currentCounts:{},pendingCounts:{},exclusions:[],expectedContractHash:hash,diagnosticCodes:[],sourceBinding:{sha256:hash}})}};
 }
 
@@ -145,6 +146,24 @@ test('SQL errors or missing explicit rollback always get fresh proof and hold pu
   const m=model({executionDelta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/HOLD_INSTALL|INCOMPLETE/);
   assert.ok(m.events.includes('fresh'));assert.ok(m.events.some(x=>x.startsWith('record:')));assert.ok(!m.events.includes('publish'));
  }
+});
+
+test('interrupted or incomplete execution and collected SQL errors never receive an intermediate SQL-pass receipt',async()=>{
+ const thrown=model({executionFailure:Error('TURN_CONNECTION_CLOSED')});
+ const originalHeld=thrown.options.turn.assertHeld;
+ thrown.options.turn.assertHeld=async phase=>{if(phase==='install1-fresh')throw Error('TURN_CONNECTION_CLOSED');return originalHeld(phase);};
+ await assert.rejects(runFullRehearsalWithinOwnedTurn(thrown.options),/TURN_CONNECTION_CLOSED/);
+ assert.equal(thrown.receipts.length,1);assert.equal(thrown.receipts[0].status,'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED');
+ assert.equal(thrown.receipts[0].execution,null);assert.equal(thrown.receipts[0].restorationProved,false);
+ assert.ok(!thrown.events.includes('fresh'));assert.ok(!thrown.events.includes('publish'));
+ for(const [delta,status] of [[{explicitRollback:false},'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED'],[{errors:[{sqlstate:'23514'}]},'SQL_ERRORS_FINISHED_RESTORATION_UNVERIFIED']]){
+  const m=model({executionDelta:delta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/INCOMPLETE|HOLD_INSTALL/);
+  assert.equal(m.receipts[0].status,status);assert.ok(m.receipts.every(r=>r.status!=='SQL_PASS_FINISHED_RESTORATION_UNVERIFIED'));
+  assert.ok(m.events.includes('fresh'));assert.ok(!m.events.includes('publish'));
+ }
+ const clean=model();await runFullRehearsalWithinOwnedTurn(clean.options);
+ assert.equal(clean.receipts[0].status,'SQL_PASS_FINISHED_RESTORATION_UNVERIFIED');
+ assert.equal(clean.receipts.at(-1).status,'FULL_CLEAN_ROLLBACK_PROVED');
 });
 
 test('restoration mismatch and lost turn prevent publication, with no duplicate dispatch on protected failure',async()=>{

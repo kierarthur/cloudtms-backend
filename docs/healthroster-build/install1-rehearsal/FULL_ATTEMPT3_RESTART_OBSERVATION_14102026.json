@@ -1,0 +1,131 @@
+{
+  "status": "TEST_READ_ONLY_RESTART_OBSERVATION",
+  "service": {
+    "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+    "name": "postgres-service-p0qoe",
+    "state": "healthy",
+    "quota": null
+  },
+  "window": {
+    "start": "2026-10-14T09:00:00Z",
+    "end": "2026-10-14T09:10:00Z"
+  },
+  "events": [],
+  "logLineCount": 0,
+  "metrics": [
+    {
+      "name": "miget_instance_memory_used_bytes",
+      "addon": "postgres-service-p0qoe",
+      "samples": 41,
+      "minimum": 768532480,
+      "maximum": 3810172928,
+      "transitions": [
+        {
+          "at": "2026-10-14T09:00:15.000Z",
+          "value": 2441629696
+        },
+        {
+          "at": "2026-10-14T09:00:45.000Z",
+          "value": 2669899776
+        },
+        {
+          "at": "2026-10-14T09:01:15.000Z",
+          "value": 2854449152
+        },
+        {
+          "at": "2026-10-14T09:01:45.000Z",
+          "value": 2811682816
+        },
+        {
+          "at": "2026-10-14T09:02:15.000Z",
+          "value": 2824355840
+        },
+        {
+          "at": "2026-10-14T09:02:45.000Z",
+          "value": 2823098368
+        },
+        {
+          "at": "2026-10-14T09:03:15.000Z",
+          "value": 2839412736
+        },
+        {
+          "at": "2026-10-14T09:03:45.000Z",
+          "value": 2813341696
+        },
+        {
+          "at": "2026-10-14T09:04:15.000Z",
+          "value": 2833838080
+        },
+        {
+          "at": "2026-10-14T09:04:45.000Z",
+          "value": 2749669376
+        },
+        {
+          "at": "2026-10-14T09:05:15.000Z",
+          "value": 2749644800
+        },
+        {
+          "at": "2026-10-14T09:05:45.000Z",
+          "value": 2741686272
+        },
+        {
+          "at": "2026-10-14T09:06:15.000Z",
+          "value": 2853306368
+        },
+        {
+          "at": "2026-10-14T09:06:45.000Z",
+          "value": 2825089024
+        },
+        {
+          "at": "2026-10-14T09:07:15.000Z",
+          "value": 2825248768
+        },
+        {
+          "at": "2026-10-14T09:07:45.000Z",
+          "value": 3810172928
+        },
+        {
+          "at": "2026-10-14T09:08:15.000Z",
+          "value": 768532480
+        },
+        {
+          "at": "2026-10-14T09:08:45.000Z",
+          "value": 853667840
+        },
+        {
+          "at": "2026-10-14T09:09:15.000Z",
+          "value": 853704704
+        },
+        {
+          "at": "2026-10-14T09:09:45.000Z",
+          "value": 852545536
+        }
+      ]
+    },
+    {
+      "name": "miget_instance_oom_events_total",
+      "addon": "postgres-service-p0qoe",
+      "samples": 41,
+      "minimum": 0,
+      "maximum": 0,
+      "transitions": []
+    },
+    {
+      "name": "miget_instance_restarts_total",
+      "addon": "postgres-service-p0qoe",
+      "samples": 41,
+      "minimum": 1,
+      "maximum": 2,
+      "transitions": [
+        {
+          "at": "2026-10-14T09:08:00.000Z",
+          "value": 2
+        }
+      ]
+    }
+  ],
+  "rawLogsRetained": false,
+  "secretsReturned": false,
+  "mutations": false,
+  "checkedAt": "2026-10-14T09:21:44.126Z"
+}
