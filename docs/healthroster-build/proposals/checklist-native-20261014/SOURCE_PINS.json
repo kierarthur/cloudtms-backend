@@ -1,9 +1,9 @@
 {
-  "status": "SOURCE_ONLY_FINITE_SOURCE_SHIFT_QUERY_MONEY_AND_SINGLE_NATIVE_KERNEL_UNMOUNTED_ALL_NATIVE_GATES_HELD",
+  "status": "UNMOUNTED_FINITE_POSITIVE_SOURCE_INVOICE_BLOCK_SOURCE_CONSTRUCTION",
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 112,
+    "passed": 126,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -12,11 +12,11 @@
   "source_pins": [
     {
       "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
-      "saved_sha256": "1db867c46c25ed21c7a6d5c0c1d2a316bb470327ca9bad60a864da8a7f4faff2"
+      "saved_sha256": "01df944f9da2ad8343b003f07957865e8a552dcdaaaf78bdf8da1277c1c3cba9"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
-      "saved_sha256": "592b218a93e2872c2a140440a488dad3269459b8b0d9768fb40d00fb98f7569e"
+      "saved_sha256": "ec98215b8442db9c0e79d9ea8f7c6bbb6fdc58b45b863305f31e98cf77ff9927"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_page.sqlinc",
@@ -741,6 +741,46 @@
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_QUERY_MONEY_MANIFEST.json",
       "saved_sha256": "39b2c4f9aa37b35bf551ab56a1f7158b740e825b54b50b8b104dfa0ee782f770"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/build-native-blocker-packet.mjs",
+      "saved_sha256": "f9cdb54e9e81763e8b34eb9f276522464790fa86f9142ad3b2db301b1b0265a1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/freeze-source-increment.mjs",
+      "saved_sha256": "b5b4dd5e16b5dd59992cce6d3d38888947126cb9082a742f2c485133d7d13075"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/NATIVE_BLOCKER_REVERSE.json",
+      "saved_sha256": "91dd8435b5b2bd454e87cf60a549ee8f48e773907eb422c5b21d992c3bd6b9d3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/HANDOFF.md",
+      "saved_sha256": "fe79d319fa628a9340ad7743c89455bfa8abce31cfb3f05274e2862e1bd8c8bb"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_invoice_block_native.forward.sqlinc",
+      "saved_sha256": "5c51c1f970587d5d983f8a3951487b2eed6d42c0ce19fe4898f725add94c7cb7"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_invoice_block_native.reverse.sqlinc",
+      "saved_sha256": "c651218bda6681f8761afe7e251936a2b83cb60377f3bf0623e82b7188169e3d"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_source_invoice_block.sqlinc",
+      "saved_sha256": "bf3a074947e8f116e5e2180081e6224c596dc58d724db92885798c936be5f01e"
+    },
+    {
+      "path": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "saved_sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-20261014/NATIVE_INVOICE_OWNER_PINS.json",
+      "saved_sha256": "a0df06460c1263106750d03eff097b76e7a56ad7b2462b33d8948c83412f1efd"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/SOURCE_MANIFEST.json",
+      "saved_sha256": "ab5f39733013e0fa504ce6d002f77fcdcaf358aac1072d8db4f7a8775925d19d"
     }
   ],
   "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
@@ -913,11 +953,13 @@
     "HISTORICAL_REAL_WITNESS_PREPARATION_CALLER_MOUNT_NATIVE_TRANSACTIONS_REQUIRED_BEFORE_FEATURE_ON",
     "D10_BOUND_REVIEW_NAVIGATION_OFFICE_MOUNT_AND_NATIVE_ACTOR_PREVIEW_ACCEPTANCE",
     "R254_NATIVE_ACCOUNT_COOLDOWN_REPLAY_SUBMISSION_RETIREMENT_INBOX_UNDO_TARGET_AND_PUSH_QUALIFICATION",
-    "FINITE_SOURCE_QUERY_MONEY_SHARED_NATIVE_OWNER_SOURCE_REVIEW",
     "SOURCE_QUERY_MONEY_INITIAL_BUNDLE_TREATMENT_NUMERIC_NATIVE_CASES",
     "EXTRACTED_NATIVE_TRUE_MODE_PARITY_AND_FALSE_MODE_GET_LOCK_ABSENCE",
     "COMPLETE_NATIVE_NEXT_DIRTYING_HOOK_AND_INSTALLED_BODY_CATALOGUE_PROOF",
-    "ORDINARY_WHOLE_TS_ROW_MONEY_INVOICE_HOLD_AND_PENDING_DECISION_PRODUCERS"
+    "ORDINARY_WHOLE_TS_ROW_MONEY_INVOICE_HOLD_AND_PENDING_DECISION_PRODUCERS",
+    "SOURCE_INVOICE_BLOCK_SHARED_NATIVE_GUARD_SOURCE_REVIEW",
+    "SOURCE_INVOICE_BLOCK_NATIVE_ADMISSION_PARITY_PURE_GET_RETENTION_AND_RELEASE_CASES",
+    "SOURCE_INVOICE_BLOCK_PENDING_OFFICE_DECISION_AND_GENUINE_ACTION_TARGET_PRODUCER"
   ],
   "predecessor_source_increment": "0e373d6c62286aa94718dd6698b256e611c04246",
   "db_source_check": {
@@ -1004,7 +1046,7 @@
     "critic_sha256": "2ecfba7b2f4711e30d0da1cf6dcb93454445496467fd2a1bbf6d87303be6a8b9"
   },
   "financial_checkpoint": {
-    "status": "SOURCE_BUILT_NOT_INDEPENDENTLY_REVIEWED_NOT_MOUNTED_NOT_NATIVE_QUALIFIED",
+    "status": "FINITE_SOURCE_SHIFT_QUERY_MONEY_INDEPENDENTLY_ACCEPTED_AT_SOURCE_77EB_NATIVE_GATES_HELD",
     "handoff": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_QUERY_MONEY_HANDOFF.md",
     "input_pins": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/NATIVE_KERNEL_INPUT_PINS.json",
     "input_pins_sha256": "db7418c3386f262f9dab96933ac6544e862b0790675666839573e8955053599a",
@@ -1015,6 +1057,19 @@
     "whole_row_quantity_known": false,
     "ordinary_quantity_known": false,
     "native_executed": false,
-    "canonical_Banking_edited": false
+    "canonical_Banking_edited": false,
+    "accepted_commit": "77eb654a72d32d88cd250e63535478495f7f5429",
+    "critic_sha256": "e7f840a1ab4ae409c75d8f1a47024b3270c4cb29a3c95dc6057c216cb2fc218c"
+  },
+  "invoice_block_checkpoint": {
+    "manifest": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/SOURCE_MANIFEST.json",
+    "manifest_sha256": "ab5f39733013e0fa504ce6d002f77fcdcaf358aac1072d8db4f7a8775925d19d",
+    "authority": "SOURCE_INVOICE_BLOCK",
+    "grain": "REAL_CURRENT_SOURCE_CLIENT_MANIFEST_MOVEMENT_UPLOAD_ROW",
+    "source_review": "PENDING_INDEPENDENT_REVIEW",
+    "native": false,
+    "pending_decision_known": false,
+    "action_proved": false,
+    "whole_row_quantity_known": false
   }
 }

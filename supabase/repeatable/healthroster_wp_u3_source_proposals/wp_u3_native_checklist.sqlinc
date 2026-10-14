@@ -21,7 +21,7 @@ declare
   agency_native record; agency_facts jsonb; comparison_accepted boolean; query_unsent boolean;
   report_bindings jsonb; needs_export boolean;
   hold_facts jsonb; source_money jsonb; item_hold jsonb; financial_facts jsonb; native_root uuid; native_roots integer;
-  d10_groups jsonb; query_parent jsonb; query_targets jsonb;
+  d10_groups jsonb; query_parent jsonb; query_targets jsonb; invoice_blocks jsonb;
   unknown_hold constant jsonb:='{"holds_pay":null,"holds_pay_scope":null,"withheld_amount_pence":null,"holds_invoice":null,"pending_decision":null,"authority":{"owner":"UNAVAILABLE","hash":null,"withholding_known":false}}';
   binding text; revision text; records jsonb; result jsonb; primary_key text; sort_key jsonb;
   empty_cell jsonb; admin_actions jsonb; no_work boolean; no_work_line text; limit_rows integer;
@@ -431,6 +431,23 @@ begin
           'counted_timesheet_id',null,'correction_binding',null,'submission_read',null,'source_information_witness',null,
           'native_source_witness',source_witness,'_rank',50));
       end loop;
+      if route='SELF_BILL' and view='ADMIN' then
+        -- The same exact native admission blocker supplies invoice-only work.
+        -- Missing amount/action qualification never suppresses its catalogue.
+        -- Reduced pay readers do not execute this invoice population reader.
+        invoice_blocks:=private.weekly_source_checklist_source_invoice_block_items_v1(row_scope,actor.id);
+        financial_facts:=financial_facts||jsonb_build_array(invoice_blocks->'native_facts');
+        for raw in select value from jsonb_array_elements(invoice_blocks->'items') loop
+          row_items:=row_items||jsonb_build_array(raw||jsonb_build_object('item_kind','NATIVE_INVOICE','scope',row_scope,'route',route,
+            'sheet_scope','WEEKLY','reason_code','VAT_FIT','status',jsonb_build_object('text','Holds invoice','tone','danger',
+              'subtext','Invoice held: source net and gross do not fit 20% VAT.','subtone','muted'),
+            'subject','INVOICE_ONLY','permitted_pay_subject',false,'action',null,'counted_timesheet_id',null,
+            'correction_binding',null,'submission_read',null,'source_information_witness',null,'native_source_witness',null,'_rank',55));
+        end loop;
+        if jsonb_array_length(invoice_blocks->'items')>0 then
+          completed:=false;complete_text:=jsonb_array_length(row_items)::text||' items';
+        end if;
+      end if;
       if route='AGENCY_INVOICE' then
         -- This route is led by actual native ordinary Timesheets. Invoicing is
         -- not the Completed predicate, and a Source finalisation is not used

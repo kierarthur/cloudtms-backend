@@ -1,0 +1,75 @@
+{
+  "status": "UNMOUNTED_FINITE_POSITIVE_SOURCE_INVOICE_BLOCK_SOURCE_CONSTRUCTION",
+  "sourceTests": 126,
+  "failed": 0,
+  "history": {
+    "acceptedSourceShiftMoney": "77eb654a72d32d88cd250e63535478495f7f5429",
+    "criticSha256": "e7f840a1ab4ae409c75d8f1a47024b3270c4cb29a3c95dc6057c216cb2fc218c",
+    "invoiceWIPCheckpoint": "02714dc6265a8636e9eb5f4bf02d2d56a51dec96",
+    "invoiceWIPIsNotMounted": true
+  },
+  "native": false,
+  "SQL_executed": false,
+  "writer_ACL_changed": false,
+  "canonical_owner_edited": false,
+  "pending_decision_known": false,
+  "action_proved": false,
+  "financialBasis": "NATIVE_UNRELEASED_VAT_FIT_INVOICE_ADMISSION_BLOCK_NO_PAY_QUANTITY",
+  "artifacts": [
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/build-native-blocker-packet.mjs",
+      "bytes": 3181,
+      "sha256": "f9cdb54e9e81763e8b34eb9f276522464790fa86f9142ad3b2db301b1b0265a1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/freeze-source-increment.mjs",
+      "bytes": 3553,
+      "sha256": "b5b4dd5e16b5dd59992cce6d3d38888947126cb9082a742f2c485133d7d13075"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/NATIVE_BLOCKER_REVERSE.json",
+      "bytes": 1519,
+      "sha256": "91dd8435b5b2bd454e87cf60a549ee8f48e773907eb422c5b21d992c3bd6b9d3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-block-20261014/HANDOFF.md",
+      "bytes": 5162,
+      "sha256": "fe79d319fa628a9340ad7743c89455bfa8abce31cfb3f05274e2862e1bd8c8bb"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_invoice_block_native.forward.sqlinc",
+      "bytes": 48481,
+      "sha256": "5c51c1f970587d5d983f8a3951487b2eed6d42c0ce19fe4898f725add94c7cb7"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_invoice_block_native.reverse.sqlinc",
+      "bytes": 47779,
+      "sha256": "c651218bda6681f8761afe7e251936a2b83cb60377f3bf0623e82b7188169e3d"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_source_invoice_block.sqlinc",
+      "bytes": 9570,
+      "sha256": "bf3a074947e8f116e5e2180081e6224c596dc58d724db92885798c936be5f01e"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
+      "bytes": 56664,
+      "sha256": "ec98215b8442db9c0e79d9ea8f7c6bbb6fdc58b45b863305f31e98cf77ff9927"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "bytes": 32111,
+      "sha256": "01df944f9da2ad8343b003f07957865e8a552dcdaaaf78bdf8da1277c1c3cba9"
+    },
+    {
+      "path": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "bytes": 12068,
+      "sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-invoice-20261014/NATIVE_INVOICE_OWNER_PINS.json",
+      "bytes": 46331,
+      "sha256": "a0df06460c1263106750d03eff097b76e7a56ad7b2462b33d8948c83412f1efd"
+    }
+  ]
+}

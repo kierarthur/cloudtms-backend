@@ -46,7 +46,7 @@ export function decodeChecklistHold(value) {
   if (![true, false, null].includes(value.holds_pay) || ![true, false, null].includes(value.holds_invoice) ||
       ![true, false, null].includes(value.pending_decision)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   closed(value.authority, ['owner', 'hash', 'withholding_known']);
-  if (!['SOURCE', 'SOURCE_QUERY_EX_VAT', 'NEXT', 'ORDINARY', 'UNAVAILABLE'].includes(value.authority.owner) ||
+  if (!['SOURCE', 'SOURCE_QUERY_EX_VAT', 'SOURCE_INVOICE_BLOCK', 'NEXT', 'ORDINARY', 'UNAVAILABLE'].includes(value.authority.owner) ||
       typeof value.authority.withholding_known !== 'boolean') fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   if (value.authority.owner === 'UNAVAILABLE') {
     if (value.authority.hash !== null || value.authority.withholding_known !== false || value.holds_invoice !== null ||
@@ -70,6 +70,11 @@ export function decodeChecklistHold(value) {
       value.holds_invoice !== null || value.pending_decision !== null || value.authority.withholding_known !== true)) {
     fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');
   }
+  // Exact native unreleased VAT_FIT admission block only. It certifies no pay
+  // quantity, cleared invoice state, Office decision or permitted action.
+  if (value.authority.owner === 'SOURCE_INVOICE_BLOCK' && (value.holds_pay !== null || value.holds_pay_scope !== null ||
+      value.withheld_amount_pence !== null || value.holds_invoice !== true || value.pending_decision !== null ||
+      value.authority.withholding_known !== false)) fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');
   return copy(value);
 }
 
@@ -112,11 +117,11 @@ function identity(record) { text(record.item_id ?? record.row_id, 512); bindScop
 /** Service-owned evidence already contains native labels and admissible subjects. */
 export function projectChecklistItem(item, actor) {
   closed(item, ['item_id', 'item_kind', 'scope', 'route', 'worker', 'work_date', 'sheet_scope', 'reason_code', 'status', 'hold', 'subject',
-    'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read', 'native_source_witness', 'queries_parent_witness']);
+    'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read', 'native_source_witness', 'queries_parent_witness', 'native_invoice_witness']);
   identity(item); text(item.worker, 250); text(item.reason_code, 200);
   if (typeof item.work_date !== 'string' || !DATE.test(item.work_date) || !['WEEKLY', 'DAILY'].includes(item.sheet_scope) ||
       !['PAY', 'PAY_AND_INVOICE', 'INVOICE_ONLY', 'INFORMATION'].includes(item.subject) ||
-      !ROUTES.has(item.route) || !['ACTUAL_TIMESHEET', 'SOURCE_INFORMATION', 'NATIVE_SOURCE'].includes(item.item_kind) ||
+      !ROUTES.has(item.route) || !['ACTUAL_TIMESHEET', 'SOURCE_INFORMATION', 'NATIVE_SOURCE', 'NATIVE_INVOICE'].includes(item.item_kind) ||
       typeof item.permitted_pay_subject !== 'boolean') fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   if (item.item_kind === 'SOURCE_INFORMATION') {
     const witness = item.source_information_witness;
@@ -155,11 +160,31 @@ export function projectChecklistItem(item, actor) {
         (item.action !== null && (item.action.kind !== 'QUERIES' || item.action.target?.row_key !== witness.parent_group_key))) {
       fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
     }
+  } else if (item.item_kind === 'NATIVE_INVOICE') {
+    const witness=item.native_invoice_witness;
+    closed(witness,['owner','actor_user_id','scope','final_revision_id','client_manifest_id','billing_movement_id',
+      'upload_row_id','work_event_id','manifest_hash','movement_economic_hash','read_proof_hash']);
+    uuid(witness.actor_user_id);bindScope(witness.scope);
+    for(const key of ['final_revision_id','client_manifest_id','billing_movement_id','upload_row_id'])uuid(witness[key]);
+    if(witness.work_event_id!==null)uuid(witness.work_event_id);
+    for(const key of ['manifest_hash','movement_economic_hash','read_proof_hash']) {
+      if(typeof witness[key]!=='string'||!HASH.test(witness[key]))fail('CHECKLIST_NATIVE_INVOICE_TARGET_INVALID');
+    }
+    if(witness.owner!=='private.weekly_source_invoice_unreleased_vat_fit_movements_v1'||
+      !same(witness.actor_user_id,actor.actor_user_id)||!sameScope(witness.scope,item.scope)||
+      item.item_id!==`native-invoice:${witness.billing_movement_id}`||item.route!=='SELF_BILL'||
+      item.reason_code!=='VAT_FIT'||item.subject!=='INVOICE_ONLY'||item.permitted_pay_subject!==false||
+      item.status?.text!=='Holds invoice'||item.status?.tone!=='danger'||
+      item.counted_timesheet_id!==null||item.correction_binding!==null||item.submission_read!==null||
+      item.source_information_witness!==null||item.native_source_witness!==null||item.queries_parent_witness!=null||item.action!==null) {
+      fail('CHECKLIST_NATIVE_INVOICE_TARGET_INVALID');
+    }
   } else {
     uuid(item.counted_timesheet_id);
     if (item.source_information_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   }
   if (item.item_kind !== 'NATIVE_SOURCE' && item.native_source_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
+  if (item.item_kind !== 'NATIVE_INVOICE' && item.native_invoice_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   const action = link(item.action ?? null, item.scope);
   if (item.queries_parent_witness != null) {
     const parent=item.queries_parent_witness;
@@ -197,6 +222,10 @@ export function projectChecklistItem(item, actor) {
   const hold = decodeChecklistHold(item.hold), s = status(item.status), correction = item.correction_binding;
   if (hold.authority.owner === 'SOURCE_QUERY_EX_VAT' && (item.item_kind !== 'NATIVE_SOURCE' ||
       item.subject !== 'PAY' || item.permitted_pay_subject !== true)) fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');
+  if ((hold.authority.owner === 'SOURCE_INVOICE_BLOCK') !== (item.item_kind === 'NATIVE_INVOICE') ||
+      (item.item_kind === 'NATIVE_INVOICE' && hold.authority.hash !== item.native_invoice_witness.read_proof_hash)) {
+    fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');
+  }
   if (correction != null) {
     closed(correction, ['request_id', 'state', 'state_revision', 'original_timesheet_id', 'replacement_timesheet_id', 'reversal_timesheet_id']);
     uuid(correction.request_id); uuid(correction.original_timesheet_id); uuid(correction.replacement_timesheet_id);
@@ -212,7 +241,7 @@ export function projectChecklistItem(item, actor) {
   }
   if (correction?.state === 'WAITING' && /reminder/i.test(action?.label ?? '')) fail('CHECKLIST_CORRECTION_REMINDER_NOT_ALLOWED');
   if (actor.permission_view === 'PAY_READONLY' && (!item.permitted_pay_subject || item.subject === 'INVOICE_ONLY')) return null;
-  return { ...copy(item), status: hold.holds_pay === null ? { ...s, text: 'Decision needed', tone: 'warning', subtone: 'warning' } : s,
+  return { ...copy(item), status: hold.holds_pay === null && item.item_kind !== 'NATIVE_INVOICE' ? { ...s, text: 'Decision needed', tone: 'warning', subtone: 'warning' } : s,
     hold, action: actor.permission_view === 'PAY_READONLY' ? null : action };
 }
 
@@ -227,6 +256,7 @@ export function projectChecklistRow(row, actor) {
   const checked = cell(row.checked, row.scope), completed = cell(row.completed, row.scope), pay = cell(row.pay_completed, row.scope);
   const hold = decodeChecklistHold(row.hold); count(row.permitted_pay_item_count);
   if (hold.authority.owner === 'SOURCE_QUERY_EX_VAT') fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');
+  if (hold.authority.owner === 'SOURCE_INVOICE_BLOCK') fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');
   if (!Array.isArray(row.admin_actions) || row.admin_actions.length > 2) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   const admin = row.admin_actions.map(a => {
     closed(a, ['kind', 'label', 'native_allowed', 'payload']);
