@@ -1,0 +1,112 @@
+{
+  "source_only": true,
+  "native": false,
+  "records": [
+    {
+      "file": "00_source_token_grammar.sqlinc",
+      "source_commit": "aad0dd848253abca76a4917765b8d20c4d128646",
+      "source_path": "docs/healthroster-build/proposals/a0-source-selector-tuples-forward-20261014/forward/00_source_token_grammar.sqlinc",
+      "before_bytes": 5376,
+      "before_sha256": "45ba69cdbdce62ce4d4387eb25709a46d1aaba1b8529d8b71450ce49b4664fae",
+      "after_bytes": 5441,
+      "after_sha256": "fbd7ff1042b815cca549495c4e558846cdcd90c83a279b39f1deae2058323d4f",
+      "hunks": [
+        {
+          "label": "closed real lineage conjunction domains",
+          "before": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT') then",
+          "after": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT') then"
+        }
+      ]
+    },
+    {
+      "file": "01_complete_same_arbiter_schema.sqlinc",
+      "source_commit": "aad0dd848253abca76a4917765b8d20c4d128646",
+      "source_path": "docs/healthroster-build/proposals/a0-source-selector-tuples-forward-20261014/forward/01_complete_same_arbiter_schema.sqlinc",
+      "before_bytes": 6270,
+      "before_sha256": "42229f7aaefe2430b6944585147b51bd94750d76464a69823a684e160be302c0",
+      "after_bytes": 6335,
+      "after_sha256": "250f5d2c2282fbf3cffa863e7a0ba5736d7f56fe1a5ef037942b64f00cc8ebb4",
+      "hunks": [
+        {
+          "label": "same scalar arbiter accepts native lineage pairs",
+          "before": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT') and uuid_identity is null",
+          "after": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT') and uuid_identity is null"
+        }
+      ]
+    },
+    {
+      "file": "02_complete_scalar_helpers.sqlinc",
+      "source_commit": "aad0dd848253abca76a4917765b8d20c4d128646",
+      "source_path": "docs/healthroster-build/proposals/a0-source-selector-tuples-forward-20261014/forward/02_complete_scalar_helpers.sqlinc",
+      "before_bytes": 23008,
+      "before_sha256": "20099783077400e257ce463c09e20a670bb89f2d4ec944eb8edc0cb5b026aea1",
+      "after_bytes": 23203,
+      "after_sha256": "ff9fef95ed580a91212ba0576c597b229eb206c8d50d8e6934b8e28c87bc7fae",
+      "hunks": [
+        {
+          "label": "closed scalar validation",
+          "before": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT')\n      or exists",
+          "after": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT')\n      or exists"
+        },
+        {
+          "label": "UUID pair identities are canonical scalar JSONB text",
+          "before": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT')\n        and(jsonb_typeof",
+          "after": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT')\n        and(jsonb_typeof"
+        },
+        {
+          "label": "lineage conjunctions stay in dependency phase",
+          "before": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT') then 1",
+          "after": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT') then 1"
+        }
+      ]
+    },
+    {
+      "file": "03_coverage_and_compatibility_acquire.sqlinc",
+      "source_commit": "aad0dd848253abca76a4917765b8d20c4d128646",
+      "source_path": "docs/healthroster-build/proposals/a0-source-selector-tuples-forward-20261014/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "before_bytes": 6680,
+      "before_sha256": "3adde37fb33635dd58737539bcfea62918a4f1eb48d1b784befdd4f7766fe029",
+      "after_bytes": 6745,
+      "after_sha256": "fde7a033766fc373757e944d4ff5076809a176e6a035a23409a901a81b81ec0b",
+      "hunks": [
+        {
+          "label": "preserved original acquire dispatch",
+          "before": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT')) then",
+          "after": "'SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT')) then"
+        }
+      ]
+    },
+    {
+      "file": "04_native_source_footprint.sqlinc",
+      "source_commit": "aad0dd848253abca76a4917765b8d20c4d128646",
+      "source_path": "docs/healthroster-build/proposals/a0-source-native-footprint-construction-20261015/construction/01_native_source_footprint.sqlinc",
+      "before_bytes": 8311,
+      "before_sha256": "5255bf5e318079518c7a7159842a8a8ae75d4194a82ba0d373aaaf8773255b35",
+      "after_bytes": 9300,
+      "after_sha256": "4d864c3759b07cec067edb8232807775d02f2d5f80b93f5be8945c1c2117ae0a",
+      "hunks": [
+        {
+          "label": "complete native lineage OR of two Client-conjoined scopes",
+          "before": " if jsonb_typeof(selectors->'group_client_pairs') is distinct from 'array'",
+          "after": " -- Native lineage predicate: selected Client AND (selected resolution OR\n -- selected event). Both phantom arms remain distinct typed conjunctions.\n for field in select * from(values\n  ('public.weekly_source_row_resolutions','SOURCE_LINEAGE_RESOLUTION_CLIENT'),\n  ('public.weekly_work_events','SOURCE_LINEAGE_EVENT_CLIENT')\n ) lineage(relation_name,token_kind)\n loop\n  select value into strict relation from jsonb_array_elements(witness->'relations')\n   where value->>'relation'=field.relation_name;\n  select value into strict identity_key from jsonb_array_elements(relation->'keys')\n   where value->>'column'='id' and value->>'type'='UUID';\n  select coalesce(jsonb_agg(jsonb_build_object('kind',field.token_kind,\n   'json',jsonb_build_array(parent_id::uuid,client_id::uuid)::text)),'[]'::jsonb) into item\n   from jsonb_array_elements_text(identity_key->'values') parents(parent_id)\n   cross join jsonb_array_elements_text(clients) selected(client_id);\n  tokens:=tokens||item;\n end loop;\n if jsonb_typeof(selectors->'group_client_pairs') is distinct from 'array'"
+        }
+      ]
+    },
+    {
+      "file": "05_raw_selector_helpers.sqlinc",
+      "source_commit": "aad0dd848253abca76a4917765b8d20c4d128646",
+      "source_path": "docs/healthroster-build/proposals/a0-source-raw-selector-guard-construction-20261015/construction/01_raw_selector_helpers.sqlinc",
+      "before_bytes": 8634,
+      "before_sha256": "ea99ef7b74e949610650a2387259934934503133b7df91438aef6cf1863cb765",
+      "after_bytes": 9256,
+      "after_sha256": "0ae595280aaf9156f9a2a47688a7da59be70e104db98d351d1ad9c2921831b23",
+      "hunks": [
+        {
+          "label": "raw lineage resolution/event Client pairs before any parent lookup",
+          "before": " if p_relation='public.contracts' and p_row->>'client_id' is not null",
+          "after": " if p_relation='public.weekly_source_row_timesheet_lineages' and p_row->>'client_id' is not null then\n  if p_row->>'row_resolution_id' is not null then\n   tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_LINEAGE_RESOLUTION_CLIENT',\n    'json',jsonb_build_array((p_row->>'row_resolution_id')::uuid,(p_row->>'client_id')::uuid)::text));\n  end if;\n  if p_row->>'work_event_id' is not null then\n   tokens:=tokens||jsonb_build_array(jsonb_build_object('kind','SOURCE_LINEAGE_EVENT_CLIENT',\n    'json',jsonb_build_array((p_row->>'work_event_id')::uuid,(p_row->>'client_id')::uuid)::text));\n  end if;\n end if;\n if p_relation='public.contracts' and p_row->>'client_id' is not null"
+        }
+      ]
+    }
+  ]
+}
