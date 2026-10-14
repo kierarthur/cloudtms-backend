@@ -25,7 +25,8 @@ const stable=value=>Array.isArray(value)?value.map(stable):value&&typeof value==
 const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms-managed-release.mjs',
  'scripts/cloudtms-managed-release-sql.mjs','scripts/cloudtms-managed-execution-policy.mjs','scripts/bpay-next-final-definers.mjs',
  'scripts/weekly-source-reader-release.mjs','supabase/release/current-release.json','supabase/release/migration-lock.json',
- 'supabase/release/protected-boundary-lock.json','supabase/release/export_contract.sql','docs/bpay-next/final-definer-closures.json'];
+ 'supabase/release/protected-boundary-lock.json','supabase/release/export_contract.sql','docs/bpay-next/final-definer-closures.json',
+ 'scripts/healthroster-rehearsal-stream-observer.mjs'];
 
 // Root runs this exact source literal as a separate fresh read-only probe under
 // the already-held turn. PostgreSQL itself supplies jsonb formatting; no client

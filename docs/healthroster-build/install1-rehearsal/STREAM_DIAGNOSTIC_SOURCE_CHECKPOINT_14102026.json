@@ -1,0 +1,127 @@
+{
+  "status": "DIAGNOSTIC_DURABILITY_SOURCE_BACKUP_NATIVE_HELD",
+  "predecessor": "54d57b4367425d63e7121771017d2c2168fdf8cd",
+  "pins": [
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT3_RESTART_LOG_OBSERVATION_14102026.json",
+      "bytes": 871,
+      "sha256": "f748b7a1b50da703e8e9741e12980902bead996089f775775bd2dfa1ae7d9f10"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/STREAM_DIAGNOSTIC_DURABILITY_14102026.md",
+      "bytes": 3038,
+      "sha256": "8b337b0eb4be07b1b63fbfa6177b108a608fcc717f168b941deefbf3173a6c53"
+    },
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "bytes": 7534,
+      "sha256": "b123b4d8a86bdfc127888e0807711a624adef90822993c640e887b72ad1b847c"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 40974,
+      "sha256": "bdbd63836c82b29e64d1d11f946554dc1293cd00e92b23e5eb6430f9bc933054"
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "bytes": 19824,
+      "sha256": "400fd8e96029e70d5dc7ab9fb3b132d394d50a4954035cc85a1b8e5a3cad9d9d"
+    },
+    {
+      "file": "scripts/healthroster-install1-restart-log-observation.mjs",
+      "bytes": 3051,
+      "sha256": "e53da7ff297e8c29beedded017889e935fbb80b908e51c5f44653e7e102c68b1"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-stream-observer.mjs",
+      "bytes": 3269,
+      "sha256": "d78c4742e831dbe38870a2df202ab54808028ec4fa7f399288c511cb3e494fa6"
+    },
+    {
+      "file": "scripts/healthroster-stream-source-checkpoint.mjs",
+      "bytes": 3372,
+      "sha256": "ccdeb9055da747eec9de7d901a8d245a4e12e687bcbdc5568fd4344a8ab6cdff"
+    },
+    {
+      "file": "tests/healthroster-rehearsal-stream-observer.test.mjs",
+      "bytes": 5994,
+      "sha256": "9980f259086b55a4fc9b945fa8ede7c8a5297ed5075234c9e68ece8136bb40d4"
+    }
+  ],
+  "syntax": [
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-install1-restart-log-observation.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-stream-observer.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "scripts/healthroster-stream-source-checkpoint.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "tests/healthroster-rehearsal-stream-observer.test.mjs",
+      "exitCode": 0
+    }
+  ],
+  "reverseSha256": "dc0302496591a4f6b2b0c702834373952e13a3888569b15c74d3e05bb8cbc675",
+  "wholeChangedOwnerReversePassed": true,
+  "rawStagedWhitespaceExitCode": 0,
+  "selectedFileCredentialFindings": 0,
+  "observedRootSourceGroups": [
+    {
+      "files": [
+        "tests/healthroster-rehearsal-stream-observer.test.mjs",
+        "tests/healthroster-install1-native-coordinator.test.mjs",
+        "tests/healthroster-turn-control.test.mjs"
+      ],
+      "tests": 21,
+      "pass": 21,
+      "fail": 0,
+      "exitCode": 0
+    },
+    {
+      "files": [
+        "tests/healthroster-install1-full-rehearsal.test.mjs",
+        "tests/healthroster-full-rehearsal-protocol.test.mjs",
+        "tests/healthroster-live-test-restoration.test.mjs"
+      ],
+      "tests": 50,
+      "pass": 50,
+      "fail": 0,
+      "exitCode": 0
+    }
+  ],
+  "observedCredentialScan": {
+    "files": 7079,
+    "exitCode": 0
+  },
+  "observedDatabaseContractCoupling": {
+    "exitCode": 0
+  },
+  "diagnosticOnly": true,
+  "qualifiedPartialRecords": false,
+  "sqlVerifierBodiesChanged": false,
+  "transactionAndFixtureObserversChanged": false,
+  "finalNativePublicationGuardsChanged": false,
+  "native": false,
+  "installation": false,
+  "restartCauseFixed": false,
+  "fourthRehearsalDispatched": false,
+  "independentSourceReview": "PENDING",
+  "futureExactCommittedArchiveGate": "REQUIRED"
+}

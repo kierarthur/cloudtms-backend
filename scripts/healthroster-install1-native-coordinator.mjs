@@ -13,6 +13,7 @@ import {canonical,digest} from './cloudtms-managed-release-sql.mjs';
 import {createReceiptJournal,latestBusyTimestamp} from './healthroster-receipt-journal.mjs';
 import {freshFixtureProofSql,qualifyLiveRestoration} from './healthroster-live-test-restoration.mjs';
 import assert from 'node:assert/strict';
+import {createRehearsalStreamObserver} from './healthroster-rehearsal-stream-observer.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
@@ -126,19 +127,16 @@ export async function runNativeInstall1(){
       const units=[...input.sql.matchAll(/^\\echo HR_FILE_BEGIN (\d+)$/gm)].map(match=>{
        const line=input.sql.slice(0,match.index).split('\n').length;
        return {index:Number(match[1]),file:input.lineMap.find(row=>row.startLine>line)?.file??'HARNESS_CONTROL'};});
-      let stdoutTail='';
-      const observedTurn={...turn,runOwnedChild:options=>turn.runOwnedChild({...options,options:{...options.options,onStdout(chunk){
-       const text=stdoutTail+chunk.toString();
-       for(const match of text.matchAll(/^HR_FILE_(BEGIN|END) (\d+)\r?(?=\n)/gm)){
-        const index=Number(match[2]);if(!units.some(unit=>unit.index===index))continue;
-        receipt.progress={unit:index,file:units.find(unit=>unit.index===index).file,event:match[1],unitCount:units.length,at:new Date().toISOString()};
-        try{journal.checkpoint(receipt.progress,{progress:true});}catch(error){receipt.receiptPersistenceFailed=true;throw error;}
-       }
-       // Only keep a short incomplete control line for progress. Raw catalogue,
-       // row and diagnostic output is never persisted or sent to the console.
-       const last=text.slice(text.lastIndexOf('\n')+1);stdoutTail=last.length<160?last:'';
-      }}})};
-      const execution=await executePsqlWithinOwnedTurn({...input,turn:observedTurn,psqlPath,env:agencyChildEnvironment('healthroster_install1_full')});
+      const observer=createRehearsalStreamObserver({units,lineMap:input.lineMap,allowedCodes:new Set(input.diagnosticCodes),onRecord(record){
+       const value={...record,at:new Date().toISOString()};
+       if(record.kind==='UNIT_PROGRESS')receipt.progress=value;
+       else if(record.kind==='PARTIAL_TRANSACTION_IDENTITY')receipt.partialTransactionIdentity=value;
+       else {receipt.partialDiagnostics??=[];receipt.partialDiagnostics.push(value);}
+       try{journal.checkpoint(value,{progress:true});}catch(error){receipt.receiptPersistenceFailed=true;throw error;}
+      }});
+      const observedTurn={...turn,runOwnedChild:options=>turn.runOwnedChild({...options,options:{...options.options,onStdout:observer.onStdout,onStderr:observer.onStderr}})};
+      let execution;try{execution=await executePsqlWithinOwnedTurn({...input,turn:observedTurn,psqlPath,env:agencyChildEnvironment('healthroster_install1_full')});}
+      finally{receipt.partialStreamSummary=observer.summary();save({continueRestoration:true});}
       nativeExecution=execution;receipt.execution=publicExecution(execution);receipt.errors=execution.errors;receipt.status='FULL_REHEARSAL_SQL_COMPLETED';save();return execution;},
      async freshAfter(){const after={...await snapshot(),connectedFresh:true};receipt.after=publicSnapshot(after);
       const prior=new Map((receipt.before?.businessRelations??[]).map(row=>[row.relation,row]));

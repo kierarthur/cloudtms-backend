@@ -1,0 +1,38 @@
+{
+  "status": "EXACT_TEST_READ_ONLY_LOG_LABEL_OBSERVATION",
+  "service": {
+    "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+    "name": "postgres-service-p0qoe"
+  },
+  "window": {
+    "start": "2026-10-14T09:07:20Z",
+    "end": "2026-10-14T09:08:30Z"
+  },
+  "results": [
+    {
+      "selector": "{app=\"postgres-service-p0qoe\"}",
+      "lineCount": 0,
+      "streamCount": 0,
+      "events": [],
+      "limited": false
+    },
+    {
+      "selector": "{app=\"cloudtms-codex-poc-pg17\"}",
+      "lineCount": 0,
+      "streamCount": 0,
+      "events": [],
+      "limited": false
+    },
+    {
+      "selector": "{addon=\"postgres-service-p0qoe\"}",
+      "lineCount": 0,
+      "streamCount": 0,
+      "events": [],
+      "limited": false
+    }
+  ],
+  "rawLogsRetained": false,
+  "secretsReturned": false,
+  "mutations": false,
+  "checkedAt": "2026-10-14T09:58:03.351Z"
+}
