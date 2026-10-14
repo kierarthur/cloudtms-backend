@@ -1,0 +1,20 @@
+create or replace function private.weekly_source_billing_movement_hash_v1(p_state jsonb)
+returns bytea language plpgsql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if jsonb_typeof(p_state) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_state) k
+    where k not in ('transition_id','nhsp_upload_row_id','expense_authority_generation_id','self_bill_report_row_id','vat_rounding_revision_id','invoice_window_cycle_id','invoice_only_snapshot_line_id','pay_effect',
+      'final_revision_id','finalisation_cycle_id','actual_client_id','candidate_id','contract_id','work_event_id','movement_role',
+      'correction_unit_id','prior_movement_id','source_profile_kind','source_line_kind','source_facts','pay_vector','charge_vector',
+      'total_pay_pence','total_pay_ex_vat','calculated_comparison_charge_pence','source_validation_charge_pence',
+      'invoice_presentation_charge_pence','vat_rate_pct','vat_amount','total_inc_vat','price_check_result','price_check_fingerprint',
+      'charge_acceptance_id','mapping_rate_policy_fingerprint','invoice_timesheet_id','vector')) then
+    raise exception 'WEEKLY_SOURCE_BILLING_HASH_INPUT_INVALID' using errcode='22023';
+  end if;
+  -- Keep the existing domain and each old producer's exact JSON field set.
+  -- Newly present origins are added by their producer, never by NULL backfill.
+  return private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BILLING_MOVEMENT_V1',p_state);
+end;
+$function$;
+ALTER FUNCTION private.weekly_source_billing_movement_hash_v1(jsonb) OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.weekly_source_billing_movement_hash_v1(jsonb) FROM public,anon,authenticated,service_role;

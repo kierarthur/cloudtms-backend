@@ -1,0 +1,47 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "effect_free_cases": 17,
+  "passed": 17,
+  "failed": 0,
+  "syntax_passed": 11,
+  "complete_SQL_reversals": 14,
+  "complete_Broker_reversals": 1,
+  "exact_original_CHECK_region_reversal": 1,
+  "full_reverse_records": 16,
+  "total_hunks": 54,
+  "all_hunk_occurrences_verified": true,
+  "private_additions": 6,
+  "public_additions": 0,
+  "selected_SQL_declarations": 20,
+  "selected_SQL_leaves": 19,
+  "one_time_source_leaves": 2,
+  "exact_input_pins": 26,
+  "preserved_dependency_manifests": 13,
+  "preserved_dependency_artifacts": 229,
+  "credential_pattern_findings": 0,
+  "whitespace_disposition": "EXCEPTIONS PRESERVED; NOT BLANKET PASS",
+  "whitespace_exceptions": [
+    {
+      "file": "before/02_complete_office_recheck.sqlinc",
+      "kind": "EXACT_ARCHIVED_OR_PROPOSED_EOF_BLANK_LINES"
+    },
+    {
+      "file": "forward/02_complete_office_recheck.sqlinc",
+      "kind": "EXACT_ARCHIVED_OR_PROPOSED_EOF_BLANK_LINES"
+    }
+  ],
+  "native_SQL_queries": 0,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "API_calls": 0,
+  "canonical_mounted": false,
+  "source_fixed_expenses_complete": false,
+  "full_pay_prepared_consumer_census_complete": false,
+  "Office_confirm_UI_complete": false,
+  "paid_same_separate_full_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "actual_preserved_scratch_receipt": "Prior managed-key-source-gCW1f5 refusal remains; this creator created no scratch and performs no deletion.",
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}

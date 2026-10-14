@@ -1,0 +1,266 @@
+{
+  "source_only": true,
+  "current_SQL_input_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "current_runtime_input_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "exact_inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "bytes": 39828,
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "bytes": 83915,
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "bytes": 19716,
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "bytes": 47770,
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "bytes": 9625,
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16112,
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "bytes": 32206,
+      "sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/05102026_1112_bpay_next_source_paid_evidence_page_v1.sql",
+      "bytes": 48233,
+      "sha256": "42feb18efe21530f0299e693df4447363ba91f837d8d1154e1cb322b96c30432"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "bytes": 70504,
+      "sha256": "e1a210e31046137b4f08c540cd1025674e0f3eaa57bf6a00978d8f0d0f31f447"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+      "bytes": 4464,
+      "sha256": "bf5a185e43e565afa45e9282d2bb9bca454a258b47bbd38cfa06ad2876339d23"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+      "bytes": 514,
+      "sha256": "58af5fef09190f8343397013dc931521ea060579f0ad2be5c7ecf415f9ea6787"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/01102026_1201_weekly_source_client_cycle_scope.sql",
+      "bytes": 2211,
+      "sha256": "b2105f82bdc592dc4312837648f7fe4ab7c421016f3b1160c8c97fc61b088a47"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "bytes": 2281,
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    },
+    {
+      "commit": "63b94142c3078ea39917bb680a6bc582ab05f1ec",
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    },
+    {
+      "commit": "63b94142c3078ea39917bb680a6bc582ab05f1ec",
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/PINNED_MANAGED_SQL_SCANNER.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "commit": "3c5090a7bdd2f64ebcfb0810f86693f10a0295e9",
+      "file": "docs/healthroster-build/proposals/root-effective-body-amendment-census-20261014/BODY_AMENDMENT_CENSUS.json",
+      "bytes": 437183,
+      "sha256": "cf7a493577f8d9f3a73a47a9095033659303b5446fef46d4bf3d1604262a53ca"
+    }
+  ],
+  "dependency_manifest_pins": [
+    {
+      "folder": "kept-pay-identical-rekey-current-root-forward-20261014",
+      "manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "artifact_count": 32,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "kept-credit-batch-repeatable-successor-20261014",
+      "manifest_sha256": "0492b381dd7c231b02de1bf148799a8516258b9c87242d67e6c2a954be3b4dde",
+      "artifact_count": 14,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-default-current-native-proposal-20261014",
+      "manifest_sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73",
+      "artifact_count": 56,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-retained-snapshot-mapping-successor-20261014",
+      "manifest_sha256": "6fe840e0fdb7ca49a8875bac0fccd47dea05df9471991e651cff3c6d251f38fc",
+      "artifact_count": 9,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-correction-baseline-successor-20261014",
+      "manifest_sha256": "4cbdd40bffd1da5fbb1eb0200c315a30fc6180134af2d4ff53e96b353f8ff2c5",
+      "artifact_count": 12,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-correction-expanded-native-scope-successor-20261014",
+      "manifest_sha256": "367e86f958ef336a84e90f0c02b4fb1c527babd79867b67558ea6dd42bc33a38",
+      "artifact_count": 8,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-revision-census-guard-successor-20261014",
+      "manifest_sha256": "b163fccb2b97a3fad453fde9ac6f04bcd9e7cc5784c9af531797311bac345e2a",
+      "artifact_count": 6,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-accept-current-native-construction-20261014",
+      "manifest_sha256": "e328d4c2b3ebf6e1bca299bfd00c625f005bedf9e66d3803dcf03ca5cc055445",
+      "artifact_count": 30,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-accept-head-continuity-construction-20261014",
+      "manifest_sha256": "2d33b9542057ed971dbe57a60fdec1c946905a1c273ffdf5ba387b7ee97b9d5a",
+      "artifact_count": 12,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-accept-deferred-anchor-successor-20261014",
+      "manifest_sha256": "555021753d81a1ac3c260ff78dc7349cd28c93d2fa84cf79a49c93e3e63443ae",
+      "artifact_count": 10,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "rekey-source-alias-current-native-successor-20261014",
+      "manifest_sha256": "44706e1eef850a647458d1af77e4a860520ca60d68801b1b91f88bae6135be07",
+      "artifact_count": 15,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "rekey-source-alias-all-owner-successor-20261014",
+      "manifest_sha256": "400b1b49fe5534b79baccbea9a9e3b7017458b40c84afeb66ebafedced92ff5c",
+      "artifact_count": 10,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "paid-shift-overlap-native-facts-construction-20261014",
+      "manifest_sha256": "17fb14d164309dbc3c17895be10ae105ea6663e083d9a495112a50a92e6f0fd5",
+      "artifact_count": 15,
+      "saved_and_committed_preserved": true
+    }
+  ],
+  "preserved_dependency_artifacts": 229,
+  "raw_before_after_reverse_scope": "FULL_SELECTED_OWNERS; NOT_WHOLE_CURRENT_DECLARATION_OR_AMENDMENT_CLOSURE",
+  "guarded_amendment_supplement": {
+    "commit": "3c5090a7bdd2f64ebcfb0810f86693f10a0295e9",
+    "file": "docs/healthroster-build/proposals/root-effective-body-amendment-census-20261014/BODY_AMENDMENT_CENSUS.json",
+    "bytes": 437183,
+    "sha256": "cf7a493577f8d9f3a73a47a9095033659303b5446fef46d4bf3d1604262a53ca",
+    "status": "CANONICAL_SOURCE_BODY_AMENDMENT_COVERAGE_NOT_EXECUTION_OR_FINAL_EFFECTIVE_DEFINITIONS",
+    "source_commit": "6c5c18f2a01a11948c9fecb045eb75e8e1599d01",
+    "root_count": 1482,
+    "input_count": 1743,
+    "source_occurrences": 2158,
+    "limitations": "Counts only canonical recursively ordered top-level DO statements containing pg_get_functiondef after comment stripping. A read may be introspection rather than amendment; EXECUTE/replace/exception indicators are lexical, not semantic verdicts. Literal regprocedure target lists may contain guards or unrelated references, and computed/catalogue-driven identities remain unresolved. Source replacement reconstruction and actual installed pg_proc body/configuration/ACL are required before claiming final effective owner coverage. No function definition was executed or changed.",
+    "authoritative_inventory": false,
+    "uppercase_SQL_inventory_successor_required": true,
+    "author_reported_missing_case_sensitive_paths": [
+      "supabase/migrations/26052026_1525_INDEX_OUTBOX.SQL",
+      "supabase/migrations/13072026_1648_MIGRATION.SQL"
+    ],
+    "purpose": "PRESERVE_GUARDED_BODY_AMENDMENTS; DOES_NOT_ESTABLISH_FINAL_EFFECTIVE_BODIES"
+  },
+  "canonical_mounted": false,
+  "native_proof": false
+}

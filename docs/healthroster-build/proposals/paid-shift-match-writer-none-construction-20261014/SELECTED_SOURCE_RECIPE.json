@@ -1,0 +1,338 @@
+{
+  "source_only": true,
+  "status": "UNMOUNTED_CONSTRUCTION_FOR_BOUNDED_SOURCE_REVIEW",
+  "independent_review": "PENDING",
+  "current_input_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "own_published_prerequisite_commit": "63b94142c3078ea39917bb680a6bc582ab05f1ec",
+  "immutable_prerequisite_manifests": [
+    {
+      "folder": "kept-pay-identical-rekey-current-root-forward-20261014",
+      "manifest_sha256": "3e878999a0b04b24ca0bbd0776bb1f042bc805df142904f28b26c3403dc0aca8",
+      "artifact_count": 32,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "kept-credit-batch-repeatable-successor-20261014",
+      "manifest_sha256": "0492b381dd7c231b02de1bf148799a8516258b9c87242d67e6c2a954be3b4dde",
+      "artifact_count": 14,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-default-current-native-proposal-20261014",
+      "manifest_sha256": "4b80a17dab44b0e3f17357b3b2dde57478dfdba09f871c0ef3743222f711ad73",
+      "artifact_count": 56,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-retained-snapshot-mapping-successor-20261014",
+      "manifest_sha256": "6fe840e0fdb7ca49a8875bac0fccd47dea05df9471991e651cff3c6d251f38fc",
+      "artifact_count": 9,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-correction-baseline-successor-20261014",
+      "manifest_sha256": "4cbdd40bffd1da5fbb1eb0200c315a30fc6180134af2d4ff53e96b353f8ff2c5",
+      "artifact_count": 12,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-correction-expanded-native-scope-successor-20261014",
+      "manifest_sha256": "367e86f958ef336a84e90f0c02b4fb1c527babd79867b67558ea6dd42bc33a38",
+      "artifact_count": 8,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-revision-census-guard-successor-20261014",
+      "manifest_sha256": "b163fccb2b97a3fad453fde9ac6f04bcd9e7cc5784c9af531797311bac345e2a",
+      "artifact_count": 6,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-accept-current-native-construction-20261014",
+      "manifest_sha256": "e328d4c2b3ebf6e1bca299bfd00c625f005bedf9e66d3803dcf03ca5cc055445",
+      "artifact_count": 30,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-accept-head-continuity-construction-20261014",
+      "manifest_sha256": "2d33b9542057ed971dbe57a60fdec1c946905a1c273ffdf5ba387b7ee97b9d5a",
+      "artifact_count": 12,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "missing-accept-deferred-anchor-successor-20261014",
+      "manifest_sha256": "555021753d81a1ac3c260ff78dc7349cd28c93d2fa84cf79a49c93e3e63443ae",
+      "artifact_count": 10,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "rekey-source-alias-current-native-successor-20261014",
+      "manifest_sha256": "44706e1eef850a647458d1af77e4a860520ca60d68801b1b91f88bae6135be07",
+      "artifact_count": 15,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "rekey-source-alias-all-owner-successor-20261014",
+      "manifest_sha256": "400b1b49fe5534b79baccbea9a9e3b7017458b40c84afeb66ebafedced92ff5c",
+      "artifact_count": 10,
+      "saved_and_committed_preserved": true
+    },
+    {
+      "folder": "paid-shift-overlap-native-facts-construction-20261014",
+      "manifest_sha256": "17fb14d164309dbc3c17895be10ae105ea6663e083d9a495112a50a92e6f0fd5",
+      "artifact_count": 15,
+      "saved_and_committed_preserved": true
+    }
+  ],
+  "finite_direct_dependencies": [
+    {
+      "packet": "rekey-source-alias-all-owner-successor-20261014",
+      "file": "forward/00_known_source_key.sqlinc",
+      "bytes": 4123,
+      "sha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d"
+    },
+    {
+      "packet": "rekey-source-alias-current-native-successor-20261014",
+      "file": "forward/01_complete_identical_rekey_prior.sqlinc",
+      "bytes": 10758,
+      "sha256": "7243e1b99f016f22efcf5b1bbaa1a061bb2fc6f2e621c4ca24bbe0368f397eaf"
+    },
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "file": "forward/01_work_event_payment_facts.sqlinc",
+      "bytes": 12479,
+      "sha256": "19619923daac1059be9d4ac719cbcf42b5721a08d4b39e82a79e187a537cc2d5"
+    },
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "file": "forward/02_complete_keep_context.sqlinc",
+      "bytes": 21427,
+      "sha256": "ea04c89d2854f9733bf52dda908a1e4887703f118288ee8411f421a0457630b4"
+    },
+    {
+      "packet": "paid-shift-overlap-native-facts-construction-20261014",
+      "file": "forward/03_paid_overlap_source_inputs.sqlinc",
+      "bytes": 6755,
+      "sha256": "4a0fb36b169fd35db727c152175979fe9ec1b5d4724a90e0202e8323513a1ac4"
+    },
+    {
+      "packet": "missing-retained-snapshot-mapping-successor-20261014",
+      "file": "forward/09_complete_shared_current_capture_proposal.sqlinc",
+      "bytes": 7903,
+      "sha256": "31f088f054494565affc36b21d7a3d29972917f4ae89d3112d2c9e79a2a946b6"
+    },
+    {
+      "packet": "missing-correction-expanded-native-scope-successor-20261014",
+      "file": "forward/02_complete_missing_correction_baseline.sqlinc",
+      "bytes": 10724,
+      "sha256": "2cb220bb04ea9802bc034f8c62b37f0511166c69dcd1f099d22d4942e219a0a7"
+    },
+    {
+      "packet": "missing-revision-census-guard-successor-20261014",
+      "file": "forward/04_revision_census_guard.sqlinc",
+      "bytes": 2356,
+      "sha256": "4af429cea4eaaa4bd0d02e18f44b4fd80fd87658d0163411ec913efde8afc7e0"
+    },
+    {
+      "packet": "missing-accept-deferred-anchor-successor-20261014",
+      "file": "forward/01_complete_current_removal.sqlinc",
+      "bytes": 17443,
+      "sha256": "533f3371b90eeb46fa78385c87e9d0661fe07cdf061c1c986d7ae270ed898a34"
+    }
+  ],
+  "complete_dependency_composition_required": "RETAIN WHOLE ACCEPTED Keep/KC14 + Missing56/M1/M2/expanded/M3 + Accept30/continuity/deferred/source foundations. This finite direct list is not a replacement whole mount recipe. Later kept_context facts15 supersedes Accept30 context; selected current-removal repair supersedes original continuity reader; corrected all-owner known-key helper supersedes original rekey15 helper.",
+  "excluded_predecessors": [
+    "rekey-source-alias-current-native-successor-20261014/forward/00_known_source_key.sqlinc",
+    "missing-accept-head-continuity-construction-20261014/forward/01_complete_current_removal.sqlinc",
+    "missing-default-current-native-proposal-20261014/forward/06_complete_fin4_default_draft.sqlinc"
+  ],
+  "one_time_source_order": [
+    "one-time/00_paid_shift_choice_fields.sqlinc",
+    "one-time/01_invoice_snapshot_origins.sqlinc"
+  ],
+  "repeatable_source_order": [
+    "forward/01_paid_overlap_choice_admit.sqlinc",
+    "forward/02_complete_office_recheck.sqlinc",
+    "forward/03_paid_overlap_choice_current.sqlinc",
+    "forward/04_complete_upload_context.sqlinc",
+    "forward/05_complete_projection_rows.sqlinc",
+    "forward/06_complete_fin4.sqlinc",
+    "forward/07_paid_choice_revision_guard.sqlinc",
+    "forward/08_paid_match_invoice_producer.sqlinc",
+    "forward/09_paid_match_invoice_origin_assert.sqlinc",
+    "forward/10_complete_billing_hash.sqlinc",
+    "forward/11_complete_movement_window.sqlinc",
+    "forward/12_complete_source_amount_valid.sqlinc",
+    "forward/13_complete_invoice_admission.sqlinc",
+    "forward/14_complete_self_bill_shift_facts.sqlinc",
+    "forward/15_complete_active_pay_movements.sqlinc",
+    "forward/16_complete_source_pay_units.sqlinc",
+    "forward/17_complete_selected_source_witness.sqlinc",
+    "forward/18_complete_finalisation_pay_open.sqlinc",
+    "forward/19_complete_invoice_allocation.sqlinc"
+  ],
+  "complete_current_declarations": [
+    {
+      "file": "forward/01_paid_overlap_choice_admit.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "definition_sha256": "791c800c8fa64700c792e8a2fdc897360321f214576c7204699a5bde4b83f71b"
+    },
+    {
+      "file": "forward/02_complete_office_recheck.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "definition_sha256": "4c6fd5d2f984de18dc16841c1f7e692f5d548e07a8de737c960b9f5c94992dda"
+    },
+    {
+      "file": "forward/03_paid_overlap_choice_current.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "definition_sha256": "bf541dcdd351507717a3d4e75f4c63e7993d1730c73b11908ad401f59bc8d3e5"
+    },
+    {
+      "file": "forward/03_paid_overlap_choice_current.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "definition_sha256": "9b3064f6b855c53cd597fd9ff6dea26e9ed7dcde5f096d15da4e7ce4c6a80db3"
+    },
+    {
+      "file": "forward/04_complete_upload_context.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "definition_sha256": "c44033c68fbd3b81163e87e62becbf9a25ef8862f33a1ae4d6e1f0573207c6d6"
+    },
+    {
+      "file": "forward/05_complete_projection_rows.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "definition_sha256": "124863ef713a5c7be003cd78edeb1fcd3a8b6a35dfd016c7a31f3146a797c75e"
+    },
+    {
+      "file": "forward/06_complete_fin4.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "definition_sha256": "d803a51e7bb16741438d254d3d525514dcb095c78f6fd89acc03c086d406b4e4"
+    },
+    {
+      "file": "forward/07_paid_choice_revision_guard.sqlinc",
+      "signature": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "definition_sha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31"
+    },
+    {
+      "file": "forward/08_paid_match_invoice_producer.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "definition_sha256": "ebc8e785bedd37dbad190dc801e8c4129735044585882be6a70df94b7bac9673"
+    },
+    {
+      "file": "forward/09_paid_match_invoice_origin_assert.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "definition_sha256": "fc1f13853fed51871cee184fee53c1cacd9efbec3064810b856574240e445c44"
+    },
+    {
+      "file": "forward/10_complete_billing_hash.sqlinc",
+      "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "definition_sha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306"
+    },
+    {
+      "file": "forward/11_complete_movement_window.sqlinc",
+      "signature": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "definition_sha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7"
+    },
+    {
+      "file": "forward/12_complete_source_amount_valid.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "definition_sha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580"
+    },
+    {
+      "file": "forward/13_complete_invoice_admission.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "definition_sha256": "eb00cdb73402d99de6aeeb716e9c873e5b33a99d6609bbc2fb2935a839288600"
+    },
+    {
+      "file": "forward/14_complete_self_bill_shift_facts.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "definition_sha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669"
+    },
+    {
+      "file": "forward/15_complete_active_pay_movements.sqlinc",
+      "signature": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "definition_sha256": "260221a9b6a6748b404bde0880ecc263a59d96ef991cc73669bdf5292c8f8d72"
+    },
+    {
+      "file": "forward/16_complete_source_pay_units.sqlinc",
+      "signature": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "definition_sha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5"
+    },
+    {
+      "file": "forward/17_complete_selected_source_witness.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "definition_sha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6"
+    },
+    {
+      "file": "forward/18_complete_finalisation_pay_open.sqlinc",
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "definition_sha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804"
+    },
+    {
+      "file": "forward/19_complete_invoice_allocation.sqlinc",
+      "signature": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "definition_sha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be"
+    }
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+    "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+    "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+    "private.weekly_source_paid_choice_revision_guard_v1()",
+    "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)"
+  ],
+  "new_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "existing_public_service_signatures": [
+    "public.weekly_source_office_recheck_begin_v1(jsonb)",
+    "public.weekly_source_upload_context_v1(jsonb)",
+    "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+    "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+    "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)"
+  ],
+  "existing_public_acl": "logical postgres; PUBLIC/anon/authenticated revoked; retain service_role EXECUTE only",
+  "runtime_forward": {
+    "file": "forward/broker/src/weekly-source/upload-publication-owner.mjs",
+    "sha256": "8cb9d3a6b9e5f01278f81197a3ce98cf8225baf892d541fb69b6d261f6df5994",
+    "reverse": "RUNTIME_REVERSE.json"
+  },
+  "unchanged_native_calculators_and_classifiers": true,
+  "policy_X": "Original settlement/economic scope, all-component native proof and frozen artifacts remain authoritative; no alternate calculator/key/provider/settlement path.",
+  "new_business_tables": 0,
+  "existing_choices_store_only": true,
+  "new_columns": 13,
+  "new_transition_outcomes": 0,
+  "field_ABI": {
+    "resolution_snapshot": [
+      "pay_effect",
+      "paid_overlap_choice_id"
+    ],
+    "movement": [
+      "pay_effect",
+      "invoice_only_snapshot_line_id"
+    ],
+    "revision": [
+      "paid_overlap_choice_census"
+    ],
+    "transition": [
+      "pay_basis_kind",
+      "paid_match_source_rows"
+    ],
+    "invoice_origin_kind": "SOURCE_INVOICE_ONLY_SNAPSHOT",
+    "retained_basis": "RETAINED_PAID_MATCH"
+  },
+  "shared_banking_owners_changed_in_this_packet": false,
+  "shared_capture_dependency": "Previously proposed mapping successor; current-owner shared compatibility remains required; no Banking canonical overwrite.",
+  "canonical_root_naming_and_mount": "ROOT-OWNED FUTURE CONTAINED SOURCE STAGE AFTER CURRENT OWNERS ONLY AFTER COMPLETE INTEGRATION REVIEW/CONTRACT/ACL/VERIFIERS; NO CANONICAL ROOT CREATED HERE",
+  "source_fixed_expenses_complete": false,
+  "full_pay_prepared_consumer_census_complete": false,
+  "Office_confirm_UI_complete": false,
+  "CorrectFinal_NHSP_protected_Legacy_complete": false,
+  "OFF_multi_period_fixture_complete": false,
+  "Report_companion_binding_complete": false,
+  "current_literal_registry_and_verifier_union_complete": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}

@@ -1,0 +1,171 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "input_bytes": 83915,
+      "input_sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "output": "14_complete_self_bill_shift_facts.sqlinc",
+      "before_sha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788",
+      "after_definition_sha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669",
+      "after_leaf_sha256": "eac92cc2e6d35394a0162a39a0ed75086514e70f776718ae86ea7a46615ddf64",
+      "hunks": [
+        {
+          "name": "one payable resolution per actual event; real invoice companions remain separate",
+          "before": "    and resolution.mapping_state='RESOLVED';",
+          "after": "    and resolution.mapping_state='RESOLVED' and resolution.pay_effect='NORMAL';"
+        },
+        {
+          "name": "NONE-only source presence uses the genuine confirmed prior payable basis",
+          "before": "  if count_rows>1 then raise exception 'WEEKLY_SOURCE_SELF_BILL_SHIFT_AMBIGUOUS' using errcode='55000'; end if;",
+          "after": "  if count_rows=0 then\n    -- This selects an actual immutable prior row as PAY basis, not as current\n    -- upload membership. Real current NONE rows and their immutable confirmations\n    -- are the independent source-presence evidence for this branch.\n    select array_agg(distinct prior_resolution.id),count(distinct prior_resolution.id)\n      into ids,count_rows\n    from public.weekly_source_row_resolutions companion\n    join public.weekly_source_upload_rows current_row on current_row.id=companion.upload_row_id\n    join public.weekly_source_uploads current_upload on current_upload.id=current_row.upload_id\n    join public.weekly_source_projection_publications current_publication\n      on current_publication.id=v_selection_publication_id and current_publication.upload_id=current_upload.id\n        and current_publication.source_cycle_id=c.id and current_publication.authority_scope_kind='CYCLE'\n        and current_publication.state=case when preparing_count=1 then 'CORRECTION_READY' else 'CURRENT' end\n    join private.weekly_source_office_row_choices choice on choice.id=companion.paid_overlap_choice_id\n      and choice.upload_row_id=current_row.id and choice.pay_effect='NONE' and not choice.separate_shift\n      and choice.work_event_id=event_fact.id and choice.paid_overlap_target_work_event_id=event_fact.id\n      and choice.candidate_id=event_fact.candidate_id and choice.client_id=event_fact.client_id\n    cross join lateral jsonb_array_elements(choice.paid_overlap_inputs_json#>'{inputs,overlaps}') item\n    join public.weekly_source_final_snapshot_lines prior_snapshot\n      on prior_snapshot.id=(item->>'snapshot_line_id')::uuid and prior_snapshot.work_event_id=event_fact.id\n        and prior_snapshot.candidate_id=event_fact.candidate_id and prior_snapshot.client_id=event_fact.client_id\n        and prior_snapshot.contract_id=choice.contract_id and prior_snapshot.pay_effect='NORMAL'\n    join public.weekly_source_row_resolutions prior_resolution on prior_resolution.id=prior_snapshot.row_resolution_id\n      and prior_resolution.work_event_id=event_fact.id and prior_resolution.pay_effect='NORMAL'\n    join public.weekly_source_final_revisions prior_revision on prior_revision.id=prior_snapshot.final_revision_id\n    join public.weekly_source_cycles prior_cycle on prior_cycle.id=prior_revision.source_cycle_id\n      and prior_cycle.source_group_id=c.source_group_id and prior_cycle.finalisation_week_ending<c.finalisation_week_ending\n    join public.weekly_source_billing_movements prior_movement on prior_movement.id=(item->>'current_pay_head_movement_id')::uuid\n      and prior_movement.work_event_id=event_fact.id and prior_movement.candidate_id=event_fact.candidate_id\n      and prior_movement.actual_client_id=event_fact.client_id and prior_movement.contract_id=prior_snapshot.contract_id\n      and prior_movement.pay_effect='NORMAL' and prior_movement.movement_role in ('POSITIVE','REPLACEMENT')\n      and prior_movement.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT')\n    where current_upload.id=v_selection_upload_id and current_upload.source_cycle_id=c.id and current_upload.report_scope_id is null\n      and current_upload.state=case when preparing_count=1 then 'CORRECTION_READY' else 'CURRENT' end\n      and companion.generation=coalesce(current_publication.projection_generation,current_publication.authority_scope_version)\n      and companion.mapping_state='RESOLVED' and companion.pay_effect='NONE' and companion.work_event_id=event_fact.id\n      and companion.candidate_id=event_fact.candidate_id and companion.client_id=event_fact.client_id\n      and companion.contract_id=choice.contract_id and item->>'work_event_id'=event_fact.id::text\n      and current_row.row_finalisation_state='SOURCE_WORKED' and current_row.work_date=event_fact.work_date\n      and item#>'{native_payment_facts,paid}'='true'::jsonb\n      and item#>>'{native_payment_facts,paid_evidence_state}'='SETTLED_ORIGINAL'\n      and item->>'snapshot_line_hash'=encode(prior_snapshot.snapshot_line_hash,'hex')\n      and item->>'movement_economic_hash'=encode(prior_movement.movement_economic_hash,'hex')\n      and exists(select 1 from public.audit_events a where a.object_type='weekly_source_office_row_choices'\n        and a.object_id_text=choice.id::text and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED'\n        and a.actor_user_id=choice.actor_user_id and a.after_json->'choice'=to_jsonb(choice)\n        and a.after_json->'admission'=choice.paid_overlap_inputs_json);\n  end if;\n  if count_rows>1 then raise exception 'WEEKLY_SOURCE_SELF_BILL_SHIFT_AMBIGUOUS' using errcode='55000'; end if;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "input_bytes": 19716,
+      "input_sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+      "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "output": "10_complete_billing_hash.sqlinc",
+      "before_sha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782",
+      "after_definition_sha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306",
+      "after_leaf_sha256": "68489f1f09e1375c144072816067c67e76cec45c7bbe48339fdd9920580d55d0",
+      "hunks": [
+        {
+          "name": "literal two-field snapshot origin; old producer key sets unchanged",
+          "before": "'vat_rounding_revision_id','invoice_window_cycle_id',",
+          "after": "'vat_rounding_revision_id','invoice_window_cycle_id','invoice_only_snapshot_line_id','pay_effect',"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "input_bytes": 19716,
+      "input_sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+      "signature": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "output": "11_complete_movement_window.sqlinc",
+      "before_sha256": "4ac1dc27b1ec9cef2c0ca1a66599234ef780d4650817b6d057897dfab335e24b",
+      "after_definition_sha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7",
+      "after_leaf_sha256": "f7d8e809b966cec0acc0561276af1ad2d5fafec4a3e2c4b402ef12fb8c08ccee",
+      "hunks": [
+        {
+          "name": "actual snapshot companion immutable window witness",
+          "before": "      then nullif(m.source_facts_json->>'invoice_window_cycle_id','')::uuid else m.finalisation_cycle_id end;",
+          "after": "      then nullif(m.source_facts_json->>'invoice_window_cycle_id','')::uuid\n    when m.pay_effect='NONE' and m.invoice_only_snapshot_line_id is not null\n      then nullif(m.source_facts_json->>'invoice_window_cycle_id','')::uuid else m.finalisation_cycle_id end;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "input_bytes": 83915,
+      "input_sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "output": "12_complete_source_amount_valid.sqlinc",
+      "before_sha256": "fdac487a96b1bfb34936ecb650921d5580440819e61d2aee7f27b32eb6bfcc39",
+      "after_definition_sha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580",
+      "after_leaf_sha256": "4926a91e434bfde5c650a45e3559f81dc3ea309c86aaf399f1c4f16fda84cd6e",
+      "hunks": [
+        {
+          "name": "genuine snapshot origin before unchanged historical source amount checks",
+          "before": "  if not found or m.source_profile_kind<>'HEALTHROSTER_ACTUAL_ROWS' or m.transition_id is null",
+          "after": "  if not found or m.source_profile_kind<>'HEALTHROSTER_ACTUAL_ROWS' or (m.transition_id is null and m.invoice_only_snapshot_line_id is null)"
+        },
+        {
+          "name": "keep ordinary transition proof and assert only new actual snapshot origin",
+          "before": "  select * into t from public.weekly_source_state_transitions where weekly_source_state_transitions.id=m.transition_id;\n  if not found or t.final_revision_id<>m.final_revision_id or t.work_event_id<>m.work_event_id then return false; end if;",
+          "after": "  if m.invoice_only_snapshot_line_id is not null then\n    perform private.weekly_source_paid_match_invoice_origin_assert_v1(m.id);\n  else\n    select * into t from public.weekly_source_state_transitions where weekly_source_state_transitions.id=m.transition_id;\n    if not found or t.final_revision_id<>m.final_revision_id or t.work_event_id<>m.work_event_id then return false; end if;\n  end if;"
+        },
+        {
+          "name": "retain all old outcome/role combinations plus bounded NONE snapshot",
+          "before": "    or (m.source_line_kind='SOURCE_REBILL_LINE' and t.outcome='NO_CHANGE' and m.movement_role='POSITIVE' and m.total_pay_ex_vat=0)) then return false; end if;",
+          "after": "    or (m.source_line_kind='SOURCE_REBILL_LINE' and t.outcome='NO_CHANGE' and m.movement_role='POSITIVE' and m.total_pay_ex_vat=0)\n    or (m.source_line_kind='SOURCE_REBILL_LINE' and m.pay_effect='NONE' and m.invoice_only_snapshot_line_id is not null\n      and m.movement_role='POSITIVE' and m.total_pay_ex_vat=0)) then return false; end if;"
+        },
+        {
+          "name": "actual raw companion snapshot supplies unchanged full money validation",
+          "before": "  select * into sn from public.weekly_source_final_snapshot_lines where weekly_source_final_snapshot_lines.id=t.new_snapshot_line_id;",
+          "after": "  select * into sn from public.weekly_source_final_snapshot_lines where weekly_source_final_snapshot_lines.id=\n    case when m.pay_effect='NONE' then m.invoice_only_snapshot_line_id else t.new_snapshot_line_id end;"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "input_bytes": 47770,
+      "input_sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "output": "13_complete_invoice_admission.sqlinc",
+      "before_sha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0",
+      "after_definition_sha256": "eb00cdb73402d99de6aeeb716e9c873e5b33a99d6609bbc2fb2935a839288600",
+      "after_leaf_sha256": "8fddbb729fe54854038288afc988df8463f2908569230f4893f433878bed0145",
+      "hunks": [
+        {
+          "name": "actual companion presentation tuple before ordinary expense/transition branches",
+          "before": "    elsif v_is_expense then\n      select source_row.* into strict v_source_row",
+          "after": "    elsif v_movement.invoice_only_snapshot_line_id is not null then\n      perform private.weekly_source_paid_match_invoice_origin_assert_v1(v_movement.id);\n      if v_count<>1 or v_is_net then raise exception 'WEEKLY_SOURCE_PAID_MATCH_INVOICE_GROUP_INVALID' using errcode='55000';end if;\n      select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot\n        where snapshot.id=v_movement.invoice_only_snapshot_line_id and snapshot.final_revision_id=v_revision.id;\n      v_work_date:=v_snapshot.work_date;v_start:=v_snapshot.start_at_local;v_end:=v_snapshot.end_at_local;\n      v_break:=v_snapshot.break_minutes;v_reference:=v_snapshot.external_event_identity;\n      -- Genuine Source hours are presentation evidence. Native pay rates and\n      -- total remain zero; no payable position is minted from these hours.\n      v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric;\n      v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric;\n      v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric;\n      v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric;\n      v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric;\n    elsif v_is_expense then\n      select source_row.* into strict v_source_row"
+        },
+        {
+          "name": "typed literal origin does not claim a transition",
+          "before": "    v_origin_kind:=case\n      when v_is_rounding then 'INVOICE_VAT_ROUNDING'",
+          "after": "    v_origin_kind:=case\n      when v_movement.invoice_only_snapshot_line_id is not null then 'SOURCE_INVOICE_ONLY_SNAPSHOT'\n      when v_is_rounding then 'INVOICE_VAT_ROUNDING'"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "input_bytes": 9625,
+      "input_sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "signature": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "output": "19_complete_invoice_allocation.sqlinc",
+      "before_sha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0",
+      "after_definition_sha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be",
+      "after_leaf_sha256": "d8b87af710d0a61f12eb8b5087ca2b61fa549aca79830cbb2e6861f22b50649b",
+      "hunks": [
+        {
+          "name": "existing full allocation guard plus current-bound snapshot-origin verification",
+          "before": "  return pg_catalog.jsonb_build_object(\n    'ok',true,'is_source_invoice',true,'invoice_id',p_invoice_id,",
+          "after": "  perform private.weekly_source_paid_match_invoice_origin_assert_v1(movement.id)\n    from public.weekly_source_invoice_line_bindings binding\n    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id\n    where binding.invoice_id=p_invoice_id and binding.state='CURRENT'\n      and (movement.pay_effect='NONE' or movement.invoice_only_snapshot_line_id is not null);\n  return pg_catalog.jsonb_build_object(\n    'ok',true,'is_source_invoice',true,'invoice_id',p_invoice_id,"
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "input_sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "output": "one-time/01_invoice_snapshot_origins.sqlinc",
+      "before_sha256": "209f49a1f250a229e7eaa7f983465595d754633a2c3c224d13baaa1f7cde5cd1",
+      "hunks": [
+        {
+          "name": "six real mutually exclusive origins",
+          "before": "+(vat_rounding_revision_id is not null)::integer=1)",
+          "after": "+(vat_rounding_revision_id is not null)::integer+(invoice_only_snapshot_line_id is not null)::integer=1)"
+        },
+        {
+          "name": "rebill snapshot is purpose-bound NONE; original transition arm retained",
+          "before": "and (source_line_kind<>'SOURCE_REBILL_LINE' or (transition_id is not null and movement_role='POSITIVE'))",
+          "after": "and (source_line_kind<>'SOURCE_REBILL_LINE' or (movement_role='POSITIVE' and (transition_id is not null\n      or (invoice_only_snapshot_line_id is not null and pay_effect='NONE'))))\n    and (invoice_only_snapshot_line_id is null or (source_line_kind='SOURCE_REBILL_LINE' and pay_effect='NONE'\n      and source_profile_kind in ('HEALTHROSTER_ACTUAL_ROWS','GENERIC_COMPLETE_SNAPSHOT')))"
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "existing_report_path_unchanged": true,
+  "native_amount_and_hold_owners_unchanged": true,
+  "old_native_hash_inputs_preserved": true,
+  "new_origin_classification_and_verifiers_required": true,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "pipeline_complete": false
+}

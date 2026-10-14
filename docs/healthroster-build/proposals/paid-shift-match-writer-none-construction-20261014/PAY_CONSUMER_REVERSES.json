@@ -1,0 +1,99 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "input_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "signature": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "output": "15_complete_active_pay_movements.sqlinc",
+      "before_sha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e",
+      "after_definition_sha256": "260221a9b6a6748b404bde0880ecc263a59d96ef991cc73669bdf5292c8f8d72",
+      "after_leaf_sha256": "8ae42edd3532702ad991db837d12294270f50bf5a468c2d6f41aaf244c4a1c58",
+      "hunks": [
+        {
+          "name": "native effect exclusion for prior",
+          "before": "prior.source_profile_kind<>'SELF_BILL_REPORT' and prior.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "prior.source_profile_kind<>'SELF_BILL_REPORT' and prior.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and prior.pay_effect='NORMAL'",
+          "occurrences": 1
+        },
+        {
+          "name": "native effect exclusion for movement",
+          "before": "movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'",
+          "occurrences": 1
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "input_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "signature": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "output": "16_complete_source_pay_units.sqlinc",
+      "before_sha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce",
+      "after_definition_sha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5",
+      "after_leaf_sha256": "5bdfe420c541b432591015ca67006746c685ff24e66ee42654ef54ee611b1705",
+      "hunks": [
+        {
+          "name": "native effect exclusion for prior_movement",
+          "before": "prior_movement.source_profile_kind<>'SELF_BILL_REPORT' and prior_movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "prior_movement.source_profile_kind<>'SELF_BILL_REPORT' and prior_movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and prior_movement.pay_effect='NORMAL'",
+          "occurrences": 1
+        },
+        {
+          "name": "native effect exclusion for movement",
+          "before": "movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'",
+          "occurrences": 1
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "input_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "output": "17_complete_selected_source_witness.sqlinc",
+      "before_sha256": "191ea5e4d18e861af194be3937003148eef0abe523a37c0f3c4f51a599f3675a",
+      "after_definition_sha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6",
+      "after_leaf_sha256": "4a55fa7191dcc71e1d0a3fc9a6d071618bb1f716a5cc6d1aa1b2d16216f441f6",
+      "hunks": [
+        {
+          "name": "native effect exclusion for m",
+          "before": "m.source_profile_kind<>'SELF_BILL_REPORT' and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "m.source_profile_kind<>'SELF_BILL_REPORT' and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and m.pay_effect='NORMAL'",
+          "occurrences": 4
+        }
+      ],
+      "whole_reverse_verified": true
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "input_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "output": "18_complete_finalisation_pay_open.sqlinc",
+      "before_sha256": "fbbfd7a2bef70cfd74cf479dd344338b71b8eec21129443242a0594cee1ec666",
+      "after_definition_sha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804",
+      "after_leaf_sha256": "499ebc59fd4f328311d619431fe03eaa1fd48fe6e28a142dba6cadd410df3a5d",
+      "hunks": [
+        {
+          "name": "native effect exclusion for movement",
+          "before": "movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')",
+          "after": "movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'",
+          "occurrences": 2
+        }
+      ],
+      "whole_reverse_verified": true
+    }
+  ],
+  "actual_line_kind_exclusions_retained": true,
+  "whole_pay_owner_census_complete": false,
+  "prepared_and_office_consumer_composition_complete": false,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "pipeline_complete": false
+}

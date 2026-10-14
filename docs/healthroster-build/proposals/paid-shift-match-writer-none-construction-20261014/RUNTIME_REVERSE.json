@@ -1,0 +1,22 @@
+{
+  "source_only": true,
+  "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+  "input_bytes": 53302,
+  "input_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+  "after_sha256": "8cb9d3a6b9e5f01278f81197a3ce98cf8225baf892d541fb69b6d261f6df5994",
+  "hunks": [
+    {
+      "name": "literal real paid choice and native paid overlap blocker, preserving existing protected picker",
+      "before": "  if (sourceAuthority) {\n    const matches = (row.protected_matches ?? []).filter(item => item.contract_id === qualified.selectedContractId);",
+      "after": "  const paidChoice = row.paid_overlap_choice;\n  if (sourceAuthority && paidChoice != null) {\n    if (paidChoice.schema_version !== 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'\n      || !['NORMAL', 'NONE'].includes(paidChoice.pay_effect)\n      || paidChoice.upload_row_id !== row.upload_row_id\n      || paidChoice.candidate_id !== row.candidate_id || paidChoice.client_id !== row.client_id\n      || paidChoice.contract_id !== qualified.selectedContractId\n      || typeof paidChoice.paid_overlap_target_work_event_id !== 'string'\n      || typeof paidChoice.choice_proof_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(paidChoice.choice_proof_sha256)) {\n      return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',\n        blocker_code: 'PAID_SHIFT_MATCH_CHOICE_STALE', qualifying_contract_ids: qualified.eligibleContractIds };\n    }\n    base.prior_work_event_id = paidChoice.pay_effect === 'NONE' ? paidChoice.paid_overlap_target_work_event_id : null;\n    // The native constructor re-reads the actual immutable choice and derives\n    // pay_effect itself. No pay/evidence assertion enters p_rows from Worker.\n  } else if (sourceAuthority && ROSTER_EXTERNAL.has(row.profile_id) && row.row_finalisation_state === 'SOURCE_WORKED'\n    && !base.prior_work_event_id && (row.paid_overlap_inputs?.overlaps ?? []).some(item => item.native_payment_facts?.paid !== false)) {\n    return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',\n      blocker_code: 'PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED', qualifying_contract_ids: qualified.eligibleContractIds };\n  } else if (sourceAuthority) {\n    const matches = (row.protected_matches ?? []).filter(item => item.contract_id === qualified.selectedContractId);"
+    }
+  ],
+  "whole_reverse_verified": true,
+  "all_current_imports_and_callers_retained": true,
+  "native_private_payload_unchanged": true,
+  "route_and_office_consumers_implemented": false,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "pipeline_complete": false
+}
