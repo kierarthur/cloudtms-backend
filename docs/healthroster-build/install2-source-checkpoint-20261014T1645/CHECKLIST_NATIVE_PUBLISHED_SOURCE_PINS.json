@@ -1,0 +1,50 @@
+{
+  "status": "SOURCE_ONLY_NATIVE_PRODUCER_BUILT_GATES_HELD",
+  "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
+  "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+  "source_tests": {
+    "passed": 57,
+    "failed": 0,
+    "native_SQL_executed": false,
+    "database_connection": false,
+    "deployment": false
+  },
+  "source_pins": [
+    {
+      "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "saved_sha256": "1cdcb9dfa9f869bdb9dc5a0cd504a7d2716184c619e011ef56638d6d5d02c920"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
+      "saved_sha256": "414f62c3a8a29f31c7e7577b1bec266a814cdbd6ea460d8761e7414075f22194"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_page.sqlinc",
+      "saved_sha256": "dd0137cb3facc3000011a675a510c187519260617398b62df8164ece4624abc2"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_process.sqlinc",
+      "saved_sha256": "de7effdbe2c1d9bdc56c90691ab917d13b97fe520251e06870bafad5fd8ba5af"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_tracker.sqlinc",
+      "saved_sha256": "c4280d60a53d795300ffb83764861d5d6fe0edc11a284546498f7d20a292051c"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_cycle_prepare.sqlinc",
+      "saved_sha256": "e50d9358b79b08e9dda23e35e4deba868641430e8f58ebfc37bcac76a74ba22e"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_cycle_dispatch.sqlinc",
+      "saved_sha256": "3456667adc4c06a0c3e5a52ca72913f87a5d8dc9876c4cd3cf4463cad2c1de17"
+    },
+    {
+      "path": "supabase/verification/support/wp_u3_submission_cycle_prepare_vectors.sqlinc",
+      "saved_sha256": "d4bbe9bc719047d61067a14d946fd9d6aa8daf22d660f9d2ab26170c40490efd"
+    },
+    {
+      "path": "tests/healthroster-checklist-native-producer.test.mjs",
+      "saved_sha256": "d387591744400f977e489042dd39b90961cd193ffdaa3210b380aa5453ae4b30"
+    }
+  ]
+}

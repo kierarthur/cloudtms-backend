@@ -1,0 +1,31 @@
+{
+  "checkedAt": "2026-10-14T16:47:47.620Z",
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "BUILD_AGENCY_NATIVE_AUTHORISE_PHASE_SOURCE_CRITIC_14102026.md",
+      "bytes": 8675,
+      "sha256": "2310ba4e6d9b2dc84a583956d4da80010043407a0120ea367cfa014447c5635f"
+    },
+    {
+      "file": "BUILD_CHECKLIST_QUERY_TARGET_OFFICE_CRITIC_14102026.md",
+      "bytes": 3250,
+      "sha256": "e57444f6de5e018fdd369ea598d3fd4e05f5ac5785cb9cdb47aacb8821787149"
+    },
+    {
+      "file": "BUILD_MONEY_MISSING_CONTINUITY_OFF_SOURCE_CRITIC_14102026.md",
+      "bytes": 12236,
+      "sha256": "5c983b3f480b89e066d14933db0133a94a24ae2e123538924c7f2a647502fc17"
+    },
+    {
+      "file": "CHECKLIST_NATIVE_PUBLISHED_SOURCE_PINS.json",
+      "bytes": 2217,
+      "sha256": "1327e3178fb0f7d2348a857f27253ed98c013041391e8710b03c0c13da0eb232"
+    },
+    {
+      "file": "SOURCE_STATUS_AND_VERIFIER_DELTA.json",
+      "bytes": 33904,
+      "sha256": "5020351fba06a7ef8837fe55e0f214fc0479c484847787e24fe1af9e2d877cbb"
+    }
+  ]
+}

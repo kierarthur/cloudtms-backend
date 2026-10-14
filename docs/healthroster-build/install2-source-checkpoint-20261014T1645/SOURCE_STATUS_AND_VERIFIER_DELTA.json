@@ -1,0 +1,696 @@
+{
+  "checkedAt": "2026-10-14T16:47:47.620Z",
+  "status": "SOURCE_CONSTRUCTION_NOT_INSTALL2_QUALIFICATION",
+  "installedBackend": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "publishedTestDocumentation": "912297ab79b48633b66d806d128ff00a9a9cd83d",
+  "installedOffice": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "normalInstallsRemaining": 1,
+  "noOwnerAnswerPending": true,
+  "lanes": [
+    {
+      "lane": "install2",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "reviewedCommit": "67223b5c8458eb3b9a769152a8eb554d29d1ed18",
+      "observedHead": "67223b5c8458eb3b9a769152a8eb554d29d1ed18",
+      "reviewedCommitPresent": true,
+      "branch": "codex/healthroster-install2-14102026"
+    },
+    {
+      "lane": "office",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026",
+      "reviewedCommit": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+      "observedHead": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+      "reviewedCommitPresent": true,
+      "branch": "codex/healthroster-v2-office-13102026"
+    },
+    {
+      "lane": "checklist_native",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+      "reviewedCommit": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
+      "observedHead": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
+      "reviewedCommitPresent": true,
+      "branch": "codex/healthroster-checklist-native-14102026"
+    },
+    {
+      "lane": "money",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "reviewedCommit": "a67a44319e25e136fa34c61fb6ca4d270d85ceda",
+      "observedHead": "a67a44319e25e136fa34c61fb6ca4d270d85ceda",
+      "reviewedCommitPresent": true,
+      "branch": "codex/healthroster-v2-money-build-13102026"
+    },
+    {
+      "lane": "agency",
+      "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+      "reviewedCommit": "9f4a921b0fe423e6450ee362d76bd46dc3d4a638",
+      "observedHead": "383c0be17b772fa42a5baff71494135273a47884",
+      "reviewedCommitPresent": true,
+      "branch": "codex/healthroster-v2-report-build-13102026"
+    }
+  ],
+  "reports": [
+    {
+      "name": "BUILD_CHECKLIST_QUERY_TARGET_OFFICE_CRITIC_14102026.md",
+      "sha256": "e57444f6de5e018fdd369ea598d3fd4e05f5ac5785cb9cdb47aacb8821787149"
+    },
+    {
+      "name": "BUILD_MONEY_MISSING_CONTINUITY_OFF_SOURCE_CRITIC_14102026.md",
+      "sha256": "5c983b3f480b89e066d14933db0133a94a24ae2e123538924c7f2a647502fc17"
+    },
+    {
+      "name": "BUILD_AGENCY_NATIVE_AUTHORISE_PHASE_SOURCE_CRITIC_14102026.md",
+      "sha256": "2310ba4e6d9b2dc84a583956d4da80010043407a0120ea367cfa014447c5635f"
+    }
+  ],
+  "verifierDelta": {
+    "previousCount": 158,
+    "currentCount": 173,
+    "removed": [],
+    "changed": [
+      {
+        "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+        "oldSourceSqlHash": "2875e79f7075d2a60bc29578d38320753a8ebc6da5a5d1cc1345bc0edfc1a5d5",
+        "newSourceSqlHash": "4b22d05688fd59ee20f43a62da2e33495db1c208a1a64c8d36821fc4e04168c6",
+        "newClosureHash": "af74379067e19d2e72765e8bbc0c44fe22ff57bcf769a68740407936d9fdfa28",
+        "decision": "PENDING_COMPLETE_REVIEW"
+      },
+      {
+        "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "oldSourceSqlHash": "6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d",
+        "newSourceSqlHash": "a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631",
+        "newClosureHash": "2d22970aa51cd6730ea125e846f4ce845bf48e9f8f47d530cdde28d778006f7f",
+        "decision": "PENDING_COMPLETE_REVIEW"
+      },
+      {
+        "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+        "oldSourceSqlHash": "f627f8acdd169847ff13edf9289f1c940b370cccbee6def6cf190bc33d08d762",
+        "newSourceSqlHash": "4f54fc72f00235af7b58c8d1a63b14991e6361b92356b9524c32f51beb1b8611",
+        "newClosureHash": "49816d037aa6f3d5312cbf6bc1159ff96dfa194deba34fbc09029a222aec13c6",
+        "decision": "PENDING_COMPLETE_REVIEW"
+      }
+    ],
+    "added": [
+      {
+        "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+        "sourceSqlHash": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c",
+        "closureHash": "3a4e3679010022ca2d1537f8136abedddc3d6139dd520310d48fb3567be856fd",
+        "expandedBytes": 32400,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+            "sha256": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c",
+            "bytes": 32400
+          }
+        ],
+        "calls": [
+          "pg_temp.f1_assert",
+          "pg_temp.f1_refuses",
+          "private._weekly_source_effective_policy_v1",
+          "private._weekly_source_settings_client_shape_v1",
+          "private.weekly_source_agency_invoice_check_only_v1",
+          "private.weekly_source_effective_rule_set_v1",
+          "private.weekly_source_has_self_bill_rules_v1",
+          "private.weekly_source_is_import_authoritative_v1",
+          "private.weekly_source_signed_check_only_v1",
+          "public.weekly_source_group_rule_assign_atomic_v1",
+          "public.weekly_source_group_rule_feature_set_atomic_v1",
+          "public.weekly_source_rule_set_version_save_atomic_v1",
+          "public.weekly_source_rule_sets_get_v1"
+        ],
+        "literalRoutineReferences": [
+          "private._weekly_source_immutable_record_guard_v1",
+          "private._weekly_source_rule_group_context_v1",
+          "private._weekly_source_rule_values_v1",
+          "private.weekly_source_agency_invoice_check_only_v1",
+          "private.weekly_source_configured_agency_invoice_v1",
+          "private.weekly_source_effective_rule_set_v1",
+          "private.weekly_source_final_rule_version_guard_v1",
+          "private.weekly_source_has_self_bill_rules_v1",
+          "private.weekly_source_is_import_authoritative_v1",
+          "private.weekly_source_signed_check_only_v1",
+          "public.weekly_source_group_rule_assign_atomic_v1",
+          "public.weekly_source_group_rule_feature_set_atomic_v1",
+          "public.weekly_source_rule_set_version_save_atomic_v1",
+          "public.weekly_source_rule_sets_get_v1"
+        ],
+        "writes": [
+          "public.candidates",
+          "public.client_settings",
+          "public.clients",
+          "public.contracts",
+          "public.timesheets",
+          "public.timesheets_financials",
+          "public.tms_users",
+          "public.weekly_source_client_policies",
+          "public.weekly_source_cycles",
+          "public.weekly_source_final_revisions",
+          "public.weekly_source_group_clients",
+          "public.weekly_source_groups",
+          "public.weekly_source_uploads"
+        ],
+        "dynamicExecute": true,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+        "sourceSqlHash": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173",
+        "closureHash": "fa7c0227825a0b01bfd13d58b2ce70807a44f0c7e7b64c96772293c540c529a1",
+        "expandedBytes": 1508,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+            "sha256": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173",
+            "bytes": 1508
+          }
+        ],
+        "calls": [
+          "private.weekly_source_issued_signed_query_evidence_v1",
+          "public._import_review_query_evidence_core_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_issued_signed_query_evidence_v1",
+          "public.timesheet_query_email_enqueue_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+        "sourceSqlHash": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f",
+        "closureHash": "74324d82fddbe031d5263f76c9a03f03dbaea701804dd31395cd1d3931d9a051",
+        "expandedBytes": 1637,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+            "sha256": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f",
+            "bytes": 1637
+          }
+        ],
+        "calls": [
+          "private.weekly_source_configured_upload_profile_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_configured_upload_profile_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+        "sourceSqlHash": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325",
+        "closureHash": "0f2ed4c112058c6eaf0df85c6e2ec6454d4cf1604867318c7be2059ba9aca991",
+        "expandedBytes": 5393,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+            "sha256": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325",
+            "bytes": 5393
+          }
+        ],
+        "calls": [
+          "private.weekly_source_authority_subset_v1",
+          "private.weekly_source_final_state_fingerprint_v1",
+          "private.weekly_source_invoice_economics_fingerprint_v1"
+        ],
+        "literalRoutineReferences": [],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+        "sourceSqlHash": "39004cd2046ac92cf3eeb8cdcfbba3f6c0ffc5b1dd21dfe54f8f3c078a390324",
+        "closureHash": "c5ec5ff5802bb10512041b8690ba59c3ee826916963d404f869cdc92b73f08e7",
+        "expandedBytes": 7249,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+            "sha256": "f57031b819cdceff1304c946aeead197944fb6697371bf1b49bb2e4871312f72",
+            "bytes": 3404
+          },
+          {
+            "file": "supabase/verification/support/13102026_1412_f8_admission_vectors.sqlinc",
+            "sha256": "904c178e542156a364825fe35b8f075573d65ad1fd0c6812e58b1a6619df9562",
+            "bytes": 3898
+          }
+        ],
+        "calls": [
+          "private.weekly_source_final_upload_facts_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_final_upload_assert_v1",
+          "private.weekly_source_final_upload_facts_v1",
+          "private.weekly_source_final_upload_gate_v1",
+          "private.weekly_source_finalise_engine_v1",
+          "private.weekly_source_rule_coverage_floor_v1",
+          "private.weekly_source_upload_coverage_context_v1",
+          "private.weekly_source_upload_coverage_floor_assert_v1",
+          "public.weekly_source_client_settings_save_atomic_v1",
+          "public.weekly_source_import_prepare_atomic_v1",
+          "public.weekly_source_upload_context_v1",
+          "public.weekly_source_upload_stage_begin_atomic_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+        "sourceSqlHash": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904",
+        "closureHash": "7e0767ec809ea012731d6ce4249e3485ac4097050f59498136460d2819216f6f",
+        "expandedBytes": 7509,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+            "sha256": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904",
+            "bytes": 7509
+          }
+        ],
+        "calls": [
+          "private.weekly_source_protected_wait_witness_v1",
+          "public.weekly_source_automatic_reconcile_atomic_v1",
+          "public.weekly_source_protect_all_signed_atomic_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_automatic_reconcile_capability_assert_v1",
+          "private.weekly_source_automatic_reconcile_certificate_v1",
+          "private.weekly_source_automatic_reconcile_selection_v1",
+          "private.weekly_source_automatic_reconcile_stage_proof_v1",
+          "private.weekly_source_automatic_reconcile_stage_replay_assert_v1",
+          "private.weekly_source_bulk_own_stage_context_v1",
+          "private.weekly_source_bulk_own_stage_v1",
+          "private.weekly_source_bulk_signed_claim_v1",
+          "private.weekly_source_bulk_source_cas_assert_v1",
+          "private.weekly_source_bulk_stage_proof_v1",
+          "private.weekly_source_bulk_stage_replay_assert_v1",
+          "private.weekly_source_candidate_current_rows_v1",
+          "private.weekly_source_candidate_prefinal_publish_recheck_v1",
+          "private.weekly_source_candidate_submission_compare_sync_v1",
+          "private.weekly_source_checking_client_scope_v1",
+          "private.weekly_source_covered_hours_incident_v1",
+          "private.weekly_source_expected_week_question_v1",
+          "private.weekly_source_expected_week_unsigned_materialise_v1",
+          "private.weekly_source_import_outreach_v1",
+          "private.weekly_source_incident_contact_retire_v1",
+          "private.weekly_source_manager_due_event_covers_v1",
+          "private.weekly_source_not_finalised_dispatch_v1",
+          "private.weekly_source_not_finalised_due_scope_guard_v1",
+          "private.weekly_source_office_query_groups_v1",
+          "private.weekly_source_pay_query_facts_v1",
+          "private.weekly_source_protect_all_signed_selection_v1",
+          "private.weekly_source_protected_contact_retire_v1",
+          "private.weekly_source_protected_family_lock_v1",
+          "private.weekly_source_protected_group_lock_v1",
+          "private.weekly_source_protected_wait_receipt_v1",
+          "private.weekly_source_protected_wait_witness_v1",
+          "private.weekly_source_publication_comparison_record_v1",
+          "private.weekly_source_publication_signed_family_fence_v1",
+          "private.weekly_source_publication_signed_roots_v1",
+          "private.weekly_source_query_comparison_fingerprint_v1",
+          "private.weekly_source_query_manager_generation_v1",
+          "private.weekly_source_query_manager_row_owned_v1",
+          "private.weekly_source_unprotected_not_finalised_close_v1",
+          "public.weekly_exceptional_pay_action_context_v1",
+          "public.weekly_exceptional_pay_prepare_action_v1",
+          "public.weekly_exceptional_pay_prepare_family_v1",
+          "public.weekly_exceptional_pay_stage_c1_request_v1",
+          "public.weekly_source_automatic_reconcile_atomic_v1",
+          "public.weekly_source_global_settings_get_v1",
+          "public.weekly_source_global_settings_save_atomic_v1",
+          "public.weekly_source_protect_all_signed_atomic_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+        "sourceSqlHash": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531",
+        "closureHash": "c1b38400ee6611cec63ee04368f8a1ba00fd38bb42f29ce8e3b43b1a7d126df3",
+        "expandedBytes": 20608,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+            "sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531",
+            "bytes": 20608
+          }
+        ],
+        "calls": [
+          "pg_temp.f5_assert",
+          "pg_temp.f5_refuses",
+          "private.weekly_source_effective_rule_set_v1",
+          "public.weekly_source_group_rule_assign_atomic_v1",
+          "public.weekly_source_group_rule_feature_set_atomic_v1",
+          "public.weekly_source_invoice_hold_release_atomic_v1",
+          "public.weekly_source_rule_set_version_save_atomic_v1",
+          "public.weekly_source_upload_seal_atomic_v1",
+          "public.weekly_source_upload_stage_begin_atomic_v1",
+          "public.weekly_source_upload_stage_rows_atomic_v1"
+        ],
+        "literalRoutineReferences": [
+          "public.weekly_source_invoice_hold_release_atomic_v1"
+        ],
+        "writes": [
+          "public.client_settings",
+          "public.clients",
+          "public.tms_users",
+          "public.weekly_source_client_policies",
+          "public.weekly_source_cycles",
+          "public.weekly_source_group_clients",
+          "public.weekly_source_groups"
+        ],
+        "dynamicExecute": true,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+        "sourceSqlHash": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32",
+        "closureHash": "ac81207217ce6d327392a5acedf2d6ead6c5094e3205607e4f4f038cb1ad0981",
+        "expandedBytes": 6907,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+            "sha256": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32",
+            "bytes": 6907
+          }
+        ],
+        "calls": [
+          "pg_temp.f5_owner_assert",
+          "private._weekly_source_acl_table_contract_v1",
+          "private.weekly_source_billing_movement_hash_v1",
+          "private.weekly_source_frozen_rule_values_v1",
+          "private.weekly_source_invoice_only_vector_v1",
+          "private.weekly_source_sha256_jsonb_v1",
+          "private.weekly_source_shift_on_self_bill_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_billing_movement_hash_v1",
+          "private.weekly_source_correct_final_prepared_context_v1",
+          "private.weekly_source_finalisation_pay_context_v1",
+          "private.weekly_source_frozen_rule_values_v1",
+          "private.weekly_source_invoice_correction_insert_v1",
+          "private.weekly_source_invoice_correction_unwind_v1",
+          "private.weekly_source_invoice_line_amounts_v1",
+          "private.weekly_source_invoice_movement_money_v1",
+          "private.weekly_source_invoice_only_vector_v1",
+          "private.weekly_source_invoice_placement_identity_guard_v1",
+          "private.weekly_source_invoice_presentation_release_authority_v1",
+          "private.weekly_source_invoice_presentation_source_hash_v1",
+          "private.weekly_source_invoice_source_amount_movement_valid_v1",
+          "private.weekly_source_invoice_window_cycle_v1",
+          "private.weekly_source_ordinary_projection_active_movements_v1",
+          "private.weekly_source_ordinary_projection_source_units_v1",
+          "private.weekly_source_pay_actor_allowed_v1",
+          "private.weekly_source_protected_final_source_context_v1",
+          "private.weekly_source_rebill_movement_insert_v1",
+          "private.weekly_source_selected_source_witness_v1",
+          "private.weekly_source_shift_on_self_bill_v1",
+          "private.weekly_source_source_amount_acceptance_policy_fingerprint_v1",
+          "private.weekly_source_source_amount_warnings_v1",
+          "private.weekly_source_vat_rounding_movement_insert_v1",
+          "public.weekly_source_finalisation_pay_open_atomic_v1",
+          "public.weekly_source_invoice_hold_release_atomic_v1",
+          "public.weekly_source_ordinary_pay_projection_apply_atomic_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+        "sourceSqlHash": "988b0488a96639080167cdebc8f9a33551066fcc36b222e656c1cb724d28ceca",
+        "closureHash": "970a8aa0e5004b1ff10e0823e7bb12974a6826d4e3e6475f768a65cb87c9db70",
+        "expandedBytes": 6864,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+            "sha256": "0e8bc553a872ac7d4461fdc6b195fb461c7661bcf6e541ba58a62336ccbe6fdd",
+            "bytes": 2616
+          },
+          {
+            "file": "supabase/verification/support/13102026_1544_report_row_vectors.sqlinc",
+            "sha256": "34c9089c47b97968c7be7fe5016c9dddb611ed47cca0ce2059bccc46587b127f",
+            "bytes": 4299
+          }
+        ],
+        "calls": [
+          "extensions.digest",
+          "private.weekly_source_self_bill_report_manifest_v1",
+          "private.weekly_source_self_bill_report_row_dto_v1",
+          "private.weekly_source_self_bill_report_row_hash_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_self_bill_report_finalise_v1",
+          "public.weekly_source_self_bill_report_scope_resolve_atomic_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+        "sourceSqlHash": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b",
+        "closureHash": "8d1f9312849de4a5c79c17bf165ec1cb41d4a0064839bb033cdb51e9a26ac5a8",
+        "expandedBytes": 3601,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+            "sha256": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b",
+            "bytes": 3601
+          }
+        ],
+        "calls": [
+          "private.weekly_source_magnit_bucket_assert_v1",
+          "private.weekly_source_magnit_contract_price_assert_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_magnit_bucket_assert_v1",
+          "private.weekly_source_magnit_contract_price_assert_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+        "sourceSqlHash": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4",
+        "closureHash": "393270229cdbb875ba778ed1837b4a6a385bdc17d9eb2e8f633db5b80625ad4d",
+        "expandedBytes": 4443,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+            "sha256": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4",
+            "bytes": 4443
+          }
+        ],
+        "calls": [
+          "private.timesheet_correction_native_original_reversal_v1",
+          "private.timesheet_correction_reversal_assert_v1",
+          "public.timesheet_correction_request_authority_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.timesheet_correction_component_negate_v1",
+          "private.timesheet_correction_native_original_reversal_v1",
+          "public.timesheet_correction_request_authority_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+        "sourceSqlHash": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4",
+        "closureHash": "b696d3f3a68d72c3bed30e99509b7ac5b0e31c433919603324a7f1914b16fa35",
+        "expandedBytes": 4388,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+            "sha256": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4",
+            "bytes": 4388
+          }
+        ],
+        "calls": [
+          "private.weekly_source_invoice_only_vector_v1",
+          "private.weekly_source_invoice_vat_target_pence_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_invoice_admission_receipt_map_v1",
+          "private.weekly_source_invoice_admitted_member_money_v1",
+          "private.weekly_source_invoice_legacy_render_support_v1",
+          "private.weekly_source_invoice_manifest_admission_money_v1",
+          "private.weekly_source_invoice_movement_window_id_v1",
+          "private.weekly_source_invoice_presentation_expected_source_hash_v1",
+          "private.weekly_source_invoice_receipt_projection_assert_v1",
+          "private.weekly_source_invoice_receipt_support_v1",
+          "private.weekly_source_invoice_rounding_authority_rebuild_v1",
+          "private.weekly_source_invoice_rounding_receipt_set_v1",
+          "private.weekly_source_invoice_rounding_suppression_witness_v1",
+          "private.weekly_source_invoice_vat_target_pence_v1",
+          "private.weekly_source_invoice_window_cycle_v1",
+          "private.weekly_source_invoice_window_lock_inventory_v1",
+          "private.weekly_source_invoice_window_scope_v1",
+          "private.weekly_source_vat_rounding_movement_insert_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+        "sourceSqlHash": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+        "closureHash": "f8ccea0d7ce172e8af1280d578eb6bc4699c53e9db921b67e5885aeffc8a077d",
+        "expandedBytes": 2308,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+            "sha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+            "bytes": 2308
+          }
+        ],
+        "calls": [
+          "private.weekly_source_self_bill_report_pay_authority_v1",
+          "private.weekly_source_self_bill_report_pay_witness_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_finalise_engine_v1",
+          "private.weekly_source_report_projection_receipt_assert_v1",
+          "private.weekly_source_self_bill_report_pay_authority_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+        "sourceSqlHash": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb",
+        "closureHash": "68420cadb5827e134af3a6e98fd0cfd86890f69e17d7f781ed90e6be93f1a3fe",
+        "expandedBytes": 7115,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+            "sha256": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb",
+            "bytes": 7115
+          }
+        ],
+        "calls": [
+          "private.weekly_source_automatic_reconcile_capability_assert_v1",
+          "private.weekly_source_automatic_reconcile_delta_assert_v1",
+          "private.weekly_source_bulk_source_cas_assert_v1",
+          "private.weekly_source_staged_publication_context_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_approved_detail_evidence_v1",
+          "private.weekly_source_approved_expense_evidence_v1",
+          "private.weekly_source_automatic_reconcile_delta_assert_v1",
+          "private.weekly_source_automatic_reconcile_producer_ready_v1",
+          "private.weekly_source_bulk_producer_ready_v1",
+          "private.weekly_source_bulk_source_cas_v1",
+          "private.weekly_source_expense_authority_evidence_v1",
+          "private.weekly_source_pay_query_c1_receipt_event_v1",
+          "private.weekly_source_pay_query_c1_receipt_v1",
+          "private.weekly_source_pay_query_local_receipt_event_v1",
+          "private.weekly_source_pay_query_local_receipt_v1",
+          "private.weekly_source_pay_query_next_receipt_event_v1",
+          "private.weekly_source_pay_query_next_receipt_v1",
+          "private.weekly_source_staged_entitlement_components_v1",
+          "private.weekly_source_staged_prior_wait_receipt_v1",
+          "private.weekly_source_staged_publication_context_v1",
+          "private.weekly_source_staged_source_documents_v1",
+          "public.weekly_exceptional_pay_complete_local_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      },
+      {
+        "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+        "sourceSqlHash": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+        "closureHash": "887fac337f3a68e8de190a83757f5aea6e7f2954a03d9c388a304e7dd03844ea",
+        "expandedBytes": 3280,
+        "completeClosureFiles": [
+          {
+            "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+            "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+            "bytes": 3280
+          }
+        ],
+        "calls": [
+          "private._weekly_source_acl_private_helper_contract_v1",
+          "private.weekly_source_report_fin_certificate_assert_v1",
+          "private.weekly_source_report_fin_strategy_v1"
+        ],
+        "literalRoutineReferences": [
+          "private.weekly_source_report_fin_certificate_assert_v1",
+          "private.weekly_source_report_fin_dispatch_v1",
+          "private.weekly_source_report_fin_feature_binding_v1",
+          "private.weekly_source_report_fin_native_comparisons_assert_v1",
+          "private.weekly_source_report_fin_qualifications_assert_v1",
+          "private.weekly_source_report_fin_release_evidence_v1",
+          "private.weekly_source_report_fin_strategy_v1"
+        ],
+        "writes": [],
+        "dynamicExecute": false,
+        "networkCalls": [],
+        "sequenceCalls": false,
+        "decision": "PENDING_COMPLETE_EFFECT_REVIEW_NOT_EXECUTION_AUTHORITY"
+      }
+    ]
+  },
+  "integrationGate": {
+    "selectedSourceTests": {
+      "passed": 39,
+      "failed": 1
+    },
+    "failure": "Historical 158-file safety review correctly refuses current 173-file release census. Assertion and review remain unchanged; fresh complete current safety review is required.",
+    "canonicalContractSealed": false,
+    "newNativeProducerMounted": false,
+    "fullRehearsalRun": false,
+    "install2Run": false,
+    "featuresActivated": false
+  },
+  "officeIntegration": {
+    "mode": "FEATURE_BRANCH_FAST_FORWARD",
+    "commit": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+    "remoteFeatureMatched": true,
+    "mainUnchanged": true,
+    "sourceChecksPreviouslyPassed": 69,
+    "independentP2ReopenFindingClosed": true,
+    "published": false,
+    "gitAutomaticHousekeeping": "Fast-forward merge attempted pruning old unrelated Git worktree metadata and received permission-denied errors. No explicit cleanup was requested or retried; source merge/push succeeded. Future task Git commands disable gc.auto and maintenance.auto per command."
+  },
+  "rejectedRootComparison": {
+    "finding": "UNAVAILABLE pending_decision mismatch",
+    "decision": "REJECTED",
+    "reason": "Root incorrectly compared historical B decoder. Exact published ba09 producer and decoder both use null, so there is no mismatch; agent was immediately told not to change it."
+  }
+}
