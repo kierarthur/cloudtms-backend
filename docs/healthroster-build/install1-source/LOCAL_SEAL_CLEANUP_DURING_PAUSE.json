@@ -1,0 +1,12 @@
+{
+  "status": "TASK_ONLY_COMPLETED_SEAL_CLEANED_DURING_PAUSE",
+  "atUtc": "2026-10-14T00:15:48.3719116Z",
+  "removedContainer": "healthroster-install1-seal-pg17-20261014",
+  "removedVolume": "healthroster-install1-seal-pg17-data-20261014",
+  "volumeDiskUsageKiB": "391704",
+  "existingBaseImageRetained": "postgres:17.11-bookworm",
+  "taskBuiltImages": 0,
+  "taskBuildCacheCreated": 0,
+  "otherResourcesChanged": false,
+  "windowsVirtualDiskCompacted": false
+}
