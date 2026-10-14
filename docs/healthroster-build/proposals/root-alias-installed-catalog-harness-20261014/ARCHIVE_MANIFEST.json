@@ -1,0 +1,18 @@
+{
+  "secretFreeSourceArchive": true,
+  "executedReadOnlyOnly": true,
+  "files": [
+    {
+      "file": "alias-fixture-installed-catalog-precheck-20261014.mjs.txt",
+      "sourcePath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\alias-fixture-installed-catalog-precheck-20261014.mjs",
+      "bytes": 5791,
+      "sha256": "1514786638529a618ae87c563fb26085e9ab27d3da33398cba5ac2342e078855"
+    },
+    {
+      "file": "alias-fixture-native-catalog-supplement-20261014.mjs.txt",
+      "sourcePath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\alias-fixture-native-catalog-supplement-20261014.mjs",
+      "bytes": 5980,
+      "sha256": "fcad7d638716852be95f3221f820906b49c2e71a23822a9a7de85f7a57713f89"
+    }
+  ]
+}

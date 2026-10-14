@@ -1,0 +1,474 @@
+{
+  "status": "READONLY_SUPPLEMENT_INSERT_TRIGGER_SOURCE_MATCHED_NOT_NATIVE_FIXTURE_PROOF",
+  "sourceCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "readOnly": true,
+  "fixtureExecuted": false,
+  "release": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "status": "VERIFIED"
+  },
+  "database": "cloudtms_test_clone",
+  "observedAt": "2026-10-14T18:22:54.616248+00:00",
+  "helperAbsent": true,
+  "testIdentity": true,
+  "fixtureCounts": [
+    {
+      "relation": "public.candidates",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.clients",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.contracts",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.tms_users",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_source_cycles",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_source_groups",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_source_upload_rows",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_source_uploads",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_work_event_source_links",
+      "fixture_matches": 0
+    },
+    {
+      "relation": "public.weekly_work_events",
+      "fixture_matches": 0
+    }
+  ],
+  "legacyControl": {
+    "epoch": 1,
+    "owner": "LEGACY"
+  },
+  "uniqueIndexes": [
+    {
+      "name": "candidates_active_normalized_cid1_uq",
+      "table": "public.candidates",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX candidates_active_normalized_cid1_uq ON public.candidates USING btree (upper(btrim(key_norm))) WHERE ((active IS TRUE) AND (key_norm IS NOT NULL) AND (upper(btrim(key_norm)) ~ '^CID1-[0-9A-HJKMNP-TV-Z]{5,160}$'::text))"
+    },
+    {
+      "name": "candidates_pkey",
+      "table": "public.candidates",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX candidates_pkey ON public.candidates USING btree (id)"
+    },
+    {
+      "name": "candidates_tms_ref_key",
+      "table": "public.candidates",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX candidates_tms_ref_key ON public.candidates USING btree (tms_ref)"
+    },
+    {
+      "name": "uq_candidates_key_norm",
+      "table": "public.candidates",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX uq_candidates_key_norm ON public.candidates USING btree (key_norm) WHERE (key_norm IS NOT NULL)"
+    },
+    {
+      "name": "clients_cli_ref_key",
+      "table": "public.clients",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX clients_cli_ref_key ON public.clients USING btree (cli_ref)"
+    },
+    {
+      "name": "clients_pkey",
+      "table": "public.clients",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)"
+    },
+    {
+      "name": "contracts_pkey",
+      "table": "public.contracts",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX contracts_pkey ON public.contracts USING btree (id)"
+    },
+    {
+      "name": "tms_users_email_key",
+      "table": "public.tms_users",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX tms_users_email_key ON public.tms_users USING btree (email)"
+    },
+    {
+      "name": "tms_users_pkey",
+      "table": "public.tms_users",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX tms_users_pkey ON public.tms_users USING btree (id)"
+    },
+    {
+      "name": "weekly_source_cycles_group_week_client_uq",
+      "table": "public.weekly_source_cycles",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_cycles_group_week_client_uq ON public.weekly_source_cycles USING btree (source_group_id, finalisation_week_ending, scope_client_id) NULLS NOT DISTINCT"
+    },
+    {
+      "name": "weekly_source_cycles_pkey",
+      "table": "public.weekly_source_cycles",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_cycles_pkey ON public.weekly_source_cycles USING btree (id)"
+    },
+    {
+      "name": "weekly_source_group_clients_pkey",
+      "table": "public.weekly_source_group_clients",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_group_clients_pkey ON public.weekly_source_group_clients USING btree (id)"
+    },
+    {
+      "name": "weekly_source_group_clients_source_group_id_client_id_valid_key",
+      "table": "public.weekly_source_group_clients",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_group_clients_source_group_id_client_id_valid_key ON public.weekly_source_group_clients USING btree (source_group_id, client_id, valid_from, valid_to) NULLS NOT DISTINCT"
+    },
+    {
+      "name": "weekly_source_groups_environment_agency_id_code_key",
+      "table": "public.weekly_source_groups",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_groups_environment_agency_id_code_key ON public.weekly_source_groups USING btree (environment, agency_id, code)"
+    },
+    {
+      "name": "weekly_source_groups_pkey",
+      "table": "public.weekly_source_groups",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_groups_pkey ON public.weekly_source_groups USING btree (id)"
+    },
+    {
+      "name": "weekly_source_row_resolutions_pkey",
+      "table": "public.weekly_source_row_resolutions",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_row_resolutions_pkey ON public.weekly_source_row_resolutions USING btree (id)"
+    },
+    {
+      "name": "weekly_source_row_resolutions_upload_row_id_generation_key",
+      "table": "public.weekly_source_row_resolutions",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_row_resolutions_upload_row_id_generation_key ON public.weekly_source_row_resolutions USING btree (upload_row_id, generation)"
+    },
+    {
+      "name": "weekly_source_upload_rows_external_key_uq",
+      "table": "public.weekly_source_upload_rows",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_upload_rows_external_key_uq ON public.weekly_source_upload_rows USING btree (upload_id, external_source_key) WHERE (external_source_key IS NOT NULL)"
+    },
+    {
+      "name": "weekly_source_upload_rows_pkey",
+      "table": "public.weekly_source_upload_rows",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_upload_rows_pkey ON public.weekly_source_upload_rows USING btree (id)"
+    },
+    {
+      "name": "weekly_source_upload_rows_upload_id_source_row_ordinal_key",
+      "table": "public.weekly_source_upload_rows",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_upload_rows_upload_id_source_row_ordinal_key ON public.weekly_source_upload_rows USING btree (upload_id, source_row_ordinal)"
+    },
+    {
+      "name": "weekly_source_uploads_pkey",
+      "table": "public.weekly_source_uploads",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_source_uploads_pkey ON public.weekly_source_uploads USING btree (id)"
+    },
+    {
+      "name": "weekly_work_event_source_link_upload_row_id_row_resolution__key",
+      "table": "public.weekly_work_event_source_links",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_work_event_source_link_upload_row_id_row_resolution__key ON public.weekly_work_event_source_links USING btree (upload_row_id, row_resolution_id)"
+    },
+    {
+      "name": "weekly_work_event_source_links_link_hash_key",
+      "table": "public.weekly_work_event_source_links",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_work_event_source_links_link_hash_key ON public.weekly_work_event_source_links USING btree (link_hash)"
+    },
+    {
+      "name": "weekly_work_event_source_links_pkey",
+      "table": "public.weekly_work_event_source_links",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_work_event_source_links_pkey ON public.weekly_work_event_source_links USING btree (id)"
+    },
+    {
+      "name": "weekly_work_events_durable_identity_hash_key",
+      "table": "public.weekly_work_events",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_work_events_durable_identity_hash_key ON public.weekly_work_events USING btree (durable_identity_hash)"
+    },
+    {
+      "name": "weekly_work_events_pkey",
+      "table": "public.weekly_work_events",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_work_events_pkey ON public.weekly_work_events USING btree (id)"
+    },
+    {
+      "name": "weekly_work_events_profile_key_uq",
+      "table": "public.weekly_work_events",
+      "valid": true,
+      "definition": "CREATE UNIQUE INDEX weekly_work_events_profile_key_uq ON public.weekly_work_events USING btree (first_source_group_id, source_format_profile_id, profile_external_key) WHERE (identity_kind = 'PROFILE_EXTERNAL_KEY'::text)"
+    }
+  ],
+  "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+  "triggerRoutineHashes": [
+    {
+      "name": "private._candidate_expense_identity_summary_trigger_v1",
+      "arguments": "",
+      "bodySha256": "c126d2a98102ce93851d6b90d0fa25e974479a8ba97e6f97a99de55dbe4f9c74"
+    },
+    {
+      "name": "private._contract_settings_after_contract_v1",
+      "arguments": "",
+      "bodySha256": "03d7ed8337e59c28eaa6125377dcd6b8f7f676f2b6024cade439476187e7c8d8"
+    },
+    {
+      "name": "private._invoice_candidate_revision_trigger_v2",
+      "arguments": "",
+      "bodySha256": "ee84b3cdc4627886eb6c7ab8a226a94ad55053740262b8e35df2e86bd0b3ad55"
+    },
+    {
+      "name": "private._weekly_source_immutable_record_guard_v1",
+      "arguments": "",
+      "bodySha256": "34cfb47b73e45a5da42fe8c2484a5f46d2cd7bae6440eb5561a9d08b3e119d19"
+    },
+    {
+      "name": "private.bpay_next_workbench_candidate_name_trigger_v1",
+      "arguments": "",
+      "bodySha256": "a4976a3252fd513aaaa22afdc53c71f018cc7d0ac8df4de687ba666f572f2d75"
+    },
+    {
+      "name": "public._trg_candidates_set_bank_hash",
+      "arguments": "",
+      "bodySha256": "48687f54964a0c0fb8f6dc0dfdb1985ff55f654903123755b8bdb6df9306a8c3"
+    },
+    {
+      "name": "public._trg_change_bump",
+      "arguments": "",
+      "bodySha256": "0b921643ac4792bdb9689730074d409e26b8c4db23f7780af4fd31794f3b5a75"
+    },
+    {
+      "name": "public.contracts_enforce_overrideclientsettings",
+      "arguments": "",
+      "bodySha256": "bab09fad2930c209c2b2618630ba2bbb110117e49af0eae2fdaa4cffb366c87e"
+    },
+    {
+      "name": "public.pay_workbench_mark_candidate_dirty",
+      "arguments": "",
+      "bodySha256": "77c0304130d98e6a4e02f1ecb33fe3254ce6ca6297cd99c04820e9372ef0ecf6"
+    },
+    {
+      "name": "public.pay_workbench_mark_contract_client_dirty",
+      "arguments": "",
+      "bodySha256": "7e762e46006fde0831dd4832c17c475ea94ecad90c50695d478e1905028001d5"
+    },
+    {
+      "name": "public.set_updated_at",
+      "arguments": "",
+      "bodySha256": "3c6d6c41d6262a20e7c102dbd49bb3383bd86a4138c8a3ab6b9b04a1ec2420a5"
+    },
+    {
+      "name": "public.tms_touch_updated_at",
+      "arguments": "",
+      "bodySha256": "841a7f70d98dd76c757140230eb8eac2a7d14eaf6c6136bc73ade388165ce43a"
+    },
+    {
+      "name": "public.trg_candidates_tombstone",
+      "arguments": "",
+      "bodySha256": "dc371af619da9a415a9c6a4bce91d5d41e43a472715ca5e665549ffe9420b63f"
+    },
+    {
+      "name": "public.trg_clients_tombstone",
+      "arguments": "",
+      "bodySha256": "9d7ba0ee2d17b78c85c8a091d79542025f247d7e8f7865d6e8bd5eec0bf17723"
+    },
+    {
+      "name": "public.trg_set_cli_ref",
+      "arguments": "",
+      "bodySha256": "74e98f405575d2de3bdc89e9fadcc3c7b8307e5a979df0eb5b463dbfe6f85769"
+    },
+    {
+      "name": "public.trg_set_rev",
+      "arguments": "",
+      "bodySha256": "be01dc3eeeadb2f096f463f79c9a72bbf10eeef7b77e2b5d6158972da96237d0"
+    },
+    {
+      "name": "public.trg_set_tms_ref",
+      "arguments": "",
+      "bodySha256": "ddb16167a415d5fc4a5c1bf34340b80ad1b990e3938940612fe4de837f9d4741"
+    },
+    {
+      "name": "public.trg_tsfin_candidates_wakeup",
+      "arguments": "",
+      "bodySha256": "b6340a87dc166c5126efee21918151b6fbbe7f27449ea08d7e32544d94619ec4"
+    }
+  ],
+  "triggerSourceComparison": [
+    {
+      "name": "private._candidate_expense_identity_summary_trigger_v1",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "private._contract_settings_after_contract_v1",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "private._invoice_candidate_revision_trigger_v2",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "private._weekly_source_immutable_record_guard_v1",
+      "sourcePresent": false,
+      "bodyMatched": false
+    },
+    {
+      "name": "private.bpay_next_workbench_candidate_name_trigger_v1",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public._trg_candidates_set_bank_hash",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public._trg_change_bump",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.contracts_enforce_overrideclientsettings",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.pay_workbench_mark_candidate_dirty",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.pay_workbench_mark_contract_client_dirty",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.set_updated_at",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.tms_touch_updated_at",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_candidates_tombstone",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_clients_tombstone",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_set_cli_ref",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_set_rev",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_set_tms_ref",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_tsfin_candidates_wakeup",
+      "sourcePresent": true,
+      "bodyMatched": true
+    }
+  ],
+  "insertTriggerSourceComparison": [
+    {
+      "name": "private._contract_settings_after_contract_v1",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "private._invoice_candidate_revision_trigger_v2",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public._trg_candidates_set_bank_hash",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public._trg_change_bump",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.contracts_enforce_overrideclientsettings",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.pay_workbench_mark_candidate_dirty",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.pay_workbench_mark_contract_client_dirty",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_set_cli_ref",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_set_rev",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_set_tms_ref",
+      "sourcePresent": true,
+      "bodyMatched": true
+    },
+    {
+      "name": "public.trg_tsfin_candidates_wakeup",
+      "sourcePresent": true,
+      "bodyMatched": true
+    }
+  ]
+}

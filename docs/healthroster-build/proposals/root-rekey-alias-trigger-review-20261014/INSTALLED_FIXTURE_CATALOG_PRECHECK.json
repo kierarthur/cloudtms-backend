@@ -1,0 +1,4743 @@
+{
+  "status": "INSTALLED_READONLY_CATALOG_NOT_NATIVE_FIXTURE_PROOF",
+  "sourceCommit": "2cb3642ec9e49e9e54187e9a0ae6c1a4ed3a5937",
+  "fixtureSha256": "7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046",
+  "readOnly": true,
+  "fixtureExecuted": false,
+  "columns": [
+    {
+      "type": "uuid",
+      "table": "public.candidates",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "tms_ref",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "first_name",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "last_name",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "display_name",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "email",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "phone",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "pay_method",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.candidates",
+      "column": "umbrella_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "active",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.candidates",
+      "column": "created_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.candidates",
+      "column": "updated_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "key_norm",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "numeric",
+      "table": "public.candidates",
+      "column": "mileage_pay_rate",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "account_holder",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "bank_name",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "sort_code",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "account_number",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.candidates",
+      "column": "roles",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "notes",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.candidates",
+      "column": "rev",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.candidates",
+      "column": "job_title_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "prof_reg_number",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "professional_reg_type_enum",
+      "table": "public.candidates",
+      "column": "prof_reg_type",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "ni_number",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.candidates",
+      "column": "date_of_birth",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "gender",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "address_line1",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "address_line2",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "address_line3",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "town_city",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "county",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "postcode",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "country",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.candidates",
+      "column": "nhsp_hr_name_aliases",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "title",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "opt_in_email",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "opt_in_sms",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "opt_in_whatsapp",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "smallint",
+      "table": "public.candidates",
+      "column": "band",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.candidates",
+      "column": "tms_ref_num",
+      "notNull": false,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.candidates",
+      "column": "bank_details_hash",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "remittance_overrides_enabled",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "remittance_receive_enabled",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "remittances_detailed_breakdown",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.candidates",
+      "column": "remittance_receive_when_umbrella_paid",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "numeric(12,2)",
+      "table": "public.candidates",
+      "column": "min_take_home_wtd",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.clients",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "cli_ref",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "name",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "invoice_address",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "primary_invoice_email",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "ap_phone",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.clients",
+      "column": "vat_chargeable",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.clients",
+      "column": "payment_terms_days",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.clients",
+      "column": "created_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.clients",
+      "column": "updated_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "numeric",
+      "table": "public.clients",
+      "column": "mileage_charge_rate",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "ts_queries_email",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.clients",
+      "column": "rev",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "client_address",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_title",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_known_as",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_forename",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_surname",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_job_title",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_tel",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_mobile",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "contact_email",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "website",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.clients",
+      "column": "notes",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.contracts",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.contracts",
+      "column": "candidate_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.contracts",
+      "column": "client_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "role",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "band",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "display_site",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "ward_hint",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.contracts",
+      "column": "start_date",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.contracts",
+      "column": "end_date",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "pay_method_snapshot",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.contracts",
+      "column": "rates_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "jsonb",
+      "table": "public.contracts",
+      "column": "std_hours_json",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "submission_mode_enum",
+      "table": "public.contracts",
+      "column": "default_submission_mode",
+      "notNull": false,
+      "hasDefault": true
+    },
+    {
+      "type": "smallint",
+      "table": "public.contracts",
+      "column": "week_ending_weekday_snapshot",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "auto_invoice",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "require_reference_to_pay",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "require_reference_to_invoice",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.contracts",
+      "column": "created_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.contracts",
+      "column": "updated_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "jsonb",
+      "table": "public.contracts",
+      "column": "bucket_labels_json",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.contracts",
+      "column": "std_schedule_json",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "numeric(10,2)",
+      "table": "public.contracts",
+      "column": "mileage_pay_rate",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "numeric(10,2)",
+      "table": "public.contracts",
+      "column": "mileage_charge_rate",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.contracts",
+      "column": "additional_rates_json",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "self_bill",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "weekly_timesheet_source_enum",
+      "table": "public.contracts",
+      "column": "weekly_timesheet_source",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "no_timesheet_required",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "daily_calc_of_invoices",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "group_nightsat_sunbh",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "is_nhsp",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "autoprocess_hr",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "requires_hr",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "hr_attach_to_invoice",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "ts_attach_to_invoice",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "overrideclientsettings",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "reference_number_required_to_issue_invoice",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "send_manual_invoices_to_different_email",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "manual_invoices_alt_email_address",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "is_ad_hoc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "healthroster_import_auto_authorise_override",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "nhsp_import_auto_authorise_override",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "send_ts_queries_to_different_email",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "ts_queries_alt_email_address",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "candidate_electronic_auto_authorise_override",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "candidate_expenses_require_separate_timesheet_override",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.contracts",
+      "column": "candidate_paper_submission_enabled_override",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.contracts",
+      "column": "candidate_expense_invoice_email_override",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.contracts",
+      "column": "candidate_manager_approval_policy_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timesheet_break_entry_mode_enum",
+      "table": "public.contracts",
+      "column": "timesheet_break_entry_mode",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.tms_users",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.tms_users",
+      "column": "email",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.tms_users",
+      "column": "role",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.tms_users",
+      "column": "is_active",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.tms_users",
+      "column": "password_hash",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.tms_users",
+      "column": "session_version",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.tms_users",
+      "column": "created_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.tms_users",
+      "column": "updated_at",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.tms_users",
+      "column": "display_name",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.tms_users",
+      "column": "grid_prefs_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "jsonb",
+      "table": "public.tms_users",
+      "column": "email_settings",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.tms_users",
+      "column": "last_login_at_utc",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.tms_users",
+      "column": "payment_authoriser",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "boolean",
+      "table": "public.tms_users",
+      "column": "payment_golden_key",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.tms_users",
+      "column": "email_signature_html",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "source_group_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_cycles",
+      "column": "finalisation_week_ending",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_cycles",
+      "column": "cutoff_at_utc",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_cycles",
+      "column": "state",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "current_complete_upload_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "current_final_revision_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_cycles",
+      "column": "version",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_cycles",
+      "column": "projection_state",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "current_projection_publication_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_cycles",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_cycles",
+      "column": "finalised_at_utc",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "finalised_by_user_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_cycles",
+      "column": "scope_client_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_group_clients",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_group_clients",
+      "column": "source_group_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_group_clients",
+      "column": "client_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_group_clients",
+      "column": "valid_from",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_group_clients",
+      "column": "valid_to",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_group_clients",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_group_clients",
+      "column": "created_by_user_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_groups",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_groups",
+      "column": "environment",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_groups",
+      "column": "agency_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_groups",
+      "column": "code",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_groups",
+      "column": "display_name",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_groups",
+      "column": "source_family",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_groups",
+      "column": "timezone",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "smallint",
+      "table": "public.weekly_source_groups",
+      "column": "cutoff_weekday",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "time without time zone",
+      "table": "public.weekly_source_groups",
+      "column": "cutoff_local_time",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_groups",
+      "column": "nhsp_report_heading_name",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.weekly_source_groups",
+      "column": "active",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_groups",
+      "column": "version",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_groups",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_groups",
+      "column": "updated_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_groups",
+      "column": "updated_by_user_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "upload_row_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "generation",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "candidate_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "client_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "contract_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "work_event_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "paid_minutes",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "rate_classifications_json",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "mapping_state",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "blocker_code",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "contract_selection_method",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "work_event_match_kind",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "work_event_match_fingerprint",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "qualification_profile_fingerprint",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "qualifying_contract_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "qualifying_contract_set_hash",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "source_row_fingerprint",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "contract_and_rate_fingerprint",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "effective_policy_fingerprint",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_row_resolutions",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_upload_rows",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_upload_rows",
+      "column": "upload_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_row_ordinal",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "external_source_key",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_candidate_identity",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_client_identity",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_upload_rows",
+      "column": "work_date",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp without time zone",
+      "table": "public.weekly_source_upload_rows",
+      "column": "start_at_local",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp without time zone",
+      "table": "public.weekly_source_upload_rows",
+      "column": "end_at_local",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_upload_rows",
+      "column": "break_minutes",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_upload_rows",
+      "column": "actual_net_minutes",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "row_finalisation_state",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "finalised_by",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "role_band_source",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_commission_pence",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_total_cost_pence",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_shift_charge_pence",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_money_parse_state",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_qualification_profile_version",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_expense_pence",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_upload_rows",
+      "column": "source_expense_parse_state",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_upload_rows",
+      "column": "normalised_row_hash",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.weekly_source_upload_rows",
+      "column": "bounded_raw_columns_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_upload_rows",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "source_cycle_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "report_scope_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "original_filename",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_uploads",
+      "column": "content_sha256",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "bigint",
+      "table": "public.weekly_source_uploads",
+      "column": "byte_count",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "source_format_profile_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "parser_version",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "normaliser_version",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_uploads",
+      "column": "workbook_part_and_sheet_fingerprint",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "jsonb",
+      "table": "public.weekly_source_uploads",
+      "column": "header_coordinate_map_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_uploads",
+      "column": "header_coordinate_map_hash",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "money_lexical_authority_version",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "purpose",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "correction_session_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_uploads",
+      "column": "declared_scope_fingerprint",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_uploads",
+      "column": "suggested_coverage_start_local_date",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_uploads",
+      "column": "suggested_coverage_end_local_date",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_uploads",
+      "column": "confirmed_coverage_start_local_date",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_source_uploads",
+      "column": "confirmed_coverage_end_local_date",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_timezone",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_confirmation_version",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_confirmed_by_user_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_confirmed_at_utc",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "boolean",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_shrink_acknowledged",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_state",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "coverage_proof_kind",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "physical_row_count",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "header_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "trailer_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "continuation_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "accepted_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "blocking_economic_duplicate_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "malformed_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "integer",
+      "table": "public.weekly_source_uploads",
+      "column": "blocked_count",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_source_uploads",
+      "column": "row_manifest_hash",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_source_uploads",
+      "column": "state",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_source_uploads",
+      "column": "uploaded_by_user_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_source_uploads",
+      "column": "uploaded_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "jsonb",
+      "table": "public.weekly_source_uploads",
+      "column": "file_metadata_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "jsonb",
+      "table": "public.weekly_source_uploads",
+      "column": "parser_summary_json",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_event_source_links",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_event_source_links",
+      "column": "work_event_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_event_source_links",
+      "column": "upload_row_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_event_source_links",
+      "column": "row_resolution_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_work_event_source_links",
+      "column": "link_kind",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_work_event_source_links",
+      "column": "link_hash",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_work_event_source_links",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_events",
+      "column": "id",
+      "notNull": true,
+      "hasDefault": true
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_events",
+      "column": "candidate_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_events",
+      "column": "client_id",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "date",
+      "table": "public.weekly_work_events",
+      "column": "work_date",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_work_events",
+      "column": "identity_kind",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "text",
+      "table": "public.weekly_work_events",
+      "column": "profile_external_key",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "bytea",
+      "table": "public.weekly_work_events",
+      "column": "durable_identity_hash",
+      "notNull": true,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_events",
+      "column": "first_source_group_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "uuid",
+      "table": "public.weekly_work_events",
+      "column": "source_format_profile_id",
+      "notNull": false,
+      "hasDefault": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "public.weekly_work_events",
+      "column": "created_at_utc",
+      "notNull": true,
+      "hasDefault": true
+    }
+  ],
+  "release": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "status": "VERIFIED"
+  },
+  "database": "cloudtms_test_clone",
+  "triggers": [
+    {
+      "name": "bpay_next_workbench_candidate_name_trigger",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "private.bpay_next_workbench_candidate_name_trigger_v1",
+      "definition": "CREATE TRIGGER bpay_next_workbench_candidate_name_trigger AFTER UPDATE OF display_name, first_name, last_name, tms_ref, pay_method, umbrella_id, bank_details_hash, account_holder, sort_code, account_number ON public.candidates FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_candidate_name_trigger_v1()"
+    },
+    {
+      "name": "candidate_expense_candidate_identity_summary_refresh",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "private._candidate_expense_identity_summary_trigger_v1",
+      "definition": "CREATE TRIGGER candidate_expense_candidate_identity_summary_refresh AFTER UPDATE OF display_name, first_name, last_name, tms_ref ON public.candidates FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "set_tms_ref",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public.trg_set_tms_ref",
+      "definition": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()"
+    },
+    {
+      "name": "trg_candidates_set_bank_hash",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public._trg_candidates_set_bank_hash",
+      "definition": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON public.candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()"
+    },
+    {
+      "name": "trg_candidates_set_rev",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public.trg_set_rev",
+      "definition": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()"
+    },
+    {
+      "name": "trg_candidates_set_updated_at",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public.set_updated_at",
+      "definition": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_candidates_tombstone_ad",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public.trg_candidates_tombstone",
+      "definition": "CREATE TRIGGER trg_candidates_tombstone_ad AFTER DELETE ON public.candidates FOR EACH ROW EXECUTE FUNCTION trg_candidates_tombstone()"
+    },
+    {
+      "name": "trg_cc_candidates",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public._trg_change_bump",
+      "definition": "CREATE TRIGGER trg_cc_candidates AFTER INSERT OR DELETE OR UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('candidates')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_candidates_d",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_d AFTER DELETE ON public.candidates REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_candidates_i",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_i AFTER INSERT ON public.candidates REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_candidates_u",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_u AFTER UPDATE ON public.candidates REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_candidate_dirty__candidates",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public.pay_workbench_mark_candidate_dirty",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_candidate_dirty__candidates AFTER INSERT OR UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_candidate_dirty()"
+    },
+    {
+      "name": "trg_tsfin_candidates_wakeup_aiu",
+      "table": "public.candidates",
+      "enabled": "O",
+      "routine": "public.trg_tsfin_candidates_wakeup",
+      "definition": "CREATE TRIGGER trg_tsfin_candidates_wakeup_aiu AFTER INSERT OR UPDATE OF key_norm, nhsp_hr_name_aliases, pay_method, umbrella_id, active ON public.candidates FOR EACH ROW EXECUTE FUNCTION trg_tsfin_candidates_wakeup()"
+    },
+    {
+      "name": "candidate_expense_client_identity_summary_refresh",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "private._candidate_expense_identity_summary_trigger_v1",
+      "definition": "CREATE TRIGGER candidate_expense_client_identity_summary_refresh AFTER UPDATE OF name, cli_ref ON public.clients FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "set_cli_ref",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "public.trg_set_cli_ref",
+      "definition": "CREATE TRIGGER set_cli_ref BEFORE INSERT OR UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION trg_set_cli_ref()"
+    },
+    {
+      "name": "trg_cc_clients",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "public._trg_change_bump",
+      "definition": "CREATE TRIGGER trg_cc_clients AFTER INSERT OR DELETE OR UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('clients')"
+    },
+    {
+      "name": "trg_clients_set_rev",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "public.trg_set_rev",
+      "definition": "CREATE TRIGGER trg_clients_set_rev BEFORE INSERT OR UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION trg_set_rev()"
+    },
+    {
+      "name": "trg_clients_set_updated_at",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "public.set_updated_at",
+      "definition": "CREATE TRIGGER trg_clients_set_updated_at BEFORE UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_clients_tombstone_ad",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "public.trg_clients_tombstone",
+      "definition": "CREATE TRIGGER trg_clients_tombstone_ad AFTER DELETE ON public.clients FOR EACH ROW EXECUTE FUNCTION trg_clients_tombstone()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_d",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_d AFTER DELETE ON public.clients REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_i",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_i AFTER INSERT ON public.clients REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_u",
+      "table": "public.clients",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_u AFTER UPDATE ON public.clients REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "candidate_expense_contract_identity_summary_refresh",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "private._candidate_expense_identity_summary_trigger_v1",
+      "definition": "CREATE TRIGGER candidate_expense_contract_identity_summary_refresh AFTER UPDATE OF role, display_site ON public.contracts FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_insert_v1",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "private._contract_settings_after_contract_v1",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_insert_v1 AFTER INSERT ON public.contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_update_v1",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "private._contract_settings_after_contract_v1",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_update_v1 AFTER UPDATE OF client_id, start_date, overrideclientsettings, no_timesheet_required, daily_calc_of_invoices, group_nightsat_sunbh, is_nhsp, autoprocess_hr, requires_hr, hr_attach_to_invoice, ts_attach_to_invoice, reference_number_required_to_issue_invoice, send_manual_invoices_to_different_email, manual_invoices_alt_email_address, default_submission_mode, timesheet_break_entry_mode, auto_invoice, require_reference_to_pay, require_reference_to_invoice, self_bill, healthroster_import_auto_authorise_override, nhsp_import_auto_authorise_override, candidate_electronic_auto_authorise_override, candidate_expenses_require_separate_timesheet_override, candidate_paper_submission_enabled_override, candidate_expense_invoice_email_override, candidate_manager_approval_policy_json, rates_json, additional_rates_json, mileage_pay_rate, mileage_charge_rate ON public.contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "trg_cc_contracts",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "public._trg_change_bump",
+      "definition": "CREATE TRIGGER trg_cc_contracts AFTER INSERT OR DELETE OR UPDATE ON public.contracts FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('contracts')"
+    },
+    {
+      "name": "trg_contracts_enforce_overrideclientsettings",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "public.contracts_enforce_overrideclientsettings",
+      "definition": "CREATE TRIGGER trg_contracts_enforce_overrideclientsettings BEFORE INSERT OR UPDATE ON public.contracts FOR EACH ROW EXECUTE FUNCTION contracts_enforce_overrideclientsettings()"
+    },
+    {
+      "name": "trg_contracts_set_updated_at",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "public.set_updated_at",
+      "definition": "CREATE TRIGGER trg_contracts_set_updated_at BEFORE UPDATE ON public.contracts FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_d",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_d AFTER DELETE ON public.contracts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_i",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_i AFTER INSERT ON public.contracts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_u",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "private._invoice_candidate_revision_trigger_v2",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_u AFTER UPDATE ON public.contracts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_contract_client_dirty__contracts",
+      "table": "public.contracts",
+      "enabled": "O",
+      "routine": "public.pay_workbench_mark_contract_client_dirty",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_contract_client_dirty__contracts AFTER INSERT OR DELETE OR UPDATE ON public.contracts FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_contract_client_dirty()"
+    },
+    {
+      "name": "tms_users_touch",
+      "table": "public.tms_users",
+      "enabled": "O",
+      "routine": "public.tms_touch_updated_at",
+      "definition": "CREATE TRIGGER tms_users_touch BEFORE UPDATE ON public.tms_users FOR EACH ROW EXECUTE FUNCTION tms_touch_updated_at()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "public.weekly_source_row_resolutions",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON public.weekly_source_row_resolutions FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "public.weekly_source_row_resolutions",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON public.weekly_source_row_resolutions FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "public.weekly_source_upload_rows",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON public.weekly_source_upload_rows FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "public.weekly_source_upload_rows",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON public.weekly_source_upload_rows FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "public.weekly_work_event_source_links",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON public.weekly_work_event_source_links FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "public.weekly_work_event_source_links",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON public.weekly_work_event_source_links FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "public.weekly_work_events",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON public.weekly_work_events FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "public.weekly_work_events",
+      "enabled": "O",
+      "routine": "private._weekly_source_immutable_record_guard_v1",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON public.weekly_work_events FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    }
+  ],
+  "observedAt": "2026-10-14T18:11:03.122504+00:00",
+  "constraints": [
+    {
+      "name": "candidates_job_title_id_fkey",
+      "type": "f",
+      "table": "public.candidates",
+      "definition": "FOREIGN KEY (job_title_id) REFERENCES default_job_titles(id)"
+    },
+    {
+      "name": "candidates_pay_method_check",
+      "type": "c",
+      "table": "public.candidates",
+      "definition": "CHECK ((pay_method = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))"
+    },
+    {
+      "name": "candidates_pkey",
+      "type": "p",
+      "table": "public.candidates",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "candidates_tms_ref_key",
+      "type": "u",
+      "table": "public.candidates",
+      "definition": "UNIQUE (tms_ref)"
+    },
+    {
+      "name": "candidates_umbrella_id_fkey",
+      "type": "f",
+      "table": "public.candidates",
+      "definition": "FOREIGN KEY (umbrella_id) REFERENCES umbrellas(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "chk_candidates_tms_ref_format",
+      "type": "c",
+      "table": "public.candidates",
+      "definition": "CHECK (((tms_ref IS NULL) OR (tms_ref ~ '^CCR-[0-9]{5,}$'::text))) NOT VALID"
+    },
+    {
+      "name": "chk_clients_cli_ref_format",
+      "type": "c",
+      "table": "public.clients",
+      "definition": "CHECK (((cli_ref IS NULL) OR (cli_ref ~ '^CLI-[0-9]{5,}$'::text)))"
+    },
+    {
+      "name": "clients_cli_ref_key",
+      "type": "u",
+      "table": "public.clients",
+      "definition": "UNIQUE (cli_ref)"
+    },
+    {
+      "name": "clients_pkey",
+      "type": "p",
+      "table": "public.clients",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "contracts_bucket_labels_json_chk",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((bucket_labels_json IS NULL) OR ((jsonb_typeof(bucket_labels_json) = 'object'::text) AND ((bucket_labels_json - ARRAY['day'::text, 'night'::text, 'sat'::text, 'sun'::text, 'bh'::text]) = '{}'::jsonb) AND (bucket_labels_json ? 'day'::text) AND (bucket_labels_json ? 'night'::text) AND (bucket_labels_json ? 'sat'::text) AND (bucket_labels_json ? 'sun'::text) AND (bucket_labels_json ? 'bh'::text) AND (NULLIF(btrim((bucket_labels_json ->> 'day'::text)), ''::text) IS NOT NULL) AND (NULLIF(btrim((bucket_labels_json ->> 'night'::text)), ''::text) IS NOT NULL) AND (NULLIF(btrim((bucket_labels_json ->> 'sat'::text)), ''::text) IS NOT NULL) AND (NULLIF(btrim((bucket_labels_json ->> 'sun'::text)), ''::text) IS NOT NULL) AND (NULLIF(btrim((bucket_labels_json ->> 'bh'::text)), ''::text) IS NOT NULL))))"
+    },
+    {
+      "name": "contracts_candidate_expense_email_ck",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((candidate_expense_invoice_email_override IS NULL) OR (btrim(candidate_expense_invoice_email_override) = ''::text) OR (candidate_expense_invoice_email_override ~* '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'::text)))"
+    },
+    {
+      "name": "contracts_candidate_id_fkey",
+      "type": "f",
+      "table": "public.contracts",
+      "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "contracts_candidate_manager_policy_object_ck",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK ((jsonb_typeof(candidate_manager_approval_policy_json) = 'object'::text))"
+    },
+    {
+      "name": "contracts_client_id_fkey",
+      "type": "f",
+      "table": "public.contracts",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "contracts_mileage_nonneg_chk",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK ((((mileage_pay_rate IS NULL) OR (mileage_pay_rate >= (0)::numeric)) AND ((mileage_charge_rate IS NULL) OR (mileage_charge_rate >= (0)::numeric))))"
+    },
+    {
+      "name": "contracts_no_ts_requires_hr_chk",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((COALESCE(no_timesheet_required, false) = false) OR (COALESCE(autoprocess_hr, false) = true)))"
+    },
+    {
+      "name": "contracts_pay_method_snapshot_check",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK ((pay_method_snapshot = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))"
+    },
+    {
+      "name": "contracts_pkey",
+      "type": "p",
+      "table": "public.contracts",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "contracts_route_one_source_chk",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((\nCASE\n    WHEN COALESCE(is_nhsp, false) THEN 1\n    ELSE 0\nEND +\nCASE\n    WHEN COALESCE(autoprocess_hr, false) THEN 1\n    ELSE 0\nEND) <= 1))"
+    },
+    {
+      "name": "contracts_ts_query_email_override_ck",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((NOT send_ts_queries_to_different_email) OR ((NULLIF(btrim(ts_queries_alt_email_address), ''::text) IS NOT NULL) AND (length(btrim(ts_queries_alt_email_address)) <= 320))))"
+    },
+    {
+      "name": "contracts_week_ending_weekday_snapshot_check",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((week_ending_weekday_snapshot >= 0) AND (week_ending_weekday_snapshot <= 6)))"
+    },
+    {
+      "name": "contracts_weekly_source_no_ts_chk",
+      "type": "c",
+      "table": "public.contracts",
+      "definition": "CHECK (((weekly_timesheet_source IS NULL) OR (weekly_timesheet_source = 'HEALTHROSTER'::weekly_timesheet_source_enum) OR (COALESCE(no_timesheet_required, false) = false)))"
+    },
+    {
+      "name": "tms_users_email_key",
+      "type": "u",
+      "table": "public.tms_users",
+      "definition": "UNIQUE (email)"
+    },
+    {
+      "name": "tms_users_payment_golden_implies_authoriser_chk",
+      "type": "c",
+      "table": "public.tms_users",
+      "definition": "CHECK (((payment_golden_key = false) OR (payment_authoriser = true)))"
+    },
+    {
+      "name": "tms_users_pkey",
+      "type": "p",
+      "table": "public.tms_users",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_cycles_check",
+      "type": "c",
+      "table": "public.weekly_source_cycles",
+      "definition": "CHECK (((state <> 'FINALISED'::text) OR ((finalised_at_utc IS NOT NULL) AND (finalised_by_user_id IS NOT NULL))))"
+    },
+    {
+      "name": "weekly_source_cycles_current_final_fk",
+      "type": "f",
+      "table": "public.weekly_source_cycles",
+      "definition": "FOREIGN KEY (current_final_revision_id) REFERENCES weekly_source_final_revisions(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_cycles_current_publication_fk",
+      "type": "f",
+      "table": "public.weekly_source_cycles",
+      "definition": "FOREIGN KEY (current_projection_publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_cycles_current_upload_fk",
+      "type": "f",
+      "table": "public.weekly_source_cycles",
+      "definition": "FOREIGN KEY (current_complete_upload_id) REFERENCES weekly_source_uploads(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_cycles_finalised_by_user_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_cycles",
+      "definition": "FOREIGN KEY (finalised_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_cycles_group_week_client_uq",
+      "type": "u",
+      "table": "public.weekly_source_cycles",
+      "definition": "UNIQUE NULLS NOT DISTINCT (source_group_id, finalisation_week_ending, scope_client_id)"
+    },
+    {
+      "name": "weekly_source_cycles_pkey",
+      "type": "p",
+      "table": "public.weekly_source_cycles",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_cycles_projection_state_check",
+      "type": "c",
+      "table": "public.weekly_source_cycles",
+      "definition": "CHECK ((projection_state = ANY (ARRAY['NONE'::text, 'REBUILDING'::text, 'CURRENT'::text, 'FAILED'::text])))"
+    },
+    {
+      "name": "weekly_source_cycles_scope_client_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_cycles",
+      "definition": "FOREIGN KEY (scope_client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_cycles_source_group_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_cycles",
+      "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_cycles_state_check",
+      "type": "c",
+      "table": "public.weekly_source_cycles",
+      "definition": "CHECK ((state = ANY (ARRAY['OPEN'::text, 'FINALISABLE'::text, 'FINALISING'::text, 'FINALISED'::text, 'CORRECTION_IN_PROGRESS'::text])))"
+    },
+    {
+      "name": "weekly_source_cycles_version_check",
+      "type": "c",
+      "table": "public.weekly_source_cycles",
+      "definition": "CHECK ((version >= 0))"
+    },
+    {
+      "name": "weekly_source_group_clients_check",
+      "type": "c",
+      "table": "public.weekly_source_group_clients",
+      "definition": "CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))"
+    },
+    {
+      "name": "weekly_source_group_clients_client_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_group_clients",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_group_clients_created_by_user_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_group_clients",
+      "definition": "FOREIGN KEY (created_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_group_clients_no_overlap",
+      "type": "x",
+      "table": "public.weekly_source_group_clients",
+      "definition": "EXCLUDE USING gist (client_id WITH =, daterange(valid_from, COALESCE(valid_to, 'infinity'::date), '[]'::text) WITH &&)"
+    },
+    {
+      "name": "weekly_source_group_clients_pkey",
+      "type": "p",
+      "table": "public.weekly_source_group_clients",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_group_clients_source_group_id_client_id_valid_key",
+      "type": "u",
+      "table": "public.weekly_source_group_clients",
+      "definition": "UNIQUE NULLS NOT DISTINCT (source_group_id, client_id, valid_from, valid_to)"
+    },
+    {
+      "name": "weekly_source_group_clients_source_group_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_group_clients",
+      "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_groups_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK (((source_family = 'NHSP'::text) = (nhsp_report_heading_name IS NOT NULL)))"
+    },
+    {
+      "name": "weekly_source_groups_code_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK ((code ~ '^[A-Z][A-Z0-9_]{1,79}$'::text))"
+    },
+    {
+      "name": "weekly_source_groups_cutoff_weekday_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK (((cutoff_weekday >= 0) AND (cutoff_weekday <= 6)))"
+    },
+    {
+      "name": "weekly_source_groups_display_name_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK (((char_length(btrim(display_name)) >= 1) AND (char_length(btrim(display_name)) <= 160)))"
+    },
+    {
+      "name": "weekly_source_groups_environment_agency_id_code_key",
+      "type": "u",
+      "table": "public.weekly_source_groups",
+      "definition": "UNIQUE (environment, agency_id, code)"
+    },
+    {
+      "name": "weekly_source_groups_environment_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK ((environment = ANY (ARRAY['TEST'::text, 'LIVE'::text])))"
+    },
+    {
+      "name": "weekly_source_groups_nhsp_report_heading_name_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK (((nhsp_report_heading_name IS NULL) OR ((char_length(btrim(nhsp_report_heading_name)) >= 1) AND (char_length(btrim(nhsp_report_heading_name)) <= 200))))"
+    },
+    {
+      "name": "weekly_source_groups_pkey",
+      "type": "p",
+      "table": "public.weekly_source_groups",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_groups_source_family_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK ((source_family = ANY (ARRAY['NHSP'::text, 'ROSTER'::text])))"
+    },
+    {
+      "name": "weekly_source_groups_timezone_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK ((timezone = 'Europe/London'::text))"
+    },
+    {
+      "name": "weekly_source_groups_updated_by_user_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_groups",
+      "definition": "FOREIGN KEY (updated_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_groups_version_check",
+      "type": "c",
+      "table": "public.weekly_source_groups",
+      "definition": "CHECK ((version >= 1))"
+    },
+    {
+      "name": "weekly_source_row_resolution_contract_and_rate_fingerprin_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((contract_and_rate_fingerprint IS NULL) OR (octet_length(contract_and_rate_fingerprint) = 32)))"
+    },
+    {
+      "name": "weekly_source_row_resolution_effective_policy_fingerprint_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((effective_policy_fingerprint IS NULL) OR (octet_length(effective_policy_fingerprint) = 32)))"
+    },
+    {
+      "name": "weekly_source_row_resolution_qualification_profile_finger_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK ((octet_length(qualification_profile_fingerprint) = 32))"
+    },
+    {
+      "name": "weekly_source_row_resolution_qualifying_contract_set_hash_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK ((octet_length(qualifying_contract_set_hash) = 32))"
+    },
+    {
+      "name": "weekly_source_row_resolution_work_event_match_fingerprint_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((work_event_match_fingerprint IS NULL) OR (octet_length(work_event_match_fingerprint) = 32)))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_candidate_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_row_resolutions_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((mapping_state = 'RESOLVED'::text) = ((candidate_id IS NOT NULL) AND (client_id IS NOT NULL) AND (contract_id IS NOT NULL) AND (work_event_id IS NOT NULL) AND (blocker_code IS NULL))))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_check1",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((mapping_state = 'RESOLVED'::text) = (contract_selection_method IS NOT NULL)))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_check2",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((mapping_state = 'RESOLVED'::text) = ((work_event_match_kind IS NOT NULL) AND (work_event_match_fingerprint IS NOT NULL))))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_client_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_row_resolutions_contract_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_row_resolutions_contract_selection_method_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((contract_selection_method IS NULL) OR (contract_selection_method = ANY (ARRAY['AUTO_UNIQUE'::text, 'OFFICE_SELECTED'::text, 'DURABLE_LINEAGE'::text]))))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_generation_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK ((generation >= 1))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_mapping_state_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK ((mapping_state = ANY (ARRAY['RESOLVED'::text, 'CANDIDATE_NOT_FOUND'::text, 'CLIENT_NOT_FOUND'::text, 'NO_ELIGIBLE_CONTRACT'::text, 'AMBIGUOUS_CONTRACT'::text, 'CONTRACT_SELECTION_REQUIRED'::text, 'SOURCE_ROW_BLOCKED'::text])))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_paid_minutes_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((paid_minutes IS NULL) OR (paid_minutes >= 0)))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_pkey",
+      "type": "p",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_row_resolutions_qualifying_contract_count_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK ((qualifying_contract_count >= 0))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_rate_classifications_json_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((rate_classifications_json IS NULL) OR (jsonb_typeof(rate_classifications_json) = 'object'::text)))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_source_row_fingerprint_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK ((octet_length(source_row_fingerprint) = 32))"
+    },
+    {
+      "name": "weekly_source_row_resolutions_upload_row_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "FOREIGN KEY (upload_row_id) REFERENCES weekly_source_upload_rows(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_row_resolutions_upload_row_id_generation_key",
+      "type": "u",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "UNIQUE (upload_row_id, generation)"
+    },
+    {
+      "name": "weekly_source_row_resolutions_work_event_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_row_resolutions_work_event_match_kind_check",
+      "type": "c",
+      "table": "public.weekly_source_row_resolutions",
+      "definition": "CHECK (((work_event_match_kind IS NULL) OR (work_event_match_kind = ANY (ARRAY['NEW_PROFILE_KEY'::text, 'REUSED_PROFILE_KEY'::text, 'NEW_SCHEDULE_TUPLE'::text, 'EXACT_DURABLE_LINEAGE'::text]))))"
+    },
+    {
+      "name": "weekly_source_upload_rows_actual_net_minutes_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((actual_net_minutes IS NULL) OR (actual_net_minutes >= 0)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_bounded_raw_columns_json_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK ((jsonb_typeof(bounded_raw_columns_json) = 'object'::text))"
+    },
+    {
+      "name": "weekly_source_upload_rows_break_minutes_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((break_minutes IS NULL) OR (break_minutes >= 0)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((start_at_local IS NULL) OR (end_at_local IS NULL) OR (end_at_local > start_at_local)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_check1",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((break_minutes IS NULL) OR (start_at_local IS NULL) OR (end_at_local IS NULL) OR (break_minutes <= ((EXTRACT(epoch FROM (end_at_local - start_at_local)) / (60)::numeric))::integer)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_check2",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((row_finalisation_state <> ALL (ARRAY['NOT_APPLICABLE'::text, 'SOURCE_WORKED'::text])) OR ((start_at_local IS NOT NULL) AND (end_at_local IS NOT NULL) AND (break_minutes IS NOT NULL) AND (actual_net_minutes IS NOT NULL) AND (actual_net_minutes > 0))))"
+    },
+    {
+      "name": "weekly_source_upload_rows_check3",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((row_finalisation_state <> 'SOURCE_ABSENT_ZERO'::text) OR (actual_net_minutes = 0)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_check4",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((NOT (source_shift_charge_pence IS DISTINCT FROM (source_commission_pence + source_total_cost_pence))) OR (source_commission_pence IS NULL) OR (source_total_cost_pence IS NULL)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_normalised_row_hash_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK ((octet_length(normalised_row_hash) = 32))"
+    },
+    {
+      "name": "weekly_source_upload_rows_pkey",
+      "type": "p",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_upload_rows_row_finalisation_state_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK ((row_finalisation_state = ANY (ARRAY['NOT_APPLICABLE'::text, 'SOURCE_WORKED'::text, 'SOURCE_ABSENT_ZERO'::text, 'SOURCE_UNFINALISED'::text, 'BLOCK_FINALISATION_DISAGREEMENT'::text, 'BLOCK_ACTUAL_TUPLE'::text])))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_commission_pence_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((source_commission_pence >= '-999999999999'::bigint) AND (source_commission_pence <= '999999999999'::bigint)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_expense_parse_state_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK ((source_expense_parse_state = ANY (ARRAY['NOT_APPLICABLE'::text, 'VALID'::text, 'OMITTED_ZERO'::text, 'INVALID'::text, 'EXCESS_PRECISION'::text, 'FORMULA'::text, 'UNSUPPORTED_CELL_TYPE'::text, 'OVERFLOW'::text])))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_expense_pence_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((source_expense_pence >= 0) AND (source_expense_pence <= '999999999999'::bigint)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_money_parse_state_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK ((source_money_parse_state = ANY (ARRAY['NOT_APPLICABLE'::text, 'VALID'::text, 'MISSING'::text, 'INVALID'::text, 'EXCESS_PRECISION'::text, 'FORMULA'::text, 'UNSUPPORTED_CELL_TYPE'::text, 'OVERFLOW'::text])))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_row_ordinal_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK ((source_row_ordinal >= 1))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_shift_charge_pence_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((source_shift_charge_pence >= '-999999999999'::bigint) AND (source_shift_charge_pence <= '999999999999'::bigint)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_source_total_cost_pence_check",
+      "type": "c",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "CHECK (((source_total_cost_pence >= '-999999999999'::bigint) AND (source_total_cost_pence <= '999999999999'::bigint)))"
+    },
+    {
+      "name": "weekly_source_upload_rows_upload_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "FOREIGN KEY (upload_id) REFERENCES weekly_source_uploads(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_upload_rows_upload_id_source_row_ordinal_key",
+      "type": "u",
+      "table": "public.weekly_source_upload_rows",
+      "definition": "UNIQUE (upload_id, source_row_ordinal)"
+    },
+    {
+      "name": "weekly_source_uploads_accepted_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((accepted_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_blocked_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((blocked_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_blocking_economic_duplicate_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((blocking_economic_duplicate_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_byte_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((byte_count > 0))"
+    },
+    {
+      "name": "weekly_source_uploads_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((purpose = 'FINAL_SOURCE_CORRECTION'::text) = (correction_session_id IS NOT NULL)))"
+    },
+    {
+      "name": "weekly_source_uploads_check1",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((suggested_coverage_end_local_date IS NULL) OR (suggested_coverage_start_local_date <= suggested_coverage_end_local_date)))"
+    },
+    {
+      "name": "weekly_source_uploads_check2",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((confirmed_coverage_end_local_date IS NULL) OR (confirmed_coverage_start_local_date <= confirmed_coverage_end_local_date)))"
+    },
+    {
+      "name": "weekly_source_uploads_check3",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((state = ANY (ARRAY['SEALED'::text, 'CURRENT'::text, 'SUPERSEDED'::text, 'CORRECTION_READY'::text])) = (row_manifest_hash IS NOT NULL)))"
+    },
+    {
+      "name": "weekly_source_uploads_check4",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((state <> ALL (ARRAY['SEALED'::text, 'CURRENT'::text, 'SUPERSEDED'::text, 'CORRECTION_READY'::text])) OR (physical_row_count = (((((header_count + trailer_count) + continuation_count) + accepted_count) + blocking_economic_duplicate_count) + malformed_count))))"
+    },
+    {
+      "name": "weekly_source_uploads_content_sha256_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((octet_length(content_sha256) = 32))"
+    },
+    {
+      "name": "weekly_source_uploads_continuation_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((continuation_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_correction_session_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_uploads",
+      "definition": "FOREIGN KEY (correction_session_id) REFERENCES weekly_final_source_correction_sessions(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_uploads_coverage_confirmed_by_user_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_uploads",
+      "definition": "FOREIGN KEY (coverage_confirmed_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_uploads_coverage_proof_kind_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((coverage_proof_kind = ANY (ARRAY['FORMAT_MANIFEST'::text, 'OFFICE_COMPLETE_EXPORT_ATTESTATION'::text, 'EXPLICIT_EMPTY_CONFIRMATION'::text, 'NHSP_TRUST_REPORT_SCOPE'::text, 'HEALTHROSTER_COMPLETE_EXPORT_ATTESTATION'::text])))"
+    },
+    {
+      "name": "weekly_source_uploads_coverage_state_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((coverage_state IS NULL) OR (coverage_state = ANY (ARRAY['COMPLETE'::text, 'INCOMPLETE'::text, 'UNKNOWN'::text]))))"
+    },
+    {
+      "name": "weekly_source_uploads_coverage_timezone_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((coverage_timezone IS NULL) OR (coverage_timezone = 'Europe/London'::text)))"
+    },
+    {
+      "name": "weekly_source_uploads_declared_scope_fingerprint_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((octet_length(declared_scope_fingerprint) = 32))"
+    },
+    {
+      "name": "weekly_source_uploads_file_metadata_json_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((jsonb_typeof(file_metadata_json) = 'object'::text))"
+    },
+    {
+      "name": "weekly_source_uploads_header_coordinate_map_hash_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((octet_length(header_coordinate_map_hash) = 32))"
+    },
+    {
+      "name": "weekly_source_uploads_header_coordinate_map_json_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((jsonb_typeof(header_coordinate_map_json) = 'object'::text))"
+    },
+    {
+      "name": "weekly_source_uploads_header_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((header_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_malformed_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((malformed_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_original_filename_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((char_length(original_filename) >= 1) AND (char_length(original_filename) <= 255)))"
+    },
+    {
+      "name": "weekly_source_uploads_parser_summary_json_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((jsonb_typeof(parser_summary_json) = 'object'::text))"
+    },
+    {
+      "name": "weekly_source_uploads_physical_row_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((physical_row_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_pkey",
+      "type": "p",
+      "table": "public.weekly_source_uploads",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_source_uploads_purpose_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((purpose = ANY (ARRAY['ORDINARY'::text, 'FINAL_SOURCE_CORRECTION'::text])))"
+    },
+    {
+      "name": "weekly_source_uploads_report_scope_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_uploads",
+      "definition": "FOREIGN KEY (report_scope_id) REFERENCES weekly_source_report_scopes(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_uploads_row_manifest_hash_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((row_manifest_hash IS NULL) OR (octet_length(row_manifest_hash) = 32)))"
+    },
+    {
+      "name": "weekly_source_uploads_source_cycle_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_uploads",
+      "definition": "FOREIGN KEY (source_cycle_id) REFERENCES weekly_source_cycles(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_uploads_source_format_profile_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_uploads",
+      "definition": "FOREIGN KEY (source_format_profile_id) REFERENCES weekly_source_format_profiles(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_uploads_state_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((state = ANY (ARRAY['STAGING'::text, 'SEALED'::text, 'CURRENT'::text, 'SUPERSEDED'::text, 'REJECTED'::text, 'CORRECTION_READY'::text])))"
+    },
+    {
+      "name": "weekly_source_uploads_trailer_count_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK ((trailer_count >= 0))"
+    },
+    {
+      "name": "weekly_source_uploads_uploaded_by_user_id_fkey",
+      "type": "f",
+      "table": "public.weekly_source_uploads",
+      "definition": "FOREIGN KEY (uploaded_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_source_uploads_workbook_part_and_sheet_fingerprint_check",
+      "type": "c",
+      "table": "public.weekly_source_uploads",
+      "definition": "CHECK (((workbook_part_and_sheet_fingerprint IS NULL) OR (octet_length(workbook_part_and_sheet_fingerprint) = 32)))"
+    },
+    {
+      "name": "weekly_work_event_source_link_upload_row_id_row_resolution__key",
+      "type": "u",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "UNIQUE (upload_row_id, row_resolution_id)"
+    },
+    {
+      "name": "weekly_work_event_source_links_link_hash_check",
+      "type": "c",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "CHECK ((octet_length(link_hash) = 32))"
+    },
+    {
+      "name": "weekly_work_event_source_links_link_hash_key",
+      "type": "u",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "UNIQUE (link_hash)"
+    },
+    {
+      "name": "weekly_work_event_source_links_link_kind_check",
+      "type": "c",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "CHECK ((link_kind = ANY (ARRAY['PROVISIONAL_SOURCE'::text, 'POSITIVE_SOURCE'::text, 'FULL_NEGATIVE_SOURCE'::text, 'ZERO_SOURCE'::text, 'TIMESHEET_EVIDENCE'::text, 'PROTECTED_OFFICE_ENTRY'::text])))"
+    },
+    {
+      "name": "weekly_work_event_source_links_pkey",
+      "type": "p",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_work_event_source_links_row_resolution_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "FOREIGN KEY (row_resolution_id) REFERENCES weekly_source_row_resolutions(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_work_event_source_links_upload_row_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "FOREIGN KEY (upload_row_id) REFERENCES weekly_source_upload_rows(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_work_event_source_links_work_event_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_event_source_links",
+      "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_work_events_candidate_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_events",
+      "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_work_events_check",
+      "type": "c",
+      "table": "public.weekly_work_events",
+      "definition": "CHECK (((identity_kind = 'PROFILE_EXTERNAL_KEY'::text) = (profile_external_key IS NOT NULL)))"
+    },
+    {
+      "name": "weekly_work_events_check1",
+      "type": "c",
+      "table": "public.weekly_work_events",
+      "definition": "CHECK (((identity_kind = ANY (ARRAY['PROFILE_EXTERNAL_KEY'::text, 'SCHEDULE_TUPLE'::text])) = (source_format_profile_id IS NOT NULL)))"
+    },
+    {
+      "name": "weekly_work_events_client_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_events",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_work_events_durable_identity_hash_check",
+      "type": "c",
+      "table": "public.weekly_work_events",
+      "definition": "CHECK ((octet_length(durable_identity_hash) = 32))"
+    },
+    {
+      "name": "weekly_work_events_durable_identity_hash_key",
+      "type": "u",
+      "table": "public.weekly_work_events",
+      "definition": "UNIQUE (durable_identity_hash)"
+    },
+    {
+      "name": "weekly_work_events_first_source_group_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_events",
+      "definition": "FOREIGN KEY (first_source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "weekly_work_events_identity_kind_check",
+      "type": "c",
+      "table": "public.weekly_work_events",
+      "definition": "CHECK ((identity_kind = ANY (ARRAY['PROFILE_EXTERNAL_KEY'::text, 'SCHEDULE_TUPLE'::text, 'OFFICE_PROTECTED_SHIFT'::text])))"
+    },
+    {
+      "name": "weekly_work_events_pkey",
+      "type": "p",
+      "table": "public.weekly_work_events",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "weekly_work_events_source_format_profile_id_fkey",
+      "type": "f",
+      "table": "public.weekly_work_events",
+      "definition": "FOREIGN KEY (source_format_profile_id) REFERENCES weekly_source_format_profiles(id) ON DELETE RESTRICT"
+    }
+  ],
+  "testIdentity": true,
+  "legacyControl": {
+    "epoch": 1,
+    "owner": "LEGACY"
+  },
+  "routineHashes": [
+    {
+      "name": "private._candidate_assert_environment",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_environment text",
+      "bodySha256": "674f1c854315e494cad4571a307acda0821734a94382de8d0fe659e609f5c9be",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_evidence_lineage_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "65abbaadbe535324ba3bbb1be6cc232e998b10277750b18a74d67e63997de63a",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_expense_component_values_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_workflow_id uuid",
+      "bodySha256": "c57ac3219fd2feafe4cb557247a40da40f76d9c7a0c09818542376e7a87d9cae",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_components_sync_financial_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_id uuid, p_now_utc timestamp with time zone",
+      "bodySha256": "f69fd57da47b995bba1ad8a12d4431d2cfb75e07d63b68b11cfd2f92c38fba4d",
+      "argumentTypes": [
+        "uuid",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_components_sync_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_workflow_id uuid, p_now_utc timestamp with time zone",
+      "bodySha256": "4d77b69db8bce67d79761a0d451e6d7b4665967021bf932b3640fa4d6c555db9",
+      "argumentTypes": [
+        "uuid",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_evidence_summary_trigger_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "804ff1e8b7e110d17590c8e44ba087dd68eaa3421f890ac88164bf540ee25f25",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_expense_identity_summary_trigger_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "c126d2a98102ce93851d6b90d0fa25e974479a8ba97e6f97a99de55dbe4f9c74",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_expense_number_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_value jsonb, p_key text",
+      "bodySha256": "6b3a0423e4895a7d4eb109498a7e8096adef7fea190df2c18751a47d90a249f0",
+      "argumentTypes": [
+        "jsonb",
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_owned_timesheet_id_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_workflow_id uuid, p_stored_timesheet_id uuid",
+      "bodySha256": "7723a13db586408f1400c58e096981b0ebb7d52e1b7d26496d3653e53af84995",
+      "argumentTypes": [
+        "uuid",
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_source_family_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_id uuid",
+      "bodySha256": "cee90fb60c8264a605870ee00a2bd9b37367b2862dc18bf3a411fd4f7914c5a3",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_source_root_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "94aefebb1adc587aed74740d10b3ad2bf158675d320601f5a506655071462c15",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_expense_summary_queue_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_id uuid, p_now_utc timestamp with time zone",
+      "bodySha256": "be1324b0bc0d30c2db026f967e280c6189af509a1fa446b87c142cc6c3297b2c",
+      "argumentTypes": [
+        "uuid",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "private._candidate_expense_timesheet_sync_trigger_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "8bbdf7812164de4ecbcd189ae1147b1880d586f6b1964d85a0f5a630ddc3c75f",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_expense_workflow_sync_trigger_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "d6bff2fee039fbf9cebd792592072be8dc26de78c6e2de735dcdf11031b42913",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_feature_enabled_current_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_feature_key text",
+      "bodySha256": "603e81b2ed7e30ae5dd6b42929bc9c310903263d6686887a2ea05dcda2cbb5bf",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_manager_authoriser_domain_array_v2",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_value jsonb",
+      "bodySha256": "2ff61981bc8e0dc7760b880850d582e0705658a9be8bb6aee2ef6c61677fdbc2",
+      "argumentTypes": [
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private._candidate_manager_authoriser_effective_v2",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_client_policy jsonb, p_contract_policy jsonb",
+      "bodySha256": "3b77a29d2a2da4c50e78a9485f6268286a4948ae3d21f7ef86d049d7b04d3570",
+      "argumentTypes": [
+        "jsonb",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private._candidate_manager_authoriser_email_array_v2",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_value jsonb",
+      "bodySha256": "0bcac7905c6a00c79c4e5259078afbf1b2ac0e324d92d19b582a866a3611bf91",
+      "argumentTypes": [
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private._candidate_manager_authoriser_policy_normalize_v2",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_policy jsonb, p_scope text",
+      "bodySha256": "9bd2caab0a9da6e9454547795741547498fb4e81b042ddeb613f76824e6da8f5",
+      "argumentTypes": [
+        "jsonb",
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_normalize_domain_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_domain text",
+      "bodySha256": "fe08c368ae66346fdf3099d8cce663e30d0d09c66bd124fd77a5cfef0ceadc36",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_normalize_email",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_email text",
+      "bodySha256": "aa1e5f683030ad41f48593dc4906cdad28447421278fa41a794b533fd7246f70",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_office_service_context_valid_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_environment text, p_actor_user_id uuid, p_action text",
+      "bodySha256": "f1a21f5f8fdc39d360e477899a99284e5c99c9a90aa2c95580ff49cd625be424",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "private._candidate_qr_pack_ready_notification_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "803bdc79f42c28d76f0b3fb757658c26592a528803f4ed3bb306b5f4688eb0c8",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_timesheet_summary_revision_upsert_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_identity_kind text, p_identity_id uuid, p_current_timesheet_id uuid, p_contract_week_id uuid",
+      "bodySha256": "9c174762d0dcf392d4d4f93b6ad03f8074c44924444b3f26133a5001802a0637",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "uuid",
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._candidate_timesheet_summary_workflow_revision_trg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "518b88765104e698b4de582329ade9297b56275eab34997ec340a7b51c5ba9c4",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._candidate_workflow_creation_identity_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "17418b0ac5b8679c482cdba3446a591015a5f4583fef6e94ee60582686f2e142",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._contract_settings_after_client_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "e70c21bac95c81e2a95bdbba6f95b4aa105127dfa7b410e97b28f97726944bf8",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._contract_settings_after_contract_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "03d7ed8337e59c28eaa6125377dcd6b8f7f676f2b6024cade439476187e7c8d8",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._contract_settings_apply_week_snapshot_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_week_id uuid",
+      "bodySha256": "065bd341c5ca95ff970eb8793ac339b256518e74ef2106a61b215093937dd680",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._contract_settings_effective_core_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid",
+      "bodySha256": "442c0aaf4d4c059aff83c89bde31c5a101d00d487273e4bb681a52027a76342e",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "date",
+        "text",
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._contract_settings_refresh_planned_for_client_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_client_id uuid",
+      "bodySha256": "444bd26841a8d55c208ee3925706bdab9f654614f4f9e1766e276858414d71f5",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._contract_settings_refresh_planned_for_contract_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_contract_id uuid",
+      "bodySha256": "a08cd49c2dd76c886d2454170e3a53c8cbca94d0594cd812084d445ceed45506",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._contract_week_settings_authority_before_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "f339020e6f918f93e6f16d104c45389af536fd0b21ce1b1cc2e7ccfa30ceeb07",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._invoice_candidate_revision_trigger_v2",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "ee84b3cdc4627886eb6c7ab8a226a94ad55053740262b8e35df2e86bd0b3ad55",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._timesheet_authorisation_overlap_trg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "93b4dcadaf386ddee7d26a00467c2277e2b4178148f14c9a68a6e61ad37f65bd",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._timesheet_cross_record_overlap_assert_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_candidate_id uuid, p_submission_json jsonb, p_actual_schedule_json jsonb, p_worked_start_iso timestamp with time zone, p_worked_end_iso timestamp with time zone, p_exclude_workflow_id uuid, p_exclude_timesheet_id uuid, p_exclude_booking_id text",
+      "bodySha256": "b813694f086fd597a97685ab397f420339d757e875655b1a88fcc575de1104e7",
+      "argumentTypes": [
+        "uuid",
+        "jsonb",
+        "jsonb",
+        "timestamp with time zone",
+        "timestamp with time zone",
+        "uuid",
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "private._timesheet_expense_anchor_follow_current_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "1083b2acbba38012f9010632f564e5ffc0cb5b01084aab0d972cb106bf95a49a",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._timesheet_route_resubmission_notifications_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_old_timesheet_id uuid, p_new_timesheet_id uuid, p_new_version integer, p_target_action text, p_now_utc timestamp with time zone",
+      "bodySha256": "aa3975543ce61684a2912f388a03260b2f095923df0801a737f3136f8e357ee2",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "integer",
+        "text",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "private._timesheet_settings_authority_before_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "2867d1400328ed5056c804173355249a0063888620f581255f8dac0afede2a76",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._timesheet_settings_authority_frozen_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_id uuid",
+      "bodySha256": "d94f72b6712491b5c869aeaf67bf9dd5b85fd3eb2bc4ec23c9a698204e2d77ca",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private._timesheet_submission_workflow_overlap_trg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "7b0ce5d902c6cc19ace31bd633b680c8c10fe0912ebafede4ef0c46667563609",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._timesheet_work_intervals_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_submission_json jsonb, p_actual_schedule_json jsonb, p_worked_start_iso timestamp with time zone, p_worked_end_iso timestamp with time zone",
+      "bodySha256": "63f1a865996dee4bb45dfbbd23ec51da48e714d7104f51792b89a7a34e2f8fc0",
+      "argumentTypes": [
+        "jsonb",
+        "jsonb",
+        "timestamp with time zone",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "private._weekly_source_effective_policy_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_client_id uuid, p_contract_id uuid, p_work_date date",
+      "bodySha256": "83014cb0f8fabb9da5e49be06a2d9bc7324c2fc85aa90a20a37cf42b661fbf10",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "date"
+      ]
+    },
+    {
+      "name": "private._weekly_source_immutable_fact_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "188ab3bab831e4d23f0f89f54e5f373ee10cad7a0af08e0a0bf73253591af885",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._weekly_source_immutable_record_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "34cfb47b73e45a5da42fe8c2484a5f46d2cd7bae6440eb5561a9d08b3e119d19",
+      "argumentTypes": []
+    },
+    {
+      "name": "private._weekly_source_settings_deployment_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_agency_id uuid, p_environment text",
+      "bodySha256": "f68a8acb9a8d7c56875bdef2745f4dc310299520e13b4b892fb97a4b4713fc53",
+      "argumentTypes": [
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "private._weekly_source_settings_require_admin_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_actor_user_id uuid",
+      "bodySha256": "0905c669e018ca80797faa81955ee6a190565479cbc5a0b532504bcda8757e5c",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_clock_changed_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "e803ee8c21983a1616df40f0cbc3eae7ff0bd68b50aa84b35dabfb5d43a5b464",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_clock_rebuild_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_id uuid",
+      "bodySha256": "b2ece7c25f9b13d214ac3c99285a55055fbdfc9da40d0b9cf4337da010a79d7e",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_clock_retire_family_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_family uuid",
+      "bodySha256": "54b9f7911480af615ec055c532e479f769214f27b9085adae144c6623078b791",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_clock_retirement_changed_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "e291e38f5bd9ed06e1206dee626843ae882233f5c4be6f48ee5efe600f43d00b",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_entitlement_financial_scope_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "a24f5f4e9887636587c10fdfeb0793d48a8eb504b82b5e950be1f36824f12f95",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "private.bpay_expense_classification_ts_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "677d92c62a6882a28ee55c72dab11d67986cc3758dee8100399e36ed6dbe9823",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_expense_classification_week_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "fc8312e105e3f6a03db88d63e102da13244231d4c4fc7902c1c8571cb41d7a51",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_expense_identity_gate_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_id uuid",
+      "bodySha256": "1e8b6d6651a0e5b391ae69d0f4eb33171a0334165fe241bc6af464cd86a8612e",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_next_case_list_native_changed_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "0abc0751ec85fa1a7c3b56bdad349448b90faaeb59d4f9fd27138c0916e720db",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_next_case_list_refresh_key_v1",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "p_case_id uuid",
+      "bodySha256": "b7c09f81a67fc9c3cd75b870d12c1f40d7e7f3d4c37758b3506108d201730cdf",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_next_legacy_callback_enabled_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "1dd4c9e44b4306d0de86cddbca189b7c7dd98b54ab15490be8dfd2b8e9528a00",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_next_payment_client_origin_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_revision_id uuid",
+      "bodySha256": "4f59b115ec9c4c5a65f3c1a67e8f460e7a8c5c10ce00031e3fd41eb1ec79175c",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_next_work_wait_state_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_work_id uuid",
+      "bodySha256": "e8fe782f0af17f4be1dda319b500a27095398d0e7890da68161e746a2958de1c",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_next_workbench_candidate_name_trigger_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "a4976a3252fd513aaaa22afdc53c71f018cc7d0ac8df4de687ba666f572f2d75",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_next_workbench_ensure_metadata_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_candidate_id uuid",
+      "bodySha256": "8258acafe54f7a73ecaf33de0690b16f4a0d75f96a8e66235d783f0191a91a30",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_next_workbench_metadata_changed_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_candidate_id uuid, p_bank_changed boolean, p_control_changed boolean",
+      "bodySha256": "c6c06d31e362780a75e6c9c5ee467d954d9cd3378cf00a14fcecc306bab008a2",
+      "argumentTypes": [
+        "uuid",
+        "boolean",
+        "boolean"
+      ]
+    },
+    {
+      "name": "private.bpay_next_workbench_require_next_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "",
+      "bodySha256": "b3774ed9e285800d0dd3e039e257bde879235fe705c652f4ec56cd952ceba1ea",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_next_workbench_schedule_task_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_type text, p_candidate_id uuid, p_work_id uuid, p_umbrella_id uuid, p_bank_changed boolean, p_control_changed boolean, p_previous_pending boolean",
+      "bodySha256": "7d1628d5eb68a23e3fc7a3ff96e06da2f719742519db8845e1270c7015c07f37",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "uuid",
+        "uuid",
+        "boolean",
+        "boolean",
+        "boolean"
+      ]
+    },
+    {
+      "name": "private.bpay_settled_financial_scope_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "808fb718d2785c3d6c6c5cbbf8fa08d091056be84c9f795a9cffc190ed8c05ea",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "private.bpay_source_family_current_gate_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_booking text",
+      "bodySha256": "c7bd42f666915136979658802ea01da8f57efa4b390b672bb0b6dea7be46e64e",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "private.bpay_source_family_try_lock_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_booking text",
+      "bodySha256": "814b1e10afa08ec38968da1e3db8940a4bc76851dbfe2b4514eed78c1692e018",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "private.bpay_source_row_gate_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_id uuid, p_exclusive boolean",
+      "bodySha256": "9bbe475b2f7c060ad024300ce1ec1c95e13d45145406fa0697ef4e95f8661579",
+      "argumentTypes": [
+        "uuid",
+        "boolean"
+      ]
+    },
+    {
+      "name": "private.bpay_source_row_wait_gate_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_id uuid",
+      "bodySha256": "e90cfd1af6beb78d377ac2b6ae8a9ba97b565fa5b4c40be04768373a6c15f46d",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.bpay_source_timesheet_family_gate_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "fcd331f7bd34c608d12fd4788e8701096d7bb377d4f318ba377d270955881a2d",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_timesheet_pay_state_work_reference_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "0202faecb798c91d55b50c23769546c6ce0a4d70de9fa9700f59b396049424f4",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_timesheet_work_key_v1",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "55afc5b66acf4a9643dd3bcf167352ca04c9ecd82bc4accaefd20a16d208f807",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.bpay_timesheet_work_revision_v1",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "aa7fc506cd7aafb9543e18cfad07582c9cea23fac0805129ac1bcb7c17bebee1",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.candidate_hours_received_audit_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "48b0272c992a5c3e0d1b727a83509ce94d69d226a963716b0463c261ccbdfc7b",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.pay_workbench_correction_dirty_context_set_v1",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "p_correction_request_id uuid, p_pay_batch_id uuid, p_candidate_ids uuid[], p_lifecycle_phase text, p_policy_x_boundary text, p_pre_request_authorities_json jsonb, p_operation_id uuid, p_work_item_id uuid, p_options_json jsonb",
+      "bodySha256": "940abdcccb93b87c0bc69c17977319b8ae9300bdfe3bb94e29a050b167d4587d",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "uuid[]",
+        "text",
+        "text",
+        "jsonb",
+        "uuid",
+        "uuid",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private.pay_workbench_finance_effect_normalise_row_v1",
+      "definer": true,
+      "volatile": "i",
+      "arguments": "p_relation_name text, p_operation text, p_row_json jsonb, p_before_row_json jsonb",
+      "bodySha256": "51fc603fc5b334a7682f66754e97cb3f2dd435facf44792abffd255ea4c7db16",
+      "argumentTypes": [
+        "text",
+        "text",
+        "jsonb",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private.pay_workbench_scope_invalidate_v1",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "p_candidate_ids uuid[], p_timesheet_ids uuid[], p_reason text, p_scope_change_tx_token uuid, p_payload_json jsonb",
+      "bodySha256": "b00cde11dacaa10f89cb135c03d9cb0cfc1f2f13c229d4e3fd139add1e6d6e93",
+      "argumentTypes": [
+        "uuid[]",
+        "uuid[]",
+        "text",
+        "uuid",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private.weekly_exceptional_json_keys_exact_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_value jsonb, p_allowed_keys text[]",
+      "bodySha256": "c1e23ad8f8102e5b7b996bb448838441cb8920e23b64c69d46007d515b618063",
+      "argumentTypes": [
+        "jsonb",
+        "text[]"
+      ]
+    },
+    {
+      "name": "private.weekly_source_candidate_serial_gate_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_candidate_id uuid, p_job_type text, p_job_id uuid, p_reason text",
+      "bodySha256": "1a8ea0febaf8553f72cef9217cbd5e0f9bf48370053cad0eb7aec17c154f90d6",
+      "argumentTypes": [
+        "uuid",
+        "text",
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "private.weekly_source_guard_flag_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_decision jsonb, p_key text, p_unsafe_value boolean",
+      "bodySha256": "9ad3c158ff65785250592631d63fa124f0153c2207815841f4aab14c4ebe82e4",
+      "argumentTypes": [
+        "jsonb",
+        "text",
+        "boolean"
+      ]
+    },
+    {
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_invoice_id uuid",
+      "bodySha256": "39446cdf510aa333f8e7e592a57ff28c99ee3c676e50aee31e3438b1a2f18e6b",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.weekly_source_invoice_issue_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "b493be56aecb184f62f0937333fbc48e2041145fe6efecf1ad6e704bf652f9a2",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.weekly_source_lock_family_rows_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_requested_timesheet_ids uuid[], p_candidate_id uuid",
+      "bodySha256": "f896430d06beb1f36a5a7da2445f0a3f340e6eb429d01ec4d654bd867e4ce9ca",
+      "argumentTypes": [
+        "uuid[]",
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.weekly_source_observation_storage_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "793fc3eb603a427a96944388a98dc50e9aa21697d3ff3f2502c64b06e3b01cc8",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.weekly_source_observe_effect_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "593a76a105b11a89e53aa3ac92dfa8fa3fcc101fd10fc6180c66c2dd42522568",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.weekly_source_office_authority_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_actor_user_id uuid, p_operation text, p_source_group_id uuid, p_client_id uuid, p_scope_date date",
+      "bodySha256": "5cc2197010d7ddc639ab540ae221c7852bd1b862fad76ddf75bb869e34ecdb53",
+      "argumentTypes": [
+        "uuid",
+        "text",
+        "uuid",
+        "uuid",
+        "date"
+      ]
+    },
+    {
+      "name": "private.weekly_source_ordinary_authorisation_guard_tg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "c36aac0612610316ed238fed62b5052bd902db2b86a547d05964de73658750f0",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.weekly_source_ordinary_authorisation_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_id uuid, p_booking_id text",
+      "bodySha256": "691527aba6e118a3f8fe833684e843dd8c4690ac6d1c7fe36d5e41cc5f531091",
+      "argumentTypes": [
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_actor_user_id uuid",
+      "bodySha256": "97cf8d3eeafbaa54c5cbec657e009db77fa93e100a847497132d1b1ccc6c0b94",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.weekly_source_query_current_publication_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_source_cycle_id uuid, p_projection_publication_id uuid",
+      "bodySha256": "e6be83c623ed5ee59e4649c41eb099e7e8175d4bee8596ba02c283426a0d99d6",
+      "argumentTypes": [
+        "uuid",
+        "uuid"
+      ]
+    },
+    {
+      "name": "private.weekly_source_query_require_service_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "",
+      "bodySha256": "379fbd7c0113eada17adab3ce212f1e719a7b4c0c26d2c00d6fc79650f3bf237",
+      "argumentTypes": []
+    },
+    {
+      "name": "private.weekly_source_sha256_jsonb_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_domain text, p_value jsonb",
+      "bodySha256": "e8c8d7e26cb8eb21b960a0a6594f55af37093e0e0042feaaa6da67fd8244af25",
+      "argumentTypes": [
+        "text",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "private.weekly_source_sha256_text_v1",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_domain text, p_value text",
+      "bodySha256": "43aa31d7b3a8f3f6b9ef515614c056a4599fb1b7bd75fa32c95ce6a9ee9b99ea",
+      "argumentTypes": [
+        "text",
+        "text"
+      ]
+    },
+    {
+      "name": "private.weekly_source_upload_client_eligible_v1",
+      "definer": false,
+      "volatile": "s",
+      "arguments": "p_upload_id uuid, p_client_id uuid, p_work_date date",
+      "bodySha256": "2e08107ced8e7ca83d0479d5fb43df7cbe167035dec11fc21b1050251123ed28",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "date"
+      ]
+    },
+    {
+      "name": "public._audit_insert",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_object_type text, p_object_id_text text, p_action text, p_before_json jsonb, p_after_json jsonb, p_reason text, p_actor_user_id uuid",
+      "bodySha256": "639c0574a9166593a00a7422386678d06bc2180d05132d5cecbde3dc31dc073c",
+      "argumentTypes": [
+        "text",
+        "text",
+        "text",
+        "jsonb",
+        "jsonb",
+        "text",
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._bank_hash",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "p_sort_code text, p_account_number text, p_account_holder text",
+      "bodySha256": "4951957714154e4e9dd401554c59ad57e9ca92ae7ef96010fbd357cfcd9e8ff1",
+      "argumentTypes": [
+        "text",
+        "text",
+        "text"
+      ]
+    },
+    {
+      "name": "public._change_bump",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_entity_key text",
+      "bodySha256": "1736beb45d211148fafa215d902acaa171c65abff05d968c4919e22f210e5ce2",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "public._ctms_correction_policy_envelope_read_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_id uuid",
+      "bodySha256": "3a22438a9d9111a0ddf086ac0aad6708390759455f83814be235630547783dc7",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._ctms_import_correction_classify_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_id uuid",
+      "bodySha256": "20ff9a685d5f945e132ad4862e3c97f39eeb04eec52e9ff2f181803eaa35ad3e",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._import_review_effective_authority_core_v1",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_source_route text, p_contract_id uuid, p_client_id uuid, p_evidence_date date",
+      "bodySha256": "e7aba6355af7bf41c073279dd0cbc4e2c1782276fcc184fe323af3f0adddbfad",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "uuid",
+        "date"
+      ]
+    },
+    {
+      "name": "public._inv_round2",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "n numeric",
+      "bodySha256": "7c14bb671e1d3efda6d658273626e445bc8bde1fd861041876baaf41c9f9e8b2",
+      "argumentTypes": [
+        "numeric"
+      ]
+    },
+    {
+      "name": "public._pay_active_settled_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "08a1a1062e4eaaa16048922e7e35d53ca54061b49fc8418f29e7c5b2a2afa224",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public._pay_batch_item_economic_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_pay_batch_id uuid, p_pay_batch_item_ids uuid[]",
+      "bodySha256": "829aaf69f2d0340da8897ba29f3de70c4b589be74c837f32b4edad101bb31b97",
+      "argumentTypes": [
+        "uuid",
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public._pay_batch_item_source_reservation_amount_ex_vat",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_pay_batch_item_id uuid",
+      "bodySha256": "96c70c2abf50b67ca5548be1b3e073c3273ab04cbdae48889567cec65c629d97",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._pay_batch_status_is_active_reservation",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_status text",
+      "bodySha256": "e14cb8abf8b4d864a1610974d1b5e557b3d1c80713053f2428673af6a8164810",
+      "argumentTypes": [
+        "text"
+      ]
+    },
+    {
+      "name": "public._pay_current_timesheet_entitlement_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "2dc2d5bbe8af658b656d8c0ced80074abaa0cd7dab0ad31544c56ac85fbb0453",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public._pay_outstanding_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "db164609b8354144f4f7e47b2bffedb3a32659fb0e2d38182e755a009ca5c166",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public._pay_outstanding_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid",
+      "bodySha256": "805edd57042e88ff9a8260e1b66489b4fa3906131d5b6d22d38294a8e3f66062",
+      "argumentTypes": [
+        "uuid[]",
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._pay_policy_x_assert_economic_key",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_id uuid, p_key_type text, p_key_value text, p_context text, p_authority_scope text, p_resolution_source text, p_required boolean, p_source_json jsonb",
+      "bodySha256": "b2802cdee45c9f5805dbf03fded712ecf59797496b79974656c830202051dae8",
+      "argumentTypes": [
+        "uuid",
+        "text",
+        "text",
+        "text",
+        "text",
+        "text",
+        "boolean",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_policy_x_resolve_post_draft_economic_key",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_pay_batch_item_id uuid, p_pay_batch_id uuid, p_timesheet_id uuid, p_item_type text, p_frozen_key_type text, p_frozen_key_value text, p_frozen_component_snapshot_json jsonb, p_frozen_source_basis_json jsonb, p_breakdown_meta_json jsonb, p_target_snapshot_json jsonb",
+      "bodySha256": "8db62af4bf38040dc0820aa584c0f4c9f5236d17b89a10cc532ad5727caaf35a",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "uuid",
+        "text",
+        "text",
+        "text",
+        "jsonb",
+        "jsonb",
+        "jsonb",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_policy_x_resolve_pre_draft_economic_key",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_id uuid, p_live_source_json jsonb, p_item_type text, p_key_type_hint text, p_key_value_hint text, p_work_date date",
+      "bodySha256": "90336a38d62c8b1b23a4b3f455d8184b08f6cbc46390120d2d1119b435aabe48",
+      "argumentTypes": [
+        "uuid",
+        "jsonb",
+        "text",
+        "text",
+        "text",
+        "date"
+      ]
+    },
+    {
+      "name": "public._pay_rail_state_money_movement_classify",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_transfer_status text, p_rail_state text, p_event_payload_json jsonb, p_provider_meta_json jsonb",
+      "bodySha256": "6ae5bfc20b56cc1088159722ec988e3145f3ceb23f05c3baad33fd375ae4ce9d",
+      "argumentTypes": [
+        "text",
+        "text",
+        "jsonb",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_reserved_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "e3f16584650a247d8498b2393c13acb7434b860d3598c2d15645fb5438486043",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public._pay_reserved_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid",
+      "bodySha256": "64fd41ea3b5142d873405f66fc6f00438ac37990f9ba25381de227f9938ec861",
+      "argumentTypes": [
+        "uuid[]",
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._pay_timesheet_components",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_snapshot_json jsonb",
+      "bodySha256": "35a6bceeaabe71a3307400f63503818a77db82909854e40495404d841945668a",
+      "argumentTypes": [
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_timesheet_rotation_scope",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "1d9633d261ed9b5c9985278f460da3beddf61ceaed633e4e1f4a90857acdfdf8",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_active_state",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_job_id uuid, p_candidate_id uuid, p_job_type text, p_payload_json jsonb, p_now_utc timestamp with time zone",
+      "bodySha256": "30812e87ab7a596603270c61cdfffac817127b8ee5b916039f713444586b8884",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "text",
+        "jsonb",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_audit",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_action text, p_job_id uuid, p_candidate_id uuid, p_after_json jsonb, p_reason text, p_actor_user_id uuid",
+      "bodySha256": "d85a00cd08751ff147d1e3e554ce1b65c2c2935b4d691d778262f32fb54e04b4",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "uuid",
+        "jsonb",
+        "text",
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_candidate_id",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_candidate_id uuid, p_payload_json jsonb",
+      "bodySha256": "06f162c83c03cac2f33a6fd146a18a4622d64bb213921a9303dfdbaa4a326e72",
+      "argumentTypes": [
+        "uuid",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_candidate_ids",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_candidate_id uuid, p_payload_json jsonb",
+      "bodySha256": "109f18831e950a4bc86b8690ea427ef22ee77fae1feaf44d7af0cf9ab286ec63",
+      "argumentTypes": [
+        "uuid",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_is_candidate_job",
+      "definer": true,
+      "volatile": "s",
+      "arguments": "p_job_type text, p_candidate_id uuid, p_payload_json jsonb",
+      "bodySha256": "a97bcac8845081dd65a3be4e1b04f328c780c098c1ed5b3dcfb9f71a7679b557",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_key",
+      "definer": true,
+      "volatile": "i",
+      "arguments": "p_candidate_id uuid",
+      "bodySha256": "aea8c3d20b856264e80f5d3eedd35918923c3d0340808953ffad0810721ad647",
+      "argumentTypes": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_candidate_serial_try_gate",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_job_id uuid, p_candidate_id uuid, p_job_type text, p_payload_json jsonb, p_reason text",
+      "bodySha256": "b0cbd16bf7a4a21b5445fc1980fbc919917996d14a74d6f437448b0e8444e082",
+      "argumentTypes": [
+        "uuid",
+        "uuid",
+        "text",
+        "jsonb",
+        "text"
+      ]
+    },
+    {
+      "name": "public._pay_workbench_dirty_payload_merge",
+      "definer": false,
+      "volatile": "i",
+      "arguments": "p_existing jsonb, p_incoming jsonb",
+      "bodySha256": "1e3816516cc86f561e0d728b0788275c5dcdd6a4ffca5f7bd20e1fa52a8c163e",
+      "argumentTypes": [
+        "jsonb",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._temp_diag_log",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_action text, p_object_type text, p_object_id_text text, p_payload_json jsonb",
+      "bodySha256": "74ddac388a73bb8a61ba0d48cadfdb64cee6c380008a6573677b81b10fa59f63",
+      "argumentTypes": [
+        "text",
+        "text",
+        "text",
+        "jsonb"
+      ]
+    },
+    {
+      "name": "public._trg_candidates_set_bank_hash",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "48687f54964a0c0fb8f6dc0dfdb1985ff55f654903123755b8bdb6df9306a8c3",
+      "argumentTypes": []
+    },
+    {
+      "name": "public._trg_change_bump",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "0b921643ac4792bdb9689730074d409e26b8c4db23f7780af4fd31794f3b5a75",
+      "argumentTypes": []
+    },
+    {
+      "name": "public._trg_touch_client_from_client_settings",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "a064c03eb665acd9817e57a9e03fe1df6ac9d56d61664f3ad1466b98d99239cf",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.candidate_pay_method_change_refresh_scope_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_candidate_id uuid, p_source_method text, p_target_method text",
+      "bodySha256": "be61f68f1beb1f38fae63c152c43d7476306d87ee09ef81ebcd6986c3c167e98",
+      "argumentTypes": [
+        "uuid",
+        "text",
+        "text"
+      ]
+    },
+    {
+      "name": "public.contracts_enforce_overrideclientsettings",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "bab09fad2930c209c2b2618630ba2bbb110117e49af0eae2fdaa4cffb366c87e",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.enqueue_ts_financials_priority",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "_timesheet_ids uuid[], _reason ts_fin_reason_enum",
+      "bodySha256": "4c66b5f0a44368ebbc0054f9cebe0216724385fc399b7deb2b95a35708d22a58",
+      "argumentTypes": [
+        "uuid[]",
+        "ts_fin_reason_enum"
+      ]
+    },
+    {
+      "name": "public.invoice_no_next",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "c8e7e31ca957c4a63e3cd2dc9e3edbeb729d1a3fb8b196842bc91b87d416d163",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_timesheet_summary_pay_state_patch_lightweight",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_ids uuid[], p_actor_user_id uuid, p_reason text",
+      "bodySha256": "8797c22ba0e6787d7e7737e6cccf0bb316e13eec58ee101b5f0b38e253cefa00",
+      "argumentTypes": [
+        "uuid[]",
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "public.pay_timesheet_summary_pay_state_refresh",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_ids uuid[], p_actor_user_id uuid",
+      "bodySha256": "ecc419639acdda5ec5614f8098db5194ca5eb742c9d074cd25beaa599b103a42",
+      "argumentTypes": [
+        "uuid[]",
+        "uuid"
+      ]
+    },
+    {
+      "name": "public.pay_timesheet_summary_pay_state_refresh_trigger",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "eec8a4f778eeeba985b9823d9285692669a31c1d2fd0dbebc79fd519310b85e9",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_workbench_dirty_event_enqueue",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_job_type text, p_scope_kind text, p_scope_id text, p_candidate_id uuid, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_payload_json jsonb, p_reason text, p_priority integer, p_run_at_utc timestamp with time zone",
+      "bodySha256": "a2dec7aac86776233dd7747f48ca8eaf628d7f23478fd500f95fa588f4d4b5b0",
+      "argumentTypes": [
+        "text",
+        "text",
+        "text",
+        "uuid",
+        "uuid[]",
+        "uuid[]",
+        "jsonb",
+        "text",
+        "integer",
+        "timestamp with time zone"
+      ]
+    },
+    {
+      "name": "public.pay_workbench_mark_candidate_dirty",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "77c0304130d98e6a4e02f1ecb33fe3254ce6ca6297cd99c04820e9372ef0ecf6",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_workbench_mark_contract_client_dirty",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "7e762e46006fde0831dd4832c17c475ea94ecad90c50695d478e1905028001d5",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_workbench_scope_change_finalize_trg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "813172fe2427409234bd3daadd292add7d254e579a224f09ab53cc6201dbc369",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_workbench_scope_change_tx_token_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "355c4ebbdb1a2d42b254933143ee467862652dd64a5c6078f563df8bd2dcf642",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_workbench_scope_counter_stage_trg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "3516b31d192e07586b32b0c481bc09f777b628793aac0ce308571ad609614457",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.pay_workbench_scope_job_stage_trg_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "e8a401b8bcedfcd82d01fa2f84f82648427b55f05e3ba47ad40525184197f142",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.settings_finance_pick",
+      "definer": false,
+      "volatile": "s",
+      "arguments": "p_date date",
+      "bodySha256": "332cba844ae38464504f550e425fb65be25d0e7739ecc84bac786b8ac2c63869",
+      "argumentTypes": [
+        "date"
+      ]
+    },
+    {
+      "name": "public.timesheet_archive_row_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "2ed947ef7bdb0e23eaa8a068fa8304ce91db07db6adbd2ee6f87f0b7f31781b2",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.timesheet_archived_evidence_guard_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "014e41644de1a277705f3e3d90543bb611306d548327d80ce2b7970aec292ec8",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.timesheet_correction_chain_scope_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_id uuid, p_lock_rows boolean, p_max_depth integer, p_max_members integer",
+      "bodySha256": "248b3fabb9b60661aa880c8311c3220d4492c500ace408bc15ac1733c7479773",
+      "argumentTypes": [
+        "uuid",
+        "boolean",
+        "integer",
+        "integer"
+      ]
+    },
+    {
+      "name": "public.timesheet_financial_retention_capture_trigger_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "3fcd40a2fa4c5b0dd89f65fa3cf683e81654dd2578890c060a8e005bfde5fdd0",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.timesheet_financial_retention_mark_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_timesheet_ids uuid[]",
+      "bodySha256": "3bb2498a107ece0db1a1a09880adb74abfa68b5b2614e84c9f6280b60807054f",
+      "argumentTypes": [
+        "uuid[]"
+      ]
+    },
+    {
+      "name": "public.timesheet_r2_cleanup_record_v1",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "p_delete_operation_id text, p_requested_timesheet_id uuid, p_deleted_timesheet_ids uuid[], p_failures jsonb, p_claim_token uuid",
+      "bodySha256": "f65bb6ac713be5c4c71e8c383939863eefe41f616554da9b112aee854ca9c4f0",
+      "argumentTypes": [
+        "text",
+        "uuid",
+        "uuid[]",
+        "jsonb",
+        "uuid"
+      ]
+    },
+    {
+      "name": "public.timesheets_invalidate_prevalidation_on_change",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "1313fca410af83d68e1c38f433d0c829de4a3a61cda3999b4188057d3989a48c",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.trg_invoice_document_immutability_guard",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "14d827c34fbb99e88468dec6a6a6ec82cae949bc74930d12ccba49857336c0cd",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.trg_invoice_document_invalidate",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "5870fc300589662e280784072716afb6a53d458af9b8ce235f4a3515d4a440db",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.trg_invoices_set_invoice_no",
+      "definer": false,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "023297815930cdf1eca65b9f3f70f8377498448138f61e4934a0f2ad055f89b3",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.trg_timesheet_document_invalidate",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "74c25c268525a89d2cec6fa130d0427a0739307fc2931a6370d39eb6f0867965",
+      "argumentTypes": []
+    },
+    {
+      "name": "public.trg_tsfin_timesheet_validations_wakeup",
+      "definer": true,
+      "volatile": "v",
+      "arguments": "",
+      "bodySha256": "fe8facd11ba5c890d62fa227cf08ed86889dcdff85144d6fb553b6ada7e37af8",
+      "argumentTypes": []
+    }
+  ],
+  "postmasterStart": "2026-10-14T09:07:33.240096+00:00"
+}

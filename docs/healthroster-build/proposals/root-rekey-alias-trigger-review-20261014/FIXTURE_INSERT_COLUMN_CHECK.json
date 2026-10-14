@@ -1,0 +1,326 @@
+{
+  "status": "INSTALLED_COLUMNS_REQUIRED_DEFAULTS_AND_INDEX_VALIDITY_PASS_NOT_NATIVE_EXECUTION",
+  "fixtureSha256": "7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046",
+  "installedCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "catalogueObservedAt": "2026-10-14T18:11:03.122504+00:00",
+  "supplementObservedAt": "2026-10-14T18:22:54.616248+00:00",
+  "insertDeclarations": 21,
+  "checks": [
+    {
+      "table": "public.tms_users",
+      "columns": [
+        "id",
+        "email",
+        "role",
+        "is_active",
+        "password_hash",
+        "payment_authoriser",
+        "payment_golden_key"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.clients",
+      "columns": [
+        "id",
+        "cli_ref",
+        "name"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.candidates",
+      "columns": [
+        "id",
+        "tms_ref",
+        "display_name"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.contracts",
+      "columns": [
+        "id",
+        "client_id",
+        "candidate_id",
+        "start_date",
+        "end_date",
+        "pay_method_snapshot",
+        "rates_json"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_groups",
+      "columns": [
+        "id",
+        "environment",
+        "agency_id",
+        "code",
+        "display_name",
+        "source_family",
+        "timezone",
+        "cutoff_weekday",
+        "cutoff_local_time"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_group_clients",
+      "columns": [
+        "source_group_id",
+        "client_id",
+        "valid_from",
+        "created_by_user_id"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_cycles",
+      "columns": [
+        "id",
+        "source_group_id",
+        "finalisation_week_ending",
+        "cutoff_at_utc"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.clients",
+      "columns": [
+        "id",
+        "cli_ref",
+        "name"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.candidates",
+      "columns": [
+        "id",
+        "tms_ref",
+        "display_name"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.contracts",
+      "columns": [
+        "id",
+        "client_id",
+        "candidate_id",
+        "start_date",
+        "end_date",
+        "pay_method_snapshot",
+        "rates_json"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_group_clients",
+      "columns": [
+        "source_group_id",
+        "client_id",
+        "valid_from",
+        "created_by_user_id"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_uploads",
+      "columns": [
+        "id",
+        "source_cycle_id",
+        "original_filename",
+        "content_sha256",
+        "byte_count",
+        "source_format_profile_id",
+        "parser_version",
+        "normaliser_version",
+        "header_coordinate_map_hash",
+        "declared_scope_fingerprint",
+        "coverage_proof_kind",
+        "physical_row_count",
+        "uploaded_by_user_id"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_upload_rows",
+      "columns": [
+        "id",
+        "upload_id",
+        "source_row_ordinal",
+        "external_source_key",
+        "source_candidate_identity",
+        "source_client_identity",
+        "work_date",
+        "start_at_local",
+        "end_at_local",
+        "break_minutes",
+        "actual_net_minutes",
+        "row_finalisation_state",
+        "finalised_by",
+        "normalised_row_hash"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_row_resolutions",
+      "columns": [
+        "id",
+        "upload_row_id",
+        "generation",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "work_event_id",
+        "paid_minutes",
+        "mapping_state",
+        "contract_selection_method",
+        "work_event_match_kind",
+        "work_event_match_fingerprint",
+        "qualification_profile_fingerprint",
+        "qualifying_contract_count",
+        "qualifying_contract_set_hash",
+        "source_row_fingerprint"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_work_event_source_links",
+      "columns": [
+        "id",
+        "work_event_id",
+        "upload_row_id",
+        "row_resolution_id",
+        "link_kind",
+        "link_hash"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_work_events",
+      "columns": [
+        "id",
+        "candidate_id",
+        "client_id",
+        "work_date",
+        "identity_kind",
+        "profile_external_key",
+        "durable_identity_hash",
+        "first_source_group_id",
+        "source_format_profile_id"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_work_events",
+      "columns": [
+        "id",
+        "candidate_id",
+        "client_id",
+        "work_date",
+        "identity_kind",
+        "profile_external_key",
+        "durable_identity_hash",
+        "first_source_group_id",
+        "source_format_profile_id"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_upload_rows",
+      "columns": [
+        "id",
+        "upload_id",
+        "source_row_ordinal",
+        "external_source_key",
+        "source_candidate_identity",
+        "source_client_identity",
+        "work_date",
+        "start_at_local",
+        "end_at_local",
+        "break_minutes",
+        "actual_net_minutes",
+        "row_finalisation_state",
+        "finalised_by",
+        "normalised_row_hash"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_source_row_resolutions",
+      "columns": [
+        "id",
+        "upload_row_id",
+        "generation",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "work_event_id",
+        "paid_minutes",
+        "mapping_state",
+        "contract_selection_method",
+        "work_event_match_kind",
+        "work_event_match_fingerprint",
+        "qualification_profile_fingerprint",
+        "qualifying_contract_count",
+        "qualifying_contract_set_hash",
+        "source_row_fingerprint"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_work_event_source_links",
+      "columns": [
+        "id",
+        "work_event_id",
+        "upload_row_id",
+        "row_resolution_id",
+        "link_kind",
+        "link_hash"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    },
+    {
+      "table": "public.weekly_work_events",
+      "columns": [
+        "id",
+        "candidate_id",
+        "client_id",
+        "work_date",
+        "identity_kind",
+        "profile_external_key",
+        "durable_identity_hash",
+        "first_source_group_id",
+        "source_format_profile_id"
+      ],
+      "allColumnsPresent": true,
+      "missingRequired": []
+    }
+  ],
+  "allUniqueIndexesValid": true,
+  "nativeExecuted": false,
+  "limits": "Column/default coverage and index validity are proved against the installed catalogue. CHECK/unique/exclusion values and all trigger branches still require independent fixture review and actual native execution. Native CLI/CCR minting triggers replace supplied references; source identity cases use actual UUIDs and do not require those supplied references to persist. Sequence increments may leave harmless gaps."
+}

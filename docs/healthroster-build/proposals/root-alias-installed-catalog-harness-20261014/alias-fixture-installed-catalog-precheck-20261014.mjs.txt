@@ -1,0 +1,40 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {withSharedRehearsalTurn,agencyChildEnvironment} from '../scripts/healthroster-rehearsal-turn.mjs';
+const root='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const folder=path.join(root,'.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/root-rekey-alias-trigger-review-20261014');
+const source=JSON.parse(fs.readFileSync(path.join(folder,'FIXTURE_TRIGGER_CALLEE_SOURCE_CENSUS.json')));
+const output=path.join(folder,'INSTALLED_FIXTURE_CATALOG_PRECHECK.json');
+if(fs.existsSync(output))throw Error('EXISTING_RECEIPT_REFUSED');
+const tables=source.directFixtureEffects.writes;
+if(!tables.every(n=>/^public\.[a-z_0-9]+$/.test(n)))throw Error('TABLE_SCOPE_REFUSED');
+const names=[...new Set(source.selectedTransitiveDefinitions.map(r=>r.id.slice(0,r.id.indexOf('('))).concat('public._trg_candidates_set_bank_hash','public._bank_hash','private._invoice_candidate_revision_trigger_v2','private._weekly_source_immutable_record_guard_v1','private._weekly_source_immutable_fact_guard_v1'))];
+if(!names.every(n=>/^(?:public|private|pg_temp)\.[a-z_0-9]+$/.test(n)))throw Error('ROUTINE_SCOPE_REFUSED');
+const list=rows=>rows.map(n=>"'"+n+"'").join(',');
+const sql=`begin read only;set local statement_timeout='5s';set local lock_timeout='1s';
+select jsonb_build_object('database',current_database(),'observedAt',clock_timestamp(),'postmasterStart',pg_postmaster_start_time(),
+ 'testIdentity',exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST'),
+ 'release',(select jsonb_build_object('commit',git_commit,'status',status) from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1),
+ 'legacyControl',(select jsonb_build_object('owner',active_owner,'epoch',owner_epoch) from private.bpay_next_module_control where id=1),
+ 'columns',(select coalesce(jsonb_agg(jsonb_build_object('table',n.nspname||'.'||c.relname,'column',a.attname,'type',format_type(a.atttypid,a.atttypmod),'notNull',a.attnotnull,'hasDefault',a.atthasdef) order by n.nspname,c.relname,a.attnum),'[]'::jsonb)
+  from pg_class c join pg_namespace n on n.oid=c.relnamespace join pg_attribute a on a.attrelid=c.oid and a.attnum>0 and not a.attisdropped where n.nspname||'.'||c.relname in (${list(tables)})),
+ 'constraints',(select coalesce(jsonb_agg(jsonb_build_object('table',n.nspname||'.'||c.relname,'name',k.conname,'type',k.contype::text,'definition',pg_get_constraintdef(k.oid)) order by n.nspname,c.relname,k.conname),'[]'::jsonb)
+  from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname||'.'||c.relname in (${list(tables)})),
+ 'triggers',(select coalesce(jsonb_agg(jsonb_build_object('table',n.nspname||'.'||c.relname,'name',t.tgname,'enabled',t.tgenabled::text,'routine',pn.nspname||'.'||p.proname,'definition',pg_get_triggerdef(t.oid)) order by n.nspname,c.relname,t.tgname),'[]'::jsonb)
+  from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace join pg_proc p on p.oid=t.tgfoid join pg_namespace pn on pn.oid=p.pronamespace where not t.tgisinternal and n.nspname||'.'||c.relname in (${list(tables)})),
+ 'routineHashes',(select coalesce(jsonb_agg(jsonb_build_object('name',n.nspname||'.'||p.proname,'arguments',pg_get_function_identity_arguments(p.oid),'argumentTypes',(select coalesce(jsonb_agg(format_type(a.type_oid,null) order by a.ordinal),'[]'::jsonb) from unnest(p.proargtypes) with ordinality a(type_oid,ordinal)),
+  'bodySha256',encode(extensions.digest(convert_to(replace(p.prosrc,E'\\r\\n',E'\\n'),'UTF8'),'sha256'),'hex'),'definer',p.prosecdef,'volatile',p.provolatile::text) order by n.nspname,p.proname,p.oid),'[]'::jsonb)
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname||'.'||p.proname in (${list(names)})));
+rollback;`;
+const result=await withSharedRehearsalTurn({task:'Bounded read-only installed alias-fixture schema/trigger precheck; no fixture SQL',progressPath:path.join(root,'.codex-worktrees/healthroster-v2-backend-13102026/docs/healthroster-build/PROGRESS.md'),async work(turn){
+ const env=agencyChildEnvironment('healthroster_alias_fixture_catalog_precheck');
+ const child=await turn.runOwnedChild({file:'C:/Program Files/PostgreSQL/18/bin/psql.exe',args:['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate','-f','-'],input:sql,options:{env,windowsHide:true,stdio:['pipe','pipe','pipe']},cancelOnLoss:true});
+ if(child.code!==0)return{status:'READONLY_CATALOG_PRECHECK_FAILED',sqlstate:child.stderr.match(/(?:ERROR|FATAL):\s*([A-Z0-9]{5})/)?.[1]??null};
+ const lines=child.stdout.split(/\r?\n/).filter(s=>s.startsWith('{'));if(lines.length!==1)throw Error('PRECHECK_ENVELOPE_REFUSED');
+ const value=JSON.parse(lines[0]);if(value.database!=='cloudtms_test_clone'||value.testIdentity!==true||value.release?.status!=='VERIFIED'||value.legacyControl?.owner!=='LEGACY'||value.legacyControl?.epoch!==1)throw Error('READONLY_TARGET_AUTHORITY_REFUSED');
+ const receipt={status:'INSTALLED_READONLY_CATALOG_NOT_NATIVE_FIXTURE_PROOF',sourceCommit:source.sourceCommit,fixtureSha256:source.fixtureSha256,readOnly:true,fixtureExecuted:false,...value};
+ fs.writeFileSync(output,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});
+ return{status:receipt.status,database:value.database,observedAt:value.observedAt,postmasterStart:value.postmasterStart,release:value.release,columns:value.columns.length,constraints:value.constraints.length,triggers:value.triggers.length,routines:value.routineHashes.length,sha256:crypto.createHash('sha256').update(fs.readFileSync(output)).digest('hex'),fixtureExecuted:false};
+}});
+console.log(JSON.stringify(result));

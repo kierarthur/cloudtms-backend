@@ -1,0 +1,43 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {withSharedRehearsalTurn,agencyChildEnvironment} from '../scripts/healthroster-rehearsal-turn.mjs';
+const root='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const folder=path.join(root,'.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/root-rekey-alias-trigger-review-20261014');
+const before=JSON.parse(fs.readFileSync(path.join(folder,'INSTALLED_FIXTURE_CATALOG_PRECHECK.json')));
+const source=JSON.parse(fs.readFileSync(path.join(folder,'FIXTURE_TRIGGER_CALLEE_INSTALLED_F743_SOURCE_CENSUS.json')));
+const output=path.join(folder,'INSTALLED_FIXTURE_CATALOG_SUPPLEMENT.json');
+if(fs.existsSync(output))throw Error('EXISTING_RECEIPT_REFUSED');
+const tables=source.directFixtureEffects.writes;
+const routines=[...new Set(before.triggers.map(t=>t.routine))];
+if(![...tables,...routines].every(n=>/^(?:public|private)\.[a-z_0-9]+$/.test(n)))throw Error('IDENTIFIER_SCOPE_REFUSED');
+const list=rows=>rows.map(n=>"'"+n+"'").join(',');
+const vacancyQueries=tables.map(table=>{const columns=before.columns.filter(c=>c.table===table&&c.type==='uuid').map(c=>c.column);if(!columns.length||!columns.every(c=>/^[a-z_0-9]+$/.test(c)))throw Error('FIXTURE_COLUMN_SCOPE_REFUSED');return "select '"+table+"' relation,count(*) fixture_matches from "+table+' where '+columns.map(c=>c+"=any(array(select ('f7120000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid from generate_series(1,90) i))").join(' or ');}).join(' union all ');
+const sql=`begin read only;set local statement_timeout='5s';set local lock_timeout='1s';
+select jsonb_build_object('database',current_database(),'observedAt',clock_timestamp(),'postmasterStart',pg_postmaster_start_time(),
+ 'testIdentity',exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST'),
+ 'release',(select jsonb_build_object('commit',git_commit,'status',status) from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1),
+ 'legacyControl',(select jsonb_build_object('owner',active_owner,'epoch',owner_epoch) from private.bpay_next_module_control where id=1),
+ 'helperAbsent',to_regprocedure('private.weekly_source_known_source_key_v1(uuid,uuid,uuid)') is null,
+ 'fixtureCounts',(select jsonb_agg(to_jsonb(v) order by relation) from (${vacancyQueries}) v),
+ 'uniqueIndexes',(select coalesce(jsonb_agg(jsonb_build_object('table',n.nspname||'.'||c.relname,'name',i.relname,'definition',pg_get_indexdef(k.indexrelid),'valid',k.indisvalid) order by n.nspname,c.relname,i.relname),'[]'::jsonb)
+  from pg_index k join pg_class c on c.oid=k.indrelid join pg_namespace n on n.oid=c.relnamespace join pg_class i on i.oid=k.indexrelid where k.indisunique and n.nspname||'.'||c.relname in (${list(tables)})),
+ 'triggerRoutineHashes',(select coalesce(jsonb_agg(jsonb_build_object('name',n.nspname||'.'||p.proname,'arguments',pg_get_function_identity_arguments(p.oid),
+ 'bodySha256',encode(extensions.digest(convert_to(replace(p.prosrc,E'\\r\\n',E'\\n'),'UTF8'),'sha256'),'hex')) order by n.nspname,p.proname),'[]'::jsonb)
+ from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.pronargs=0 and n.nspname||'.'||p.proname in (${list(routines)})));
+rollback;`;
+const result=await withSharedRehearsalTurn({task:'Bounded read-only alias-fixture indexes, trigger hashes and finite vacancy; no fixture SQL',progressPath:path.join(root,'.codex-worktrees/healthroster-v2-backend-13102026/docs/healthroster-build/PROGRESS.md'),async work(turn){
+ const child=await turn.runOwnedChild({file:'C:/Program Files/PostgreSQL/18/bin/psql.exe',args:['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate','-f','-'],input:sql,options:{env:agencyChildEnvironment('healthroster_alias_fixture_catalog_supplement'),windowsHide:true,stdio:['pipe','pipe','pipe']},cancelOnLoss:true});
+ if(child.code!==0)return{status:'READONLY_SUPPLEMENT_FAILED',sqlstate:child.stderr.match(/(?:ERROR|FATAL):\s*([A-Z0-9]{5})/)?.[1]??null};
+ const lines=child.stdout.split(/\r?\n/).filter(s=>s.startsWith('{'));if(lines.length!==1)throw Error('SUPPLEMENT_ENVELOPE_REFUSED');
+ const value=JSON.parse(lines[0]);if(value.database!=='cloudtms_test_clone'||value.testIdentity!==true||value.release?.status!=='VERIFIED'||value.release.commit!==source.sourceCommit||value.legacyControl?.owner!=='LEGACY'||value.legacyControl?.epoch!==1||value.postmasterStart!==before.postmasterStart)throw Error('READONLY_SUPPLEMENT_AUTHORITY_CHANGED');
+ if(value.fixtureCounts.some(c=>c.fixture_matches!==0)||!value.helperAbsent)throw Error('FIXTURE_OR_HELPER_OCCUPIED');
+ const comparison=value.triggerRoutineHashes.map(r=>{const body=source.selectedTransitiveDefinitions.find(s=>s.id===r.name+'()');return{name:r.name,sourcePresent:!!body,bodyMatched:body?.bodySha256===r.bodySha256};});
+ const insertRoutines=new Set(before.triggers.filter(r=>/\bINSERT\b/.test(r.definition)).map(r=>r.routine));
+ const insertComparisons=comparison.filter(r=>insertRoutines.has(r.name));
+ if(insertComparisons.length!==insertRoutines.size||insertComparisons.some(r=>!r.bodyMatched))throw Error('INSERT_TRIGGER_SOURCE_BODY_MISMATCH');
+ const receipt={status:'READONLY_SUPPLEMENT_INSERT_TRIGGER_SOURCE_MATCHED_NOT_NATIVE_FIXTURE_PROOF',sourceCommit:source.sourceCommit,readOnly:true,fixtureExecuted:false,...value,triggerSourceComparison:comparison,insertTriggerSourceComparison:insertComparisons};
+ fs.writeFileSync(output,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});
+ return{status:receipt.status,database:value.database,observedAt:value.observedAt,fixtureRelations:value.fixtureCounts.length,allFiniteFixtureCountsZero:true,uniqueIndexes:value.uniqueIndexes.length,insertTriggerRoutinesMatched:insertComparisons.length,helperAbsent:value.helperAbsent,sha256:crypto.createHash('sha256').update(fs.readFileSync(output)).digest('hex'),fixtureExecuted:false};
+}});
+console.log(JSON.stringify(result));
