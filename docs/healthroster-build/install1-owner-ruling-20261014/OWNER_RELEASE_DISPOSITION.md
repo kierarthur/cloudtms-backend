@@ -1,0 +1,9 @@
+# Install1 owner release ruling —14October2026
+
+The owner explicitly ended the full-run diagnosis and classified the two root verifier failures as one-transaction rehearsal artefacts. Both complete verifiers pass separately against the exact candidate, including ReleasedReview with its complete source prefix and full outer preamble. The protected `runVerifiers` launches each verifier through its own `psql` invocation after the managed definitions commit. The earlier full retry and all errors remain recorded as held; no historical full PASS is claimed. The diagnosis is a low-priority follow-up and no additional full rehearsal will run before Install1.
+
+The final restoration gate now accepts a nonzero observed activity count only with a genuine freshly branded proof for the exact before/after snapshots. Ledger, catalogue, relation census, marker, LEGACY1, every fixture identity and native background-writer attribution remain required. Invalid counts, APPLYING releases, copied/stale qualifications and unqualified nonzero activity still refuse. No session is cancelled or attributed by guesswork.
+
+The explicit next action is the exact committed/pushed source preflight, fresh actual Cloudflare connections, then the canonical protected TEST release under the shared lock: database, normal backend, real private, synthetic private, public broker, Office last. Features stay off. A real protected failure holds applications; a reviewed forward fix may retry up to three rounds, recording whether either same verifier fails. Publish the WP-PP installed receipt only after actual release proof. No Banking chat message or LIVE/payment/external-email/secret action is authorised.
+
+The secret-free task execution wrapper is archived beside this ruling; it invokes the existing shared-turn and canonical managed-release APIs and contains no additional full rehearsal.

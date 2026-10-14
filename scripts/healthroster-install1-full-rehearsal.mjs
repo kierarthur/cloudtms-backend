@@ -317,10 +317,16 @@ export function assertFreshRestoration(before,after,marker){
  for(const key of ['businessCountsFingerprint','businessRowsFingerprint'])requireThat(hashPattern.test(before?.[key]??'')
   &&(after[key]===before[key]||qualified),'REHEARSAL_RESTORATION_MISMATCH');
  requireThat(hashPattern.test(before?.relationCensus??'')&&after.relationCensus===before.relationCensus,'REHEARSAL_RELATION_CENSUS_MISMATCH');
- requireThat(after.applyingCount===0&&after.otherActivityCount===0,'REHEARSAL_FRESH_ACTIVITY_REFUSED');
+ // The owner requires normal background jobs to keep running. Their active
+ // sessions are not rollback leakage. Only the exact freshly branded live
+ // restoration proof can replace the legacy quiet-session requirement;
+ // all ledger/catalogue/relation/fixture and native-writer checks above remain.
+ requireThat(after.applyingCount===0&&Number.isSafeInteger(after.otherActivityCount)
+  &&after.otherActivityCount>=0&&(after.otherActivityCount===0||qualified),'REHEARSAL_FRESH_ACTIVITY_REFUSED');
  return {connectedFresh:true,physicalDatabase:after.physicalDatabase,module:after.module,markerAbsent:true,
   compared:['ledgerFingerprint','catalogueFingerprint','businessCountsFingerprint','businessRowsFingerprint'],
-  ...after.liveRestoration?{liveRestoration:after.liveRestoration}:{} };
+  ...after.liveRestoration?{liveRestoration:after.liveRestoration,
+    otherActivityCountObserved:after.otherActivityCount,activityIsRestorationEvidence:false}:{} };
 }
 
 // Root calls this from ONE withSharedRehearsalTurn work callback. This function

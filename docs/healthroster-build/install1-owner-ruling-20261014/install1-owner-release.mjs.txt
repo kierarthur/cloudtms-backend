@@ -1,0 +1,51 @@
+// Exact owner ruling14Oct2026: protected Install1, no additional full rehearsal.
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {withSharedRehearsalTurn,assertNoProtectedRelease} from '../scripts/healthroster-rehearsal-turn.mjs';
+import {validateConnectionProof} from '../scripts/automatic-test-release-policy.mjs';
+const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const root=process.cwd(),predecessor='07e66fb2b2742fbe634a41582f2ad3e004eed3b9';
+const office=path.join(workspace,'.codex-worktrees/healthroster-v2-office-13102026');
+const progressPath=path.join(workspace,'.codex-worktrees/healthroster-v2-backend-13102026/docs/healthroster-build/PROGRESS.md');
+const gh='C:/Program Files/GitHub CLI/gh.exe';
+const git=(args,cwd=root)=>execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0',...args],{cwd,encoding:'utf8',windowsHide:true,maxBuffer:4000000}).trim();
+const requireThat=(ok,code)=>{if(!ok)throw Error(code);};
+requireThat(process.argv[2]==='--run-owner-ruled-protected-install1','EXPLICIT_OWNER_RELEASE_ENTRY_REQUIRED');
+requireThat(git(['branch','--show-current'])==='codex/healthroster-install1-14102026'&&!git(['status','--porcelain']),'OWN_CLEAN_INSTALL1_BRANCH_REQUIRED');
+const commit=git(['rev-parse','HEAD']);
+requireThat(git(['ls-remote','origin','refs/heads/codex/healthroster-install1-14102026']).split(/\s/)[0]===commit,'EXACT_PUSHED_INSTALL1_REQUIRED');
+const archive=JSON.parse(fs.readFileSync('.codex-tmp/healthroster-install1-archive-preflight.json','utf8'));
+requireThat(archive.status==='SOURCE_PREFLIGHT_PASS'&&archive.commit===commit&&archive.linearAncestryPassed===true
+ &&archive.steps.length===9&&archive.steps.every(x=>x.exitCode===0)&&archive.cleanup.removed===true
+ &&archive.dependencyProvisioning.exitCode===0&&archive.dependencyProvisioning.lockUnchanged===true
+ &&archive.sqlCarriageReturnFiles.length===0,'EXACT_INSTALL1_RELEASE_PREFLIGHT_REQUIRED');
+const proofPath=path.join(root,'.codex-tmp/healthroster-install1-connections-proof.json');
+const targets=[['backend','test-cloudtms-backend','deploy/cloudflare/test-cloudtms-backend'],
+ ['private','test-cloudtms-candidate-private-api','deploy/cloudflare/test-candidate-private-api'],
+ ['synthetic','test-cloudtms-candidate-synthetic-private-api','deploy/cloudflare/test-candidate-synthetic-private-api'],
+ ['broker','test-cloudtms-candidate-broker','deploy/cloudflare/test-candidate-broker']];
+const validateProof=()=>validateConnectionProof(JSON.parse(fs.readFileSync(proofPath,'utf8')),commit,targets);
+validateProof();
+requireThat(!git(['status','--porcelain'],office)&&git(['rev-parse','HEAD'],office)==='8ea8c8af0435702d3bf032b3197fe0e0eda64d1c','EXACT_CLEAN_REVIEWED_OFFICE_REQUIRED');
+const officeMain=git(['ls-remote','origin','refs/heads/main'],office).split(/\s/)[0];
+requireThat(git(['merge-base',officeMain,'HEAD'],office)===officeMain,'OFFICE_NONFORCED_CURRENT_ANCESTRY_REQUIRED');
+console.log(JSON.stringify({status:'OWNER_RULED_INSTALL1_RELEASE_START',commit,officeCommit:git(['rev-parse','HEAD'],office),noAdditionalFullRehearsal:true}));
+const result=await withSharedRehearsalTurn({task:'Owner-ruled Install1 protected database then Workers then Office; no additional full rehearsal',progressPath,async work(turn){
+ await turn.assertHeld('owner-release-before-promotion');assertNoProtectedRelease();validateProof();
+ const bank=fs.readFileSync(path.join(workspace,'.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/TEST_INSTALLS.md'),'utf8');
+ requireThat(bank.includes('First disabled-first install — COMPLETE')&&bank.includes(predecessor)&&bank.includes('2026-10-13T23:45:36.217Z'),'BANK_FIRST_INSTALL_COMPLETION_REQUIRED');
+ requireThat(git(['ls-remote','origin','refs/heads/test']).split(/\s/)[0]===predecessor,'SHARED_TEST_PREDECESSOR_CHANGED');
+ requireThat(git(['merge-base',predecessor,commit])===predecessor&&!git(['status','--porcelain']),'EXACT_NONFORCED_CLEAN_PROMOTION_REQUIRED');
+ git(['push','origin',commit+':refs/heads/test']);
+ requireThat(git(['ls-remote','origin','refs/heads/test']).split(/\s/)[0]===commit,'EXACT_TEST_PROMOTION_NOT_PROVED');
+ await turn.assertHeld('owner-release-canonical-entry');
+ const release=await turn.runManagedRelease({npmCli:'C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js',connectionsProof:proofPath,officePath:office,cwd:root,
+  env:{...process.env,GH_BIN:gh,PATH:'C:/Program Files/nodejs;'+(process.env.PATH??process.env.Path??'')}});
+ const receipt=JSON.parse(fs.readFileSync('.codex-tmp/test-deployment-receipt.json','utf8'));
+ requireThat(receipt.commit===commit,'MANAGED_RECEIPT_SOURCE_MISMATCH');
+ console.log(JSON.stringify({status:receipt.status,commit,exitCode:release.code,databaseRunId:receipt.databaseRunId??null,stages:receipt.stages,failure:receipt.failure??null}));
+ requireThat(release.code===0&&receipt.status==='DEPLOYED_ACCEPTANCE_PENDING','PROTECTED_INSTALL1_FAILED_CLOSED_RECONCILE_EXACT_RUN');
+ return {status:receipt.status,commit,databaseRunId:receipt.databaseRunId,officeCommit:receipt.officeCommit};
+}});
+console.log(JSON.stringify(result));

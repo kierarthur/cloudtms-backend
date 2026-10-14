@@ -41,11 +41,13 @@ test('actual final publication gate rejects forged, copied and stale qualificati
  const m=model();addClaim(m);const marker='exact_marker';
  Object.assign(m.before,{ledgerFingerprint:h('ledger'),catalogueFingerprint:h('catalogue'),businessCountsFingerprint:h('old-counts'),businessRowsFingerprint:h('old-rows'),relationCensus:h('census')});
  Object.assign(m.after,{connectedFresh:true,physicalDatabase:'cloudtms_test_clone',identityTest:true,customerKeyNull:true,module:'LEGACY:1',markerAbsent:true,marker,
-  ledgerFingerprint:m.before.ledgerFingerprint,catalogueFingerprint:m.before.catalogueFingerprint,businessCountsFingerprint:h('new-counts'),businessRowsFingerprint:h('new-rows'),relationCensus:m.before.relationCensus,applyingCount:0,otherActivityCount:0});
+  ledgerFingerprint:m.before.ledgerFingerprint,catalogueFingerprint:m.before.catalogueFingerprint,businessCountsFingerprint:h('new-counts'),businessRowsFingerprint:h('new-rows'),relationCensus:m.before.relationCensus,applyingCount:0,otherActivityCount:1});
  m.after.liveRestoration={status:'LIVE_TEST_RESTORATION_QUALIFIED'};
  assert.throws(()=>assertFreshRestoration(m.before,m.after,marker),/UNBRANDED/);
  const genuine=qualifyLiveRestoration(m.before,m.after,m.proof);m.after.liveRestoration=genuine;
- assert.equal(assertFreshRestoration(m.before,m.after,marker).markerAbsent,true);
+ const restored=assertFreshRestoration(m.before,m.after,marker);
+ assert.equal(restored.markerAbsent,true);assert.equal(restored.otherActivityCountObserved,1);
+ assert.equal(restored.activityIsRestorationEvidence,false);
  m.after.liveRestoration={...genuine};assert.throws(()=>assertFreshRestoration(m.before,m.after,marker),/UNBRANDED/);m.after.liveRestoration=genuine;
  m.after.backgroundObservedAt='2026-10-14T08:26:00Z';assert.throws(()=>assertFreshRestoration(m.before,m.after,marker),/STALE/);
  m.after.backgroundObservedAt='2026-10-14T08:25:00Z';m.after.catalogueFingerprint=h('changed');assert.throws(()=>assertFreshRestoration(m.before,m.after,marker),/MISMATCH/);
