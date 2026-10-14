@@ -1,0 +1,36 @@
+{
+  "source_only": true,
+  "native": false,
+  "packets": [
+    {
+      "name": "paid-match-source-expense-native-construction-20261014",
+      "pin": "8db419193eb6faf08e3c5adb1d3205326b347d83",
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e",
+      "files": 26,
+      "saved_git_mismatches": 0,
+      "passed": 12,
+      "failed": 0,
+      "output_sha256": "251c22cd37f29b2271bc1257f93a87ce076e7ddb3548912c9e41f241f366df7d"
+    },
+    {
+      "name": "paid-match-prepared-pay-consumer-construction-20261014",
+      "pin": "8ca63151708e6482b5ecea580fbb34eec6a51ddb",
+      "manifest_sha256": "d26c0a2b3139e0eb471068ce938809e4acce169bd58afd79b414018cc42a80e4",
+      "files": 17,
+      "saved_git_mismatches": 0,
+      "passed": 9,
+      "failed": 0,
+      "output_sha256": "f372adaa59f4f01b947ce8763cd676a352230e8d955eb4fef4c7dd24ecdb7d98"
+    },
+    {
+      "name": "paid-match-off-command-consumer-construction-20261014",
+      "pin": "30a30f16b29d0b61c11fc91656fdc8abccb5ab64",
+      "manifest_sha256": "1c63070851eff8d34a56cfce48e67b36a0850156b04231ee5624618b2527e517",
+      "files": 18,
+      "saved_git_mismatches": 0,
+      "passed": 8,
+      "failed": 0,
+      "output_sha256": "4e7ce4a234b7b7cc1d32a5de0ba1368786184413e344252bf041f353bc616896"
+    }
+  ]
+}

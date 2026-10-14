@@ -1,0 +1,20 @@
+✔ single exact native expense VAT/vector block is extracted and full writer reverses (4.4338ms)
+✔ five complete successor owners/constraints raw reverse without unrelated edits (4.3858ms)
+✔ true NONE-only presence retains payable expense history; no new omitted-zero generation (0.8806ms)
+✔ ordinary payable expense authority and native replacement/reversal remain full old owner (0.5148ms)
+✔ positive companion uses native snapshot values and genuinely zero PAY; no payable generation (2.0693ms)
+✔ two genuine raw components replay separately without ambiguous snapshot-only lookup (0.7929ms)
+✔ historical expense origin binds real HOURS proof and complete immutable policy tuple (0.5397ms)
+✔ whole origin dispatch is literal and expense-to-hours delegation cannot recurse by component (0.6116ms)
+✔ existing native invoice binding fields derive the actual same-snapshot buddy (87.8792ms)
+✔ new Source expense functions retain owner-private ACLs and closed native definitions (1.156ms)
+✔ schema preserves the six genuine origins and distinguishes zero PAY vector grains (0.4501ms)
+✔ all constructed source SQL leaves are finite and contain no external effects (4.2764ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 253.8841

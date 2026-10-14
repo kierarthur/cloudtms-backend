@@ -1,0 +1,47 @@
+[
+  {
+    "file": "BUILD_MONEY_EXPENSE_PREPARED_OFF_SOURCE_CRITIC_14102026.md",
+    "bytes": 6094,
+    "sha256": "672c65844fb4be50df730aa737f46f503d6e24aa77c228d2263415334cf193ac"
+  },
+  {
+    "file": "BUILD_AGENCY_MODE_A_POLICY_CREDIT_SOURCE_CRITIC_14102026.md",
+    "bytes": 6420,
+    "sha256": "214645e47384b03b040f1aeb94d21d44d59d1957e070d243a18e148ac6e524b6"
+  },
+  {
+    "file": "money-expense-prepared-off-source-review-20261014-CHECKS.json",
+    "bytes": 1309,
+    "sha256": "5f36e1f34239766172679b3c722f8049a6028b0734ce51d6481b1b46f55b2fcb"
+  },
+  {
+    "file": "money-expense-prepared-off-source-review-20261014-paid-match-off-command-consumer-construction-20261014.txt",
+    "bytes": 912,
+    "sha256": "4e7ce4a234b7b7cc1d32a5de0ba1368786184413e344252bf041f353bc616896"
+  },
+  {
+    "file": "money-expense-prepared-off-source-review-20261014-paid-match-prepared-pay-consumer-construction-20261014.txt",
+    "bytes": 972,
+    "sha256": "f372adaa59f4f01b947ce8763cd676a352230e8d955eb4fef4c7dd24ecdb7d98"
+  },
+  {
+    "file": "money-expense-prepared-off-source-review-20261014-paid-match-source-expense-native-construction-20261014.txt",
+    "bytes": 1310,
+    "sha256": "251c22cd37f29b2271bc1257f93a87ce076e7ddb3548912c9e41f241f366df7d"
+  },
+  {
+    "file": "agency-policy-credit-source-review-20261014-agency-issued-credit-dependency-source-successor-20261014.txt",
+    "bytes": 1596,
+    "sha256": "11962079f1368b6ccadc3509702c884287b6910873b864b589445f7b4e2bd05e"
+  },
+  {
+    "file": "agency-policy-credit-source-review-20261014-agency-mode-a-preset-policy-source-successor-20261014.txt",
+    "bytes": 3263,
+    "sha256": "26fbac7948bc6f2144d103b2f41d4d7dc179f579aaa622043ce94712db691d03"
+  },
+  {
+    "file": "agency-policy-credit-source-review-20261014-CHECKS.json",
+    "bytes": 898,
+    "sha256": "4fd546c6d25d3e427dd4801f4104fa5fb7bb4d433b271bca98bbd588e9909332"
+  }
+]

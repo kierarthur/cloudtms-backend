@@ -1,0 +1,41 @@
+✔ UNIT_ONLY exact full owner reverse: 21_complete_native_ready_units_with_preset_exclusion.sqlinc (2.896ms)
+✔ UNIT_ONLY exact full owner reverse: 22_complete_native_mode_a_with_selected_preset_refusal.sqlinc (2.3719ms)
+✔ UNIT_ONLY exact full owner reverse: 23_complete_native_reference_apply_with_preset_row_refusal.sqlinc (0.8089ms)
+✔ UNIT_ONLY exact full owner reverse: 24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc (0.8231ms)
+✔ UNIT_ONLY exact full owner reverse: 25_complete_current_routes_with_native_mode_a_continuation.js (1.3255ms)
+✔ UNIT_ONLY actual route: all preset checks have no reference/apply or import authorisation call (1.4455ms)
+✔ UNIT_ONLY actual route: ordinary native continuation still calls the two existing owners (0.8841ms)
+✔ UNIT_ONLY actual mixed caller retains the real native ordinary follow-up handle (0.7668ms)
+✔ UNIT_ONLY actual route refuses untyped native continuation undefined (0.8782ms)
+✔ UNIT_ONLY actual route refuses untyped native continuation null (0.677ms)
+✔ UNIT_ONLY actual route refuses untyped native continuation "false" (0.5497ms)
+✔ UNIT_ONLY actual route refuses untyped native continuation 0 (0.5185ms)
+✔ UNIT_ONLY actual route refuses untyped native continuation [] (0.6176ms)
+✔ UNIT_ONLY actual route refuses untyped native continuation {} (0.4994ms)
+✔ UNIT_ONLY actual route refuses native unit count undefined (0.6146ms)
+✔ UNIT_ONLY actual route refuses native unit count null (0.6314ms)
+✔ UNIT_ONLY actual route refuses native unit count -1 (0.596ms)
+✔ UNIT_ONLY actual route refuses native unit count 1.5 (0.5224ms)
+✔ UNIT_ONLY actual route refuses native unit count "1" (0.5257ms)
+✔ UNIT_ONLY actual route refuses native unit count [] (0.5987ms)
+✔ UNIT_ONLY actual route refuses native unit count 9007199254740992 (0.5595ms)
+✔ UNIT_ONLY native refusal remains causal and identifies the already published upload (0.6742ms)
+✔ UNIT_ONLY not-dispatched ordinary upload preserves the existing null continuation (0.5331ms)
+✔ UNIT_ONLY actual complete-unit model: mixed Clients retain ordinary native action IDs exactly (0.9858ms)
+✔ UNIT_ONLY actual complete-unit model: same Client different Candidates does not skip the Client (0.0897ms)
+✔ UNIT_ONLY a same Candidate/Client unit straddling dates remains whole, never a fabricated subset envelope (0.053ms)
+✔ UNIT_ONLY existing unresolved/blocked candidate unit does not freeze unrelated ordinary unit (0.0598ms)
+✔ UNIT_ONLY pre-T0 configured preset is excluded without inventing a Timesheet (0.0734ms)
+✔ UNIT_ONLY native census calls the exact existing preview/configured authorities and has no readiness recursion (0.7388ms)
+✔ UNIT_ONLY existing native server envelope/hash and selection comparison are not reconstructed by caller (0.5833ms)
+✔ UNIT_ONLY preset refusal precedes any reference manifest or auto-authorisation policy read (0.3982ms)
+✔ UNIT_ONLY final native unit refusal runs before Mode A TV/mirror/email/auto-authorisation steps (0.7395ms)
+✔ UNIT_ONLY genuine bridge/comparison write precedes sole validation continuation (0.4117ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 174.7934

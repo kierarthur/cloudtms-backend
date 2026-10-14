@@ -1,0 +1,17 @@
+✔ four complete current native consumers reverse all six unique hunks (4.5702ms)
+✔ whole stored census is rederived; foreign/missing/extra raw choice cannot be a subset pass (0.5364ms)
+✔ actual prepared session/publication and native actor, not original confirmer, bind reproof (0.4935ms)
+✔ recorded-only or stale choice/hash/scope cannot become fresh prepare proof (0.4145ms)
+✔ native prepare result binds real census before its existing result hash (0.3768ms)
+✔ fresh apply rechecks after real root-family gates and before own business CAS (0.3914ms)
+✔ prepared root and expense root discovery exclude invoice companions without hiding payable generations (0.6166ms)
+✔ new read helper has owner-only ACL and contains no business DML or new classifier (0.3935ms)
+✔ all full SQL leaves are finite managed source, not native proof (1.9675ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 163.2784

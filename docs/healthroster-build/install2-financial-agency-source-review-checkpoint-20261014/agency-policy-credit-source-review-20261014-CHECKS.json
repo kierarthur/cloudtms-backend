@@ -1,0 +1,26 @@
+{
+  "source_only": true,
+  "native": false,
+  "packets": [
+    {
+      "name": "agency-mode-a-preset-policy-source-successor-20261014",
+      "pin": "28a39f4108940bc83df103c321ddf988ac9188ce",
+      "manifest_sha256": "0bb9866c364a66fbaca2858f071f9c3728e88c11aa76a170b7d94d65fe1ee0d8",
+      "files": 30,
+      "saved_git_mismatches": 0,
+      "passed": 33,
+      "failed": 0,
+      "output_sha256": "26fbac7948bc6f2144d103b2f41d4d7dc179f579aaa622043ce94712db691d03"
+    },
+    {
+      "name": "agency-issued-credit-dependency-source-successor-20261014",
+      "pin": "28a39f4108940bc83df103c321ddf988ac9188ce",
+      "manifest_sha256": "f849596fa983ce92804013f42cd3d7bcc8ffc3a2db629431d9d73b0e83fca2b7",
+      "files": 11,
+      "saved_git_mismatches": 0,
+      "passed": 16,
+      "failed": 0,
+      "output_sha256": "11962079f1368b6ccadc3509702c884287b6910873b864b589445f7b4e2bd05e"
+    }
+  ]
+}

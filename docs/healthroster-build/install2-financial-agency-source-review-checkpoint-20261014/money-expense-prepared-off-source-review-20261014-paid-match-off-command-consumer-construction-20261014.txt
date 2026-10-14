@@ -1,0 +1,16 @@
+✔ all five complete OFF consumers reverse exactly seven unique hunks (4.7601ms)
+✔ Office operation uses existing SOURCE_FIXTURE_SETUP owner/ABI, no AUTOMATIC extension (1.6448ms)
+✔ command scope gate/OPEN/parent census/native audit stays before actual command (2.9067ms)
+✔ actual target is read in parent discovery before frame; existing foreign identities and mixed-cycle refusal retained (0.667ms)
+✔ actual dependency proxy forwards exact native request to existing command owner (0.5532ms)
+✔ qualified proxy refuses operation absent from actual OPEN allowed_operations (0.4644ms)
+✔ ordinary no-fixture and LIVE paths retain original dependency identity and payload (0.1636ms)
+✔ SQL leaves retain finite source-only statements with no new private grants or money fixture (2.116ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 174.8407
