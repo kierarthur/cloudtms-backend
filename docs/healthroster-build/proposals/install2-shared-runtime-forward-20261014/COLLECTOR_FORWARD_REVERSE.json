@@ -1,0 +1,38 @@
+{
+  "schema_version": "REPORT_NATIVE_COLLECTOR_COMPLETE_FORWARD_REVERSE_V1",
+  "input_commit": "c57746f82558dd698d13fe5b2fc43dd18d72af6c",
+  "input_file": "docs/healthroster-build/proposals/report-ab-protected-dispatch/weekly-source-report-fin-native-collector.mjs",
+  "output_file": "forward/scripts/weekly-source-report-fin-native-collector.mjs",
+  "hunks": [
+    {
+      "before": "const factKeys=['native_candidate_i1','ordinary_nhsp','origin_authority','no_external_effects'];\n// Facts are raw *root native collector outputs*, not caller assertion flags.\n// This protocol preserves absent facts as WAITING. Root must supply its genuine\n// native owner transport and retain each raw input in the same captured trace.\nfunction nativeGates(raw,caseId,context){\n if(raw===null)return {waiting:factKeys};\n exact(raw,factKeys,'REPORT_NATIVE_GATE_FACTS_INVALID');const waiting=[];\n const required={native_candidate_i1:['complete_original_root_set','empty_set_guard','candidate_gate_order','hooks_body'],\n  ordinary_nhsp:['ordinary_owners','nhsp_owners','ordinary_result','nhsp_result'],\n  origin_authority:['prepared','c1','withheld','headless',...(caseId==='NEXT_ACTIVE'?['next']:[])],\n  no_external_effects:['provider','settlement','email','network']};\n for(const key of factKeys){const v=raw[key];\n  if(v===null){waiting.push(key);continue;}\n  exact(v,['owner_signature','owner_body_sha256','request_bytes','result_bytes'],'REPORT_NATIVE_GATE_FACTS_INVALID');\n  if(typeof v.owner_signature!=='string'||!/^private\\.[a-z0-9_]+\\([a-z0-9, .\\[\\]]*\\)$/.test(v.owner_signature)\n   ||!hex.test(v.owner_body_sha256))fail('REPORT_NATIVE_GATE_FACTS_INVALID');\n  const input=rawJson(v.request_bytes,'REPORT_NATIVE_GATE_FACTS_INVALID'),result=rawJson(v.result_bytes,'REPORT_NATIVE_GATE_FACTS_INVALID');\n  exact(input,['schema_version','execution','actor_user_id','source_cycle_id','report_scope_id','invoice_id','case_id','variant','native_owner_request'],'REPORT_NATIVE_GATE_FACTS_INVALID');\n  if(input.schema_version!=='WEEKLY_SOURCE_REPORT_FIN_NATIVE_GATE_CAPTURE_REQUEST_V1'||!same(input.execution,context.execution)\n   ||input.actor_user_id!==context.native_request.actor_user_id||input.source_cycle_id!==context.native_request.source_cycle_id\n   ||input.report_scope_id!==context.native_request.report_scope_id||input.invoice_id!==context.invoice_id||input.case_id!==caseId\n   ||input.variant!==context.variant||!input.native_owner_request||Array.isArray(input.native_owner_request)||typeof input.native_owner_request!=='object')\n   fail('REPORT_NATIVE_GATE_SCOPE_CHANGED');\n  // The controlling root mapper validates native semantic result shapes. The\n  // collector cannot elevate an arbitrary {ok:true}/assertions object. These\n  // are rederived gate witness bindings to actual native raw owner outputs.\n  exact(result,['schema_version','execution','native_request_sha256','native_result_sha256','observations'],'REPORT_NATIVE_GATE_FACTS_INVALID');\n  if(result.schema_version!=='WEEKLY_SOURCE_REPORT_FIN_NATIVE_GATE_OBSERVATION_V1'\n   ||result.native_request_sha256!==sha256(v.request_bytes)\n   ||!Array.isArray(result.observations)||result.observations.length!==required[key].length\n   ||result.native_result_sha256!==domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_GATE_OBSERVATIONS_V1',result.observations)\n   ||new Set(result.observations.map(o=>o.identity)).size!==result.observations.length\n   ||!required[key].every(id=>result.observations.some(o=>o.identity===id)))fail('REPORT_NATIVE_GATE_FACTS_INVALID');\n  for(const observation of result.observations){\n   exact(observation,['identity','expected_bytes','observed_bytes'],'REPORT_NATIVE_GATE_FACTS_INVALID');\n   if(typeof observation.identity!=='string'||!observation.identity||typeof observation.expected_bytes!=='string'\n    ||typeof observation.observed_bytes!=='string'||observation.expected_bytes!==observation.observed_bytes)fail('REPORT_NATIVE_GATE_OBSERVATION_FAILED');\n   for(const bytes of [observation.expected_bytes,observation.observed_bytes]){\n    const value=rawJson(bytes,'REPORT_NATIVE_GATE_FACTS_INVALID');\n    if(!value||typeof value!=='object')fail('REPORT_NATIVE_GATE_FACTS_INVALID');\n   }\n  }\n }\n return {waiting};\n}\n",
+      "after": "// Four concrete native slot mappers replace the retired generic equality gate.\nconst nativeGates=validateReportNativeGateFacts;\n"
+    },
+    {
+      "before": "import {exact,sha256,domainHash,pgJsonbText} from './weekly-source-protected-release-qualification.mjs';",
+      "after": "import {exact,sha256,domainHash,pgJsonbText} from './weekly-source-protected-release-qualification.mjs';\nimport {validateReportNativeGateFacts,deriveReportCaseGrain,captureReportNativeGateBefore,captureReportNativeGateAfter} from './weekly-source-report-fin-native-mapper.mjs';"
+    },
+    {
+      "before": " const gates=nativeGates(trace.native_gate_facts,trace.case_id,{execution:trace.execution,native_request:r,invoice_id:f.invoice.id,variant:trace.variant});for(const gate of Object.values(trace.native_gate_facts??{})){\n  if(gate!==null&&!same(rawJson(gate.result_bytes,'REPORT_NATIVE_GATE_FACTS_INVALID').execution,trace.execution))fail('REPORT_NATIVE_GATE_EXECUTION_CHANGED');}",
+      "after": " deriveReportCaseGrain(trace.case_id,b,f);\n const gates=nativeGates(trace.native_gate_facts,{execution:trace.execution,native_request:r,invoice_id:f.invoice.id,variant:trace.variant,case_id:trace.case_id,\n  basis:b,financial:f,backend_pid:before.backend_pid,transaction_id:commandFrame.transaction_id});"
+    },
+    {
+      "before": " originalReportBytes,turnBackendPid,captureFrozenDocument,captureNativeGateFacts},variants){",
+      "after": " originalReportBytes,turnBackendPid,captureFrozenDocument,nativeRegressionFrames},variants){"
+    },
+    {
+      "before": "  ||(captureNativeGateFacts!==undefined&&typeof captureNativeGateFacts!=='function'))fail('REPORT_NATIVE_SESSION_REQUIRED');",
+      "after": "  ||(nativeRegressionFrames!==undefined&&(nativeRegressionFrames===null||typeof nativeRegressionFrames!=='object'||Array.isArray(nativeRegressionFrames))))fail('REPORT_NATIVE_SESSION_REQUIRED');"
+    },
+    {
+      "before": "  if(variants.length===2)await session.execute('savepoint report_native_variant;');",
+      "after": "  if(variants.length===2)await session.execute('savepoint report_native_variant;');\n  const gateBefore=await captureReportNativeGateBefore({session,nativeRequest,basis,expectedExecution});"
+    },
+    {
+      "before": "  const facts=captureNativeGateFacts?await captureNativeGateFacts({session,invoiceId,nativeRequest,caseId,variant,expectedExecution}):null;",
+      "after": "  const facts=await captureReportNativeGateAfter({session,nativeRequest,basis,expectedExecution,before:gateBefore,nativeRegressionFrames,caseId,variant,invoiceId});"
+    }
+  ],
+  "native_signatures_or_recorder_slots_added": 0,
+  "recordable_while_unsealed": false
+}

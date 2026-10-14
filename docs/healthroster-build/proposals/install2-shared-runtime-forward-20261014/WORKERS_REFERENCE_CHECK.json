@@ -1,0 +1,26 @@
+{
+  "schema_version": "INSTALL2_WORKERS_PRIMARY_REFERENCE_SOURCE_CHECK_V1",
+  "package": "@cloudflare/workers-types",
+  "version": "5.20261014.1",
+  "types_sha256": "c939798427a9ca2fcfa281ad2f675eb8446499785785978c20a00d5a22f96d2d",
+  "source": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261014.1.tgz",
+  "reviewed_symbols": [
+    {
+      "symbol": "interface ExecutionContext",
+      "snippet": "interface ExecutionContext<Props = unknown> {\n  waitUntil(promise: Promise<any>): void;\n  passThroughOnException(): void;\n  readonly exports: Cloudflare.Exports;\n  readonly props: Props;\n  cache?: CacheContext;\n  readonly access?: CloudflareAccessContext;\n  tracing: Tracing;\n  abort(reason?: any): void;\n}\ntype ExportedHandlerFetchHandler<\n  Env = unknown,\n  CfHostMetadata = unknown,\n  Props = unknown,\n> = (\n  request: Request<CfHostMetadata, IncomingRequestCfProperties<CfHostMetadata>>,\n  env: Env,\n  ctx: ExecutionContext<Props>,\n) => Response | Promise<Response>;\ntype ExportedHandlerConnectHandler<Env = unknown, Props = unknown> = (\n  socket: Socket,\n  env: Env,\n  ctx: ExecutionContext<Props>,\n) => void | Promise<void>;\ntype ExportedHandlerTailHandler<Env = unknown, Props = unknown> = (\n "
+    },
+    {
+      "symbol": "type ExportedHandlerFetchHandler",
+      "snippet": "type ExportedHandlerFetchHandler<\n  Env = unknown,\n  CfHostMetadata = unknown,\n  Props = unknown,\n> = (\n  request: Request<CfHostMetadata, IncomingRequestCfProperties<CfHostMetadata>>,\n  env: Env,\n  ctx: ExecutionContext<Props>,\n) => Response | Promise<Response>;\ntype ExportedHandlerConnectHandler<Env = unknown, Props = unknown> = (\n  socket: Socket,\n  env: Env,\n  ctx: ExecutionContext<Props>,\n) => void | Promise<void>;\ntype ExportedHandlerTailHandler<Env = unknown, Props = unknown> = (\n  events: TraceItem[],\n  env: Env,\n  ctx: ExecutionContext<Props>,\n) => void | Promise<void>;\ntype ExportedHandlerTraceHandler<Env = unknown, Props = unknown> = (\n  traces: TraceItem[],\n  env: Env,\n  ctx: ExecutionContext<Props>,\n) => void | Promise<void>;\ntype ExportedHandlerTailStreamHandler<Env = unknown"
+    },
+    {
+      "symbol": "type Fetcher",
+      "snippet": "type Fetcher<\n  T extends Rpc.EntrypointBranded | undefined = undefined,\n  Reserved extends string = never,\n> = (T extends Rpc.EntrypointBranded\n  ? Rpc.Provider<T, Reserved | \"fetch\" | \"connect\">\n  : unknown) & {\n  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;\n  connect(address: SocketAddress | string, options?: SocketOptions): Socket;\n};\ninterface KVNamespaceListKey<Metadata, Key extends string = string> {\n  name: Key;\n  expiration?: number;\n  metadata?: Metadata;\n}\ntype KVNamespaceListResult<Metadata, Key extends string = string> =\n  | {\n      list_complete: false;\n      keys: KVNamespaceListKey<Metadata, Key>[];\n      cursor: string;\n      cacheStatus: string | null;\n    }\n  | {\n      list_complete: true;\n      keys: KVNamespaceListKey<Metadata, Key>[];\n      "
+    }
+  ],
+  "current_best_practices": "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/",
+  "service_fetch": "https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/http/",
+  "context": "https://developers.cloudflare.com/workers/runtime-apis/context/",
+  "config_and_binding_declarations_changed": false,
+  "no_runtime_call": true
+}
