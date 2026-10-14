@@ -262,7 +262,7 @@ begin
         where u.source_cycle_id=scope.cycle_id and u.report_scope_id is null and u.state in('CURRENT','SUPERSEDED')
           and exists(select 1 from public.weekly_source_upload_attempts a where a.logical_upload_id=u.id and a.result='ACCEPTED')
           and u.confirmed_coverage_start_local_date<=own_week-6 and u.confirmed_coverage_end_local_date>=own_week
-          and (upper(coalesce(u.file_metadata_json->>'import_use',''))='CHECKING' or profile.profile_code='NHSP_PREFINAL_RELEASED_V1')
+          and (upper(coalesce(u.file_metadata_json->>'import_use','CHECKING'))='CHECKING' or profile.profile_code='NHSP_PREFINAL_RELEASED_V1')
           and exists(select 1 from public.weekly_source_upload_rows ur join public.weekly_source_row_resolutions rr on rr.upload_row_id=ur.id
             where ur.upload_id=u.id and rr.client_id=scope.client_id and rr.mapping_state='RESOLVED'
               and rr.generation=coalesce(publication.projection_generation,publication.authority_scope_version))

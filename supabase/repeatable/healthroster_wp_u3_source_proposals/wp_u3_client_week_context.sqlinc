@@ -167,7 +167,7 @@ begin
       join lateral(select a.id from public.weekly_source_upload_attempts a where a.logical_upload_id=u.id and a.result='ACCEPTED'
         order by a.attempted_at_utc desc,a.id desc limit 1) attempt on true
       where u.source_cycle_id=c.id and u.report_scope_id is null and u.state in('CURRENT','SUPERSEDED')
-        and upper(coalesce(u.file_metadata_json->>'import_use',''))='CHECKING'
+        and upper(coalesce(u.file_metadata_json->>'import_use','CHECKING'))='CHECKING'
         and (c.scope_client_id=v_client or exists(select 1 from public.weekly_source_row_resolutions rr
           where rr.upload_row_id in(select ur.id from public.weekly_source_upload_rows ur where ur.upload_id=u.id)
             and rr.client_id=v_client and rr.mapping_state='RESOLVED'))),'[]'::jsonb),

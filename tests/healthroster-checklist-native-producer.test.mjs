@@ -209,8 +209,15 @@ test('literal native Source parent/child census reaches the actual exact-target 
 });
 test('one check-only/D10 parent owner reuses current native decisions/CAS without publication, send/store or Source bulk action',()=>{
   const groups=read('wp_u3_check_only_query_groups.sqlinc'),raw=read('wp_u3_check_only_query_rows.sqlinc');
-  assert.equal(scanManagedSql(exactAtomicBody(groups)).statements.length,3);
-  const tokens=scanManagedSql(groups.split('$function$')[1]).statements.flatMap(s=>s.tokens);
+  assert.equal(scanManagedSql(exactAtomicBody(groups)).statements.length,6);
+  const definitions=scanManagedSql(exactAtomicBody(groups)).statements;
+  assert.equal((groups.match(/create or replace function private\./g)||[]).length,2);
+  for(const signature of ['weekly_source_check_only_issue_filter_keys_v1(text,jsonb)','weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)']){
+    assert.ok(groups.includes(`alter function private.${signature} owner to postgres;`));
+    assert.ok(groups.includes(`revoke all on function private.${signature} from public,anon,authenticated,service_role;`));
+  }
+  assert.equal(definitions.length,6);assert.doesNotMatch(groups,/grant execute|create or replace function public\./i);
+  const tokens=groups.split('$function$').filter((_,i)=>i%2===1).flatMap(body=>scanManagedSql(body).statements.flatMap(s=>s.tokens));
   for(const forbidden of ['INSERT','UPDATE','DELETE','TRUNCATE','LOCK','NOTIFY','CALL','EXECUTE'])assert.ok(!tokens.includes(forbidden),forbidden);
   for(const marker of ['private.weekly_source_check_only_query_rows_v1(cycle.id,p_client_id',"parent_key:='d10g_'",
     'WEEKLY_SOURCE_CHECK_ONLY_QUERY_PARENT_V1','state.preview_generation','state.state_version','state.preview_fingerprint',

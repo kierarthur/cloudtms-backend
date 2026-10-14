@@ -2,6 +2,41 @@
 -- Queries workspace. Real D10 comparison is independent of Source publication.
 -- Facts/reasons/delivery remain in the existing row owner and D10 decisions.
 -- No second discrepancy, query, send, finance or outreach owner is introduced.
+-- Filter compatibility projects only persisted native reason/comparison codes.
+-- It never compares clocks/amounts or interprets display wording.
+create or replace function private.weekly_source_check_only_issue_filter_keys_v1(p_action_kind text,p_summary jsonb)
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare keys jsonb:='[]'::jsonb; comparisons jsonb; evidence jsonb;
+begin
+  if p_action_kind is null or p_action_kind not in('EMAIL_ISSUE','EMAIL_REMINDER','ADVISORY') or jsonb_typeof(p_summary) is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_FILTER_FACT_INVALID' using errcode='55000';
+  end if;
+  comparisons:=case when jsonb_typeof(p_summary->'comparisons')='array' then p_summary->'comparisons' else '[]'::jsonb end;
+  evidence:=case when jsonb_typeof(p_summary->'evidence_rows')='array' then p_summary->'evidence_rows' else '[]'::jsonb end;
+  if p_action_kind='ADVISORY' and p_summary->>'authority_mode'='VALIDATION_ONLY'
+    and p_summary->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED') then
+    keys:=keys||jsonb_build_array('TIMESHEET_MISSING');
+  end if;
+  if p_action_kind in('EMAIL_ISSUE','EMAIL_REMINDER') and (
+    p_summary->>'reason_code' in('ACTUAL_HOURS_MISMATCH','START_END_MISMATCH','BREAK_MINUTES_MISMATCH')
+    or exists(select 1 from jsonb_array_elements(comparisons) cx where cx->>'match_status'='MISMATCH')
+    or exists(select 1 from jsonb_array_elements(evidence) e cross join lateral jsonb_array_elements_text(
+      case when jsonb_typeof(e->'difference_codes')='array' then e->'difference_codes' else '[]'::jsonb end) code
+      where code in('WORKED_HOURS','START_TIME','END_TIME','BREAK_MINUTES'))) then
+    keys:=keys||jsonb_build_array('HOURS_DIFFER');
+  end if;
+  if p_action_kind in('EMAIL_ISSUE','EMAIL_REMINDER') and (p_summary->>'reason_code'='MISSING_FROM_IMPORT'
+    or exists(select 1 from jsonb_array_elements(comparisons) cx where cx->>'match_status' in('UNMATCHED','HR_ONLY'))) then
+    keys:=keys||jsonb_build_array('MISSING_SHIFT');
+  end if;
+  return keys;
+end;
+$function$;
+alter function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) owner to postgres;
+revoke all on function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) from public,anon,authenticated,service_role;
+
 create or replace function private.weekly_source_check_only_query_groups_v1(
   p_source_cycle_id uuid,p_client_id uuid,p_filters jsonb
 ) returns jsonb language plpgsql stable security definer
@@ -15,7 +50,7 @@ declare
   parent_identity jsonb; parent_key text; parent_proof text; binding text; revision text;
   action_bindings jsonb; child_binding jsonb; review_action jsonb; latest_decision public.import_review_decisions%rowtype;
   state public.import_review_states%rowtype; first_seen timestamptz; group_row jsonb;
-  native_status jsonb; native_summary jsonb; actual_item_id text; native_actions text[];
+  native_status jsonb; native_summary jsonb; actual_item_id text; native_actions text[]; child_filter_keys jsonb; group_filter_keys jsonb;
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_filters,
@@ -67,7 +102,7 @@ begin
         and s.preview_generation=(preview->>'preview_generation')::integer and s.state_version=(preview->>'state_version')::bigint
         and s.preview_fingerprint=preview->>'preview_fingerprint' and s.superseded_at_utc is null and s.abandoned_at_utc is null;
       if state.import_id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001'; end if;
-      children:='[]'::jsonb; action_bindings:='[]'::jsonb; native_actions:='{}'::text[]; first_seen:=null;
+      children:='[]'::jsonb; action_bindings:='[]'::jsonb; native_actions:='{}'::text[]; first_seen:=null; group_filter_keys:='[]'::jsonb;
       for native_issue in select value from jsonb_array_elements(case when raw->>'item_kind'='SOURCE_INFORMATION' then
         jsonb_build_array(jsonb_build_object('action_id',raw->'action_id','action_kind',raw->'action_kind',
           'evidence_fingerprint',raw->'evidence_fingerprint','reason_code',raw->'native_reason_code','summary',raw->'summary'))
@@ -96,6 +131,9 @@ begin
           'action_kind',latest_decision.action_kind,'evidence_fingerprint',latest_decision.evidence_fingerprint);
         action_bindings:=action_bindings||jsonb_build_array(child_binding);
         native_summary:=latest_decision.summary_json;
+        child_filter_keys:=private.weekly_source_check_only_issue_filter_keys_v1(latest_decision.action_kind,native_summary);
+        select coalesce(jsonb_agg(key order by key),'[]'::jsonb) into group_filter_keys
+          from(select distinct key from jsonb_array_elements_text(group_filter_keys||child_filter_keys) key) native_keys;
         native_status:=case when jsonb_typeof(native_summary->'status')='object' then native_summary->'status'
           else jsonb_build_object('text',coalesce(nullif(native_summary->>'outcome_label',''),
             nullif(native_summary->>'reason_code',''),latest_decision.action_kind),'tone','muted') end;
@@ -106,6 +144,7 @@ begin
           'candidate_hours',coalesce(native_summary#>>'{current_evidence,worked_hours}',''),
           'system_hours',coalesce(native_summary#>>'{imported_evidence,worked_hours}',''),
           'issue',coalesce(native_summary->>'outcome_label',native_summary->>'reason_code',latest_decision.action_kind),
+          'issue_filter_keys',child_filter_keys,
           'status',native_status,'incident_id',null,'accept_eligible',false,'actions','[]'::jsonb,
           'native_action_binding',child_binding,
           'delivery',case when raw->>'item_kind'='ACTUAL_TIMESHEET' then jsonb_build_object(
@@ -137,7 +176,7 @@ begin
         'context',jsonb_build_object('candidate',raw->'worker','client',raw->'client'));
       group_row:=jsonb_build_object('row_key',parent_key,'group_key',parent_key,'origin','CHECK_ONLY_D10',
         'client_id',p_client_id,'candidate_id',raw->'candidate_id','candidate_sort',private.weekly_source_query_ascii_fold_v1(raw->>'worker'),
-        'candidate',raw->'worker','client',raw->'client','issues',jsonb_array_length(children),
+        'candidate',raw->'worker','client',raw->'client','issues',jsonb_array_length(children),'issue_filter_keys',group_filter_keys,
         'candidate_asked',null,'manager_informed',null,'status',jsonb_build_object('text','HealthRoster comparison','tone','muted'),
         'age',case when first_seen is null then '—' when transaction_timestamp()-first_seen<interval '1 hour' then 'Less than 1 hour'
           when transaction_timestamp()-first_seen<interval '24 hours' then floor(extract(epoch from (transaction_timestamp()-first_seen))/3600)::integer||' hours'
