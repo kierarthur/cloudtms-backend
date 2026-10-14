@@ -1,0 +1,70 @@
+✔ exact installed Git source retains all nested SQL roots and uppercase migration authority (1320.8006ms)
+✔ installed-source collector refuses another relative repository, short ref or unavailable exact object (89.1085ms)
+✔ second install distinguishes Banking, installed source, receipt-only test and candidate without relabelling the release (2.2805ms)
+✔ failed, applying, incomplete or unrelated installed releases cannot qualify the predecessor (0.6822ms)
+✔ native catalogue must match its own installed Git contract and both recorded contract hashes (0.5239ms)
+✔ both entire ledgers reject missing, unknown, duplicate or changed entries while preserving uppercase SQL identity (11.9911ms)
+✔ target, fresh connection and identity refusals remain mandatory for native predecessor observations (0.5231ms)
+✔ receipt-gap dispositions must cover exactly the actual Git paths and raw before/after content hashes (1.2639ms)
+✔ retained drafts remain visible and prevent a clean release claim (0.1827ms)
+✔ source relationship cannot swap predecessor, target, bank pin or any actual ancestry edge (0.9347ms)
+✔ the common safety gates still hold runtime/Office before any publication callback (1.6438ms)
+✔ the second marker can be probed truthfully and cannot be run through the first-install entry (0.9061ms)
+✔ second-install callback source flow preserves identity and gates across rollback and publication (1.1873ms)
+✔ unchanged full tables and exact fresh parent abort/fixture absence qualify (3.4736ms)
+✔ native other-transaction claim and retry qualify without replacing original fingerprints (0.8135ms)
+✔ claim labels without native request/terminal proof fail (0.6776ms)
+✔ other changed relation and omitted or duplicate relation cannot be attributed (0.82ms)
+✔ incomplete or independently wrong two-table row map fails (0.4614ms)
+✔ old receipt mutation/deletion and new finance identity fail (0.9ms)
+✔ outbox stable-field change, nonincreasing attempts and impossible retry time fail (0.6971ms)
+✔ own, aborted, unknown or before-visible writer XID fails (1.4834ms)
+✔ genuinely active before-snapshot writer is distinguished from later native time (0.4695ms)
+✔ dynamic exception fixture identity must be absent and cannot be attributed as background (0.5875ms)
+✔ exact observer order, all units, epoch and parent PID/XID bind (0.8111ms)
+✔ fixture readback is read-only, identity-scoped and handles empty native footprint (1.4679ms)
+✔ observer resets roles before read and does not add mutation/transaction control (1.1008ms)
+✔ snapshot binds complete raw-row and stable-field hashes and native receipt semantics (0.2099ms)
+✔ writer census explicitly converts the actual text-valued contract exporter before JSON traversal (0.824ms)
+✔ actual renderer retains native body exactly and captures after role reset before rollback (0.8475ms)
+✔ only actual qualification for these exact before/after snapshots admits a delta (0.8271ms)
+✔ changed proof fields and mutated before maps cannot reuse a legitimate qualification (0.5006ms)
+✔ both actual full snapshot epochs and Xip ranges must be proved (0.6138ms)
+✔ retry timing derives the exact capped fail formula as well as five-minute dequeue (0.557ms)
+✔ actual final publication gate rejects forged, copied and stale qualifications and retains its independent guards (1.1897ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1604.1504
+
+✔ fresh gate refuses missing authority, wrong environment/module, concurrent release, dirty/unpushed or stale source (3.4905ms)
+✔ fresh restoration requires all four identical fingerprints and the exact absent marker (0.5441ms)
+✔ one supplied retained turn spans before/full/explicit rollback/fresh and canonical root publication callback (1.236ms)
+✔ live observation admits active background sessions before SQL but requires genuine restoration before publication (1.0703ms)
+✔ SQL errors or missing explicit rollback always get fresh proof and hold publication (1.3233ms)
+✔ restoration mismatch and lost turn prevent publication, with no duplicate dispatch on protected failure (0.5682ms)
+✔ root psql adapter refuses missing unit end markers and unmapped database diagnostics (1.9775ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 198.9313
+
+✔ read-only probe accepts one JSON result alongside harmless psql control output (1.6011ms)
+✔ ambiguous or malformed probe results fail without returning database payloads (0.6603ms)
+✔ native coordinator cannot run from import or the test runner entry (0.5943ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 205.4607

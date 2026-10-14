@@ -1,0 +1,18 @@
+[
+  {
+    "file": "FULL_CURRENT_SOURCE_REVERSE.json",
+    "sha256": "a71b1dc24c07e667c3a27f7395cc7aedb2cc981e18659c28b015f251cdafee6c"
+  },
+  {
+    "file": "README.md",
+    "sha256": "7b3edacbb3a83c379af909964cbab17d4be06cb26d46392fe2b4a1c640dbbe90"
+  },
+  {
+    "file": "SOURCE_CHECKS.json",
+    "sha256": "511bc1df9c399ed0f78a5beaa86a55029d43321673cfee85c1e5e2f9e6a5a8b7"
+  },
+  {
+    "file": "UNIT_TEST_OUTPUT.txt",
+    "sha256": "875934e6c52d135acde2772aaa40f5445f61aeb39099df26050e8612c186d2c1"
+  }
+]

@@ -41,6 +41,13 @@ export function collectInstall2SourceRelationship({repositoryRoot,installedSourc
     if(result.status!==0)throw Error('INSTALL2_NONFORCED_ANCESTRY_REFUSED');}
   const difference=git(['diff','--name-only','-z',installedSourceCommit,expectedRemoteTestCommit]);
   const paths=difference.split('\0').filter(Boolean);
+  const blobHash=(commit,file)=>{
+    const exists=spawnSync('git',[...prefix,'cat-file','-e',commit+':'+file],{windowsHide:true,stdio:'pipe'});
+    if(exists.status!==0)return null;
+    return hash(execFileSync('git',[...prefix,'show',commit+':'+file],{windowsHide:true,maxBuffer:4000000}));
+  };
+  const blobs=paths.map(file=>({path:file,beforeContentSha256:blobHash(installedSourceCommit,file),
+    afterContentSha256:blobHash(expectedRemoteTestCommit,file)}));
   const status=git(['status','--porcelain=v1','-z']);
   // Keep the complete status envelope and its digest. Never pretend unrelated
   // retained files are absent or discard them to obtain a clean-tree claim.
@@ -50,7 +57,7 @@ export function collectInstall2SourceRelationship({repositoryRoot,installedSourc
     installedSourceCommitSupplied:installedSourceCommit,completedBankCommitSupplied:completedBankCommit,
     observedRemoteTestCommit:expectedRemoteTestCommit,pushedCandidateCommit:expectedCandidateCommit,
     ancestry:links.map(([ancestor,descendant])=>({ancestor,descendant,proved:true})),
-    installedSourceToRemoteChangedPaths:paths,changedPathEnvelopeSha256:hash(difference),
+    installedSourceToRemoteChangedPaths:paths,installedSourceToRemoteBlobs:blobs,changedPathEnvelopeSha256:hash(difference),
     fullGitClean:entries.length===0,gitStatusEnvelope:entries,gitStatusEnvelopeSha256:hash(status),
     databaseProbed:false,installedReleaseStatusVerified:false,runtimeBuildsVerified:false,
     currentContractVerified:false,permanentWritesPerformed:false,

@@ -12,13 +12,15 @@ import {neutraliseReviewedVerifierEnvelope,renderFullRehearsalUnits,closedRehear
 import {assertTurnIdentity,ownTurnActivityExclusionSql} from './healthroster-turn-control.mjs';
 import {verifierClosure} from './healthroster-install1-verifier-census.mjs';
 import {backgroundSnapshotFieldsSql,fixtureObservationSql,transactionIdentitySql,validateFixtureObservations,assertQualifiedLiveRestoration} from './healthroster-live-test-restoration.mjs';
+import {assertFreshInstall2NativeGate} from './healthroster-install2-native-gate.mjs';
 
 export const REHEARSAL_VERSION='HEALTHROSTER_INSTALL1_FULL_REHEARSAL_V1';
+export const INSTALL2_REHEARSAL_VERSION='HEALTHROSTER_INSTALL2_FULL_REHEARSAL_V1';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const finalBrowser='supabase/verification/22082026_1302_general_browser_isolation_verification.sql';
 const sourcePinPattern=/^[0-9a-f]{40}$/;
 const hashPattern=/^[0-9a-f]{64}$/;
-const markerPattern=/^hr_install1_[a-f0-9]{32}$/;
+const markerPattern=/^hr_install[12]_[a-f0-9]{32}$/;
 const requireThat=(condition,code)=>{if(!condition)throw Error(code);};
 const stable=value=>Array.isArray(value)?value.map(stable):value&&typeof value==='object'
  ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
@@ -26,7 +28,9 @@ const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms
  'scripts/cloudtms-managed-release-sql.mjs','scripts/cloudtms-managed-execution-policy.mjs','scripts/bpay-next-final-definers.mjs',
  'scripts/weekly-source-reader-release.mjs','supabase/release/current-release.json','supabase/release/migration-lock.json',
  'supabase/release/protected-boundary-lock.json','supabase/release/export_contract.sql','docs/bpay-next/final-definer-closures.json',
- 'scripts/healthroster-rehearsal-stream-observer.mjs','scripts/healthroster-rehearsal-resource-guard.mjs'];
+ 'scripts/healthroster-rehearsal-stream-observer.mjs','scripts/healthroster-rehearsal-resource-guard.mjs',
+ 'scripts/healthroster-install1-full-rehearsal.mjs','scripts/healthroster-install2-native-gate.mjs',
+ 'scripts/healthroster-install2-source-relationship.mjs','scripts/healthroster-install2-installed-source.mjs'];
 
 // Root runs this exact source literal as a separate fresh read-only probe under
 // the already-held turn. PostgreSQL itself supplies jsonb formatting; no client
@@ -167,7 +171,7 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
  closeSelection=closeFinalDefinerSelection,compileUnit=compileManagedUnit,readVerifier=mappedVerifier,
  readerPhases=readerReleasePhases,render=renderFullRehearsalUnits}={}){
  requireThat(sourcePinPattern.test(candidatePin??'')&&sourcePinPattern.test(currentRemoteTestPin??''),'REHEARSAL_COMMIT_INPUT_REFUSED');
- requireThat(/^hr_install1_[a-f0-9]{32}$/.test(marker??''),'REHEARSAL_MARKER_REFUSED');
+ requireThat(markerPattern.test(marker??''),'REHEARSAL_MARKER_REFUSED');
  requireThat(process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER==='CURRENT_USER','REHEARSAL_AUDITED_OWNER_MODE_REQUIRED');
  assertReview(review,release);
  requireThat(review.sourceCounts?.migrations===current.migrations.length&&review.sourceCounts?.repeatables===current.repeatables.length
@@ -277,7 +281,7 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   kind:'contract_export',phase:'installed_contract_comparison',statement:statement+1,object:'catalogue',
   startLine:sql.slice(0,contractStart+row.start).split('\n').length,endLine:sql.slice(0,contractStart+row.end).split('\n').length,
   statementHash:digest(contractSql.slice(row.start,row.end))});
- return {version:REHEARSAL_VERSION,status:'COMPILED_NOT_RUN',candidatePin,currentRemoteTestPin,marker,mode:'UPGRADE',
+ return {version:marker.startsWith('hr_install2_')?INSTALL2_REHEARSAL_VERSION:REHEARSAL_VERSION,status:'COMPILED_NOT_RUN',candidatePin,currentRemoteTestPin,marker,mode:'UPGRADE',
   currentCounts:{migrations:current.migrations.length,repeatables:current.repeatables.length,verifiers:release.verificationFiles.length},
   pendingCounts:{migrations:pending.migrations.length,repeatables:pending.repeatables.length,readerPair:phases.readers.length},
   units:rendered.units.map((x,i)=>({...x,phase:units[i].phase,sourceFiles:units[i].sourceFiles??[],clientVariables:units[i].clientVariables??[]})),
@@ -332,23 +336,29 @@ export function assertFreshRestoration(before,after,marker){
 // Root calls this from ONE withSharedRehearsalTurn work callback. This function
 // never acquires/releases a turn, spawns a probe, reads credentials, promotes,
 // or dispatches a release independently. Root supplies same-turn implementations.
-export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,currentRemoteTestPin,expectedContractHash,marker,review,callbacks,compilePlan=compileFullRehearsal}){
+export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,currentRemoteTestPin,expectedContractHash,marker,review,callbacks,compilePlan=compileFullRehearsal,installNumber=1}){
+ requireThat([1,2].includes(installNumber)&&typeof marker==='string'&&marker.startsWith('hr_install'+installNumber+'_')
+  &&markerPattern.test(marker),'REHEARSAL_INSTALL_IDENTITY_REFUSED');
+ const version=installNumber===2?INSTALL2_REHEARSAL_VERSION:REHEARSAL_VERSION;
+ const phasePrefix='install'+installNumber;
+ const assertGate=installNumber===2?assertFreshInstall2NativeGate:assertFreshNativeGate;
  assertTurnIdentity(turn?.identity);
  requireThat(turn.signal&&!turn.signal.aborted&&typeof turn.assertHeld==='function','REHEARSAL_OWNED_TURN_REQUIRED');
  for(const name of ['freshGate','before','executeSameSession','freshAfter','recordReceipt','publishManaged'])requireThat(typeof callbacks?.[name]==='function','REHEARSAL_ROOT_CALLBACK_REQUIRED');
  let bindingHash;
  const gate=async phase=>{await turn.assertHeld(phase);if(turn.signal.aborted)throw turn.signal.reason;
-  const value=assertFreshNativeGate(await callbacks.freshGate(phase),{candidatePin,currentRemoteTestPin,expectedContractHash});
+  const value=assertGate(await callbacks.freshGate(phase),{candidatePin,currentRemoteTestPin,expectedContractHash});
   if(bindingHash)requireThat(value.sourceBindingSha256===bindingHash,'REHEARSAL_RELEASE_SOURCE_BINDING_DRIFT');
   else bindingHash=value.sourceBindingSha256;return value;};
- await gate('install1-before');
+ await gate(phasePrefix+'-before');
  const before=await callbacks.before({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
  requireThat(before.physicalDatabase==='cloudtms_test_clone'&&before.identityTest===true&&before.customerKeyNull===true&&before.module==='LEGACY:1'
   &&before.applyingCount===0&&Number.isSafeInteger(before.otherActivityCount)&&before.otherActivityCount>=0
   &&(before.otherActivityCount===0||before.observeLiveBusiness===true)&&before.markerAbsent===true,'REHEARSAL_BEFORE_REFUSED');
  const plan=compilePlan({candidatePin,currentRemoteTestPin,expectedContractHash,contractDigest:before.contractDigest,installed:before.installed,review,marker,observeLiveBusiness:before.observeLiveBusiness===true});
+ requireThat(plan.version===version,'REHEARSAL_COMPILED_INSTALL_IDENTITY_REFUSED');
  requireThat(plan.sourceBinding?.sha256===bindingHash,'REHEARSAL_COMPILED_SOURCE_BINDING_DRIFT');
- await gate('install1-full');
+ await gate(phasePrefix+'-full');
  let execution,executionFailure,restoration;
  try{
   execution=await callbacks.executeSameSession({sql:plan.sql,lineMap:plan.lineMap,sqlHash:plan.sqlHash,turn,marker,
@@ -361,13 +371,13 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
   requireThat(execution.installedContract?.matched===true&&execution.installedContract.sha256===plan.expectedContractHash,
    'REHEARSAL_INSTALLED_CONTRACT_NOT_PROVED');
  }catch(error){executionFailure=error;}
- await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:executionFailure?'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED':execution.errors.length
+ await callbacks.recordReceipt({version,status:executionFailure?'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED':execution.errors.length
   ?'SQL_ERRORS_FINISHED_RESTORATION_UNVERIFIED':'SQL_PASS_FINISHED_RESTORATION_UNVERIFIED',candidatePin,currentRemoteTestPin,
   sqlHash:plan.sqlHash,execution:execution??null,executionFailure:executionFailure
    ?(/^REHEARSAL_[A-Z_]+$/.test(executionFailure.message)?executionFailure.message:'EXECUTION_ADAPTER_FAILED'):null,
   restorationProved:false,turnId:turn.identity.turnId});
  // Even a failed SQL pass requires fresh rollback evidence, under the held turn.
- await turn.assertHeld('install1-fresh');
+ await turn.assertHeld(phasePrefix+'-fresh');
  const after=await callbacks.freshAfter({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
  try{
   // Admitting existing background activity before the rehearsal requires its
@@ -376,23 +386,23 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
   requireThat(before.observeLiveBusiness!==true||after.liveRestoration!==undefined,'REHEARSAL_LIVE_RESTORATION_REQUIRED');
   restoration=assertFreshRestoration(before,after,marker);
  }catch(error){
-  await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:'RESTORATION_FAILED_HOLD_INSTALL',candidatePin,currentRemoteTestPin,
+  await callbacks.recordReceipt({version,status:'RESTORATION_FAILED_HOLD_INSTALL',candidatePin,currentRemoteTestPin,
    sqlHash:plan.sqlHash,execution:execution??null,restorationProved:false,turnId:turn.identity.turnId});throw error;
  }
- await callbacks.recordReceipt({version:REHEARSAL_VERSION,status:executionFailure?'EXECUTION_INCOMPLETE_HOLD_INSTALL':execution.errors.length
+ await callbacks.recordReceipt({version,status:executionFailure?'EXECUTION_INCOMPLETE_HOLD_INSTALL':execution.errors.length
   ?'FULL_ERRORS_ROLLBACK_PROVED_HOLD_INSTALL':'FULL_CLEAN_ROLLBACK_PROVED',candidatePin,currentRemoteTestPin,sqlHash:plan.sqlHash,
   execution:execution??null,restoration,turnId:turn.identity.turnId});
  if(executionFailure)throw executionFailure;
  requireThat(execution.errors.length===0,'REHEARSAL_FULL_ERRORS_HOLD_INSTALL');
- const receipt={version:REHEARSAL_VERSION,status:'FULL_CLEAN_ROLLBACK_PROVED',candidatePin,currentRemoteTestPin,sqlHash:plan.sqlHash,
+ const receipt={version,status:'FULL_CLEAN_ROLLBACK_PROVED',candidatePin,currentRemoteTestPin,sqlHash:plan.sqlHash,
   beforeFingerprints:Object.fromEntries(['ledgerFingerprint','catalogueFingerprint','businessCountsFingerprint','businessRowsFingerprint'].map(k=>[k,before[k]])),
   restoration,counts:plan.currentCounts,pending:plan.pendingCounts,exclusions:plan.exclusions,errors:[],turnId:turn.identity.turnId};
  receipt.sourceBinding=plan.sourceBinding;receipt.installedContract=execution.installedContract;
- await gate('install1-before-managed-release');
+ await gate(phasePrefix+'-before-managed-release');
  // The root callback must use turn.runManagedRelease / canonical npm release:test,
  // and retain this turn through database wait and ordered runtime publication.
  const publication=await callbacks.publishManaged({turn,receipt,candidatePin,currentRemoteTestPin});
- await turn.assertHeld('install1-after-managed-release');
+ await turn.assertHeld(phasePrefix+'-after-managed-release');
  return {receipt,publication};
 }
 
@@ -445,10 +455,11 @@ export async function executePsqlWithinOwnedTurn({turn,psqlPath,env,sql,lineMap,
   ...observeLiveBusiness?{transaction,fixtureObservations,fixtureObservationUnits,fixtureCaptureFailure}:{} };
 }
 export const identityProbeSql=marker=>{
- requireThat(/^hr_install1_[a-f0-9]{32}$/.test(marker??''),'REHEARSAL_MARKER_REFUSED');
+ requireThat(markerPattern.test(marker??''),'REHEARSAL_MARKER_REFUSED');
  return `select jsonb_build_object('physicalDatabase',current_database(),'identityTest',exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST' and customer_key is null),
  'customerKeyNull',exists(select 1 from private.cloudtms_database_identity where singleton and customer_key is null),
- 'latestRelease',(select jsonb_build_object('status',status,'commit',git_commit) from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1),
+ 'latestRelease',(select jsonb_build_object('status',status,'commit',git_commit,'releaseId',release_id,'completedAt',completed_at_utc,
+  'repositoryContract',repository_contract_sha256,'installedContract',installed_contract_sha256) from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1),
  'module',(select active_owner||':'||owner_epoch::text from private.bpay_next_module_control where id=1),
  'applyingCount',(select count(*) from private.cloudtms_database_releases where status='APPLYING'),'markerAbsent',to_regclass(${literal('private.'+marker)}) is null)::text;`;
 };
