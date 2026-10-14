@@ -1,0 +1,7 @@
+# FIN4 record-field source checkpoint
+
+The complete four-argument FIN4 definition now uses the loop's actual `current_snapshot_id` and `prior_snapshot_id` fields in the NO_CHANGE rebill branch. One reversible hunk changes four accesses; the returned transition/revision call and every other byte of the complete definition remain unchanged.
+
+Reviewed input: `74a9c10f7370cd3641ee95d31f6702ecadd900a7`. Published source packet: `6606b5c2617b0e8af7c07d33ac48bbb60ec6e32d`. The new contained `14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql` installs the exact reviewed `762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62` body, with the existing logical-owner adaptation and immediate private revocation from public, anon, authenticated and service_role. There are no new signatures or grants. The earlier 0541 definition and immutable proposal artifacts are retained.
+
+Source checks passed: 13 exact saved/staged source pins, six source vectors, exact mounted-forward equality, three inert proposal syntax checks, atomic packaging (two files/four statements), database source integrity (399 migrations/1059 repeatables), tracked credential scan (9039 files), and raw staged whitespace. These checks neither compile nor execute SQL. Native NO_CHANGE/rekey/rebill proof, final verifier/body coupling, catalogue/contract sealing and qualification remain held. Larger kept-as-paid work must use this corrected current owner as its before-input.

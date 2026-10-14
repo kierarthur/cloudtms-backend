@@ -1,0 +1,99 @@
+{
+  "sourceOnly": true,
+  "inputCommit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "publication": "6606b5c2617b0e8af7c07d33ac48bbb60ec6e32d",
+  "status": "FIN4_RECORD_FIELD_SOURCE_FIX_NATIVE_AND_FINAL_COUPLING_HELD",
+  "rootFile": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+  "leaf": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+  "wholeCurrentReversibleHunks": 1,
+  "changedRecordAccesses": 4,
+  "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+  "signatureDelta": 0,
+  "serviceOrBrowserGrantDelta": 0,
+  "priorOwnerFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+  "priorOwnerSha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+  "mountedOwnerSha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+  "compiledContract": null,
+  "nativeCalls": 0,
+  "finalVerifierCatalogueAndQualification": "HOLD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/COMPLETE_CURRENT_OWNER_AND_REVERSE.json",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/COMPLETE_CURRENT_OWNER_AND_REVERSE.json",
+      "sha256": "9eee4549d8bb0781dfcf0d049ef33cea5df8b0531456deafd46ec902f9f22f24",
+      "bytes": 2345
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/REVIEW_AND_MOUNT.md",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/REVIEW_AND_MOUNT.md",
+      "sha256": "8a35141bdd61f4097090eaba4a65ba945ee72cd8d915cd75d019722450cd34a9",
+      "bytes": 1781
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "95316ae303d30fb58daad1e585d9ce01ccfdd493ffda8b47bc4b391b7ac27d2f",
+      "bytes": 414
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/before/06_complete_fin4_lock_observation.sqlinc",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/before/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "bytes": 109868
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/build-and-freeze.mjs",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/build-and-freeze.mjs",
+      "sha256": "1398bae4b24feca7ecb512646ac9993ab837da4dc6908c85307345a44dfd6adb",
+      "bytes": 4127
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/compose-fin4.mjs",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/compose-fin4.mjs",
+      "sha256": "c38c600f5e9c7ec292735f7f0c0a4f6e9ed2160834133192fb3202125203baae",
+      "bytes": 2513
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/forward/06_complete_fin4_lock_observation.sqlinc",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/forward/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+      "bytes": 109850
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/record-fields-source.test.mjs",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/record-fields-source.test.mjs",
+      "sha256": "c8b7dabeba03993250796a7a7f462a44e5fb352707623cdcc642d58b9162780b",
+      "bytes": 1871
+    },
+    {
+      "file": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/FROZEN_ARTIFACT_MANIFEST.json",
+      "sha256": "b1e1435eee929c3a8c256ffcd785485463416c1ac6a73b72369fe61f653b5a03",
+      "bytes": 1650
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_FIN4_REBILL_RECORD_FIELDS_MOUNT_RECIPE_14102026.json",
+      "sourceFile": "docs/healthroster-build/MONEY_FIN4_REBILL_RECORD_FIELDS_MOUNT_RECIPE_14102026.json",
+      "sha256": "7d5f14409d5aecdc7ab3e76bbedaba1162634955c4d9c3c02b27663eb2867b38",
+      "bytes": 2724
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_FIN4_REBILL_RECORD_FIELDS_HANDBACK_14102026.md",
+      "sourceFile": "docs/healthroster-build/MONEY_FIN4_REBILL_RECORD_FIELDS_HANDBACK_14102026.md",
+      "sha256": "c2cec6f8f367ccba102b3a01bc67f4bef071e56d3891a730a74e0a80e03fed1a",
+      "bytes": 1688
+    },
+    {
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "sourceFile": "docs/healthroster-build/proposals/fin4-rebill-record-fields-successor-20261014/forward/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+      "bytes": 109850
+    },
+    {
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+      "sourceFile": "ROOT_ATOMIC_PRIVATE_WRAPPER",
+      "sha256": "58af5fef09190f8343397013dc931521ea060579f0ad2be5c7ecf415f9ea6787",
+      "bytes": 514
+    }
+  ]
+}

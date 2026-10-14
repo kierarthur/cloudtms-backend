@@ -1,0 +1,82 @@
+{
+  "sourceOnly": true,
+  "status": "FIN4_RECORD_FIELDS_SOURCE_PASS_NATIVE_AND_FINAL_COUPLING_HELD",
+  "sourcePins": 13,
+  "rootFile": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+  "closureFiles": 2,
+  "closureSha256": "155061e4626109906dd53899834dd180afa82f04610cc0f3317a34d008516acb",
+  "atomicPackaging": true,
+  "atomicStatements": 4,
+  "atomicBodySha256": "251b1dc12d35bc682d5a6db88b918252cc7d72c078270d1b2aa4285190e6aad8",
+  "steps": [
+    {
+      "name": "six-reviewed-source-vectors",
+      "exitCode": 0,
+      "outputSha256": "57525f230c702c215e447e28a5a7063f9cdf87aa694a4f7bc36ee7a3241d0114",
+      "summary": [
+        "# tests 6",
+        "# pass 6",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0"
+      ],
+      "failures": []
+    },
+    {
+      "name": "mounted-owner-equals-reviewed-forward",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    },
+    {
+      "name": "inert-syntax-build-and-freeze.mjs",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    },
+    {
+      "name": "inert-syntax-compose-fin4.mjs",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    },
+    {
+      "name": "inert-syntax-record-fields-source.test.mjs",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    },
+    {
+      "name": "database-source-integrity",
+      "exitCode": 0,
+      "outputSha256": "1c9381913ad7748d77697533489f0d9f45a224726870e5727a135b793c22c68f",
+      "summary": [
+        "Database source integrity passed: 399 migrations, 1059 repeatables."
+      ],
+      "failures": []
+    },
+    {
+      "name": "tracked-credential-scan",
+      "exitCode": 0,
+      "outputSha256": "6b2f9c87f98ac53e1f416b3513e223b7620caf06f6f34ef8643a0adad67234e8",
+      "summary": [
+        "Tracked source credential scan: PASS (9039 files)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "staged-whitespace",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    }
+  ],
+  "nativeCalls": 0,
+  "compiledContract": null
+}

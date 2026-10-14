@@ -1,0 +1,49 @@
+{
+  "schema_version": "FIN4_REBILL_RECORD_FIELDS_FROZEN_SOURCE_V1",
+  "source_only": true,
+  "input_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "artifact_count": 8,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_OWNER_AND_REVERSE.json",
+      "bytes": 2345,
+      "sha256": "9eee4549d8bb0781dfcf0d049ef33cea5df8b0531456deafd46ec902f9f22f24"
+    },
+    {
+      "file": "REVIEW_AND_MOUNT.md",
+      "bytes": 1781,
+      "sha256": "8a35141bdd61f4097090eaba4a65ba945ee72cd8d915cd75d019722450cd34a9"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 414,
+      "sha256": "95316ae303d30fb58daad1e585d9ce01ccfdd493ffda8b47bc4b391b7ac27d2f"
+    },
+    {
+      "file": "before/06_complete_fin4_lock_observation.sqlinc",
+      "bytes": 109868,
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+    },
+    {
+      "file": "build-and-freeze.mjs",
+      "bytes": 4127,
+      "sha256": "1398bae4b24feca7ecb512646ac9993ab837da4dc6908c85307345a44dfd6adb"
+    },
+    {
+      "file": "compose-fin4.mjs",
+      "bytes": 2513,
+      "sha256": "c38c600f5e9c7ec292735f7f0c0a4f6e9ed2160834133192fb3202125203baae"
+    },
+    {
+      "file": "forward/06_complete_fin4_lock_observation.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    },
+    {
+      "file": "record-fields-source.test.mjs",
+      "bytes": 1871,
+      "sha256": "c8b7dabeba03993250796a7a7f462a44e5fb352707623cdcc642d58b9162780b"
+    }
+  ],
+  "review_scope": "Four wrong record-field accesses only; current complete FIN4 preserved; no native or qualification claim."
+}

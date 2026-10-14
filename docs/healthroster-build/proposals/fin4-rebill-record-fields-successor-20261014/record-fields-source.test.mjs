@@ -1,0 +1,9 @@
+import fs from 'node:fs';import path from 'node:path';import test from 'node:test';import assert from 'node:assert/strict';import {fileURLToPath} from 'node:url';
+import {composeFin4} from './compose-fin4.mjs';
+const out=path.dirname(fileURLToPath(import.meta.url)),input=fs.readFileSync(path.join(out,'before','06_complete_fin4_lock_observation.sqlinc'));
+test('current full owner has one reversible branch and four exact replacements',()=>{const r=composeFin4(input);assert.equal(r.forward.toString('utf8').replace(r.after,r.before),input.toString('utf8'));assert.deepEqual(r.replace_counts,{new_snapshot_line_id:2,previous_snapshot_line_id:2});});
+test('complete loop record and branch use only actual selected fields',()=>{assert.deepEqual(composeFin4(input).record_fields,['current_snapshot_id','prior_snapshot_id','work_event_id']);});
+test('original absent-field source counterexample remains in preserved before',()=>{assert.ok(input.includes(Buffer.from('v_transition.new_snapshot_line_id')));assert.ok(!composeFin4(input).forward.includes(Buffer.from('v_transition.new_snapshot_line_id')));});
+test('different loop SELECT field refuses source composition',()=>{assert.throws(()=>composeFin4(input.toString('utf8').replace('prior_lines.id as prior_snapshot_id,current_lines.id as current_snapshot_id','prior_lines.id as wrong_prior,current_lines.id as wrong_current')));});
+test('changed returned transition/revision call refuses composition',()=>{assert.throws(()=>composeFin4(input.toString('utf8').replace('weekly_source_rebill_movement_insert_v1(v_transition_id,v_revision_id)','weekly_source_rebill_movement_insert_v1(null,null)')));});
+test('duplicate branch refuses ambiguous full owner replacement',()=>{const text=input.toString('utf8'),line=text.match(/^.*v_transition\.new_snapshot_line_id.*$/gm)[0];assert.throws(()=>composeFin4(text+'\n'+line));});

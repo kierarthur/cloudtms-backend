@@ -1,0 +1,12 @@
+{
+  "source_only": true,
+  "input_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+  "forward_sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+  "pure_source_tests": 6,
+  "inert_syntax_checks": 2,
+  "unique_full_hunks": 1,
+  "whole_file_reverse": true,
+  "record_select_branch_field_consistency": true,
+  "native_execution": false,
+  "sql_compiled": false
+}
