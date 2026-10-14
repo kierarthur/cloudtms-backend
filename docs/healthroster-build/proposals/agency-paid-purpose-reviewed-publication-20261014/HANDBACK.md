@@ -1,0 +1,7 @@
+# Reviewed Agency paid-purpose source backup
+
+This backup contains only two immutable reviewed packets: paid-purpose67 (3be7476fe2b274ed9ac42cdcc3c9d8ee071ef8181a4b45336fa2715f36394e81) and scalar/removal-hold10 (31b3718ffc7eb4f32e1a6597c8a8c506d98a5cf452a3be2c36680e2089758790), plus these two adjacent records. It preserves unrelated untracked construction and every prior freeze. Independent source critique accepted the selected economic identity/admission/frame and E7/E25/E26 deltas, then closed the scalar decoder and initial same-D1 removal-hold contradictions.
+
+The selected final module is b0666380b031bf83c843bb9cb45e92440b962ca6250ed4b10a17fd7085cd18e7; native begin is d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9. Six existing native owner files still match their pinned saved source. All 77 frozen files match their manifests; 54+20 tests are effect-free UNIT_ONLY cases. No compilation, database/native/runtime or release action occurred.
+
+The checkpoint is a partial source composition. Joint Source38/A0 admission, protection actions/NX-AI-6, whole-week facts/typed same-store validation, complete AUTHORISE/validation/RETURN, public action and Office Original consumers remain engineering work. A source acceptance cannot clear those gates. Source seal and native qualification remain null. The current PPv2 14102026_0044 workspace owner is later than Report1344; individual older page checks do not establish the controlling final workspace composition.

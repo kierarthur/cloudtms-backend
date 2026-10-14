@@ -1,0 +1,102 @@
+create or replace function private.bpay_next_assert_candidate_financial_fence_v1(
+ p_candidate_id uuid,p_job_id uuid,p_lease_nonce uuid,p_owner_epoch bigint)
+returns void language plpgsql security invoker set search_path=pg_catalog,private
+as $function$
+declare
+ v_module_epoch bigint;
+ v_control private.bpay_next_worker_control%rowtype;
+ v_fence private.bpay_next_candidate_week_commit_fence%rowtype;
+ v_job private.bpay_next_job%rowtype;
+ v_command private.bpay_next_command%rowtype;
+ v_request private.bpay_next_paye_net_request%rowtype;
+ v_worker private.bpay_next_run_worker%rowtype;
+ v_state private.bpay_next_case_allocation_state%rowtype;
+ v_draft private.bpay_next_case_allocation_state%rowtype;
+ v_rep private.bpay_next_net_replacement%rowtype;v_delegate private.bpay_next_job%rowtype;
+ v_handoff private.bpay_next_net_cancel_handoff%rowtype;
+begin
+ if p_candidate_id is null then
+  raise exception using errcode='22023',message='BPAY_NEXT_CANDIDATE_FINANCIAL_FENCE_INPUT_INVALID';end if;
+ select m.owner_epoch into v_module_epoch from private.bpay_next_module_control m
+  where m.id=1 and m.active_owner='NEXT' for share nowait;
+ if v_module_epoch is null then raise exception using errcode='55000',message='BPAY_NEXT_MODULE_NOT_ACTIVE';end if;
+ select c.* into strict v_control from private.bpay_next_worker_control c
+  where c.candidate_id=p_candidate_id for update nowait;
+ select f.* into v_fence from private.bpay_next_candidate_week_commit_fence f
+  where f.candidate_id=p_candidate_id and f.stage in ('STAGING','COMMITTING','CANCEL_REQUESTED','CANCELLING') for update nowait;
+ if not found then return;end if;
+ -- Candidate serialization also fences the native owner and exact state reads.
+ select j.* into v_job from private.bpay_next_job j where j.id=v_fence.original_job_id;
+ select c.* into v_command from private.bpay_next_command c where c.id=v_fence.command_id;
+ select r.* into v_request from private.bpay_next_paye_net_request r where r.command_id=v_fence.command_id;
+ select w.* into v_worker from private.bpay_next_run_worker w where w.id=v_fence.run_worker_id;
+ select s.* into v_state from private.bpay_next_case_allocation_state s where s.id=v_fence.allocation_state_id;
+ select d.* into v_draft from private.bpay_next_case_allocation_state d where d.id=v_request.case_draft_state_id;
+ if v_job.id is null or v_command.id is null or v_request.command_id is null or v_worker.id is null or v_state.id is null
+  or v_job.candidate_id is distinct from p_candidate_id or v_job.command_id is distinct from v_fence.command_id
+  or v_job.module_epoch is distinct from v_fence.module_epoch
+  or v_command.module_epoch is distinct from v_fence.module_epoch
+  or v_job.command_sequence is distinct from v_command.agency_sequence
+  or v_command.command_kind is distinct from 'PAYE_NET_ENTRY' or v_job.job_kind is distinct from 'PAYE_NET_ENTRY'
+  or v_request.candidate_id is distinct from p_candidate_id or v_request.run_worker_id is distinct from v_fence.run_worker_id
+  or v_worker.candidate_id is distinct from p_candidate_id
+  or v_state.pass_kind is distinct from 'NET' or v_state.command_id is distinct from v_fence.command_id
+  or v_state.job_id is distinct from v_fence.original_job_id or v_state.module_epoch is distinct from v_fence.module_epoch
+  or v_state.run_worker_id is distinct from v_fence.run_worker_id or v_state.candidate_id is distinct from p_candidate_id
+  or v_state.run_id is distinct from v_worker.run_id or v_state.pay_week_start is distinct from v_fence.pay_week_start
+  or v_state.projection_no is distinct from v_request.request_no
+  or v_state.preparation_revision is distinct from v_request.preparation_revision
+  or v_state.selection_revision is distinct from v_request.selection_revision
+  or v_worker.captured_preparation_revision is distinct from v_request.preparation_revision
+  or v_worker.case_selection_revision is distinct from v_request.selection_revision
+  or v_draft.id is null or v_draft.pass_kind is distinct from 'DRAFT'
+  or v_draft.run_worker_id is distinct from v_fence.run_worker_id or v_draft.run_id is distinct from v_worker.run_id
+  or v_draft.candidate_id is distinct from p_candidate_id
+  or v_draft.preparation_revision is distinct from v_request.preparation_revision
+  or v_draft.selection_revision is distinct from v_request.selection_revision
+  or v_draft.pay_week_start is distinct from v_fence.pay_week_start
+  or not exists(select 1 from private.bpay_next_command_member m where m.command_id=v_fence.command_id and m.candidate_id=p_candidate_id) then
+  raise exception using errcode='23514',message='BPAY_NEXT_CANDIDATE_FINANCIAL_FENCE_IDENTITY_INVALID';end if;
+ select dr37_point_76.* into v_rep from private.bpay_next_net_replacement dr37_point_76 where id=v_fence.replacement_id;
+ if v_rep.id is null or (v_rep.id,v_rep.original_job_id,v_rep.target_state_id,v_rep.candidate_id,v_rep.run_worker_id,v_rep.module_epoch,v_rep.pay_week_start)
+  is distinct from (v_fence.command_id,v_fence.original_job_id,v_fence.allocation_state_id,v_fence.candidate_id,v_fence.run_worker_id,v_fence.module_epoch,v_fence.pay_week_start)
+  or v_worker.net_replacement_pending_id is distinct from v_rep.id then
+  raise exception using errcode='23514',message='BPAY_NEXT_CANDIDATE_FINANCIAL_FENCE_REPLACEMENT_INVALID';end if;
+ -- A later genuine cancellation owns a new lease only after original NET DONE.
+ if v_rep.stage='CANCELLED' and v_fence.stage='CANCELLING' and p_job_id is distinct from v_fence.original_job_id then
+  select dr37_point_77.* into v_handoff from private.bpay_next_net_cancel_handoff dr37_point_77 where replacement_id=v_rep.id;
+  select dr37_point_78.* into v_delegate from private.bpay_next_job dr37_point_78 where id=p_job_id;
+  if v_handoff.replacement_id=v_rep.id and v_handoff.cancel_command_id=v_rep.cancel_command_id
+   and v_handoff.original_job_id=v_job.id and v_handoff.target_state_id=v_state.id
+   and (v_handoff.prior_state_id,v_handoff.prior_projection_id,v_handoff.target_projection_id)
+    is not distinct from (v_rep.prior_state_id,v_rep.prior_projection_id,v_rep.accepted_projection_id)
+   and v_handoff.expected_instruction_count=v_handoff.cleaned_instruction_count
+   and v_handoff.expected_hold_count=v_handoff.released_hold_count
+   and v_handoff.expected_source_total=v_handoff.released_source_total
+   and v_state.status='CANCELLED' and v_state.net_stage='CANCELLED' and v_job.status='DONE' and v_job.phase='DONE'
+   and v_fence.module_epoch=v_module_epoch and v_delegate.command_id=v_rep.cancel_command_id
+   and v_delegate.job_kind='SIMPLE_CANCEL' and v_delegate.candidate_id=p_candidate_id and v_delegate.module_epoch=v_module_epoch
+   and v_delegate.command_sequence>v_job.command_sequence and v_delegate.status='LEASED' and v_delegate.phase='RELEASE'
+   and p_lease_nonce is not null and v_delegate.lease_nonce=p_lease_nonce and p_owner_epoch is not null
+   and v_delegate.owner_epoch=p_owner_epoch and v_control.active_owner_epoch=p_owner_epoch
+   and v_delegate.lease_until_utc>pg_catalog.clock_timestamp()
+   and exists(select 1 from private.bpay_next_command c where c.id=v_delegate.command_id and c.command_kind='SIMPLE_CANCEL'
+    and c.module_epoch=v_module_epoch and c.agency_sequence=v_delegate.command_sequence)
+   and exists(select 1 from private.bpay_next_cancel_request q where q.command_id=v_delegate.command_id
+    and q.run_worker_id=v_rep.run_worker_id and q.candidate_id=p_candidate_id and q.status in ('REQUESTED','CANCELLING','CANCELLED'))
+   and not exists(select 1 from private.bpay_next_job j where j.candidate_id=p_candidate_id
+    and j.command_sequence<v_delegate.command_sequence and j.status<>'DONE') then return;end if;
+ end if;
+ -- Module identity and lease ownership are different clocks. State's carried
+ -- lease epoch is refreshed by the original NET owner after fresh admission.
+ if v_fence.module_epoch=v_module_epoch and p_job_id=v_fence.original_job_id
+  and p_lease_nonce is not null and p_owner_epoch is not null
+  and v_job.status='LEASED' and v_job.phase='FINANCE_ALLOCATE'
+  and v_job.lease_nonce=p_lease_nonce and v_job.owner_epoch=p_owner_epoch
+  and v_control.active_owner_epoch=p_owner_epoch and v_job.lease_until_utc>pg_catalog.clock_timestamp() then
+  return;end if;
+ raise exception using errcode='55P03',message='BPAY_NEXT_CANDIDATE_FINANCIAL_FENCE_BUSY';
+exception when lock_not_available then
+ raise exception using errcode='55P03',message='BPAY_NEXT_CANDIDATE_FINANCIAL_FENCE_BUSY';
+end
+$function$;

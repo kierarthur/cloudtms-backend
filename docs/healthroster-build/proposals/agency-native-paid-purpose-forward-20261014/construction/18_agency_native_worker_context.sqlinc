@@ -1,0 +1,108 @@
+-- Finite service-only canonical Worker input. No Office/browser read projection,
+-- caller phase/actor/schedule selector, calculation or mutation-in-read.
+create or replace function public.weekly_source_agency_change_worker_targets_v1(p_timesheet_ids uuid[])
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_timesheet_ids is null or cardinality(p_timesheet_ids) not between 1 and 100
+  or array_position(p_timesheet_ids,null::uuid) is not null
+  or (select count(distinct id) from unnest(p_timesheet_ids) id)<>cardinality(p_timesheet_ids) then
+  raise exception 'AGENCY_CHANGE_WORKER_TARGETS_INVALID' using errcode='22023'; end if;
+ select coalesce(jsonb_agg(jsonb_build_object('request_id',r.id,'timesheet_id',r.current_timesheet_id,
+   'phase',r.phase,'outbox_id',r.outbox_id) order by r.current_timesheet_id),'[]'::jsonb) into result
+ from private.weekly_source_agency_timesheet_change_requests r
+ where r.state='ACTIVE' and r.current_timesheet_id=any(p_timesheet_ids);
+ if jsonb_array_length(result)>100 or octet_length(result::text)>65536 then
+  raise exception 'AGENCY_CHANGE_WORKER_TARGETS_BOUND_EXCEEDED' using errcode='54000'; end if;
+ return result;
+end;
+$function$;
+alter function public.weekly_source_agency_change_worker_targets_v1(uuid[]) owner to postgres;
+revoke all on function public.weekly_source_agency_change_worker_targets_v1(uuid[]) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_change_worker_targets_v1(uuid[]) to service_role;
+
+create or replace function private.weekly_source_agency_change_worker_context_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+ q public.ts_financials_outbox%rowtype; context jsonb; weekly jsonb; frame jsonb; claim jsonb;
+ validation jsonb; shifts jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,
+   r.initial_row_signature,r.request_key,r.updated_by_user_id);
+ if r.state<>'ACTIVE' or r.phase not in('UNAUTHORISED','RECOMPUTE_PENDING') then
+  raise exception 'AGENCY_CHANGE_WORKER_PHASE_NOT_READY' using errcode='55000'; end if;
+ select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+ select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current;
+ if t.version is distinct from r.current_timesheet_version or f.id is distinct from r.current_financial_id
+  or f.timesheet_version is distinct from t.version or f.locked_by_invoice_id is not null
+  or t.authorised_at_server is not null or exists(select 1 from public.invoice_lines where timesheet_id=t.timesheet_id) then
+  raise exception 'AGENCY_CHANGE_WORKER_CURRENT_TARGET_CHANGED' using errcode='40001'; end if;
+ claim:=private.weekly_source_agency_original_claim_recheck_v1(r.id);
+ if claim->>'available' is distinct from 'true' then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_UNAVAILABLE' using errcode='55000'; end if;
+ if r.phase='RECOMPUTE_PENDING' then
+  select * into strict q from public.ts_financials_outbox where id=r.outbox_id;
+  if q.timesheet_id is distinct from t.timesheet_id or q.reason is distinct from r.outbox_reason
+   or r.outbox_reason is distinct from 'MANUAL'::public.ts_fin_reason_enum
+   or q.attempt_count<1 or q.next_attempt_at is null or q.next_attempt_at<=transaction_timestamp() then
+   raise exception 'AGENCY_CHANGE_NATIVE_OUTBOX_CHANGED' using errcode='40001'; end if;
+ end if;
+ select to_jsonb(x) into strict context from public.tsfin_load_context_batch(array[t.timesheet_id]) x
+  where x.effective_timesheet_id=t.timesheet_id;
+ select to_jsonb(x) into strict weekly from public.tsfin_load_weekly_context_batch(array[t.timesheet_id]) x
+  where x.timesheet_id=t.timesheet_id;
+ if (select count(*) from public.timesheet_validations where timesheet_id=t.timesheet_id)>1 then
+  raise exception 'AGENCY_CHANGE_NATIVE_VALIDATION_AMBIGUOUS' using errcode='55000'; end if;
+ select jsonb_build_object('timesheet_id',v.timesheet_id,'status',v.status,'reason_code',v.reason_code,
+   'validated_at_utc',v.validated_at_utc,'updated_at',v.updated_at) into validation
+ from public.timesheet_validations v where v.timesheet_id=t.timesheet_id;
+ select x.shifts into strict shifts from public.tsfin_load_nhsp_shifts_batch(array[t.timesheet_id]) x
+  where x.timesheet_id=t.timesheet_id;
+ if jsonb_typeof(shifts) is distinct from 'array' or jsonb_array_length(shifts)>100 then
+  raise exception 'AGENCY_CHANGE_NATIVE_CALCULATOR_CONTEXT_BOUND_EXCEEDED' using errcode='54000'; end if;
+ if context#>>'{out_timesheet,timesheet_id}' is distinct from t.timesheet_id::text
+  or context#>>'{out_cur_fin,id}' is distinct from f.id::text
+  or context#>>'{out_candidate,id}' is distinct from r.candidate_id::text
+  or context->>'out_client_id' is distinct from r.client_id::text
+  or weekly#>>'{out_cw,id}' is distinct from r.contract_week_id::text
+  or weekly#>>'{out_contract,id}' is distinct from r.contract_id::text
+  or weekly#>>'{out_contract,candidate_id}' is distinct from r.candidate_id::text
+  or weekly#>>'{out_contract,client_id}' is distinct from r.client_id::text then
+  raise exception 'AGENCY_CHANGE_NATIVE_CALCULATOR_CONTEXT_UNAVAILABLE' using errcode='55000'; end if;
+ frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_CANONICAL_WORKER_CONTEXT_V1',
+   'request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),'request_version',r.version,
+   'phase',r.phase,'phase_actor_user_id',r.updated_by_user_id,'current_row_signature',r.current_row_signature,
+   'source_cas',r.source_cas,'source_schedule',r.native_receipts#>'{original_capture,schedule}',
+   'outbox_id',r.outbox_id,'outbox_reason',r.outbox_reason,
+   'outbox_row',case when r.phase='RECOMPUTE_PENDING' then to_jsonb(q) else null::jsonb end,
+   'context',context,'weekly_context',weekly,'weekly_validation',validation,'nhsp_shifts',shifts);
+ if r.version>9007199254740991 or octet_length(frame::text)>2097152 then
+  raise exception 'AGENCY_CHANGE_WORKER_CONTEXT_BOUND_EXCEEDED' using errcode='54000'; end if;
+ return frame||jsonb_build_object('context_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+   'WEEKLY_SOURCE_AGENCY_CANONICAL_WORKER_CONTEXT_V1',frame),'hex'));
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NATIVE_CALCULATOR_CONTEXT_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_change_worker_context_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_change_worker_context_v1(uuid)
+ from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_agency_change_worker_context_v1(p_request_id uuid)
+returns jsonb language sql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+ select private.weekly_source_agency_change_worker_context_v1(p_request_id);
+$function$;
+alter function public.weekly_source_agency_change_worker_context_v1(uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_change_worker_context_v1(uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_change_worker_context_v1(uuid) to service_role;

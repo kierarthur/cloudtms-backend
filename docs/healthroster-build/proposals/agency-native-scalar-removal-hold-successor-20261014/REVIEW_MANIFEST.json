@@ -1,0 +1,56 @@
+{
+  "schema": "AGENCY_NATIVE_SCALAR_REMOVAL_HOLD_REVIEW_MANIFEST_V1",
+  "source_only": true,
+  "native": false,
+  "independent_review_pending": true,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null,
+  "predecessor_manifest_sha256": "3be7476fe2b274ed9ac42cdcc3c9d8ee071ef8181a4b45336fa2715f36394e81",
+  "entries": [
+    {
+      "path": "CURRENT_RUNTIME_IMPORT_CLOSURE.json",
+      "bytes": 67881,
+      "sha256": "f40093e7b82b9948a7b4d264bf6e1edd1f2ca7794223bcb0b5356fad76eefd57"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 734,
+      "sha256": "c465eb8f4cd5b9e0d540f42551677a2d8e33cf74e1d4277c98d0afd5185d7dd3"
+    },
+    {
+      "path": "SOURCE_DISPOSITION.md",
+      "bytes": 1887,
+      "sha256": "d180d239713c724d154baf4dfe8bd254b26c3ed055c3c48acc132000c1bcafac"
+    },
+    {
+      "path": "construction/33_complete_native_begin_with_after_una_purpose.sqlinc",
+      "bytes": 13272,
+      "sha256": "d85d0ad80ad3e7c75c996c6557040f9bfac9cd1a00eca28535627968d42abe33"
+    },
+    {
+      "path": "construction/41_agency_canonical_worker_scalar.mjs",
+      "bytes": 12545,
+      "sha256": "b0666380b031bf83c843bb9cb45e92440b962ca6250ed4b10a17fd7085cd18e7"
+    },
+    {
+      "path": "construction/42_complete_native_begin_with_actual_removal_hold.sqlinc",
+      "bytes": 13285,
+      "sha256": "d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9"
+    },
+    {
+      "path": "construction/SCALAR_AND_ACTUAL_REMOVAL_HOLD_FULL_REVERSE.json",
+      "bytes": 2475,
+      "sha256": "2c34aec7eae656abd1c51477ffd03bdd3702536c261dfe747b870fc3f8993386"
+    },
+    {
+      "path": "construction/agency-scalar-and-removal-hold.test.mjs",
+      "bytes": 4605,
+      "sha256": "d85475e949b5677e6fbd0f884e75eff9d76e4e02f1b9e847a0fdec4a975d5ac7"
+    },
+    {
+      "path": "construction/runtime/agency-canonical-worker.mjs",
+      "bytes": 12430,
+      "sha256": "76e514c2877b52eb00869ceeb96e7a5250ecea0a390317fb696c818bb983441e"
+    }
+  ]
+}

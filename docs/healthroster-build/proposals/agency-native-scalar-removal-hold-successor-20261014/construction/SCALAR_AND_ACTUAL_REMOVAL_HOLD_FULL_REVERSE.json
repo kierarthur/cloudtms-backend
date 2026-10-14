@@ -1,0 +1,42 @@
+{
+  "schema": "AGENCY_NATIVE_SCALAR_AND_ACTUAL_REMOVAL_HOLD_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "predecessor_manifest_sha256": "3be7476fe2b274ed9ac42cdcc3c9d8ee071ef8181a4b45336fa2715f36394e81",
+  "full_forward_files": [
+    {
+      "before_path": "runtime/agency-canonical-worker.mjs",
+      "after_path": "41_agency_canonical_worker_scalar.mjs",
+      "before_raw_sha256": "76e514c2877b52eb00869ceeb96e7a5250ecea0a390317fb696c818bb983441e",
+      "after_raw_sha256": "b0666380b031bf83c843bb9cb45e92440b962ca6250ed4b10a17fd7085cd18e7",
+      "hunks": [
+        {
+          "before": "    if(!DATE.test(s.date)||!DATE.test(s.end_date)||!TIME.test(s.start)||!TIME.test(s.end)",
+          "after": "    if(typeof s.date!=='string'||typeof s.end_date!=='string'||typeof s.start!=='string'||typeof s.end!=='string'\n      ||!DATE.test(s.date)||!DATE.test(s.end_date)||!TIME.test(s.start)||!TIME.test(s.end)",
+          "before_sha256": "b6a7359bec8e7890d574b226e17acdafcade9e85aa98db294d50d459f0371953",
+          "after_sha256": "7eb0087df5cf7619b117ef083a89843b0a61bb1ce12270ad92be6f8a2c235c65"
+        }
+      ]
+    },
+    {
+      "before_path": "33_complete_native_begin_with_after_una_purpose.sqlinc",
+      "after_path": "42_complete_native_begin_with_actual_removal_hold.sqlinc",
+      "before_raw_sha256": "d85d0ad80ad3e7c75c996c6557040f9bfac9cd1a00eca28535627968d42abe33",
+      "after_raw_sha256": "d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9",
+      "hunks": [
+        {
+          "before": "   capture->>'original_draft_invoice_id' is not null,(capture->>'current_financial_id')::uuid,",
+          "after": "   false,(capture->>'current_financial_id')::uuid,",
+          "before_sha256": "822b3455709de8039eb37c4726cc8e417aeaa98d020707bf8c120f29b433cde4",
+          "after_sha256": "567e43725aa6ceeb0aa8c52e81d09491aedb50b5ed6e90983d58e40df42e0346"
+        },
+        {
+          "before": "   update private.weekly_source_agency_timesheet_change_requests set phase='DRAFT_REMOVED',native_receipts=receipts,",
+          "after": "   update private.weekly_source_agency_timesheet_change_requests set phase='DRAFT_REMOVED',native_receipts=receipts,\n    return_hold=r.original_draft_invoice_id is not null,",
+          "before_sha256": "661bf64f3323839194b866e2fd0a45bef152a4d2a996a680d6692593f28a062a",
+          "after_sha256": "8cd97837e8ff6c1346621ddcbc3adc5e3819517dd9318de7c9d32931acd5428a"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1901 @@
+{
+  "schema": "AGENCY_CANONICAL_WORKER_CURRENT_STATIC_IMPORT_CLOSURE_V1",
+  "source_only": true,
+  "current_i2_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "entry": "broker/src/index.js",
+  "objects": 137,
+  "relative_edges": 219,
+  "database_calls": false,
+  "native_calls": false,
+  "installation_calls": false,
+  "classification": "LITERAL_STATIC_SOURCE_GRAPH_NOT_RUNTIME_OR_DYNAMIC_IMPORT_PROOF",
+  "files": [
+    {
+      "path": "broker/src/banking-pay-create-draft-headroom.js",
+      "raw_sha256": "b214645ea33df165a66e2c413c8e1099c626a44ba7b792d08d21b71837b1fac5",
+      "bytes": 3276,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay-draft-certified-v8.js",
+      "raw_sha256": "7673977ea63b4e0189e657ad1439b256bce8cc9d21d21d58990560c768fda6fa",
+      "bytes": 38447,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay-draft-insert-items.js",
+      "raw_sha256": "33fe591333d21b99bdef9b3f7a60da36ce63628524e2e928ab83646ace9f2b67",
+      "bytes": 4305,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay-modal-v2.js",
+      "raw_sha256": "547da9e281772719dd034383e75fead41e7eea4d77724a3d353785a0e3fc2aa8",
+      "bytes": 43366,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-authoring.mjs",
+      "raw_sha256": "67bff9ac76aa2b6ac71e0e4a34f921f10bd01293a9c2889e4c9997f76018777f",
+      "bytes": 12998,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-components.mjs",
+      "raw_sha256": "1c70ca14d9893096ae9a0ff04865bdb54dc7021cb1dc1418f46e8c0d9e185ca8",
+      "bytes": 14027,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-publication.mjs",
+      "raw_sha256": "2a9a1f6d06eed3637b1de2f11de3023e87cd3d71ab686a847fc616a0d405be7e",
+      "bytes": 14260,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./weekly-source-c1-authoring.mjs",
+          "target": "broker/src/banking-pay/weekly-source-c1-authoring.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-raw-rpc.mjs",
+      "raw_sha256": "fb6c9a55414821c6a17effeb1a5f2e0dfe2fa10c8743f72dfb050ed62e51eb8f",
+      "bytes": 7591,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-stream.mjs",
+      "raw_sha256": "45aacb4a33e17d9d8b41d80a225a7bae678e4098e95fd8f7cf19cf941b26f00c",
+      "bytes": 16357,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./weekly-source-c1-authoring.mjs",
+          "target": "broker/src/banking-pay/weekly-source-c1-authoring.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-busy.js",
+      "raw_sha256": "f9de3b1fd722ce592868fe5b13f65d01494c88d83d082fcd1bd214bc99c16932",
+      "bytes": 4751,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-background.js",
+      "raw_sha256": "7858985806b52d045ec88300946c47ebc2fa4b1da01c7e23b57e16dbbdde7edd",
+      "bytes": 10500,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-runtime-rpc.js",
+          "target": "broker/src/bpay-next-runtime-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-preparation-expiry-rpc.js",
+          "target": "broker/src/bpay-next-preparation-expiry-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-financial-queue.js",
+          "target": "broker/src/bpay-next-financial-queue.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-case-audit-contract.js",
+      "raw_sha256": "7bf3adeae214d26f435cb93cbbaf5c842f493214369e1ce30e9db949b92fd399",
+      "bytes": 10088,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-case-contract.js",
+      "raw_sha256": "de0e678903aade1dcd2043ef6f4e88d2e95971a7773e019051794dabd7fb03d6",
+      "bytes": 30005,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "raw_sha256": "a1ee88cfc37deab4e20fbd109d5f4bd70740b04bdea0004e6b505c3e3a383bab",
+      "bytes": 3686,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "raw_sha256": "7ccd7b32616382eeefbd043d66e1cfc5c3fbb7b2baba38aa40a748ec33597eda",
+      "bytes": 38098,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-case-contract.js",
+          "target": "broker/src/bpay-next-case-contract.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-decisions-clear.js",
+      "raw_sha256": "cca0befe84b805d6e15460399c211e63bd8828d64bbd4d66601d39c056498bca",
+      "bytes": 9189,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-environment.js",
+      "raw_sha256": "82d0339fd2a3881d94cc73a7237fd27c5e5755a60ca9133c1a0a460dabfa3424",
+      "bytes": 2216,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "raw_sha256": "cfc112f97ad79a8e209d5d644eaef49581d7edd487fc2003875ee5ee039c56e1",
+      "bytes": 14268,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-job-step.js",
+          "target": "broker/src/bpay-next-job-step.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice-rpc.js",
+      "raw_sha256": "acf94f66927911c3252f2f59d5e4bc4ab2ec4ae3d7e550e4d4d0100b8bf80549",
+      "bytes": 3441,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice.js",
+      "raw_sha256": "00bda626dc69226264e814cfc3fb5ab41cc159bc35ca58ac681ae93d1e25f021",
+      "bytes": 31651,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-frozen-read.js",
+          "target": "broker/src/bpay-next-frozen-read.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-read.js",
+      "raw_sha256": "ab352c72df54319c2c2d46dc9f3dfcd36959a1b45f5dd9ca382e110bb5de7b5c",
+      "bytes": 27471,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-rpc.js",
+      "raw_sha256": "6ddbc1ecb64873714e9a9c9a05bc4fcb2dae5d7fca95236a4f75976594a4e83c",
+      "bytes": 1287,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-history.js",
+      "raw_sha256": "1262a7961045a44b294939257db93e2ef54a3cf0754f76f90e8ebc52982335e0",
+      "bytes": 36846,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "raw_sha256": "fd39b0999b1625a267b13ce0b394a3108300687368bf0e91d6755d25cb7b7460",
+      "bytes": 3923,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-job-step.js",
+      "raw_sha256": "50729687b91e0aa9b99195ca6e50ce19e2a81a62a3ea6711c1ef320d8661d2c0",
+      "bytes": 40261,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-case-contract.js",
+          "target": "broker/src/bpay-next-case-contract.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-email.js",
+      "raw_sha256": "3a3684860794faf2a59dd4a3f7667e5ecb95696d82c48dcca7784a01dfafed65",
+      "bytes": 3504,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "raw_sha256": "0a7e0f87af882e1d0d39a98498fed7814bbdad77c444ac9b0f9058bc4c5f24b8",
+      "bytes": 10491,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-retirement.js",
+      "raw_sha256": "7850a2fc72c72c462b67fef51d29a8258904f4b605127cb2c3f1d2d6a0ad588a",
+      "bytes": 16992,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-financial-queue.js",
+          "target": "broker/src/bpay-next-financial-queue.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-pay-method-change.js",
+      "raw_sha256": "4a09461f35b62c1cc0c2c05b5d974e408ffd076e60199fa3ac7beee03e153432",
+      "bytes": 13513,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-paye-net-contract.js",
+      "raw_sha256": "2633a73b574a123a2173f94d5f0f4103ca9bc2a76c8cd692e8ddb2828083057e",
+      "bytes": 7619,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-preparation-expiry-rpc.js",
+      "raw_sha256": "f173c7e0a9b1f037f32c324b711581115b72dc64162fcfd1582571c680d8fec4",
+      "bytes": 17318,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-preparation-rpc.js",
+      "raw_sha256": "642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34",
+      "bytes": 1424,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-preparation.js",
+          "target": "broker/src/bpay-next-preparation.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "raw_sha256": "720af44911181d00acebfdf901c87b6ee251aab74d7104ad93b77aaba7e449a2",
+      "bytes": 129132,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-case-audit-contract.js",
+          "target": "broker/src/bpay-next-case-audit-contract.js"
+        },
+        {
+          "specifier": "./bpay-next-paye-net-contract.js",
+          "target": "broker/src/bpay-next-paye-net-contract.js"
+        },
+        {
+          "specifier": "./bpay-next-case-contract.js",
+          "target": "broker/src/bpay-next-case-contract.js"
+        },
+        {
+          "specifier": "./bpay-next-command.js",
+          "target": "broker/src/bpay-next-command.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "raw_sha256": "19ee29d29692a3874ba09130f2429fc8ffeb2fe7670405df644baccf04a43793",
+      "bytes": 56566,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "raw_sha256": "97f043498d6c8cc2030742ba59ef826f6ffc093ccbb1a937ca6fee22644bbb84",
+      "bytes": 26779,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-snooze-reader.js",
+      "raw_sha256": "f90b01fa46c30b235931abc538094f2b8084a5bda14a15520617bee670a1a07b",
+      "bytes": 10393,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-snooze.js",
+      "raw_sha256": "90fc75a066232f1d8e4b7f74aba2ee85f194134f01e64e81b905a0d3d17d5af9",
+      "bytes": 16409,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "raw_sha256": "b82cb07c6b3e6d283dc7b5ddc979fcc08bb9e4932e49db0f7d30c12e21b66f25",
+      "bytes": 95452,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./bpay-next-snooze-reader.js",
+          "target": "broker/src/bpay-next-snooze-reader.js"
+        },
+        {
+          "specifier": "./bpay-next-resolution.js",
+          "target": "broker/src/bpay-next-resolution.js"
+        },
+        {
+          "specifier": "./bpay-next-snooze.js",
+          "target": "broker/src/bpay-next-snooze.js"
+        },
+        {
+          "specifier": "./bpay-next-decisions-clear.js",
+          "target": "broker/src/bpay-next-decisions-clear.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/bulk-authorise-evidence-policy.js",
+      "raw_sha256": "bfc5d336a72a3ace11d7a56f69312c656aa73a2a93b0f006928c90e1a142d5a6",
+      "bytes": 3284,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bulk-authorise-watch.js",
+      "raw_sha256": "04cb2672214908c832ed326d82b5a093110059623879cf3e473542394e549935",
+      "bytes": 8986,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/bulk-row-freshness.js",
+      "raw_sha256": "2992afcd12a7547c256a472ab454d960029fb2311c718c07ee33e29c560e6356",
+      "bytes": 12823,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "raw_sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587",
+      "bytes": 601690,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./timesheet-official-pdf.js",
+          "target": "broker/src/timesheet-official-pdf.js"
+        },
+        {
+          "specifier": "./invoice-presentation-contract.js",
+          "target": "broker/src/invoice-presentation-contract.js"
+        },
+        {
+          "specifier": "./candidate-correction-v1.js",
+          "target": "broker/src/candidate-correction-v1.js"
+        },
+        {
+          "specifier": "./candidate-daily-phase1b.js",
+          "target": "broker/src/candidate-daily-phase1b.js"
+        },
+        {
+          "specifier": "./candidate-daily-contract-v1.js",
+          "target": "broker/src/candidate-daily-contract-v1.js"
+        },
+        {
+          "specifier": "../../candidate-broker/src/control-plane-client.js",
+          "target": "candidate-broker/src/control-plane-client.js"
+        },
+        {
+          "specifier": "./mytms-manager-control-adapter.js",
+          "target": "broker/src/mytms-manager-control-adapter.js"
+        },
+        {
+          "specifier": "./timesheet-qr-payload.js",
+          "target": "broker/src/timesheet-qr-payload.js"
+        },
+        {
+          "specifier": "./candidate-paper-page-image.js",
+          "target": "broker/src/candidate-paper-page-image.js"
+        },
+        {
+          "specifier": "./weekly-source/guard-refusal-record.mjs",
+          "target": "broker/src/weekly-source/guard-refusal-record.mjs"
+        },
+        {
+          "specifier": "./bpay-busy.js",
+          "target": "broker/src/bpay-busy.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.js",
+      "raw_sha256": "6fbec686f6fc775bda6fb35ea4c24a333c3427e5292b85c49ea971934899027c",
+      "bytes": 11814,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./candidate-correction-v1.validator.js",
+          "target": "broker/src/candidate-correction-v1.validator.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.validator.js",
+      "raw_sha256": "3eb48eaf91e55fce5d60572e71c56a863eda17ec52c7441040799b0e3c514a99",
+      "bytes": 492226,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-daily-contract-v1.js",
+      "raw_sha256": "2cb13da9329a220c472893a1cedd9e67bbc99cd55d0246ae200f7daf53420e29",
+      "bytes": 58955,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-daily-hmac-v1.js",
+      "raw_sha256": "5ff83b61d1c5a6a6538fe6c0bd90ee4b3a883ed8b66677c6e0b1dad0cff0983f",
+      "bytes": 15950,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./candidate-daily-contract-v1.js",
+          "target": "broker/src/candidate-daily-contract-v1.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/candidate-daily-phase1b.js",
+      "raw_sha256": "8e50491e4f869947de7838894a670e351855c0737bd782ad07113ed4dcccc704",
+      "bytes": 36803,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./candidate-daily-contract-v1.js",
+          "target": "broker/src/candidate-daily-contract-v1.js"
+        },
+        {
+          "specifier": "./candidate-daily-hmac-v1.js",
+          "target": "broker/src/candidate-daily-hmac-v1.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/candidate-daily-specialist.js",
+      "raw_sha256": "5c3ce22e2eb3739ac84972f8b138d2a69c69c73cb6f6d7db8a3e124eb7250a30",
+      "bytes": 17102,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-expense-reservation-summary.mjs",
+      "raw_sha256": "be1e5840ac5bdbe43410538cffdb84ce736bca906da7229b54ccca6d696eeefe",
+      "bytes": 3063,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-manager-email-e2e-proof.js",
+      "raw_sha256": "2c44b735447941623e0f473e6b7c783eb87308230a20bcbb9ac8f03a0bcc89a8",
+      "bytes": 19453,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./candidate-app-backend.js",
+          "target": "broker/src/candidate-app-backend.js"
+        },
+        {
+          "specifier": "../../candidate-broker/src/control-plane-client.js",
+          "target": "candidate-broker/src/control-plane-client.js"
+        },
+        {
+          "specifier": "./mytms-office-control.js",
+          "target": "broker/src/mytms-office-control.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/candidate-manager-provider-authority.js",
+      "raw_sha256": "8043801f1ea468e68c54566c18f16ee3a8a01770ebf872eb7acdfac3126deb64",
+      "bytes": 4528,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-paper-page-image.js",
+      "raw_sha256": "3b720eb9679b320ada4efaeb18c63b5c6817cd047311baa83fbdf273b8ed9cc0",
+      "bytes": 2631,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-paper-provider-authority.js",
+      "raw_sha256": "e8224aa15ef41c5079af58dac6556598112f5343af452a6d657f999dc6fd572a",
+      "bytes": 5608,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-route-context.js",
+      "raw_sha256": "baef31166a116307f763fb82029370a5da163771a77b276e1551da31d5be68f1",
+      "bytes": 15791,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/candidate-service-auth.js",
+      "raw_sha256": "f77b227838f56b6501b354b625ef055040d2c9e317a3b49c70b419b4efcf099f",
+      "bytes": 8388,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/contract-worked-date-guard.js",
+      "raw_sha256": "e4906fdec7fdc1753df177ff1f33772bed3006cd28d286a06557f72f1911eee3",
+      "bytes": 12022,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/daily-canonical-authority.js",
+      "raw_sha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+      "bytes": 11475,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/daily-roster-compat.js",
+      "raw_sha256": "c73138702daaa5bbba2cf640c7aa7523b83be37f51afec7a2021844df22f43d3",
+      "bytes": 6032,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/daily-schedule-authority.js",
+      "raw_sha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "bytes": 14306,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/exact-request-a0-weekly-clock-arm.mjs",
+      "raw_sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "bytes": 6085,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./native-weekly-correction-dispatch.mjs",
+          "target": "broker/src/native-weekly-correction-dispatch.mjs"
+        },
+        {
+          "specifier": "./native-correction-snapshot-producers.mjs",
+          "target": "broker/src/native-correction-snapshot-producers.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/import-review-follow-up.js",
+      "raw_sha256": "6ffe533b364a2b57b6bd8ac3d86924fbc8576b0bf566ee4e3fcf9389db8b40ab",
+      "bytes": 20379,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/import-review.js",
+      "raw_sha256": "a3d4ba81cc42cb3d3d432275a4f3b781b1b0ff40c2e82fa02d7c24407752a9ef",
+      "bytes": 55715,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./weekly-source/guard-refusal-record.mjs",
+          "target": "broker/src/weekly-source/guard-refusal-record.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/index.js",
+      "raw_sha256": "ca30ea365f64c77d230821e5a7cdf89316133a085d6d03e08d6bc5e3f10d0a4f",
+      "bytes": 8930341,
+      "origin": "UNREVIEWED_OWN_FORWARD",
+      "literal_relative_imports": [
+        {
+          "specifier": "./native-correction-snapshot-producers.mjs",
+          "target": "broker/src/native-correction-snapshot-producers.mjs"
+        },
+        {
+          "specifier": "./exact-request-a0-weekly-clock-arm.mjs",
+          "target": "broker/src/exact-request-a0-weekly-clock-arm.mjs"
+        },
+        {
+          "specifier": "./timesheet-correction-orchestrator.mjs",
+          "target": "broker/src/timesheet-correction-orchestrator.mjs"
+        },
+        {
+          "specifier": "./timesheet-correction-office-routes.mjs",
+          "target": "broker/src/timesheet-correction-office-routes.mjs"
+        },
+        {
+          "specifier": "./timesheet-correction-office-context.mjs",
+          "target": "broker/src/timesheet-correction-office-context.mjs"
+        },
+        {
+          "specifier": "./bpay-next-pay-method-change.js",
+          "target": "broker/src/bpay-next-pay-method-change.js"
+        },
+        {
+          "specifier": "./weekly-source/invoice-render-qualification.js",
+          "target": "broker/src/weekly-source/invoice-render-qualification.js"
+        },
+        {
+          "specifier": "./candidate-expense-reservation-summary.mjs",
+          "target": "broker/src/candidate-expense-reservation-summary.mjs"
+        },
+        {
+          "specifier": "./bulk-authorise-evidence-policy.js",
+          "target": "broker/src/bulk-authorise-evidence-policy.js"
+        },
+        {
+          "specifier": "./bulk-authorise-watch.js",
+          "target": "broker/src/bulk-authorise-watch.js"
+        },
+        {
+          "specifier": "./banking-pay-modal-v2.js",
+          "target": "broker/src/banking-pay-modal-v2.js"
+        },
+        {
+          "specifier": "./bpay-next-frozen-read.js",
+          "target": "broker/src/bpay-next-frozen-read.js"
+        },
+        {
+          "specifier": "./bpay-next-history.js",
+          "target": "broker/src/bpay-next-history.js"
+        },
+        {
+          "specifier": "./bpay-next-frozen-rpc.js",
+          "target": "broker/src/bpay-next-frozen-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-frozen-advice.js",
+          "target": "broker/src/bpay-next-frozen-advice.js"
+        },
+        {
+          "specifier": "./bpay-next-frozen-advice-rpc.js",
+          "target": "broker/src/bpay-next-frozen-advice-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-command.js",
+          "target": "broker/src/bpay-next-command.js"
+        },
+        {
+          "specifier": "./bpay-next-command-rpc.js",
+          "target": "broker/src/bpay-next-command-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-preparation.js",
+          "target": "broker/src/bpay-next-preparation.js"
+        },
+        {
+          "specifier": "./bpay-next-workbench.js",
+          "target": "broker/src/bpay-next-workbench.js"
+        },
+        {
+          "specifier": "./bpay-next-preparation-rpc.js",
+          "target": "broker/src/bpay-next-preparation-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-legacy-fence.js",
+          "target": "broker/src/bpay-next-legacy-fence.js"
+        },
+        {
+          "specifier": "./bpay-next-legacy-email.js",
+          "target": "broker/src/bpay-next-legacy-email.js"
+        },
+        {
+          "specifier": "./bpay-next-environment.js",
+          "target": "broker/src/bpay-next-environment.js"
+        },
+        {
+          "specifier": "./bpay-next-runtime-rpc.js",
+          "target": "broker/src/bpay-next-runtime-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-preparation-expiry-rpc.js",
+          "target": "broker/src/bpay-next-preparation-expiry-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-job-rpc.js",
+          "target": "broker/src/bpay-next-job-rpc.js"
+        },
+        {
+          "specifier": "./bpay-next-background.js",
+          "target": "broker/src/bpay-next-background.js"
+        },
+        {
+          "specifier": "./bpay-next-legacy-retirement.js",
+          "target": "broker/src/bpay-next-legacy-retirement.js"
+        },
+        {
+          "specifier": "./banking-pay/weekly-source-c1-raw-rpc.mjs",
+          "target": "broker/src/banking-pay/weekly-source-c1-raw-rpc.mjs"
+        },
+        {
+          "specifier": "./weekly-source/index.js",
+          "target": "broker/src/weekly-source/index.js"
+        },
+        {
+          "specifier": "./weekly-source/routes.js",
+          "target": "broker/src/weekly-source/routes.js"
+        },
+        {
+          "specifier": "./weekly-source/unauthorise-routing.mjs",
+          "target": "broker/src/weekly-source/unauthorise-routing.mjs"
+        },
+        {
+          "specifier": "./weekly-source/authorise-routing.mjs",
+          "target": "broker/src/weekly-source/authorise-routing.mjs"
+        },
+        {
+          "specifier": "./weekly-source/guard-refusal-record.mjs",
+          "target": "broker/src/weekly-source/guard-refusal-record.mjs"
+        },
+        {
+          "specifier": "./weekly-source/delivery-runtime.mjs",
+          "target": "broker/src/weekly-source/delivery-runtime.mjs"
+        },
+        {
+          "specifier": "./weekly-source/correct-final-source-orchestrator.mjs",
+          "target": "broker/src/weekly-source/correct-final-source-orchestrator.mjs"
+        },
+        {
+          "specifier": "./weekly-source/correct-final-source-snapshot-adapter.mjs",
+          "target": "broker/src/weekly-source/correct-final-source-snapshot-adapter.mjs"
+        },
+        {
+          "specifier": "./weekly-source/protected-action-orchestrator.mjs",
+          "target": "broker/src/weekly-source/protected-action-orchestrator.mjs"
+        },
+        {
+          "specifier": "./weekly-source/protected-component-identity.mjs",
+          "target": "broker/src/weekly-source/protected-component-identity.mjs"
+        },
+        {
+          "specifier": "./weekly-source/protected-next-preview.mjs",
+          "target": "broker/src/weekly-source/protected-next-preview.mjs"
+        },
+        {
+          "specifier": "./weekly-source/next-paid-evidence.mjs",
+          "target": "broker/src/weekly-source/next-paid-evidence.mjs"
+        },
+        {
+          "specifier": "./weekly-source/finalisation-pay-orchestrator.mjs",
+          "target": "broker/src/weekly-source/finalisation-pay-orchestrator.mjs"
+        },
+        {
+          "specifier": "./weekly-source/upload-publication-owner.mjs",
+          "target": "broker/src/weekly-source/upload-publication-owner.mjs"
+        },
+        {
+          "specifier": "./weekly-source/agency-canonical-worker.mjs",
+          "target": "broker/src/weekly-source/agency-canonical-worker.mjs"
+        },
+        {
+          "specifier": "./weekly-source/off-rule-transport-rpc.mjs",
+          "target": "broker/src/weekly-source/off-rule-transport-rpc.mjs"
+        },
+        {
+          "specifier": "./bulk-row-freshness.js",
+          "target": "broker/src/bulk-row-freshness.js"
+        },
+        {
+          "specifier": "./daily-canonical-authority.js",
+          "target": "broker/src/daily-canonical-authority.js"
+        },
+        {
+          "specifier": "./daily-schedule-authority.js",
+          "target": "broker/src/daily-schedule-authority.js"
+        },
+        {
+          "specifier": "./candidate-app-backend.js",
+          "target": "broker/src/candidate-app-backend.js"
+        },
+        {
+          "specifier": "./timesheet-expense-presentation.js",
+          "target": "broker/src/timesheet-expense-presentation.js"
+        },
+        {
+          "specifier": "./timesheet-route-sort.js",
+          "target": "broker/src/timesheet-route-sort.js"
+        },
+        {
+          "specifier": "./office-candidate-paper-pack-evidence.js",
+          "target": "broker/src/office-candidate-paper-pack-evidence.js"
+        },
+        {
+          "specifier": "./payment-actor-permission.js",
+          "target": "broker/src/payment-actor-permission.js"
+        },
+        {
+          "specifier": "./candidate-daily-specialist.js",
+          "target": "broker/src/candidate-daily-specialist.js"
+        },
+        {
+          "specifier": "./candidate-manager-email-e2e-proof.js",
+          "target": "broker/src/candidate-manager-email-e2e-proof.js"
+        },
+        {
+          "specifier": "./candidate-service-auth.js",
+          "target": "broker/src/candidate-service-auth.js"
+        },
+        {
+          "specifier": "./mytms-manager-control-adapter.js",
+          "target": "broker/src/mytms-manager-control-adapter.js"
+        },
+        {
+          "specifier": "./mytms-office-control.js",
+          "target": "broker/src/mytms-office-control.js"
+        },
+        {
+          "specifier": "./candidate-paper-provider-authority.js",
+          "target": "broker/src/candidate-paper-provider-authority.js"
+        },
+        {
+          "specifier": "./candidate-manager-provider-authority.js",
+          "target": "broker/src/candidate-manager-provider-authority.js"
+        },
+        {
+          "specifier": "./import-review.js",
+          "target": "broker/src/import-review.js"
+        },
+        {
+          "specifier": "./import-review-follow-up.js",
+          "target": "broker/src/import-review-follow-up.js"
+        },
+        {
+          "specifier": "./timestamp-normalisation.js",
+          "target": "broker/src/timestamp-normalisation.js"
+        },
+        {
+          "specifier": "./miget-postgrest-compat.js",
+          "target": "broker/src/miget-postgrest-compat.js"
+        },
+        {
+          "specifier": "./daily-roster-compat.js",
+          "target": "broker/src/daily-roster-compat.js"
+        },
+        {
+          "specifier": "./test-csv-execution-bypass.js",
+          "target": "broker/src/test-csv-execution-bypass.js"
+        },
+        {
+          "specifier": "./banking-pay-create-draft-headroom.js",
+          "target": "broker/src/banking-pay-create-draft-headroom.js"
+        },
+        {
+          "specifier": "./contract-worked-date-guard.js",
+          "target": "broker/src/contract-worked-date-guard.js"
+        },
+        {
+          "specifier": "./banking-pay-draft-insert-items.js",
+          "target": "broker/src/banking-pay-draft-insert-items.js"
+        },
+        {
+          "specifier": "./banking-pay-draft-certified-v8.js",
+          "target": "broker/src/banking-pay-draft-certified-v8.js"
+        },
+        {
+          "specifier": "./invoice-async-http.js",
+          "target": "broker/src/invoice-async-http.js"
+        },
+        {
+          "specifier": "./invoice-queue-runtime.js",
+          "target": "broker/src/invoice-queue-runtime.js"
+        },
+        {
+          "specifier": "./invoice-queue-security.js",
+          "target": "broker/src/invoice-queue-security.js"
+        },
+        {
+          "specifier": "./timesheet-qr-payload.js",
+          "target": "broker/src/timesheet-qr-payload.js"
+        },
+        {
+          "specifier": "./weekly-source/weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        },
+        {
+          "specifier": "./bpay-busy.js",
+          "target": "broker/src/bpay-busy.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/invoice-async-http.js",
+      "raw_sha256": "77120b6ef29f010ebd9864e9fbe1507f64b0cdfd261ec02f3fa98a1c9bdcd9f3",
+      "bytes": 215051,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./weekly-source/agency-invoice-credit-consumer.mjs",
+          "target": "broker/src/weekly-source/agency-invoice-credit-consumer.mjs"
+        },
+        {
+          "specifier": "./invoice-document-access.js",
+          "target": "broker/src/invoice-document-access.js"
+        },
+        {
+          "specifier": "./invoice-queue-runtime.js",
+          "target": "broker/src/invoice-queue-runtime.js"
+        },
+        {
+          "specifier": "./invoice-queue-security.js",
+          "target": "broker/src/invoice-queue-security.js"
+        },
+        {
+          "specifier": "./weekly-source/invoice-batch-integration.mjs",
+          "target": "broker/src/weekly-source/invoice-batch-integration.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/invoice-document-access.js",
+      "raw_sha256": "477bf4cb4926717b7fdc3e7780f425d47ecb91b4213a992355f5ab9d38a7b2f3",
+      "bytes": 4665,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/invoice-document-templates.js",
+      "raw_sha256": "3acf89db285a6eb1834cf773f3763ed9bd33abe0ce4e8eca26f3beb0e4026346",
+      "bytes": 26542,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./invoice-presentation-contract.js",
+          "target": "broker/src/invoice-presentation-contract.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/invoice-presentation-contract.js",
+      "raw_sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1",
+      "bytes": 41599,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/invoice-queue-runtime.js",
+      "raw_sha256": "963ed02dd68e65ac62c0910c76a39740c84945eebcb9417958173b5c8be27b9d",
+      "bytes": 83082,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./invoice-document-templates.js",
+          "target": "broker/src/invoice-document-templates.js"
+        },
+        {
+          "specifier": "./timesheet-qr-payload.js",
+          "target": "broker/src/timesheet-qr-payload.js"
+        },
+        {
+          "specifier": "./timesheet-official-pdf.js",
+          "target": "broker/src/timesheet-official-pdf.js"
+        },
+        {
+          "specifier": "./invoice-queue-security.js",
+          "target": "broker/src/invoice-queue-security.js"
+        },
+        {
+          "specifier": "../../shared/invoice-processor-security.js",
+          "target": "shared/invoice-processor-security.js"
+        },
+        {
+          "specifier": "./invoice-presentation-contract.js",
+          "target": "broker/src/invoice-presentation-contract.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/invoice-queue-security.js",
+      "raw_sha256": "d63aee0a2fc6f1e5651389c4fb77ac815f87faae1654436832601504d859505d",
+      "bytes": 4217,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/miget-postgrest-compat.js",
+      "raw_sha256": "2ae733235b6bd3f33222e939c50f008577b0775446a14d7acac690dfb6983061",
+      "bytes": 1173,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/mytms-manager-control-adapter.js",
+      "raw_sha256": "a8e42836d9574c6b3800f0b28aac70c0871072ae1a5e8ce20fe35240f7eb72c3",
+      "bytes": 18559,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "../../candidate-broker/src/control-plane-client.js",
+          "target": "candidate-broker/src/control-plane-client.js"
+        },
+        {
+          "specifier": "./candidate-service-auth.js",
+          "target": "broker/src/candidate-service-auth.js"
+        },
+        {
+          "specifier": "./timesheet-qr-payload.js",
+          "target": "broker/src/timesheet-qr-payload.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/mytms-office-control.js",
+      "raw_sha256": "6d1f90b496a4b93f37e5b0b0bb9b2c7888c36d105f52f1498e8ce8ba317bcc1b",
+      "bytes": 61911,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "../../candidate-broker/src/control-plane-client.js",
+          "target": "candidate-broker/src/control-plane-client.js"
+        },
+        {
+          "specifier": "./candidate-route-context.js",
+          "target": "broker/src/candidate-route-context.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/native-correction-snapshot-producers.mjs",
+      "raw_sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "bytes": 15646,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./native-daily-role-helpers.mjs",
+          "target": "broker/src/native-daily-role-helpers.mjs"
+        },
+        {
+          "specifier": "./native-weekly-correction-dispatch.mjs",
+          "target": "broker/src/native-weekly-correction-dispatch.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/native-daily-role-helpers.mjs",
+      "raw_sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "bytes": 980,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/native-weekly-correction-dispatch.mjs",
+      "raw_sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "bytes": 13634,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/office-candidate-paper-pack-evidence.js",
+      "raw_sha256": "f69c9d9d27959a40422198970662fe4e2ad59bde7e984398a5aeb13ddb3bc696",
+      "bytes": 2981,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/payment-actor-permission.js",
+      "raw_sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "bytes": 2692,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/test-csv-execution-bypass.js",
+      "raw_sha256": "76cdae644079e1a68b0401ad6e17215b722b237fba892eb367c52518c7d590cd",
+      "bytes": 4125,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/timesheet-correction-office-context.mjs",
+      "raw_sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0",
+      "bytes": 5475,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./timesheet-correction-office-routes.mjs",
+          "target": "broker/src/timesheet-correction-office-routes.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/timesheet-correction-office-routes.mjs",
+      "raw_sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e",
+      "bytes": 13709,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./payment-actor-permission.js",
+          "target": "broker/src/payment-actor-permission.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/timesheet-correction-orchestrator.mjs",
+      "raw_sha256": "bbe161040d4bd6e87cbd239fee23b8ce6526b43c965aa0a34fbca270aa8af15f",
+      "bytes": 44591,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/timesheet-expense-presentation.js",
+      "raw_sha256": "dbbcb245620ca6fcca9be64bedf47a0731bea1c5789fff2baaa496b16f0a8e93",
+      "bytes": 6010,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/timesheet-official-pdf.js",
+      "raw_sha256": "7756bede5744641f729f0a44dd528f13cd0ed15de28fcd754b8dce47e3bfa2ed",
+      "bytes": 52454,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/timesheet-qr-payload.js",
+      "raw_sha256": "7440e0ddf768b1ae3e314a1495b9d3d4ef7eb7a05b56e5c62363a6918bf71f45",
+      "bytes": 10511,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/timesheet-route-sort.js",
+      "raw_sha256": "71c111e59db24da9d4c41accbd8082d18fa369b7389600f1916eb8bc146765f6",
+      "bytes": 2469,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/timestamp-normalisation.js",
+      "raw_sha256": "51d1fae45d5a6b6848e409a8e2732379d34b9f68c1efbbf4f4e51669bbb82311",
+      "bytes": 486,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "raw_sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "bytes": 6379,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./source-invoice-money.js",
+          "target": "broker/src/weekly-source/source-invoice-money.js"
+        },
+        {
+          "specifier": "./rule-set-validation.js",
+          "target": "broker/src/weekly-source/rule-set-validation.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/agency-canonical-worker.mjs",
+      "raw_sha256": "76e514c2877b52eb00869ceeb96e7a5250ecea0a390317fb696c818bb983441e",
+      "bytes": 12430,
+      "origin": "UNREVIEWED_OWN_FORWARD",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/agency-invoice-credit-consumer.mjs",
+      "raw_sha256": "6a15c7c9113929811333ed740933a6d06c456af4e3c6776ef651e73336265ac9",
+      "bytes": 8412,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/authorise-routing.mjs",
+      "raw_sha256": "587f0ff02e2da0b29e6ef996c0b2ef94fd83cca49287e9d9a1f3edc47ef21de9",
+      "bytes": 7289,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/checklist-read.mjs",
+      "raw_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "bytes": 6041,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./healthroster-checklist-source.mjs",
+          "target": "broker/src/weekly-source/healthroster-checklist-source.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/completed-pack-copy.mjs",
+      "raw_sha256": "c034b67254b52ae49e3c69a10005b003124827f1627db81b88390ee6d8eb4811",
+      "bytes": 3369,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "raw_sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "bytes": 7660,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "raw_sha256": "0815260d495a35c0c612dbd7cbb9f07940d719236e5fbbc0d335b57695e128f6",
+      "bytes": 39315,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/correct-final-source-snapshot-adapter.mjs",
+      "raw_sha256": "1069db84f23fa62a77ec542085b1522d1082198d0ff0756817e240b18afc6e77",
+      "bytes": 20698,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "raw_sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "bytes": 3588,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "raw_sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "bytes": 5014,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/delivery-auth.mjs",
+      "raw_sha256": "8796554cc64798d1c51a415ee486a225c624fdc145e286d703c121e50dc533a3",
+      "bytes": 4212,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/delivery-runtime.mjs",
+      "raw_sha256": "747e79b759efe1d4552828f58c5868abc635219f4da81c020ea86b0844d4ddbb",
+      "bytes": 30218,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./delivery-auth.mjs",
+          "target": "broker/src/weekly-source/delivery-auth.mjs"
+        },
+        {
+          "specifier": "./manager-email.js",
+          "target": "broker/src/weekly-source/manager-email.js"
+        },
+        {
+          "specifier": "./pending-entitlement-release-worker.mjs",
+          "target": "broker/src/weekly-source/pending-entitlement-release-worker.mjs"
+        },
+        {
+          "specifier": "./completed-pack-copy.mjs",
+          "target": "broker/src/weekly-source/completed-pack-copy.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "raw_sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "bytes": 13513,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "raw_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "bytes": 340,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/finalisation-pay-orchestrator.mjs",
+      "raw_sha256": "549e63d14c160eb1ad932089dc4febced99854f843bec7d36edb81f649dcfd0b",
+      "bytes": 38429,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/guard-refusal-record.mjs",
+      "raw_sha256": "85c7a7d2a5d43886ef1324fe0bc64628138ed2d9d02f250125815cd93da87979",
+      "bytes": 8193,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "raw_sha256": "9519e434de8549dcfebb446197d4421de037a90a05a91a80091f4aa9f3bc2757",
+      "bytes": 24176,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "raw_sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "bytes": 8831,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        },
+        {
+          "specifier": "./source-invoice-money.js",
+          "target": "broker/src/weekly-source/source-invoice-money.js"
+        },
+        {
+          "specifier": "./source-finalised-time.js",
+          "target": "broker/src/weekly-source/source-finalised-time.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "raw_sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "bytes": 5649,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/index.js",
+      "raw_sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "bytes": 6275,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./csv-evidence.js",
+          "target": "broker/src/weekly-source/csv-evidence.js"
+        },
+        {
+          "specifier": "./html-evidence.js",
+          "target": "broker/src/weekly-source/html-evidence.js"
+        },
+        {
+          "specifier": "./healthroster-normalise.js",
+          "target": "broker/src/weekly-source/healthroster-normalise.js"
+        },
+        {
+          "specifier": "./nhsp-normalise.js",
+          "target": "broker/src/weekly-source/nhsp-normalise.js"
+        },
+        {
+          "specifier": "./roster-summary-normalise.js",
+          "target": "broker/src/weekly-source/roster-summary-normalise.js"
+        },
+        {
+          "specifier": "./acacium-report-normalise.js",
+          "target": "broker/src/weekly-source/acacium-report-normalise.js"
+        },
+        {
+          "specifier": "./profiles.js",
+          "target": "broker/src/weekly-source/profiles.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        },
+        {
+          "specifier": "./xlsx-evidence.js",
+          "target": "broker/src/weekly-source/xlsx-evidence.js"
+        },
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./profiles.js",
+          "target": "broker/src/weekly-source/profiles.js"
+        },
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        },
+        {
+          "specifier": "./source-price-comparator.js",
+          "target": "broker/src/weekly-source/source-price-comparator.js"
+        },
+        {
+          "specifier": "./economic-snapshot.js",
+          "target": "broker/src/weekly-source/economic-snapshot.js"
+        },
+        {
+          "specifier": "./protected-target-schedule.js",
+          "target": "broker/src/weekly-source/protected-target-schedule.js"
+        },
+        {
+          "specifier": "./manager-email.js",
+          "target": "broker/src/weekly-source/manager-email.js"
+        },
+        {
+          "specifier": "./contract-qualification.js",
+          "target": "broker/src/weekly-source/contract-qualification.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/invoice-batch-integration.mjs",
+      "raw_sha256": "822aaf45171b37b0fd02c4d4ea71e2380676414df4858321debf0f2539005397",
+      "bytes": 11513,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/invoice-render-qualification.js",
+      "raw_sha256": "1ad4a720a103840e035903ba3c51e97e0b0daf12a058186f734a11e7208a02ac",
+      "bytes": 617,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "../invoice-presentation-contract.js",
+          "target": "broker/src/invoice-presentation-contract.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "raw_sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "bytes": 3114,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "raw_sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "bytes": 15252,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "raw_sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "bytes": 7889,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/next-paid-evidence.mjs",
+      "raw_sha256": "729909c4b1ff3350130ca835dc9e4ebb49dd069636b10138b0b6928d72bcf404",
+      "bytes": 19929,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "raw_sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "bytes": 15260,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "raw_sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "bytes": 3638,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "raw_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "bytes": 3520,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./off-rule-native-proxy.mjs",
+          "target": "broker/src/weekly-source/off-rule-native-proxy.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/pending-entitlement-release-worker.mjs",
+      "raw_sha256": "1574803df2dc741156bfdfd8567def2066cab517693b759dae3d3ccd33c3d006",
+      "bytes": 11370,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/profiles.js",
+      "raw_sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "bytes": 14652,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "raw_sha256": "5352ef8bcc66e87b090d5a1d4f40ba872cf7a542d38f60aaf690ec1eea80f3c3",
+      "bytes": 35819,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "../banking-pay/weekly-source-c1-components.mjs",
+          "target": "broker/src/banking-pay/weekly-source-c1-components.mjs"
+        },
+        {
+          "specifier": "../banking-pay/weekly-source-c1-publication.mjs",
+          "target": "broker/src/banking-pay/weekly-source-c1-publication.mjs"
+        },
+        {
+          "specifier": "../banking-pay/weekly-source-c1-stream.mjs",
+          "target": "broker/src/banking-pay/weekly-source-c1-stream.mjs"
+        },
+        {
+          "specifier": "./protected-target-schedule.js",
+          "target": "broker/src/weekly-source/protected-target-schedule.js"
+        },
+        {
+          "specifier": "./protected-next-preview.mjs",
+          "target": "broker/src/weekly-source/protected-next-preview.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/protected-component-identity.mjs",
+      "raw_sha256": "9fb74a4ceb4ed1bbd2a4ed558adce0b1474f314e5d3e4fc4810922511ca02f48",
+      "bytes": 4062,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/protected-next-preview.mjs",
+      "raw_sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a",
+      "bytes": 10762,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "raw_sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "bytes": 6387,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "raw_sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "bytes": 12480,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "raw_sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "bytes": 7516,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "raw_sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef",
+      "bytes": 66355,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./index.js",
+          "target": "broker/src/weekly-source/index.js"
+        },
+        {
+          "specifier": "./guard-refusal-record.mjs",
+          "target": "broker/src/weekly-source/guard-refusal-record.mjs"
+        },
+        {
+          "specifier": "../bpay-busy.js",
+          "target": "broker/src/bpay-busy.js"
+        },
+        {
+          "specifier": "../payment-actor-permission.js",
+          "target": "broker/src/payment-actor-permission.js"
+        },
+        {
+          "specifier": "./protected-action-orchestrator.mjs",
+          "target": "broker/src/weekly-source/protected-action-orchestrator.mjs"
+        },
+        {
+          "specifier": "../bpay-next-legacy-fence.js",
+          "target": "broker/src/bpay-next-legacy-fence.js"
+        },
+        {
+          "specifier": "./rule-set-validation.js",
+          "target": "broker/src/weekly-source/rule-set-validation.js"
+        },
+        {
+          "specifier": "./checklist-read.mjs",
+          "target": "broker/src/weekly-source/checklist-read.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "raw_sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "bytes": 10329,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/shared.js",
+      "raw_sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "bytes": 8080,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "raw_sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "bytes": 2786,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "raw_sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "bytes": 6221,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "raw_sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "bytes": 6857,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/unauthorise-routing.mjs",
+      "raw_sha256": "64cb2495467daf7166d294f98bb6e4ee2e652d45380568081a55e70f5d07e0f7",
+      "bytes": 15963,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./authorise-routing.mjs",
+          "target": "broker/src/weekly-source/authorise-routing.mjs"
+        },
+        {
+          "specifier": "../bpay-next-legacy-fence.js",
+          "target": "broker/src/bpay-next-legacy-fence.js"
+        },
+        {
+          "specifier": "./guard-refusal-record.mjs",
+          "target": "broker/src/weekly-source/guard-refusal-record.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "raw_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "bytes": 53302,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./report-upload-provenance.mjs",
+          "target": "broker/src/weekly-source/report-upload-provenance.mjs"
+        },
+        {
+          "specifier": "./magnit-contract-price-admission.js",
+          "target": "broker/src/weekly-source/magnit-contract-price-admission.js"
+        },
+        {
+          "specifier": "./upload-staging-adapter.mjs",
+          "target": "broker/src/weekly-source/upload-staging-adapter.mjs"
+        },
+        {
+          "specifier": "./contract-qualification.js",
+          "target": "broker/src/weekly-source/contract-qualification.js"
+        },
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        },
+        {
+          "specifier": "./source-price-comparator.js",
+          "target": "broker/src/weekly-source/source-price-comparator.js"
+        },
+        {
+          "specifier": "./economic-snapshot.js",
+          "target": "broker/src/weekly-source/economic-snapshot.js"
+        },
+        {
+          "specifier": "./coverage-warnings.mjs",
+          "target": "broker/src/weekly-source/coverage-warnings.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "raw_sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "bytes": 20759,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./report-upload-provenance.mjs",
+          "target": "broker/src/weekly-source/report-upload-provenance.mjs"
+        },
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./coverage-warnings.mjs",
+          "target": "broker/src/weekly-source/coverage-warnings.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "raw_sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "bytes": 15000,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "raw_sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "bytes": 11671,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        },
+        {
+          "specifier": "./shared.js",
+          "target": "broker/src/weekly-source/shared.js"
+        }
+      ]
+    },
+    {
+      "path": "candidate-broker/src/control-plane-client.js",
+      "raw_sha256": "da5696a1f91b5417ede9574253f715c7851b2b74e66773933e9fa7fc6f705363",
+      "bytes": 5519,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    },
+    {
+      "path": "shared/invoice-processor-security.js",
+      "raw_sha256": "629a68fcc1052777ea241dea67d4df73ef7eb01e8d677f37c1aa5e0bf513a9aa",
+      "bytes": 5832,
+      "origin": "EXACT_CURRENT_SAVED_GIT",
+      "literal_relative_imports": []
+    }
+  ],
+  "reviewed": false,
+  "compiled_contract_sha256": null
+}

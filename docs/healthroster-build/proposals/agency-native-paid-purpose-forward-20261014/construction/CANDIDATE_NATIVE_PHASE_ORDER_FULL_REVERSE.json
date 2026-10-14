@@ -1,0 +1,36 @@
+{
+  "schema": "AGENCY_EXISTING_CANDIDATE_BEFORE_BUSINESS_LOCK_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "new_arbiter": false,
+  "full_forward_files": [
+    {
+      "before_path": "32_complete_request_authority_with_native_manual_frame.sqlinc",
+      "after_path": "36_complete_request_authority_with_candidate_admission.sqlinc",
+      "before_raw_sha256": "d05a9db7fd552733ffa40b3c2f1fad1e45d2b8e14a632a55783e98e29b3638c8",
+      "after_raw_sha256": "55c0daf9f5e9fdff29077039743a3a7df2abf1e22dbd40ad92abedc089636230",
+      "hunks": [
+        {
+          "before": "  -- Preserve invoice -> Timesheet/financial order. The immutable D1 is the",
+          "after": "  perform private.weekly_source_agency_candidate_admit_v1(v_week.timesheet_id,p_actor_user_id);\n  -- Preserve invoice -> Timesheet/financial order. The immutable D1 is the",
+          "before_sha256": "18b4b81b3419538bb8dfe8992447406ef4a13713545dd67b8fabb7b38c8d95aa",
+          "after_sha256": "4fb0075d4ef32d73cdf0f56a2e8c35636d4587e7cfb68a82edf955add0071f7b"
+        }
+      ]
+    },
+    {
+      "before_path": "30_complete_capture_with_original_pay_identity.sqlinc",
+      "after_path": "37_complete_capture_with_candidate_admission.sqlinc",
+      "before_raw_sha256": "c9aafcbd8042c5e8904b48a207d8e1996da94b44471fd1c8c0eea88906f2d8d3",
+      "after_raw_sha256": "eb83e2335a3eb5c54c6c6a5fcdc034a3fa6257acb950ef529257d328a32569eb",
+      "hunks": [
+        {
+          "before": "  select * into strict v_ts from public.timesheets where timesheet_id=v_requested_timesheet_id;",
+          "after": "  select * into strict v_ts from public.timesheets where timesheet_id=v_requested_timesheet_id;\r\n  perform private.weekly_source_agency_candidate_admit_v1(v_requested_timesheet_id,p_actor_user_id);",
+          "before_sha256": "4c8e522175373550ef0294c566cb627a8e198f53dc9c766dd9c23c28469efa1c",
+          "after_sha256": "9c433f89abbc02c55c3b8a8c2bf4b009c9e573bcf95f38170ba268f7b12fe342"
+        }
+      ]
+    }
+  ]
+}

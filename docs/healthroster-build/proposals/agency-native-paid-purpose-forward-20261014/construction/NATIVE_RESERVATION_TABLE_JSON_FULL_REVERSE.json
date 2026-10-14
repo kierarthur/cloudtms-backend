@@ -1,0 +1,35 @@
+{
+  "schema": "AGENCY_NATIVE_RESERVATION_TABLE_JSON_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "full_forward_files": [
+    {
+      "before_path": "24_agency_ordinary_collection_inputs.sqlinc",
+      "after_path": "34_complete_ordinary_collection_native_json_codec.sqlinc",
+      "before_raw_sha256": "e2ac05a5ef0eaaa61c9c027cad2fcfcd0f1aa1821446a44787026c9ef6334fc3",
+      "after_raw_sha256": "11d3b933f8962fd3d7423da1b5e5fe736bcbef8af41556dbba10b5d1fab046a4",
+      "hunks": [
+        {
+          "before": "   select private.bpay_next_original_reservation_v1(transfer.run_worker_id,transfer.id) into reservation\n    from private.bpay_next_transfer transfer where transfer.id=v_basis.original_transfer_id\n     and transfer.candidate_id=v_work.candidate_id;",
+          "after": "   select to_jsonb(native) into reservation\n    from private.bpay_next_transfer transfer\n    cross join lateral private.bpay_next_original_reservation_v1(transfer.run_worker_id,transfer.id) native\n    where transfer.id=v_basis.original_transfer_id and transfer.candidate_id=v_work.candidate_id;",
+          "before_sha256": "3a7cb791176a65a69be88c692b6a4a40d5d91b3a09c155ee1ff42d000a860fbf",
+          "after_sha256": "b0d581a91a695b3fb0d76857f41c06de322ae3348e3422c64fa3ae03c51b4a86"
+        }
+      ]
+    },
+    {
+      "before_path": "26_agency_before_collection_inputs.sqlinc",
+      "after_path": "35_complete_before_collection_native_json_codec.sqlinc",
+      "before_raw_sha256": "da106201c294b7e9369d48e8fef68d1052ce08063cd414a46b2b3251cbc730ac",
+      "after_raw_sha256": "0d7c9f97f3d16a833f25386146783fef55a2e4c362879a5eeec1f7bda2aa11b4",
+      "hunks": [
+        {
+          "before": "   select private.bpay_next_original_reservation_v1(transfer.run_worker_id,transfer.id) into reservation\n    from private.bpay_next_transfer transfer where transfer.id=v_basis.original_transfer_id\n     and transfer.candidate_id=v_work.candidate_id;",
+          "after": "   select to_jsonb(native) into reservation\n    from private.bpay_next_transfer transfer\n    cross join lateral private.bpay_next_original_reservation_v1(transfer.run_worker_id,transfer.id) native\n    where transfer.id=v_basis.original_transfer_id and transfer.candidate_id=v_work.candidate_id;",
+          "before_sha256": "3a7cb791176a65a69be88c692b6a4a40d5d91b3a09c155ee1ff42d000a860fbf",
+          "after_sha256": "b0d581a91a695b3fb0d76857f41c06de322ae3348e3422c64fa3ae03c51b4a86"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+-- Read only. Reuse the actual submission owner's complete native proof before
+-- exposing the immutable worker schedule to private Agency consumers. This is
+-- neither the edited current T0 schedule nor a financial target/capability.
+create or replace function private.weekly_source_agency_submitted_claim_v1(
+  p_timesheet_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_submission jsonb; v_workflow public.candidate_submission_workflows%rowtype;
+  v_input jsonb; v_patch jsonb; v_schedule jsonb; v_receipt jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  v_submission:=private.weekly_source_actual_timesheet_submission_v1(p_timesheet_id);
+  if v_submission->>'actual_submitted' is distinct from 'true'
+    or v_submission->>'support_state' is distinct from 'PROVED'
+    or v_submission->>'sheet_scope' is distinct from 'WEEKLY' then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',
+      'available',false,'reason','ACTUAL_WEEKLY_SUBMISSION_UNPROVED','claim',null);
+  end if;
+  if v_submission->>'authority' is distinct from 'CANDIDATE_IMMUTABLE_HOURS' then
+    -- The existing legacy reader proves a current source and official document;
+    -- it does not expose a frozen original hours vector after a native T0 edit.
+    -- Keep that missing producer explicit instead of reading mutable T0 hours.
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',
+      'available',false,'reason','LEGACY_FROZEN_HOURS_CLAIM_UNAVAILABLE','claim',null);
+  end if;
+  if not pg_input_is_valid(coalesce(v_submission->>'workflow_id',''),'uuid')
+    or not pg_input_is_valid(coalesce(v_submission->>'workflow_generation',''),'integer') then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',
+      'available',false,'reason','IMMUTABLE_WORKFLOW_IDENTITY_UNPROVED','claim',null);
+  end if;
+  select * into v_workflow from public.candidate_submission_workflows
+    where id=(v_submission->>'workflow_id')::uuid
+      and generation=(v_submission->>'workflow_generation')::integer
+      and target_timesheet_id=p_timesheet_id
+      and candidate_id=(v_submission->>'candidate_id')::uuid
+      and contract_id=(v_submission->>'contract_id')::uuid
+      and week_ending_date=(v_submission->>'week_ending_date')::date
+      and scope='WEEKLY' and workflow_kind in('CONTRACT_HOURS','CONTRACT_COMBINED')
+      and worker_submitted_at_utc is not null and cancelled_at_utc is null;
+  if v_workflow.id is null or jsonb_typeof(v_workflow.immutable_submission_json) is distinct from 'object'
+    or octet_length(v_workflow.immutable_submission_sha256) is distinct from 32
+    or private._candidate_sha256_jsonb_v1(v_workflow.immutable_submission_json)
+      is distinct from v_workflow.immutable_submission_sha256
+    or encode(v_workflow.immutable_submission_sha256,'hex') is distinct from v_submission->>'submission_sha256'
+    or v_workflow.candidate_signed_at_utc is null then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',
+      'available',false,'reason','IMMUTABLE_SUBMISSION_CHANGED_OR_UNPROVED','claim',null);
+  end if;
+  v_input:=coalesce(v_workflow.immutable_submission_json->'hours_submission',v_workflow.immutable_submission_json);
+  v_patch:=coalesce(v_input->'timesheet_patch_json',v_input);
+  v_schedule:=coalesce(v_patch->'actual_schedule_json',v_input#>'{canonical_tsfin_snapshot,actual_schedule_json}');
+  if jsonb_typeof(v_input) is distinct from 'object' or jsonb_typeof(v_patch) is distinct from 'object'
+    or jsonb_typeof(v_schedule) is distinct from 'array'
+    or jsonb_array_length(v_schedule)>100 or octet_length(v_schedule::text)>65536
+    or exists(select 1 from jsonb_array_elements(v_schedule) entry where jsonb_typeof(entry) is distinct from 'object') then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',
+      'available',false,'reason','FROZEN_WORKER_HOURS_CLAIM_BOUND_OR_SHAPE_INVALID','claim',null);
+  end if;
+  -- The original vector is preserved verbatim. Canonical date/break conversion
+  -- and work_event membership remain the actual native producer's duties.
+  v_receipt:=jsonb_build_object('authority','CANDIDATE_IMMUTABLE_HOURS',
+    'timesheet_id',p_timesheet_id,'timesheet_version',v_submission->'timesheet_version',
+    'candidate_id',v_submission->'candidate_id','client_id',v_submission->'client_id',
+    'contract_id',v_submission->'contract_id','week_ending_date',v_submission->'week_ending_date',
+    'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
+    'submission_sha256',encode(v_workflow.immutable_submission_sha256,'hex'),
+    'hours_component_id',v_submission->'hours_component_id',
+    'candidate_signature_component_id',v_submission->'candidate_signature_component_id',
+    'submitted_at_utc',v_workflow.worker_submitted_at_utc,'signed_at_utc',v_workflow.candidate_signed_at_utc,
+    'actual_schedule_json',v_schedule);
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',
+    'available',true,'reason',null,'claim',v_receipt,
+    'claim_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SUBMITTED_CLAIM_V1',v_receipt),'hex'));
+end;
+$function$;
+alter function private.weekly_source_agency_submitted_claim_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_submitted_claim_v1(uuid) from public,anon,authenticated,service_role;

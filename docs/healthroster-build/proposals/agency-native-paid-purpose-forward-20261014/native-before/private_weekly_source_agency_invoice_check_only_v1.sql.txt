@@ -1,0 +1,41 @@
+create or replace function private.weekly_source_agency_invoice_check_only_v1(p_timesheet_id uuid)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ts public.timesheets%rowtype; v_contract public.contracts%rowtype;
+  v_cycle uuid; v_rules jsonb; v_policy jsonb; v_settings jsonb;
+begin
+  select * into v_ts from public.timesheets t where t.timesheet_id=p_timesheet_id and t.is_current
+    and t.sheet_scope::text='WEEKLY' and t.status::text<>'REVOKED' and t.revoked_at is null and t.archived_at_utc is null;
+  if not found or v_ts.contract_id is null or v_ts.week_ending_date is null then return false; end if;
+  select * into v_contract from public.contracts c where c.id=v_ts.contract_id
+    and c.weekly_timesheet_source::text='HEALTHROSTER';
+  if not found or v_contract.self_bill or coalesce(v_contract.no_timesheet_required,false)
+    or coalesce(v_contract.is_nhsp,false) then return false; end if;
+  if nullif(v_ts.settings_authority_json->>'client_id','') is not null
+    and v_ts.settings_authority_json->>'client_id'<>v_contract.client_id::text then return false; end if;
+  if v_contract.start_date>v_ts.week_ending_date or v_contract.end_date<v_ts.week_ending_date-6
+    or exists(select 1 from public.timesheets_financials f where f.timesheet_id=p_timesheet_id
+      and f.is_current and f.timesheet_version=v_ts.version and f.client_id is distinct from v_contract.client_id) then return false; end if;
+  select c.id into v_cycle from public.weekly_source_cycles c
+    join public.weekly_source_groups g on g.id=c.source_group_id and g.active and g.source_family='ROSTER'
+    join public.weekly_source_group_clients gc on gc.source_group_id=g.id and gc.client_id=v_contract.client_id
+      and v_ts.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+    where c.finalisation_week_ending=v_ts.week_ending_date;
+  if v_cycle is null then return false; end if;
+  v_rules:=private.weekly_source_effective_rule_set_v1(v_contract.client_id,v_cycle);
+  if v_rules is null or v_rules->'values'->>'invoice_sender'<>'AGENCY_INVOICE' then return false; end if;
+  if not private.weekly_source_is_import_authoritative_v1(v_contract.client_id,v_contract.id,v_ts.week_ending_date) then return false; end if;
+  v_policy:=private._weekly_source_effective_policy_v1(v_contract.client_id,v_contract.id,v_ts.week_ending_date);
+  if coalesce((v_policy->>'self_bill_enabled')::boolean,true) then return false; end if;
+  if coalesce((select cs.self_bill_no_invoices_sent from public.client_settings cs
+    where cs.client_id=v_contract.client_id and (cs.effective_from is null or cs.effective_from<=v_ts.week_ending_date)
+    order by cs.effective_from desc nulls last,cs.updated_at desc,cs.id desc limit 1),false) then return false; end if;
+  v_settings:=private._contract_settings_effective_core_v1(v_contract.client_id,v_contract.id,v_ts.week_ending_date,'WEEKLY',null);
+  return coalesce((v_settings->'applicability'->>'configuration_valid')::boolean,false)
+    and not coalesce((v_settings->'values'->>'self_bill')::boolean,true)
+    and not coalesce((v_settings->'values'->>'no_timesheet_required')::boolean,true)
+    and not coalesce((v_settings->'values'->>'is_nhsp')::boolean,true)
+    and coalesce((v_settings->'values'->>'requires_hr')::boolean,false)
+    and coalesce((v_settings->'values'->>'autoprocess_hr')::boolean,false);
+end;
+$function$;

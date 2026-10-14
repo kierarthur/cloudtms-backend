@@ -1,0 +1,88 @@
+{
+  "schema": "AGENCY_LEGACY_ORIGINAL_DOCUMENT_VIEW_SOURCE_V1",
+  "source_only": true,
+  "current_i2_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "database_calls": false,
+  "native_calls": false,
+  "worker_claim_proof": false,
+  "paid_writer_authority": false,
+  "inputs": [
+    {
+      "path": "supabase/migrations/23072026_2207_invoice_operation_queue_schema.sql",
+      "raw_sha256": "9e850f1e75837ab86e1e9d4e20d134083ea5a2bbf0ca5808ed31de6eb42b9fdb",
+      "bytes": 35922
+    },
+    {
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "raw_sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "bytes": 123180
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "raw_sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8",
+      "bytes": 11146
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "raw_sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+      "bytes": 275109
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+      "raw_sha256": "53e9af7ae8209f834508cb688c7b5d2449a9f7aedbe22db4906dafceb94c8a45",
+      "bytes": 25959
+    },
+    {
+      "path": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "raw_sha256": "0b93bd0b0379348930ba9cff38b45e0196eb52b54690cfc29ea257252b922e06",
+      "bytes": 121063
+    }
+  ],
+  "reader": {
+    "path": "21_agency_legacy_original_document.sqlinc",
+    "raw_sha256": "4dce5030b0706d67b5323442799c26a03e4f77c42a1f958af8927f87b36b57e5",
+    "source_statements": 3
+  },
+  "capture_reverse": {
+    "before_path": "14_complete_agency_capture_with_original_claim.sqlinc",
+    "before_raw_sha256": "84b828efb683e92b91ab9dfb72720782528517df90c90728a7c279a36a2bcb20",
+    "after_path": "22_complete_capture_with_original_document_view.sqlinc",
+    "after_raw_sha256": "aebf9c084ffd43b18227b406995a3273c0e68ecb5e9823ff2c39904a52fd4d0e",
+    "hunks": [
+      {
+        "name": "declare read-only original document view",
+        "before": "v_requested_timesheet_id uuid; v_claim jsonb; v_original_submission jsonb;",
+        "after": "v_requested_timesheet_id uuid; v_claim jsonb; v_original_submission jsonb; v_legacy_document jsonb;",
+        "before_raw_sha256": "69f7ded0284884e79a527159fed502e10759a93ac7aa7e3408adcebeb0ddc297",
+        "after_raw_sha256": "e67189d81ebc7b80944d920e7063236550a2cb666cf43f0cd1fcf088b2b2b54f"
+      },
+      {
+        "name": "capture native historical document reference separately from worker claim",
+        "before": "  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_CHANGE_NATIVE_CAPTURE_V1',",
+        "after": "  v_legacy_document:=private.weekly_source_agency_legacy_original_document_v1(v_ts.timesheet_id,null,p_actor_user_id);\r\n  if v_legacy_document->>'available'='true' then\r\n    v_legacy_document:=(v_legacy_document-'document_view')||jsonb_build_object(\r\n      'document_witness',v_legacy_document->'document_view'-'original_shift_lines','document_state','FROZEN_DOCUMENT_VIEW');\r\n  end if;\r\n  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_CHANGE_NATIVE_CAPTURE_V1',",
+        "before_raw_sha256": "a25f4f9e58935083fa7cfca66a97656ba8498edef2f5269d65e43b49a60023f0",
+        "after_raw_sha256": "7f1c4e84f0d2923734a773d754f3704adc436b89553e35d529a14836b5ba7845"
+      },
+      {
+        "name": "retain reference in original immutable capture digest",
+        "before": "    'original_submitted_claim',v_claim);",
+        "after": "    'original_submitted_claim',v_claim,'original_legacy_document',v_legacy_document);",
+        "before_raw_sha256": "522c4b900c5425ab634ca91e3836f958db5333ed2461f87caafe57d6401973a7",
+        "after_raw_sha256": "f4a61081c33529cd83d00840536e844baa6689c082f73061debfb1d8b5c503c1"
+      }
+    ],
+    "full_reverse_exact": true
+  },
+  "boundary": [
+    "Real legacy submission + exact current verified native document/model constructor before capture.",
+    "Historical document/view hash and signing/asset identities retain exact native Original reference after own edit.",
+    "Distinct document view only: does not certify worker immutable claimed-hours, Source work_event membership, money, protection or paid writer permission.",
+    "No new state/store/public RPC or competing calculator. Only metadata/reference goes in the planned original capture.",
+    "Legacy templates other than current professional V2 have no compatible view producer in this slice.",
+    "Same-arbiter family/Source/claim raw-child coverage, compile/role/session/document provenance and all native schedules remain unproved."
+  ],
+  "compiled_contract_sha256": null,
+  "native_receipt": null,
+  "reviewed": false,
+  "mount_ready": false
+}

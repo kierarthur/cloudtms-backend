@@ -1,0 +1,9 @@
+# Agency scalar and actual removal-hold source successor
+
+Source only. This immutable successor preserves the 67-file predecessor (manifest 3be7476fe2b274ed9ac42cdcc3c9d8ee071ef8181a4b45336fa2715f36394e81). It supersedes only its canonical-worker module and native begin owner. Full Agency execution, source qualification, native compilation, role/session/isolation, shared raw-domain admission, protection, week producer, typed validation, AUTHORISE/RETURN, public command and Office consumers remain unfinished or unproved. No database/native call occurred.
+
+The four schedule date/time fields now require actual strings before regex evaluation. The actual predecessor accepts one-element arrays; the successor rejects arrays, numbers, null and objects before calculator or apply callbacks. Valid scalar frames retain the same decoding. This closes the critic's four scalar-coercion source counterexamples without creating native evidence.
+
+The existing draft round-trip REMOVE guard refuses a request whose return_hold is already true. The predecessor set that hold during initial capture whenever D1 exists. This successor starts CAPTURED with false, under the same actual native admission/locks, and sets the hold only after a successful actual removal receipt has been validated and the phase becomes DRAFT_REMOVED. Failed REMOVE preserves CAPTURED and false through the existing guarded subtransaction. This is a source correction to the contradictory initial state; it does not prove the remaining native invoice plan or Return owner.
+
+Two complete files, three unique whole-owner forward/reverse hunks, 20 effect-free UNIT_ONLY cases, three syntax checks and one lexical SQL envelope were checked. The static graph retains 137 objects/219 relative edges and changes only the proposed worker module hash. The test's state-transition model is not PostgreSQL or rollback evidence.

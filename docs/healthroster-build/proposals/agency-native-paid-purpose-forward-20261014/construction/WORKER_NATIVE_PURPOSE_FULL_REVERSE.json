@@ -1,0 +1,21 @@
+{
+  "schema": "AGENCY_WORKER_NATIVE_PAID_PURPOSE_FULL_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "full_forward_files": [
+    {
+      "before_path": "18_agency_native_worker_context.sqlinc",
+      "after_path": "39_complete_worker_context_with_native_paid_purpose.sqlinc",
+      "before_raw_sha256": "2e21bf34f9ec6e8804178ba0fec84b7c53d623cc019fdaf1120c4f5b0eeadf50",
+      "after_raw_sha256": "1a21d0f74592edf8e283ff2a9f8fe2d7ee83e13f0ce6420ba5018bef2e327e69",
+      "hunks": [
+        {
+          "before": " claim:=private.weekly_source_agency_original_claim_recheck_v1(r.id);\n if claim->>'available' is distinct from 'true' then\n  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_UNAVAILABLE' using errcode='55000'; end if;",
+          "after": " -- Current native planned-request purpose preserves original evidence,\n -- even when its hours parser is unavailable. It does not grant Protect pay.\n perform private.weekly_source_agency_paid_write_purpose_v1(r.id);",
+          "before_sha256": "ec5e02265850d61dd4f6d522ee8fcf59cbc69a2ebdc326744aba18d36922b2c6",
+          "after_sha256": "d2d8571950175df6b1a1e2eb0e444cc266080860328cb05ec0f3d195572d0e26"
+        }
+      ]
+    }
+  ]
+}

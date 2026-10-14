@@ -1,0 +1,49 @@
+{
+  "source_only": true,
+  "current_i2_pin": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "native_calls": false,
+  "owners": [
+    {
+      "name": "public.tsfin_prepare_write",
+      "source_path": "supabase/repeatable/19012026_extras.sql",
+      "source_raw_sha256": "8c8dadbaaf5e45e377f4cee4586080677627236bda91aea423bac743c30a0c36",
+      "definition_raw_sha256": "4e2bd516d8b3687d078b9d4b306061e0d7b9e27477d8e95cf1213e25dfbfcc6e",
+      "canonical_lf_complete_before_exact": true,
+      "full_reverse_hunks": 3
+    },
+    {
+      "name": "public.tsfin_write_current_snapshot_single_bounded",
+      "source_path": "supabase/repeatable/21072026_1235_37_tsfin_write_current_snapshot_single_bounded.sql",
+      "source_raw_sha256": "9f82588a4c16e4cbbf7285560b5ee1701b021eee51c854658d92c50ed08650aa",
+      "definition_raw_sha256": "a2c478f9f90e17a61c8c4fbf039ce422fbf3c84ce94ef5a162b7616c7909354a",
+      "canonical_lf_complete_before_exact": true,
+      "full_reverse_hunks": 3
+    },
+    {
+      "name": "public.tsfin_write_snapshots_and_complete",
+      "source_path": "supabase/repeatable/21072026_1235_38_tsfin_write_snapshots_and_complete.sql",
+      "source_raw_sha256": "175903f7dd7b6f48af6209cf29173a5e05372d05ba8c59d87399833e1d008693",
+      "definition_raw_sha256": "144df3cfb0907e8f17645c2f512bb58aa700fcc2c98483cbb2265149a1a708d2",
+      "canonical_lf_complete_before_exact": true,
+      "full_reverse_hunks": 5
+    },
+    {
+      "name": "private.bpay_next_assert_candidate_financial_fence_v1",
+      "source_path": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "source_raw_sha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "definition_raw_sha256": "7181c4ab568f07dbbe343a4627f7a0e565871e720517f5fbe062f8527007e5d0"
+    },
+    {
+      "name": "private.weekly_source_candidate_serial_gate_v1",
+      "source_path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "source_raw_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "definition_raw_sha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9"
+    },
+    {
+      "name": "public._inv_unlock_segments_for_invoice",
+      "source_path": "supabase/repeatable/13012026_invoice_edit_RPCs.sql",
+      "source_raw_sha256": "5241fcb43761e8948d45541f4f9925e807d5b825f343460e376f9c00a3f7b64f",
+      "definition_raw_sha256": "ba25552f742431215d488aebad1766e4e7a0a6f12ffd4ad1a885ccc3d7854f48"
+    }
+  ]
+}

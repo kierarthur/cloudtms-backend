@@ -1,0 +1,21 @@
+{
+  "schema": "AGENCY_NATIVE_SCALAR_REMOVAL_HOLD_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "database_calls": false,
+  "predecessor_artifacts_verified": 66,
+  "predecessor_manifest_sha256": "3be7476fe2b274ed9ac42cdcc3c9d8ee071ef8181a4b45336fa2715f36394e81",
+  "complete_unique_forward_reverse_hunks": 3,
+  "unit_only_tests": 20,
+  "failures": 0,
+  "syntax_files": 3,
+  "sql_lexical_statements": 3,
+  "sql_scope": "transaction-neutral lexical envelope; not PostgreSQL compilation",
+  "static_objects": 137,
+  "static_relative_edges": 219,
+  "static_edges_unchanged": true,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null,
+  "full_agency_implementation_complete": false,
+  "mount_ready": false
+}

@@ -1,0 +1,135 @@
+{
+  "schema": "AGENCY_NATIVE_PAID_PURPOSE_COMPLETE_FORWARD_REVERSE_V1",
+  "source_only": true,
+  "native_calls": false,
+  "compiled": false,
+  "qualification_receipt": null,
+  "mount_ready": false,
+  "current_i2_pin": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "full_forward_files": [
+    {
+      "before_path": "27_complete_capture_with_before_pay_inputs.sqlinc",
+      "after_path": "30_complete_capture_with_original_pay_identity.sqlinc",
+      "before_raw_sha256": "b477efb692d919a789c59b72f8baa233eae9eccc14ec2c9c21e8dd7c28bddeda",
+      "after_raw_sha256": "c9aafcbd8042c5e8904b48a207d8e1996da94b44471fd1c8c0eea88906f2d8d3",
+      "before_bytes": 22369,
+      "after_bytes": 22856,
+      "hunks": [
+        {
+          "label": "actual native immutable cut before UNA",
+          "before": "  v_before_pay_witness:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_BEFORE_PAY_INPUT_WITNESS_V1',",
+          "after": "  v_before_pay_witness:=private.weekly_source_agency_original_pay_identity_v1(\r\n    v_ts.timesheet_id,p_actor_user_id,v_fin.id,null::uuid);\r\n  v_before_pay_witness:=(v_before_pay_witness-'native_original_reservations')||jsonb_build_object(\r\n    'native_reservations_sha256',encode(private.weekly_source_sha256_jsonb_v1(\r\n      'AGENCY_CURRENT_NATIVE_ORIGINAL_RESERVATIONS_V1',v_before_pay_witness->'native_original_reservations'),'hex'));\r\n  v_before_pay_witness:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_BEFORE_PAY_INPUT_WITNESS_V1',\r\n    'original_identity',v_before_pay_witness,",
+          "before_sha256": "484caf429d3ea452d2935a4bbb96527ed2a8c5ce8418e5c6ea9e5f1676c270a0",
+          "after_sha256": "9bb210e5f488246fc27f38b17ab545967936ed49e953727b0f087ace4de26dc5"
+        },
+        {
+          "label": "complete finite original witness bound",
+          "before": "  if octet_length(v_before_pay_witness::text)>16384 then",
+          "after": "  if octet_length(v_before_pay_witness::text)>32768 then",
+          "before_sha256": "0bbfabb4066caf10418d34e0a691e7fc652bb198558990ab108879aa7ad30bed",
+          "after_sha256": "d8163b855c0fcca9357d217f85251e6221b606e5811ff9a3b44fca387d98da99"
+        }
+      ]
+    },
+    {
+      "before_path": "23_complete_bounded_unpaid_financial_authority.sqlinc",
+      "after_path": "31_complete_native_paid_financial_authority.sqlinc",
+      "before_raw_sha256": "237983cdf9e1aac48e7c76ccd78faa4a2919f274c599cf9cfbb6df58c34d584f",
+      "after_raw_sha256": "d3071353a62dd78152920d7f915acb50798607a5a651e02f99af8b631d550413",
+      "before_bytes": 17523,
+      "after_bytes": 18192,
+      "hunks": [
+        {
+          "label": "constructor measured native purpose variable",
+          "before": "queue public.ts_financials_outbox%rowtype; claim jsonb; frame jsonb; receipts jsonb;",
+          "after": "queue public.ts_financials_outbox%rowtype; claim jsonb; purpose jsonb; frame jsonb; receipts jsonb;",
+          "before_sha256": "a4b2c7c6ce219bc47e6fc18108c0da0cc9e36cf96389521bdc69108eb8f30ee8",
+          "after_sha256": "6fb1e3e0024d903633e19de438ab6de5fa722a74986ebe35c42f607e5ba2cf29"
+        },
+        {
+          "label": "constructor genuine planned phase purpose instead of marker refusal",
+          "before": "  -- Intermediate unpaid-only source slice. Primary paid actions still\n  -- require the separate genuine ORDINARY/native paid-purpose producer.\n  -- Original claim is evidence of hours, never paid writer permission.\n  if f.paid_at_utc is not null then\n    raise exception 'AGENCY_CHANGE_PAID_WRITER_PRODUCER_UNIMPLEMENTED' using errcode='55000'; end if;\n  if claim->>'available' is distinct from 'true' then\n    raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_UNAVAILABLE' using errcode='55000',detail=claim::text; end if;",
+          "after": "  purpose:=private.weekly_source_agency_paid_write_purpose_v1(r.id);\n  -- Unavailable original hours stay unavailable to protection. The financial\n  -- purpose preserves the actual signed/document/old-financial identities;\n  -- it does not relabel a document view as an immutable worker claim.",
+          "before_sha256": "1f0db501d6d15a10262e56bcd594ae3435578ac7fff89d83a966c4520450a765",
+          "after_sha256": "6ab8a58370d0535ffbf8f67830f26b407152f40ebe6669ef1bb26c73e5db74de"
+        },
+        {
+          "label": "constructor exact nullable claim and purpose fields",
+          "before": "    'source_cas',r.source_cas,'original_submission_sha256',claim->'claim_sha256',",
+          "after": "    'source_cas',r.source_cas,'original_submission_proved',claim->'available',\n    'paid_write_purpose_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_PAID_WRITE_PURPOSE_V1',purpose),'hex'),\n    'original_submission_sha256',claim->'claim_sha256',",
+          "before_sha256": "38e770192d4a816add20d6209d9d771a30f44aee66943c58520615f46df15efb",
+          "after_sha256": "c76c9722992061e706e7beb3ad7e7a6a0a8b09a3b87781aced6b2b6872f4d9da"
+        },
+        {
+          "label": "nested purpose variable",
+          "before": "frame jsonb; claim jsonb; invoice public.invoices%rowtype;",
+          "after": "frame jsonb; claim jsonb; purpose jsonb; invoice public.invoices%rowtype;",
+          "before_sha256": "b6c4dfcd34695a30990863874ce7b286b2bbbc528f091275d67d23ef23249d8f",
+          "after_sha256": "e6efaa95164913d7a5425d2007bd3d36bbf4e5b866d8ecc15e75b25dc73d8fb6"
+        },
+        {
+          "label": "closed frame fields",
+          "before": "'snapshot_sha256','source_cas','original_submission_sha256','original_submission_state','prior_financial_updated_at','outbox_id'];",
+          "after": "'snapshot_sha256','source_cas','original_submission_proved','paid_write_purpose_sha256',\n    'original_submission_sha256','original_submission_state','prior_financial_updated_at','outbox_id'];",
+          "before_sha256": "b5598008757cb6b77bc27a8e0a821cc834822504f9b6b9c9a0d58385bd576aef",
+          "after_sha256": "09631052d84f01acc435c07dda5689e28815239fdf160742661b40d855866208"
+        },
+        {
+          "label": "nullable unavailable claim remains honest",
+          "before": "    or coalesce(frame->>'original_submission_sha256','')!~'^[0-9a-f]{64}$'",
+          "after": "    or jsonb_typeof(frame->'original_submission_proved') is distinct from 'boolean'\n    or coalesce(frame->>'paid_write_purpose_sha256','')!~'^[0-9a-f]{64}$'\n    or (frame->'original_submission_proved'='true'::jsonb\n      and coalesce(frame->>'original_submission_sha256','')!~'^[0-9a-f]{64}$')\n    or (frame->'original_submission_proved'='false'::jsonb\n      and (frame->'original_submission_sha256' is distinct from 'null'::jsonb\n        or frame->'original_submission_state' is distinct from 'null'::jsonb))",
+          "before_sha256": "6ee06a4eac8d85ccf01d77199126b9c2d0ecec6b8afd1d34fc30cd4b73eebcd4",
+          "after_sha256": "6b4bc81e787b3edc89000c20fb20534244540c72fdce4b3808e42fa818cafcd2"
+        },
+        {
+          "label": "nested genuine paid purpose rederivation",
+          "before": "  if f.paid_at_utc is not null then\n    raise exception 'AGENCY_CHANGE_PAID_WRITER_PRODUCER_UNIMPLEMENTED' using errcode='55000'; end if;\n  if claim->>'available' is distinct from 'true' or claim->'claim_sha256' is distinct from frame->'original_submission_sha256'\n    or claim->'submission_state' is distinct from frame->'original_submission_state' then\n    raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_UNAVAILABLE' using errcode='55000'; end if;",
+          "after": "  purpose:=private.weekly_source_agency_paid_write_purpose_v1(r.id);\n  if claim->'available' is distinct from frame->'original_submission_proved'\n    or coalesce(claim->'claim_sha256','null'::jsonb) is distinct from frame->'original_submission_sha256'\n    or coalesce(claim->'submission_state','null'::jsonb) is distinct from frame->'original_submission_state'\n    or encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_PAID_WRITE_PURPOSE_V1',purpose),'hex')\n      is distinct from frame->>'paid_write_purpose_sha256' then\n    raise exception 'AGENCY_CHANGE_NATIVE_PAID_WRITE_PURPOSE_CHANGED' using errcode='40001'; end if;",
+          "before_sha256": "dd86be8098c050de9846c551c0b0bde47ae60c39cd7f5b3e55b9784a9d8cd4c6",
+          "after_sha256": "4b7adc625a1dec3807b92a53ec140658aaed829d323a005862b3fa6554f23219"
+        }
+      ]
+    },
+    {
+      "before_path": "16_complete_agency_request_authority_with_owned_unauthed_phase.sqlinc",
+      "after_path": "32_complete_request_authority_with_native_manual_frame.sqlinc",
+      "before_raw_sha256": "2593b5e9a352d13f1f7894d881429265b42c7029d91f0b34c605850199713d30",
+      "after_raw_sha256": "d05a9db7fd552733ffa40b3c2f1fad1e45d2b8e14a632a55783e98e29b3638c8",
+      "before_bytes": 12602,
+      "after_bytes": 13646,
+      "hunks": [
+        {
+          "label": "native MANUAL signature transition only under actual frame",
+          "before": "    and coalesce((v_request.phase='RECOMPUTE_PENDING'",
+          "after": "    and coalesce((v_request.phase='UNAUTHORISED'\n      and v_request.native_receipts#>>'{financial_write_frame,mode}'='MANUAL'\n      and v_request.native_receipts#>>'{financial_write_frame,request_id}'=v_request.id::text\n      and v_request.native_receipts#>>'{financial_write_frame,request_sha256}'=encode(v_request.request_sha256,'hex')\n      and v_request.native_receipts#>>'{financial_write_frame,transaction_id}'=pg_current_xact_id()::text\n      and v_request.native_receipts#>>'{financial_write_frame,backend_pid}'=pg_backend_pid()::text\n      and v_request.native_receipts#>>'{financial_write_frame,phase_actor_user_id}'=v_request.updated_by_user_id::text\n      and v_request.native_receipts#>>'{financial_write_frame,timesheet_id}'=v_ts.timesheet_id::text\n      and v_request.native_receipts#>>'{financial_write_frame,timesheet_version}'=v_ts.version::text\n      and v_request.native_receipts#>'{financial_write_frame,source_cas}'=v_request.source_cas\n      and v_ts.actual_schedule_json=v_request.native_receipts#>'{original_capture,schedule}')\n     or(v_request.phase='RECOMPUTE_PENDING'",
+          "before_sha256": "e9b2134abfcb18cb526516857ee5139ba2970d6ffb88dbea1332bf8ee8bc9f9c",
+          "after_sha256": "a475ca9875f029489cacab7bf52c9569df43e0faf166dd0d480510a50f1e77fe"
+        }
+      ]
+    },
+    {
+      "before_path": "17_agency_native_request_begin.sqlinc",
+      "after_path": "33_complete_native_begin_with_after_una_purpose.sqlinc",
+      "before_raw_sha256": "0ba378014661d6a3b4fd5732fa53a2a3fb266c5e2e357bcef323532c563ec76b",
+      "after_raw_sha256": "d85d0ad80ad3e7c75c996c6557040f9bfac9cd1a00eca28535627968d42abe33",
+      "before_bytes": 12783,
+      "after_bytes": 13272,
+      "hunks": [
+        {
+          "label": "real after UNA observation variable",
+          "before": "audit_id uuid; receipts jsonb;",
+          "after": "audit_id uuid; receipts jsonb; pay_purpose jsonb;",
+          "before_sha256": "4a55e3787840d4cbf562ba17abe10eebb0a68c42d091cf5f89975acc27c748fa",
+          "after_sha256": "987732f8583a481aad15bb39f74811856bcd1ee7e181ffc9a17fac363615f3fb"
+        },
+        {
+          "label": "measure only after actual phase/row/CAS signature receipt",
+          "before": "   update private.weekly_source_agency_timesheet_change_requests set phase='UNAUTHORISED',native_receipts=receipts,\n    current_row_signature=next_signature,current_financial_id=f.id,updated_by_user_id=p_actor_user_id,version=version+1,\n    updated_at_utc=transaction_timestamp(),last_refusal_code=null where id=r.id returning * into r;",
+          "after": "   update private.weekly_source_agency_timesheet_change_requests set phase='UNAUTHORISED',native_receipts=receipts,\n    current_row_signature=next_signature,current_financial_id=f.id,updated_by_user_id=p_actor_user_id,version=version+1,\n    updated_at_utc=transaction_timestamp(),last_refusal_code=null where id=r.id returning * into r;\n   pay_purpose:=private.weekly_source_agency_paid_write_purpose_v1(r.id);\n   receipts:=r.native_receipts||jsonb_build_object('after_una_pay_purpose',pay_purpose);\n   if octet_length(receipts::text)>65536 then raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED'; end if;\n   update private.weekly_source_agency_timesheet_change_requests set native_receipts=receipts,\n    version=version+1,updated_at_utc=transaction_timestamp() where id=r.id returning * into r;",
+          "before_sha256": "a3f7c3e96e9edbc8a73b77997cd3b1f7b582a1d828620cf6be13e70531d337a6",
+          "after_sha256": "2b9d8ac1172cfc87871ecbc2a0f9932fc9981a75189a174726be2d45b9f1b7c7"
+        }
+      ]
+    }
+  ]
+}

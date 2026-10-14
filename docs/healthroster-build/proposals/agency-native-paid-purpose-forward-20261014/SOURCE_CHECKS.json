@@ -1,0 +1,131 @@
+{
+  "schema": "AGENCY_NATIVE_PAID_PURPOSE_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "database_calls": false,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null,
+  "full_forward_reverse_hunks": 33,
+  "native_current_owners": 6,
+  "sql": [
+    {
+      "path": "construction/11_complete_tsfin_prepare_write.sqlinc",
+      "sha256": "d20ae24e7e3ed504f41f3e7d7ab445de2f1674249073d25e43a16beec8c0482e",
+      "statements": 1
+    },
+    {
+      "path": "construction/12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+      "sha256": "a48e15134fd61562f75e8a8f7c7d3912b06b87046ccd3a8417fa9f2f133b2162",
+      "statements": 1
+    },
+    {
+      "path": "construction/13_complete_tsfin_write_snapshots_and_complete.sqlinc",
+      "sha256": "50e5f92fefff607455618da5ae643397c79250d6c3aff808435ddb255ae719bd",
+      "statements": 1
+    },
+    {
+      "path": "construction/15_agency_original_claim_recheck.sqlinc",
+      "sha256": "08c20fc4c0b9723c334b282a56940782b4cb8f79cc04463afe0cb5b49b464e14",
+      "statements": 3
+    },
+    {
+      "path": "construction/19_agency_native_worker_apply.sqlinc",
+      "sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e",
+      "statements": 7
+    },
+    {
+      "path": "construction/20_agency_native_pay_scope.sqlinc",
+      "sha256": "60ab70b937864ca57e7f7d786076f66ab3a011111f3a8f17d988e1d7fe236b40",
+      "statements": 3
+    },
+    {
+      "path": "construction/21_agency_legacy_original_document.sqlinc",
+      "sha256": "4dce5030b0706d67b5323442799c26a03e4f77c42a1f958af8927f87b36b57e5",
+      "statements": 3
+    },
+    {
+      "path": "construction/28_agency_original_pay_identity.sqlinc",
+      "sha256": "1382e30d9d5cec8f1ed24b8444d927ebcd9c696367636d805a9a9242eabe05ed",
+      "statements": 3
+    },
+    {
+      "path": "construction/29_agency_paid_write_purpose.sqlinc",
+      "sha256": "0311e44d1e0a495fae05cf98cc3939729568b1f52498fd4eb8163e43e7cb00ad",
+      "statements": 3
+    },
+    {
+      "path": "construction/31_complete_native_paid_financial_authority.sqlinc",
+      "sha256": "d3071353a62dd78152920d7f915acb50798607a5a651e02f99af8b631d550413",
+      "statements": 10
+    },
+    {
+      "path": "construction/33_complete_native_begin_with_after_una_purpose.sqlinc",
+      "sha256": "d85d0ad80ad3e7c75c996c6557040f9bfac9cd1a00eca28535627968d42abe33",
+      "statements": 3
+    },
+    {
+      "path": "construction/34_complete_ordinary_collection_native_json_codec.sqlinc",
+      "sha256": "11d3b933f8962fd3d7423da1b5e5fe736bcbef8af41556dbba10b5d1fab046a4",
+      "statements": 3
+    },
+    {
+      "path": "construction/35_complete_before_collection_native_json_codec.sqlinc",
+      "sha256": "0d7c9f97f3d16a833f25386146783fef55a2e4c362879a5eeec1f7bda2aa11b4",
+      "statements": 3
+    },
+    {
+      "path": "construction/36_complete_request_authority_with_candidate_admission.sqlinc",
+      "sha256": "55c0daf9f5e9fdff29077039743a3a7df2abf1e22dbd40ad92abedc089636230",
+      "statements": 3
+    },
+    {
+      "path": "construction/37_complete_capture_with_candidate_admission.sqlinc",
+      "sha256": "eb83e2335a3eb5c54c6c6a5fcdc034a3fa6257acb950ef529257d328a32569eb",
+      "statements": 6
+    },
+    {
+      "path": "construction/38_agency_candidate_native_admission.sqlinc",
+      "sha256": "9086104bf6e173ac75d62a0cc3c440bd22669c1c643e0c4a4ab7c55dc7d8d57a",
+      "statements": 3
+    },
+    {
+      "path": "construction/39_complete_worker_context_with_native_paid_purpose.sqlinc",
+      "sha256": "1a21d0f74592edf8e283ff2a9f8fe2d7ee83e13f0ce6420ba5018bef2e327e69",
+      "statements": 11
+    },
+    {
+      "path": "construction/40_complete_physical_pay_scope_client_cycle.sqlinc",
+      "sha256": "cdf06fb048fe7b67006045c6259631d541867403b9e9b00bb93d43d1ca871474",
+      "statements": 3
+    }
+  ],
+  "sql_check_scope": "transaction-neutral lexical envelope, not PostgreSQL compilation",
+  "tests": [
+    {
+      "name": "agency-canonical-worker.test.mjs",
+      "tests": 37,
+      "unit_only": true
+    },
+    {
+      "name": "agency-paid-purpose.test.mjs",
+      "tests": 17,
+      "unit_only": true
+    }
+  ],
+  "syntax": [
+    "construction/runtime-forward/index.js",
+    "construction/runtime-reference/index.js",
+    "construction/runtime/agency-canonical-worker.mjs",
+    "construction/agency-canonical-worker.test.mjs",
+    "construction/agency-paid-purpose.test.mjs"
+  ],
+  "paid_quantity_certified": false,
+  "withheld_quantity_certified": false,
+  "full_agency_implementation_complete": false,
+  "mount_ready": false,
+  "credential_scan": {
+    "files": 66,
+    "findings": 0,
+    "scope": "bounded new source packet only"
+  }
+}

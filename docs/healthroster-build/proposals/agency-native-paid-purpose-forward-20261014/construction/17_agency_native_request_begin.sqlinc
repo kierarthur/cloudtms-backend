@@ -1,0 +1,164 @@
+-- Initial portion of the SINGLE planned native change owner. Owner-private;
+-- not a second business entry or a public placeholder. Canonical Worker/native
+-- completion and authorise/return phases are separate continuing construction.
+create or replace function private.weekly_source_agency_change_begin_v1(
+ p_contract_week_id uuid,p_reason text,p_expected_signature text,p_request_key text,p_actor_user_id uuid
+) returns private.weekly_source_agency_timesheet_change_requests
+language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ capture jsonb; signature jsonb; receipt jsonb; native_result jsonb;
+ t public.timesheets%rowtype; f public.timesheets_financials%rowtype; cw public.contract_weeks%rowtype;
+ actor public.tms_users%rowtype; next_signature text; error_code text; error_state text;
+ audit_id uuid; receipts jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001'; end if;
+ if p_contract_week_id is null or p_actor_user_id is null or p_reason is null
+  or length(p_reason) not between 1 and 2000 or p_reason is distinct from btrim(p_reason)
+  or p_request_key is null or length(p_request_key) not between 1 and 200
+  or p_request_key is distinct from btrim(p_request_key)
+  or p_expected_signature is null or length(p_expected_signature) not between 1 and 512 then
+  raise exception 'AGENCY_CHANGE_REQUEST_INVALID' using errcode='22023'; end if;
+ if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+  raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501'; end if;
+ select * into strict actor from public.tms_users where id=p_actor_user_id and is_active;
+ -- Only duplicate click-key admission serialisation; real invoice/family/source
+ -- locks are still derived and taken by capture/request authority in native order.
+ perform pg_advisory_xact_lock(hashtextextended('weekly_source_agency_change_key:'||p_request_key,0));
+ select * into r from private.weekly_source_agency_timesheet_change_requests where request_key=p_request_key;
+ if found then
+  r:=private.weekly_source_agency_change_request_assert_v1(p_contract_week_id,p_reason,
+    p_expected_signature,p_request_key,p_actor_user_id);
+  if r.state='COMPLETED' then return r; end if;
+  if r.updated_by_user_id is distinct from p_actor_user_id then
+   update private.weekly_source_agency_timesheet_change_requests set updated_by_user_id=p_actor_user_id,
+    updated_at_utc=transaction_timestamp(),version=version+1 where id=r.id returning * into r;
+   insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,
+     action,after_json,reason,correlation_id)
+    values(gen_random_uuid(),transaction_timestamp(),p_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,
+      'RESUME_CURRENT_SCOPED_ACTOR',jsonb_build_object('phase',r.phase,'request_version',r.version,
+        'original_creator_user_id',r.actor_user_id,'current_resumer_user_id',p_actor_user_id),p_reason,r.request_key);
+  end if;
+ else
+  capture:=private.weekly_source_agency_change_capture_v1(p_contract_week_id,p_actor_user_id);
+  if capture->>'initial_row_signature' is distinct from p_expected_signature then
+   raise exception 'AGENCY_CHANGE_EXPECTED_SIGNATURE_CHANGED' using errcode='40001'; end if;
+  if octet_length(jsonb_build_object('original_capture',capture)::text)>49152 then
+   raise exception 'AGENCY_CHANGE_NATIVE_CAPTURE_BOUND_EXCEEDED' using errcode='54000'; end if;
+  if exists(select 1 from private.weekly_source_agency_timesheet_change_requests active
+   where active.state='ACTIVE' and (active.contract_week_id=p_contract_week_id
+     or(active.agency_id=(capture->>'agency_id')::uuid
+       and active.canonical_family_booking_id=capture->>'canonical_family_booking_id'))) then
+   raise exception 'AGENCY_CHANGE_EXISTING_ACTIVE_REQUEST_REQUIRED' using errcode='40001'; end if;
+  insert into private.weekly_source_agency_timesheet_change_requests(
+   request_key,request_sha256,actor_user_id,reason,environment,agency_id,contract_week_id,contract_id,candidate_id,
+   client_id,week_ending_date,source_group_id,source_cycle_id,source_upload_id,source_publication_id,rule_set_version_id,
+   source_cas,initial_timesheet_id,initial_timesheet_version,initial_row_signature,canonical_family_booking_id,
+   original_draft_invoice_id,original_draft_invoice_no,current_timesheet_id,current_timesheet_version,current_row_signature,
+   return_hold,current_financial_id,native_receipts,updated_by_user_id)
+  values(p_request_key,private.weekly_source_agency_change_request_sha256_v1(p_contract_week_id,p_reason,
+    p_expected_signature,p_request_key,p_actor_user_id,capture),p_actor_user_id,p_reason,'TEST',
+   (capture->>'agency_id')::uuid,p_contract_week_id,(capture->>'contract_id')::uuid,(capture->>'candidate_id')::uuid,
+   (capture->>'client_id')::uuid,(capture->>'week_ending_date')::date,(capture->>'source_group_id')::uuid,
+   (capture->>'source_cycle_id')::uuid,(capture->>'source_upload_id')::uuid,(capture->>'source_publication_id')::uuid,
+   (capture->>'rule_set_version_id')::uuid,capture->'source_cas',(capture->>'initial_timesheet_id')::uuid,
+   (capture->>'initial_timesheet_version')::integer,p_expected_signature,capture->>'canonical_family_booking_id',
+   (capture->>'original_draft_invoice_id')::uuid,capture->>'original_draft_invoice_no',
+   (capture->>'initial_timesheet_id')::uuid,(capture->>'initial_timesheet_version')::integer,p_expected_signature,
+   capture->>'original_draft_invoice_id' is not null,(capture->>'current_financial_id')::uuid,
+   jsonb_build_object('original_capture',capture),p_actor_user_id) returning * into r;
+  insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,
+    action,after_json,reason,correlation_id)
+   values(gen_random_uuid(),transaction_timestamp(),p_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,
+    'CAPTURE_NATIVE_REQUEST',jsonb_build_object('phase',r.phase,'request_version',r.version,
+      'request_sha256',encode(r.request_sha256,'hex')),p_reason,p_request_key);
+ end if;
+ -- Each attempted phase has its own subtransaction. Failure does not relabel
+ -- an earlier real phase, discard D1's hold or manufacture queue/completion.
+ if r.phase='CAPTURED' then
+  begin
+   if r.original_draft_invoice_id is not null then
+    receipt:=private.weekly_source_agency_draft_round_trip_v1(r.request_key,'REMOVE',p_actor_user_id);
+    if receipt->>'ok' is distinct from 'true' or receipt->>'step' is distinct from 'REMOVE'
+     or receipt->>'request_id' is distinct from r.id::text then
+     raise exception 'AGENCY_CHANGE_NATIVE_DRAFT_REMOVAL_UNPROVED'; end if;
+    next_signature:=receipt->>'current_row_signature';
+   else
+    if exists(select 1 from public.invoice_lines l where l.timesheet_id=r.current_timesheet_id) then
+     raise exception 'AGENCY_CHANGE_FOREIGN_DRAFT_PLACEMENT'; end if;
+    signature:=public.timesheet_lifecycle_guard_signature_v1(r.current_timesheet_id,r.contract_week_id,false);
+    next_signature:=btrim(coalesce(signature->>'backend_row_signature',signature->>'row_signature',signature->>'signature'));
+    receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_DRAFT_ABSENCE_V1',
+      'request_id',r.id,'timesheet_id',r.current_timesheet_id,'original_draft_invoice_id',null,
+      'native_editor_called',false,'native_observed_no_placement',true,'phase_actor_user_id',p_actor_user_id);
+   end if;
+   if nullif(next_signature,'') is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE'; end if;
+   receipts:=r.native_receipts||jsonb_build_object('remove_draft',receipt);
+   if octet_length(receipts::text)>65536 then raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED'; end if;
+   update private.weekly_source_agency_timesheet_change_requests set phase='DRAFT_REMOVED',native_receipts=receipts,
+    current_row_signature=next_signature,updated_by_user_id=p_actor_user_id,version=version+1,
+    updated_at_utc=transaction_timestamp(),last_refusal_code=null where id=r.id returning * into r;
+  exception when others then
+   get stacked diagnostics error_code=MESSAGE_TEXT,error_state=RETURNED_SQLSTATE;
+   update private.weekly_source_agency_timesheet_change_requests set last_refusal_code=case when error_code~'^[A-Z][A-Z0-9_]{0,199}$' then error_code
+      else 'AGENCY_CHANGE_NATIVE_PHASE_FAILED' end,
+    updated_by_user_id=p_actor_user_id,updated_at_utc=transaction_timestamp(),version=version+1
+    where id=r.id returning * into r;
+   return r;
+  end;
+ end if;
+ if r.phase='DRAFT_REMOVED' then
+  begin
+   r:=private.weekly_source_agency_change_request_assert_v1(p_contract_week_id,p_reason,
+     p_expected_signature,p_request_key,p_actor_user_id);
+   select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+   select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current;
+   select * into strict cw from public.contract_weeks where id=r.contract_week_id;
+   if t.authorised_at_server is not null or f.authorised_at_utc is not null or cw.status::text='AUTHORISED' then
+    native_result:=public.timesheet_unauthorise_atomic(t.timesheet_id,t.timesheet_id,p_actor_user_id,
+      transaction_timestamp(),r.current_row_signature);
+    if native_result->>'ok' is distinct from 'true' or native_result->>'timesheet_id' is distinct from t.timesheet_id::text
+      or native_result->>'operation' is distinct from 'timesheet_unauthorise' then
+     raise exception 'AGENCY_CHANGE_NATIVE_UNAUTHORISE_UNPROVED'; end if;
+    select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+    select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current;
+    if t.authorised_at_server is not null or f.authorised_at_utc is not null
+      or t.revoked_reason is distinct from 'TIMESHEET_UNAUTHORISE' or t.revoked_by is distinct from p_actor_user_id::text then
+     raise exception 'AGENCY_CHANGE_NATIVE_UNAUTHORISE_POSTCONDITION_UNPROVED'; end if;
+    receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_UNAUTHORISE_V1',
+      'phase_actor_user_id',p_actor_user_id,'native_result_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_AGENCY_NATIVE_UNAUTHORISE_RESULT_V1',native_result),'hex'),
+      'result',jsonb_build_object('ok',true,'operation',native_result->'operation','timesheet_id',native_result->'timesheet_id',
+        'current_version',native_result->'current_version','revoked_at',native_result->'revoked_at'));
+   else
+    receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_ALREADY_UNAUTHORISED_V1',
+      'phase_actor_user_id',p_actor_user_id,'native_unauthorise_called',false,
+      'observed_timesheet_authorised_at',t.authorised_at_server,'observed_financial_authorised_at',f.authorised_at_utc,
+      'observed_contract_week_status',cw.status::text);
+   end if;
+   signature:=public.timesheet_lifecycle_guard_signature_v1(t.timesheet_id,r.contract_week_id,false);
+   next_signature:=btrim(coalesce(signature->>'backend_row_signature',signature->>'row_signature',signature->>'signature'));
+   if nullif(next_signature,'') is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE'; end if;
+   receipts:=r.native_receipts||jsonb_build_object('unauthorise',receipt);
+   update private.weekly_source_agency_timesheet_change_requests set phase='UNAUTHORISED',native_receipts=receipts,
+    current_row_signature=next_signature,current_financial_id=f.id,updated_by_user_id=p_actor_user_id,version=version+1,
+    updated_at_utc=transaction_timestamp(),last_refusal_code=null where id=r.id returning * into r;
+  exception when others then
+   get stacked diagnostics error_code=MESSAGE_TEXT,error_state=RETURNED_SQLSTATE;
+   update private.weekly_source_agency_timesheet_change_requests set last_refusal_code=case when error_code~'^[A-Z][A-Z0-9_]{0,199}$' then error_code
+      else 'AGENCY_CHANGE_NATIVE_PHASE_FAILED' end,
+    updated_by_user_id=p_actor_user_id,updated_at_utc=transaction_timestamp(),version=version+1
+    where id=r.id returning * into r;
+   return r;
+  end;
+ end if;
+ return r;
+end;
+$function$;
+alter function private.weekly_source_agency_change_begin_v1(uuid,text,text,text,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_change_begin_v1(uuid,text,text,text,uuid)
+ from public,anon,authenticated,service_role;

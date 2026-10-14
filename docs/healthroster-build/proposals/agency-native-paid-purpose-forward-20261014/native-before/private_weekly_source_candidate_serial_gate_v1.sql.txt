@@ -1,0 +1,84 @@
+create or replace function private.weekly_source_candidate_serial_gate_v1(
+  p_candidate_id uuid,
+  p_job_type text,
+  p_job_id uuid,
+  p_reason text
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_job_types constant text[]:=array[
+    'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION',
+    'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION_WITHDRAWAL',
+    'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+    'WORKBENCH_CANDIDATE_PENDING_ENTITLEMENT_RELEASE'
+  ];
+  v_job_type text:=nullif(pg_catalog.btrim(coalesce(p_job_type,'')),'');
+  v_gate jsonb;
+  v_decision text;
+begin
+  -- Any job type outside the four pinned Weekly Source types is refused by this
+  -- helper itself, before the installed gate is consulted, because the installed
+  -- helper would return BYPASSED for it and take no lock at all.  The refusal
+  -- carries the same code as a real BYPASSED so no caller has to learn a second
+  -- one; the reason distinguishes the two.
+  if p_candidate_id is null
+     or v_job_type is null
+     or not (v_job_type=any(v_allowed_job_types)) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,
+      'code','WEEKLY_SOURCE_SERIAL_GATE_BYPASSED',
+      'retryable',false,
+      'gate','BYPASSED',
+      'reason',case when p_candidate_id is null
+        then 'CANDIDATE_REQUIRED' else 'JOB_TYPE_NOT_PINNED' end,
+      'job_type',v_job_type,
+      'candidate_id',p_candidate_id
+    );
+  end if;
+
+  v_gate:=public._pay_workbench_candidate_serial_try_gate(
+    p_job_id:=p_job_id,
+    p_candidate_id:=p_candidate_id,
+    p_job_type:=v_job_type,
+    p_payload_json:=pg_catalog.jsonb_build_object('candidate_id',p_candidate_id::text),
+    p_reason:=coalesce(nullif(pg_catalog.btrim(coalesce(p_reason,'')),''),'WEEKLY_SOURCE_ROTATION_AUTHORITY')
+  );
+  v_decision:=coalesce(nullif(pg_catalog.btrim(coalesce(
+    v_gate->>'candidate_serial_gate_decision',''
+  )),''),'UNKNOWN');
+
+  -- A GRANTED decision is only trusted when the installed gate actually
+  -- attempted and obtained the transaction-scoped advisory lock; anything else
+  -- is the BYPASSED failure, never a silent pass.
+  if v_decision='GRANTED'
+     and coalesce((v_gate->>'advisory_lock_attempted')::boolean,false)
+     and coalesce((v_gate->>'advisory_lock_granted')::boolean,false) then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'gate','GRANTED','candidate_id',p_candidate_id,'job_type',v_job_type
+    );
+  elsif v_decision='BLOCKED' then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,
+      'code','WEEKLY_SOURCE_CANDIDATE_BUSY',
+      'retryable',true,
+      'gate','BLOCKED',
+      'candidate_id',p_candidate_id,
+      'job_type',v_job_type
+    );
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',false,
+    'code','WEEKLY_SOURCE_SERIAL_GATE_BYPASSED',
+    'retryable',false,
+    'gate',v_decision,
+    'reason','GATE_DECISION_NOT_GRANTED',
+    'candidate_id',p_candidate_id,
+    'job_type',v_job_type
+  );
+end;
+$function$;

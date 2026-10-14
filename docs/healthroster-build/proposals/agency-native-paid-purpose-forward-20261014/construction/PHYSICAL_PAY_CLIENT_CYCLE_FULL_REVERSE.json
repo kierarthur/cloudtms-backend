@@ -1,0 +1,27 @@
+{
+  "schema": "AGENCY_PHYSICAL_PAY_CLIENT_CYCLE_FULL_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "full_forward_files": [
+    {
+      "before_path": "25_agency_physical_pay_inputs.sqlinc",
+      "after_path": "40_complete_physical_pay_scope_client_cycle.sqlinc",
+      "before_raw_sha256": "74fbf8a9ef9fed555cd7e103cc71cf3b71e547df22e049af4947b8f831fa2509",
+      "after_raw_sha256": "cdf06fb048fe7b67006045c6259631d541867403b9e9b00bb93d43d1ca871474",
+      "hunks": [
+        {
+          "before": " group_id uuid; cycle_id uuid; member_ids uuid[]; n bigint;",
+          "after": " group_id uuid; cycle_id uuid; cycle_ids uuid[]; member_ids uuid[]; n bigint;",
+          "before_sha256": "a531da56695849b474e2e96a530eeb7acd70c76301abbe109f22ed8dcf798ca3",
+          "after_sha256": "7d212a82ef6853dae2b91a347f69fb5b542d3a8281265ee3d919d1d46525011f"
+        },
+        {
+          "before": " select g.id,cycle.id into strict group_id,cycle_id from public.weekly_source_groups g\n  join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=c.client_id\n   and t.week_ending_date between member.valid_from and coalesce(member.valid_to,'infinity'::date)\n  join public.weekly_source_cycles cycle on cycle.source_group_id=g.id and cycle.finalisation_week_ending=t.week_ending_date\n  where g.active and g.environment='TEST' and g.source_family='ROSTER';",
+          "after": " select array_agg(cycle.id order by cycle.id) into cycle_ids from public.weekly_source_groups g\n  join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=c.client_id\n   and t.week_ending_date between member.valid_from and coalesce(member.valid_to,'infinity'::date)\n  join public.weekly_source_cycles cycle on cycle.source_group_id=g.id and cycle.finalisation_week_ending=t.week_ending_date\n  where g.active and g.environment='TEST' and g.source_family='ROSTER'\n   and (cycle.scope_client_id is null or cycle.scope_client_id=c.client_id);\n if cardinality(cycle_ids)>1 then\n  select array_agg(cycle.id order by cycle.id) into cycle_ids from public.weekly_source_cycles cycle\n   where cycle.id=any(cycle_ids) and cycle.scope_client_id=c.client_id; end if;\n if coalesce(cardinality(cycle_ids),0)<>1 then\n  raise exception 'AGENCY_CHANGE_SOURCE_CYCLE_AMBIGUOUS' using errcode='55000'; end if;\n select cycle.source_group_id,cycle.id into strict group_id,cycle_id\n  from public.weekly_source_cycles cycle where cycle.id=cycle_ids[1];",
+          "before_sha256": "d54963f13f4b2081843ec68b789cca9e439ea22b744250a18790727c5d74af18",
+          "after_sha256": "8d8d0ba59adad3aa7d0d6626860ef8b2d219bb418e90281221c9c13bd282a503"
+        }
+      ]
+    }
+  ]
+}

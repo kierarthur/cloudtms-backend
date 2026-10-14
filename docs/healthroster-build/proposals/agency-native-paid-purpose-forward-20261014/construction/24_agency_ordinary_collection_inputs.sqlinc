@@ -1,0 +1,95 @@
+-- Actual ORDINARY native collection/reservation INPUTS only. These are not a
+-- universal paid/withheld quantity, protection v_position or paid edit permit.
+-- The established native owners retain every money formula and uncertainty.
+create or replace function private.weekly_source_agency_ordinary_collection_inputs_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ scope jsonb; v_work private.bpay_next_work%rowtype;
+ before_work jsonb; before_worker jsonb; after_worker jsonb;
+ v_keys text[]; v_key text; v_position private.bpay_next_position%rowtype;
+ v_basis private.bpay_next_work_collection%rowtype; rows jsonb:='[]'::jsonb;
+ observation jsonb; reservation jsonb; native_error text; item jsonb; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ scope:=private.weekly_source_agency_native_pay_scope_v1(p_request_id);
+ if scope->>'active_owner' is distinct from 'NEXT' then
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_ORDINARY_COLLECTION_INPUTS_V1',
+   'scope',scope,'native_component_inputs',null,'reason','LEGACY_COLLECTION_PROTOCOL_NOT_NEXT',
+   'paid_writer_permission',null,'paid_quantity_known',null,'withheld_quantity_known',null);
+ end if;
+ if jsonb_typeof(scope->'ordinary_work') is distinct from 'object'
+  or not pg_input_is_valid(coalesce(scope#>>'{ordinary_work,work_id}',''),'uuid') then
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_ORDINARY_COLLECTION_INPUTS_V1',
+   'scope',scope,'native_component_inputs',null,'reason','NATIVE_ORDINARY_WORK_UNAVAILABLE',
+   'paid_writer_permission',null,'paid_quantity_known',null,'withheld_quantity_known',null);
+ end if;
+ select * into strict v_work from private.bpay_next_work where id=(scope#>>'{ordinary_work,work_id}')::uuid;
+ if v_work.work_kind is distinct from 'ORDINARY' or v_work.origin_kind is distinct from 'CONTRACT'
+  or v_work.booking_id is distinct from scope#>>'{ordinary_work,booking_id}'
+  or v_work.candidate_id::text is distinct from scope->>'candidate_id'
+  or v_work.contract_id::text is distinct from scope->>'contract_id'
+  or v_work.week_ending_date::text is distinct from scope->>'week_ending_date'
+  or v_work.current_revision_id::text is distinct from scope#>>'{ordinary_work,current_revision_id}'
+  or v_work.applied_revision_id::text is distinct from scope#>>'{ordinary_work,applied_revision_id}' then
+  raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_WORK_SCOPE_CONFLICT' using errcode='40001'; end if;
+ before_work:=to_jsonb(v_work);
+ select to_jsonb(worker) into before_worker from private.bpay_next_worker_control worker where candidate_id=v_work.candidate_id;
+ -- All actual native v_keys, including historical paid/held/collection v_keys.
+ -- Caller supplies no v_key, date, subset, source_component_id or after cursor.
+ select coalesce(array_agg(component_key order by component_key),'{}'::text[]) into v_keys from (
+  select line.component_key from private.bpay_next_approved_line line
+   join private.bpay_next_work_revision revision on revision.id=line.revision_id and revision.work_id=v_work.id
+   where revision.id=v_work.current_revision_id or revision.id=v_work.applied_revision_id
+  union select pos.component_key from private.bpay_next_position pos where pos.work_id=v_work.id
+  union select collection.component_key from private.bpay_next_work_collection collection where collection.work_id=v_work.id
+ ) native_keys;
+ if cardinality(v_keys)>1000 or array_position(v_keys,null::text) is not null
+  or exists(select 1 from unnest(v_keys) actual_key where length(actual_key) not between 1 and 256
+   or octet_length(actual_key)>1024) then
+  raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_COMPONENT_BOUND_EXCEEDED' using errcode='54000'; end if;
+ foreach v_key in array v_keys loop
+  v_position:=null;v_basis:=null;observation:=null;reservation:=null;native_error:=null;
+  select * into v_position from private.bpay_next_position pos where pos.work_id=v_work.id and pos.component_key=v_key;
+  select * into v_basis from private.bpay_next_work_collection collection where collection.work_id=v_work.id and collection.component_key=v_key;
+  if v_position.work_id is not null and v_position.applied_revision_id is not null then
+   begin
+    observation:=private.bpay_next_work_collection_observation_v1(v_work.id,v_key,v_position.applied_revision_id);
+   exception when no_data_found or too_many_rows then
+    get stacked diagnostics native_error=returned_sqlstate;
+   end;
+  end if;
+  if v_basis.id is not null and v_basis.original_transfer_id is not null then
+   -- The run worker is derived from the real Original transfer. It is not an
+   -- Office selected payer or a stored held_source_ex_vat -> withheld shortcut.
+   select private.bpay_next_original_reservation_v1(transfer.run_worker_id,transfer.id) into reservation
+    from private.bpay_next_transfer transfer where transfer.id=v_basis.original_transfer_id
+     and transfer.candidate_id=v_work.candidate_id;
+  end if;
+  item:=jsonb_build_object('component_key',v_key,'actual_position',to_jsonb(v_position),
+   'actual_collection',to_jsonb(v_basis),'native_collection_observation',observation,
+   'native_observation_sqlstate',native_error,'native_original_reservation',reservation);
+  rows:=rows||jsonb_build_array(item);
+  if octet_length(rows::text)>1048576 then
+   raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_COMPONENT_BOUND_EXCEEDED' using errcode='54000'; end if;
+ end loop;
+ select to_jsonb(worker) into after_worker from private.bpay_next_worker_control worker where candidate_id=v_work.candidate_id;
+ if before_work is distinct from (select to_jsonb(current_work) from private.bpay_next_work current_work where id=v_work.id)
+  or before_worker is distinct from after_worker
+  or not exists(select 1 from private.bpay_next_module_control module where module.id=1
+   and module.active_owner='NEXT' and module.owner_epoch::text=scope->>'owner_epoch') then
+  raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_INPUTS_CHANGED' using errcode='40001'; end if;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_ORDINARY_COLLECTION_INPUTS_V1',
+  'scope',scope,'native_component_inputs',rows,'native_worker_control',before_worker,
+  'reason',null,'paid_writer_permission',null,'paid_quantity_known',null,'withheld_quantity_known',null);
+ if octet_length(result::text)>1310720 then
+  raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_COMPONENT_BOUND_EXCEEDED' using errcode='54000'; end if;
+ return result;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_INPUTS_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_ordinary_collection_inputs_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_ordinary_collection_inputs_v1(uuid)
+ from public,anon,authenticated,service_role;

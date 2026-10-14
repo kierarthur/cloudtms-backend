@@ -1,0 +1,55 @@
+{
+  "schema": "AGENCY_CURRENT_CANONICAL_WORKER_SOURCE_CONSTRUCTION_REVERSE_V1",
+  "source_only": true,
+  "current_i2_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "path": "broker/src/index.js",
+  "before_raw_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+  "before_bytes": 8927507,
+  "after_raw_sha256": "ca30ea365f64c77d230821e5a7cdf89316133a085d6d03e08d6bc5e3f10d0a4f",
+  "after_bytes": 8930341,
+  "line_endings": {
+    "before_crlf": 595,
+    "before_bare_lf": 201691,
+    "after_crlf": 595,
+    "after_bare_lf": 201746,
+    "local_hunk_rendering_measured": true,
+    "whole_file_eol_normalisation": false
+  },
+  "whole_current_reverse_exact": true,
+  "hunks": [
+    {
+      "purpose": "Import the finite native Agency Worker decoder/runner without replacing current Bank/PP/Report consumers.",
+      "before": "import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';",
+      "after": "import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';\nimport { decodeAgencyWorkerTargets, runAgencyLeasedCanonicalRecompute } from './weekly-source/agency-canonical-worker.mjs';",
+      "before_sha256": "7f0122920423e40728a9af36afaa8905e7540cc7227a0b96d248bb6f5d15a410",
+      "after_sha256": "b751d2e2f9282d89bd80c5c66b40597ad7e6991ceb0ab6e26bda48231cb6c4b0"
+    },
+    {
+      "purpose": "Derive current native ACTIVE request targets before any ordinary paid/no-op success; unknown native target state is a causal dependency refusal.",
+      "before": "  // 4) Load batch context for effective IDs (one RPC)\n  const ctxRows2 = await rpcTsfinLoadContextBatch(env, { timesheetIds: effIds });",
+      "after": "  // Native ACTIVE Agency requests take the finite canonical Worker seam. The\n  // native target owner supplies scope; payload flags cannot select this path.\n  const agencyWorkerTargets = new Map();\n  try {\n    for (let offset = 0; offset < effIds.length; offset += 100) {\n      const ids = effIds.slice(offset, offset + 100);\n      const targets = decodeAgencyWorkerTargets(await sbRpc(env,\n        'weekly_source_agency_change_worker_targets_v1', { p_timesheet_ids: ids }), ids);\n      for (const [id, target] of targets) agencyWorkerTargets.set(id, target);\n    }\n  } catch (error) {\n    // Never fall through to paid/no-op queue success when native scope is unknown.\n    const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,199}$/.test(error.code)\n      ? error.code : 'AGENCY_CHANGE_NATIVE_WORKER_DEPENDENCY_UNAVAILABLE';\n    for (const row of lease) await sbRpc(env, 'tsfin_work_fail', { p_id: row.outbox_id, p_error: code });\n    return { picked: lease.length, ok: 0, fail: lease.length, completed_timesheet_ids: [] };\n  }\n\n  // 4) Load batch context for effective IDs (one RPC)\n  const ctxRows2 = await rpcTsfinLoadContextBatch(env, { timesheetIds: effIds });",
+      "before_sha256": "393899ae1d46d9be49a87296c6dab5a385ffa10b128bcc8eb15cbd4307278eb3",
+      "after_sha256": "0b3c8ff9e4a90e41c693a2a81516fba41e336dbfb7317d63c5323c2340be6564"
+    },
+    {
+      "purpose": "Bind the genuine native request/leased outbox to the existing canonical calculator and complete native apply owner before all ordinary cleanup paths.",
+      "before": "    const ctx = ctxByEff.get(effId) || null;\n    if (!ctx) {",
+      "after": "    const agencyTarget = agencyWorkerTargets.get(effId);\n    if (agencyTarget) {\n      let receipt;\n      try {\n        const leasedRows = lease.filter(row => outboxIds.includes(row.outbox_id))\n          .map(row => ({ outbox_id: row.outbox_id, timesheet_id: row.timesheet_id, reason: row.reason }));\n        receipt = await runAgencyLeasedCanonicalRecompute({\n          requestId: agencyTarget.request_id,\n          leasedRows,\n          readContext: requestId => sbRpc(env, 'weekly_source_agency_change_worker_context_v1',\n            { p_request_id: requestId }),\n          buildWeeklySnapshot: (ts, cw, contract, curFin, options) =>\n            buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options),\n          applySnapshot: args => sbRpcRecordingGuardRefusal(env,\n            'weekly_source_agency_change_worker_apply_v1', args)\n        });\n      } catch (error) {\n        const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,199}$/.test(error.code)\n          ? error.code : 'AGENCY_CHANGE_NATIVE_WORKER_UNCONFIRMED';\n        for (const ob of outboxIds) {\n          await sbRpc(env, 'tsfin_work_fail', { p_id: ob, p_error: code });\n          fail++;\n        }\n        continue;\n      }\n      // A later unrelated queue failure cannot relabel this real native write.\n      completedPrimaryOutboxSet.add(receipt.outbox_id);\n      completedTimesheetIds.add(receipt.timesheet_id);\n      ok++;\n      for (const ob of outboxIds.filter(id => id !== receipt.outbox_id)) {\n        await sbRpc(env, 'tsfin_work_fail', { p_id: ob, p_error: 'AGENCY_CHANGE_OTHER_NATIVE_QUEUE_RETAINED' });\n        fail++;\n      }\n      continue;\n    }\n\n    const ctx = ctxByEff.get(effId) || null;\n    if (!ctx) {",
+      "before_sha256": "b791d79d7abf36754093a8322af923460a426c35d2efd464c4053cfeb4daac6b",
+      "after_sha256": "ce1b559e3664f08e3609be7e48c91abd0184b5748b0843b186322cca2a5f5a4c"
+    }
+  ],
+  "ordinary_worker_body_preserved_outside_three_unique_hunks": true,
+  "native_calls": false,
+  "database_calls": false,
+  "installed": false,
+  "full_agency_implementation_complete": false,
+  "held_engineering": [
+    "single fence/current writer and immutable-claim coverage",
+    "paid-domain and protection admission",
+    "NX-AI-6 event-native financial publication",
+    "AUTHORISE/validation/same-D1/issue/week completion",
+    "planned single business entry and actual Office consumer"
+  ],
+  "compiled_contract_sha256": null
+}
