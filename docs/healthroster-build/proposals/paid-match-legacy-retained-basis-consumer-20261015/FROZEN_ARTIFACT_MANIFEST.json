@@ -1,0 +1,61 @@
+{
+  "schema_version": "PAID_MATCH_LEGACY_RETAINED_BASIS_CONSUMER_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 10,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 8710,
+      "sha256": "9e67f520abda621f4a02169574fc40a866f2dcb1c84b87b93c9ce6900966f223"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 2482,
+      "sha256": "13d50c609d3ee31b6dd70f48a761a8eb59d7a51d7cd4aae5be7f8f1228277e47"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 3180,
+      "sha256": "974bfc4eed4675a0d8c68334ffd4adacf14c896318f45711a5b9056eccc6708d"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 561,
+      "sha256": "7280fb14046b0a5770995bef0e8b46efbc0f00496d8ed25a54c40f91e070c8c0"
+    },
+    {
+      "file": "before/01_complete_retained_transition_assert.sqlinc",
+      "bytes": 11466,
+      "sha256": "376a27e2fa0a1648557699f7b9fd5bd422f4fe113f06bf93f8541706e9986e5f"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 9426,
+      "sha256": "d5686c9a40954ae8eeb3f1b9bea33a01265fbbf98f621fbc4be7d0b5849827f9"
+    },
+    {
+      "file": "forward/01_complete_retained_transition_assert.sqlinc",
+      "bytes": 16142,
+      "sha256": "5a16d86655e5913b9014f0afa19e0909d96eebcd54df735db1c0981f5888f542"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4772,
+      "sha256": "2b6f66347b56e413665dd7726a6ee6f80af333655f6c9a24b1a2139ea6d1c869"
+    },
+    {
+      "file": "input/04102026_0505_current_hooks.sql",
+      "bytes": 32206,
+      "sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51"
+    },
+    {
+      "file": "retained-legacy-source.test.mjs",
+      "bytes": 7667,
+      "sha256": "7d09142b1b131e8c52ac2e10e3ba36795509f0b51b3ef6f62a459a4ad159ada1"
+    }
+  ]
+}

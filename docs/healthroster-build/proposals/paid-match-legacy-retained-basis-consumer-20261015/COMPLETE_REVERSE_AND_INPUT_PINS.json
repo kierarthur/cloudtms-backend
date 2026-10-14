@@ -1,0 +1,53 @@
+{
+  "source_only": true,
+  "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+  "source": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/09_complete_retained_transition_assert.sqlinc",
+  "before_sha256": "376a27e2fa0a1648557699f7b9fd5bd422f4fe113f06bf93f8541706e9986e5f",
+  "after_sha256": "5a16d86655e5913b9014f0afa19e0909d96eebcd54df735db1c0981f5888f542",
+  "hunks": [
+    {
+      "name": "finite saved native root and Source selection proof locals",
+      "before": "  proof jsonb;item jsonb;rows jsonb;expected jsonb;counted integer;movement_id uuid;lineage_id uuid;economic_id uuid;",
+      "after": "  proof jsonb;item jsonb;rows jsonb;expected jsonb;counted integer;movement_id uuid;lineage_id uuid;economic_id uuid;\n  native_basis jsonb;legacy_current jsonb;native_roots uuid[];source_group_id uuid;"
+    },
+    {
+      "name": "native evidence-specific provenance with unchanged NEXT map and genuine Legacy Source selection",
+      "before": "      or not exists(select 1 from private.bpay_next_source_current_snapshots mapping\n        join private.bpay_next_source_current_scopes scope on scope.id=mapping.scope_id\n        where mapping.snapshot_line_id=old_line.id and mapping.movement_id=m.id and mapping.work_event_id=t.work_event_id\n          and scope.source_group_id=(select source_group_id from public.weekly_source_cycles where id=r.source_cycle_id)\n          and (scope.candidate_id,scope.client_id,scope.contract_id)=(old_line.candidate_id,old_line.client_id,old_line.contract_id)) then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;",
+      "after": "      then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;\n    if item#>>'{native_payment_facts,paid_evidence_state}'='SETTLED_ORIGINAL' then\n      -- Keep the existing NEXT map predicate unchanged for NEXT proof.\n      if not exists(select 1 from private.bpay_next_source_current_snapshots mapping\n        join private.bpay_next_source_current_scopes scope on scope.id=mapping.scope_id\n        where mapping.snapshot_line_id=old_line.id and mapping.movement_id=m.id and mapping.work_event_id=t.work_event_id\n          and scope.source_group_id=(select source_group_id from public.weekly_source_cycles where id=r.source_cycle_id)\n          and (scope.candidate_id,scope.client_id,scope.contract_id)=(old_line.candidate_id,old_line.client_id,old_line.contract_id)) then\n        raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;\n    else\n      -- LEGACY publish_revision returns before NEXT capture. Re-prove the\n      -- genuine Source prior selection instead of manufacturing a NEXT map.\n      select c.source_group_id into strict source_group_id from public.weekly_source_cycles c where c.id=r.source_cycle_id;\n      if item#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_LEGACY_SOURCE_COMPONENT'\n        or (select control.active_owner from private.bpay_next_module_control control where control.id=1) is distinct from 'LEGACY'\n        or item#>>'{native_payment_facts,schema_version}' is distinct from 'WEEKLY_SOURCE_WORK_EVENT_PAYMENT_FACTS_V1'\n        or item#>>'{native_payment_facts,work_event_id}' is distinct from t.work_event_id::text\n        or item#>>'{native_payment_facts,source_cycle_id}' is distinct from r.source_cycle_id::text\n        or item#>>'{native_payment_facts,source_group_id}' is distinct from source_group_id::text\n        or item#>>'{native_payment_facts,candidate_id}' is distinct from old_line.candidate_id::text\n        or item#>>'{native_payment_facts,client_id}' is distinct from old_line.client_id::text\n        or jsonb_typeof(item#>'{native_payment_facts,root_timesheet_ids}') is distinct from 'array'\n        or jsonb_array_length(item#>'{native_payment_facts,root_timesheet_ids}') not between 1 and 200\n        or jsonb_typeof(item#>'{native_payment_facts,native_paid_basis}') is distinct from 'array'\n        or jsonb_array_length(item#>'{native_payment_facts,native_paid_basis}')\n          is distinct from jsonb_array_length(item#>'{native_payment_facts,root_timesheet_ids}') then\n        raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;\n      native_roots:=array(select value::uuid from jsonb_array_elements_text(item#>'{native_payment_facts,root_timesheet_ids}') value order by value);\n      if cardinality(native_roots) is distinct from (select count(distinct root) from unnest(native_roots) root) then\n        raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;\n      for native_basis in select value from jsonb_array_elements(item#>'{native_payment_facts,native_paid_basis}') value loop\n        if native_basis->>'schema_version' is distinct from 'WEEKLY_SOURCE_LEGACY_SIGNED_SOURCE_MEMBERSHIP_INPUT_V1'\n          or native_basis->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n            'WEEKLY_SOURCE_LEGACY_SIGNED_SOURCE_MEMBERSHIP_INPUT_V1',native_basis-'inputs_sha256'),'hex')\n          or native_basis->>'work_event_id' is distinct from t.work_event_id::text\n          or native_basis->>'source_cycle_id' is distinct from r.source_cycle_id::text\n          or native_basis->>'source_group_id' is distinct from source_group_id::text\n          or native_basis->>'candidate_id' is distinct from old_line.candidate_id::text\n          or native_basis->>'client_id' is distinct from old_line.client_id::text\n          or native_basis->>'actor_user_id' is distinct from r.finalised_by_user_id::text\n          or native_basis#>>'{native_module,active_owner}' is distinct from 'LEGACY'\n          or not ((native_basis->>'root_timesheet_id')::uuid=any(native_roots)) then\n          raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;\n      end loop;\n      if array(select (value->>'root_timesheet_id')::uuid\n          from jsonb_array_elements(item#>'{native_payment_facts,native_paid_basis}') value order by value->>'root_timesheet_id')\n        is distinct from native_roots then\n        raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;\n      legacy_current:=private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(t.work_event_id,m.id,\n        old_line.candidate_id,old_line.client_id,old_line.contract_id,source_group_id,native_roots,r.source_cycle_id);\n      if legacy_current is distinct from item->'current_pay_snapshot'\n        or legacy_current->>'state' is distinct from 'CURRENT'\n        or legacy_current->>'snapshot_line_id' is distinct from old_line.id::text\n        or legacy_current->>'movement_id' is distinct from m.id::text then\n        raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;\n    end if;"
+    }
+  ],
+  "whole_reverse_byte_exact": true,
+  "native_input": {
+    "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+    "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+    "saved": "input/04102026_0505_current_hooks.sql",
+    "bytes": 32206,
+    "sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51"
+  },
+  "dependencies": [
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/00_roster_prior_states.sqlinc",
+      "bytes": 2277,
+      "sha256": "be7b89291c84f7332af666b93fb5c45d4909c4f778d29379d59e7cf5d1058ca9"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/02_legacy_signed_source_membership.sqlinc",
+      "bytes": 13825,
+      "sha256": "60fe932ecc18a0d5ac0acfb0e56a2c09e2888ee9a5d59bab412f35667164a3df"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/03_current_snapshot_for_cycle.sqlinc",
+      "bytes": 6537,
+      "sha256": "77e8480af0105129ed717abc821faeb0c54113c820ae3a1a2a9e2d8a3b892ce9"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/04_complete_payment_facts.sqlinc",
+      "bytes": 14686,
+      "sha256": "1773bd2b9da8eb9ece206ac1228c92e4a106b1f645252dd59193339a2604f33f"
+    }
+  ]
+}

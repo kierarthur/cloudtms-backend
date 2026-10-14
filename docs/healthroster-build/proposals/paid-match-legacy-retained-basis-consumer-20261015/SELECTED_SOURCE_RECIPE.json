@@ -1,0 +1,69 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "19efb87a26158e53fb4023676aa9b19e117b0685",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_complete_owner": "forward/01_complete_retained_transition_assert.sqlinc",
+  "replaces_complete_leaf": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/09_complete_retained_transition_assert.sqlinc",
+  "prerequisites": [
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/00_roster_prior_states.sqlinc",
+      "bytes": 2277,
+      "sha256": "be7b89291c84f7332af666b93fb5c45d4909c4f778d29379d59e7cf5d1058ca9"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/02_legacy_signed_source_membership.sqlinc",
+      "bytes": 13825,
+      "sha256": "60fe932ecc18a0d5ac0acfb0e56a2c09e2888ee9a5d59bab412f35667164a3df"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/03_current_snapshot_for_cycle.sqlinc",
+      "bytes": 6537,
+      "sha256": "77e8480af0105129ed717abc821faeb0c54113c820ae3a1a2a9e2d8a3b892ce9"
+    },
+    {
+      "commit": "19efb87a26158e53fb4023676aa9b19e117b0685",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/04_complete_payment_facts.sqlinc",
+      "bytes": 14686,
+      "sha256": "1773bd2b9da8eb9ece206ac1228c92e4a106b1f645252dd59193339a2604f33f"
+    }
+  ],
+  "existing_signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+  "new_private_signatures": [],
+  "new_public_signatures": [],
+  "new_store_column_calculator": 0,
+  "NEXT_map_predicate_byte_exact": true,
+  "Legacy_native_capture_remains_inactive": true,
+  "return_ABI_unchanged": true,
+  "no_new_cash_or_writer_permission": true,
+  "preserved": [
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "artifacts": 30,
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+    },
+    {
+      "packet": "paid-match-correct-final-choice-construction-20261014",
+      "artifacts": 33,
+      "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5"
+    },
+    {
+      "packet": "qualification-physical-contract-identity-successor-20261014",
+      "artifacts": 27,
+      "manifest_sha256": "173622063cd1f6f5a655fb7cdd3ba1b6847d9eac7f787f3c8e48ad676e8719b9"
+    },
+    {
+      "packet": "paid-match-retained-current-capture-construction-20261014",
+      "artifacts": 21,
+      "manifest_sha256": "59e80944ceb41c73b037a1fe0b6fbe1e43aafbeb6aa57345ea8c6c00fa521af7"
+    }
+  ],
+  "root_Report_Office_U3_Undo_current_union_required": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}
