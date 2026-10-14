@@ -1,0 +1,83 @@
+{
+  "source_only": true,
+  "current_root": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "original_frozen_target14_commit": "b9505669927d86f843b376376033db0b87f169f2",
+  "original_frozen_target14_manifest": "91121aaaf3ccc7b4f8b8368f6eab0aac3f1b9fc29155d4898fcc57f37bacbfc0",
+  "source_findings": [
+    "Original ordinary-only read misses genuine CURRENT FINAL_SOURCE_CORRECTION after APPLIED"
+  ],
+  "files": [
+    {
+      "input_commit": "b9505669927d86f843b376376033db0b87f169f2",
+      "input_file": "docs/healthroster-build/proposals/kept-target-publication-context-successor-20261014/forward/00_target_publication_facts.sqlinc",
+      "before": "before/00_target_publication_facts.sqlinc",
+      "after": "forward/00_target_publication_facts.sqlinc",
+      "input_bytes": 13897,
+      "input_sha256": "3cd8fd0a8b0001a771976078f484357ec1a1eaa40a2ee6374561649961222dc5",
+      "output_bytes": 17456,
+      "output_sha256": "3bb894d44140dc63f43947f5744ab9eeea55efba20ad62e3c728e2bf501c972e",
+      "full_reverse_verified": true,
+      "unique_hunks": 2,
+      "hunks": [
+        {
+          "name": "completed-current target branch",
+          "before": "      (publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n        and upload.correction_session_id is null and publication.correction_session_id is null\n        and cycle.current_projection_publication_id=publication.id)",
+          "after": "      (publication.state='CURRENT' and upload.state='CURRENT'\n        and cycle.current_projection_publication_id=publication.id\n        and ((upload.purpose='ORDINARY' and upload.correction_session_id is null\n          and publication.correction_session_id is null)\n          or (upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n          select 1 from public.weekly_final_source_correction_sessions applied\n          join public.weekly_source_final_revisions final on final.id=applied.applied_final_revision_id\n          where applied.id=upload.correction_session_id and publication.correction_session_id=applied.id\n            and applied.source_cycle_id=cycle.id and applied.authority_scope_kind='CYCLE'\n            and applied.report_scope_id is null and applied.state='APPLIED'\n            and applied.prepared_final_revision_id=applied.applied_final_revision_id\n            and applied.replacement_correction_upload_id=upload.id\n            and applied.replacement_projection_publication_id=publication.id\n            and applied.completed_at_utc is not null\n            and final.source_cycle_id=cycle.id and final.authority_scope_kind='CYCLE'\n            and final.report_scope_id is null and final.upload_id=upload.id\n            and final.reason='CORRECT_FINAL_SOURCE' and final.state='CURRENT'\n            and final.predecessor_revision_id=applied.expected_current_final_revision_id\n            and cycle.current_final_revision_id=final.id\n            and applied.result_json->>'status'='CORRECTED'\n            and applied.result_json->>'correction_session_id'=applied.id::text\n            and applied.result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_RESULT_V1',applied.result_json)\n            and applied.review_result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',applied.review_result_json)))))"
+        },
+        {
+          "name": "latest-current wrapper includes only proven completed correction",
+          "before": "    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'",
+          "after": "    and publication.state='CURRENT' and upload.state='CURRENT'\n    and publication.source_cycle_id=cycle.id and publication.report_scope_id is null\n    and cycle.current_projection_publication_id=publication.id\n    and ((upload.purpose='ORDINARY' and upload.correction_session_id is null\n      and publication.correction_session_id is null)\n      or (upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n          select 1 from public.weekly_final_source_correction_sessions applied\n          join public.weekly_source_final_revisions final on final.id=applied.applied_final_revision_id\n          where applied.id=upload.correction_session_id and publication.correction_session_id=applied.id\n            and applied.source_cycle_id=cycle.id and applied.authority_scope_kind='CYCLE'\n            and applied.report_scope_id is null and applied.state='APPLIED'\n            and applied.prepared_final_revision_id=applied.applied_final_revision_id\n            and applied.replacement_correction_upload_id=upload.id\n            and applied.replacement_projection_publication_id=publication.id\n            and applied.completed_at_utc is not null\n            and final.source_cycle_id=cycle.id and final.authority_scope_kind='CYCLE'\n            and final.report_scope_id is null and final.upload_id=upload.id\n            and final.reason='CORRECT_FINAL_SOURCE' and final.state='CURRENT'\n            and final.predecessor_revision_id=applied.expected_current_final_revision_id\n            and cycle.current_final_revision_id=final.id\n            and applied.result_json->>'status'='CORRECTED'\n            and applied.result_json->>'correction_session_id'=applied.id::text\n            and applied.result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_RESULT_V1',applied.result_json)\n            and applied.review_result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',applied.review_result_json))))"
+        }
+      ]
+    },
+    {
+      "input_commit": "b9505669927d86f843b376376033db0b87f169f2",
+      "input_file": "docs/healthroster-build/proposals/kept-target-publication-context-successor-20261014/forward/01_target_publication_context.sqlinc",
+      "before": "before/01_target_publication_context.sqlinc",
+      "after": "forward/01_target_publication_context.sqlinc",
+      "input_bytes": 25570,
+      "input_sha256": "12c87d87015495d8f648d51edbea59b0a72d865a0b0f700ca654d6c6636e39d9",
+      "output_bytes": 29129,
+      "output_sha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11",
+      "full_reverse_verified": true,
+      "unique_hunks": 2,
+      "hunks": [
+        {
+          "name": "completed-current target branch",
+          "before": "      (publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n        and upload.correction_session_id is null and publication.correction_session_id is null\n        and cycle.current_projection_publication_id=publication.id)",
+          "after": "      (publication.state='CURRENT' and upload.state='CURRENT'\n        and cycle.current_projection_publication_id=publication.id\n        and ((upload.purpose='ORDINARY' and upload.correction_session_id is null\n          and publication.correction_session_id is null)\n          or (upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n          select 1 from public.weekly_final_source_correction_sessions applied\n          join public.weekly_source_final_revisions final on final.id=applied.applied_final_revision_id\n          where applied.id=upload.correction_session_id and publication.correction_session_id=applied.id\n            and applied.source_cycle_id=cycle.id and applied.authority_scope_kind='CYCLE'\n            and applied.report_scope_id is null and applied.state='APPLIED'\n            and applied.prepared_final_revision_id=applied.applied_final_revision_id\n            and applied.replacement_correction_upload_id=upload.id\n            and applied.replacement_projection_publication_id=publication.id\n            and applied.completed_at_utc is not null\n            and final.source_cycle_id=cycle.id and final.authority_scope_kind='CYCLE'\n            and final.report_scope_id is null and final.upload_id=upload.id\n            and final.reason='CORRECT_FINAL_SOURCE' and final.state='CURRENT'\n            and final.predecessor_revision_id=applied.expected_current_final_revision_id\n            and cycle.current_final_revision_id=final.id\n            and applied.result_json->>'status'='CORRECTED'\n            and applied.result_json->>'correction_session_id'=applied.id::text\n            and applied.result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_RESULT_V1',applied.result_json)\n            and applied.review_result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',applied.review_result_json)))))"
+        },
+        {
+          "name": "latest-current wrapper includes only proven completed correction",
+          "before": "    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'",
+          "after": "    and publication.state='CURRENT' and upload.state='CURRENT'\n    and publication.source_cycle_id=cycle.id and publication.report_scope_id is null\n    and cycle.current_projection_publication_id=publication.id\n    and ((upload.purpose='ORDINARY' and upload.correction_session_id is null\n      and publication.correction_session_id is null)\n      or (upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n          select 1 from public.weekly_final_source_correction_sessions applied\n          join public.weekly_source_final_revisions final on final.id=applied.applied_final_revision_id\n          where applied.id=upload.correction_session_id and publication.correction_session_id=applied.id\n            and applied.source_cycle_id=cycle.id and applied.authority_scope_kind='CYCLE'\n            and applied.report_scope_id is null and applied.state='APPLIED'\n            and applied.prepared_final_revision_id=applied.applied_final_revision_id\n            and applied.replacement_correction_upload_id=upload.id\n            and applied.replacement_projection_publication_id=publication.id\n            and applied.completed_at_utc is not null\n            and final.source_cycle_id=cycle.id and final.authority_scope_kind='CYCLE'\n            and final.report_scope_id is null and final.upload_id=upload.id\n            and final.reason='CORRECT_FINAL_SOURCE' and final.state='CURRENT'\n            and final.predecessor_revision_id=applied.expected_current_final_revision_id\n            and cycle.current_final_revision_id=final.id\n            and applied.result_json->>'status'='CORRECTED'\n            and applied.result_json->>'correction_session_id'=applied.id::text\n            and applied.result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_RESULT_V1',applied.result_json)\n            and applied.review_result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',applied.review_result_json))))"
+        }
+      ]
+    }
+  ],
+  "actual_native_inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "bytes": 116274,
+      "sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5"
+    }
+  ],
+  "complete_reverses": 2,
+  "unique_hunks": 4,
+  "new_private_public_or_table_signatures": 0,
+  "financial_and_facts_tuple_and_prepared_branch_unchanged": true,
+  "current_viewer_not_original_actor": true,
+  "writer_correction_preconditions_unchanged": true,
+  "canonical_changed": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "default_and_accept_consumers_complete": false
+}

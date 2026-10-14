@@ -1,0 +1,64 @@
+{
+  "schema_version": "KEEP_APPLIED_CORRECTION_CONTEXT_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "current_root": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "original_target14_commit": "b9505669927d86f843b376376033db0b87f169f2",
+  "independent_review": "PENDING",
+  "canonical_changed": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_implementation_complete": false,
+  "artifact_count": 10,
+  "artifacts": [
+    {
+      "file": "applied-context-source.test.mjs",
+      "bytes": 5175,
+      "sha256": "6a5ce7da9d4b0a62996a1ff44d6c9fbc77639f94e9ce1e698b6745066cdb66be"
+    },
+    {
+      "file": "before/00_target_publication_facts.sqlinc",
+      "bytes": 13897,
+      "sha256": "3cd8fd0a8b0001a771976078f484357ec1a1eaa40a2ee6374561649961222dc5"
+    },
+    {
+      "file": "before/01_target_publication_context.sqlinc",
+      "bytes": 25570,
+      "sha256": "12c87d87015495d8f648d51edbea59b0a72d865a0b0f700ca654d6c6636e39d9"
+    },
+    {
+      "file": "build-applied-context.mjs",
+      "bytes": 6403,
+      "sha256": "dfce8b397397f575766563e751293889fdf40f4d6a12d7b6e1c46a3104bbe156"
+    },
+    {
+      "file": "COMPLETE_APPLIED_CONTEXT_AND_REVERSES.json",
+      "bytes": 11878,
+      "sha256": "b06a95a5e841c4949050c9a567a74cb6ce6ca643c95ddf1c9a15cebaf10c57ef"
+    },
+    {
+      "file": "forward/00_target_publication_facts.sqlinc",
+      "bytes": 17456,
+      "sha256": "3bb894d44140dc63f43947f5744ab9eeea55efba20ad62e3c728e2bf501c972e"
+    },
+    {
+      "file": "forward/01_target_publication_context.sqlinc",
+      "bytes": 29129,
+      "sha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11"
+    },
+    {
+      "file": "freeze-applied-context.mjs",
+      "bytes": 3997,
+      "sha256": "91bdffed13a662d65214384330640d748d90d5abe72d3174c3a201bca1f84a37"
+    },
+    {
+      "file": "REVIEW_AND_MOUNT_BOUNDARY.md",
+      "bytes": 3013,
+      "sha256": "dd60616dc13955b60d200a7f5eb89b8c8f4a799f066883af6b78cba1e36d85d0"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1331,
+      "sha256": "1bd10fe3a5f07a7f35df34210be03a2144014bac9a57182baead70858db4c0b0"
+    }
+  ]
+}

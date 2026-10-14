@@ -1,0 +1,40 @@
+{
+  "schema_version": "KEEP_APPLIED_CORRECTION_CONTEXT_SOURCE_CHECK_V1",
+  "source_only": true,
+  "current_root": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "original_target14_commit": "b9505669927d86f843b376376033db0b87f169f2",
+  "tests": {
+    "count": 7,
+    "pass": 7,
+    "fail": 0,
+    "kind": "Full source reversal/byte/purpose boundary model only; no SQL/security/financial evaluator",
+    "output_sha256": "f5baf2c674fea148451f58d1169855c2056fff0be0b768877a58d31b9266e0c2"
+  },
+  "inert_syntax": [
+    "build-applied-context.mjs",
+    "applied-context-source.test.mjs",
+    "freeze-applied-context.mjs"
+  ],
+  "complete_reverses": 2,
+  "unique_hunks": 4,
+  "new_signatures": 0,
+  "current_applied_reader_only": true,
+  "prepared_branch_financial_body_and_primary_facts_domain_unchanged": true,
+  "writer_preconditions_and_current_viewer_authority_unchanged": true,
+  "credential_scan": {
+    "files": 9,
+    "rules": [
+      "PRIVATE_KEY",
+      "GITHUB_TOKEN",
+      "JWT_LITERAL"
+    ],
+    "findings": []
+  },
+  "independent_review": "PENDING",
+  "canonical_changed": false,
+  "sql_compiled": false,
+  "sql_executed": false,
+  "native_proof": false,
+  "full_missing_default_accept_overlap_prepared_consumers": "UNFINISHED_SOURCE_ENGINEERING",
+  "final_current_classes_verifier_body_source_and_native_seal": "HOLD"
+}
