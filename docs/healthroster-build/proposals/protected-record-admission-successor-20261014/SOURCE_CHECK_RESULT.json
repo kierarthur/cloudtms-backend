@@ -1,0 +1,18 @@
+{
+  "schema_version": "PROTECTED_RECORD_ADMISSION_SUCCESSOR_SOURCE_CHECK_V1",
+  "source_only": true,
+  "read_only_source_vm_tests_pass": 6,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 4,
+  "yaml_parse": "PASS",
+  "credential_scan": "PASS",
+  "invalid_recording_target_mode_refuses_before_protected_environment_secret_assignment": true,
+  "runner_requires_actual_upgrade_mode": true,
+  "ordinary_release_phase_mode_approval_conditions_unchanged": true,
+  "entire_entry28_and_original_current_workflow_reverse": true,
+  "entire_entry28_runner_reverse": true,
+  "full_original_owner_recorder_request9_response13_three_bundle_native_logic_preserved": true,
+  "all_earlier_frozen_packets_preserved": true,
+  "independent_critic": false,
+  "actual_workflow_session_sql_release_or_business_action": false
+}

@@ -1,0 +1,152 @@
+{
+  "schema_version": "PROTECTED_RECORD_EVIDENCE_CURRENT_ROOT_FROZEN_SOURCE_REVIEW_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_ACTUAL_NATIVE_INSTALLATION_AND_GENUINE_INPUTS_HELD",
+  "current_input_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "current_native_dependency_commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/COMPLETE_CURRENT_WORKFLOW_REVERSE.json",
+      "bytes": 5216,
+      "sha256": "83f9b206760342cba2dfb6a25fbac673afa82c7c30d72e34fba5d52c4c4bd012"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/CURRENT_NATIVE_DEPENDENCY_PINS.json",
+      "bytes": 9077,
+      "sha256": "aceeafe9a1d64a71bbf763163fbd3f3e430a41dbe3423f22bf2904717aebda0a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_CHECK_RESULT.json",
+      "bytes": 1227,
+      "sha256": "8f44e97046ad5bdb5a935f591eaa16c0a5dd753d7232bfdc8d93f886284e5426"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_REVIEW_READY.md",
+      "bytes": 4721,
+      "sha256": "5fd52eef1e5a48f8836b34db69a57317c2688db2927c75753adc55ae0137e371"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_SCHEMA_OWNER_READS.json",
+      "bytes": 1920,
+      "sha256": "bd96e83479230a0fc307b5c0716f331a7660ff815d651627296dd1bed6d11e21"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-psql.mjs",
+      "bytes": 5398,
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-activation-window-binding.mjs",
+      "bytes": 3778,
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "bytes": 6878,
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "bytes": 15228,
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "bytes": 9395,
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-execution-tree.mjs",
+      "bytes": 11842,
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-operational-evidence.mjs",
+      "bytes": 18719,
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "bytes": 1718,
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 17331,
+      "sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "bytes": 5751,
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "bytes": 5203,
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "bytes": 30888,
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-collector.mjs",
+      "bytes": 49303,
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "bytes": 39600,
+      "sha256": "63e884f9e812234690ef62a59151d807099069c8a2e57b308ac0e44c15cea6a2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-seal.mjs",
+      "bytes": 258,
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/freeze-record-entry-current-root.mjs",
+      "bytes": 4276,
+      "sha256": "58c510426ae398016aa07d19ae2f1e948642d5313bff6d66f508687af18873c4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/generate-record-entry-current-root.mjs",
+      "bytes": 9689,
+      "sha256": "555fc29214c540651516d199e874c3b64c11c729ff402289d5ef98e11cf81a70"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/protected-record-entry-source.test.mjs",
+      "bytes": 14689,
+      "sha256": "0b7684bfbbf6a27a6ff79cbc6dfeaa2f08314f602e9bdb65c707afb771f97d05"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/scripts/weekly-source-protected-record-evidence.mjs",
+      "bytes": 12758,
+      "sha256": "585df181193753e64e49ee0b732f5705cd44dc18b292db5dac438c424e0a948f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/workflow/database-release.yml",
+      "bytes": 13064,
+      "sha256": "34868e95c7c65c62d840dff0f8a0dead03c56358f360bcc984eeb507bbd90c36"
+    }
+  ],
+  "source_check_sha256": "8f44e97046ad5bdb5a935f591eaa16c0a5dd753d7232bfdc8d93f886284e5426",
+  "independent_critic": false,
+  "actual_workflow_entry_or_database_invoked": false
+}

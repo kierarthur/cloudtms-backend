@@ -1,0 +1,90 @@
+{
+  "source_only": true,
+  "complete_current_helpers": [
+    {
+      "name": "validateContext",
+      "sha256": "c7a77e7565274bcf7e229ce172f484886c68d4a67ca8279f1a2b1bab83a9ec17",
+      "bytes": 485
+    },
+    {
+      "name": "managedEvidence",
+      "sha256": "e0838c58a04220ad06f43741f7fa0c0232c7b3769268f162d011e88a293b4a39",
+      "bytes": 504
+    },
+    {
+      "name": "identitySql",
+      "sha256": "2081bbdec3765243136f62cbc9702203eee8e0946cc793d4091521e0077cdef4",
+      "bytes": 1014
+    },
+    {
+      "name": "managedAdmissionSql",
+      "sha256": "dca54d6ee95b123b48daad88949a16b53d857ab8d10147d796543b236b4f816b",
+      "bytes": 1553
+    },
+    {
+      "name": "resumeCheckSql",
+      "sha256": "838aabc21ee9694f755ecaff62db84c464a215a14fd51f28281ad3be42b0e3f7",
+      "bytes": 447
+    },
+    {
+      "name": "unitCheckpointSql",
+      "sha256": "9f0e4ff66cdecc65c29e5dfa3f3ee234f925b3af2a42a9510177031f5fabc274",
+      "bytes": 1509
+    },
+    {
+      "name": "migrationLedgerSql",
+      "sha256": "327fe4bfb2240a6a782e41defee2ebb4ddbc4f6e24e74b4d54e9571885c5e061",
+      "bytes": 238
+    },
+    {
+      "name": "repeatableLedgerSql",
+      "sha256": "5507056afc1bee7c4081bab84848919b2b6c0c18d939e06540bb567bb7e1e0e6",
+      "bytes": 400
+    },
+    {
+      "name": "compileManagedUnit",
+      "sha256": "9929eca0017f43fc8be16d86ab271a9efbb0a89b7ff066fa50c8c273deeb04cc",
+      "bytes": 2019
+    },
+    {
+      "name": "immutableGuardDependencyFor",
+      "sha256": "db2b64a02ca127450ef6d01a476fb0b8e4321014d24faf6bd5f21f9a59ec15a1",
+      "bytes": 1272
+    },
+    {
+      "name": "immutableGuardDependencySql",
+      "sha256": "46537d45b621afe096465f79aff876d7fe9156642b98691500a4ad964fc31319",
+      "bytes": 2560
+    },
+    {
+      "name": "ownerRlsEnvelopeFor",
+      "sha256": "1d29fec0522aba9d056fc124d13c760f6dbaf9f0c2142e2c5c0f69d7872523f6",
+      "bytes": 446
+    },
+    {
+      "name": "ownerRlsEnvelopeSql",
+      "sha256": "4380fa6b0bd680cb522992f027d69f07647807e2cc828959b7b03e4eb866aa01",
+      "bytes": 4619
+    },
+    {
+      "name": "compileBootstrap",
+      "sha256": "71afeb9c093b6a4593696bac62a67bdf04f476c81c340423c9875a16d6fa950e",
+      "bytes": 2604
+    },
+    {
+      "name": "prepareManagedSourceReaders",
+      "sha256": "e7be96f74d089340b27c2d0b8728d74304a80fa29e83fdaa6644133a1e24d83f",
+      "bytes": 595
+    },
+    {
+      "name": "managedReleaseContext",
+      "sha256": "570211200aa602d45b317a924ddde5bd4b87b223d13f5c85ca59ca4079fef3b7",
+      "bytes": 676
+    }
+  ],
+  "immutable_guard_dependency_sha256": "982d97d218affcf5eb0cd2a457af4a3f7b9f187453e899d7a291c4d42bd931f9",
+  "native_reader_and_writer_policy_unchanged": true,
+  "original_release_admission_target_handover_approval_cli_failure_checkpoint_and_mutex_restored_by_full_reverse": true,
+  "added_evidence_only_after_actual_contract_verification": true,
+  "qualification_does_not_authorize_activation_or_installation": true
+}

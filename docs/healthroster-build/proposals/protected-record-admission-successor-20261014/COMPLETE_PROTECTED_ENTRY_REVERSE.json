@@ -1,0 +1,27 @@
+{
+  "source_only": true,
+  "entry28_manifest_sha256": "16755702bdd4973ff47bbf78942994365e8808ad14afa13ab100152184ddc595",
+  "entry_before_sha256": "585df181193753e64e49ee0b732f5705cd44dc18b292db5dac438c424e0a948f",
+  "entry_after_sha256": "0a14d9fb74046606ee053717cfef9cf08048604337203f158511c21d3450859d",
+  "entry_hunk": {
+    "before": "||env.CLOUDTMS_PROTECTED_ENVIRONMENT!=='database-test'||env.CLOUDTMS_ENVIRONMENT!=='TEST'",
+    "after": "||env.CLOUDTMS_PROTECTED_ENVIRONMENT!=='database-test'||env.CLOUDTMS_ENVIRONMENT!=='TEST'||env.CLOUDTMS_RELEASE_MODE!=='UPGRADE'"
+  },
+  "entry_entire_predecessor_reverse": true,
+  "workflow_before_sha256": "34868e95c7c65c62d840dff0f8a0dead03c56358f360bcc984eeb507bbd90c36",
+  "workflow_after_sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c",
+  "workflow_hunks": [
+    {
+      "before": "      commit: ${{ steps.commit.outputs.sha }}\n    steps:\n      - uses: actions/checkout@v6",
+      "after": "      commit: ${{ steps.commit.outputs.sha }}\n    steps:\n      - name: Admit TEST-only recording before any protected target job\n        if: inputs.phase == 'RECORD_EVIDENCE'\n        env:\n          RECORD_ENVIRONMENT: ${{ inputs.environment }}\n          RECORD_MODE: ${{ inputs.mode }}\n        shell: bash\n        run: |\n          set -euo pipefail\n          [[ \"$RECORD_ENVIRONMENT\" == \"TEST\" && \"$RECORD_MODE\" == \"UPGRADE\" ]] || { echo \"RECORD_EVIDENCE is restricted to TEST UPGRADE before protected target admission\"; exit 1; }\n      - uses: actions/checkout@v6"
+    },
+    {
+      "before": "    needs: source-gate\n    runs-on: ubuntu-latest",
+      "after": "    needs: source-gate\n    if: inputs.phase != 'RECORD_EVIDENCE' || (inputs.environment == 'TEST' && inputs.mode == 'UPGRADE')\n    runs-on: ubuntu-latest"
+    }
+  ],
+  "workflow_entire_predecessor_reverse": true,
+  "ordinary_release_modes_phases_and_approvals_unchanged": true,
+  "invalid_recording_target_refuses_before_environment_secret_assignment": true,
+  "no_new_sql_private_abi_bundle_or_native_operation": true
+}

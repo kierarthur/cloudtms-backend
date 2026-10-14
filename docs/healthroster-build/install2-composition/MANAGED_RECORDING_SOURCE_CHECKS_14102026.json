@@ -1,0 +1,61 @@
+{
+  "sourceOnly": true,
+  "syntaxOutputs": [
+    "scripts/weekly-source-protected-execution-tree.mjs",
+    "scripts/cloudtms-managed-release.mjs",
+    "scripts/cloudtms-db-release.mjs",
+    "scripts/weekly-source-protected-record-evidence.mjs"
+  ],
+  "tests": [
+    "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/setup-mode-source.test.mjs",
+    "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/protected-record-entry-source.test.mjs",
+    "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/record-admission-source.test.mjs",
+    "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/same-descriptor-source.test.mjs"
+  ],
+  "steps": [
+    {
+      "name": "pure-reviewed-source-vectors",
+      "exitCode": 0,
+      "outputSha256": "c6949c8cd93613024fb5eb0259fdec3f4dd685a530b2eb3d4857fe8b42d761b1",
+      "summary": [
+        "# tests 32",
+        "# suites 0",
+        "# pass 32",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0",
+        "# duration_ms 9728.2644"
+      ],
+      "failures": []
+    },
+    {
+      "name": "db:check",
+      "exitCode": 0,
+      "outputSha256": "6235327e37c0097c9d9eaf51739e23444ed16d0e0a20e4fe434953941b535e0b",
+      "summary": [
+        "Database source integrity passed: 399 migrations, 1057 repeatables."
+      ],
+      "failures": []
+    },
+    {
+      "name": "security:secrets",
+      "exitCode": 0,
+      "outputSha256": "fcc530ed0e83c56086f2f0d240d588ef540c3e201e332b3b6a62b9e87c3568cd",
+      "summary": [
+        "Tracked source credential scan: PASS (8875 files)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "staged-whitespace",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    }
+  ],
+  "priorHeldSteps": [],
+  "noProtectedEntryReleaseRecorderOrLargeTreeCapture": true,
+  "nativeGatesRun": false
+}

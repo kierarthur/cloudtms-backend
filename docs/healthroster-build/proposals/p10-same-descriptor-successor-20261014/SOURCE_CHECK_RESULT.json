@@ -1,0 +1,20 @@
+{
+  "schema_version": "P10_SAME_DESCRIPTOR_SUCCESSOR_CHECK_V1",
+  "source_only": true,
+  "read_only_in_memory_tests_pass": 6,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 4,
+  "credential_scan": "PASS",
+  "complete_successor_sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+  "same_exclusive_descriptor_for_git_write_fstat_hash_and_close": true,
+  "old_path_replacement_counterexample_reproduced": true,
+  "successor_hashes_original_git_written_inode": true,
+  "small_full_three_bundle_proof_equal": true,
+  "stream_failure_close_once_and_cleanup_preserved": true,
+  "synthetic_raw_bytes_exceed_320_mib": true,
+  "synchronous_api_v2_dto_all_tracked_and_exact_three_exceptions_preserved": true,
+  "entire_bounded9_and_current_fe7_reverse": true,
+  "all_earlier_frozen_sources_preserved": true,
+  "actual_large_git_capture_scratch_native_or_database_action": false,
+  "independent_critic": false
+}

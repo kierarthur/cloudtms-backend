@@ -1,0 +1,24 @@
+{
+  "schema_version": "MANAGED_PREREQUISITE_KEY_SUCCESSOR_SOURCE_CHECK_V1",
+  "source_only": true,
+  "source_tests_pass": 6,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 4,
+  "credential_scan": "PASS",
+  "complete_successor_managed_sha256": "d1a1c9b956e6f2ffa5b1500bc7d6dd2c665e0d3089335f360b7e95eedc03f9cb",
+  "entire_predecessor_and_original_current_reverse": true,
+  "one_caller_property_hunk": true,
+  "actual_predecessor_js_counterexample_reproduced_in_source_mock": true,
+  "corrected_actual_managed_js_refuses_before_recorded_execution_and_verified": true,
+  "ordinary_empty_journey_source_path_pass": true,
+  "current_native_baseline_import_input": {
+    "commit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+    "file": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+    "bytes": 154756,
+    "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+  },
+  "all_previous_frozen_files_preserved": true,
+  "independent_critic": false,
+  "postgresql_or_actual_release_invoked": false,
+  "actual_runtime_or_business_action": false
+}

@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const out=path.dirname(fileURLToPath(import.meta.url)),own=path.resolve(out,'../../../..'),sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+const save=(file,value)=>fs.writeFileSync(path.join(out,file),JSON.stringify(value,null,2)+'\n'),relative=file=>path.relative(own,file).replaceAll('\\','/');
+function files(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(path.join(dir,entry.name)):[path.join(dir,entry.name)]);}
+const list=files(out).filter(file=>!['REVIEW_MANIFEST.json','SOURCE_CHECK_RESULT.json'].includes(path.basename(file))).sort();
+for(const file of list.filter(file=>file.endsWith('.mjs')))execFileSync(process.execPath,['--check',file],{stdio:'pipe'});
+const test=execFileSync(process.execPath,['--test',path.join(out,'managed-current-source.test.mjs')],{encoding:'utf8'});assert.match(test,/(?:# |ℹ )pass 10/);assert.match(test,/(?:# |ℹ )fail 0/);
+const patterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}/,/gh[pousr]_[A-Za-z0-9]{30,}/,/AKIA[0-9A-Z]{16}/];for(const file of list){const source=fs.readFileSync(file,'utf8');if(patterns.some(pattern=>pattern.test(source)))throw Error('SOURCE_CREDENTIAL_PATTERN '+relative(file));}
+save('SOURCE_CHECK_RESULT.json',{schema_version:'MANAGED_QUALIFICATION_CURRENT_ROOT_SOURCE_CHECK_V1',source_only:true,current_shared_source_commit:'a63455e878391cb3ee9732165e58c0db517f48a7',current_dependency_commit:'fe7b3dfc2946cf334ba88681ae425105f864c42f',complete_current_owners:3,entire_current_reverse_proofs:3,preserved_complete_native_helpers:16,current_import_dependency_modules:20,source_tests_pass:10,source_tests_fail:0,javascript_syntax_files:list.filter(file=>file.endsWith('.mjs')).length,whole_packet_credential_scan:'PASS',no_new_cli_env_option_or_bundle:true,recorder_request_response_fields:[9,13],old198_and_a0_108_frozen_artifacts_preserved:true,protected_recording_entry_separate_required:true,independent_critic:false,postgresql_compile:false,managed_release_or_recorder_invoked:false,actual_database_runtime_business_action:false});
+const all=[...list,path.join(out,'SOURCE_CHECK_RESULT.json')].sort();save('REVIEW_MANIFEST.json',{schema_version:'MANAGED_QUALIFICATION_CURRENT_ROOT_FROZEN_SOURCE_REVIEW_V1',source_only:true,status:'SOURCE_REVIEW_READY_PROTECTED_RECORDING_ENTRY_AND_ALL_NATIVE_RELEASE_GATES_HELD',current_shared_source_commit:'a63455e878391cb3ee9732165e58c0db517f48a7',current_dependency_commit:'fe7b3dfc2946cf334ba88681ae425105f864c42f',files:all.map(file=>{const bytes=fs.readFileSync(file);return {file:relative(file),bytes:bytes.length,sha256:sha(bytes)};}),source_check_sha256:sha(fs.readFileSync(path.join(out,'SOURCE_CHECK_RESULT.json'))),independent_critic:false,managed_release_or_recorder_invoked:false});
+console.log(JSON.stringify({source_only:true,artifacts:all.length,source_tests:10,manifest_sha256:sha(fs.readFileSync(path.join(out,'REVIEW_MANIFEST.json'))),source_check_sha256:sha(fs.readFileSync(path.join(out,'SOURCE_CHECK_RESULT.json')))}));

@@ -1,0 +1,48 @@
+{
+  "source_only": true,
+  "input_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "input_sha256": "602168afac04f4ed08a826d1714d9060780742d95559408ac037eb0866b851a1",
+  "managed_base_sha256": "5744b97cba1cd0afe5e83206c62a9d62983c06971978a50352bf0595acbfb8f5",
+  "managed_base_manifest_sha256": "2a26cc7bff14054acbff8575eca9a602ccd87364aef578623556d1d7aae2d349",
+  "recording_hunks": [
+    {
+      "before": "options: [PLAN, APPLY, AUTO_PLAN, AUTO]",
+      "after": "options: [PLAN, APPLY, AUTO_PLAN, AUTO, RECORD_EVIDENCE]"
+    },
+    {
+      "before": "      customer_key:",
+      "after": "      record_actor_user_id:\n        description: Actual active TEST Office admin UUID for RECORD_EVIDENCE\n        required: false\n        type: string\n      record_artifact_slot:\n        description: One existing receipt slot for RECORD_EVIDENCE\n        required: false\n        type: choice\n        options: [weekly_source_protected_test_setup_authorizations, weekly_source_off_rule_test_controls, weekly_source_protected_partial_native_evidence, weekly_source_protected_activation_probe_authorizations, weekly_source_protected_capability_qualifications, weekly_source_protected_prerequisite_qualifications, weekly_source_report_fin_native_comparisons, weekly_source_report_fin_qualifications]\n      record_reason:\n        description: Purpose of recording committed evidence against the same VERIFIED installation\n        required: false\n        type: string\n      customer_key:"
+    },
+    {
+      "before": "      CLOUDTMS_RELEASE_REQUESTED_APPROVAL: ${{ inputs.approval }}",
+      "after": "      CLOUDTMS_RELEASE_REQUESTED_APPROVAL: ${{ inputs.approval }}\n      CLOUDTMS_PROTECTED_ENVIRONMENT: ${{ inputs.environment == 'TEST' && 'database-test' || 'database-live' }}\n      CLOUDTMS_RECORD_INPUT_COMMIT: ${{ needs.source-gate.outputs.commit }}\n      CLOUDTMS_RECORD_ACTOR_USER_ID: ${{ inputs.record_actor_user_id }}\n      CLOUDTMS_RECORD_ARTIFACT_SLOT: ${{ inputs.record_artifact_slot }}\n      CLOUDTMS_RECORD_REASON: ${{ inputs.record_reason }}"
+    },
+    {
+      "before": "          if [[ \"${{ inputs.phase }}\" == \"AUTO\" || \"${{ inputs.phase }}\" == \"AUTO_PLAN\" ]]; then",
+      "after": "          if [[ \"${{ inputs.phase }}\" == \"RECORD_EVIDENCE\" ]]; then\n            [[ \"${{ inputs.environment }}\" == \"TEST\" && \"${{ inputs.mode }}\" == \"UPGRADE\" && \"$GITHUB_REPOSITORY\" == \"kierarthur/cloudtms-backend\" ]] || { echo \"Recording is restricted to protected TEST on the canonical repository\"; exit 1; }\n            test -n \"${CLOUDTMS_EXPECTED_DATABASE:-}\" || { echo \"Missing protected exact TEST database\"; exit 1; }\n            expected=\"RECORD_EVIDENCE TEST ${{ needs.source-gate.outputs.commit }} ${CLOUDTMS_RECORD_ARTIFACT_SLOT} ${CLOUDTMS_RECORD_ACTOR_USER_ID}\"\n            [[ \"${CLOUDTMS_RELEASE_REQUESTED_APPROVAL:-}\" == \"$expected\" ]] || { echo \"Exact RECORD_EVIDENCE approval does not match commit, slot and Office actor\"; exit 1; }\n          fi\n          if [[ \"${{ inputs.phase }}\" == \"AUTO\" || \"${{ inputs.phase }}\" == \"AUTO_PLAN\" ]]; then"
+    },
+    {
+      "before": "      - name: Read-only release plan\n        run:",
+      "after": "      - name: Read-only release plan\n        if: inputs.phase != 'RECORD_EVIDENCE'\n        run:"
+    },
+    {
+      "before": "      - name: Preserve bounded automatic release evidence",
+      "after": "      - name: Record committed evidence against the same VERIFIED TEST installation\n        if: inputs.phase == 'RECORD_EVIDENCE' && inputs.environment == 'TEST' && inputs.mode == 'UPGRADE'\n        timeout-minutes: 10\n        run: node scripts/weekly-source-protected-record-evidence.mjs record\n      - name: Preserve exact same-installed recording receipt\n        if: always() && inputs.phase == 'RECORD_EVIDENCE'\n        uses: actions/upload-artifact@v4\n        with:\n          name: same-installed-recording-${{ needs.source-gate.outputs.commit }}\n          path: .codex-tmp/weekly-source-post-verified-record-receipt.json\n          if-no-files-found: warn\n      - name: Preserve bounded automatic release evidence"
+    },
+    {
+      "before": "            echo \"- Authority: ${{ inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval' }}\"",
+      "after": "            echo \"- Authority: ${{ inputs.phase == 'RECORD_EVIDENCE' && 'exact same-installed recording approval' || (inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval') }}\""
+    }
+  ],
+  "managed_existing_hunks": [
+    {
+      "before": "          ref: ${{ needs.source-gate.outputs.commit }}",
+      "after": "          ref: ${{ needs.source-gate.outputs.commit }}\n          # Source-equivalence evidence reads actual historical R1 Git objects.\n          fetch-depth: 0"
+    }
+  ],
+  "output_sha256": "34868e95c7c65c62d840dff0f8a0dead03c56358f360bcc984eeb507bbd90c36",
+  "entire_managed_base_reverse": true,
+  "entire_original_current_reverse": true,
+  "ordinary_apply_auto_and_plan_authority_preserved": true,
+  "recording_has_no_install_or_plan_call": true
+}

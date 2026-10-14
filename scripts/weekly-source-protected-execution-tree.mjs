@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {domainHash,exact} from './weekly-source-protected-release-qualification.mjs';
 const fail=code=>{throw Error(code);};
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
@@ -74,30 +74,31 @@ export function releaseAuthority(bytes){
  }
  return {authority,descriptors};
 }
-export function assertTreeEquivalence(left,right,readBlob){
+function assertMeasuredTreeEquivalence(left,right,readBlob,readSha){
  const nativeLeft=left.filter(row=>!receiptPath(row.path)),nativeRight=right.filter(row=>!receiptPath(row.path));
  if(nativeLeft.length!==nativeRight.length)fail('QUALIFICATION_SOURCE_SET_CHANGED');
  const files=nativeLeft.map((before,index)=>{
   const after=nativeRight[index];
   if(!after||before.path!==after.path||before.mode!==after.mode||before.type!==after.type)
    fail('QUALIFICATION_SOURCE_MODE_TYPE_OR_PATH_CHANGED');
-  const beforeBytes=readBlob(before.blob),afterBytes=readBlob(after.blob);
-  let comparison='EXACT_GIT_OBJECT',comparisonHash=sha(beforeBytes);
+  const beforeDigest=readSha(before.blob),afterDigest=readSha(after.blob);
+  let comparison='EXACT_GIT_OBJECT',comparisonHash=beforeDigest;
   if(before.path===sourceInventory.manifest){
+   const beforeBytes=readBlob(before.blob),afterBytes=readBlob(after.blob);
    const l=releaseAuthority(beforeBytes),r=releaseAuthority(afterBytes);
    if(releaseAuthorityHash(l.authority)!==releaseAuthorityHash(r.authority))
     fail('QUALIFICATION_RELEASE_AUTHORITY_CHANGED');
    comparison='RELEASE_AUTHORITY_EXCEPT_CLOSED_RECEIPT_DESCRIPTORS';comparisonHash=releaseAuthorityHash(l.authority);
-  }else if(before.blob!==after.blob||!beforeBytes.equals(afterBytes))fail('QUALIFICATION_NATIVE_SOURCE_CHANGED');
+  }else if(before.blob!==after.blob||beforeDigest!==afterDigest)fail('QUALIFICATION_NATIVE_SOURCE_CHANGED');
   return {path:before.path,git_mode:before.mode,git_type:before.type,execution_blob_oid:before.blob,installation_blob_oid:after.blob,
-   execution_sha256:sha(beforeBytes),installation_sha256:sha(afterBytes),comparison,comparison_sha256:comparisonHash};
+   execution_sha256:beforeDigest,installation_sha256:afterDigest,comparison,comparison_sha256:comparisonHash};
  });
  const receiptBindings=[];
  for(const [role,rows] of [['EXECUTION',left],['INSTALLATION',right]]){
   const manifest=releaseAuthority(readBlob(rows.find(row=>row.path===sourceInventory.manifest).blob));
   for(const [key,descriptor] of Object.entries(manifest.descriptors)){
    const row=rows.find(row=>row.path===descriptor.path);
-   if(!row||sha(readBlob(row.blob))!==descriptor.sha256)fail('QUALIFICATION_RECEIPT_BUNDLE_UNBOUND');
+   if(!row||readSha(row.blob)!==descriptor.sha256)fail('QUALIFICATION_RECEIPT_BUNDLE_UNBOUND');
    receiptBindings.push({role,key,path:row.path,git_mode:row.mode,git_type:row.type,blob_oid:row.blob,sha256:descriptor.sha256});
   }
   if(rows.some(row=>receiptPath(row.path)&&!Object.values(manifest.descriptors).some(d=>d.path===row.path)))
@@ -105,25 +106,99 @@ export function assertTreeEquivalence(left,right,readBlob){
  }
  return {files,receipt_bindings:receiptBindings};
 }
+export function assertTreeEquivalence(left,right,readBlob){
+ return assertMeasuredTreeEquivalence(left,right,readBlob,id=>sha(readBlob(id)));
+}
+// Full tracked objects are measured from their actual raw Git bytes. The finite
+// synchronous public API is retained. Only digests/size metadata are retained;
+// no complete native blob or whole-tree raw output is accumulated in memory.
+const gitBatchBudget=32*1024*1024,gitChunkBytes=64*1024;
+function assertOwnedProofPath(root,base,temporary){
+ const realRoot=fs.realpathSync(root),realBase=fs.realpathSync(base),relative=path.relative(realRoot,realBase);
+ if(relative!=='.codex-tmp'||fs.lstatSync(base).isSymbolicLink()||!fs.lstatSync(base).isDirectory())
+  fail('QUALIFICATION_SOURCE_PROOF_SCRATCH_PATH_INVALID');
+ if(temporary){const relativeTemp=path.relative(realBase,fs.realpathSync(temporary));
+  if(!/^qualification-source-proof-[A-Za-z0-9]+$/.test(relativeTemp)||fs.lstatSync(temporary).isSymbolicLink()
+   ||!fs.lstatSync(temporary).isDirectory())fail('QUALIFICATION_SOURCE_PROOF_SCRATCH_PATH_INVALID');}
+ if(temporary&&typeof process.getuid==='function'){
+  const info=fs.lstatSync(temporary);
+  if(info.uid!==process.getuid()||(info.mode&0o077)!==0)fail('QUALIFICATION_SOURCE_PROOF_SCRATCH_OWNER_INVALID');
+ }
+}
+function measureGitBlobs(root,ids,git){
+ const checked=git(['cat-file','--batch-check=%(objectname) %(objecttype) %(objectsize)'],ids.join('\n')+'\n')
+  .toString('utf8').trimEnd().split('\n');
+ if(checked.length!==ids.length)fail('QUALIFICATION_GIT_BLOB_INVALID');
+ const sizes=new Map();for(let i=0;i<ids.length;i++){
+  const row=checked[i].match(/^([0-9a-f]{40}) blob ([0-9]+)$/),size=row?Number(row[2]):NaN;
+  if(!row||row[1]!==ids[i]||!Number.isSafeInteger(size)||size<0)fail('QUALIFICATION_GIT_BLOB_INVALID');sizes.set(ids[i],size);
+ }
+ const batches=[];let current=[],cost=0;
+ for(const id of ids){const size=sizes.get(id),next=size+Buffer.byteLength(id+' blob '+size+'\n')+1;
+  if(!Number.isSafeInteger(next))fail('QUALIFICATION_GIT_BLOB_INVALID');
+  if(current.length&&(cost+next>gitBatchBudget||current.length>=256)){batches.push(current);current=[];cost=0;}
+  current.push(id);cost+=next;
+  // A single blob above the batch budget is still admitted and fully hashed
+  // in chunks. Its finite declared file length is checked; it is never skipped.
+  if(cost>=gitBatchBudget){batches.push(current);current=[];cost=0;}
+ }if(current.length)batches.push(current);
+ const base=path.join(root,'.codex-tmp');fs.mkdirSync(base,{recursive:true});assertOwnedProofPath(root,base);
+ const temporary=fs.mkdtempSync(path.join(base,'qualification-source-proof-')),output=path.join(temporary,'objects.batch');
+ const digests=new Map();let openFd;
+ try{
+  assertOwnedProofPath(root,base,temporary);
+  for(const batch of batches){
+   assertOwnedProofPath(root,base,temporary);openFd=fs.openSync(output,'wx+',0o600);
+   const result=spawnSync('git',['--no-replace-objects','-c','maintenance.auto=false','-c','gc.auto=0','cat-file','--batch'],
+    {cwd:root,input:batch.join('\n')+'\n',encoding:null,stdio:['pipe',openFd,'pipe'],maxBuffer:1024*1024,timeout:120000,windowsHide:true});
+   if(result.error||result.status!==0)fail('QUALIFICATION_GIT_OBJECT_STREAM_FAILED');
+   // The same exclusive descriptor is Git's stdout and the measured stream.
+   // A path replacement cannot redirect hashing onto another file identity.
+   const length=fs.fstatSync(openFd).size;
+   const expectedLength=batch.reduce((sum,id)=>sum+Buffer.byteLength(id+' blob '+sizes.get(id)+'\n')+sizes.get(id)+1,0);
+   if(!Number.isSafeInteger(expectedLength)||length!==expectedLength)fail('QUALIFICATION_GIT_BLOB_INVALID');
+   const chunk=Buffer.allocUnsafe(gitChunkBytes),header=Buffer.allocUnsafe(128);let offset=0;
+   for(const id of batch){let headerLength=0;
+    while(true){if(headerLength===header.length||fs.readSync(openFd,header,headerLength,1,offset++)!==1)fail('QUALIFICATION_GIT_BLOB_INVALID');
+     if(header[headerLength++]===10)break;}
+    const matched=header.subarray(0,headerLength-1).toString('utf8').match(/^([0-9a-f]{40}) blob ([0-9]+)$/);
+    if(!matched||matched[1]!==id||Number(matched[2])!==sizes.get(id))fail('QUALIFICATION_GIT_BLOB_INVALID');
+    let remaining=sizes.get(id);const hash=crypto.createHash('sha256');
+    while(remaining){const count=fs.readSync(openFd,chunk,0,Math.min(chunk.length,remaining),offset);
+     if(count<1)fail('QUALIFICATION_GIT_BLOB_INVALID');hash.update(chunk.subarray(0,count));offset+=count;remaining-=count;}
+    if(fs.readSync(openFd,header,0,1,offset++)!==1||header[0]!==10)fail('QUALIFICATION_GIT_BLOB_INVALID');
+    digests.set(id,hash.digest('hex'));
+   }
+   if(offset!==length)fail('QUALIFICATION_GIT_BLOB_INVALID');fs.closeSync(openFd);openFd=undefined;
+   assertOwnedProofPath(root,base,temporary);fs.unlinkSync(output);
+  }
+  if(digests.size!==ids.length)fail('QUALIFICATION_GIT_BLOB_MISSING');return digests;
+ }finally{
+  if(openFd!==undefined)try{fs.closeSync(openFd);}catch{}
+  // Exact task-owned file and empty directory only. Never recursively remove a
+  // workspace or another task's scratch. Cleanup failure refuses qualification.
+  try{assertOwnedProofPath(root,base,temporary);if(fs.existsSync(output))fs.unlinkSync(output);fs.rmdirSync(temporary);}
+  catch{fail('QUALIFICATION_SOURCE_PROOF_SCRATCH_CLEANUP_FAILED');}
+ }
+}
 export function proveCommittedSources(root,executionCommit,installationCommit){
  if(!commit.test(executionCommit)||!commit.test(installationCommit))fail('QUALIFICATION_SOURCE_COMMIT_INVALID');
- const git=(args,input)=>execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0',...args],
+ const git=(args,input)=>execFileSync('git',['--no-replace-objects','-c','maintenance.auto=false','-c','gc.auto=0',...args],
   {cwd:root,input,encoding:null,maxBuffer:256*1024*1024});
  const left=parseGitTree(git(['ls-tree','-r','-z',executionCommit])),right=parseGitTree(git(['ls-tree','-r','-z',installationCommit]));
- const ids=[...new Set([...left,...right].map(row=>row.blob))],raw=git(['cat-file','--batch'],ids.join('\n')+'\n');
- const blobs=new Map();let offset=0;
- for(const id of ids){
-  const end=raw.indexOf(10,offset),header=raw.subarray(offset,end).toString('ascii').match(/^([0-9a-f]{40}) blob ([0-9]+)$/);
-  if(end<0||!header||header[1]!==id)fail('QUALIFICATION_GIT_BLOB_INVALID');
-  const size=Number(header[2]),start=end+1,bytes=raw.subarray(start,start+size);offset=start+size+1;
-  if(!Number.isSafeInteger(size)||bytes.length!==size||raw[offset-1]!==10)fail('QUALIFICATION_GIT_BLOB_INVALID');blobs.set(id,bytes);
- }
- if(offset!==raw.length)fail('QUALIFICATION_GIT_BLOB_INVALID');
- const census=assertTreeEquivalence(left,right,id=>{if(!blobs.has(id))fail('QUALIFICATION_GIT_BLOB_MISSING');return blobs.get(id);});
+ const ids=[...new Set([...left,...right].map(row=>row.blob))],digests=measureGitBlobs(root,ids,git);
+ // Release-authority JSON alone requires materialisation. It retains the old
+ // finite capture bound; every other object's raw bytes have already been
+ // completely hashed in bounded chunks, including the three receipt bundles.
+ const manifestIds=new Set([...left,...right].filter(row=>row.path===sourceInventory.manifest).map(row=>row.blob)),manifests=new Map();
+ for(const id of manifestIds){const bytes=git(['cat-file','blob',id]);if(sha(bytes)!==digests.get(id))fail('QUALIFICATION_GIT_BLOB_INVALID');manifests.set(id,bytes);}
+ const census=assertMeasuredTreeEquivalence(left,right,id=>{if(!manifests.has(id))fail('QUALIFICATION_GIT_MANIFEST_MISSING');return manifests.get(id);},
+  id=>{if(!digests.has(id))fail('QUALIFICATION_GIT_BLOB_MISSING');return digests.get(id);});
  const body={schema_version:'WEEKLY_SOURCE_COMMITTED_EXECUTION_TREE_EQUIVALENCE_V2',execution_source_commit:executionCommit,
   installation_source_commit:installationCommit,inventory_schema:'WEEKLY_SOURCE_NATIVE_RELEASE_TOOLCHAIN_VERIFIER_INVENTORY_V2',...census};
  return {...body,source_equivalence_sha256:domainHash(body.schema_version,body)};
 }
+
 export function assertExecutionTreeProof(proof,executionCommit,installationCommit){
  exact(proof,['schema_version','execution_source_commit','installation_source_commit','inventory_schema','files','receipt_bindings',
   'source_equivalence_sha256'],'QUALIFICATION_EXECUTION_TREE_PROOF_INVALID');

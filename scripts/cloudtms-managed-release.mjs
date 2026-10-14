@@ -1,3 +1,7 @@
+import { buildQualification, domainHash } from './weekly-source-protected-release-qualification.mjs';
+import { buildPrerequisiteQualification, assertManagedPrerequisiteEvidence, proveCommittedSources, installedQualificationCatalogueEvidence } from './weekly-source-protected-prerequisite-evidence.mjs';
+import { assertManagedOperationalEvidence } from './weekly-source-protected-operational-evidence.mjs';
+import { buildTestSetupAuthorization } from './weekly-source-protected-test-setup-evidence.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -420,7 +424,7 @@ export function managedReleaseContext({ root, current, release, context, baselin
 // pre-apply security rehearsal and fresh-connection verifiers remain separate.
 export async function applyManagedRelease({ root, current, release, context: input,
   mapSource = value=>value, executableFile, openSession, deadlockRetries = ()=>0,
-  preapply, verify, log = ()=>{}, delay = ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  preapply, verify, protectedCapabilityJourneys = [], protectedTestSetupAuthorizations = [], log = ()=>{}, delay = ms=>new Promise(resolve=>setTimeout(resolve,ms)),
   baselinePrefix=BASELINE_MIGRATION_PREFIX }) {
   // Dependency injection is only for the finite control-flow unit model. The
   // CLI never takes a baseline-prefix override from arguments/environment.
@@ -504,6 +508,101 @@ export async function applyManagedRelease({ root, current, release, context: inp
       notify pgrst,'reload schema';`);
     const verified = await verify(context);
     if (verified.sha256 !== context.expectedHash) throw Error('MANAGED_VERIFIED_CONTRACT_MISMATCH');
+    if (context.environment==='TEST') verified.evidence={...(verified.evidence??{}),
+      weekly_source_protected_qualification_catalogue:installedQualificationCatalogueEvidence(verified.actual,context.expectedHash)};
+    // Root-only reviewed setup inputs; not CLI/env/browser flags. Native
+    // prerequisite envelopes are byte-preserved and exact commit/contract-bound.
+    if (!Array.isArray(protectedCapabilityJourneys)) throw Error('QUALIFICATION_INPUT_INVALID');
+    if (protectedCapabilityJourneys.length) {
+      if (verified.evidence?.weekly_source_protected_capability_qualifications !== undefined)
+        throw Error('QUALIFICATION_EVIDENCE_REPLACEMENT_REFUSED');
+      const rows=protectedCapabilityJourneys.map(journey=>{
+        if (journey.context.release_id!==context.releaseId || journey.context.git_commit!==context.gitCommit
+          || journey.context.contract_sha256!==context.expectedHash || journey.context.environment!==context.environment
+          || journey.context.database!==context.expectedDatabase) throw Error('QUALIFICATION_MANAGED_SCOPE_INVALID');
+        if (journey.phase==='FULL_OPERATIONAL') {
+          if (!journey.qualification || journey.qualification.release_id!==context.releaseId
+            || journey.qualification.git_commit!==context.gitCommit || journey.qualification.contract_sha256!==context.expectedHash)
+            throw Error('OPERATIONAL_MANAGED_SCOPE_INVALID');
+          return journey.qualification;
+        }
+        if (journey.phase==='ROLLBACK_PREREQUISITE') {
+          if (!journey.receipts.length) throw Error('PREREQUISITE_GATE_CENSUS_INVALID');
+          const first=JSON.parse(journey.receipts[0].receipt_bytes.toString('utf8'));
+          const sourceProof=proveCommittedSources(root,first.execution.source_commit,context.gitCommit);
+          return buildPrerequisiteQualification(journey.context,journey.receipts,sourceProof);
+        }
+        if (journey.phase!==undefined) throw Error('QUALIFICATION_INPUT_INVALID');
+        return buildQualification(journey.context,journey.receipts);
+      });
+      verified.evidence={...(verified.evidence??{}),weekly_source_protected_capability_qualifications:rows};
+    }
+    const qualifications=verified.evidence?.weekly_source_protected_capability_qualifications??[];
+    assertManagedPrerequisiteEvidence(context,{weekly_source_protected_prerequisite_qualifications:qualifications.filter(
+      q=>q.schema_version==='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2')},root);
+    assertManagedOperationalEvidence(context,{weekly_source_protected_capability_qualifications:qualifications.filter(
+      q=>q.schema_version!=='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2')},root);
+    if (!Array.isArray(protectedTestSetupAuthorizations)) throw Error('TEST_SETUP_INPUT_INVALID');
+    if (protectedTestSetupAuthorizations.length) {
+      if (verified.evidence?.weekly_source_protected_test_setup_authorizations!==undefined) throw Error('TEST_SETUP_EVIDENCE_REPLACEMENT_REFUSED');
+      const authorizations=protectedTestSetupAuthorizations.map(input=>buildTestSetupAuthorization({...context,mode:context.mode},input,qualifications));
+      for (const auth of authorizations) {
+        const actual=JSON.parse(await execute('select private.weekly_source_protected_qualification_census_v1('
+          +literal(auth.source_cycle_id)+'::uuid)::text'));
+        if (domainHash('TEST_SETUP_ACTUAL_CENSUS',actual)!==domainHash('TEST_SETUP_ACTUAL_CENSUS',auth.original_census))
+          throw Error('TEST_SETUP_NATIVE_CENSUS_CHANGED');
+      }
+      verified.evidence={...(verified.evidence??{}),weekly_source_protected_test_setup_authorizations:authorizations};
+    }
+    for (const q of qualifications.filter(q=>q.schema_version==='WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1')) {
+      const native=q.native_execution_qualification,closure=q.test_setup_closure;
+      const recorded=JSON.parse(await execute('select jsonb_build_object('+literal('release_id')+',r.release_id,'+
+        literal('source_commit')+',r.git_commit,'+literal('contract_sha256')+',r.installed_contract_sha256,'+
+        literal('catalogue_sha256')+',r.evidence_json#>>'+literal('{weekly_source_protected_qualification_catalogue,jsonb_sha256}')+
+        ')::text from private.cloudtms_database_releases r where r.release_id='+literal(native.release_id)+
+        ' and r.status='+literal('VERIFIED')+' and r.completed_at_utc is not null and r.installed_contract_sha256=r.repository_contract_sha256'));
+      if (!recorded || recorded.source_commit!==native.git_commit || recorded.contract_sha256!==context.expectedHash
+        || recorded.catalogue_sha256!==verified.evidence.weekly_source_protected_qualification_catalogue.jsonb_sha256)
+        throw Error('OPERATIONAL_RECORDED_EXECUTION_CHANGED');
+      const actual=JSON.parse(await execute('select jsonb_build_object('+literal('id')+',a.id,'+literal('after')+',a.after_json,'+
+        literal('sha256')+',encode(private.weekly_source_sha256_jsonb_v1('+literal('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED_V1')+
+        ',a.after_json),'+literal('hex')+'))::text from public.audit_events a where a.id='+literal(closure.closure_audit_id)+
+        '::uuid and a.object_type='+literal('weekly_source_protected_test_journey')+' and a.object_id_text='+literal(closure.scope_id)+
+        ' and a.action='+literal('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED')+' and a.event_sequence_is_authoritative'));
+      const {closure_audit_id,closure_audit_sha256,...after}=closure;
+      if (!actual || actual.id!==closure_audit_id || actual.sha256!==closure_audit_sha256
+        || domainHash('ACTUAL_TEST_SETUP_CLOSURE',actual.after)!==domainHash('ACTUAL_TEST_SETUP_CLOSURE',after))
+        throw Error('OPERATIONAL_ACTUAL_SETUP_CLOSURE_REQUIRED');
+    }
+    if (protectedCapabilityJourneys.length) {
+      const priorRows=JSON.parse(await execute('select coalesce(evidence_json->' + literal('weekly_source_protected_capability_qualifications')
+        + ',' + literal('null') + '::jsonb)::text from private.cloudtms_database_releases where release_id=' + literal(context.releaseId)));
+      if (priorRows!==null && domainHash('WEEKLY_SOURCE_REPLAY_SAFE_PREREQUISITE_EVIDENCE_V1',priorRows)!==
+        domainHash('WEEKLY_SOURCE_REPLAY_SAFE_PREREQUISITE_EVIDENCE_V1',verified.evidence.weekly_source_protected_capability_qualifications))
+        throw Error('QUALIFICATION_EVIDENCE_REPLACEMENT_REFUSED');
+      for (const q of verified.evidence.weekly_source_protected_capability_qualifications) {
+        if (q.schema_version!=='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2') continue;
+        const recorded=JSON.parse(await execute('select jsonb_build_object('+
+          literal('release_id')+',r.release_id,'+literal('source_commit')+',r.git_commit,'+
+          literal('contract_sha256')+',r.installed_contract_sha256,'+literal('installation_id')+',i.installation_id,'+
+          literal('agency_id')+',g.agency_id,'+literal('environment')+',i.environment,'+literal('database')+',current_database(),'+
+          literal('managed_manifest_sha256')+',r.evidence_json#>>'+literal('{managed_release,manifest_sha256}')+','+
+          literal('installed_catalogue_jsonb_sha256')+',r.evidence_json#>>'+literal('{weekly_source_protected_qualification_catalogue,jsonb_sha256}')+
+          ')::text from private.cloudtms_database_releases r cross join private.cloudtms_database_identity i '+
+          'join public.weekly_source_groups g on g.id='+literal(q.source_group_id)+'::uuid and g.active and g.environment='+literal('TEST')+
+          ' and g.source_family='+literal('ROSTER')+' where i.singleton and i.environment='+literal('TEST')+
+          ' and r.release_id='+literal(q.execution_identity.release_id)+' and r.status='+literal('VERIFIED')+
+          ' and r.completed_at_utc is not null and r.installed_contract_sha256=r.repository_contract_sha256'));
+        if (domainHash('EXECUTION_IDENTITY',recorded)!==domainHash('EXECUTION_IDENTITY',q.execution_identity))
+          throw Error('PREREQUISITE_RECORDED_EXECUTION_CHANGED');
+      }
+    }
+    if (protectedTestSetupAuthorizations.length) {
+      const old=JSON.parse(await execute('select coalesce(evidence_json->'+literal('weekly_source_protected_test_setup_authorizations')+','+
+        literal('null')+'::jsonb)::text from private.cloudtms_database_releases where release_id='+literal(context.releaseId)));
+      if (old!==null && domainHash('REPLAY_TEST_SETUP_AUTHORIZATIONS',old)!==domainHash('REPLAY_TEST_SETUP_AUTHORIZATIONS',
+        verified.evidence.weekly_source_protected_test_setup_authorizations)) throw Error('TEST_SETUP_EVIDENCE_REPLACEMENT_REFUSED');
+    }
     await execute(`begin;${assertWriterSql}${identitySql(context)}
       update private.cloudtms_database_releases r set status='VERIFIED',installed_contract_sha256=${literal(verified.sha256)},
         completed_at_utc=pg_catalog.clock_timestamp(),evidence_json=evidence_json||${json(verified.evidence??{})}

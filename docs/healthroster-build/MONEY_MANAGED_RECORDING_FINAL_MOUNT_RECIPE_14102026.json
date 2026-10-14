@@ -1,0 +1,234 @@
+{
+  "schema_version": "MONEY_MANAGED_RECORDING_FINAL_SOURCE_MOUNT_RECIPE_V1",
+  "source_only": true,
+  "current_root_source_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "review_status": "INDEPENDENT_SOURCE_CLOSURE_ACCEPTED_ALL_NATIVE_GATES_HELD",
+  "only_five_complete_current_composed_or_new_source_outputs": [
+    {
+      "order": 1,
+      "name": "P10",
+      "source_packet": "p10-same-descriptor-successor-20261014",
+      "source_file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs",
+      "source_bytes": 17345,
+      "source_sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "destination": "scripts/weekly-source-protected-execution-tree.mjs",
+      "actual_current_input": {
+        "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+        "file": "scripts/weekly-source-protected-execution-tree.mjs",
+        "bytes": 11842,
+        "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2"
+      },
+      "requires_exact_before_assertion": true,
+      "complete_current_reverse_required": true
+    },
+    {
+      "order": 2,
+      "name": "MANAGED_WRITER",
+      "source_packet": "managed-qualification-setup-mode-successor-20261014",
+      "source_file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/scripts/cloudtms-managed-release.mjs",
+      "source_bytes": 44678,
+      "source_sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a",
+      "destination": "scripts/cloudtms-managed-release.mjs",
+      "actual_current_input": {
+        "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+        "file": "scripts/cloudtms-managed-release.mjs",
+        "bytes": 35379,
+        "sha256": "bde07cf05d42918830a95bf2c8136058b5f568817fcc76193ec5b2ac22b19bbf"
+      },
+      "requires_exact_before_assertion": true,
+      "complete_current_reverse_required": true
+    },
+    {
+      "order": 3,
+      "name": "CURRENT_RELEASE_CALLER",
+      "source_packet": "managed-qualification-current-root-install2-forward",
+      "source_file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-db-release.mjs",
+      "source_bytes": 26150,
+      "source_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "destination": "scripts/cloudtms-db-release.mjs",
+      "actual_current_input": {
+        "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+        "file": "scripts/cloudtms-db-release.mjs",
+        "bytes": 25506,
+        "sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65"
+      },
+      "requires_exact_before_assertion": true,
+      "complete_current_reverse_required": true
+    },
+    {
+      "order": 4,
+      "name": "PROTECTED_RECORD_ENTRY",
+      "source_packet": "protected-record-admission-successor-20261014",
+      "source_file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/scripts/weekly-source-protected-record-evidence.mjs",
+      "source_bytes": 12797,
+      "source_sha256": "0a14d9fb74046606ee053717cfef9cf08048604337203f158511c21d3450859d",
+      "destination": "scripts/weekly-source-protected-record-evidence.mjs",
+      "actual_current_input": {
+        "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+        "file": "scripts/weekly-source-protected-record-evidence.mjs",
+        "absent": true
+      },
+      "requires_exact_before_assertion": true,
+      "complete_current_reverse_required": true
+    },
+    {
+      "order": 5,
+      "name": "PROTECTED_RECORD_WORKFLOW",
+      "source_packet": "protected-record-admission-successor-20261014",
+      "source_file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/workflow/database-release.yml",
+      "source_bytes": 13642,
+      "source_sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c",
+      "destination": ".github/workflows/database-release.yml",
+      "actual_current_input": {
+        "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+        "file": ".github/workflows/database-release.yml",
+        "bytes": 10138,
+        "sha256": "602168afac04f4ed08a826d1714d9060780742d95559408ac037eb0866b851a1"
+      },
+      "requires_exact_before_assertion": true,
+      "complete_current_reverse_required": true
+    }
+  ],
+  "existing_actual_current_dependency_inputs": [
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "bytes": 15228,
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 17331,
+      "sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "bytes": 18719,
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "bytes": 5203,
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "bytes": 6878,
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "bytes": 30888,
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-report-fin-native-collector.mjs",
+      "bytes": 49303,
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "scripts/weekly-source-report-fin-native-mapper.mjs",
+      "bytes": 47129,
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426",
+      "mount": false,
+      "preserve_actual_current_owner": true
+    }
+  ],
+  "report_final52ad_source_descendants_retained": true,
+  "no_dependency_reference_wholesale_copy_authority": true,
+  "all_packets_and_source_hunks_must_match_reviewed_own_checkpoint": true,
+  "no_sql_private_service_signature_or_runtime_route_added_by_these_five_files": true,
+  "all_current_source_mounted_before_actual_r1_seal_and_installation": true,
+  "receipt_only_r2_commit_changes_only_same_three_bundles_and_closed_manifest_descriptors": true,
+  "no_extra_install_release_relabel_or_owner_actor_pid_invention": true,
+  "source_qualification_does_not_authorize_native_runtime_deployment_data_or_business_action": true,
+  "independent_critic": "/root/critic_money_off",
+  "reviewed_packets": [
+    {
+      "packet": "managed-qualification-current-root-install2-forward",
+      "artifacts": 32,
+      "manifest_file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "manifest_sha256": "2a26cc7bff14054acbff8575eca9a602ccd87364aef578623556d1d7aae2d349",
+      "source_check_sha256": "9ff451968873b27b3237c774c8119af28d4ada256a8a6b5ad67a0444fbaf059a"
+    },
+    {
+      "packet": "managed-qualification-prerequisite-key-successor-20261014",
+      "artifacts": 7,
+      "manifest_file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "4fb84c7962ce345e277f3ec0bcb7e5c1331894489b61af33dcd4fe51dcb6bd9b",
+      "source_check_sha256": "7c0348cb33a06d588858ead0e3a2e48930781b52c0905186b26e4e2800597a4d"
+    },
+    {
+      "packet": "managed-qualification-setup-mode-successor-20261014",
+      "artifacts": 7,
+      "manifest_file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "a5a8fd04c2085bf51f711ece410ddc591ac2e75997975157ec56733a44e749bf",
+      "source_check_sha256": "8c16f299938c17de49df942ec925e5f0c767935ae5fdfe5200d9d93124864fdb"
+    },
+    {
+      "packet": "protected-record-evidence-current-root-install2-forward",
+      "artifacts": 28,
+      "manifest_file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "manifest_sha256": "16755702bdd4973ff47bbf78942994365e8808ad14afa13ab100152184ddc595",
+      "source_check_sha256": "8f44e97046ad5bdb5a935f591eaa16c0a5dd753d7232bfdc8d93f886284e5426"
+    },
+    {
+      "packet": "protected-record-admission-successor-20261014",
+      "artifacts": 8,
+      "manifest_file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "716940f914ddd7fef6e047b06b73476c9c2797612d54cb0b8b7c1cb1aa49f66b",
+      "source_check_sha256": "8231653b1073940284060f1d2dd58286d81ca8bbc6d4aa9bd513a7721e17bc3d"
+    },
+    {
+      "packet": "p10-bounded-git-source-successor-20261014",
+      "artifacts": 9,
+      "manifest_file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "f812ed2e4fe4846f321af2797a2bb674fba56057022dc095984bd03dae74cd89",
+      "source_check_sha256": "518fbc5b35af7d336df9fee93147783062fb2bd66da5534e6f667b4b99abef0f"
+    },
+    {
+      "packet": "p10-same-descriptor-successor-20261014",
+      "artifacts": 7,
+      "manifest_file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "fbb7e1c63d963727327ad304dbc48a3962edf669ba594dbaa87aca5a96386bad",
+      "source_check_sha256": "068448e6b74500e5abdbe2e2cf0a15fbc729cd57055ef9fbc59945610d73fa4f"
+    }
+  ],
+  "superseded_managed_outputs_must_not_mount": [
+    "managed32 initial writer",
+    "key7 intermediate writer"
+  ],
+  "superseded_record_entry_workflow_outputs_must_not_mount": [
+    "entry28 initial workflow/runner"
+  ],
+  "superseded_p10_output_must_not_mount": "bounded9 before same-descriptor correction"
+}

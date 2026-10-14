@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import {loadCommittedPrerequisiteJourneys} from './weekly-source-protected-prerequisite-evidence.mjs';
+import {loadOperationalJourneys} from './weekly-source-protected-operational-evidence.mjs';
+import {loadTestSetupInputs} from './weekly-source-protected-test-setup-evidence.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -349,6 +352,9 @@ async function applyRelease() {
       openSession: openManagedPsqlSession,
       deadlockRetries: deadlockRetryCountForFile,
       preapply: runBankingPayCatalogPreapply,
+      protectedCapabilityJourneys:[...loadCommittedPrerequisiteJourneys(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),
+        ...loadOperationalJourneys(repoRoot,release,{...releaseVerifierContext,mode,expectedHash})],
+      protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),
       verify: () => {
         runVerifiers(mode,releaseVerifierContext);
         const verified=compareExpected(release.contractPath);

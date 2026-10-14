@@ -1,0 +1,776 @@
+{
+  "sourceOnly": true,
+  "status": "MOUNTED_CONCRETE_PROTECTED_RECORDING_SOURCE_NATIVE_ENTRY_AND_SEAL_HELD",
+  "priorHeldSteps": [
+    {
+      "stage": "WHOLE_CURRENT_REVERSE",
+      "cause": "Root mount reader initially treated the reviewed START_OF_MODULE symbolic anchor as literal source.",
+      "sourceInputsWritten": false,
+      "correction": "Recognise only the exact symbolic module-start anchor, require its inserted prefix at offset zero, and reverse to empty bytes."
+    }
+  ],
+  "rootInputCommit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "publication": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+  "recipeSha256": "52fd126efe47b2b2f9264c24cc12a38e52271595fe170a6d465e216cb3a89703",
+  "reviewedPackets": [
+    {
+      "packet": "managed-qualification-current-root-install2-forward",
+      "artifacts": 32,
+      "manifest_file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "manifest_sha256": "2a26cc7bff14054acbff8575eca9a602ccd87364aef578623556d1d7aae2d349",
+      "source_check_sha256": "9ff451968873b27b3237c774c8119af28d4ada256a8a6b5ad67a0444fbaf059a"
+    },
+    {
+      "packet": "managed-qualification-prerequisite-key-successor-20261014",
+      "artifacts": 7,
+      "manifest_file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "4fb84c7962ce345e277f3ec0bcb7e5c1331894489b61af33dcd4fe51dcb6bd9b",
+      "source_check_sha256": "7c0348cb33a06d588858ead0e3a2e48930781b52c0905186b26e4e2800597a4d"
+    },
+    {
+      "packet": "managed-qualification-setup-mode-successor-20261014",
+      "artifacts": 7,
+      "manifest_file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "a5a8fd04c2085bf51f711ece410ddc591ac2e75997975157ec56733a44e749bf",
+      "source_check_sha256": "8c16f299938c17de49df942ec925e5f0c767935ae5fdfe5200d9d93124864fdb"
+    },
+    {
+      "packet": "protected-record-evidence-current-root-install2-forward",
+      "artifacts": 28,
+      "manifest_file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "manifest_sha256": "16755702bdd4973ff47bbf78942994365e8808ad14afa13ab100152184ddc595",
+      "source_check_sha256": "8f44e97046ad5bdb5a935f591eaa16c0a5dd753d7232bfdc8d93f886284e5426"
+    },
+    {
+      "packet": "protected-record-admission-successor-20261014",
+      "artifacts": 8,
+      "manifest_file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "716940f914ddd7fef6e047b06b73476c9c2797612d54cb0b8b7c1cb1aa49f66b",
+      "source_check_sha256": "8231653b1073940284060f1d2dd58286d81ca8bbc6d4aa9bd513a7721e17bc3d"
+    },
+    {
+      "packet": "p10-bounded-git-source-successor-20261014",
+      "artifacts": 9,
+      "manifest_file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "f812ed2e4fe4846f321af2797a2bb674fba56057022dc095984bd03dae74cd89",
+      "source_check_sha256": "518fbc5b35af7d336df9fee93147783062fb2bd66da5534e6f667b4b99abef0f"
+    },
+    {
+      "packet": "p10-same-descriptor-successor-20261014",
+      "artifacts": 7,
+      "manifest_file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/REVIEW_MANIFEST.json",
+      "manifest_sha256": "fbb7e1c63d963727327ad304dbc48a3962edf669ba594dbaa87aca5a96386bad",
+      "source_check_sha256": "068448e6b74500e5abdbe2e2cf0a15fbc729cd57055ef9fbc59945610d73fa4f"
+    }
+  ],
+  "completeCurrentOwnerHunks": 22,
+  "onlyFiveSelectedSourceOutputs": true,
+  "existingDependenciesPreserved": 9,
+  "receiptExceptions": 3,
+  "recorderRequestFields": 9,
+  "recorderResponseFields": 13,
+  "noSqlOrRuntimeOwnerChange": true,
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/COMPLETE_CURRENT_SOURCE_REVERSE.json",
+      "sha256": "961cea4996f8e5d5bf194631a60eeccb4853daa5bce870501ec83b7e9fe2e95e",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/COMPLETE_CURRENT_SOURCE_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/CURRENT_DEPENDENCY_CLOSURE.json",
+      "sha256": "45f6a13566bf34d2fb6357267dbdc40b29ef67d13b5ecdde8ad6c3adbdc76450",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/CURRENT_DEPENDENCY_CLOSURE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/CURRENT_NATIVE_RELEASE_POLICY_PRESERVATION.json",
+      "sha256": "e1514e4dc62c4de7f2f7de11a740e98af0acdc406091560ba3e0e29fd5f8144e",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/CURRENT_NATIVE_RELEASE_POLICY_PRESERVATION.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/SOURCE_CHECK_RESULT.json",
+      "sha256": "9ff451968873b27b3237c774c8119af28d4ada256a8a6b5ad67a0444fbaf059a",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/SOURCE_REVIEW_READY.md",
+      "sha256": "9b9ff1e994b80db4b678b32ace7cbc71e9f288b5b1b3de6a1311ee360832e384",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/THREE_BUNDLE_AND_RECORDER_ABI.json",
+      "sha256": "4d143d9801bc59b7072d510cff6b8207e4a202e84a6c770aa9066fb4ca459c08",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/THREE_BUNDLE_AND_RECORDER_ABI.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/broker/src/weekly-source/off-rule-native-proxy.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/bpay-next-final-definers.mjs",
+      "sha256": "4d7ad99b9af129bb3d641a03e9f6ec13c29a7527cea47470713b57fda52c4e8d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/bpay-next-final-definers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-db-release-lib.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "0098adfeb34f7765373a1b6db79cbbb4e9650d837963293004e8a44663841c01",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-execution-policy.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-psql.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-release-sql.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-release.mjs",
+      "sha256": "bde07cf05d42918830a95bf2c8136058b5f568817fcc76193ec5b2ac22b19bbf",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-activation-window-binding.mjs",
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-activation-window-binding.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-external-approval.mjs",
+      "sha256": "f8e66de262fdb802747e2e8274af8b41085a391786ec46662a512f4eb2862b47",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-external-approval.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-off-rule-setup-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-post-verified-evidence-controller.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-activation-probe-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-execution-tree.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-operational-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-partial-native-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-prerequisite-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-probe-native-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-release-qualification.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-test-setup-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-reader-release.mjs",
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/dependency-reference/scripts/weekly-source-reader-release.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/freeze-managed-current-root.mjs",
+      "sha256": "64574469c1126821af04c9ea2ea59eb4df9a334f70d16632d6558eae3fde3f97",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/freeze-managed-current-root.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/generate-managed-current-root.mjs",
+      "sha256": "a4814050e767ce8ca8722df03e1e674a984a1e59acf1084db24ec169b2b2c86d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/generate-managed-current-root.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/managed-current-source.test.mjs",
+      "sha256": "e91d7a6bdf8c103d54936c439d5bafb6633d0d8516e0262a8cfea1bf9da36c05",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/managed-current-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-db-release.mjs",
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-db-release.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-managed-release.mjs",
+      "sha256": "15dae11fc5ea465d3d7abb6ee3780cf341c66528ec2854cd5d90b417c7969c78",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/workflow/database-release.yml",
+      "sha256": "5744b97cba1cd0afe5e83206c62a9d62983c06971978a50352bf0595acbfb8f5",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/workflow/database-release.yml"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "sha256": "2a26cc7bff14054acbff8575eca9a602ccd87364aef578623556d1d7aae2d349",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/COMPLETE_CURRENT_MANAGED_REVERSE.json",
+      "sha256": "f1c7e93cc96d5681ea31487aa69d0ad93f0e55cca4560e97b53fd83fde6b70dc",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/COMPLETE_CURRENT_MANAGED_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "7c0348cb33a06d588858ead0e3a2e48930781b52c0905186b26e4e2800597a4d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/SOURCE_REVIEW_READY.md",
+      "sha256": "d9f00c1443226fae74d197576ac51c9327ab06411c20d10edd5dad336a35e83a",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/freeze-prerequisite-key-successor.mjs",
+      "sha256": "816cc7726f18391c32581da092ce45e4128ae33f7184f0566dda369b4237559a",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/freeze-prerequisite-key-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/generate-prerequisite-key-successor.mjs",
+      "sha256": "f3199348ee2dc35768aadb97c95b352c8526c0e34983d4936152b15c18d73e61",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/generate-prerequisite-key-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/prerequisite-key-source.test.mjs",
+      "sha256": "cea23d41042811e1b4b28420778482c60029dbe2710eafd0925ec97eee70ff92",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/prerequisite-key-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/scripts/cloudtms-managed-release.mjs",
+      "sha256": "d1a1c9b956e6f2ffa5b1500bc7d6dd2c665e0d3089335f360b7e95eedc03f9cb",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "4fb84c7962ce345e277f3ec0bcb7e5c1331894489b61af33dcd4fe51dcb6bd9b",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/COMPLETE_CURRENT_MANAGED_REVERSE.json",
+      "sha256": "4763800e67ece33541f429d3212446deea233d6af353bbb6f86ee41ea215cae0",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/COMPLETE_CURRENT_MANAGED_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "8c16f299938c17de49df942ec925e5f0c767935ae5fdfe5200d9d93124864fdb",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/SOURCE_REVIEW_READY.md",
+      "sha256": "03bf18427aee0edb52167aa5266a978f15c343597d0f0b14822d2b3c9eff6917",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/freeze-setup-mode-successor.mjs",
+      "sha256": "a826901113d66305b8fd66f9d27fbfe79a55099f5cf069194ea47e197326941d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/freeze-setup-mode-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/generate-setup-mode-successor.mjs",
+      "sha256": "fc566346f0db125708e486bc1a3bbe8e02edc693b2303537b4824c91a5ffb6ef",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/generate-setup-mode-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/scripts/cloudtms-managed-release.mjs",
+      "sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/setup-mode-source.test.mjs",
+      "sha256": "70869f0a85c6383291f448a5ecfd305d64e509b922a89b8e4a61a2e217a90190",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/setup-mode-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "a5a8fd04c2085bf51f711ece410ddc591ac2e75997975157ec56733a44e749bf",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/COMPLETE_CURRENT_WORKFLOW_REVERSE.json",
+      "sha256": "83f9b206760342cba2dfb6a25fbac673afa82c7c30d72e34fba5d52c4c4bd012",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/COMPLETE_CURRENT_WORKFLOW_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/CURRENT_NATIVE_DEPENDENCY_PINS.json",
+      "sha256": "aceeafe9a1d64a71bbf763163fbd3f3e430a41dbe3423f22bf2904717aebda0a",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/CURRENT_NATIVE_DEPENDENCY_PINS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_CHECK_RESULT.json",
+      "sha256": "8f44e97046ad5bdb5a935f591eaa16c0a5dd753d7232bfdc8d93f886284e5426",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_REVIEW_READY.md",
+      "sha256": "5fd52eef1e5a48f8836b34db69a57317c2688db2927c75753adc55ae0137e371",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_SCHEMA_OWNER_READS.json",
+      "sha256": "bd96e83479230a0fc307b5c0716f331a7660ff815d651627296dd1bed6d11e21",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/SOURCE_SCHEMA_OWNER_READS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/broker/src/weekly-source/off-rule-native-proxy.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/cloudtms-db-release-lib.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/cloudtms-managed-psql.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-activation-window-binding.mjs",
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-activation-window-binding.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-off-rule-setup-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-post-verified-evidence-controller.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-activation-probe-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-execution-tree.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-operational-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-partial-native-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-prerequisite-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-probe-native-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-release-qualification.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-protected-test-setup-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-ab-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-collector.mjs",
+      "sha256": "7a752ffee7eb159b82e492f88ffa3369902e30873d9749f1875d081efc7c23b3",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-collector.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-mapper.mjs",
+      "sha256": "63e884f9e812234690ef62a59151d807099069c8a2e57b308ac0e44c15cea6a2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-mapper.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-seal.mjs",
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/dependency-reference/scripts/weekly-source-report-fin-native-seal.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/freeze-record-entry-current-root.mjs",
+      "sha256": "58c510426ae398016aa07d19ae2f1e948642d5313bff6d66f508687af18873c4",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/freeze-record-entry-current-root.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/generate-record-entry-current-root.mjs",
+      "sha256": "555fc29214c540651516d199e874c3b64c11c729ff402289d5ef98e11cf81a70",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/generate-record-entry-current-root.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/protected-record-entry-source.test.mjs",
+      "sha256": "0b7684bfbbf6a27a6ff79cbc6dfeaa2f08314f602e9bdb65c707afb771f97d05",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/protected-record-entry-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/scripts/weekly-source-protected-record-evidence.mjs",
+      "sha256": "585df181193753e64e49ee0b732f5705cd44dc18b292db5dac438c424e0a948f",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/scripts/weekly-source-protected-record-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/workflow/database-release.yml",
+      "sha256": "34868e95c7c65c62d840dff0f8a0dead03c56358f360bcc984eeb507bbd90c36",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/workflow/database-release.yml"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "sha256": "16755702bdd4973ff47bbf78942994365e8808ad14afa13ab100152184ddc595",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-evidence-current-root-install2-forward/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/COMPLETE_PROTECTED_ENTRY_REVERSE.json",
+      "sha256": "390f1f8505d88e5bdfa24eb30083acda05f693936f10fe01caa6d2b321ade105",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/COMPLETE_PROTECTED_ENTRY_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "8231653b1073940284060f1d2dd58286d81ca8bbc6d4aa9bd513a7721e17bc3d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/SOURCE_REVIEW_READY.md",
+      "sha256": "98789f31842b8bb5a5656fb5061330b87ead77f2487e762ea5d2ab30de4b4370",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/freeze-record-admission-successor.mjs",
+      "sha256": "d12e2dedbb28b1dfc7cb6b0cc572cba6b4cb82255025ae9270f5fac4f62d4405",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/freeze-record-admission-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/generate-record-admission-successor.mjs",
+      "sha256": "259d9bd402a5613f11e687f074baea8af851551d757d6a65c8a8e8d4fc2642d2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/generate-record-admission-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/record-admission-source.test.mjs",
+      "sha256": "0e5461b6a6f23a45159987391580e9189ec4d0a8d60262bed6548f9402991f90",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/record-admission-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/scripts/weekly-source-protected-record-evidence.mjs",
+      "sha256": "0a14d9fb74046606ee053717cfef9cf08048604337203f158511c21d3450859d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/scripts/weekly-source-protected-record-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/workflow/database-release.yml",
+      "sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/workflow/database-release.yml"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "716940f914ddd7fef6e047b06b73476c9c2797612d54cb0b8b7c1cb1aa49f66b",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/ACTUAL_CURRENT_GIT_SIZE_CENSUS.json",
+      "sha256": "85bd908880adb7f67c0c2a5d1055424445d0418148905766bcb7c8c283ab4f72",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/ACTUAL_CURRENT_GIT_SIZE_CENSUS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/COMPLETE_P10_SOURCE_REVERSE.json",
+      "sha256": "42131d0bcf7770870c67214b82072354790d46ba730fbc6743bbbdeb80924532",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/COMPLETE_P10_SOURCE_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/GIT_OBJECT_STREAM_IMPLEMENTATION.mjsfrag",
+      "sha256": "b6e78d1b0f8eea841bfb7ef77dd5567bef9961f43acbe313838e7479f04836fb",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/GIT_OBJECT_STREAM_IMPLEMENTATION.mjsfrag"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "518fbc5b35af7d336df9fee93147783062fb2bd66da5534e6f667b4b99abef0f",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/SOURCE_REVIEW_READY.md",
+      "sha256": "05268c5940f1a831753d38755eb8d9563746f39a0baeacd42934863dc12792c6",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/bounded-source-proof.test.mjs",
+      "sha256": "c91e3aeeef7394e08b01a631a0178ba0988e29886aefae3a8a6a50d6942a2a26",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/bounded-source-proof.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/freeze-bounded-source-proof.mjs",
+      "sha256": "c2553568f065a95f099931946a336df78274bd607114c8408bc8bf633dda2402",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/freeze-bounded-source-proof.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/generate-bounded-source-proof.mjs",
+      "sha256": "008b967395241f35b0143da6af167996ab0e1acc762d83f9b730ae3910b8a839",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/generate-bounded-source-proof.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "64a50bc856a4fd9d75819a0c02b7f094bd991f0e76f1fdacec3dd22436069681",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "f812ed2e4fe4846f321af2797a2bb674fba56057022dc095984bd03dae74cd89",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/COMPLETE_P10_DESCRIPTOR_REVERSE.json",
+      "sha256": "4c27b452841e59fbe8fadad3f8cce0e68f72132a0b244617f736e8e9fd887f10",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/COMPLETE_P10_DESCRIPTOR_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "068448e6b74500e5abdbe2e2cf0a15fbc729cd57055ef9fbc59945610d73fa4f",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/SOURCE_REVIEW_READY.md",
+      "sha256": "9209c3cce1845e523e363295e9e78fbb1e3387bd5f72aa6444f5438ebc0f232d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/freeze-same-descriptor.mjs",
+      "sha256": "a798be7c12193b97208ae67529f27d0014205d2121c1771bc9bf1fb09ab93685",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/freeze-same-descriptor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/generate-same-descriptor.mjs",
+      "sha256": "1e0d4077f31cc6ae4e09e3e027dee70e979fddc5c4ede1c2929272a11fc16010",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/generate-same-descriptor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/same-descriptor-source.test.mjs",
+      "sha256": "e58f90315e938ee13d49b90a070f1f6da6802bbb8798aebbb161f8f0b24c6347",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/same-descriptor-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "fbb7e1c63d963727327ad304dbc48a3962edf669ba594dbaa87aca5a96386bad",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "scripts/weekly-source-protected-record-evidence.mjs",
+      "sha256": "0a14d9fb74046606ee053717cfef9cf08048604337203f158511c21d3450859d",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/scripts/weekly-source-protected-record-evidence.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_MANAGED_RECORDING_FINAL_MOUNT_RECIPE_14102026.json",
+      "sha256": "52fd126efe47b2b2f9264c24cc12a38e52271595fe170a6d465e216cb3a89703",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/MONEY_MANAGED_RECORDING_FINAL_MOUNT_RECIPE_14102026.json"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_A0_LATE_POSITION_DISJOINT_14102026.json",
+      "sha256": "50359d702a8b9a5f256e60307ac02ed1be2efe1a4a7e91c1bc37f1e8fb6964d9",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/MONEY_A0_LATE_POSITION_DISJOINT_14102026.json"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_MANAGED_RECORDING_HANDBACK_14102026.md",
+      "sha256": "1acc903e974f1342194d35d6337cd0c1df2b527610c5ab24a373779f5a210b74",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/MONEY_MANAGED_RECORDING_HANDBACK_14102026.md"
+    },
+    {
+      "file": "docs/healthroster-build/MONEY_SOURCE_TEST_LEFTOVER_14102026.json",
+      "sha256": "b64fe2e76a67d7361a8acd2ccb9d54e5b5e14c75572a4d95d3b42785adb2bfe6",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/MONEY_SOURCE_TEST_LEFTOVER_14102026.json"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/MONEY_LANE_PROGRESS_AT_b70ef1b.md",
+      "sha256": "f685bbf495614878df4c17bbe5e65f1c90a9538e6c32f1c82e5f1e31fdcda2c6",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/PROGRESS.md"
+    }
+  ],
+  "replacements": [
+    {
+      "file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "beforeSha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs",
+      "wholeCurrentReverse": true
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a",
+      "beforeSha256": "bde07cf05d42918830a95bf2c8136058b5f568817fcc76193ec5b2ac22b19bbf",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-setup-mode-successor-20261014/scripts/cloudtms-managed-release.mjs",
+      "wholeCurrentReverse": true
+    },
+    {
+      "file": "scripts/cloudtms-db-release.mjs",
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "beforeSha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/managed-qualification-current-root-install2-forward/scripts/cloudtms-db-release.mjs",
+      "wholeCurrentReverse": true
+    },
+    {
+      "file": ".github/workflows/database-release.yml",
+      "sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c",
+      "beforeSha256": "602168afac04f4ed08a826d1714d9060780742d95559408ac037eb0866b851a1",
+      "sourceCommit": "b70ef1b331a3654a0c7e001fa74825cd25ed2f8c",
+      "sourceFile": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/workflow/database-release.yml",
+      "wholeCurrentReverse": true
+    }
+  ],
+  "noReleaseRecorderSqlOrWholeTreeCaptureInvocation": true
+}

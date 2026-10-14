@@ -17,7 +17,20 @@ on:
         description: PLAN is read-only; APPLY is full verification; AUTO selects the safe TEST route
         required: true
         type: choice
-        options: [PLAN, APPLY, AUTO_PLAN, AUTO]
+        options: [PLAN, APPLY, AUTO_PLAN, AUTO, RECORD_EVIDENCE]
+      record_actor_user_id:
+        description: Actual active TEST Office admin UUID for RECORD_EVIDENCE
+        required: false
+        type: string
+      record_artifact_slot:
+        description: One existing receipt slot for RECORD_EVIDENCE
+        required: false
+        type: choice
+        options: [weekly_source_protected_test_setup_authorizations, weekly_source_off_rule_test_controls, weekly_source_protected_partial_native_evidence, weekly_source_protected_activation_probe_authorizations, weekly_source_protected_capability_qualifications, weekly_source_protected_prerequisite_qualifications, weekly_source_report_fin_native_comparisons, weekly_source_report_fin_qualifications]
+      record_reason:
+        description: Purpose of recording committed evidence against the same VERIFIED installation
+        required: false
+        type: string
       customer_key:
         description: Optional non-secret tenant key for a dedicated customer database
         required: false
@@ -41,6 +54,15 @@ jobs:
     outputs:
       commit: ${{ steps.commit.outputs.sha }}
     steps:
+      - name: Admit TEST-only recording before any protected target job
+        if: inputs.phase == 'RECORD_EVIDENCE'
+        env:
+          RECORD_ENVIRONMENT: ${{ inputs.environment }}
+          RECORD_MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RECORD_ENVIRONMENT" == "TEST" && "$RECORD_MODE" == "UPGRADE" ]] || { echo "RECORD_EVIDENCE is restricted to TEST UPGRADE before protected target admission"; exit 1; }
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -79,6 +101,7 @@ jobs:
   release:
     name: ${{ inputs.phase }} ${{ inputs.mode }} ${{ inputs.environment }}
     needs: source-gate
+    if: inputs.phase != 'RECORD_EVIDENCE' || (inputs.environment == 'TEST' && inputs.mode == 'UPGRADE')
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}
     env:
@@ -89,6 +112,11 @@ jobs:
       CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
       CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
       CLOUDTMS_RELEASE_REQUESTED_APPROVAL: ${{ inputs.approval }}
+      CLOUDTMS_PROTECTED_ENVIRONMENT: ${{ inputs.environment == 'TEST' && 'database-test' || 'database-live' }}
+      CLOUDTMS_RECORD_INPUT_COMMIT: ${{ needs.source-gate.outputs.commit }}
+      CLOUDTMS_RECORD_ACTOR_USER_ID: ${{ inputs.record_actor_user_id }}
+      CLOUDTMS_RECORD_ARTIFACT_SLOT: ${{ inputs.record_artifact_slot }}
+      CLOUDTMS_RECORD_REASON: ${{ inputs.record_reason }}
       # Miget preloads pg_show_plans. Keep its diagnostic plan collector off for
       # protected TEST release sessions, as for the TEST PostgREST connections;
       # every SQL verifier still runs normally. Disable optional JIT compilation
@@ -104,6 +132,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.source-gate.outputs.commit }}
+          # Source-equivalence evidence reads actual historical R1 Git objects.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
@@ -139,6 +169,12 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
+          if [[ "${{ inputs.phase }}" == "RECORD_EVIDENCE" ]]; then
+            [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" && "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" ]] || { echo "Recording is restricted to protected TEST on the canonical repository"; exit 1; }
+            test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected exact TEST database"; exit 1; }
+            expected="RECORD_EVIDENCE TEST ${{ needs.source-gate.outputs.commit }} ${CLOUDTMS_RECORD_ARTIFACT_SLOT} ${CLOUDTMS_RECORD_ACTOR_USER_ID}"
+            [[ "${CLOUDTMS_RELEASE_REQUESTED_APPROVAL:-}" == "$expected" ]] || { echo "Exact RECORD_EVIDENCE approval does not match commit, slot and Office actor"; exit 1; }
+          fi
           if [[ "${{ inputs.phase }}" == "AUTO" || "${{ inputs.phase }}" == "AUTO_PLAN" ]]; then
             [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" && "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" && "$GITHUB_REF" == "refs/heads/test" ]] || { echo "AUTO is restricted to canonical managed TEST UPGRADE"; exit 1; }
           fi
@@ -166,6 +202,7 @@ jobs:
           jit_setting="$(psql "$CLOUDTMS_DATABASE_URL" -X -Atqc 'show jit')"
           [[ "$jit_setting" == "off" ]] || { echo "TEST release-session JIT is not disabled"; exit 1; }
       - name: Read-only release plan
+        if: inputs.phase != 'RECORD_EVIDENCE'
         run: npm run db:plan -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
       - name: Apply verified release
         if: inputs.phase == 'APPLY'
@@ -176,6 +213,17 @@ jobs:
       - name: Preview automatic TEST database decision without installing
         if: inputs.phase == 'AUTO_PLAN'
         run: node scripts/cloudtms-auto-test-release.mjs plan
+      - name: Record committed evidence against the same VERIFIED TEST installation
+        if: inputs.phase == 'RECORD_EVIDENCE' && inputs.environment == 'TEST' && inputs.mode == 'UPGRADE'
+        timeout-minutes: 10
+        run: node scripts/weekly-source-protected-record-evidence.mjs record
+      - name: Preserve exact same-installed recording receipt
+        if: always() && inputs.phase == 'RECORD_EVIDENCE'
+        uses: actions/upload-artifact@v4
+        with:
+          name: same-installed-recording-${{ needs.source-gate.outputs.commit }}
+          path: .codex-tmp/weekly-source-post-verified-record-receipt.json
+          if-no-files-found: warn
       - name: Preserve bounded automatic release evidence
         if: always() && (inputs.phase == 'AUTO' || inputs.phase == 'AUTO_PLAN')
         uses: actions/upload-artifact@v4
@@ -194,5 +242,5 @@ jobs:
             echo "- Environment: ${{ inputs.environment }}"
             echo "- Commit: ${{ needs.source-gate.outputs.commit }}"
             echo "- Protected GitHub Environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}"
-            echo "- Authority: ${{ inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval' }}"
+            echo "- Authority: ${{ inputs.phase == 'RECORD_EVIDENCE' && 'exact same-installed recording approval' || (inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval') }}"
           } >> "$GITHUB_STEP_SUMMARY"

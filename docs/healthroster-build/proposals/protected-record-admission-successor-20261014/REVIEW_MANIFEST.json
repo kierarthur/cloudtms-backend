@@ -1,0 +1,50 @@
+{
+  "schema_version": "PROTECTED_RECORD_ADMISSION_SUCCESSOR_FROZEN_SOURCE_REVIEW_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_TEST_PURPOSE_BOUNDARY_NATIVE_GATES_HELD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/COMPLETE_PROTECTED_ENTRY_REVERSE.json",
+      "bytes": 2081,
+      "sha256": "390f1f8505d88e5bdfa24eb30083acda05f693936f10fe01caa6d2b321ade105"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 811,
+      "sha256": "8231653b1073940284060f1d2dd58286d81ca8bbc6d4aa9bd513a7721e17bc3d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/SOURCE_REVIEW_READY.md",
+      "bytes": 1741,
+      "sha256": "98789f31842b8bb5a5656fb5061330b87ead77f2487e762ea5d2ab30de4b4370"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/freeze-record-admission-successor.mjs",
+      "bytes": 3414,
+      "sha256": "d12e2dedbb28b1dfc7cb6b0cc572cba6b4cb82255025ae9270f5fac4f62d4405"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/generate-record-admission-successor.mjs",
+      "bytes": 3505,
+      "sha256": "259d9bd402a5613f11e687f074baea8af851551d757d6a65c8a8e8d4fc2642d2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/record-admission-source.test.mjs",
+      "bytes": 5401,
+      "sha256": "0e5461b6a6f23a45159987391580e9189ec4d0a8d60262bed6548f9402991f90"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/scripts/weekly-source-protected-record-evidence.mjs",
+      "bytes": 12797,
+      "sha256": "0a14d9fb74046606ee053717cfef9cf08048604337203f158511c21d3450859d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-record-admission-successor-20261014/workflow/database-release.yml",
+      "bytes": 13642,
+      "sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c"
+    }
+  ],
+  "source_check_sha256": "8231653b1073940284060f1d2dd58286d81ca8bbc6d4aa9bd513a7721e17bc3d",
+  "independent_critic": false,
+  "actual_workflow_database_release_or_business_action": false
+}

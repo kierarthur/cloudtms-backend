@@ -1,0 +1,55 @@
+{
+  "schema_version": "P10_BOUNDED_GIT_SOURCE_SUCCESSOR_FROZEN_REVIEW_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_GENUINE_ROOT_SOURCE_AND_NATIVE_GATES_HELD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/ACTUAL_CURRENT_GIT_SIZE_CENSUS.json",
+      "bytes": 465,
+      "sha256": "85bd908880adb7f67c0c2a5d1055424445d0418148905766bcb7c8c283ab4f72"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/COMPLETE_P10_SOURCE_REVERSE.json",
+      "bytes": 14307,
+      "sha256": "42131d0bcf7770870c67214b82072354790d46ba730fbc6743bbbdeb80924532"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/GIT_OBJECT_STREAM_IMPLEMENTATION.mjsfrag",
+      "bytes": 6857,
+      "sha256": "b6e78d1b0f8eea841bfb7ef77dd5567bef9961f43acbe313838e7479f04836fb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 1696,
+      "sha256": "518fbc5b35af7d336df9fee93147783062fb2bd66da5534e6f667b4b99abef0f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/SOURCE_REVIEW_READY.md",
+      "bytes": 3583,
+      "sha256": "05268c5940f1a831753d38755eb8d9563746f39a0baeacd42934863dc12792c6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/bounded-source-proof.test.mjs",
+      "bytes": 10317,
+      "sha256": "c91e3aeeef7394e08b01a631a0178ba0988e29886aefae3a8a6a50d6942a2a26"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/freeze-bounded-source-proof.mjs",
+      "bytes": 3376,
+      "sha256": "c2553568f065a95f099931946a336df78274bd607114c8408bc8bf633dda2402"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/generate-bounded-source-proof.mjs",
+      "bytes": 3297,
+      "sha256": "008b967395241f35b0143da6af167996ab0e1acc762d83f9b730ae3910b8a839"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-bounded-git-source-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs",
+      "bytes": 17263,
+      "sha256": "64a50bc856a4fd9d75819a0c02b7f094bd991f0e76f1fdacec3dd22436069681"
+    }
+  ],
+  "source_check_sha256": "518fbc5b35af7d336df9fee93147783062fb2bd66da5534e6f667b4b99abef0f",
+  "independent_critic": false,
+  "actual_database_or_large_raw_git_proof_invoked": false
+}

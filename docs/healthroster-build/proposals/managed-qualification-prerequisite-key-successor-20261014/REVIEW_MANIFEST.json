@@ -1,0 +1,45 @@
+{
+  "schema_version": "MANAGED_PREREQUISITE_KEY_SUCCESSOR_FROZEN_SOURCE_REVIEW_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_REJECTED_MANAGED32_OWNER_SUPERSEDED_NATIVE_GATES_HELD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/COMPLETE_CURRENT_MANAGED_REVERSE.json",
+      "bytes": 11066,
+      "sha256": "f1c7e93cc96d5681ea31487aa69d0ad93f0e55cca4560e97b53fd83fde6b70dc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 1093,
+      "sha256": "7c0348cb33a06d588858ead0e3a2e48930781b52c0905186b26e4e2800597a4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/SOURCE_REVIEW_READY.md",
+      "bytes": 2293,
+      "sha256": "d9f00c1443226fae74d197576ac51c9327ab06411c20d10edd5dad336a35e83a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/freeze-prerequisite-key-successor.mjs",
+      "bytes": 3286,
+      "sha256": "816cc7726f18391c32581da092ce45e4128ae33f7184f0566dda369b4237559a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/generate-prerequisite-key-successor.mjs",
+      "bytes": 2288,
+      "sha256": "f3199348ee2dc35768aadb97c95b352c8526c0e34983d4936152b15c18d73e61"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/prerequisite-key-source.test.mjs",
+      "bytes": 6992,
+      "sha256": "cea23d41042811e1b4b28420778482c60029dbe2710eafd0925ec97eee70ff92"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/managed-qualification-prerequisite-key-successor-20261014/scripts/cloudtms-managed-release.mjs",
+      "bytes": 44665,
+      "sha256": "d1a1c9b956e6f2ffa5b1500bc7d6dd2c665e0d3089335f360b7e95eedc03f9cb"
+    }
+  ],
+  "source_check_sha256": "7c0348cb33a06d588858ead0e3a2e48930781b52c0905186b26e4e2800597a4d",
+  "independent_critic": false,
+  "actual_database_release_or_business_action": false
+}

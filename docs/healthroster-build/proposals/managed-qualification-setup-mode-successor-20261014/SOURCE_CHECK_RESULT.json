@@ -1,0 +1,19 @@
+{
+  "schema_version": "MANAGED_SETUP_MODE_SUCCESSOR_SOURCE_CHECK_V1",
+  "source_only": true,
+  "read_only_in_memory_tests_pass": 6,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 4,
+  "credential_scan": "PASS",
+  "complete_managed_successor_sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a",
+  "entire_key7_and_original_current_reverse": true,
+  "one_new_mode_hunk": true,
+  "actual_key7_referenceerror_reproduced": true,
+  "corrected_nonempty_setup_reaches_real_closed_native_input_builder": true,
+  "context_mode_from_actual_managed_context": true,
+  "malformed_v2_still_refuses_before_setup": true,
+  "ordinary_empty_setup_behavior_preserved": true,
+  "all_earlier_frozen_sources_preserved": true,
+  "independent_critic": false,
+  "actual_database_release_runtime_or_business_action": false
+}

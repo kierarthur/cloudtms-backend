@@ -1,0 +1,45 @@
+{
+  "schema_version": "P10_SAME_DESCRIPTOR_SUCCESSOR_FROZEN_REVIEW_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_GENUINE_SOURCE_AND_NATIVE_GATES_HELD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/COMPLETE_P10_DESCRIPTOR_REVERSE.json",
+      "bytes": 14870,
+      "sha256": "4c27b452841e59fbe8fadad3f8cce0e68f72132a0b244617f736e8e9fd887f10"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 934,
+      "sha256": "068448e6b74500e5abdbe2e2cf0a15fbc729cd57055ef9fbc59945610d73fa4f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/SOURCE_REVIEW_READY.md",
+      "bytes": 1655,
+      "sha256": "9209c3cce1845e523e363295e9e78fbb1e3387bd5f72aa6444f5438ebc0f232d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/freeze-same-descriptor.mjs",
+      "bytes": 3023,
+      "sha256": "a798be7c12193b97208ae67529f27d0014205d2121c1771bc9bf1fb09ab93685"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/generate-same-descriptor.mjs",
+      "bytes": 2304,
+      "sha256": "1e0d4077f31cc6ae4e09e3e027dee70e979fddc5c4ede1c2929272a11fc16010"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/same-descriptor-source.test.mjs",
+      "bytes": 5749,
+      "sha256": "e58f90315e938ee13d49b90a070f1f6da6802bbb8798aebbb161f8f0b24c6347"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/p10-same-descriptor-successor-20261014/scripts/weekly-source-protected-execution-tree.mjs",
+      "bytes": 17345,
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2"
+    }
+  ],
+  "source_check_sha256": "068448e6b74500e5abdbe2e2cf0a15fbc729cd57055ef9fbc59945610d73fa4f",
+  "independent_critic": false,
+  "actual_native_database_or_large_raw_git_operation": false
+}
