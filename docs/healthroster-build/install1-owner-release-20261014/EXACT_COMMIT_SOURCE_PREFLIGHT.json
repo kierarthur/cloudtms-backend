@@ -1,0 +1,174 @@
+{
+  "status": "SOURCE_PREFLIGHT_PASS",
+  "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "predecessor": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "beganAt": "2026-10-14T14:41:05.522Z",
+  "source": "EXACT_COMMITTED_GIT_ARCHIVE",
+  "runtime": "Windows Node/npm running the same portable protected-workflow source commands; not a Linux runtime claim",
+  "linearAncestryPassed": true,
+  "steps": [
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "security:toolchain"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 417,
+      "outputSha256": "28e756e8bfa18ebf880b1961546f02610d1d978a83c307722f31f68a6f843525",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "security:dependencies"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 473,
+      "outputSha256": "f39223686b58ad74b13d80fa1055db5878371e0b90b3ca9e70fb753a8c788610",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "security:secrets"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 5138,
+      "outputSha256": "8676d2b041d81b279de1044c1999acae0ba2e9bf8eadfb4454a546aea6331bf5",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "db:check"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 1278,
+      "outputSha256": "1a788795b407640f4b8607c1d3a0473d2f4831ecb8af4f1b1bd37934415a20cd",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "npm",
+      "args": [
+        "run",
+        "db:contract:coupling"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 13676,
+      "outputSha256": "2f254526cd6ea17a61c45e760a713ae64871b99ff8eb47bcf353a85a88c709db",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/bpay-next-source-gates.test.js",
+        "tests/bpay-next-legacy-fence.test.js",
+        "tests/bpay-next-final-definers.test.js"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 67331,
+      "outputSha256": "6ff56f7a9bbdf464620ed6b050cf73b8a69fe9f6919650d5939296c56cff7d83",
+      "tests": 32,
+      "pass": 32,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/database-release-system.test.mjs",
+        "tests/automatic-test-release-policy.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 6481,
+      "outputSha256": "49b3eb376a0023b0e24107863a96d405056c996593f1bff5dcef3bac9caec2e8",
+      "tests": 42,
+      "pass": 42,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/healthroster-install1-full-rehearsal.test.mjs",
+        "tests/healthroster-install1-native-coordinator.test.mjs",
+        "tests/healthroster-source-check-environment.test.mjs",
+        "tests/healthroster-turn-control.test.mjs",
+        "tests/healthroster-receipt-journal.test.mjs",
+        "tests/healthroster-rehearsal-turn.test.mjs",
+        "tests/healthroster-full-rehearsal-protocol.test.mjs",
+        "tests/healthroster-live-test-restoration.test.mjs",
+        "tests/healthroster-rehearsal-stream-observer.test.mjs",
+        "tests/healthroster-rehearsal-resource-guard.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 52568,
+      "outputSha256": "f4b779e9a9d7310b3eb51b3cbfba485aecd4ec92d0e8db17b7e36fef27d178d4",
+      "tests": 114,
+      "pass": 114,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    },
+    {
+      "entry": "--test",
+      "args": [
+        "tests/weekly-source/weekly-source-pay-authority-sql.test.mjs",
+        "tests/weekly-source/weekly-source-pay-view.test.mjs",
+        "tests/weekly-source/weekly-source-pay-auth-transport.test.mjs",
+        "tests/weekly-source/weekly-source-office-presentation-integration.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 2262,
+      "outputSha256": "1b909118e59de0436ff568b451f2e77c7d27bab42e173c92acd926834e7e36b8",
+      "tests": 24,
+      "pass": 24,
+      "fail": 0,
+      "diagnosticCodes": [],
+      "missingPackages": []
+    }
+  ],
+  "temporaryFolder": "C:\\tmp\\healthroster-install1-preflight-f743b81fe537-nKrvUp",
+  "cleanup": {
+    "removed": true,
+    "deletionRefused": false
+  },
+  "sqlFiles": 1842,
+  "sqlCarriageReturnFiles": [],
+  "dependencyProvisioning": {
+    "method": "EXACT_ARCHIVED_LOCK_NPM_CI_SOURCE_ONLY",
+    "installerHooks": false,
+    "exitCode": 0,
+    "elapsedMs": 9449,
+    "packageLockSha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+    "lockUnchanged": true,
+    "outputSha256": "05b65d7de1a01c5f456ac63339fbf19b42fc55d78e8e0ae9492d583517c38ae5"
+  },
+  "endedAt": "2026-10-14T14:44:10.546Z"
+}

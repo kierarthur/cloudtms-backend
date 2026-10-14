@@ -1,0 +1,71 @@
+{
+  "environment": "TEST",
+  "backendCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "checkedAt": "2026-10-14T14:41:36.377Z",
+  "workers": [
+    {
+      "worker": "test-cloudtms-backend",
+      "triggerUuid": "5e1207d4-e550-4a74-8135-15d68b2060fa",
+      "branch": "deploy/cloudflare/test-cloudtms-backend",
+      "repository": "kierarthur/cloudtms-backend",
+      "root": "/",
+      "buildCommand": "",
+      "deployCommand": "npx wrangler deploy --env test",
+      "buildTokenName": "test-cloudtms-backend build token",
+      "activeVersion": "014aa120-6b88-4c6b-adbd-66def6e83ccd",
+      "activeCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "buildOutcome": "success",
+      "activeBuildUuid": "15e99c5c-c2ef-48d6-9155-53f5ffb68cb4",
+      "branchCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "verified": true
+    },
+    {
+      "worker": "test-cloudtms-candidate-private-api",
+      "triggerUuid": "b85d23aa-8eeb-46f9-a498-199fb6949f8a",
+      "branch": "deploy/cloudflare/test-candidate-private-api",
+      "repository": "kierarthur/cloudtms-backend",
+      "root": "/",
+      "buildCommand": "npm run check:candidate-private-api",
+      "deployCommand": "npx wrangler deploy --config candidate-private-api/wrangler.jsonc --keep-vars",
+      "buildTokenName": "test-cloudtms-backend build token",
+      "activeVersion": "96ea9673-f8e9-4ac5-a145-dd1250502f92",
+      "activeCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "buildOutcome": "success",
+      "activeBuildUuid": "9c1f0cd5-8a7d-4885-b0e5-ecc3e9a20384",
+      "branchCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "verified": true
+    },
+    {
+      "worker": "test-cloudtms-candidate-synthetic-private-api",
+      "triggerUuid": "4ad64d89-46f4-4f50-b92b-2f9121a5c165",
+      "branch": "deploy/cloudflare/test-candidate-synthetic-private-api",
+      "repository": "kierarthur/cloudtms-backend",
+      "root": "/",
+      "buildCommand": "npx wrangler deploy --dry-run --config candidate-synthetic-private-api/wrangler.jsonc",
+      "deployCommand": "npx wrangler deploy --config candidate-synthetic-private-api/wrangler.jsonc --keep-vars",
+      "buildTokenName": "test-cloudtms-backend build token",
+      "activeVersion": "ffdb3151-d49e-40be-ad04-93a2523c54d7",
+      "activeCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "buildOutcome": "success",
+      "activeBuildUuid": "45947903-fc31-4c99-8273-8122ba359ef3",
+      "branchCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "verified": true
+    },
+    {
+      "worker": "test-cloudtms-candidate-broker",
+      "triggerUuid": "e4e44a2d-35cc-4189-86d2-c0c5c07958ac",
+      "branch": "deploy/cloudflare/test-candidate-broker",
+      "repository": "kierarthur/cloudtms-backend",
+      "root": "/",
+      "buildCommand": "npm run check:candidate-broker",
+      "deployCommand": "npx wrangler deploy --config candidate-broker/wrangler.jsonc --keep-vars",
+      "buildTokenName": "test-cloudtms-backend build token",
+      "activeVersion": "3f34be93-9808-4cfc-adc4-6d5040f73568",
+      "activeCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "buildOutcome": "success",
+      "activeBuildUuid": "d979307c-a884-428d-97ae-5294310694fa",
+      "branchCommit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "verified": true
+    }
+  ]
+}

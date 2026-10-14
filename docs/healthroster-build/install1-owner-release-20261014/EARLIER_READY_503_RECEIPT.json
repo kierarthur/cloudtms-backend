@@ -1,0 +1,26 @@
+{
+  "checkedAt": "2026-10-14T14:43:01.617Z",
+  "rows": [
+    {
+      "url": "https://cloudtms-codex-poc-postgrest-kwtyn.eu-east-1.migetapp.com/",
+      "status": 200,
+      "bytes": 83430,
+      "sha256": "b467354ada2a06c06cda8baa91ec15af803f63feb1a6785db3b6aff3d1e13796"
+    },
+    {
+      "url": "https://codex-cloudtms-miget-gateway.kier-88a.workers.dev/rest/v1/",
+      "status": 200,
+      "bytes": 83430,
+      "sha256": "b467354ada2a06c06cda8baa91ec15af803f63feb1a6785db3b6aff3d1e13796"
+    },
+    {
+      "url": "https://test-cloudtms-backend.kier-88a.workers.dev/readyz",
+      "status": 503,
+      "bytes": 472,
+      "sha256": "f8d29595b507993a2bf6a07bb17ae7f245fdeb472f98550fdb5238b591433b13",
+      "ready": false
+    }
+  ],
+  "staleConnectionsObserved": true,
+  "hyperdriveRefreshed": false
+}

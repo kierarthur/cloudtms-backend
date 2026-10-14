@@ -1,0 +1,28 @@
+{
+  "status": "BOUNDED_SOURCE_ACCEPTED_NATIVE_HELPER35_PASS_NOT_FULL_CHECKLIST",
+  "parent": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "source": [
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_calendar.sqlinc",
+      "name": "wp_u3_client_calendar.sqlinc.txt",
+      "sha256": "51509cebfcf3f6e8a263da7614d419294e0ab4ccea9f926add09b72f51091e3d"
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "name": "wp_u3_client_week_context.sqlinc.txt",
+      "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+      "name": "13102026_1730_healthroster_checklist_private_read_v1.sql.txt",
+      "sha256": "7d5988cf8e1792cd23eb479604d8735d5c9ebb2dda05d2eb8b28006da3cc2093"
+    },
+    {
+      "file": "tests/healthroster-checklist-sql-source.test.mjs",
+      "name": "healthroster-checklist-sql-source.test.mjs.txt",
+      "sha256": "ad99ab8ddb9fa1e2fa03263e7be2b3a7c4c2244a620a107c899e7aca8e79fef9"
+    }
+  ],
+  "canonicalSealPending": true,
+  "sourceCopiesOnly": true
+}

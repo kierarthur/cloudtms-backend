@@ -1,0 +1,39 @@
+{
+  "status": "PROTECTED_INSTALL1_DISPATCH_IN_PROGRESS_NOT_INSTALLED",
+  "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "officeCommit": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "pins": [
+    {
+      "name": "EXACT_COMMIT_SOURCE_PREFLIGHT.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\healthroster-install1-archive-preflight.json",
+      "sha256": "12102f7e6bbe095491da1c7594f097866a7a4d12d92db73acaa1b2edb93edae9"
+    },
+    {
+      "name": "CURRENT_CONNECTIONS_PROOF.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\healthroster-install1-connections-proof.json",
+      "sha256": "522985defa23202c7ad67c9ec700f2294aeb7bbe7939cb431336c623b41f8d15"
+    },
+    {
+      "name": "CURRENT_ROUTE_PROOF.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\owner-install1-route-current.json",
+      "sha256": "9ed7b5863db73491ac28c59332c7c7da70dfb24431ba5e2088beca026b1121e4"
+    },
+    {
+      "name": "EARLIER_READY_503_RECEIPT.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\owner-install1-route-first-503.json",
+      "sha256": "50efe9c891ec8ec9669a9ec44ec516acd31e1363703aae5ef2962e3d66a18754"
+    },
+    {
+      "name": "OWNER_RELEASE_DISPOSITION.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\docs\\healthroster-build\\install1-owner-ruling-20261014\\OWNER_RELEASE_DISPOSITION.md",
+      "sha256": "a2d20ada56e4bb16173925859edef6c23a7ccf15d9e3361bd7cf1572868a565f"
+    },
+    {
+      "name": "SOURCE_ACTIVITY_CRITIC.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_INSTALL1_LIVE_ACTIVITY_CRITIC_14102026.md",
+      "sha256": "4ecd7af8cc22649f6183778442a483defc277c1ec36634d5d06d1355730258c1"
+    }
+  ],
+  "noAdditionalFullRehearsal": true,
+  "earlierReady503": "The first helper incorrectly labelled any non200 as staleConnectionsObserved=true. That is not actual stale-connection attribution. Preserve the receipt, disregard that inference. DirectPostgREST+gateway were healthy; subsequent currentroute all200/readytrue. No pool refresh or secret/job change occurred."
+}
