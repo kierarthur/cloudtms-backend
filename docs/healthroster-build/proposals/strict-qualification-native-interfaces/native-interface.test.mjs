@@ -8,6 +8,9 @@ import {buildOffRuleTestAuthorization,assertManagedOffRuleTestEvidence} from './
 import {domainHash} from '../protected-source-capability/release-qualification.mjs';
 import {buildMeasuredNativePartial} from './measured-partial-evidence.mjs';
 import {createHash} from 'node:crypto';
+import {buildActivationWindowBinding,assertActivationWindowBinding} from './activation-window-binding.mjs';
+import {createOffRuleTransportRpc} from './off-rule-transport-rpc.mjs';
+import {assertPostVerifiedReceipt} from './post-verified-evidence-controller.mjs';
 const out=path.dirname(fileURLToPath(import.meta.url)),id=n=>`91301300-0000-4000-8000-${String(n).padStart(12,'0')}`,h='a'.repeat(64);
 const scope={actorUserId:id(1),agencyId:id(2),environment:'TEST',sourceCycleId:id(3),purpose:'SOURCE_FIXTURE_SETUP'};
 // UNIT VECTORS ONLY: no one of these synthetic strings is an acceptance input.
@@ -100,4 +103,51 @@ test('same installed evidence record preserves every release identity field and 
  const cert=fs.readFileSync(path.join(out,'SAME_INSTALLED_OPERATIONAL_CERTIFICATE.sqlinc'),'utf8');
  assert.doesNotMatch(cert,/executed.release_id=r.release_id or/);assert.match(cert,/executed.status<>'VERIFIED'/);
  assert.match(cert,/ALL_PRE_SWITCH_GATES_QUALIFIED/);assert.match(cert,/PHYSICAL_TESTFLIGHT_MYTMS_PHONE/);
+});
+test('historical fixture dates remain literal while future activation binds the same immutable rule and original census',()=>{
+ const native={source_group_id:id(6),effective_from_week_ending:'2026-10-18',effective_to_week_ending:'2026-10-18',capabilities:['BULK_SIGNED','AUTOMATIC_RECONCILE']};
+ const current={...native,effective_from_week_ending:'2026-10-25',effective_to_week_ending:null};
+ const closure={scope_id:id(5),scope_sha256:h,original_census_sha256:h,source_cycle_id:id(3)};
+ const input={assignment_id:id(11),assignment_version:'1',assignment_sha256:h,source_group_id:id(6),feature_purpose:'RULE_SET',
+  rule_set_version_id:id(12),rule_values_sha256:h,effective_from_week_ending:'2026-10-25',effective_to_week_ending:null,
+  native_effective_from_week_ending:'2026-10-18',native_effective_to_week_ending:'2026-10-18',fixture_cycle_id:id(3),
+  fixture_rule_set_version_id:id(12),fixture_rule_values_sha256:h,scope_id:id(5),scope_sha256:h,original_census_sha256:h};
+ const binding=buildActivationWindowBinding(input,current,native,closure);assert.equal(binding.native_effective_from_week_ending,'2026-10-18');
+ for(const patch of [{fixture_rule_set_version_id:id(19)},{fixture_rule_values_sha256:'b'.repeat(64)},
+  {fixture_cycle_id:id(19)},{original_census_sha256:'b'.repeat(64)},{native_effective_from_week_ending:'2026-10-25'},
+  {effective_from_week_ending:'2026-10-11'},{assignment_version:'01'}]){
+  const changed={...binding,...patch};const {scope_binding_sha256,...body}=changed;changed.scope_binding_sha256=domainHash(changed.schema_version,body);
+  assert.throws(()=>assertActivationWindowBinding(changed,current,native,closure),/WINDOW_BINDING_INVALID/);
+ }
+});
+test('actual nested transport uses server actor, exact admission, unchanged native payload/options and unwraps only its own envelope',async()=>{
+ const calls=[],req={actor_user_id:id(1),upload_id:id(20),rows:[{literal:'whole native rows'}]},options={timeoutMs:120000};
+ const baseRpc=async(name,args,opts)=>{calls.push({name,args,opts});return [{weekly_source_group_rule_feature_set_atomic_v1:calls.length===1
+  ?{contract:'WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1',qualified_fixture:true,operational_ready:false,purpose:'SOURCE_FIXTURE_SETUP',
+   source_cycle_id:id(3),actor_user_id:id(1),allowed_operations:[...sourceOperations],scope_id:id(5),authorization_sha256:h}
+  :{native:true,unchanged_result:'whole native result'}}];};
+ const rpc=createOffRuleTransportRpc({baseRpc,getActor:()=>id(1),agencyId:id(2),environment:'TEST'});
+ assert.deepEqual(await rpc('weekly_source_upload_stage_rows_atomic_v1',{p_request:req},options),{native:true,unchanged_result:'whole native result'});
+ assert.equal(calls[1].args.p_request.native_request,req);assert.equal(calls[1].opts,options);
+ await assert.rejects(rpc('weekly_source_finalise_atomic_v1',{p_request:{actor_user_id:id(19)}}),/NATIVE_PAYLOAD_INVALID/);
+ const ordinary=async()=>({contract:'WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1',qualified_fixture:false,operational_ready:false,hidden_ready:true});
+ await assert.rejects(createOffRuleTransportRpc({baseRpc:ordinary,getActor:()=>id(1),agencyId:id(2),environment:'TEST'})('weekly_source_finalise_atomic_v1',{p_request:{}}),/ADMISSION_INVALID/);
+ assert.equal(createOffRuleTransportRpc({baseRpc,getActor:()=>null,agencyId:id(2),environment:'LIVE'}),baseRpc);
+});
+test('post-VERIFIED receipt has the exact thirteen fields/domains and cannot carry changed operational settings or a relabelled execution',()=>{
+ const execution={release_id:'UNIT_VECTOR_NOT_NATIVE_EVIDENCE',source_commit:'b'.repeat(40)};
+ const request={expected_execution:execution,receipt_input_commit:'c'.repeat(40),receipt_tree_proof:{source_equivalence_sha256:h},
+  artifact_slot:'weekly_source_protected_partial_native_evidence',artifacts:[{unit_only:true}],expected_evidence_sha256:h};
+ const body={schema_version:'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1',execution,receipt_input_commit:request.receipt_input_commit,
+  receipt_tree_sha256:h,artifact_slot:request.artifact_slot,artifacts_sha256:domainHash('WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_SET_V1',request.artifacts),
+  prior_evidence_sha256:h,evidence_sha256:'d'.repeat(64),actor_user_id:id(1),recorded_at_utc:'2026-10-14T12:00:00Z',replayed:false,operational_settings_changed:false};
+ const receipt={...body,receipt_sha256:domainHash(body.schema_version,body)};assert.equal(Object.keys(receipt).length,13);
+ assert.equal(assertPostVerifiedReceipt(receipt,request,id(1)),receipt);
+ for(const patch of [{operational_settings_changed:true},{receipt_input_commit:'b'.repeat(40)},{artifacts_sha256:h},{unknown_key:true}]){
+  const changed={...receipt,...patch};const {receipt_sha256,...data}=changed;changed.receipt_sha256=domainHash(changed.schema_version,data);
+  assert.throws(()=>assertPostVerifiedReceipt(changed,request,id(1)),/RECEIPT_INVALID/);
+ }
+ const closure=JSON.parse(fs.readFileSync(path.join(out,'OFF_CLOSURE_REVERSE.json')));assert.equal(closure.reverse_hunk_matches_entire_input_definition,true);
+ const transport=JSON.parse(fs.readFileSync(path.join(out,'BROKER_TRANSPORT_REVERSE.json')));assert.equal(transport.reverse_hunk_matches_entire_input_definition,true);
+ assert.equal(transport.native_recording_rpc_callers,5);assert.equal(transport.unchanged_calculator_and_c1_raw_dependencies,true);
 });

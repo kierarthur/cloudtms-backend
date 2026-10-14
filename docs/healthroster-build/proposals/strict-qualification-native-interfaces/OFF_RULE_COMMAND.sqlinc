@@ -2,7 +2,7 @@ create or replace function private.weekly_source_rule_qualification_setup_atomic
 returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
 as $function$
 declare auth jsonb; actor uuid; journey uuid; action text; lease jsonb; result jsonb; n integer;
-  assignment public.weekly_source_group_rule_assignments%rowtype;
+  assignment public.weekly_source_group_rule_assignments%rowtype; census jsonb; clients uuid[]; audit_id uuid;
 begin
   perform private.weekly_source_query_require_service_v1();
   if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','agency_id','environment','qualification_action',
@@ -38,6 +38,19 @@ begin
       'opened_local_date',(clock_timestamp() at time zone 'Europe/London')::date,
       'coverage_floor_local_date',((auth->>'week_ending')::date-6),
       'actor_user_id',journey,'setup_actor_user_id',actor,'operational_ready',false,'expires_at_utc',auth->>'expires_at_utc');
+    if auth->>'purpose'='AUTOMATIC_JOURNEY' then
+      -- Capture ONCE, before any protected round. Every remaining Client and
+      -- original physical root stays in this immutable audited census.
+      census:=private.weekly_source_protected_qualification_census_v1((auth->>'source_cycle_id')::uuid);
+      if census->'original_client_ids' is distinct from auth#>'{fixture_manifest,client_ids}'
+        or census->'source_cas' is distinct from auth->'original_source_cas'
+        or (select coalesce(jsonb_agg(distinct row_value->'contract_id' order by row_value->'contract_id'),'[]'::jsonb)
+          from jsonb_array_elements(census->'original_items') row_value) is distinct from auth#>'{fixture_manifest,contract_ids}'
+        or (select coalesce(jsonb_agg(distinct row_value->'candidate_id' order by row_value->'candidate_id'),'[]'::jsonb)
+          from jsonb_array_elements(census->'original_items') row_value) is distinct from auth#>'{fixture_manifest,candidate_ids}' then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+      lease:=lease||jsonb_build_object('original_census',census);
+    end if;
     lease:=lease||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_TEST_SCOPE_V1',lease),'hex'));
     perform public._audit_insert('weekly_source_off_rule_test_journey',auth->>'scope_id','WEEKLY_SOURCE_OFF_RULE_TEST_OPENED',null,lease,p_request->>'reason',actor);
     return lease;
@@ -45,16 +58,47 @@ begin
   if n<>1 then raise exception 'WEEKLY_SOURCE_OFF_RULE_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
   if action='OFF_RULE_CLOSE' then
     perform private.weekly_source_rule_qualification_scope_assert_v1(auth,journey,false);
-    result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_TEST_CLOSURE_V1','scope_id',auth->>'scope_id',
-      'scope_sha256',lease->>'scope_sha256','authorization_sha256',auth->>'authorization_sha256',
-      'source_cycle_id',auth->>'source_cycle_id','week_ending',auth->>'week_ending','rule_set_version_id',auth->>'rule_set_version_id',
-      'original_source_cas',auth->'original_source_cas','actor_user_id',journey,'release_id',auth->>'release_id',
-      'source_commit',auth->>'source_commit','contract_sha256',auth->>'contract_sha256','state','CLOSED',
-      'closed_at_utc',clock_timestamp(),'all_assignments_disabled',true,'all_operational_producers_false',true);
+    if auth->>'purpose'='AUTOMATIC_JOURNEY' then
+      census:=lease->'original_census';
+      if census is null or census->>'census_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1',census-'census_sha256'),'hex') then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_ORIGINAL_CENSUS_UNAVAILABLE' using errcode='55000'; end if;
+      select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(census->'original_client_ids') value;
+      if private.weekly_source_bulk_source_cas_v1((auth->>'source_cycle_id')::uuid,clients) is distinct from census->'source_cas' then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+      -- Same closed DTO as the original controlled journey. The closure audit
+      -- preserves the OPEN census; it never recollects remaining incidents.
+      result:=jsonb_build_object('scope_id',auth->>'scope_id','scope_sha256',lease->>'scope_sha256',
+        'setup_authorization_sha256',auth->>'authorization_sha256','original_census_sha256',census->>'census_sha256',
+        'actor_user_id',journey,'source_cycle_id',auth->>'source_cycle_id','week_ending',auth->>'week_ending',
+        'execution_release_id',auth->>'release_id','execution_source_commit',auth->>'source_commit',
+        'execution_contract_sha256',auth->>'contract_sha256','state','CLOSED','closed_at_utc',clock_timestamp(),
+        'all_assignments_disabled',true,'all_operational_producers_false',true);
+    else
+      -- The first genuine Source producer may have no protected incidents.
+      -- Its resulting frozen Source CAS is a setup result, not a protected
+      -- capability census/certificate or manufactured protection evidence.
+      select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(auth#>'{fixture_manifest,client_ids}') value;
+      result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_TEST_SOURCE_CLOSURE_V1','scope_id',auth->>'scope_id',
+        'scope_sha256',lease->>'scope_sha256','authorization_sha256',auth->>'authorization_sha256',
+        'source_cycle_id',auth->>'source_cycle_id','week_ending',auth->>'week_ending','rule_set_version_id',auth->>'rule_set_version_id',
+        'rule_values_sha256',auth->>'rule_values_sha256','result_source_cas',private.weekly_source_bulk_source_cas_v1((auth->>'source_cycle_id')::uuid,clients),
+        'actor_user_id',journey,'release_id',auth->>'release_id','source_commit',auth->>'source_commit','contract_sha256',auth->>'contract_sha256',
+        'state','CLOSED','closed_at_utc',clock_timestamp(),'all_assignments_disabled',true,'all_operational_producers_false',true);
+    end if;
   else result:=jsonb_build_object('scope_id',auth->>'scope_id','state','REVOKED','closed_at_utc',clock_timestamp(),'operational_ready',false); end if;
   perform public._audit_insert('weekly_source_off_rule_test_journey',auth->>'scope_id',
     case when action='OFF_RULE_CLOSE' then 'WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED' else 'WEEKLY_SOURCE_OFF_RULE_TEST_REVOKED' end,
     lease,result,p_request->>'reason',actor);
+  if action='OFF_RULE_CLOSE' and auth->>'purpose'='AUTOMATIC_JOURNEY' then
+    select audit.id into strict audit_id from public.audit_events audit
+      where audit.object_type='weekly_source_off_rule_test_journey' and audit.object_id_text=auth->>'scope_id'
+        and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED' and audit.event_sequence_is_authoritative and audit.after_json=result;
+    -- OFF_RULE_ORIGINAL_CENSUS_CLOSED: returned identifiers are measured from
+    -- the genuine audit row, never supplied by caller or inserted as evidence.
+    return result||jsonb_build_object('closure_audit_id',audit_id,'closure_audit_sha256',
+      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED_V1',result),'hex'));
+  end if;
   return result;
 end;
 $function$;

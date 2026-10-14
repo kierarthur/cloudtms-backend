@@ -46,7 +46,7 @@ export function validateProbeAssignment(value,context,closure,nativeContext){
   'native_effective_from_week_ending','native_effective_to_week_ending'],'ACTIVATION_PROBE_ASSIGNMENT_SCOPE_INVALID');
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
  if(!uuid.test(value.scope_id)||!uuid.test(value.setup_actor_user_id)||!uuid.test(value.assignment_id)
-  ||!/^\d+$/.test(value.expected_assignment_version)||BigInt(value.expected_assignment_version)<1n
+  ||typeof value.expected_assignment_version!=='string'||!/^[1-9][0-9]*$/.test(value.expected_assignment_version)
   ||!['scope_sha256','original_census_sha256','expected_assignment_sha256'].every(key=>/^[0-9a-f]{64}$/.test(value[key]))
   ||value.rule_set_version_id!==null||value.source_group_id!==context.source_group_id
   ||value.effective_from_week_ending!==context.effective_from_week_ending||value.effective_to_week_ending!==context.effective_to_week_ending

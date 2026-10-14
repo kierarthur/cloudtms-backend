@@ -53,6 +53,7 @@ begin
     raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
   -- These actual evidence bindings are measured by the protected writer, never
   -- a function-presence test or an arbitrary caller hash. No operational PASS.
+  perform private.weekly_source_off_rule_setup_shape_assert_v1(auth);
   if r.evidence_json#>>'{weekly_source_off_rule_test_controls,banking_install_receipt_sha256}' is distinct from auth->>'banking_install_receipt_sha256'
     or r.evidence_json#>>'{weekly_source_off_rule_test_controls,security_receipt_sha256}' is distinct from auth->>'security_receipt_sha256'
     or r.evidence_json#>>'{weekly_source_off_rule_test_controls,source_effects_review_sha256}' is distinct from auth->>'source_effects_review_sha256' then

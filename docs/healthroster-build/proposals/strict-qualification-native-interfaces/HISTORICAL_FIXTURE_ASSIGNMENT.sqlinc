@@ -1,0 +1,143 @@
+-- Direct owner clarification, 14 October: a dedicated fresh TEST Client/cycle
+-- may use a genuine older open file, uploaded today. This does not establish
+-- historical operational feature enablement or change the activation owner.
+create or replace function private.weekly_source_historical_fixture_assignment_scope_v1(p_frame jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare req jsonb:=p_frame->'native_request'; c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  reference public.weekly_source_group_rule_assignments%rowtype; v public.weekly_source_rule_set_versions%rowtype;
+  controls jsonb; manifest jsonb:=p_frame->'fixture_manifest'; clients uuid[]; actor uuid; week date; actual jsonb;
+begin
+  actor:=(p_frame->>'actor_user_id')::uuid;
+  perform private._weekly_source_settings_require_admin_v1(actor);
+  if p_frame->'execution' is distinct from private.weekly_source_protected_qualification_release_v1()
+    or p_frame->>'phase' is distinct from 'HISTORICAL_DISABLED_FIXTURE_ASSIGNMENT_ONLY'
+    or p_frame->'operational_ready' is distinct from 'false'::jsonb
+    or p_frame->>'current_local_date' is distinct from ((clock_timestamp() at time zone 'Europe/London')::date)::text
+    or not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted and lock_row.mode='ExclusiveLock'
+      and lock_row.database=(select oid from pg_database where datname=current_database()) and lock_row.classid=20261013::oid
+      and lock_row.objid=1::oid and lock_row.objsubid=2 and lock_row.pid=(p_frame->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid()) then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  select evidence_json->'weekly_source_off_rule_test_controls' into strict controls from private.cloudtms_database_releases
+    where release_id=p_frame#>>'{execution,release_id}';
+  perform private.weekly_source_post_verified_artifact_assert_v1('weekly_source_off_rule_test_controls',jsonb_build_array(controls),p_frame->'execution',
+    p_frame#>>'{execution,source_commit}');
+  select * into strict c from public.weekly_source_cycles where id=(p_frame->>'source_cycle_id')::uuid;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER' and environment='TEST';
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  week:=c.finalisation_week_ending;
+  if not private.weekly_source_qualification_closed_object_v1(req,array['actor_user_id','agency_id','environment','source_group_id','rule_set_version_id',
+      'effective_from_week_ending','effective_to_week_ending','expected_group_version','request_id'])
+    or req->>'actor_user_id' is distinct from actor::text or req->>'agency_id' is distinct from g.agency_id::text
+    or req->>'environment' is distinct from 'TEST' or req->>'source_group_id' is distinct from g.id::text
+    or req->>'effective_from_week_ending' is distinct from week::text or req->>'effective_to_week_ending' is distinct from week::text
+    or week>=(clock_timestamp() at time zone 'Europe/London')::date or extract(dow from week)<>0
+    or not private.weekly_source_qualification_closed_object_v1(manifest,array['group_code','client_ids','contract_ids','candidate_ids','client_refs','candidate_refs'])
+    or g.code is distinct from manifest->>'group_code' or g.code !~ '^WSQ_TEST_[A-Z0-9_]+$' then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_SCOPE_INVALID' using errcode='22023'; end if;
+  select * into strict reference from public.weekly_source_group_rule_assignments where id=(p_frame->>'future_reference_assignment_id')::uuid
+    and source_group_id=g.id and not feature_enabled and effective_from_week_ending>=(clock_timestamp() at time zone 'Europe/London')::date;
+  if encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(reference)),'hex')
+      is distinct from p_frame->>'expected_future_assignment_sha256' or reference.rule_set_version_id::text is distinct from req->>'rule_set_version_id'
+    or exists(select 1 from public.weekly_source_group_rule_assignments a where a.source_group_id=g.id and a.feature_enabled) then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_REFERENCE_CHANGED' using errcode='40001'; end if;
+  select version.* into strict v from public.weekly_source_rule_set_versions version join public.weekly_source_rule_sets rules
+    on rules.id=version.rule_set_id and rules.agency_id=g.agency_id and rules.environment=g.environment where version.id=reference.rule_set_version_id;
+  if v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL' then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_RULE_REFUSED' using errcode='22023'; end if;
+  -- Every fixture Client is in the dedicated group's dated census. A fresh
+  -- group excludes old, failed, partial and report uploads too, before any
+  -- native assignment/coverage or Source business row is produced.
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(manifest->'client_ids') value;
+  if cardinality(clients) not between 1 and 100 or to_jsonb(clients) is distinct from manifest->'client_ids'
+    or cardinality(clients)<>(select count(distinct value) from unnest(clients) value)
+    or c.current_complete_upload_id is not null or c.current_projection_publication_id is not null or c.current_final_revision_id is not null
+    or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
+    or exists(select 1 from public.weekly_source_uploads u join public.weekly_source_cycles cycle on cycle.id=u.source_cycle_id where cycle.source_group_id=g.id)
+    or exists(select 1 from public.weekly_source_final_revisions f join public.weekly_source_cycles cycle on cycle.id=f.source_cycle_id where cycle.source_group_id=g.id)
+    or exists(select 1 from public.weekly_source_report_scopes scope where scope.source_group_id=g.id)
+    or exists(select 1 from public.weekly_source_self_bill_reports report where report.source_group_id=g.id)
+    or exists(select 1 from public.weekly_source_billing_movements movement where movement.actual_client_id=any(clients))
+    or exists(select 1 from unnest(clients) client where not exists(select 1 from public.weekly_source_group_clients member
+      where member.source_group_id=g.id and member.client_id=client and week between member.valid_from and coalesce(member.valid_to,'infinity'::date))) then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_NOT_FRESH' using errcode='55000'; end if;
+  select coalesce(jsonb_agg(distinct member.client_id order by member.client_id),'[]'::jsonb) into actual
+    from public.weekly_source_group_clients member where member.source_group_id=g.id;
+  if actual is distinct from manifest->'client_ids' or (select coalesce(jsonb_agg(contract.id order by contract.id),'[]'::jsonb)
+      from public.contracts contract where contract.client_id=any(clients) and daterange(contract.start_date,contract.end_date,'[]')&&daterange(week-6,week,'[]'))
+      is distinct from manifest->'contract_ids'
+    or (select coalesce(jsonb_agg(distinct contract.candidate_id order by contract.candidate_id),'[]'::jsonb) from public.contracts contract
+      where contract.id in(select value::uuid from jsonb_array_elements_text(manifest->'contract_ids'))) is distinct from manifest->'candidate_ids'
+    or (select coalesce(jsonb_agg(ref->'client_id' order by ref->'client_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'client_refs') ref) is distinct from manifest->'client_ids'
+    or (select coalesce(jsonb_agg(ref->'candidate_id' order by ref->'candidate_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'candidate_refs') ref) is distinct from manifest->'candidate_ids'
+    or exists(select 1 from jsonb_array_elements(manifest->'client_refs') ref where not private.weekly_source_qualification_closed_object_v1(ref,array['client_id','cli_ref'])
+      or coalesce(ref->>'cli_ref','') !~ '^CLI-913013[0-9]{2}$' or not exists(select 1 from public.clients client where client.id=(ref->>'client_id')::uuid and client.cli_ref=ref->>'cli_ref'))
+    or exists(select 1 from jsonb_array_elements(manifest->'candidate_refs') ref where not private.weekly_source_qualification_closed_object_v1(ref,array['candidate_id','tms_ref'])
+      or coalesce(ref->>'tms_ref','') !~ '^CCR-913013[0-9]{2}$' or not exists(select 1 from public.candidates candidate where candidate.id=(ref->>'candidate_id')::uuid and candidate.tms_ref=ref->>'tms_ref')) then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_IDENTITY_CHANGED' using errcode='40001'; end if;
+  perform private._weekly_source_rule_group_context_v1(g.id,week,week,v.values_json,false);
+end;
+$function$;
+
+create or replace function private.weekly_source_historical_fixture_assignment_assert_v1(p_native_request jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare frame jsonb; n integer; stack text;
+begin
+  get diagnostics stack=pg_context;
+  if stack !~ 'PL/pgSQL function (private\.)?weekly_source_historical_fixture_rule_assign_v1\(uuid,jsonb\)' then
+    raise exception 'WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED' using errcode='22023'; end if;
+  select count(*),jsonb_agg(audit.after_json)->0 into n,frame from public.audit_events audit
+    where audit.object_type='weekly_source_historical_fixture_assignment' and audit.action='WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_ADMITTED'
+      and audit.event_sequence_is_authoritative and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text
+      and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+      and not exists(select 1 from public.audit_events done where done.object_type=audit.object_type and done.object_id_text=audit.object_id_text
+        and done.action='WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNED' and done.event_sequence_is_authoritative);
+  if n<>1 or frame->'native_request' is distinct from p_native_request or frame->>'frame_sha256' is distinct from
+    encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_FRAME_V1',frame-'frame_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED' using errcode='22023'; end if;
+  perform private.weekly_source_historical_fixture_assignment_scope_v1(frame);
+end;
+$function$;
+
+create or replace function private.weekly_source_historical_fixture_rule_assign_v1(p_actor_user_id uuid,p_request jsonb)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare frame jsonb; result jsonb; assignment public.weekly_source_group_rule_assignments%rowtype; request_id uuid;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['schema_version','expected_execution','turn_backend_pid','source_cycle_id',
+    'future_reference_assignment_id','expected_future_assignment_sha256','fixture_manifest','native_request','reason'])
+    or p_request->>'schema_version' is distinct from 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_REQUEST_V1'
+    or coalesce(p_request->>'expected_future_assignment_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(p_request->>'turn_backend_pid','') !~ '^[1-9][0-9]*$'
+    or char_length(coalesce(p_request->>'reason','')) not between 1 and 500
+    or p_request->'expected_execution' is distinct from private.weekly_source_protected_qualification_release_v1() then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_REQUEST_INVALID' using errcode='22023'; end if;
+  request_id:=(p_request#>>'{native_request,request_id}')::uuid;
+  frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_FRAME_V1','request_id',request_id,
+    'actor_user_id',p_actor_user_id,'execution',p_request->'expected_execution','turn_backend_pid',p_request->'turn_backend_pid',
+    'source_cycle_id',p_request->'source_cycle_id','future_reference_assignment_id',p_request->'future_reference_assignment_id',
+    'expected_future_assignment_sha256',p_request->'expected_future_assignment_sha256','fixture_manifest',p_request->'fixture_manifest',
+    'native_request',p_request->'native_request','transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,
+    'current_local_date',(clock_timestamp() at time zone 'Europe/London')::date,
+    'phase','HISTORICAL_DISABLED_FIXTURE_ASSIGNMENT_ONLY','operational_ready',false);
+  frame:=frame||jsonb_build_object('frame_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_FRAME_V1',frame),'hex'));
+  perform private.weekly_source_historical_fixture_assignment_scope_v1(frame);
+  perform public._audit_insert('weekly_source_historical_fixture_assignment',request_id::text,'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_ADMITTED',null,frame,p_request->>'reason',p_actor_user_id);
+  -- One actual unchanged native producer, with only the bounded past-date
+  -- assertion forwarded below. Native admin/CAS/locks/immutable/overlap and all
+  -- finalised-week refusals remain in that complete owner.
+  result:=public.weekly_source_group_rule_assign_atomic_v1(p_request->'native_request');
+  select * into strict assignment from public.weekly_source_group_rule_assignments where id=(result->>'assignment_id')::uuid;
+  if assignment.feature_enabled or assignment.feature_receipt_json is not null or assignment.assignment_receipt_json is distinct from result-'replayed'
+    and assignment.assignment_receipt_json is distinct from result then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_DISABLED_ASSIGNMENT_REQUIRED' using errcode='55000'; end if;
+  perform public._audit_insert('weekly_source_historical_fixture_assignment',request_id::text,'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNED',frame,
+    jsonb_build_object('schema_version','WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNED_V1','execution',frame->'execution','source_cycle_id',frame->'source_cycle_id',
+      'assignment_id',assignment.id,'assignment_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(assignment)),'hex'),
+      'rule_set_version_id',assignment.rule_set_version_id,'native_receipt',result,'frame_sha256',frame->>'frame_sha256',
+      'phase','HISTORICAL_DISABLED_FIXTURE_ASSIGNMENT_ONLY','operational_ready',false,'historical_operational_activation',false),p_request->>'reason',p_actor_user_id);
+  return result;
+end;
+$function$;

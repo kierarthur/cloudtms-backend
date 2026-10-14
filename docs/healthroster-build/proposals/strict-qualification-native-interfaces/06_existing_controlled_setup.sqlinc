@@ -41,7 +41,7 @@ begin
     (jsonb_typeof(p_request->'protected_capability_qualification_sha256') is distinct from 'string'
       or coalesce(p_request->>'protected_capability_qualification_sha256','') !~ '^[0-9a-f]{64}$') then
     raise exception 'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID' using errcode='22023'; end if;
-  if v_purpose='PROTECTED_SOURCE' and v_enabled and not(p_request ? 'protected_capability_qualification_sha256') and not(p_request ? 'activation_probe_scope_id') then
+  if v_purpose in ('RULE_SET','PROTECTED_SOURCE') and v_enabled and not(p_request ? 'protected_capability_qualification_sha256') and not(p_request ? 'activation_probe_scope_id') then
     raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
   if p_request ? 'activation_probe_scope_id' then
     if v_purpose is distinct from 'PROTECTED_SOURCE' or v_enabled is distinct from true or v_version_id is not null

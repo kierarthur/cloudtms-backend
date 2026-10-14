@@ -1,0 +1,26 @@
+{
+  "source_only": true,
+  "input_sha256": "062888dcf25562cb36d1c2198afb57473ffa03c593c280e1f7ced77e1de204a0",
+  "output_sha256": "1faf116f0bc616d0c9509ebc4150e46b21cafb9887c7a8cadbc0b4b6816b5a04",
+  "reverse_hunk_matches_entire_input_definition": true,
+  "original_census_captured_once_before_any_round": true,
+  "no_runtime_acceptance": true,
+  "hunks": [
+    {
+      "before_sha256": "a689b6c453c2cbf20cff754ee68688e1eee7026198837397a25adba93a057af8",
+      "after_sha256": "d739a1793b1b4016d783dc46fdbfdd918e0484059a7dc5a82266605b106a0904"
+    },
+    {
+      "before_sha256": "a367e7d0eeea43808024475452cd3942e150fc9655d74a0b2826b41c7fc4a94f",
+      "after_sha256": "73638a594c593aeeb332328491689dab3d7d5c8b6ce21ba3d318b5291981ffe3"
+    },
+    {
+      "before_sha256": "3f7cf9e9b34996f40b57d8f53e062ca039af26e7e1c8fe112a5749c9ae6c9cd5",
+      "after_sha256": "60955165cdf9b75ed17ff76b1097453c9a8c994f9d5bce8eebf5a82af27499a2"
+    },
+    {
+      "before_sha256": "7832577080299d130c2b757a04ea182b289a6cd84359a92903f97160d7d312f9",
+      "after_sha256": "6d4ed8d7ec5c23e906e934ebe728d27ea35d04e69925861822140a08e2e346e7"
+    }
+  ]
+}

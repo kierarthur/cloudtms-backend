@@ -91,8 +91,9 @@ begin
     or (closure->>'week_ending')::date<(native->>'effective_from_week_ending')::date
     or (native->>'effective_to_week_ending' is not null and (closure->>'week_ending')::date>(native->>'effective_to_week_ending')::date)
     or not exists(select 1 from public.audit_events a where a.id=(closure->>'closure_audit_id')::uuid
-      and a.object_type='weekly_source_protected_test_journey' and a.object_id_text=closure->>'scope_id'
-      and a.action='WEEKLY_SOURCE_TEST_JOURNEY_CLOSED' and a.event_sequence_is_authoritative
+      and a.object_id_text=closure->>'scope_id' and a.event_sequence_is_authoritative
+      and ((a.object_type='weekly_source_protected_test_journey' and a.action='WEEKLY_SOURCE_TEST_JOURNEY_CLOSED')
+        or (a.object_type='weekly_source_off_rule_test_journey' and a.action='WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED'))
       and a.after_json=closure-'closure_audit_id'-'closure_audit_sha256'
       and encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED_V1',a.after_json),'hex')=closure->>'closure_audit_sha256') then
     raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;
@@ -151,6 +152,18 @@ begin
   if not private.weekly_source_qualification_closed_object_v1(q->'assignment_scope',array['scope_id','scope_sha256','original_census_sha256',
     'setup_actor_user_id','assignment_id','expected_assignment_version','expected_assignment_sha256','source_group_id','effective_from_week_ending',
     'effective_to_week_ending','rule_set_version_id','native_effective_from_week_ending','native_effective_to_week_ending'])
+    or exists(select 1 from unnest(array['scope_id','setup_actor_user_id','assignment_id','source_group_id']) key
+      where coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['scope_sha256','original_census_sha256','expected_assignment_sha256']) key
+      where coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9a-f]{64}$')
+    or coalesce(q#>>'{assignment_scope,expected_assignment_version}','') !~ '^[1-9][0-9]*$'
+    or exists(select 1 from unnest(array['effective_from_week_ending','native_effective_from_week_ending']) key
+      where coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        or extract(dow from (q#>>array['assignment_scope',key])::date)<>0)
+    or exists(select 1 from unnest(array['effective_to_week_ending','native_effective_to_week_ending']) key
+      where q#>array['assignment_scope',key]<>'null'::jsonb and
+        (coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          or extract(dow from (q#>>array['assignment_scope',key])::date)<>0))
     or q#>'{assignment_scope,rule_set_version_id}' is distinct from 'null'::jsonb
     or q#>>'{assignment_scope,source_group_id}' is distinct from g.id::text
     or q#>>'{assignment_scope,effective_from_week_ending}' is distinct from p_from::text

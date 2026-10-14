@@ -84,7 +84,7 @@ ${setupBefore}`;
 const setupHunks=[{before:setupBefore,after:setupAfter},
  {before:"'client_settings_versions','protected_capability_qualification_sha256']",after:"'client_settings_versions','protected_capability_qualification_sha256','activation_probe_scope_id']"},
  {before:"if v_purpose='PROTECTED_SOURCE' and v_enabled and not(p_request ? 'protected_capability_qualification_sha256') then",
-  after:"if v_purpose='PROTECTED_SOURCE' and v_enabled and not(p_request ? 'protected_capability_qualification_sha256') and not(p_request ? 'activation_probe_scope_id') then"},
+  after:"if v_purpose in ('RULE_SET','PROTECTED_SOURCE') and v_enabled and not(p_request ? 'protected_capability_qualification_sha256') and not(p_request ? 'activation_probe_scope_id') then"},
  {before:"  if v_purpose='SIGNED_CHECK_ONLY' and p_request ? 'protected_capability_qualification_sha256' then",
   after:`  if p_request ? 'activation_probe_scope_id' then
     if v_purpose is distinct from 'PROTECTED_SOURCE' or v_enabled is distinct from true or v_version_id is not null

@@ -2,7 +2,7 @@ create or replace function private.weekly_source_protected_activation_probe_begi
 returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
 as $function$
 declare r private.cloudtms_database_releases%rowtype; auth jsonb; scope jsonb; assignment public.weekly_source_group_rule_assignments%rowtype;
-  actor uuid; n integer; clients uuid[]; old_auth jsonb;
+  actor uuid; n integer; clients uuid[]; old_auth jsonb; original_census jsonb; original_lease jsonb;
 begin
   perform private.weekly_source_protected_qualification_owner_v1();
   if not private.weekly_source_qualification_closed_object_v1(p_request,array['scope_id','actor_user_id','probe_authorization_sha256','turn_backend_pid'])
@@ -38,10 +38,35 @@ begin
     where historical.release_id=auth#>>'{test_setup_closure,execution_release_id}'
       and value->>'scope_id'=auth#>>'{test_setup_closure,scope_id}'
       and value->>'authorization_sha256'=auth#>>'{test_setup_closure,setup_authorization_sha256}';
-  if old_auth#>>'{original_census,census_sha256}' is distinct from auth#>>'{assignment_scope,original_census_sha256}' then
+  -- OFF_CLOSED_ORIGINAL_CENSUS_BRIDGE. The new independent-session path
+  -- retains the original census in its real OPEN audit. It is not derived
+  -- from whatever OPEN incidents remain after native protected rounds.
+  if old_auth->>'schema_version'='WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1' then
+    if old_auth->>'purpose' is distinct from 'AUTOMATIC_JOURNEY' then
+      raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+    select audit.after_json into strict original_lease from public.audit_events audit
+      where audit.object_type='weekly_source_off_rule_test_journey' and audit.object_id_text=old_auth->>'scope_id'
+        and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_OPENED' and audit.event_sequence_is_authoritative
+        and audit.after_json->>'authorization_sha256'=old_auth->>'authorization_sha256';
+    if original_lease->>'scope_sha256' is distinct from auth#>>'{test_setup_closure,scope_sha256}'
+      or original_lease->>'scope_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_OFF_RULE_TEST_SCOPE_V1',original_lease-'scope_sha256'),'hex')
+      or not exists(select 1 from public.audit_events closed where closed.id=(auth#>>'{test_setup_closure,closure_audit_id}')::uuid
+        and closed.object_type='weekly_source_off_rule_test_journey' and closed.object_id_text=old_auth->>'scope_id'
+        and closed.action='WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED' and closed.event_sequence_is_authoritative
+        and closed.after_json=auth->'test_setup_closure'-'closure_audit_id'-'closure_audit_sha256') then
+      raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+    original_census:=original_lease->'original_census';
+    if original_census->'source_cas' is distinct from old_auth->'original_source_cas' then
+      raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+  else original_census:=old_auth->'original_census'; end if;
+  if original_census->>'census_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1',original_census-'census_sha256'),'hex')
+    or original_census->>'source_cycle_id' is distinct from old_auth->>'source_cycle_id'
+    or original_census->>'census_sha256' is distinct from auth#>>'{assignment_scope,original_census_sha256}' then
     raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
-  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(old_auth#>'{original_census,original_client_ids}') value;
-  if private.weekly_source_bulk_source_cas_v1((old_auth->>'source_cycle_id')::uuid,clients) is distinct from old_auth#>'{original_census,source_cas}' then
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(original_census->'original_client_ids') value;
+  if private.weekly_source_bulk_source_cas_v1((old_auth->>'source_cycle_id')::uuid,clients) is distinct from original_census->'source_cas' then
     raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_SOURCE_CHANGED' using errcode='40001'; end if;
   if exists(select 1 from public.audit_events audit where audit.object_type='weekly_source_activation_probe'
     and audit.action='WEEKLY_SOURCE_ACTIVATION_PROBE_ADMITTED' and audit.event_sequence_is_authoritative
@@ -51,7 +76,7 @@ begin
     'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,'turn_backend_pid',p_request->>'turn_backend_pid',
     'current_local_date',(clock_timestamp() at time zone 'Europe/London')::date,'execution',private.weekly_source_protected_qualification_release_v1(),
     'actor_user_id',actor,'assignment_id',assignment.id,'assignment_version',assignment.version,'authorization',auth,
-    'original_census',old_auth->'original_census','original_source_facts',private.weekly_source_bulk_source_facts_v1((old_auth->>'source_cycle_id')::uuid,clients),
+    'original_census',original_census,'original_source_facts',private.weekly_source_bulk_source_facts_v1((old_auth->>'source_cycle_id')::uuid,clients),
     'phase','ACTIVATION_PROBE_ONLY','operational_ready',false);
   scope:=scope||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_ACTIVATION_PROBE_SCOPE_V1',scope),'hex'));
   perform public._audit_insert('weekly_source_activation_probe',scope->>'scope_id','WEEKLY_SOURCE_ACTIVATION_PROBE_ADMITTED',null,scope,

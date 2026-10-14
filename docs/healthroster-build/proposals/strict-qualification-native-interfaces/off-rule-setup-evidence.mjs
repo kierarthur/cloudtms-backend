@@ -17,7 +17,7 @@ function validateInput(input,controls){
   ||!validDate(input.week_ending)||new Date(input.week_ending+'T00:00:00Z').getUTCDay()!==0
   ||typeof input.expires_at_utc!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(input.expires_at_utc)
   ||!Number.isFinite(Date.parse(input.expires_at_utc))||!['assignment_sha256','rule_values_sha256','banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256'].every(k=>hex.test(input[k]))
-  ||typeof input.assignment_version!=='string'||!/^\d+$/.test(input.assignment_version)||BigInt(input.assignment_version)<1n)fail('OFF_RULE_SETUP_INPUT_INVALID');
+  ||typeof input.assignment_version!=='string'||!/^[1-9][0-9]*$/.test(input.assignment_version))fail('OFF_RULE_SETUP_INPUT_INVALID');
  exact(controls,['schema_version','release_id','source_commit','contract_sha256','banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256',
   'banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls'],'OFF_RULE_SETUP_CONTROLS_INVALID');
  if(controls.schema_version!=='WEEKLY_SOURCE_OFF_RULE_TEST_CONTROLS_V1'

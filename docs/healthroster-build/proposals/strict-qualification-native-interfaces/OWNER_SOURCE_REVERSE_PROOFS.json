@@ -49,7 +49,7 @@
     {
       "file": "06_existing_controlled_setup.sqlinc",
       "input_definition_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
-      "output_definition_sha256": "8dcd979a10cdb0b27e1e1f1c76c42488df525a54625ce2feb6b697fadda539e5",
+      "output_definition_sha256": "85a8b860c07579b26180cfd623f85ffb16d24efc66105b644303513c52ee61bd",
       "reverse_hunk_matches_entire_input_definition": true,
       "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
       "hunks": [
@@ -63,7 +63,7 @@
         },
         {
           "before_sha256": "039818042a47ae0c7b2e15504747b59aabbb6a91c91384bbb09c17a6106dd618",
-          "after_sha256": "6f09631454d69d9d578fb336959dec797f4bdffbf11192019fecb7ad69b50544"
+          "after_sha256": "b24d9bb14d2746c2ed20d91e85bb1266e0b9deff4914e2229333d33e5617f8ae"
         },
         {
           "before_sha256": "47963ad4bbef628e8157129f5452e43a5a607383465e6c67f0c54fc79fee8476",

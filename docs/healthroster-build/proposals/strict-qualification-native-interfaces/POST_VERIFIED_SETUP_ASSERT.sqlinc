@@ -6,6 +6,7 @@ as $function$
 declare g public.weekly_source_groups%rowtype; c public.weekly_source_cycles%rowtype; a public.weekly_source_group_rule_assignments%rowtype;
   v public.weekly_source_rule_set_versions%rowtype; item jsonb; clients uuid[];
 begin
+  perform private.weekly_source_off_rule_setup_shape_assert_v1(p_artifact);
   if not private.weekly_source_qualification_closed_object_v1(p_artifact,array['schema_version','authorization_id','scope_id','release_id','source_commit','contract_sha256',
     'agency_id','source_group_id','source_cycle_id','setup_actor_user_id','journey_actor_user_id','purpose','week_ending','expires_at_utc','fixture_namespace',
     'fixture_manifest','assignment_id','assignment_version','assignment_sha256','rule_set_version_id','rule_values_sha256','original_source_cas','allowed_operations',
@@ -43,6 +44,8 @@ begin
     or g.code is distinct from p_artifact#>>'{fixture_manifest,group_code}' or g.code !~ '^WSQ_TEST_[A-Z0-9_]+$' then
     raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_SCOPE_CHANGED' using errcode='40001'; end if;
   perform private.weekly_source_office_authority_v1((p_artifact->>'journey_actor_user_id')::uuid,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  if not private.weekly_source_pay_actor_allowed_v1((p_artifact->>'journey_actor_user_id')::uuid) then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_ACTOR_REFUSED' using errcode='42501'; end if;
   select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(p_artifact#>'{fixture_manifest,client_ids}') value;
   if cardinality(clients) not between 1 and 100 or to_jsonb(clients) is distinct from p_artifact#>'{fixture_manifest,client_ids}' then
     raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_SCOPE_CHANGED' using errcode='40001'; end if;

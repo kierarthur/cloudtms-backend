@@ -25,6 +25,8 @@ change("needed:=array['SOURCE_CAS_NATIVE','NATIVE_PROTECTION','SECURITY','LEGACY
  "needed:=array['SOURCE_CAS_NATIVE','NATIVE_PROTECTION','LEGACY_PAY','NEXT_PAY','CLIENT_API','DOCUMENT','OWN_STAGE_CAS','SOURCE_ROUTING'];");
 change("(closure->>'week_ending')::date<p_from or (p_to is not null and (closure->>'week_ending')::date>p_to)",
  "(closure->>'week_ending')::date<(native->>'effective_from_week_ending')::date\n    or (native->>'effective_to_week_ending' is not null and (closure->>'week_ending')::date>(native->>'effective_to_week_ending')::date)");
+change("and a.object_type='weekly_source_protected_test_journey' and a.object_id_text=closure->>'scope_id'\n      and a.action='WEEKLY_SOURCE_TEST_JOURNEY_CLOSED' and a.event_sequence_is_authoritative",
+ "and a.object_id_text=closure->>'scope_id' and a.event_sequence_is_authoritative\n      and ((a.object_type='weekly_source_protected_test_journey' and a.action='WEEKLY_SOURCE_TEST_JOURNEY_CLOSED')\n        or (a.object_type='weekly_source_off_rule_test_journey' and a.action='WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED'))");
 const anchor="  needed:=array['SOURCE_CAS_NATIVE','NATIVE_PROTECTION','LEGACY_PAY','NEXT_PAY','CLIENT_API','DOCUMENT','OWN_STAGE_CAS','SOURCE_ROUTING'];";
 const inserted=`  row_value:=native->'negative_security_receipt';
   if not private.weekly_source_qualification_closed_object_v1(row_value,array['gate','status','execution','database','receipt_id','receipt_sha256',
@@ -42,6 +44,18 @@ const endAnchor="  perform private.weekly_source_protected_execution_tree_assert
 change(endAnchor,`  if not private.weekly_source_qualification_closed_object_v1(q->'assignment_scope',array['scope_id','scope_sha256','original_census_sha256',
     'setup_actor_user_id','assignment_id','expected_assignment_version','expected_assignment_sha256','source_group_id','effective_from_week_ending',
     'effective_to_week_ending','rule_set_version_id','native_effective_from_week_ending','native_effective_to_week_ending'])
+    or exists(select 1 from unnest(array['scope_id','setup_actor_user_id','assignment_id','source_group_id']) key
+      where coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['scope_sha256','original_census_sha256','expected_assignment_sha256']) key
+      where coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9a-f]{64}$')
+    or coalesce(q#>>'{assignment_scope,expected_assignment_version}','') !~ '^[1-9][0-9]*$'
+    or exists(select 1 from unnest(array['effective_from_week_ending','native_effective_from_week_ending']) key
+      where coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        or extract(dow from (q#>>array['assignment_scope',key])::date)<>0)
+    or exists(select 1 from unnest(array['effective_to_week_ending','native_effective_to_week_ending']) key
+      where q#>array['assignment_scope',key]<>'null'::jsonb and
+        (coalesce(q#>>array['assignment_scope',key],'') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          or extract(dow from (q#>>array['assignment_scope',key])::date)<>0))
     or q#>'{assignment_scope,rule_set_version_id}' is distinct from 'null'::jsonb
     or q#>>'{assignment_scope,source_group_id}' is distinct from g.id::text
     or q#>>'{assignment_scope,effective_from_week_ending}' is distinct from p_from::text

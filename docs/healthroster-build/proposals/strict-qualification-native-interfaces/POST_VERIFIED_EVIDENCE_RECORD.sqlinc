@@ -9,6 +9,13 @@ begin
   if jsonb_typeof(p_artifacts) is distinct from 'array' or jsonb_array_length(p_artifacts) not between 1 and 100 then
     raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
   case p_slot
+    when 'weekly_source_protected_prerequisite_qualifications' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        if artifact->'capabilities' is distinct from '["BULK_SIGNED"]'::jsonb then
+          raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PREREQUISITE_SCOPE_REFUSED' using errcode='55000'; end if;
+        perform private.weekly_source_protected_prerequisite_release_assert_v2(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'qualification_sha256');
+      end loop;
     when 'weekly_source_protected_activation_probe_authorizations' then
       for artifact in select value from jsonb_array_elements(p_artifacts) value loop
         perform private.weekly_source_protected_activation_probe_authorization_assert_v1(artifact,(artifact->>'source_group_id')::uuid,
@@ -29,7 +36,9 @@ begin
       perform private.weekly_source_report_fin_qualifications_assert_v1(p_artifacts,p_execution,p_receipt_commit);
     when 'weekly_source_protected_test_setup_authorizations' then
       for artifact in select value from jsonb_array_elements(p_artifacts) value loop
-        perform private.weekly_source_post_verified_setup_artifact_assert_v1(artifact,p_execution);
+        if artifact->>'schema_version'='WEEKLY_SOURCE_PROTECTED_TEST_SETUP_AUTHORIZATION_V1' then
+          perform private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(artifact,p_execution);
+        else perform private.weekly_source_post_verified_setup_artifact_assert_v1(artifact,p_execution); end if;
       end loop;
     when 'weekly_source_off_rule_test_controls' then
       if jsonb_array_length(p_artifacts)<>1 then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
@@ -100,6 +109,7 @@ begin
       key:=case slot when 'weekly_source_protected_test_setup_authorizations' then 'authorization_id'
         when 'weekly_source_protected_activation_probe_authorizations' then 'probe_authorization_sha256'
         when 'weekly_source_protected_partial_native_evidence' then 'partial_evidence_sha256'
+        when 'weekly_source_protected_prerequisite_qualifications' then 'qualification_sha256'
         when 'weekly_source_protected_capability_qualifications' then 'qualification_sha256'
         when 'weekly_source_report_fin_qualifications' then 'qualification_sha256'
         when 'weekly_source_report_fin_native_comparisons' then 'comparison_sha256' end;
@@ -110,9 +120,10 @@ begin
         (slot='weekly_source_protected_test_setup_authorizations' and
           (existing->>'source_cycle_id',existing->>'journey_actor_user_id',existing->>'purpose') is not distinct from
           (item->>'source_cycle_id',item->>'journey_actor_user_id',item->>'purpose'))
-        or (slot in ('weekly_source_protected_capability_qualifications','weekly_source_report_fin_qualifications') and
+        or (slot in ('weekly_source_protected_capability_qualifications','weekly_source_protected_prerequisite_qualifications') and
           (existing->>'source_group_id',existing->>'effective_from_week_ending',existing->>'effective_to_week_ending',existing->>'rule_set_version_id')
-            is not distinct from (item->>'source_group_id',item->>'effective_from_week_ending',item->>'effective_to_week_ending',item->>'rule_set_version_id')))) then
+            is not distinct from (item->>'source_group_id',item->>'effective_from_week_ending',item->>'effective_to_week_ending',item->>'rule_set_version_id'))
+        or (slot='weekly_source_report_fin_qualifications' and existing->'scope' is not distinct from item->'scope'))) then
         raise exception 'WEEKLY_SOURCE_POST_VERIFIED_AMBIGUOUS_SCOPE_REFUSED' using errcode='23505'; end if;
       if not exists(select 1 from jsonb_array_elements(next_value) existing where existing=item) then next_value:=next_value||jsonb_build_array(item); end if;
     end loop;
