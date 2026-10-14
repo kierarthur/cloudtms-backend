@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+export const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+export const currentCommit='74a9c10f7370cd3641ee95d31f6702ecadd900a7';
+export const currentPath='supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc';
+export function composeFin4(input){
+ const text=Buffer.isBuffer(input)?input.toString('utf8'):input;
+ const lines=text.match(/^.*v_transition\.new_snapshot_line_id.*$/gm);
+ assert.equal(lines?.length,1,'One exact current NO_CHANGE branch line required');
+ const before=lines[0];
+ assert.equal((before.match(/v_transition\.new_snapshot_line_id/g)||[]).length,2);
+ assert.equal((before.match(/v_transition\.previous_snapshot_line_id/g)||[]).length,2);
+ assert.match(before,/if v_transition\.new_snapshot_line_id is not null and v_transition\.previous_snapshot_line_id is not null and exists\(/);
+ const marker="      if v_outcome='NO_CHANGE' then";
+ const at=text.indexOf(before),branch=text.lastIndexOf(marker,at);
+ assert.ok(branch>=0&&at-branch<1200,'Exact NO_CHANGE branch required');
+ assert.match(text.slice(at,at+before.length+400),/weekly_source_rebill_movement_insert_v1\(v_transition_id,v_revision_id\)/);
+ const after=before.replaceAll('v_transition.new_snapshot_line_id','v_transition.current_snapshot_id').replaceAll('v_transition.previous_snapshot_line_id','v_transition.prior_snapshot_id');
+ const forward=text.slice(0,at)+after+text.slice(at+before.length);
+ assert.equal(forward.split(after).length,2,'Unique forward reversal required');
+ const reverse=forward.replace(after,before);assert.equal(reverse,text,'Complete source reversal');
+ assert.ok(!forward.includes('v_transition.new_snapshot_line_id'));
+ assert.ok(!forward.includes('v_transition.previous_snapshot_line_id'));
+ assert.match(text,/prior_lines\.id as prior_snapshot_id,current_lines\.id as current_snapshot_id/);
+ const loopStart=text.indexOf('    for v_transition in'),loopEnd=text.indexOf('    end loop;',loopStart);
+ assert.ok(loopStart>=0&&loopEnd>loopStart);
+ const loop=forward.slice(loopStart,loopEnd),fields=[...new Set([...loop.matchAll(/v_transition\.([a-z_]+)/g)].map(x=>x[1]))].sort();
+ assert.deepEqual(fields,['current_snapshot_id','prior_snapshot_id','work_event_id']);
+ return {forward:Buffer.from(forward,'utf8'),before,after,record_fields:fields,replace_counts:{new_snapshot_line_id:2,previous_snapshot_line_id:2},reverse_equal:true};
+}

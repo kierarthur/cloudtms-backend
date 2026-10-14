@@ -1,0 +1,37 @@
+{
+  "schema_version": "FIN4_REBILL_RECORD_FIELDS_SOURCE_SUCCESSOR_V1",
+  "source_only": true,
+  "input_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "input_file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+  "input_bytes": 109868,
+  "input_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+  "before_definition_sha256": "9ab1b93119d3f68a96e7b6c776f70863df72fa9a69cbfbb187387f724bac3b71",
+  "forward_bytes": 109850,
+  "forward_sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+  "after_definition_sha256": "11d8521f9e0d0526eef2bf0484e037a115978bde63c9f3b5011fddb46a80094c",
+  "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+  "same_as_exact61ce_input": true,
+  "hunks": [
+    {
+      "before": "        if v_transition.new_snapshot_line_id is not null and v_transition.previous_snapshot_line_id is not null and exists(select 1 from public.weekly_source_final_snapshot_lines current_line join public.weekly_source_final_snapshot_lines prior_line on prior_line.id=v_transition.previous_snapshot_line_id where current_line.id=v_transition.new_snapshot_line_id and current_line.external_event_identity is distinct from prior_line.external_event_identity) then",
+      "after": "        if v_transition.current_snapshot_id is not null and v_transition.prior_snapshot_id is not null and exists(select 1 from public.weekly_source_final_snapshot_lines current_line join public.weekly_source_final_snapshot_lines prior_line on prior_line.id=v_transition.prior_snapshot_id where current_line.id=v_transition.current_snapshot_id and current_line.external_event_identity is distinct from prior_line.external_event_identity) then"
+    }
+  ],
+  "replace_counts": {
+    "new_snapshot_line_id": 2,
+    "previous_snapshot_line_id": 2
+  },
+  "whole_file_reverse_equals_input": true,
+  "actual_loop_record_fields": [
+    "current_snapshot_id",
+    "prior_snapshot_id",
+    "work_event_id"
+  ],
+  "new_sql_signatures": 0,
+  "acl_or_owner_changes": 0,
+  "native_rebill_owner_and_transition_revision_call_preserved": true,
+  "all_other_bytes_preserved": true,
+  "sql_compiled": false,
+  "native_execution": false,
+  "final_contract_catalogue_verifier_coupling_and_qualification": "HOLD"
+}

@@ -1,0 +1,22 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import {composeFin4,sha,currentCommit,currentPath} from './compose-fin4.mjs';
+import {functionEvents} from '../a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs';
+const out=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(out,'../../../..');
+const input=execFileSync('git',['--no-replace-objects','show',currentCommit+':'+currentPath],{cwd:root,maxBuffer:32*1024*1024});
+const prior=execFileSync('git',['--no-replace-objects','show','61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966:'+currentPath],{cwd:root,maxBuffer:32*1024*1024});assert.deepEqual(input,prior);
+const composed=composeFin4(input);
+fs.mkdirSync(path.join(out,'before'),{recursive:true});fs.mkdirSync(path.join(out,'forward'),{recursive:true});
+fs.writeFileSync(path.join(out,'before','06_complete_fin4_lock_observation.sqlinc'),input);
+fs.writeFileSync(path.join(out,'forward','06_complete_fin4_lock_observation.sqlinc'),composed.forward);
+const eventsBefore=functionEvents(input.toString('utf8')).events,eventsAfter=functionEvents(composed.forward.toString('utf8')).events;
+assert.equal(eventsBefore.length,1);assert.equal(eventsAfter.length,1);assert.equal(eventsBefore[0].id,'private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)');assert.equal(eventsAfter[0].id,eventsBefore[0].id);
+const proof={schema_version:'FIN4_REBILL_RECORD_FIELDS_SOURCE_SUCCESSOR_V1',source_only:true,input_commit:currentCommit,input_file:currentPath,input_bytes:input.length,input_sha256:sha(input),before_definition_sha256:sha(eventsBefore[0].definition),forward_bytes:composed.forward.length,forward_sha256:sha(composed.forward),after_definition_sha256:sha(eventsAfter[0].definition),signature:eventsBefore[0].id,same_as_exact61ce_input:true,hunks:[{before:composed.before,after:composed.after}],replace_counts:composed.replace_counts,whole_file_reverse_equals_input:true,actual_loop_record_fields:composed.record_fields,new_sql_signatures:0,acl_or_owner_changes:0,native_rebill_owner_and_transition_revision_call_preserved:true,all_other_bytes_preserved:true,sql_compiled:false,native_execution:false,final_contract_catalogue_verifier_coupling_and_qualification:'HOLD'};
+fs.writeFileSync(path.join(out,'COMPLETE_CURRENT_OWNER_AND_REVERSE.json'),JSON.stringify(proof,null,2)+'\n');
+execFileSync(process.execPath,['--test',path.join(out,'record-fields-source.test.mjs')],{cwd:root,stdio:'pipe'});
+for(const file of ['compose-fin4.mjs','build-and-freeze.mjs'])execFileSync(process.execPath,['--check',path.join(out,file)],{cwd:root});
+const checks={source_only:true,input_sha256:proof.input_sha256,forward_sha256:proof.forward_sha256,pure_source_tests:6,inert_syntax_checks:2,unique_full_hunks:1,whole_file_reverse:true,record_select_branch_field_consistency:true,native_execution:false,sql_compiled:false};
+fs.writeFileSync(path.join(out,'SOURCE_CHECK_RESULT.json'),JSON.stringify(checks,null,2)+'\n');
+function walk(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);}
+const artifacts=walk(out).filter(file=>!file.endsWith('FROZEN_ARTIFACT_MANIFEST.json')).sort().map(file=>{const bytes=fs.readFileSync(file);return {file:path.relative(out,file).replaceAll('\\','/'),bytes:bytes.length,sha256:sha(bytes)};});
+fs.writeFileSync(path.join(out,'FROZEN_ARTIFACT_MANIFEST.json'),JSON.stringify({schema_version:'FIN4_REBILL_RECORD_FIELDS_FROZEN_SOURCE_V1',source_only:true,input_commit:currentCommit,artifact_count:artifacts.length,artifacts,review_scope:'Four wrong record-field accesses only; current complete FIN4 preserved; no native or qualification claim.'},null,2)+'\n');
+console.log(JSON.stringify({artifacts:artifacts.length,input_sha256:proof.input_sha256,forward_sha256:proof.forward_sha256,manifest_sha256:sha(fs.readFileSync(path.join(out,'FROZEN_ARTIFACT_MANIFEST.json'))),check_sha256:sha(fs.readFileSync(path.join(out,'SOURCE_CHECK_RESULT.json'))),source_only:true}));
