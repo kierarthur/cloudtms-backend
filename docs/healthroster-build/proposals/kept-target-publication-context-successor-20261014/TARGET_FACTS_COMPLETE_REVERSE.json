@@ -1,0 +1,44 @@
+{
+  "source_only": true,
+  "unfinished_construction": true,
+  "current_root": "8685b8cf855f46b5b35100d338e294459d87317c",
+  "input_commit": "cda43b0160999f95482e27a70b86c0bc775895c0",
+  "input_file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/05_kept_as_paid_facts.sqlinc",
+  "input_bytes": 9220,
+  "input_sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa",
+  "forward_file": "forward/00_target_publication_facts.sqlinc",
+  "forward_bytes": 13897,
+  "forward_sha256": "3cd8fd0a8b0001a771976078f484357ec1a1eaa40a2ee6374561649961222dc5",
+  "full_file_reverse_verified": true,
+  "unique_hunks": 4,
+  "hunks": [
+    {
+      "name": "target facts signature",
+      "before": "private.weekly_source_kept_as_paid_facts_v1(p_work_event_id uuid,p_reason text)",
+      "after": "private.weekly_source_kept_as_paid_facts_for_publication_v1(p_work_event_id uuid,p_reason text,p_projection_publication_id uuid)"
+    },
+    {
+      "name": "same literal target/session scope",
+      "before": "  where cycle.source_group_id=v_event.first_source_group_id\n    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)\n    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n    and publication.authority_scope_kind='CYCLE' and upload.report_scope_id is null",
+      "after": "  where publication.id=p_projection_publication_id\n    and publication.source_cycle_id=cycle.id and publication.authority_scope_kind='CYCLE'\n    and publication.report_scope_id is null and upload.report_scope_id is null\n    and cycle.source_group_id=v_event.first_source_group_id\n    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)\n    and (\n      (publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n        and upload.correction_session_id is null and publication.correction_session_id is null\n        and cycle.current_projection_publication_id=publication.id)\n      or\n      (publication.state='CORRECTION_READY' and upload.state='CORRECTION_READY'\n        and upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n          select 1 from public.weekly_final_source_correction_sessions correction\n          join public.weekly_source_final_revisions prior on prior.id=correction.expected_current_final_revision_id\n          where correction.id=upload.correction_session_id and publication.correction_session_id=correction.id\n            and correction.source_cycle_id=cycle.id and correction.authority_scope_kind='CYCLE'\n            and correction.report_scope_id is null\n            and correction.replacement_correction_upload_id=upload.id\n            and correction.replacement_projection_publication_id=publication.id\n            and correction.state in ('REVIEWED','PREPARING','PREPARED','COMMITTING')\n            and prior.source_cycle_id=cycle.id and prior.authority_scope_kind='CYCLE'\n            and prior.report_scope_id is null and prior.state='CURRENT'\n            and prior.manifest_hash=correction.expected_final_manifest_hash\n            and cycle.current_final_revision_id=prior.id\n            and correction.review_result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',correction.review_result_json)))\n    )"
+    },
+    {
+      "name": "target facts owner ACL",
+      "before": "alter function private.weekly_source_kept_as_paid_facts_v1(uuid,text) owner to postgres;\nrevoke all on function private.weekly_source_kept_as_paid_facts_v1(uuid,text) from public,anon,authenticated,service_role;",
+      "after": "alter function private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid) owner to postgres;\nrevoke all on function private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid) from public,anon,authenticated,service_role;"
+    },
+    {
+      "name": "retain original facts ABI wrapper after kernel",
+      "before": "revoke all on function private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid) from public,anon,authenticated,service_role;",
+      "after": "revoke all on function private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid) from public,anon,authenticated,service_role;\n-- Retained two-argument ABI and primary V1 facts domain.\ncreate or replace function private.weekly_source_kept_as_paid_facts_v1(p_work_event_id uuid,p_reason text)\nreturns bytea language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\nas $function$\ndeclare v_event public.weekly_work_events%rowtype; v_publication uuid;\nbegin\n  if p_work_event_id is null or p_reason is null or p_reason not in ('CREDITED','NOT_INVOICED_DISAPPEARED') then\n    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_REASON_INVALID' using errcode='22023'; end if;\n  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\n  select publication.id into v_publication\n  from public.weekly_source_projection_publications publication\n  join public.weekly_source_uploads upload on upload.id=publication.upload_id\n  join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id\n  join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id\n  where cycle.source_group_id=v_event.first_source_group_id\n    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)\n    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n    and publication.authority_scope_kind='CYCLE' and upload.report_scope_id is null\n    and profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',\n      'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')\n    and upload.row_manifest_hash is not null and upload.coverage_state='COMPLETE'\n    and upload.coverage_timezone='Europe/London'\n    and v_event.work_date between upload.confirmed_coverage_start_local_date and upload.confirmed_coverage_end_local_date\n    and (upload.file_metadata_json->>'client_id'=v_event.client_id::text\n      or (nullif(upload.file_metadata_json->>'client_id','') is null and\n        (select count(*) from public.weekly_source_group_clients gc\n          where gc.source_group_id=cycle.source_group_id\n            and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))=1\n        and exists(select 1 from public.weekly_source_group_clients gc\n          where gc.source_group_id=cycle.source_group_id and gc.client_id=v_event.client_id\n            and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))))\n  order by publication.published_at_utc desc,publication.created_at_utc desc,publication.id desc limit 1;\n  if not found then raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_EXPORT_UNAVAILABLE' using errcode='55000'; end if;\n  return private.weekly_source_kept_as_paid_facts_for_publication_v1(v_event.id,p_reason,v_publication);\nend;\n$function$;\nalter function private.weekly_source_kept_as_paid_facts_v1(uuid,text) owner to postgres;\nrevoke all on function private.weekly_source_kept_as_paid_facts_v1(uuid,text) from public,anon,authenticated,service_role;\n"
+    }
+  ],
+  "financial_and_hash_body_sha256": "57587b21540d6e1b741c6680ceec61025478899992c9a8505c41a2e2e914cb3a",
+  "financial_and_hash_body_unchanged": true,
+  "unchanged_wrapper_signature": "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+  "new_owner_private_signature": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+  "facts_domain_unchanged": "WEEKLY_SOURCE_KEPT_AS_PAID_FACTS_V1",
+  "sql_compiled": false,
+  "native_proof": false,
+  "consumers_complete": false
+}

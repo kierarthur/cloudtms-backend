@@ -1,0 +1,31 @@
+{
+  "source_only": true,
+  "current_root": "8685b8cf855f46b5b35100d338e294459d87317c",
+  "inputs": [
+    {
+      "commit": "8685b8cf855f46b5b35100d338e294459d87317c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "8685b8cf855f46b5b35100d338e294459d87317c",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "bytes": 109850,
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    },
+    {
+      "commit": "8685b8cf855f46b5b35100d338e294459d87317c",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "bytes": 116274,
+      "sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5"
+    }
+  ],
+  "keep32_source_before_commit": "cda43b0160999f95482e27a70b86c0bc775895c0",
+  "existing_context_and_facts_not_mounted_in_current_root": true,
+  "source39_recorder_abi_unchanged": true,
+  "new_helpers_owner_private_only": true,
+  "canonical_changed": false,
+  "sql_compiled": false,
+  "native_proof": false
+}

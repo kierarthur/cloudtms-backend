@@ -1,0 +1,45 @@
+{
+  "schema_version": "KEEP_TARGET_PUBLICATION_CONTEXT_SOURCE_CHECK_V1",
+  "source_only": true,
+  "current_root": "8685b8cf855f46b5b35100d338e294459d87317c",
+  "own_before_commit": "cda43b0160999f95482e27a70b86c0bc775895c0",
+  "tests": {
+    "count": 11,
+    "pass": 11,
+    "fail": 0,
+    "kind": "Inspected literal/full reverse/schema/source target-reselection cases only; no PostgreSQL evaluator or native claim",
+    "output_sha256": "e4260cda1bb7c0dedbc8c5938eee2ae9acf0bd540a0a8057907420d871c20b81"
+  },
+  "inert_syntax": [
+    "build-target-context.mjs",
+    "target-context-source.test.mjs",
+    "freeze-target-context.mjs"
+  ],
+  "complete_file_reverses": 2,
+  "unique_hunks": 9,
+  "financial_body_and_primary_facts_domain_preserved": true,
+  "context_facts_same_explicit_publication": true,
+  "original_two_argument_abis_and_admission_retained": true,
+  "new_owner_private_signatures": [
+    "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+    "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)"
+  ],
+  "new_public_or_table_signatures": 0,
+  "credential_scan": {
+    "files": 12,
+    "rules": [
+      "PRIVATE_KEY",
+      "GITHUB_TOKEN",
+      "JWT_LITERAL"
+    ],
+    "findings": []
+  },
+  "independent_review": "PENDING",
+  "shared13_approved": false,
+  "canonical_changed": false,
+  "sql_compiled": false,
+  "sql_executed": false,
+  "native_proof": false,
+  "default_cancel_retained_basis_capture_selector_accept_overlap_prepared_office_consumer_wiring": "UNFINISHED_SOURCE_CONSTRUCTION",
+  "full_current_abi_acl_verifier_body_source_seal_and_native_gates": "HOLD"
+}

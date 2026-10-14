@@ -1,0 +1,58 @@
+{
+  "source_only": true,
+  "unfinished_construction": true,
+  "current_root": "8685b8cf855f46b5b35100d338e294459d87317c",
+  "input_commit": "cda43b0160999f95482e27a70b86c0bc775895c0",
+  "input_file": "docs/healthroster-build/proposals/kept-pay-identical-rekey-current-root-forward-20261014/forward/06_kept_as_paid_context.sqlinc",
+  "input_bytes": 20324,
+  "input_sha256": "b6328f6f2ed70e3c6c47a1d924a866ac30d0db420e39ab2a7795b48bbc16c4bd",
+  "forward_file": "forward/01_target_publication_context.sqlinc",
+  "forward_bytes": 25570,
+  "forward_sha256": "12c87d87015495d8f648d51edbea59b0a72d865a0b0f700ca654d6c6636e39d9",
+  "full_file_reverse_verified": true,
+  "unique_hunks": 5,
+  "hunks": [
+    {
+      "name": "purpose-bound signature",
+      "before": "private.weekly_source_kept_as_paid_context_v1(p_work_event_id uuid,p_actor_user_id uuid)",
+      "after": "private.weekly_source_kept_as_paid_context_for_publication_v1(p_work_event_id uuid,p_actor_user_id uuid,p_projection_publication_id uuid)"
+    },
+    {
+      "name": "exact publication and real target authority",
+      "before": "  where cycle.source_group_id=v_event.first_source_group_id\n    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)\n    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n    and publication.authority_scope_kind='CYCLE' and upload.report_scope_id is null",
+      "after": "  where publication.id=p_projection_publication_id\n    and publication.source_cycle_id=cycle.id and publication.authority_scope_kind='CYCLE'\n    and publication.report_scope_id is null and upload.report_scope_id is null\n    and cycle.source_group_id=v_event.first_source_group_id\n    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)\n    and (\n      (publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n        and upload.correction_session_id is null and publication.correction_session_id is null\n        and cycle.current_projection_publication_id=publication.id)\n      or\n      (publication.state='CORRECTION_READY' and upload.state='CORRECTION_READY'\n        and upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n          select 1 from public.weekly_final_source_correction_sessions correction\n          join public.weekly_source_final_revisions prior on prior.id=correction.expected_current_final_revision_id\n          where correction.id=upload.correction_session_id and publication.correction_session_id=correction.id\n            and correction.source_cycle_id=cycle.id and correction.authority_scope_kind='CYCLE'\n            and correction.report_scope_id is null\n            and correction.replacement_correction_upload_id=upload.id\n            and correction.replacement_projection_publication_id=publication.id\n            and correction.state in ('REVIEWED','PREPARING','PREPARED','COMMITTING')\n            and (p_actor_user_id is null or correction.actor_user_id=p_actor_user_id)\n            and prior.source_cycle_id=cycle.id and prior.authority_scope_kind='CYCLE'\n            and prior.report_scope_id is null and prior.state='CURRENT'\n            and prior.manifest_hash=correction.expected_final_manifest_hash\n            and cycle.current_final_revision_id=prior.id\n            and correction.review_result_hash=private.weekly_source_sha256_jsonb_v1(\n              'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',correction.review_result_json)))\n    )"
+    },
+    {
+      "name": "kernel owner ACL",
+      "before": "alter function private.weekly_source_kept_as_paid_context_v1(uuid,uuid) owner to postgres;\nrevoke all on function private.weekly_source_kept_as_paid_context_v1(uuid,uuid) from public,anon,authenticated,service_role;",
+      "after": "alter function private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid) owner to postgres;\nrevoke all on function private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;"
+    },
+    {
+      "name": "target facts uses the same explicit publication",
+      "before": "private.weekly_source_kept_as_paid_facts_v1(v_event.id,v_reason)",
+      "after": "private.weekly_source_kept_as_paid_facts_for_publication_v1(v_event.id,v_reason,v_publication)"
+    },
+    {
+      "name": "retain original ABI wrapper after kernel",
+      "before": "revoke all on function private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;",
+      "after": "revoke all on function private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;\n-- Retained two-argument ABI: latest real CURRENT export only.\ncreate or replace function private.weekly_source_kept_as_paid_context_v1(p_work_event_id uuid,p_actor_user_id uuid)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\nas $function$\ndeclare v_event public.weekly_work_events%rowtype; v_resolution public.weekly_source_row_resolutions%rowtype; v_publication uuid;\nbegin\n  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\n  select * into strict v_resolution from public.weekly_source_row_resolutions\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\n    order by created_at_utc desc,id desc limit 1;\n  if v_resolution.candidate_id is distinct from v_event.candidate_id or v_resolution.client_id is distinct from v_event.client_id\n    or not exists(select 1 from public.contracts c where c.id=v_resolution.contract_id\n      and c.candidate_id=v_event.candidate_id and c.client_id=v_event.client_id) then\n    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_LINEAGE_UNBOUND' using errcode='55000'; end if;\n  select publication.id into v_publication\n  from public.weekly_source_projection_publications publication\n  join public.weekly_source_uploads upload on upload.id=publication.upload_id\n  join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id\n  join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id\n  where cycle.source_group_id=v_event.first_source_group_id\n    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)\n    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'\n    and publication.authority_scope_kind='CYCLE' and upload.report_scope_id is null\n    and profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',\n      'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')\n    and upload.row_manifest_hash is not null and upload.coverage_state='COMPLETE' and upload.coverage_timezone='Europe/London'\n    and v_event.work_date between upload.confirmed_coverage_start_local_date and upload.confirmed_coverage_end_local_date\n    and (upload.file_metadata_json->>'client_id'=v_event.client_id::text or\n      (nullif(upload.file_metadata_json->>'client_id','') is null and\n        (select count(*) from public.weekly_source_group_clients gc where gc.source_group_id=cycle.source_group_id\n          and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))=1\n        and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=cycle.source_group_id\n          and gc.client_id=v_event.client_id and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))))\n  order by publication.published_at_utc desc,publication.created_at_utc desc,publication.id desc limit 1;\n  if v_publication is null then raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_EXPORT_UNAVAILABLE' using errcode='55000'; end if;\n  return private.weekly_source_kept_as_paid_context_for_publication_v1(v_event.id,p_actor_user_id,v_publication);\nend;\n$function$;\nalter function private.weekly_source_kept_as_paid_context_v1(uuid,uuid) owner to postgres;\nrevoke all on function private.weekly_source_kept_as_paid_context_v1(uuid,uuid) from public,anon,authenticated,service_role;\n"
+    }
+  ],
+  "financial_body_bytes": 15759,
+  "financial_body_sha256": "9b9433cbefb06cdaee6dd2732bec5fe8e53e27549c93ce6c28fb34858176d0f1",
+  "financial_grain_preserved_except_literal_target_facts_call": true,
+  "wrapper_latest_current_selection_and_admission_unchanged": true,
+  "unchanged_wrapper_signature": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+  "new_owner_private_signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+  "exact_session_schema": {
+    "commit": "8685b8cf855f46b5b35100d338e294459d87317c",
+    "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+    "bytes": 229113,
+    "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+  },
+  "shared13_approved": false,
+  "canonical_source_changed": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "default_accept_prepared_consumer_wiring_complete": false
+}
