@@ -7,7 +7,8 @@ as $function$
 declare c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
   v_actor uuid; v_client uuid; v_week date; v_today date; v_admin boolean; v_rule jsonb;
   v_route text; v_actual jsonb; v_facts jsonb; v_unproved jsonb; v_gate jsonb:='[]'::jsonb;
-  v_latest_week date; v_open integer; v_earlier_open integer; v_count integer; v_wait integer:=0; v_wait_fact jsonb; v_event record;
+  v_latest_week date; v_latest_timesheet_week date; v_calendar_authority jsonb;
+  v_open integer; v_earlier_open integer; v_count integer; v_wait integer:=0; v_wait_fact jsonb; v_event record;
 begin
   perform private._weekly_source_settings_assert_request_v1(p_request,
     array['actor_user_id','source_cycle_id','source_group_id','client_id','week_ending','command','cursor','limit'],
@@ -43,6 +44,11 @@ begin
     v_route:='SIGNED_TIMESHEETS';
   end if;
   if v_route is null then return jsonb_build_object('applies',false,'preserve_native',true); end if;
+  -- R-252 retains the client's latest ended calendar week, not its latest
+  -- week containing a Timesheet. A completed old week must disappear even
+  -- when no worker submitted a newer week. Reuse the native settings owner.
+  v_calendar_authority:=private.weekly_source_checklist_client_calendar_v1(v_client,v_today);
+  v_latest_week:=(v_calendar_authority->>'latest_ended_week')::date;
   -- Only actual Client authority narrows the witness scan. There is no booked
   -- Client/booking-name or live current-setting substitute for nullable Daily.
   with scoped as materialized (
@@ -86,12 +92,12 @@ begin
       'ordinary_authorised',authorised_at_server is not null,'validation_status',validation_status,
       'processing_status',processing_status,'correction_waiting',correction_waiting,'open_read_item',open_read_item)
       order by timesheet_id) filter(where week_ending_date=v_week),'[]'::jsonb),
-    count(distinct week_ending_date) filter(where open_read_item and week_ending_date<(select max(week_ending_date) from counted))::integer,
+    count(distinct week_ending_date) filter(where open_read_item and week_ending_date<v_latest_week)::integer,
     coalesce((select jsonb_agg(jsonb_build_object('code',reason,'unproved_timesheet_count',number) order by reason)
       from(select witness->>'reason' reason,count(distinct timesheet_id) number from scoped
         where week_ending_date=v_week and witness->>'support_state'='UNPROVED'
         group by witness->>'reason') unproved),'[]'::jsonb)
-    into v_latest_week,v_count,v_open,v_actual,v_earlier_open,v_unproved from counted;
+    into v_latest_timesheet_week,v_count,v_open,v_actual,v_earlier_open,v_unproved from counted;
   v_gate:=v_gate||v_unproved;
   if v_route='SIGNED_TIMESHEETS' and (v_count=0 or (v_week<>v_latest_week and v_open=0)) then
     return jsonb_build_object('applies',true,'admitted',false,'route',v_route,'preserve_native',false,
@@ -168,13 +174,17 @@ begin
     'checking_due',v_today>=v_week+(8-extract(isodow from v_week)::integer),
     'actual_timesheet_count',v_count,'actual_timesheet_authority_hash',
       encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_ACTUAL_SET_V1',v_actual),'hex'),
-    'most_recent_ended_timesheet_week',v_latest_week,'open_timesheet_read_items',v_open,
+    'most_recent_ended_timesheet_week',v_latest_timesheet_week,
+    'most_recent_ended_client_week',v_latest_week,
+    'client_week_authority_fingerprint',v_calendar_authority->>'authority_fingerprint','open_timesheet_read_items',v_open,
     'earlier_open_weeks',v_earlier_open,
     'qualified_waiting_count',v_wait,'engineering_gates',v_gate,
     'pay_financial_evidence_required',true,'root_checklist_union_required',true,
     'read_revision',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',
       jsonb_build_object('scope',p_request-'cursor'-'limit','cycle_version',c.version,'actual',v_actual,'facts',v_facts,
-        'latest_week',v_latest_week,'earlier_open_weeks',v_earlier_open,'actual_count',v_count,'open_read_items',v_open,
+        'latest_week',v_latest_week,'latest_timesheet_week',v_latest_timesheet_week,
+        'client_week_authority_fingerprint',v_calendar_authority->>'authority_fingerprint',
+        'earlier_open_weeks',v_earlier_open,'actual_count',v_count,'open_read_items',v_open,
         'wait_count',v_wait,'gates',v_gate)),'hex'));
 end;
 $function$;

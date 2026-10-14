@@ -8,9 +8,9 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const read=name=>fs.readFileSync(path.join(root,name==='wp_u3_native_read_vectors.sqlinc'
   ? 'supabase/verification/support' : 'supabase/repeatable/healthroster_wp_u3_source_proposals',name),'utf8');
 const pages=['wp_u3_submission_context.sqlinc','wp_u3_check_only_query_rows.sqlinc','wp_u3_client_week_context.sqlinc',
-  'wp_u3_signed_submission_read_context.sqlinc'];
+  'wp_u3_signed_submission_read_context.sqlinc','wp_u3_client_calendar.sqlinc'];
 
-test('private read proposals remain twelve classified packaging statements with fixed owner-only boundaries',()=>{
+test('private read proposals retain classified packaging statements with fixed owner-only boundaries',()=>{
   for(const name of pages){const source=read(name),parsed=scanManagedSql(exactAtomicBody(source));
     assert.equal(parsed.statements.length,3,name);assert.equal(parsed.meta.length,0,name);
     assert.match(source,/create or replace function private\./i);
