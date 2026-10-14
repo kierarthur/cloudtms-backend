@@ -1,0 +1,55 @@
+{
+  "sourceOnly": true,
+  "status": "CURRENT_CLASSIFICATION_SOURCE_CHECKPOINT_PASS_NATIVE_AND_FINAL_RECENSUS_HELD",
+  "sourcePins": 40,
+  "rootFile": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+  "closureFiles": 2,
+  "closureSha256": "890c04721cca58f3ca325303242b55ec0f6090cbed80ddb3a93d4c48014fb2c1",
+  "atomicPackaging": true,
+  "atomicStatements": 41,
+  "atomicBodySha256": "18cc67becd9b219482f7e7645a205664b9d1b73dd5eeb07773f6e14a00fdf150",
+  "steps": [
+    {
+      "name": "immutable-reviewed-source-vectors",
+      "exitCode": 0,
+      "outputSha256": "c23ae63a88ed0d96e1350da5290ccb455cee6c875206a9eef782a06a3fc376dc",
+      "summary": [
+        "# tests 14",
+        "# pass 14",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0"
+      ],
+      "failures": []
+    },
+    {
+      "name": "database-source-integrity",
+      "exitCode": 0,
+      "outputSha256": "48676c6aebbc29799f5489d9d99a95e00d56695a3a8e3b1c0fcd3c72ab8d43f0",
+      "summary": [
+        "Database source integrity passed: 399 migrations, 1058 repeatables."
+      ],
+      "failures": []
+    },
+    {
+      "name": "tracked-credential-scan",
+      "exitCode": 0,
+      "outputSha256": "545c8f8d838644a8960ac963e05968c7d0738b2a8b68ff116e672a562b324b0b",
+      "summary": [
+        "Tracked source credential scan: PASS (8967 files)"
+      ],
+      "failures": []
+    },
+    {
+      "name": "staged-whitespace",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": [],
+      "failures": []
+    }
+  ],
+  "nativeCalls": 0,
+  "compiledContract": null,
+  "noFinalImplementationCensusClaim": true
+}

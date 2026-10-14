@@ -1,0 +1,447 @@
+{
+  "source_only": true,
+  "current_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "entries": [
+    {
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "name": "private.weekly_source_entitlement_publication_receipts",
+      "statement_sha256": "1839bc279873cc89a160997c7254a62c2f23ab1db392479827cd3fe64d142ca6",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "1839bc279873cc89a160997c7254a62c2f23ab1db392479827cd3fe64d142ca6",
+          "statement": "\n\n-- ---------------------------------------------------------------------------\n-- proof/32 section 9 (frozen): the one publication receipt for the entitlement\n-- head coordinator, immediate and deferred.  It is not the ordinary projection\n-- receipt (weekly_source_projection_publications, rejected for this purpose)\n-- and not a C1 staging or checkpoint receipt.  Exact replay reads this relation\n-- first (proof/32 section 8 step 1), which is what stops a committed release\n-- whose response was lost from publishing a second time.\n--\n-- The private schema is outside the public RLS loop above, so its owner policy,\n-- revocations and immutability guards are written explicitly here.  Unlike the\n-- public Weekly Source relations, service_role is revoked and is not named in\n-- the policy, because proof/32 section 9 requires it; the policy keeps the\n-- Miget name cloudtms_miget_service_owner_all.\n-- ---------------------------------------------------------------------------\ncreate table private.weekly_source_entitlement_publication_receipts (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  decision_bundle_id uuid not null,\n  pending_bundle_id uuid,\n  bundle_revision bigint not null check (bundle_revision>=1),\n  request_digest bytea not null check (pg_catalog.octet_length(request_digest)=32),\n  publication_mode text not null check (publication_mode in ('IMMEDIATE','DEFERRED')),\n  candidate_id uuid not null references public.candidates(id) on delete restrict,\n  member_root_ids uuid[] not null,\n  member_family_booking_ids text[] not null,\n  member_root_versions integer[] not null,\n  head_ids uuid[] not null,\n  scope_change_tx_token uuid not null,\n  decision_id uuid not null,\n  decided_by_user_id uuid not null references public.tms_users(id) on delete restrict,\n  released_by_worker_id text,\n  released_by_worker_run_id uuid,\n  census_json jsonb not null check (pg_catalog.jsonb_typeof(census_json)='object'),\n  proof_json jsonb not null check (pg_catalog.jsonb_typeof(proof_json)='object'),\n  created_at_utc timestamptz not null default pg_catalog.clock_timestamp(),\n  check ((publication_mode='DEFERRED')=(pending_bundle_id is not null)),\n  check ((publication_mode='DEFERRED')=(released_by_worker_id is not null and released_by_worker_run_id is not null)),\n  -- proof/32 section 9: census_json is \"the complete per-root census ... not a\n  -- summary (an empty object for immediate)\" and proof_json is \"every section\n  -- 5.1/5.2 tuple used ... (an empty object for immediate)\".  A deferred\n  -- release is the one that had to prove a freeze census, so it may not be\n  -- recorded empty.\n  check (publication_mode<>'DEFERRED' or (census_json<>'{}'::jsonb and proof_json<>'{}'::jsonb)),\n  check (pg_catalog.cardinality(member_root_ids)>=1),\n  check (pg_catalog.cardinality(member_root_ids)=pg_catalog.cardinality(member_family_booking_ids)),\n  check (pg_catalog.cardinality(member_root_ids)=pg_catalog.cardinality(member_root_versions)),\n  check (pg_catalog.cardinality(member_root_ids)=pg_catalog.cardinality(head_ids)),\n  check (pg_catalog.array_position(member_root_ids,null::uuid) is null),\n  check (pg_catalog.array_position(member_family_booking_ids,null::text) is null),\n  check (pg_catalog.array_position(member_root_versions,null::integer) is null),\n  check (pg_catalog.array_position(head_ids,null::uuid) is null),\n  check (private.weekly_source_uuid_array_is_distinct_v1(member_root_ids)),\n  check (private.weekly_source_uuid_array_is_distinct_v1(head_ids)),\n  unique (decision_bundle_id,bundle_revision,request_digest),\n  unique (request_digest)\n);"
+        },
+        {
+          "sha256": "9a89703b83c3d8d44a64fa55454c45a3fc64096459807dbaebd74dce800955b4",
+          "statement": "\nalter table private.weekly_source_entitlement_publication_receipts owner to postgres;"
+        },
+        {
+          "sha256": "9ef3f5271f35ae5dc20c06303e099b02105482da7eb3d93d86347df79df383cd",
+          "statement": "\n\ncreate trigger weekly_source_entitlement_publication_receipt_immutable\n  before update or delete on private.weekly_source_entitlement_publication_receipts\n  for each row execute function private.weekly_source_entitlement_publication_receipt_immutable_v1();"
+        },
+        {
+          "sha256": "959a20beb6bab3a615a1535110e33bd31d2406c14af02b2d55b7f76b0068ddc8",
+          "statement": "\ncreate trigger weekly_source_entitlement_publication_receipt_truncate_guard\n  before truncate on private.weekly_source_entitlement_publication_receipts\n  for each statement execute function private.weekly_source_entitlement_publication_receipt_immutable_v1();"
+        },
+        {
+          "sha256": "886b91203ee2004471e1fbc9898d1f189116ea1aafbe2dfb49608f96b54a42cf",
+          "statement": "\n\nalter table private.weekly_source_entitlement_publication_receipts enable row level security;"
+        },
+        {
+          "sha256": "358709d515c92735ec58b83a9bb68e32fcb07ec0b3ae28847a920709bea34ca6",
+          "statement": "\nalter table private.weekly_source_entitlement_publication_receipts force row level security;"
+        },
+        {
+          "sha256": "d9f73c4a79db17d2321fbed3e0d634d281626867a05d538d7f48aff3427ec70e",
+          "statement": "\nrevoke all on table private.weekly_source_entitlement_publication_receipts\n  from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/18092026_0900_weekly_source_withdrawal_supersession.sql",
+      "name": "private.weekly_source_first_authorisation_withdrawal_receipts",
+      "statement_sha256": "3f99b1294d5c3d9cb0653a3ea41181c921be5e7239ac61e65f2c17a024f94106",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "3f99b1294d5c3d9cb0653a3ea41181c921be5e7239ac61e65f2c17a024f94106",
+          "statement": "\n\n-- ---------------------------------------------------------------------------\n-- 1. The durable replay receipt of ruling A3 step 5.\n--\n-- Until now the exact replay of `proof/36 section 5 step 1` read the recorded\n-- result out of `public.audit_events.after_json->'result'`, which WP-07b\n-- declared as finding F4: replay depended on audit retention and there was no\n-- second durable copy.  Ruling A3 step 5 makes the receipt part of the atomic\n-- write set, so it becomes a relation of its own and F4 closes as a\n-- consequence.\n--\n-- Shape follows `private.weekly_source_entitlement_publication_receipts`\n-- deliberately: same schema, same immutability trigger pattern, same RLS and\n-- privilege pattern, same `request_digest` replay contract (exact replay\n-- returns the stored receipt; a conflicting replay refuses).  Reusing the\n-- installed mechanism is the instruction; inventing a second one is not.\n--\n-- ROUND-5 ROTATION/SIGNATURE RULING (Part E, \"Rotation readings\"):\n--   \"The authorisation row signature binds tenant/agency, canonical root, exact\n--    authorised physical Timesheet identity, source generation/revision and the\n--    canonical digest of the protected decision fields.  Booking reference\n--    alone is not a signature key. ... a decision must never migrate silently\n--    between physical Timesheet IDs.\"\n-- Every one of those five bindings is a column here AND a field of\n-- `request_digest`, and `root_timesheet_id` is a real physical identity, so a\n-- withdrawal decision cannot be presented against a different physical row.\n-- ---------------------------------------------------------------------------\ncreate table private.weekly_source_first_authorisation_withdrawal_receipts (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  -- Tenant binding.  There is no agencies relation in this schema; agency_id is\n  -- a deployment identity carried by the decision bundle and copied onto the\n  -- head.  A withdrawal that retires a head therefore binds that head's agency;\n  -- a withdrawal with no head to retire has no agency evidence to bind and\n  -- records NULL rather than inventing one.\n  agency_id uuid,\n  candidate_id uuid not null references public.candidates(id) on delete restrict,\n  contract_id uuid not null references public.contracts(id) on delete restrict,\n  root_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,\n  root_family_booking_id text not null\n    check (pg_catalog.char_length(root_family_booking_id) between 1 and 200),\n  root_timesheet_version integer not null check (root_timesheet_version>=1),\n  requested_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,\n  -- The caller's `p_expected_timesheet_id`, stored so the canonical request can\n  -- be rebuilt EXACTLY from this row at replay time.  Nullable because the owner\n  -- accepts a null expectation.\n  expected_timesheet_id uuid references public.timesheets(timesheet_id) on delete restrict,\n  root_authorisation_id uuid not null\n    references public.weekly_source_root_authorisations(id) on delete restrict,\n  authorisation_generation integer not null check (authorisation_generation>=1),\n  expected_row_signature text not null\n    check (pg_catalog.char_length(expected_row_signature) between 1 and 512),\n  -- The canonical digest of the protected decision fields, produced by the\n  -- INSTALLED encoder private.weekly_source_publication_request_digest_v1.\n  request_digest bytea not null check (pg_catalog.octet_length(request_digest)=32),\n  -- The immutable predecessor link of ruling A3 step 3: the head this\n  -- withdrawal retired, its revision and the state it was in beforehand.  NULL\n  -- on the ordinary no-head withdrawal, which retires nothing.\n  predecessor_head_id uuid references public.weekly_source_entitlement_heads(id) on delete restrict,\n  predecessor_head_revision bigint check (predecessor_head_revision>=1),\n  predecessor_head_state_before text\n    check (predecessor_head_state_before is null or predecessor_head_state_before='COMMITTED_CURRENT'),\n  predecessor_head_certified_zero boolean,\n  head_superseded boolean not null,\n  scope_change_tx_token uuid not null,\n  withdrawn_at_utc timestamptz not null,\n  withdrawn_by_user_id uuid not null references public.tms_users(id) on delete restrict,\n  checks_json jsonb not null check (pg_catalog.jsonb_typeof(checks_json)='array'),\n  result_json jsonb not null check (pg_catalog.jsonb_typeof(result_json)='object'),\n  created_at_utc timestamptz not null default pg_catalog.clock_timestamp(),\n  check (head_superseded=(predecessor_head_id is not null)),\n  check ((predecessor_head_id is null)=(predecessor_head_revision is null)),\n  check ((predecessor_head_id is null)=(predecessor_head_state_before is null)),\n  check ((predecessor_head_id is null)=(predecessor_head_certified_zero is null)),\n  -- One withdrawal per authorisation generation, for ever.\n  unique (root_authorisation_id),\n  -- A head is retired by at most one withdrawal, for ever.  NULLs repeat\n  -- freely, so an ordinary no-head withdrawal is unaffected.\n  unique (predecessor_head_id),\n  -- The replay identity of `proof/36 section 5 step 1`, read by (timesheet,\n  -- expected row signature) exactly as the owner is called -- AND BY\n  -- GENERATION, which is not decoration.\n  --\n  -- `public.timesheet_lifecycle_guard_signature_v1` is a function of the\n  -- Timesheet's own state, so withdrawing a root and then authorising it again\n  -- can and does produce the SAME row signature on the new generation: proved\n  -- by execution on the WP-07 fixture, where generation 1 and generation 2 of\n  -- root WP07-BK-06 carry an identical signature.  Keyed on (root, signature)\n  -- alone, the second, genuinely different withdrawal would either be mistaken\n  -- for a replay of the first or collide on this index.  The generation is what\n  -- separates them, and the replay reader additionally refuses to treat\n  -- anything as a replay while a LIVE generation exists.\n  unique (root_timesheet_id,expected_row_signature,authorisation_generation)\n);"
+        },
+        {
+          "sha256": "27c3211189396a8ecf3c13d7bdda20891713eb9dcfbe84c7de7544ab52186d5c",
+          "statement": "\nalter table private.weekly_source_first_authorisation_withdrawal_receipts owner to postgres;"
+        },
+        {
+          "sha256": "4fd3b24e52721256ff9ef60519a27cf2d8e1b548ba0738f49809345c5680c0bc",
+          "statement": "\n\ncreate trigger weekly_source_withdrawal_receipt_immutable\n  before update or delete on private.weekly_source_first_authorisation_withdrawal_receipts\n  for each row execute function private.weekly_source_withdrawal_receipt_immutable_v1();"
+        },
+        {
+          "sha256": "5d40a661bea0256e6a18d6320bd9850bfb59314a937f811d75a8bee2ec3ed34b",
+          "statement": "\ncreate trigger weekly_source_withdrawal_receipt_truncate_guard\n  before truncate on private.weekly_source_first_authorisation_withdrawal_receipts\n  for each statement execute function private.weekly_source_withdrawal_receipt_immutable_v1();"
+        },
+        {
+          "sha256": "5bd3c6a0aa4bfc04289c49513a06b948cfefff00b1377a4b5c7682116171db69",
+          "statement": "\n\nalter table private.weekly_source_first_authorisation_withdrawal_receipts\n  enable row level security;"
+        },
+        {
+          "sha256": "0d108dcf60adaa8f214f568d913616773e25269904aab21cf9dd5e4101d9c846",
+          "statement": "\nalter table private.weekly_source_first_authorisation_withdrawal_receipts\n  force row level security;"
+        },
+        {
+          "sha256": "b9bb4692bb32acb3c62efa06a90c2144fa14f2dd255d627c549ae738b3c70333",
+          "statement": "\nrevoke all on table private.weekly_source_first_authorisation_withdrawal_receipts\n  from public,anon,authenticated,service_role;"
+        },
+        {
+          "sha256": "b4f9690c367260cd0ebfa32883d3822176af1f435c0cceaff16799ec5931afd5",
+          "statement": "\n\nalter table public.weekly_source_entitlement_heads\n  add constraint weekly_source_entitlement_heads_superseded_withdrawal_fk\n  foreign key (superseded_by_withdrawal_id)\n  references private.weekly_source_first_authorisation_withdrawal_receipts(id)\n  on delete restrict;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/18092026_1500_weekly_source_external_publication_arrival.sql",
+      "name": "private.weekly_source_external_publication_arrivals",
+      "statement_sha256": "1c819eeef0fcfd98cc2816e4818264ac00cdfc13db6c632e7729a8ec8f522265",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "1c819eeef0fcfd98cc2816e4818264ac00cdfc13db6c632e7729a8ec8f522265",
+          "statement": "\n\ncreate table private.weekly_source_external_publication_arrivals (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n\n  -- Only one classification is ever recorded.  IDENTICAL writes nothing (it is\n  -- a readback), and UNKNOWN/CONTRADICTORY writes nothing (it fails closed), so\n  -- a row in this relation always means \"different, pending, not accepted\".\n  -- The column is present rather than implied so the row is self-describing to\n  -- an Office reader and so a future classification cannot be added by\n  -- overloading the meaning of an existing row.\n  arrival_outcome text not null\n    check (arrival_outcome='PENDING_SUCCESSOR_INPUT'),\n\n  -- Which external system handed the evidence over.  Bounded, and recorded as\n  -- given; it is a label on evidence, never an authority.\n  external_system text not null\n    check (pg_catalog.char_length(external_system) between 1 and 64),\n\n  -- ------------------------------------------------------------------ --\n  -- 1. SOURCE IDENTITY, exactly as the arrival declared it.\n  -- ------------------------------------------------------------------ --\n  declared_root_timesheet_id uuid not null\n    references public.timesheets(timesheet_id) on delete restrict,\n  -- Stored raw, like every other Weekly Source booking identity (H2-035): the\n  -- trimmed form is a lock and index key, not an identity.\n  declared_root_family_booking_id text not null\n    check (pg_catalog.char_length(declared_root_family_booking_id) between 1 and 200),\n  declared_final_revision_id uuid not null\n    references public.weekly_source_final_revisions(id) on delete restrict,\n  declared_source_cycle_id uuid not null\n    references public.weekly_source_cycles(id) on delete restrict,\n\n  -- ------------------------------------------------------------------ --\n  -- 2. GENERATION, exactly as the arrival declared it.\n  -- ------------------------------------------------------------------ --\n  declared_root_timesheet_version integer not null\n    check (declared_root_timesheet_version>=1),\n  declared_source_revision_number integer not null\n    check (declared_source_revision_number>=1),\n  -- The CloudTMS head generation the arrival claims to be a successor to or\n  -- evidence of.  A pending successor input always declares a STRICTLY GREATER\n  -- generation than the current committed head; equal-with-different-content\n  -- and lower are fail-closed refusals and never reach this relation, so the\n  -- cross-row check below is a real invariant and not decoration.\n  declared_head_revision bigint not null check (declared_head_revision>=1),\n\n  -- ------------------------------------------------------------------ --\n  -- 3. DIGESTS, exactly as the arrival declared them.\n  -- ------------------------------------------------------------------ --\n  declared_source_generation_digest bytea not null\n    check (pg_catalog.octet_length(declared_source_generation_digest)=32),\n  declared_entitlement_digest bytea not null\n    check (pg_catalog.octet_length(declared_entitlement_digest)=32),\n  declared_publication_receipt_digest bytea not null\n    check (pg_catalog.octet_length(declared_publication_receipt_digest)=32),\n\n  -- ------------------------------------------------------------------ --\n  -- 4. The CloudTMS head that REMAINED AUTHORITATIVE at arrival.\n  --\n  -- This is the immutable proof that the head was not replaced, mutated or\n  -- released.  It is recorded from the row the owner read under its own lock,\n  -- inside the same transaction that appends this row.\n  -- ------------------------------------------------------------------ --\n  current_head_id uuid not null\n    references public.weekly_source_entitlement_heads(id) on delete restrict,\n  current_head_revision bigint not null check (current_head_revision>=1),\n  current_entitlement_digest bytea not null\n    check (pg_catalog.octet_length(current_entitlement_digest)=32),\n  current_source_generation_digest bytea not null\n    check (pg_catalog.octet_length(current_source_generation_digest)=32),\n  current_publication_receipt_digest bytea not null\n    check (pg_catalog.octet_length(current_publication_receipt_digest)=32),\n\n  -- The canonical digest of the complete declared arrival, produced by the one\n  -- installed encoder (`private.weekly_source_publication_request_digest_v1`,\n  -- H2-032).  It is the replay key: the same arrival delivered twice appends\n  -- one row and returns the same row the second time.\n  arrival_digest bytea not null\n    check (pg_catalog.octet_length(arrival_digest)=32),\n\n  -- The field-by-field comparison the owner actually performed, so an Office\n  -- reader can see WHICH of the ten declared facts differed without recomputing\n  -- anything.  Booleans, identifiers and hex digests only; no figure appears\n  -- here, by construction and by the check below.\n  comparison_json jsonb not null\n    check (pg_catalog.jsonb_typeof(comparison_json)='object'),\n\n  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n\n  -- The pending-successor invariant, enforced by the relation and not only by\n  -- the owner: a recorded arrival always claims a LATER generation than the\n  -- head it did not replace.\n  check (declared_head_revision>current_head_revision),\n  unique (arrival_digest)\n);"
+        },
+        {
+          "sha256": "457c11ac62baa077315f3b219f5887c999eea754f366aa1799ad7f8c56741fba",
+          "statement": "\nalter table private.weekly_source_external_publication_arrivals owner to postgres;"
+        },
+        {
+          "sha256": "5c66bc4b0b054acda11655d065baac54199b39ed5adb61c592aba3add2b030b8",
+          "statement": "\n\ncreate trigger weekly_source_external_publication_arrival_immutable\n  before update or delete on private.weekly_source_external_publication_arrivals\n  for each row execute function private.weekly_source_external_publication_arrival_immutable_v1();"
+        },
+        {
+          "sha256": "664d3b195aabe9eb7db8e218ccf7002ba01e142fcb0ed9793f51b032524a3686",
+          "statement": "\ncreate trigger weekly_source_external_publication_arrival_truncate_guard\n  before truncate on private.weekly_source_external_publication_arrivals\n  for each statement execute function private.weekly_source_external_publication_arrival_immutable_v1();"
+        },
+        {
+          "sha256": "db06e4c9793e84acbdd3cfd6954916da66761c0a372ff64c75f315fd50369de1",
+          "statement": "\n\nalter table private.weekly_source_external_publication_arrivals\n  enable row level security;"
+        },
+        {
+          "sha256": "3e83fe40e0473bb51a62b3ca58250584017c7cfc2fb877d1f42a271d1034ac49",
+          "statement": "\nalter table private.weekly_source_external_publication_arrivals\n  force row level security;"
+        },
+        {
+          "sha256": "85125bddd01ae62964b9e0e42ba2faa62f3b07a3ff87a41781893256bfaf3a90",
+          "statement": "\nrevoke all on table private.weekly_source_external_publication_arrivals\n  from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/18092026_1520_weekly_source_pending_release_review_items.sql",
+      "name": "private.weekly_source_pending_release_review_items",
+      "statement_sha256": "477eb6ab8a277f4df24a80ced916caf921454954e6c42d2922cda091e9733274",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "477eb6ab8a277f4df24a80ced916caf921454954e6c42d2922cda091e9733274",
+          "statement": "\n\n-- HANDOVER 2 round-5 ruling B4.4: \"The Office reason's 1,000-character summary\n-- may remain bounded, but exact census item identifiers must be retained\n-- losslessly in bounded, pageable child records and shown through the Office\n-- detail view.  Never concatenate an unbounded list into one field and never\n-- silently drop the fifth or later identifier.\"\n--\n-- WP-08b's review finding F3 measured the defect: the reason reached 1,055\n-- characters at five census error items, so from the fifth item onward the\n-- identifiers were cut.  WP-08b raised the cap to 8,000 characters and made the\n-- reason a structured object, which is better but is still ONE field; a census\n-- with enough items still drops some, and an Office screen still has to scrape\n-- a string.  This relation is that child record: one row per census item, in\n-- the census's own order, with the identifiers as their own typed columns.  The\n-- reason keeps only a bounded summary and a pointer to here.\n--\n-- Why `private` and not `public`:\n--   * the ACL contract's `WEEKLY_SOURCE_ACL_TABLE_UNCLASSIFIED` sweep is a\n--     closed set of exactly 98 `public.weekly_*` relations, owned by a file this\n--     package does not own; a public relation could not be added without\n--     changing it, and\n--   * the reason detail is diagnostic evidence about Banking Pay items that no\n--     browser role may ever read.  `private` is where the publication receipts\n--     already live, so this follows the established Weekly Source pattern\n--     (the receipts relation below) and gives the rows no browser surface at\n--     all.  The Office reaches them only through the service-only pageable\n--     reader in the release repeatable.\n--\n-- Append-only: a manual-review reason is evidence, so the rows are written once\n-- and never updated or deleted.  A later attempt on the same bundle writes a NEW\n-- pending_revision generation rather than rewriting the old one, so the Office\n-- can see what each attempt found.\ncreate table private.weekly_source_pending_release_review_items (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  pending_bundle_id uuid not null\n    references public.weekly_source_pending_entitlement_bundles(id) on delete restrict,\n  -- The generation this evidence belongs to.  (bundle, revision, ordinal) is\n  -- unique, so a replayed writer cannot duplicate a generation's items and a\n  -- new attempt cannot overwrite an old one's.\n  pending_revision bigint not null check (pending_revision>=1),\n  item_ordinal integer not null check (item_ordinal>=1),\n  -- The refusal that produced this evidence, and the census verdict it came\n  -- from, so one bundle's successive manual reviews stay distinguishable.\n  refusal_code text not null check (pg_catalog.btrim(refusal_code)<>''\n                                    and pg_catalog.length(refusal_code)<=200),\n  census_result text check (census_result is null\n                            or pg_catalog.btrim(census_result)<>''),\n  -- The exact identifiers.  Typed columns, never a concatenated list.  A census\n  -- item is allowed to lack one of them (an error item raised against a family\n  -- rather than against one pay batch item), which is why they are nullable;\n  -- what is NOT allowed is for a present identifier to be dropped.\n  item_class text not null check (pg_catalog.btrim(item_class)<>''),\n  item_reason text,\n  pay_batch_item_id uuid,\n  timesheet_id uuid,\n  -- The complete original item, so a future census member is not lost either.\n  item_json jsonb not null check (pg_catalog.jsonb_typeof(item_json)='object'),\n  recorded_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  unique (pending_bundle_id,pending_revision,item_ordinal)\n);"
+        },
+        {
+          "sha256": "70d5a369024d5fefa08d7dc9b06a463536b13d3146093a4b0537d5bbcec0064b",
+          "statement": "\nalter table private.weekly_source_pending_release_review_items owner to postgres;"
+        },
+        {
+          "sha256": "93f939012462a2ef31e66f7fb5fb285ebee75039d3a424382383d061900a06ef",
+          "statement": "\n\ncreate trigger weekly_source_pending_release_review_item_immutable\n  before update or delete on private.weekly_source_pending_release_review_items\n  for each row execute function private.weekly_source_pending_release_review_item_immutable_v1();"
+        },
+        {
+          "sha256": "6d0ad9d14aebc8a140ba04b32bea08940cb7edb99e2bf84316e1e16bf9459f4f",
+          "statement": "\ncreate trigger weekly_source_pending_release_review_item_truncate_guard\n  before truncate on private.weekly_source_pending_release_review_items\n  for each statement execute function private.weekly_source_pending_release_review_item_immutable_v1();"
+        },
+        {
+          "sha256": "07b656225060cdbe4323e715c5d932c01cda230c2ac4412f0b0d3b2a3bbe5c2c",
+          "statement": "\n\nalter table private.weekly_source_pending_release_review_items enable row level security;"
+        },
+        {
+          "sha256": "3ca045c8a23a7de576db6702fec583047f244a29c7c54df3ea8dd9ec99165eea",
+          "statement": "\nalter table private.weekly_source_pending_release_review_items force row level security;"
+        },
+        {
+          "sha256": "d89774d1de1df3c258b793093abc96fa3783cef03d37ac3a71873b2681f54ec6",
+          "statement": "\nrevoke all on table private.weekly_source_pending_release_review_items\n  from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/18092026_1740_weekly_source_banking_pay_absence.sql",
+      "name": "private.weekly_source_banking_pay_absence",
+      "statement_sha256": "d0ff23d9e8a17c7f38226224f16752e1d76b4607213a3d8ddd999bd223db1752",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "d0ff23d9e8a17c7f38226224f16752e1d76b4607213a3d8ddd999bd223db1752",
+          "statement": "\n\n-- ---------------------------------------------------------------------------\n-- 2. The declaration.\n--\n-- Singleton, and DELIBERATELY EMPTY after this migration.\n--\n--   * no row            -> the setting is OFF (the default, and the state a\n--                          release leaves behind)\n--   * declared = false  -> the setting is OFF\n--   * declared = true   -> the setting is ON: the Banking Pay integration is\n--                          declared knowingly absent, and a boundary notice\n--                          becomes available to anything that chooses to read\n--                          it.  NOTHING ELSE CHANGES.\n-- ---------------------------------------------------------------------------\ncreate table private.weekly_source_banking_pay_absence (\n  singleton boolean primary key default true check (singleton),\n  declared boolean not null default false,\n  declared_by text not null,\n  reason text not null,\n  declared_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  constraint weekly_source_banking_pay_absence_by_ck\n    check (pg_catalog.btrim(declared_by) <> ''),\n  constraint weekly_source_banking_pay_absence_reason_ck\n    check (pg_catalog.btrim(reason) <> '')\n);"
+        },
+        {
+          "sha256": "4d5a5e6365264e87d0169feeffa1394ef785abc687e6ffa8caea8205806ed75b",
+          "statement": "\nalter table private.weekly_source_banking_pay_absence owner to postgres;"
+        },
+        {
+          "sha256": "82b933e9c3a55005b96d917ade862850080f45212d573533b840bb5ca2a961b0",
+          "statement": "\n\ncreate trigger weekly_source_banking_pay_absence_environment_guard\n  before insert or update on private.weekly_source_banking_pay_absence\n  for each row\n  execute function private._weekly_source_banking_pay_absence_environment_guard_v1();"
+        },
+        {
+          "sha256": "7d33e753252463f6b6223837074a0a626b0d4097cd9998bd469472fdfdf965c2",
+          "statement": "\n\nrevoke all on table private.weekly_source_banking_pay_absence\nfrom public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/22092026_1645_weekly_source_workbench_inventory_projection.sql",
+      "name": "private.weekly_source_workbench_inventory_v1",
+      "statement_sha256": "634daf062459be3f6d50b430c604ab08563ec1b9ff7de98e3417496c9659a36a",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "634daf062459be3f6d50b430c604ab08563ec1b9ff7de98e3417496c9659a36a",
+          "statement": "\n\n-- Derived validation metadata only. Source heads/components remain financial\n-- authority. Existing heads are NOT silently certified by this migration.\ncreate table private.weekly_source_workbench_inventory_v1 (\n  head_id uuid primary key references public.weekly_source_entitlement_heads(id) on delete cascade,\n  component_count bigint not null default 0 check(component_count>=0),\n  emittable_count bigint not null default 0 check(emittable_count>=0),\n  invalid_count bigint not null default 0 check(invalid_count>=0),\n  complete boolean not null default false,\n  bootstrap_last_ordinal integer not null default 0 check(bootstrap_last_ordinal>=0),\n  check(emittable_count<=component_count and invalid_count<=component_count)\n);"
+        },
+        {
+          "sha256": "13a594dc1f97fd54cf0a2ef81f6479ccb1e40ac98adc9512c657cfd5ac10d463",
+          "statement": "\nalter table private.weekly_source_workbench_inventory_v1 owner to postgres;"
+        },
+        {
+          "sha256": "1e775971c7ba794d21d498fb2df0809874a0abb61cd7f445f709a649cbaf3132",
+          "statement": "\nrevoke all on private.weekly_source_workbench_inventory_v1 from public,anon,authenticated,service_role;"
+        },
+        {
+          "sha256": "b616f08668bcb73fdd40e1b4d24b290cc36d7ac358489f8c3c97897bd9d4f83d",
+          "statement": "\nalter table private.weekly_source_workbench_inventory_v1 enable row level security;"
+        },
+        {
+          "sha256": "fa8a6b083f7b65b9f6e1d52dc2b4d9a30607cebfa861ddf6f0eb247646f83f17",
+          "statement": "\nalter table private.weekly_source_workbench_inventory_v1 force row level security;"
+        },
+        {
+          "sha256": "22929fe1b461564a8489ea4c341546735e3686eca364566e3e927121c2ad18b4",
+          "statement": "\ncreate policy weekly_source_workbench_inventory_owner on private.weekly_source_workbench_inventory_v1\n  to current_user using(true) with check(true);"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/22092026_1645_weekly_source_workbench_inventory_projection.sql",
+      "name": "private.weekly_source_workbench_inventory_install_v1",
+      "statement_sha256": "fd769d747823aef5865ae03717c36f4d478daa76e470928d5e0bace797a1a91d",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "fd769d747823aef5865ae03717c36f4d478daa76e470928d5e0bace797a1a91d",
+          "statement": "\n\n-- One permanent installation-progress row. This is not a business activation\n-- flag and is never read by a payment or Source publication owner.\ncreate table private.weekly_source_workbench_inventory_install_v1 (\n  singleton boolean primary key default true check(singleton),\n  scan_through uuid,\n  last_head uuid,\n  complete boolean not null default false,\n  page_calls bigint not null default 0 check(page_calls>=0),\n  check(last_head is null or (scan_through is not null and last_head<=scan_through))\n);"
+        },
+        {
+          "sha256": "f8d7f47be0334df0a09a87e8f1c800d48d35f0e671538bf1590e1e2090dba0c9",
+          "statement": "\nalter table private.weekly_source_workbench_inventory_install_v1 owner to postgres;"
+        },
+        {
+          "sha256": "133e91907bfe81b79584882a92e2dcdfd9b1d7bf634f1b50d149a254727cecf3",
+          "statement": "\nrevoke all on private.weekly_source_workbench_inventory_install_v1 from public,anon,authenticated,service_role;"
+        },
+        {
+          "sha256": "a873afea0e31f99f8f34c807685c8a612ef3fb92759bf5d2f978c186436b49db",
+          "statement": "\nalter table private.weekly_source_workbench_inventory_install_v1 enable row level security;"
+        },
+        {
+          "sha256": "c10107f827f888b25d21a1fccc1323efa49d2843bd3780995b9c0ef93ffc2f3a",
+          "statement": "\nalter table private.weekly_source_workbench_inventory_install_v1 force row level security;"
+        },
+        {
+          "sha256": "395df9832749b16e11d67d2847f8dcfce10597bf21dba3584bf564af80ebd182",
+          "statement": "\ncreate policy weekly_source_workbench_inventory_install_owner on private.weekly_source_workbench_inventory_install_v1\n  to current_user using(true) with check(true);"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/30092026_2052_weekly_source_import_preparation.sql",
+      "name": "private.weekly_source_import_preparations",
+      "statement_sha256": "31b3dc1ae0fac651c2a4aacfe4b9ee90d2f4f1b6f558903d54220134871d3e68",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "31b3dc1ae0fac651c2a4aacfe4b9ee90d2f4f1b6f558903d54220134871d3e68",
+          "statement": "\n\ncreate table private.weekly_source_import_preparations (\n  upload_id uuid primary key references public.weekly_source_uploads(id),\n  projection_publication_id uuid not null references public.weekly_source_projection_publications(id),\n  authority_scope_version bigint not null check (authority_scope_version>0),\n  prepared_by_user_id uuid not null references public.tms_users(id),\n  prepared_at_utc timestamptz not null default transaction_timestamp(),\n  row_manifest_hash bytea not null check (octet_length(row_manifest_hash)=32)\n);"
+        },
+        {
+          "sha256": "0c46c9639e403034c8ae0e74672f9bebb859f8668957b9fcd9612bff65f9b6a6",
+          "statement": "\nalter table private.weekly_source_import_preparations owner to postgres;"
+        },
+        {
+          "sha256": "87ff8fd7d92ca77e19f575b376aab20b8dec37c2443a2ce7fc6c75894b4cc7e3",
+          "statement": "\nrevoke all on private.weekly_source_import_preparations from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "name": "private.weekly_source_office_row_choices",
+      "statement_sha256": "cefc4be48e965b9787185d978dc84871dc00510b801fdd289bf6ad95cbb13b2e",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "cefc4be48e965b9787185d978dc84871dc00510b801fdd289bf6ad95cbb13b2e",
+          "statement": "\n\n-- Choices apply to this immutable source row only, never to another file or\n-- every person sharing a name. Each replacement choice remains auditable.\ncreate table private.weekly_source_office_row_choices (\n  id bigint generated always as identity primary key,\n  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,\n  candidate_id uuid references public.candidates(id) on delete restrict,\n  client_id uuid references public.clients(id) on delete restrict,\n  contract_id uuid references public.contracts(id) on delete restrict,\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  chosen_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  check(candidate_id is not null or client_id is not null or contract_id is not null)\n);"
+        },
+        {
+          "sha256": "5af4a4d0d53d71db7d1875bcb8fcbf528c9c3affd6eeb82d19064f8d21211bd3",
+          "statement": "\nalter table private.weekly_source_office_row_choices owner to postgres;"
+        },
+        {
+          "sha256": "e9cffba0584bd018b26675766800964bfe940142a59a5399136a24b3c0fa3c96",
+          "statement": "\nrevoke all on private.weekly_source_office_row_choices,private.weekly_source_office_rechecks from public,anon,authenticated,service_role;"
+        },
+        {
+          "sha256": "1d2077e56751fa84134502372c5f724088d055ce12005b1b5ace8846749dbf81",
+          "statement": "\nrevoke all on sequence private.weekly_source_office_row_choices_id_seq from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "name": "private.weekly_source_office_rechecks",
+      "statement_sha256": "177f3cf80faaf741b34f6f51e29c96120a0a9196c322559797624846170d0a80",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "177f3cf80faaf741b34f6f51e29c96120a0a9196c322559797624846170d0a80",
+          "statement": "\ncreate table private.weekly_source_office_rechecks (\n  request_id uuid primary key,\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  upload_id uuid not null references public.weekly_source_uploads(id) on delete restrict,\n  prior_publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,\n  publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,\n  request_hash bytea not null check(pg_catalog.octet_length(request_hash)=32),\n  request_json jsonb not null check(pg_catalog.jsonb_typeof(request_json)='object'),\n  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp()\n);"
+        },
+        {
+          "sha256": "c5a410dc1965d7905c17969519615fce0e47850625bfe96e181555e60cd9193a",
+          "statement": "\nalter table private.weekly_source_office_rechecks owner to postgres;"
+        },
+        {
+          "sha256": "e9cffba0584bd018b26675766800964bfe940142a59a5399136a24b3c0fa3c96",
+          "statement": "\nrevoke all on private.weekly_source_office_row_choices,private.weekly_source_office_rechecks from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/02102026_1600_weekly_source_manual_review.sql",
+      "name": "private.weekly_source_manual_reviews",
+      "statement_sha256": "2fef0dfb217ed0db11f5164582e242b74cb7362cfffa8de74873e9373ae383a0",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "2fef0dfb217ed0db11f5164582e242b74cb7362cfffa8de74873e9373ae383a0",
+          "statement": "-- An Office review of an existing imported work identity is separate from an\n-- automatically detected comparison incident. It cannot create work or pay.\ncreate table private.weekly_source_manual_reviews (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  source_group_id uuid not null references public.weekly_source_groups(id) on delete restrict,\n  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,\n  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,\n  row_resolution_id uuid not null references public.weekly_source_row_resolutions(id) on delete restrict,\n  source_row_hash bytea not null check (pg_catalog.octet_length(source_row_hash)=32),\n  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,\n  candidate_id uuid not null references public.candidates(id) on delete restrict,\n  client_id uuid not null references public.clients(id) on delete restrict,\n  contract_id uuid not null references public.contracts(id) on delete restrict,\n  work_date date not null,\n  state text not null check (state in ('OPEN','RESOLVED')),\n  office_reason text not null check (pg_catalog.char_length(pg_catalog.btrim(office_reason)) between 1 and 1000),\n  opened_by_user_id uuid not null references public.tms_users(id) on delete restrict,\n  opened_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  resolved_by_user_id uuid references public.tms_users(id) on delete restrict,\n  resolved_at_utc timestamptz,\n  resolution_kind text check (resolution_kind in ('OFFICE_ACCEPTED_SOURCE','PROTECTED_PAY')),\n  check ((state='RESOLVED')=(resolved_by_user_id is not null and resolved_at_utc is not null and resolution_kind is not null))\n);"
+        },
+        {
+          "sha256": "fbb053c63c3a87ed4bee7489b3991a102f606aacb103e5d9f823df52ccf5f4af",
+          "statement": "\nalter table private.weekly_source_manual_reviews owner to postgres;"
+        },
+        {
+          "sha256": "48213a01589446c37a42d78d452100d7665405a9f475358cef7e81656aa8bff3",
+          "statement": "\nrevoke all on private.weekly_source_manual_reviews from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/04102026_1257_weekly_source_local_protected_decision_receipts_v1.sql",
+      "name": "private.weekly_source_local_protected_decision_receipts",
+      "statement_sha256": "7b5cfa342327fe9623297a0be7b68f3f564e8c10553c7f861f185cbd1f37528b",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "7b5cfa342327fe9623297a0be7b68f3f564e8c10553c7f861f185cbd1f37528b",
+          "statement": "\n\ncreate table private.weekly_source_local_protected_decision_receipts (\n  publication_request_id uuid primary key references public.weekly_exceptional_c1_publication_requests(id),\n  generation_id uuid not null unique references public.weekly_exceptional_pay_generations(id),\n  family_id uuid not null references public.weekly_exceptional_pay_target_families(id),\n  root_timesheet_id uuid not null references public.timesheets(timesheet_id),\n  actor_user_id uuid not null references public.tms_users(id),\n  request_sha256 bytea not null check (octet_length(request_sha256)=32),\n  idempotency_key text not null unique,\n  preparing_transaction_id xid8 not null,\n  prior_financial_id uuid references public.timesheets_financials(id),\n  approved_snapshot_json jsonb not null check (jsonb_typeof(approved_snapshot_json)='object'),\n  state text not null check (state in ('PREPARING','COMPLETE','PENDING_FREEZE')),\n  result_json jsonb not null default '{}'::jsonb,\n  created_at_utc timestamptz not null default transaction_timestamp(),\n  completed_at_utc timestamptz,\n  check ((state='PREPARING')=(completed_at_utc is null))\n);"
+        },
+        {
+          "sha256": "4eca48829062c65e19d0e65339238cc94d3bb2e05efaa98789ef26cc6642afd2",
+          "statement": "\nalter table private.weekly_source_local_protected_decision_receipts owner to postgres;"
+        },
+        {
+          "sha256": "9684ea056b15b36c2617dd140a5f2055b01ff91d7846955e353a586ed0f98280",
+          "statement": "\nrevoke all on private.weekly_source_local_protected_decision_receipts from public,anon,authenticated,service_role;"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/04102026_2155_weekly_source_accepted_publication_actions_v1.sql",
+      "name": "private.weekly_source_accepted_publication_actions_v1",
+      "statement_sha256": "441cf82ade2ce3490803fd692b1b8f8ca91dc1b11a2c1af9bf871e04401c6068",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "441cf82ade2ce3490803fd692b1b8f8ca91dc1b11a2c1af9bf871e04401c6068",
+          "statement": "\n\ncreate table private.weekly_source_accepted_publication_actions_v1 (\n  action_id uuid primary key,\n  decision_bundle_id uuid not null,\n  bundle_revision bigint not null check (bundle_revision>=1),\n  idempotency_key text not null unique check (char_length(idempotency_key) between 16 and 200),\n  request_sha256 bytea not null check (octet_length(request_sha256)=32),\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  action text not null check (action='APPROVE_UPDATED_HOURS'),\n  root_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,\n  family_booking_id text not null check (char_length(btrim(family_booking_id)) between 1 and 200),\n  root_version bigint not null check (root_version>=1),\n  agency_id uuid not null,\n  candidate_id uuid not null references public.candidates(id) on delete restrict,\n  client_id uuid not null references public.clients(id) on delete restrict,\n  contract_id uuid not null references public.contracts(id) on delete restrict,\n  week_ending_date date not null,\n  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,\n  final_revision_id uuid not null references public.weekly_source_final_revisions(id) on delete restrict,\n  finalisation_week_ending date not null,\n  final_revision_number bigint not null check (final_revision_number>=1),\n  manifest_hash bytea not null check (octet_length(manifest_hash)=32),\n  policy_fingerprint bytea not null check (octet_length(policy_fingerprint)=32),\n  expected_prior_origin jsonb not null check (\n    jsonb_typeof(expected_prior_origin)='object'\n    and coalesce(expected_prior_origin->>'kind','') in\n      ('INITIAL_AUTHORISED_TSFIN_V1','COMMITTED_SOURCE_HEAD_V1')\n  ),\n  before_inventory_sha256 bytea not null check (octet_length(before_inventory_sha256)=32),\n  before_entitlement_sha256 bytea not null check (octet_length(before_entitlement_sha256)=32),\n  origin_sha256 bytea not null check (octet_length(origin_sha256)=32),\n  planned_head_id uuid not null unique,\n  accepted_canonical_json jsonb not null check (\n    jsonb_typeof(accepted_canonical_json)='object'\n    and (accepted_canonical_json->>'publication_mode') is not distinct from 'IMMEDIATE'\n    and (accepted_canonical_json->'pending_bundle_id') is not distinct from 'null'::jsonb\n  ),\n  accepted_canonical_sha256 bytea not null check (octet_length(accepted_canonical_sha256)=32),\n  accepted_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  unique (decision_bundle_id,bundle_revision),\n  foreign key (decision_bundle_id,bundle_revision)\n    references public.weekly_source_entitlement_decision_bundles(decision_bundle_id,bundle_revision)\n    on delete restrict\n);"
+        },
+        {
+          "sha256": "9ba0bf9a4819d21ee5a14d89c492b48a55e89146a765cb368f79074a54c52c51",
+          "statement": "\nalter table private.weekly_source_accepted_publication_actions_v1 owner to postgres;"
+        },
+        {
+          "sha256": "8a625a56db681114801ef8cd32303e13d0d1f3adf82efb7beb811f204ab3c0ba",
+          "statement": "\nrevoke all on private.weekly_source_accepted_publication_actions_v1\n  from public,anon,authenticated,service_role;"
+        },
+        {
+          "sha256": "579f304fd6fe408a3e1e697b0561e3cd220b557e715a2f23082fc248d58b573d",
+          "statement": "\ncreate trigger weekly_source_accepted_publication_action_immutable\n  before update or delete on private.weekly_source_accepted_publication_actions_v1\n  for each row execute function private.weekly_source_accepted_publication_action_immutable_v1();"
+        },
+        {
+          "sha256": "b098d98a6e3dcc93de473f17b06eaa35991d8eef1d4f588d851e4542ead88000",
+          "statement": "\ncreate trigger weekly_source_accepted_publication_action_truncate_immutable\n  before truncate on private.weekly_source_accepted_publication_actions_v1\n  for each statement execute function private.weekly_source_accepted_publication_action_immutable_v1();"
+        }
+      ],
+      "source_forward_changes": []
+    },
+    {
+      "file": "supabase/migrations/05102026_0428_weekly_source_manual_review_commands.sql",
+      "name": "private.weekly_source_manual_review_commands",
+      "statement_sha256": "7cf3c963b71762de6185acde97e32f0aff9ce926cd40ce3f3145b8551730f906",
+      "conditional_if_not_exists": false,
+      "direct_access_class": "OWNER_ONLY",
+      "record_mutation_contract": "PRESERVE_COMPLETE_NATIVE_TABLE_TRIGGERS_AND_POLICIES",
+      "source_statements": [
+        {
+          "sha256": "7cf3c963b71762de6185acde97e32f0aff9ce926cd40ce3f3145b8551730f906",
+          "statement": "\n\n-- Immutable request replies and the actually observed opening authority only.\n-- No pay, recovery, invoice, archive or frozen Draft state is stored or changed.\n-- Existing unanchored reviews are deliberately not backfilled from today's report.\ncreate table private.weekly_source_manual_review_commands (\n  command_id uuid primary key,\n  command_kind text not null check (command_kind in ('OPEN','RESOLVE')),\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  request_sha256 bytea not null check (octet_length(request_sha256)=32),\n  review_id uuid not null references private.weekly_source_manual_reviews(id) on delete restrict,\n  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,\n  client_id uuid not null references public.clients(id) on delete restrict,\n  week_ending_date date not null,\n  opening_final_revision_id uuid references public.weekly_source_final_revisions(id) on delete restrict,\n  opening_projection_publication_id uuid references public.weekly_source_projection_publications(id) on delete restrict,\n  opening_target_family_id uuid references public.weekly_exceptional_pay_target_families(id) on delete restrict,\n  opening_event_sequence bigint check (opening_event_sequence>=0),\n  result_json jsonb not null check (jsonb_typeof(result_json)='object'),\n  completed_at_utc timestamptz not null default statement_timestamp()\n    check (isfinite(completed_at_utc)),\n  check (not (opening_final_revision_id is not null and opening_projection_publication_id is not null)),\n  check (command_kind='OPEN' or (opening_final_revision_id is null and opening_projection_publication_id is null)),\n  check ((opening_final_revision_id is not null or opening_projection_publication_id is not null)=\n    (opening_event_sequence is not null)),\n  check (opening_event_sequence is not null or opening_target_family_id is null),\n  check ((command_kind='OPEN' and result_json->>'already_open'='false')=\n    (opening_final_revision_id is not null or opening_projection_publication_id is not null))\n);"
+        },
+        {
+          "sha256": "022f08fe9fa0ae17059d283409e74409548fb6263e63e561aa64ba3c59a688d3",
+          "statement": "\nalter table private.weekly_source_manual_review_commands owner to postgres;"
+        },
+        {
+          "sha256": "462364f08a0d9cf4cf930a4c6a33521e0307cdc39de386be38373e6e9b5bd42f",
+          "statement": "\nrevoke all on private.weekly_source_manual_review_commands from public,anon,authenticated,service_role;"
+        },
+        {
+          "sha256": "2b0bf175db26c1a9c28bbc5fa87f50a9d8a57e56aeb363b1c2e3bd6b903e51ad",
+          "statement": "\ncreate trigger weekly_source_manual_review_command_immutable\n  before update or delete on private.weekly_source_manual_review_commands\n  for each row execute function private.weekly_source_manual_review_command_immutable_v1();"
+        },
+        {
+          "sha256": "55b80b9e8925ad629f92e8ff1cde798024e4daac65f185f7a395098df5b2554a",
+          "statement": "\ncreate trigger weekly_source_manual_review_command_no_truncate\n  before truncate on private.weekly_source_manual_review_commands\n  for each statement execute function private.weekly_source_manual_review_command_immutable_v1();"
+        }
+      ],
+      "source_forward_changes": []
+    }
+  ],
+  "public_table_contract_unchanged": true,
+  "no_new_table_or_policy_or_trigger": true,
+  "no_native_mutation_contract_invented": true
+}

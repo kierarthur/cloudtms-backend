@@ -33,7 +33,7 @@ begin
   end loop;
   -- Full ordinary receipt wrappers and Local retain their reviewed body bytes.
   for r in select * from (values
-    ('public.weekly_exceptional_pay_complete_local_v1(jsonb)','b784c6b55a7255f34f2d46aaf10ed5ad98aceccd22ba400207343bf1c0c6f5cf'),
+    ('public.weekly_exceptional_pay_complete_local_v1(jsonb)','47dc12fb32f5a32c2e925351b8f191258e484a069ed3062f702610eeee24504e'),
     ('private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)','fc492a7e92c911ef618bf26808b9ec9fb483a2d5745e217d76def3f0672a70f7'),
     ('private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)','37cb2de5cf4038903079a965171540cb08be6277d3f8ba038bcf9643ca2d3923'),
     ('private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)','037b250753c5230362737684061bef25e9f1e3673155326784b76240213be711')

@@ -1,5 +1,15 @@
 # HealthRoster v2 TEST build progress
 
+## Current classification checkpoint — 14 October 2026, 06:10 UTC
+
+Money publication `dd09a6d461f6a36575ab28e7f77a3c06f8bd05fe` is integrated as a current-source checkpoint. Thirty immutable artifacts plus their manifest and four external source records remain exact. The complete classification support is contained in late atomic root `14102026_0709_healthroster_current_literal_classification_v1.sql`; the existing2205 owner is untouched. The complete ACL verifier and current Local-body expectation are integrated, and both mandatory verifier arrays preserve their158/159 ordered prefixes, adding15 to173/174 without changing release identity or contract fields. Fourteen full SQL reversals and nineteen retained verifier inputs are checked. The root mount reader's initial text-hunk assumption for the separately reviewed append-only JSON proof held before writing source; its bounded semantic check now verifies full prefixes and all other fields.
+
+All40 selected/archive/new source pins match saved and staged Git bytes. Fourteen immutable source vectors pass, atomic source packaging is two files/41 statements, database source integrity passes399 migrations/1058 repeatables, tracked credential scan passes8967 files and staged whitespace passes. These are source facts only: conditional/dynamic DDL, native catalogue/ACL, generated contract and all real acceptance remain unproved. Planned U3 Checklist/Undo/original presentation and any accepted A0 isolation fix require a fresh final source/classification/verifier census before sealing. No database, release or recording entry was invoked.
+
+The corrected plan ownership is recorded on the broad feature branch at `fa4d3fab074ce07c25e995f6587641403c0a6e9c`: primary final plan §§11/28.8 authorises the single planned WP-U3 reader/Imports consumer, while the internal Banking-overlay claim was an unsupported handover assumption. Historical inputs remain exact. Current index is still the accepted A0 foundation6dca bytes; scoped payment lifecycle22 and finite read-context15 are awaiting independent review/publication before the route mount. No missing SEND or Checklist permission is fabricated.
+
+Install1, quiet-window, native isolation, final Part B, TEST release/activation/TestFlight/phone and NEXT F17 holds remain as recorded below. All our DB clients remain closed. Two normal installs remains the maximum; genuine past open-week acceptance is still required.
+
 ## Current source checkpoint — 14 October 2026, 05:57 UTC
 
 The executable Install2 source is published at `efc03dc5f540ac128838b34376790a9aa49fc166`. Reviewed A0 native/runtime foundations, Report FIN/current-owner composition, and the five protected same-installed recording/streamed Git-proof outputs are mounted. Source integrity passes399 migrations/1057 repeatables. The managed five-output mount preserves nine current dependencies, reverses all22 reviewed hunks, and has independent actual-root source acceptance; no recording, native qualification, release or activation has run.

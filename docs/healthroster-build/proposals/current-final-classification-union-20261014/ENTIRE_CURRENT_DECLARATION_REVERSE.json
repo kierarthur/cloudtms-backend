@@ -1,0 +1,18 @@
+{
+  "source_only": true,
+  "current_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "before_symbols": 2688,
+  "forward_symbols": 2688,
+  "reverse_symbols": 2688,
+  "new_symbols": [],
+  "removed_symbols": [],
+  "changed_source_definition_hashes": [
+    {
+      "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+      "before_sha256": "14b1d1b1d4d121bddd3ded6c0274b6f2a8acd5d6993f161e3203b4467f21d83d",
+      "after_sha256": "090e00798a4e4726bc9285e439b6f4fe56fa0c896fb9b0e2f9668268d3c9e1ab"
+    }
+  ],
+  "all_other_current_native_definition_hashes_equal": true,
+  "full_reverse_mismatches": []
+}

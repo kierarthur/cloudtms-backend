@@ -1,0 +1,193 @@
+{
+  "schema_version": "MONEY_A0_RPC_ISOLATION_SOURCE_BOUNDARY_V1",
+  "source_only": true,
+  "current_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "note_file": "docs/healthroster-build/MONEY_A0_RPC_ISOLATION_SOURCE_BOUNDARY_14102026.md",
+  "note_sha256": "7bb87c3f8e3489c51cd4c207fc827956de27623a7d820ef95c7a0aefec17aa62",
+  "current_exact_correction_entry_and_guard_owners": [
+    {
+      "kind": "CREATE",
+      "name": "private.timesheet_correction_a0_native_lock_fence_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "offset": 159,
+      "header": "private.timesheet_correction_a0_native_lock_fence_v1(p_request_id uuid,p_actor_user_id uuid) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "definition_sha256": "d9979f3a2ee5bad9586311658ed96d8a916148243dfdf0396160338469e1ec79",
+      "source_body_sha256": "1ebe1334d420a1fec05ca34d16a5e308dcd23d580d4721c6f1cefdc769ce5c7a"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.timesheet_correction_a0_writer_admit_v1",
+      "inputTypes": "uuid[],text[],text",
+      "id": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+      "offset": 1525,
+      "header": "private.timesheet_correction_a0_writer_admit_v1(p_ids uuid[],p_bookings text[],p_kind text) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "f319ef939bfed68ae1993c235ad669ac00dada9211ac615b724ae2f8a092e59f",
+      "source_body_sha256": "9ae40cf75dd788c5b989be6e89dfdb58b60370cb9cf3d674ebdaf33b86f0e330"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_authorise_atomic_v1",
+      "inputTypes": "uuid,bigint,jsonb,uuid,timestamp with time zone",
+      "id": "public.timesheet_correction_authorise_atomic_v1(uuid,bigint,jsonb,uuid,timestamp with time zone)",
+      "offset": 21641,
+      "header": "public.timesheet_correction_authorise_atomic_v1( p_request_id uuid,p_expected_state_revision bigint,p_prepared jsonb,p_actor_user_id uuid,p_now_utc timestamptz default now() ) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+      "definition_sha256": "bf79eb605fda9f71811670dcfae5706d0fd83713301671ab1530c6cbe084c461",
+      "source_body_sha256": "22b6359070d372a14ccf4299ee9c85aae14f1532f78ccb69d80d8c7b8506d8be"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_cancel_atomic_v1",
+      "inputTypes": "text,uuid,bigint,uuid,timestamp with time zone",
+      "id": "public.timesheet_correction_cancel_atomic_v1(text,uuid,bigint,uuid,timestamp with time zone)",
+      "offset": 3357,
+      "header": "public.timesheet_correction_cancel_atomic_v1( p_environment text,p_request_id uuid,p_expected_state_revision bigint,p_actor_user_id uuid,p_now_utc timestamptz default now() ) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "definition_sha256": "b98ce36aed26856b0a3109997c4a4895eb2823335d51139f356d0b004eff8e9d",
+      "source_body_sha256": "87ee6fb46ec7960246da7f473556c616611528560ed7ca0bcc9c98c20ea18203"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_chain_scope_v1",
+      "inputTypes": "uuid,boolean,integer,integer",
+      "id": "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)",
+      "offset": 0,
+      "header": "public.timesheet_correction_chain_scope_v1( p_timesheet_id uuid, p_lock_rows boolean default false, p_max_depth integer default 32, p_max_members integer default 100 ) returns jsonb language plpgsql security definer set search_path to 'public', 'extensions', 'pg_temp' set plpgsql_check.mode to 'disabled'",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+      "definition_sha256": "92f875ecc237fd1c09a078dc6c90dc3bf4781ab8067f67e61924a6fec8d1b4c6",
+      "source_body_sha256": "8b34ecfcd815d10eedd5860c5b5358c9fd772a07a137fe46f2701e7055e00f5d"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_create_projection_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "id": "public.timesheet_correction_create_projection_v1(uuid,uuid,uuid,uuid)",
+      "offset": 20928,
+      "header": "public.timesheet_correction_create_projection_v1( p_candidate_id uuid,p_contract_week_id uuid default null,p_target_timesheet_id uuid default null,p_anchor_timesheet_id uuid default null ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','private','public','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "definition_sha256": "475c7d89f9ba05da4a80218b3ec218a1ec4ddf8277b0d26d6191aecb108c523c",
+      "source_body_sha256": "9800a45edeec6d626a983bbbd8bea2624f2d7510770524b796d0775543383d19"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_credit_candidates_v1",
+      "inputTypes": "jsonb",
+      "id": "public.timesheet_correction_credit_candidates_v1(jsonb)",
+      "offset": 344,
+      "header": "public.timesheet_correction_credit_candidates_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "definition_sha256": "624dd39a6f3eca71671583d438a2734ad3a0706f869e590e0beb2a5192a48b89",
+      "source_body_sha256": "ad3e322298ad842b81370d43d647224667bf7ef7e2866ca8980c6fa1148d3b90"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_manager_summary_v1",
+      "inputTypes": "uuid,integer,uuid,text",
+      "id": "public.timesheet_correction_manager_summary_v1(uuid,integer,uuid,text)",
+      "offset": 158,
+      "header": "public.timesheet_correction_manager_summary_v1( p_workflow_id uuid,p_workflow_generation integer,p_approval_request_id uuid,p_manifest_sha256 text ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "definition_sha256": "d3094ac467be75aaa663872b1583a3b2b9102627609bfb53aa98b836961e4ee8",
+      "source_body_sha256": "21d5b4bad0d2d4f778b78ee905c1e271134f1837fb2156de97fac3ef93912fae"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_pair_lifecycle_preview_v1",
+      "inputTypes": "jsonb,text,uuid,integer",
+      "id": "public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer)",
+      "offset": 0,
+      "header": "public.timesheet_correction_pair_lifecycle_preview_v1( p_items jsonb, p_action text, p_actor_user_id uuid, p_max_members integer default 100 ) returns jsonb language plpgsql security definer set search_path to 'public','extensions','pg_temp'",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_preview.sqlinc",
+      "definition_sha256": "c94287d7f76f666c21f8d603c2e0efc8232ec08026e78961f40942fad457701d",
+      "source_body_sha256": "ffaae67e147688aa8450604c0272715bee0b3eea59c50ab9ad5811a39736c5a4"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_pair_transition_v1",
+      "inputTypes": "uuid,text,uuid,uuid,text,boolean,integer",
+      "id": "public.timesheet_correction_pair_transition_v1(uuid,text,uuid,uuid,text,boolean,integer)",
+      "offset": 0,
+      "header": "public.timesheet_correction_pair_transition_v1( p_timesheet_id uuid, p_action text, p_actor_user_id uuid, p_operation_id uuid default null, p_expected_chain_fingerprint text default null, p_lock_rows boolean default true, p_max_members integer default 100 ) returns jsonb language plpgsql security definer set search_path to 'public','extensions','pg_temp'",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+      "definition_sha256": "ccb27eb7cacc6ef518cc6623d63a60200b92828f24dbdb3124d27d634f6c5d04",
+      "source_body_sha256": "fdb0bcc1ea013dcbf5891d6e531164403966d519bfe916dbe28748025c9f7d88"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_prepare_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "public.timesheet_correction_prepare_v1(uuid,uuid)",
+      "offset": 15305,
+      "header": "public.timesheet_correction_prepare_v1(p_request_id uuid,p_actor_user_id uuid) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+      "definition_sha256": "86da044d0e3a0fe64b2240e3235dfa939726b48dd56880058ce09640e64efb67",
+      "source_body_sha256": "aba462277b930f180ff89736937e647cf877181a3a9332139c9d9d03c4ab13e3"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_request_authority_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "public.timesheet_correction_request_authority_v1(uuid,uuid)",
+      "offset": 188,
+      "header": "public.timesheet_correction_request_authority_v1(p_request_id uuid,p_actor_user_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "file": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+      "definition_sha256": "2863e9458ba186c496fb39bdacd02e0c99240175f6463c5080c86ac18bfd86e5",
+      "source_body_sha256": "f0798669b3b4800dfdc95121847a65831b362c90c1ff95663f03045c3516414c"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_request_projection_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "public.timesheet_correction_request_projection_v1(uuid,uuid)",
+      "offset": 19941,
+      "header": "public.timesheet_correction_request_projection_v1(p_timesheet_id uuid,p_candidate_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','private','public','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "definition_sha256": "946f8db3f61de501320af3f91bf5639d0a89335c4901e2c41c70b190297fe723",
+      "source_body_sha256": "5c46f69f4b98f38d383c9e5434b5614a5ad986386ae364d301bd41538f31704b"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_return_to_draft_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "public.timesheet_correction_return_to_draft_v1(uuid,uuid)",
+      "offset": 8471,
+      "header": "public.timesheet_correction_return_to_draft_v1(p_request_id uuid,p_actor_user_id uuid) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "definition_sha256": "0748a75ea6fae89267c3d4a8c72824f1b506869f13dfd69ed2e45ef12f588b79",
+      "source_body_sha256": "282b5ace050e3bea3bc5911767c46ca8caf50e352e2312afcb524fdb84ff4996"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_send_v1",
+      "inputTypes": "jsonb,uuid,timestamp with time zone",
+      "id": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "offset": 7125,
+      "header": "public.timesheet_correction_send_v1(p_request jsonb,p_actor_user_id uuid,p_now_utc timestamptz default now()) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "definition_sha256": "b4d90e94d55b16536f72f278bb8c6933a45f91638fa218423d0bab36735f35e7",
+      "source_body_sha256": "c1aa78bbd3969b6056b3e847549b68739afac08087eb9c5946258fd9b846d6ad"
+    },
+    {
+      "kind": "CREATE",
+      "name": "public.timesheet_correction_workflow_projection_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "public.timesheet_correction_workflow_projection_v1(uuid,uuid)",
+      "offset": 1098,
+      "header": "public.timesheet_correction_workflow_projection_v1(p_workflow_id uuid,p_candidate_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "definition_sha256": "769fb71da588f74e29899a89a899e556fb39a25a1dc8a0594099c27b4c867060",
+      "source_body_sha256": "c9a2b8cca7094bda2c7b0b85efe6a1b5bb9c1f9b531e816a1174257045fc8b38"
+    }
+  ],
+  "current_per_rpc_isolation_declarations": [],
+  "source_native_creator_candidates_reference": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_FOUR_TABLE_CREATOR_CENSUS.json",
+  "candidate_census_not_complete_rpc_or_physical_catalogue": true,
+  "required_native_isolation": null,
+  "hidden_rr_visibility_solved": false,
+  "all_five_native_schedules": "HOLD",
+  "actual_postgrest_role_cache_session_native_proof": "HOLD",
+  "sql_settings_role_or_runtime_mutation": false
+}
