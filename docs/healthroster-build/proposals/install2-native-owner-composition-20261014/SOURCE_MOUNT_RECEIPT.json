@@ -1,0 +1,50 @@
+{
+  "sourceOnly": true,
+  "status": "MOUNTED_SOURCE_NATIVE_AND_CANONICAL_GATES_HELD",
+  "repeatable": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+  "repeatableSha256": "39dfc2377184d170450d4028de43791d6561755d844cd5f2d4b12be2d7f178a1",
+  "owners": [
+    {
+      "name": "public.weekly_exceptional_pay_complete_local_v1",
+      "file": "weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+      "inputDefinitionSha256": "6330a93faec20e7a1e6ffa421dbd2535daebbd58f77599eaa5b41a8c3614c04b",
+      "completeFileSha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION"
+    },
+    {
+      "name": "public.weekly_source_manual_review_resolve_v1",
+      "file": "weekly_source_manual_review_resolve_v1.complete.sqlinc",
+      "inputDefinitionSha256": "a522deee42487d3a582dda9d74f3c270a186d69d9659f0c31978589005c9a282",
+      "completeFileSha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796",
+      "decision": "RETAIN_COMPLETE_CURRENT_COMMAND_REPLAY_AND_ACCEPTED_EVIDENCE_OWNER; REJECT_STALE_BROAD_PRE_COMMAND_REPLACEMENT"
+    },
+    {
+      "name": "public.weekly_exceptional_pay_stage_c1_request_v1",
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+      "inputDefinitionSha256": "2c311b23730e311166f5df8ebd86cbc051579352f43693720c142f8c195b4ff2",
+      "completeFileSha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5",
+      "decision": "COMPLETE_Q45_ACTOR_EXACT_EVENT_OWNER_PLUS_CURRENT_NEXT_ADMISSION_BEFORE_FIRST_REPLAY"
+    },
+    {
+      "name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "file": "weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "inputDefinitionSha256": "8c5dba0fd51cb20504c3a06f6bca0f4e15c9bb7e36753cf48b9c7d251969539a",
+      "completeFileSha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION"
+    },
+    {
+      "name": "private.weekly_source_manual_reviews_finalised_v1",
+      "file": "weekly_source_manual_reviews_finalised_v1.complete.sqlinc",
+      "inputDefinitionSha256": "aca683c58b274102191ef9044bd1a9471d0c23ba86d3a5bfc017bff04539de69",
+      "completeFileSha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION"
+    }
+  ],
+  "hunks": 36,
+  "existingPublicServiceFunctions": 3,
+  "existingOwnerPrivateFunctions": 2,
+  "newSignatures": 0,
+  "newServiceGrants": 0,
+  "frozenInputsUnmodified": true,
+  "noDatabaseOrReleaseAction": true
+}

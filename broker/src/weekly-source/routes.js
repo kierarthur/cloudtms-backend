@@ -7,6 +7,7 @@ import { bpayBusyEnvelope } from '../bpay-busy.js';
 import { isActivePaymentActor } from '../payment-actor-permission.js';
 import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs';
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
+import { validateRuleSetValues } from './rule-set-validation.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -34,6 +35,7 @@ const DIRECT_RPC_COMMANDS = Object.freeze({
   ADMIT_SOURCE_INVOICE: 'weekly_source_invoice_admit_atomic_v1',
   MOVE_SOURCE_INVOICE: 'weekly_source_invoice_move_atomic_v1',
   ACCEPT_NHSP_SOURCE_CHARGES: 'weekly_source_charge_accept_atomic_v1',
+  RELEASE_INVOICE_HOLD: 'weekly_source_invoice_hold_release_atomic_v1',
   // WP-12 handoff N2: the Office `Unauthorise` control on a Weekly-Source-managed
   // root had no route behind it, so the screen could not complete a withdrawal at
   // all. The owner takes one jsonb request like every other Weekly Source owner
@@ -445,18 +447,60 @@ function assertNoBrowserDeploymentScope(body) {
   }
 }
 
+const RULE_SETTINGS_REFUSALS = Object.freeze({
+  WEEKLY_SOURCE_RULE_R1: 'These rules need a separate final report.',
+  WEEKLY_SOURCE_RULE_R2: 'Choose the separate final-report layout first.',
+  WEEKLY_SOURCE_RULE_R3: 'The selected file must contain the chosen invoice amount.',
+  WEEKLY_SOURCE_RULE_R4: 'This VAT method needs amounts supplied by the file or the Contract calculation.',
+  WEEKLY_SOURCE_RULE_R6: 'Contract-rate differences apply only to source amounts.',
+  WEEKLY_SOURCE_RULE_R7: 'Source expenses are waiting for compatible Banking Pay support and the weekly summary layout.',
+  WEEKLY_SOURCE_RULE_R8: 'Every member needs a dated Weekly Source policy for these rules.',
+  WEEKLY_SOURCE_RULE_R9: 'Choose an earliest final-upload time at or after the group cut-off; weekly summaries and agency invoices use Not used.',
+  WEEKLY_SOURCE_RULE_R10: 'NHSP keeps its existing source rules.',
+  WEEKLY_SOURCE_RULE_R13: 'This agency-invoice preset has one setting: attach the HealthRoster section.',
+  WEEKLY_SOURCE_RULE_R14: 'This client cannot use the unsigned agency-invoice preset.',
+  WEEKLY_SOURCE_RULE_R15: 'Every member must have self-bill enabled for these rules.',
+  WEEKLY_SOURCE_RULE_SET_STALE: 'The rule set changed. Refresh it before saving.',
+  WEEKLY_SOURCE_RULE_GROUP_STALE: 'The source group changed. Refresh it before assigning rules.',
+  WEEKLY_SOURCE_RULE_FINALISED_WEEK_REFUSED: 'Rules cannot change for a week already finalised for any member.',
+  WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED: 'Choose a future, unfinalised week for the new rules.',
+  WEEKLY_SOURCE_RULE_ASSIGNMENT_OVERLAP: 'These rule dates overlap another saved assignment.',
+  WEEKLY_SOURCE_RULE_ACTIVE_AGENCY_TRANSITION_REQUIRED: 'The agency-invoice rules are enabled. A reviewed setup transition is needed before changing their dates.',
+  WEEKLY_SOURCE_RULE_AGENCY_PROFILE_CONFLICT: 'This group has used another file layout. Its source history cannot be changed by this preset.',
+  WEEKLY_SOURCE_RULE_GROUP_NOT_APPLICABLE: 'Choose an active Roster source group in this Office.',
+  WEEKLY_SOURCE_RULE_VERSION_NOT_FOUND: 'The selected rule version is unavailable in this Office.',
+  WEEKLY_SOURCE_RULE_SET_NOT_FOUND: 'The selected rule set is unavailable in this Office.',
+  WEEKLY_SOURCE_RULE_REQUEST_REUSED: 'This save request was already used with different values. Refresh before trying again.',
+});
+
+async function callRuleSettingsRpc(dependencies, name, request) {
+  try { return await callRpc(dependencies, name, request); }
+  catch (error) {
+    const apiCode = String(error?.json?.code || error?.code || '');
+    if (apiCode === 'PGRST202') {
+      fail('WEEKLY_SOURCE_RULE_DEPENDENCY_UNAVAILABLE', 'Source rules cannot be confirmed right now. Retry after the service refreshes.', 503);
+    }
+    const reason = String(error?.json?.message || error?.message || '');
+    if (Object.hasOwn(RULE_SETTINGS_REFUSALS, reason)) {
+      fail(reason, RULE_SETTINGS_REFUSALS[reason], /STALE|FINALISED|OVERLAP|TRANSITION_REQUIRED/.test(reason) ? 409 : 400);
+    }
+    throw error;
+  }
+}
+
 async function handleSettingsGet(req, env, dependencies, user, kind, id = null) {
   const deployment = weeklySourceDeploymentContext(env);
   const query = settingsQuery(new URL(req.url), id ? ['effective_date'] : []);
   const definitions = {
     global: ['weekly_source_global_settings_get_v1', null],
     groups: ['weekly_source_source_groups_get_v1', null],
+    rules: ['weekly_source_rule_sets_get_v1', null],
     clients: ['weekly_source_client_settings_get_v1', 'client_id'],
     contracts: ['weekly_source_contract_settings_get_v1', 'contract_id'],
   };
   const [rpcName, idKey] = definitions[kind] || [];
   if (!rpcName) fail('WEEKLY_SOURCE_SETTINGS_ROUTE_INVALID', 'This settings route is unavailable.', 404);
-  const result = await callRpc(dependencies, rpcName, {
+  const result = await (kind === 'rules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
     actor_user_id: user.id,
     ...deployment,
     ...query,
@@ -471,15 +515,32 @@ async function handleSettingsPut(req, env, dependencies, user, kind, id = null) 
   const body = await readJsonBody(req, 64 * 1024);
   assertNoBrowserDeploymentScope(body);
   assertNoBrowserFinancialFacts(body);
+  if (kind === 'rules' || kind === 'groupRules') {
+    const keys = kind === 'rules'
+      ? ['source_group_id', 'rule_set', 'values', 'request_id']
+      : ['rule_set_version_id', 'effective_from_week_ending', 'effective_to_week_ending', 'expected_group_version', 'request_id'];
+    if (Object.keys(body).some((key) => !keys.includes(key))) {
+      fail('WEEKLY_SOURCE_RULE_SETTINGS_REQUEST_INVALID', 'The source rules request is invalid.', 400);
+    }
+    if (kind === 'rules') {
+      // Syntax only. The DB owner resolves group, membership, cutoff and NEXT
+      // readiness again under locks; none comes from browser context.
+      body.values = validateRuleSetValues(body.values);
+      body.source_group_id = canonicalUuid(body.source_group_id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', 'Source group');
+    }
+    body.request_id = canonicalUuid(body.request_id, 'WEEKLY_SOURCE_RULE_REQUEST_INVALID', 'Request');
+  }
   const definitions = {
     global: ['weekly_source_global_settings_save_atomic_v1', null],
     groups: ['weekly_source_source_group_save_atomic_v1', null],
+    rules: ['weekly_source_rule_set_version_save_atomic_v1', null],
+    groupRules: ['weekly_source_group_rule_assign_atomic_v1', 'source_group_id'],
     clients: ['weekly_source_client_settings_save_atomic_v1', 'client_id'],
     contracts: ['weekly_source_contract_settings_save_atomic_v1', 'contract_id'],
   };
   const [rpcName, idKey] = definitions[kind] || [];
   if (!rpcName) fail('WEEKLY_SOURCE_SETTINGS_ROUTE_INVALID', 'This settings route is unavailable.', 404);
-  const result = await callRpc(dependencies, rpcName, {
+  const result = await (kind === 'rules' || kind === 'groupRules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
     ...body,
     actor_user_id: user.id,
     ...deployment,
@@ -832,12 +893,14 @@ async function handleUploadPreview(req, env, dependencies, user) {
   const { fileKey, bytes } = await loadUploadBytes(body, env, dependencies);
   let parsed;
   let acceptContext = {};
+  let coverageWarnings;
   if (typeof dependencies.previewUpload === 'function') {
     const result = await dependencies.previewUpload({
       body, bytes, actor: user, env, fileKey, parseWeeklySourceFile,
     });
     parsed = result?.parsed;
     acceptContext = result?.accept_context ?? {};
+    coverageWarnings = result?.coverage_warnings;
   } else {
     const parserOptions = plainObject(body.parser_options ?? {}, 'WEEKLY_SOURCE_PARSER_OPTIONS_INVALID', 'Source options');
     parsed = await parseWeeklySourceFile(bytes, parserOptions);
@@ -851,6 +914,7 @@ async function handleUploadPreview(req, env, dependencies, user) {
     file_key: fileKey,
     preview: parsed,
     accept_context: acceptContext,
+    ...(coverageWarnings === undefined ? {} : { coverage_warnings: coverageWarnings }),
   });
 }
 
@@ -1082,6 +1146,25 @@ function protectedActionErrorResponse(error) {
 function routeErrorResponse(error) {
   const busy = bpayBusyEnvelope(error);
   if (busy) return jsonResponse(busy.status, busy.body);
+  // Only the declared F8 refusals use their purpose-bound SQL detail as product
+  // wording. Unrelated RPC errors retain the established transport verbatim.
+  const f8Code = String(error?.json?.message || error?.code || '');
+  const f8Messages = {
+    WEEKLY_SOURCE_FINAL_UPLOAD_CONTEXT_INVALID: 'The final file could not be checked. Refresh the import before trying again.',
+    WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE: 'The import period could not be checked. Refresh the upload before trying again.',
+    WEEKLY_SOURCE_CLIENT_GROUP_HAS_CURRENT_FINAL_REVISION: 'This client has a finalised report in its current group and cannot be moved.',
+  };
+  const f8Patterns = {
+    WEEKLY_SOURCE_FINAL_FILE_UPLOADED_TOO_EARLY: /^The final file can be uploaded from (?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) [0-2]\d:[0-5]\d \(\d{2}\/\d{2}\/\d{4}\)\.$/,
+    WEEKLY_SOURCE_FINAL_FILE_COVERAGE_INCOMPLETE: /^(?:Upload an export covering the whole week\.|The current file covers \d{2}\/\d{2}\/\d{4}–\d{2}\/\d{2}\/\d{4} only\. Upload an export covering the whole week\.)$/,
+    WEEKLY_SOURCE_COVERAGE_BEFORE_RULE_SET: /^Import coverage starts from \d{2}\/\d{2}\/\d{4}, the first week using these settings\.$/,
+  };
+  if (Object.hasOwn(f8Messages, f8Code) || Object.hasOwn(f8Patterns, f8Code)) {
+    const detail = String(error?.json?.details || error?.message || '');
+    return jsonResponse(409, { ok: false, error_code: f8Code,
+      message: f8Messages[f8Code] || (f8Patterns[f8Code].test(detail) ? detail
+        : 'The final file could not be checked. Refresh the import before trying again.') });
+  }
   if (error instanceof WeeklySourceRouteError) {
     return jsonResponse(error.status, {
       ok: false,
@@ -1165,6 +1248,16 @@ export async function dispatchWeeklySourceRequest(req, env, ctx, dependencies = 
     if (path === `${officePrefix}/settings/source-groups` && req.method === 'PUT') {
       return await handleSettingsPut(req, env, dependencies, user, 'groups');
     }
+    if (path === `${officePrefix}/settings/rule-sets` && req.method === 'GET') {
+      return await handleSettingsGet(req, env, dependencies, user, 'rules');
+    }
+    if (path === `${officePrefix}/settings/rule-sets` && req.method === 'PUT') {
+      return await handleSettingsPut(req, env, dependencies, user, 'rules');
+    }
+    const groupRulesMatch = path.match(/^\/api\/weekly-source\/v1\/settings\/source-groups\/([0-9a-f-]+)\/rules$/i);
+    if (groupRulesMatch && req.method === 'PUT') {
+      return await handleSettingsPut(req, env, dependencies, user, 'groupRules', groupRulesMatch[1]);
+    }
     const clientSettingsMatch = path.match(/^\/api\/weekly-source\/v1\/settings\/clients\/([0-9a-f-]+)$/i);
     if (clientSettingsMatch && req.method === 'GET') {
       return await handleSettingsGet(req, env, dependencies, user, 'clients', clientSettingsMatch[1]);
@@ -1227,6 +1320,8 @@ export const WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT = Object.freeze({
   settingsRoutes: Object.freeze([
     '/settings/global',
     '/settings/source-groups',
+    '/settings/rule-sets',
+    '/settings/source-groups/:sourceGroupId/rules',
     '/settings/clients/:clientId',
     '/settings/contracts/:contractId',
   ]),

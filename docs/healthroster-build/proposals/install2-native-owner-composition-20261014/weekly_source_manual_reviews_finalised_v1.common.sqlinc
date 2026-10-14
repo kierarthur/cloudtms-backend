@@ -1,0 +1,72 @@
+create or replace function private.weekly_source_manual_reviews_finalised_v1(p_final_revision_id uuid,p_actor_user_id uuid)
+returns integer language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_final public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_review private.weekly_source_manual_reviews%rowtype;
+  v_anchor private.weekly_source_manual_review_commands%rowtype;
+  v_opening_upload_id uuid;
+  v_count integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select f.* into strict v_final from public.weekly_source_final_revisions f where f.id=p_final_revision_id;
+  select c.* into strict v_cycle from public.weekly_source_cycles c where c.id=v_final.source_cycle_id;
+  if p_actor_user_id is null or v_final.state is distinct from 'CURRENT' or v_final.finalised_by_user_id is distinct from p_actor_user_id
+     or v_final.finalised_at_utc is null or not isfinite(v_final.finalised_at_utc) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_FINAL_AUTHORITY_INVALID' using errcode='55000'; end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  -- The sole reviewed Final/Correct mutation callers invoke this private hook
+  -- after their successful CURRENT CAS, never on preparation or replay. Do not
+  -- compare preparation timestamps, nor xmin to the top xid: the real owner
+  -- may write in a PL/pgSQL exception subtransaction. Validate its actual CAS
+  -- result here; caller closure and genuine-owner native proof are mandatory.
+  if (v_final.authority_scope_kind='CYCLE' and v_cycle.current_final_revision_id is distinct from v_final.id)
+    or (v_final.authority_scope_kind='NHSP_REPORT_SCOPE' and not exists(
+      select 1 from public.weekly_source_report_scopes s where s.id=v_final.report_scope_id
+        and s.source_cycle_id=v_cycle.id and s.current_final_revision_id=v_final.id)) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_FINAL_AUTHORITY_INVALID' using errcode='55000'; end if;
+  for v_review in
+    with contained as materialized (
+      select distinct s.work_event_id,s.candidate_id,s.client_id,s.contract_id,s.work_date
+      from private.weekly_source_manual_review_final_rows_v2(v_final.id) s
+    )
+    select r.* from contained s join private.weekly_source_manual_reviews r
+      on r.source_group_id=v_cycle.source_group_id and r.work_event_id=s.work_event_id and r.state='OPEN'
+      and r.candidate_id=s.candidate_id and r.client_id=s.client_id
+      and r.contract_id=s.contract_id and r.work_date=s.work_date
+    order by r.id for update of r
+  loop
+    select c.* into v_anchor from private.weekly_source_manual_review_commands c where c.review_id=v_review.id
+      and (c.opening_final_revision_id is not null or c.opening_projection_publication_id is not null);
+    -- A legacy review without captured opening provenance needs an explicit
+    -- Office remedy. Never manufacture an anchor using today's report.
+    if not found or v_anchor.opening_final_revision_id=p_final_revision_id
+       or not exists(select 1 from public.weekly_source_client_manifests m where m.final_revision_id=v_final.id
+         and m.source_group_id=v_cycle.source_group_id and m.source_cycle_id=v_cycle.id and m.client_id=v_review.client_id) then continue; end if;
+    -- A new Final for the report already queried is not a new imported report.
+    -- Resolve the immutable opening authority, not preparation timestamps or
+    -- the currently displayed row; rebuilt projections of that upload also
+    -- remain the same report. Missing opening evidence is never a remedy.
+    if v_anchor.opening_final_revision_id is not null then
+      select f.upload_id into v_opening_upload_id from public.weekly_source_final_revisions f
+        where f.id=v_anchor.opening_final_revision_id;
+    else
+      select p.upload_id into v_opening_upload_id from public.weekly_source_projection_publications p
+        where p.id=v_anchor.opening_projection_publication_id;
+    end if;
+    if v_opening_upload_id is null or v_opening_upload_id=v_final.upload_id then continue; end if;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'ACCEPT_SYSTEM_HOURS',
+      v_cycle.source_group_id,v_review.client_id,v_cycle.finalisation_week_ending);
+    update private.weekly_source_manual_reviews set state='RESOLVED',resolved_by_user_id=p_actor_user_id,
+      resolved_at_utc=statement_timestamp(),resolution_kind='OFFICE_ACCEPTED_SOURCE' where id=v_review.id;
+    perform public._audit_insert('weekly_source_manual_review',v_review.id::text,'WEEKLY_SOURCE_MANUAL_REVIEW_RESOLVED',null,
+      jsonb_build_object('resolution_kind','OFFICE_ACCEPTED_SOURCE','work_event_id',v_review.work_event_id,
+        'final_revision_id',v_final.id,'reason','A later finalised report contains this shift'),
+      'Later finalised source report resolved imported-shift review',p_actor_user_id);
+    v_count:=v_count+1;
+  end loop;
+  return v_count;
+end;
+$function$;

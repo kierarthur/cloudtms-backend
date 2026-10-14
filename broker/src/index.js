@@ -1,4 +1,5 @@
 import { handleBpayNextPayMethodChange, createBpayNextPayMethodChangeRpc } from './bpay-next-pay-method-change.js';
+import { validateLegacyInvoiceManifestSuppressions } from './weekly-source/invoice-render-qualification.js';
 /**
  * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets) HELLO WORLD
  *
@@ -94,6 +95,7 @@ import {
   recoverWeeklySourceFinalisationPayProjection
 } from './weekly-source/finalisation-pay-orchestrator.mjs';
 import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';
+import { createOffRuleTransportRpc } from './weekly-source/off-rule-transport-rpc.mjs';
 import { handleBulkRowFreshnessRequest } from './bulk-row-freshness.js';
 import {
   buildCanonicalDailyFinancialSnapshot,
@@ -196,6 +198,7 @@ import {
   testPaymentScheduleTokenMatchesRequest
 } from './test-csv-execution-bypass.js';
 import { evaluateCreateDraftRecoveryHeadroom } from './banking-pay-create-draft-headroom.js';
+import { readContractWorkedDateBoundary, readContractWorkedDatePage, contractWorkedDateRefusal } from './contract-worked-date-guard.js';
 import {
   isCertifiedDeferredFinanceOnlyInsertItemsResult,
   isCertifiedEmptyTimesheetSnapshotsResult
@@ -11159,6 +11162,13 @@ async function handleContractsFinanceGlobals(env, req) {
   }));
 }
 
+async function contractWorkedDateBoundary(env, contractId) {
+  return readContractWorkedDateBoundary({
+    baseUrl: env.SUPABASE_URL, contractId,
+    readPage: (url, options) => readContractWorkedDatePage(url, { ...options, headers: sbHeaders(env), fetcher: fetch })
+  });
+}
+
 async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -11547,6 +11557,15 @@ async function handleContractsUpdate(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
+  let protectedWorkBoundary;
+  try {
+    protectedWorkBoundary = await contractWorkedDateBoundary(env, contractId);
+    const refusal = contractWorkedDateRefusal(protectedWorkBoundary, newStart, newEnd);
+    if (refusal) return withCORS(env, req, badRequest(refusal));
+  } catch (error) {
+    return withCORS(env, req, serverError(error.message));
+  }
+
   patch.start_date = newStart;
   patch.end_date   = newEnd;
 
@@ -11602,24 +11621,7 @@ async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  let min_ts_date = null, max_ts_date = null;
-  try {
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&select=work_date,status`
-    );
-    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    for (const r of (tsRows||[])) {
-      const st = String(r?.status||'').toUpperCase();
-      if (bad.has(st)) continue;
-      const d = r?.work_date;
-      if (!d) continue;
-      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-    }
-  } catch {}
+  const { min_ts_date, max_ts_date } = protectedWorkBoundary;
 
   let min_plan_date = null, max_plan_date = null;
   try {
@@ -11752,40 +11754,15 @@ async function handleContractsUpdate(env, req, contractId) {
   if (!start_date || !end_date) return withCORS(env, req, badRequest('Invalid start_date or end_date'));
   if (start_date > end_date)    return withCORS(env, req, badRequest('start_date cannot be after end_date'));
 
-  let tsRows = [];
+  let protectedWorkBoundary;
   try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contract_id)}` +
-      `&select=id,timesheet_id,work_date,status,client_id`
-    );
-    tsRows = rows || [];
+    protectedWorkBoundary = await contractWorkedDateBoundary(env, contract_id);
   } catch (e) {
-    return withCORS(env, req, serverError('Boundary check failed to load timesheets'));
+    return withCORS(env, req, serverError(e.message));
   }
 
-  const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-  const realTs = (tsRows || []).filter(r => {
-    const st = String(r?.status || '').toUpperCase();
-    return !st || !badStatuses.has(st);
-  });
-
-  let min_ts_date = null, max_ts_date = null;
-  for (const r of realTs) {
-    const d = r?.work_date || null;
-    if (!d) continue;
-    if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-    if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-  }
-
-  const violations = realTs.filter(r => {
-    const d = r?.work_date;
-    if (!d) return false;
-    if (d < start_date) return true;
-    if (d > end_date)   return true;
-    return false;
-  });
+  const { min_ts_date, max_ts_date } = protectedWorkBoundary;
+  const violations = protectedWorkBoundary.records.filter(record => record.date < start_date || record.date > end_date);
 
   let namesById = {};
   if (violations.length) {
@@ -11807,7 +11784,7 @@ async function handleContractsUpdate(env, req, contractId) {
     max_ts_date,
     violations: violations.map(v => ({
       timesheet_id: v?.timesheet_id ?? v?.id ?? null,
-      date: v?.work_date ?? null,
+      date: v?.date ?? null,
       status: v?.status ?? null,
       client_id: v?.client_id ?? null,
       client_name: namesById[String(v?.client_id)] || null
@@ -12115,33 +12092,13 @@ async function handleContractsReplace(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
-  let minProtectedWorkDate = null, maxProtectedWorkDate = null;
+  let protectedWorkBoundary;
   try {
-    const { rows: protectedRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&select=work_date,status`
-    );
-    const nonProtectedStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    for (const row of (protectedRows || [])) {
-      const status = String(row?.status || '').trim().toUpperCase();
-      const workDate = toYmd(row?.work_date);
-      if (!workDate || nonProtectedStatuses.has(status)) continue;
-      if (!minProtectedWorkDate || workDate < minProtectedWorkDate) minProtectedWorkDate = workDate;
-      if (!maxProtectedWorkDate || workDate > maxProtectedWorkDate) maxProtectedWorkDate = workDate;
-    }
-  } catch {}
-
-  if (minProtectedWorkDate && newStart > minProtectedWorkDate) {
-    return withCORS(env, req, badRequest(
-      `start_date cannot be after earliest protected work date (${minProtectedWorkDate})`
-    ));
-  }
-  if (maxProtectedWorkDate && newEnd < maxProtectedWorkDate) {
-    return withCORS(env, req, badRequest(
-      `end_date cannot be before latest protected work date (${maxProtectedWorkDate})`
-    ));
+    protectedWorkBoundary = await contractWorkedDateBoundary(env, contractId);
+    const refusal = contractWorkedDateRefusal(protectedWorkBoundary, newStart, newEnd);
+    if (refusal) return withCORS(env, req, badRequest(refusal));
+  } catch (error) {
+    return withCORS(env, req, serverError(error.message));
   }
 
   const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
@@ -12367,24 +12324,7 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  let min_ts_date = null, max_ts_date = null;
-  try {
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&select=work_date,status`
-    );
-    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    for (const r of (tsRows||[])) {
-      const st = String(r?.status||'').toUpperCase();
-      if (bad.has(st)) continue;
-      const d = r?.work_date;
-      if (!d) continue;
-      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-    }
-  } catch {}
+  const { min_ts_date, max_ts_date } = protectedWorkBoundary;
 
   let min_plan_date = null, max_plan_date = null;
   try {
@@ -155386,6 +155326,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         }));
     }
 
+    validateLegacyInvoiceManifestSuppressions(manifest);
     const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
 
     const items = lineRows.map(l => ({
@@ -157207,6 +157148,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
       return { ok: false, error: 'Failed to load invoice render manifest' };
     }
 
+    validateLegacyInvoiceManifestSuppressions(manifest);
     const inv = manifest.invoice || manifest.invoice_row || null;
     if (!inv || !inv.id) {
       log('error', 'invoice_not_found_in_manifest', { ms: Date.now() - t0 });
@@ -198970,16 +198912,30 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
       });
       if (invoiceAsyncResponse) return withCORS(env, req, invoiceAsyncResponse);
 
+      let weeklySourceAuthenticatedActorId = null;
+      const weeklySourceOffScope = {
+        getActor: () => weeklySourceAuthenticatedActorId,
+        agencyId: String(env.MYTMS_OFFICE_AGENCY_ID || '').trim().toLowerCase(),
+        environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase()
+      };
+      const weeklySourceOffRpc = createOffRuleTransportRpc({ ...weeklySourceOffScope,
+        baseRpc: (functionName, args, options) => sbRpc(env, functionName, args, options) });
+      const weeklySourceOffRecordingRpc = createOffRuleTransportRpc({ ...weeklySourceOffScope,
+        baseRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options) });
       const weeklySourceUploadOwner = createWeeklySourceUploadPublicationOwner({
-        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        rpc: weeklySourceOffRpc,
         loadFileBytes: (runtimeEnv, fileKey, options) =>
           loadWeeklySourceFileBytes(runtimeEnv, fileKey, options),
         parseWeeklySourceFile
       });
       const weeklySourceResponse = await dispatchWeeklySourceRequest(req, env, ctx, {
-        requireUser: (runtimeEnv, request, roles) => requireUser(runtimeEnv, request, roles),
+        requireUser: async (runtimeEnv, request, roles) => {
+          const actor = await requireUser(runtimeEnv, request, roles);
+          weeklySourceAuthenticatedActorId = actor?.is_active === true ? actor.id : null;
+          return actor;
+        },
         bpayNextOwnerStatusRpc: (runtimeEnv) => bpayNextOwnerStatusRpc(runtimeEnv)(),
-        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        rpc: weeklySourceOffRpc,
         previewUpload: weeklySourceUploadOwner.previewUpload,
         recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,
         acceptUpload: weeklySourceUploadOwner.acceptUpload,
@@ -198997,7 +198953,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
           action,
           request,
           dependencies: {
-            dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+            dataRpc: weeklySourceOffRecordingRpc,
             calculateWeeklySnapshot: (calculationInput) =>
               calculateWeeklyProtectedSnapshot(env, calculationInput),
             c1RawRpc: createWeeklySourceC1RawRpc({
@@ -199014,7 +198970,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
             env: runtimeEnv,
             ctx: runtimeContext,
             dependencies: {
-              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              dataRpc: weeklySourceOffRecordingRpc,
               buildOrdinaryServiceSnapshot: (calculationInput) =>
                 buildWeeklyCorrectFinalServiceSnapshot(env, calculationInput)
             }
@@ -199026,7 +198982,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
             env: runtimeEnv,
             ctx: runtimeContext,
             dependencies: {
-              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              dataRpc: weeklySourceOffRecordingRpc,
               buildOrdinaryServiceSnapshot: (calculationInput) =>
                 buildWeeklyCorrectFinalServiceSnapshot(env, calculationInput)
             }
@@ -199038,7 +198994,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
             env: runtimeEnv,
             ctx: runtimeContext,
             dependencies: {
-              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              dataRpc: weeklySourceOffRecordingRpc,
               stageReplacementSource: weeklySourceUploadOwner.stageReplacementSource,
               rebuildReplacementProjection: weeklySourceUploadOwner.rebuildReplacementProjection,
               buildOrdinaryServiceSnapshot: (calculationInput) =>
@@ -199052,7 +199008,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
             env: runtimeEnv,
             ctx: runtimeContext,
             dependencies: {
-              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              dataRpc: weeklySourceOffRecordingRpc,
               stageReplacementSource: weeklySourceUploadOwner.stageReplacementSource,
               rebuildReplacementProjection: weeklySourceUploadOwner.rebuildReplacementProjection,
               buildOrdinaryServiceSnapshot: (calculationInput) =>

@@ -1,0 +1,57 @@
+{
+  "sourceOnly": true,
+  "status": "MOUNTED_SOURCE_SYNTAX_PASS_NATIVE_UNPROVED",
+  "beforeRootCommit": "03221cb237f59658ecde5217ff84e45d3ab48be8",
+  "reportSource": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+  "moneySource": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "closurePaths": 136,
+  "syntaxFiles": 135,
+  "fullReverseHunks": 61,
+  "mounted": [
+    {
+      "file": "broker/src/candidate-app-backend.js",
+      "sourceCommit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/candidate-app-backend.js",
+      "beforeRawSha256": "2be91ef454edb41feba0bb1ce603762dac253f2a2e8394cdf172fcf49aabb5db",
+      "afterSha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587"
+    },
+    {
+      "file": "broker/src/index.js",
+      "sourceCommit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/index.js",
+      "beforeRawSha256": "5d6912b6e502af72b586d6205dd6f99fdc1347c73e4bdeae98dc36b6c73ba5d8",
+      "afterSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785"
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sourceCommit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "sourceFile": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/off-rule-native-proxy.mjs",
+      "beforeRawSha256": null,
+      "afterSha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "sourceCommit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "sourceFile": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/off-rule-transport-rpc.mjs",
+      "beforeRawSha256": null,
+      "afterSha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1"
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "sourceCommit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/broker/src/weekly-source/routes.js",
+      "beforeRawSha256": "034b96260f679a4c320648ec29a9ff1d19f982d800c50c6aceccfb69ea99fc67",
+      "afterSha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53"
+    },
+    {
+      "file": "candidate-broker/src/candidate-broker.js",
+      "sourceCommit": "ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6",
+      "sourceFile": "docs/healthroster-build/proposals/install2-shared-runtime-forward-20261014/forward/candidate-broker/src/candidate-broker.js",
+      "beforeRawSha256": "4b8904edf3dc787ffdd04f3ed89afa19d9fe236ee35506e0dba20b1154976685",
+      "afterSha256": "0d1f0435872793ed0cb1021b7c9122151891c0c5bfd915c7d73de47f95df07ea"
+    }
+  ],
+  "sourcePinsSha256": "ae23166cf422196913914f76de57167bb1a8779abdd0c4dbf1054671a68d8de2",
+  "noCollectorMapperSealMounted": true,
+  "noDatabaseReleaseOrRuntimeCall": true
+}

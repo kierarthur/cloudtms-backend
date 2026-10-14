@@ -1,0 +1,68 @@
+{
+  "sourceOnly": true,
+  "beganAt": "2026-10-14T02:47:48.781Z",
+  "status": "SOURCE_CHECK_PASS",
+  "initialUnprovisionedCheck": {
+    "tests": 16,
+    "pass": 12,
+    "failedFiles": 4,
+    "reason": "xlsx/pdf-lib packages absent; exact lock provisioning required",
+    "nativeCalls": 0
+  },
+  "steps": [
+    {
+      "args": [
+        "npm",
+        "run",
+        "security:toolchain"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 386,
+      "outputSha256": "28e756e8bfa18ebf880b1961546f02610d1d978a83c307722f31f68a6f843525",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": []
+    },
+    {
+      "args": [
+        "npm",
+        "ci",
+        "--engine-strict",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 7857,
+      "outputSha256": "b4ba3ea753a6b44f18c6aeafea6fc4b0d5583a484dd4b73ab00b9d65d3a7342e",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0,
+      "diagnosticCodes": []
+    },
+    {
+      "args": [
+        "--test",
+        "tests/weekly-source/weekly-source-pay-auth-transport.test.mjs",
+        "tests/weekly-source/weekly-source-office-presentation-integration.test.mjs",
+        "tests/weekly-source/weekly-source-settings-routes.test.mjs",
+        "tests/candidate-correction-v1.test.js",
+        "tests/weekly-source/protected-action-orchestrator.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 1659,
+      "outputSha256": "3c2dc01592f56f948fcd6f17d7da459accd05257a7b76058423d36eae4478ebc",
+      "tests": 47,
+      "pass": 47,
+      "fail": 0,
+      "diagnosticCodes": []
+    }
+  ],
+  "lockfile": {
+    "sha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+    "unchanged": true,
+    "installerHooks": false
+  },
+  "endedAt": "2026-10-14T02:47:58.698Z"
+}

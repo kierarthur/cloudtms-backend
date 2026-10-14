@@ -1,0 +1,28 @@
+// Source mount only. No database, release, runtime or fixture operation.
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { scanManagedSql } from '../../../../scripts/cloudtms-managed-release-sql.mjs';
+const folder=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(folder,'../../../..');
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+assert.equal(execFileSync('git',['rev-parse','--abbrev-ref','HEAD'],{cwd:root,encoding:'utf8'}).trim(),'codex/healthroster-install2-14102026');
+const decisions=JSON.parse(fs.readFileSync(path.join(folder,'COMPLETE_OWNER_DECISIONS.json')));
+const reversal=JSON.parse(fs.readFileSync(path.join(folder,'FULL_NATIVE_OWNER_REVERSE.json')));
+assert.equal(decisions.owners.length,5);assert.equal(reversal.owners.length,5);
+const leafName='14102026_0420_healthroster_current_native_composition';
+const support=path.join(root,'supabase/repeatable',leafName);
+const rootFile=path.join(root,'supabase/repeatable',leafName+'_v1.sql');
+assert.ok(!fs.existsSync(support)&&!fs.existsSync(rootFile),'NEW_SOURCE_TARGET_EXISTS');
+const rows=decisions.owners.map(row=>{const bytes=fs.readFileSync(path.join(folder,row.file));assert.equal(hash(bytes),row.completeFileSha256);
+ assert.ok(!bytes.includes(13),'SQL_LF_REQUIRED');assert.ok(reversal.owners.find(proof=>proof.name===row.name&&proof.completeForwardMatches&&proof.completeReverseMatches&&proof.completeFileSha256===row.completeFileSha256));
+ const parsed=scanManagedSql(bytes.toString('utf8'));assert.equal(parsed.meta.length,0);assert.equal(parsed.statements.length,1);
+ return {...row,bytes};
+});
+const exactAcl="alter function public.weekly_exceptional_pay_complete_local_v1(jsonb) owner to postgres;\nrevoke all on function public.weekly_exceptional_pay_complete_local_v1(jsonb) from public,anon,authenticated,service_role;\ngrant execute on function public.weekly_exceptional_pay_complete_local_v1(jsonb) to service_role;\nalter function public.weekly_source_manual_review_resolve_v1(jsonb) owner to postgres;\nrevoke all on function public.weekly_source_manual_review_resolve_v1(jsonb) from public,anon,authenticated,service_role;\ngrant execute on function public.weekly_source_manual_review_resolve_v1(jsonb) to service_role;\nalter function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) owner to postgres;\nrevoke all on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) from public,anon,authenticated,service_role;\ngrant execute on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) to service_role;\nalter function private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamptz) owner to postgres;\nrevoke all on function private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamptz) from public,anon,authenticated,service_role;\nalter function private.weekly_source_manual_reviews_finalised_v1(uuid,uuid) owner to postgres;\nrevoke all on function private.weekly_source_manual_reviews_finalised_v1(uuid,uuid) from public,anon,authenticated,service_role;\n";
+const source='-- Complete current Banking/WP-PP plus HealthRoster native owner composition.\n-- WIP: original prerequisites, final ACL registry, contract and native gates remain required.\nbegin;\n'+rows.map(row=>'\\ir '+leafName+'/'+row.file).join('\n')+'\n'+exactAcl+"notify pgrst, 'reload schema';\ncommit;\n";
+fs.mkdirSync(support,{recursive:true});for(const row of rows)fs.writeFileSync(path.join(support,row.file),row.bytes);fs.writeFileSync(rootFile,source);
+const receipt={sourceOnly:true,status:'MOUNTED_SOURCE_NATIVE_AND_CANONICAL_GATES_HELD',repeatable:path.relative(root,rootFile).replaceAll('\\','/'),repeatableSha256:hash(source),owners:rows.map(({bytes,...row})=>row),hunks:36,existingPublicServiceFunctions:3,existingOwnerPrivateFunctions:2,newSignatures:0,newServiceGrants:0,frozenInputsUnmodified:true,noDatabaseOrReleaseAction:true};
+fs.writeFileSync(path.join(folder,'SOURCE_MOUNT_RECEIPT.json'),JSON.stringify(receipt,null,2)+'\n');console.log(JSON.stringify(receipt));

@@ -1,0 +1,358 @@
+{
+  "sourceOnly": true,
+  "status": "WHOLE_SOURCE_TRANSFORMATIONS_PASS_NATIVE_UNPROVED",
+  "owners": [
+    {
+      "name": "public.weekly_exceptional_pay_complete_local_v1",
+      "file": "weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+      "inputDefinitionSha256": "6330a93faec20e7a1e6ffa421dbd2535daebbd58f77599eaa5b41a8c3614c04b",
+      "completeFileSha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION",
+      "beforeFile": "weekly_exceptional_pay_complete_local_v1.actual.sqlinc",
+      "beforeFileSha256": "04c918daaf3acb353c0aaa19d6461dea16919b7ac81515331ae86605bcf8a91b",
+      "hunks": [
+        {
+          "oldLine": 28,
+          "oldCount": 0,
+          "newLine": 29,
+          "newCount": 1,
+          "before": "",
+          "after": "  v_automatic_components jsonb;\n"
+        },
+        {
+          "oldLine": 189,
+          "oldCount": 0,
+          "newLine": 191,
+          "newCount": 5,
+          "before": "",
+          "after": "  -- A manually invoked native Local owner cannot bypass the sealed automatic\n  -- request's per-component zero-delta proof. This is before PREPARING insert.\n  if v_generation.complete_next_vector_json ? 'automatic_reconcile_proof' then\n    perform private.weekly_source_automatic_reconcile_delta_assert_v1(v_request.id,v_actor);\n  end if;\n"
+        },
+        {
+          "oldLine": 269,
+          "oldCount": 0,
+          "newLine": 276,
+          "newCount": 6,
+          "before": "",
+          "after": "    if v_generation.complete_next_vector_json ? 'automatic_reconcile_proof' then\n      -- Exactly the producer used by delta_assert; no separately guessed vector.\n      v_automatic_components:=private.weekly_source_staged_entitlement_components_v1(v_request.id,v_actor);\n      v_components:=v_automatic_components->'components';\n      v_expenses:=v_automatic_components->'expenses';\n    else\n"
+        },
+        {
+          "oldLine": 296,
+          "oldCount": 0,
+          "newLine": 309,
+          "newCount": 1,
+          "before": "",
+          "after": "    end if;\n"
+        }
+      ],
+      "completeForwardMatches": true,
+      "completeReverseMatches": true
+    },
+    {
+      "name": "public.weekly_source_manual_review_resolve_v1",
+      "file": "weekly_source_manual_review_resolve_v1.complete.sqlinc",
+      "inputDefinitionSha256": "a522deee42487d3a582dda9d74f3c270a186d69d9659f0c31978589005c9a282",
+      "completeFileSha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796",
+      "decision": "RETAIN_COMPLETE_CURRENT_COMMAND_REPLAY_AND_ACCEPTED_EVIDENCE_OWNER; REJECT_STALE_BROAD_PRE_COMMAND_REPLACEMENT",
+      "beforeFile": "weekly_source_manual_review_resolve_v1.actual.sqlinc",
+      "beforeFileSha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796",
+      "hunks": [],
+      "completeForwardMatches": true,
+      "completeReverseMatches": true
+    },
+    {
+      "name": "public.weekly_exceptional_pay_stage_c1_request_v1",
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+      "inputDefinitionSha256": "2c311b23730e311166f5df8ebd86cbc051579352f43693720c142f8c195b4ff2",
+      "completeFileSha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5",
+      "decision": "COMPLETE_Q45_ACTOR_EXACT_EVENT_OWNER_PLUS_CURRENT_NEXT_ADMISSION_BEFORE_FIRST_REPLAY",
+      "beforeFile": "weekly_exceptional_pay_stage_c1_request_v1.actual.sqlinc",
+      "beforeFileSha256": "8e7529619964d19ed0fd7a34e44abb91d28ab2f0c0bc35a28efe1412f15f6141",
+      "hunks": [
+        {
+          "oldLine": 67,
+          "oldCount": 0,
+          "newLine": 68,
+          "newCount": 2,
+          "before": "",
+          "after": "  v_bulk_signed_proof jsonb;\n  v_automatic_reconcile_proof jsonb;\n"
+        },
+        {
+          "oldLine": 71,
+          "oldCount": 0,
+          "newLine": 74,
+          "newCount": 1,
+          "before": "",
+          "after": "  v_lock_family jsonb; v_lock_group uuid;\n"
+        },
+        {
+          "oldLine": 85,
+          "oldCount": 1,
+          "newLine": 88,
+          "newCount": 1,
+          "before": "  v_source_mode text;\n",
+          "after": "  v_source_mode text; v_activated_source_mode text;\n"
+        },
+        {
+          "oldLine": 156,
+          "oldCount": 1,
+          "newLine": 159,
+          "newCount": 1,
+          "before": "  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_top_keys)\n",
+          "after": "  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_top_keys||array['bulk_signed_selection_proof','automatic_reconcile_selection_sha256'])\n"
+        },
+        {
+          "oldLine": 252,
+          "oldCount": 2,
+          "newLine": 254,
+          "newCount": 0,
+          "before": "  -- An exact staged request is the idempotency authority even after the family\n  -- version advances.  A UUID collision with different bytes always refuses.\n",
+          "after": ""
+        },
+        {
+          "oldLine": 258,
+          "oldCount": 0,
+          "newLine": 260,
+          "newCount": 25,
+          "before": "",
+          "after": "  -- An exact staged request is the idempotency authority even after the family\n  -- version advances.  A UUID collision with different bytes always refuses.\n  select request.* into v_publication\n  from public.weekly_exceptional_c1_publication_requests request\n  where request.id=v_request_id;\n  if found then\n    if v_publication.family_id is distinct from v_family_id\n       or v_publication.orchestration_run_id is distinct from v_run_id\n       or v_publication.request_sha256 is distinct from v_c1_request_hash then\n      raise exception 'WEEKLY_PROTECTED_C1_REQUEST_ID_COLLISION' using errcode='23505';\n    end if;\n    perform private.weekly_source_bulk_stage_replay_assert_v1(v_publication.id,p_request);\n    perform private.weekly_source_automatic_reconcile_stage_replay_assert_v1(v_publication.id,p_request);\n    return pg_catalog.jsonb_build_object(\n      'ok',true,'outcome','STAGED','idempotent_replay',true,\n      'family_id',v_publication.family_id,'generation_id',v_publication.generation_id,\n      'publication_request_id',v_publication.id,'request_sha256',\n      pg_catalog.encode(v_publication.request_sha256,'hex'),\n      'state',v_publication.state\n    );\n  end if;\n\n  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);\n  -- An exact staged request is the idempotency authority even after the family\n  -- version advances.  A UUID collision with different bytes always refuses.\n"
+        },
+        {
+          "oldLine": 268,
+          "oldCount": 0,
+          "newLine": 295,
+          "newCount": 2,
+          "before": "",
+          "after": "    perform private.weekly_source_bulk_stage_replay_assert_v1(v_publication.id,p_request);\n    perform private.weekly_source_automatic_reconcile_stage_replay_assert_v1(v_publication.id,p_request);\n"
+        },
+        {
+          "oldLine": 285,
+          "oldCount": 0,
+          "newLine": 314,
+          "newCount": 11,
+          "before": "",
+          "after": "  if (v_family.root_timesheet_id::text,v_family.candidate_id::text,v_family.contract_id::text,v_family.week_ending_date::text)\n    is distinct from (v_lock_family->>'root_timesheet_id',v_lock_family->>'candidate_id',\n      v_lock_family->>'contract_id',v_lock_family->>'week_ending_date') then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;\n  v_lock_group:=private.weekly_source_protected_group_lock_v1(v_source_cycle_id);\n  if p_request ? 'bulk_signed_selection_proof' or p_request ? 'automatic_reconcile_selection_sha256' then\n    -- The new one-shift round seals one pending proof at a time using the\n    -- existing cycle mutex; the individual path retains its native SHARE.\n    select cycle.* into strict v_cycle from public.weekly_source_cycles cycle\n      where cycle.id=v_source_cycle_id for update;\n  else\n"
+        },
+        {
+          "oldLine": 289,
+          "oldCount": 0,
+          "newLine": 329,
+          "newCount": 3,
+          "before": "",
+          "after": "  end if;\n  if v_cycle.source_group_id is distinct from v_lock_group then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;\n"
+        },
+        {
+          "oldLine": 347,
+          "oldCount": 1,
+          "newLine": 389,
+          "newCount": 2,
+          "before": "  v_source_mode:=v_policy->>'c1_source_mode';\n",
+          "after": "  v_activated_source_mode:=private.weekly_source_protected_non_self_bill_mode_v1(v_client_id,v_family.contract_id,v_work_date,v_cycle.id,v_actor_user_id,v_work_event_id);\n  v_source_mode:=coalesce(v_policy->>'c1_source_mode',v_activated_source_mode);\n"
+        },
+        {
+          "oldLine": 349,
+          "oldCount": 1,
+          "newLine": 392,
+          "newCount": 1,
+          "before": "     or coalesce((v_policy->>'self_bill_enabled')::boolean,false) is not true\n",
+          "after": "     or (coalesce((v_policy->>'self_bill_enabled')::boolean,false) is not true and v_activated_source_mode is null)\n"
+        },
+        {
+          "oldLine": 719,
+          "oldCount": 0,
+          "newLine": 763,
+          "newCount": 8,
+          "before": "",
+          "after": "  if p_request ? 'bulk_signed_selection_proof' then\n    v_bulk_signed_proof:=private.weekly_source_bulk_stage_proof_v1(p_request,v_fin.id);\n    v_next_vector:=v_next_vector||jsonb_build_object('bulk_signed_selection_proof',v_bulk_signed_proof);\n  end if;\n  if p_request ? 'automatic_reconcile_selection_sha256' then\n    v_automatic_reconcile_proof:=private.weekly_source_automatic_reconcile_stage_proof_v1(p_request);\n    v_next_vector:=v_next_vector||jsonb_build_object('automatic_reconcile_proof',v_automatic_reconcile_proof);\n  end if;\n"
+        },
+        {
+          "oldLine": 994,
+          "oldCount": 0,
+          "newLine": 1046,
+          "newCount": 5,
+          "before": "",
+          "after": "  if p_request ? 'automatic_reconcile_selection_sha256' then\n    -- The assertion reads the actual sealed complete vector and native rows.\n    -- Any refusal rolls back this entire stage, including its unaccepted event.\n    perform private.weekly_source_automatic_reconcile_certificate_v1(v_publication.id,v_actor_user_id,v_cycle.id);\n  end if;\n"
+        }
+      ],
+      "completeForwardMatches": true,
+      "completeReverseMatches": true
+    },
+    {
+      "name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "file": "weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "inputDefinitionSha256": "8c5dba0fd51cb20504c3a06f6bca0f4e15c9bb7e36753cf48b9c7d251969539a",
+      "completeFileSha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION",
+      "beforeFile": "weekly_source_candidate_submission_compare_sync_v1.actual.sqlinc",
+      "beforeFileSha256": "09f45cb41744c01f162251e846644a5b5b19ad379c84193cc21a1316576c7dbb",
+      "hunks": [
+        {
+          "oldLine": 53,
+          "oldCount": 0,
+          "newLine": 54,
+          "newCount": 6,
+          "before": "",
+          "after": "  v_import_authoritative boolean:=false;\n  v_scope_client_id uuid;\n  v_source_question_changed boolean:=false;\n  v_discovered_cycle_id uuid; v_discovered_group_id uuid; v_discovered_cycle jsonb;\n  v_discovered_timesheet public.timesheets%rowtype; v_locked_timesheet public.timesheets%rowtype;\n  v_family_lock jsonb; v_publication_i1_context jsonb;\n"
+        },
+        {
+          "oldLine": 60,
+          "oldCount": 0,
+          "newLine": 67,
+          "newCount": 25,
+          "before": "",
+          "after": "  -- Plain scope/physical discovery precedes this owner's first business lock.\n  select * into strict v_publication from public.weekly_source_projection_publications\n    where id=p_projection_publication_id and state='CURRENT';\n  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;\n  v_discovered_cycle_id:=v_cycle.id; v_discovered_group_id:=v_cycle.source_group_id; v_discovered_cycle:=to_jsonb(v_cycle);\n  select * into strict v_discovered_timesheet from public.timesheets where timesheet_id=p_timesheet_id;\n  if nullif(current_setting('cloudtms.weekly_source_publication_i1_context',true),'') is not null then\n    v_publication_i1_context:=current_setting('cloudtms.weekly_source_publication_i1_context',true)::jsonb;\n    if v_publication_i1_context->>'schema_version' is distinct from 'WEEKLY_SOURCE_PUBLICATION_I1_CONTEXT_V1'\n      or v_publication_i1_context->>'publication_id' is distinct from p_projection_publication_id::text\n      or jsonb_typeof(v_publication_i1_context->'root_ids') is distinct from 'array'\n      or not(v_publication_i1_context->'root_ids' ? p_timesheet_id::text) then\n      raise exception 'WEEKLY_SOURCE_PUBLICATION_SIGNED_ROOT_SET_CHANGED' using errcode='40001'; end if;\n  end if;\n  perform private.weekly_source_pay_query_admit_v2();\n  v_family_lock:=private.weekly_source_lock_family_rows_v1(array[p_timesheet_id],null);\n  if v_family_lock->>'ok' is distinct from 'true' then\n    raise exception '%',coalesce(v_family_lock->>'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE') using errcode='55000'; end if;\n  select * into strict v_locked_timesheet from public.timesheets where timesheet_id=p_timesheet_id;\n  if to_jsonb(v_locked_timesheet) is distinct from to_jsonb(v_discovered_timesheet) then\n    raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001'; end if;\n  perform 1 from public.weekly_source_groups where id=v_discovered_group_id for update;\n  select * into strict v_cycle from public.weekly_source_cycles where id=v_discovered_cycle_id for update;\n  if to_jsonb(v_cycle) is distinct from v_discovered_cycle or v_cycle.source_group_id is distinct from v_discovered_group_id then\n    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='40001'; end if;\n"
+        },
+        {
+          "oldLine": 93,
+          "oldCount": 0,
+          "newLine": 125,
+          "newCount": 2,
+          "before": "",
+          "after": "    if v_generation.source_cycle_id is distinct from v_discovered_cycle_id then\n      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='40001'; end if;\n"
+        },
+        {
+          "oldLine": 143,
+          "oldCount": 0,
+          "newLine": 177,
+          "newCount": 4,
+          "before": "",
+          "after": "  v_scope_client_id:=private.weekly_source_checking_client_scope_v1(v_publication.id);\n  if v_scope_client_id is not null and v_scope_client_id is distinct from v_contract.client_id then\n    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';\n  end if;\n"
+        },
+        {
+          "oldLine": 148,
+          "oldCount": 0,
+          "newLine": 186,
+          "newCount": 5,
+          "before": "",
+          "after": "  v_import_authoritative:=private.weekly_source_is_import_authoritative_v1(\n    v_contract.client_id,v_contract.id,v_membership.week_ending);\n  if v_import_authoritative and (v_upload.confirmed_coverage_start_local_date is null\n    or v_upload.confirmed_coverage_end_local_date is null) then\n    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000'; end if;\n"
+        },
+        {
+          "oldLine": 177,
+          "oldCount": 1,
+          "newLine": 219,
+          "newCount": 1,
+          "before": "    where v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'\n",
+          "after": "    where (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1' and not v_import_authoritative)\n"
+        },
+        {
+          "oldLine": 429,
+          "oldCount": 1,
+          "newLine": 471,
+          "newCount": 1,
+          "before": "          'system_start_at_local',case when v_presence='PRESENT'\n",
+          "after": "          'system_start_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')\n"
+        },
+        {
+          "oldLine": 431,
+          "oldCount": 1,
+          "newLine": 473,
+          "newCount": 1,
+          "before": "          'system_end_at_local',case when v_presence='PRESENT'\n",
+          "after": "          'system_end_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')\n"
+        },
+        {
+          "oldLine": 433,
+          "oldCount": 1,
+          "newLine": 475,
+          "newCount": 1,
+          "before": "          'system_break_minutes',case when v_presence='PRESENT'\n",
+          "after": "          'system_break_minutes',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')\n"
+        },
+        {
+          "oldLine": 448,
+          "oldCount": 0,
+          "newLine": 491,
+          "newCount": 2,
+          "before": "",
+          "after": "      and (not v_import_authoritative or source_row.work_date between\n        v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date)\n"
+        },
+        {
+          "oldLine": 463,
+          "oldCount": 0,
+          "newLine": 508,
+          "newCount": 4,
+          "before": "",
+          "after": "      if v_import_authoritative and not exists(select 1 from public.contract_weeks expected\n        where expected.contract_id=v_contract.id and expected.additional_seq=0\n          and not coalesce(expected.is_adjustment,false) and expected.status<>'CANCELLED'\n          and v_source.work_date between expected.week_ending_date-6 and expected.week_ending_date) then continue; end if;\n"
+        },
+        {
+          "oldLine": 483,
+          "oldCount": 1,
+          "newLine": 531,
+          "newCount": 1,
+          "before": "      'system_start_at_local',case when v_presence='PRESENT'\n",
+          "after": "      'system_start_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')\n"
+        },
+        {
+          "oldLine": 485,
+          "oldCount": 1,
+          "newLine": 533,
+          "newCount": 1,
+          "before": "      'system_end_at_local',case when v_presence='PRESENT'\n",
+          "after": "      'system_end_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')\n"
+        },
+        {
+          "oldLine": 487,
+          "oldCount": 1,
+          "newLine": 535,
+          "newCount": 1,
+          "before": "      'system_break_minutes',case when v_presence='PRESENT'\n",
+          "after": "      'system_break_minutes',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')\n"
+        },
+        {
+          "oldLine": 539,
+          "oldCount": 1,
+          "newLine": 587,
+          "newCount": 2,
+          "before": "        case when p_candidate_generation_id is null\n",
+          "after": "        case when v_issue_family='HEALTHROSTER_NOT_FINALISED' and v_import_authoritative then 'NOT_REQUIRED'\n          when p_candidate_generation_id is null\n"
+        },
+        {
+          "oldLine": 566,
+          "oldCount": 0,
+          "newLine": 616,
+          "newCount": 5,
+          "before": "",
+          "after": "    v_source_question_changed:=v_import_authoritative and v_comparison.id is not null\n      and (v_comparison.issue_family,v_comparison.source_presence,v_comparison.system_start_at_local,\n        v_comparison.system_end_at_local,v_comparison.system_break_minutes)\n      is distinct from (v_issue_family,v_presence,nullif(v_issue->>'system_start_at_local','')::timestamp,\n        nullif(v_issue->>'system_end_at_local','')::timestamp,nullif(v_issue->>'system_break_minutes','')::integer);\n"
+        },
+        {
+          "oldLine": 606,
+          "oldCount": 1,
+          "newLine": 660,
+          "newCount": 7,
+          "before": "      set current_comparison_revision_id=v_comparison.id\n",
+          "after": "      set current_comparison_revision_id=v_comparison.id,\n        candidate_action_state=case when v_issue_family='HEALTHROSTER_NOT_FINALISED' and v_import_authoritative\n          then 'NOT_REQUIRED' else candidate_action_state end,\n        manager_action_state=case when v_source_question_changed and manager_potential_state='AVAILABLE'\n          then 'NOT_SENT' else manager_action_state end,\n        waiting_source_state=case when v_source_question_changed then 'NOT_WAITING' else waiting_source_state end,\n        reconciliation_state=case when v_source_question_changed then 'UNRESOLVED' else reconciliation_state end\n"
+        },
+        {
+          "oldLine": 638,
+          "oldCount": 1,
+          "newLine": 698,
+          "newCount": 1,
+          "before": "      and (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'\n",
+          "after": "      and ((v_profile_code<>'NHSP_PREFINAL_RELEASED_V1' and not v_import_authoritative)\n"
+        }
+      ],
+      "completeForwardMatches": true,
+      "completeReverseMatches": true
+    },
+    {
+      "name": "private.weekly_source_manual_reviews_finalised_v1",
+      "file": "weekly_source_manual_reviews_finalised_v1.complete.sqlinc",
+      "inputDefinitionSha256": "aca683c58b274102191ef9044bd1a9471d0c23ba86d3a5bfc017bff04539de69",
+      "completeFileSha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION",
+      "beforeFile": "weekly_source_manual_reviews_finalised_v1.actual.sqlinc",
+      "beforeFileSha256": "086dbb9e81fa7b798fe03067c1d7088a218ff206cf198a01854deb497f772f12",
+      "hunks": [
+        {
+          "oldLine": 46,
+          "oldCount": 1,
+          "newLine": 46,
+          "newCount": 1,
+          "before": "       or not exists(select 1 from public.weekly_source_client_manifests m where m.final_revision_id=v_final.id\n",
+          "after": "       or not exists(select 1 from public.weekly_source_client_manifests m where coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=v_final.id\n"
+        }
+      ],
+      "completeForwardMatches": true,
+      "completeReverseMatches": true
+    }
+  ]
+}

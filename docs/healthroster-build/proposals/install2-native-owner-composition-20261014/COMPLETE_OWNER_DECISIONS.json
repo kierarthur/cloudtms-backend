@@ -1,0 +1,50 @@
+{
+  "sourceOnly": true,
+  "status": "COMPLETE_SOURCE_CANDIDATES_NATIVE_REVIEW_HELD",
+  "inputs": "INPUTS.json",
+  "q45Stage": {
+    "commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
+    "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_20_stage_request.sqlinc",
+    "rawFileSha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019",
+    "inputDefinitionSha256": "c0ba3b907908dc16d83175138ce8be90c06053c732bf3c6c4df33b6bccb341a1",
+    "nativeAdmissionBeforeFirstReplay": true
+  },
+  "owners": [
+    {
+      "name": "public.weekly_exceptional_pay_complete_local_v1",
+      "file": "weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+      "inputDefinitionSha256": "6330a93faec20e7a1e6ffa421dbd2535daebbd58f77599eaa5b41a8c3614c04b",
+      "completeFileSha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION"
+    },
+    {
+      "name": "public.weekly_source_manual_review_resolve_v1",
+      "file": "weekly_source_manual_review_resolve_v1.complete.sqlinc",
+      "inputDefinitionSha256": "a522deee42487d3a582dda9d74f3c270a186d69d9659f0c31978589005c9a282",
+      "completeFileSha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796",
+      "decision": "RETAIN_COMPLETE_CURRENT_COMMAND_REPLAY_AND_ACCEPTED_EVIDENCE_OWNER; REJECT_STALE_BROAD_PRE_COMMAND_REPLACEMENT"
+    },
+    {
+      "name": "public.weekly_exceptional_pay_stage_c1_request_v1",
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+      "inputDefinitionSha256": "2c311b23730e311166f5df8ebd86cbc051579352f43693720c142f8c195b4ff2",
+      "completeFileSha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5",
+      "decision": "COMPLETE_Q45_ACTOR_EXACT_EVENT_OWNER_PLUS_CURRENT_NEXT_ADMISSION_BEFORE_FIRST_REPLAY"
+    },
+    {
+      "name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "file": "weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "inputDefinitionSha256": "8c5dba0fd51cb20504c3a06f6bca0f4e15c9bb7e36753cf48b9c7d251969539a",
+      "completeFileSha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION"
+    },
+    {
+      "name": "private.weekly_source_manual_reviews_finalised_v1",
+      "file": "weekly_source_manual_reviews_finalised_v1.complete.sqlinc",
+      "inputDefinitionSha256": "aca683c58b274102191ef9044bd1a9471d0c23ba86d3a5bfc017bff04539de69",
+      "completeFileSha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32",
+      "decision": "NONCONFLICTING_COMPLETE_CURRENT_AND_BROAD_THREE_WAY_SOURCE_UNION"
+    }
+  ],
+  "noNativeSqlOrReleaseAction": true
+}

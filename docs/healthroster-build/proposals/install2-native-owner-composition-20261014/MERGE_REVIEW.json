@@ -1,0 +1,36 @@
+{
+  "sourceOnly": true,
+  "status": "DRAFT_NOT_MOUNTED",
+  "rows": [
+    {
+      "name": "public.weekly_exceptional_pay_complete_local_v1",
+      "conflictBlocks": 0,
+      "mergeExit": 0,
+      "reviewOnly": true
+    },
+    {
+      "name": "public.weekly_source_manual_review_resolve_v1",
+      "conflictBlocks": 1,
+      "mergeExit": 1,
+      "reviewOnly": true
+    },
+    {
+      "name": "public.weekly_exceptional_pay_stage_c1_request_v1",
+      "conflictBlocks": 0,
+      "mergeExit": 0,
+      "reviewOnly": true
+    },
+    {
+      "name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "conflictBlocks": 0,
+      "mergeExit": 0,
+      "reviewOnly": true
+    },
+    {
+      "name": "private.weekly_source_manual_reviews_finalised_v1",
+      "conflictBlocks": 0,
+      "mergeExit": 0,
+      "reviewOnly": true
+    }
+  ]
+}

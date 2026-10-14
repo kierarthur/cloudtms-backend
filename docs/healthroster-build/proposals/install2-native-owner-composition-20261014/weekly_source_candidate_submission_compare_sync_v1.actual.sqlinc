@@ -1,0 +1,695 @@
+create or replace function private.weekly_source_candidate_submission_compare_sync_v1(
+  p_candidate_generation_id uuid,
+  p_projection_publication_id uuid,
+  p_membership_id uuid,
+  p_timesheet_id uuid,
+  p_timesheet_hash bytea,
+  p_now_utc timestamptz default pg_catalog.transaction_timestamp()
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_profile_code text;
+  v_submission public.weekly_timesheet_submission_requests%rowtype;
+  v_membership public.weekly_timesheet_submission_request_memberships%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_contract public.contracts%rowtype;
+  v_candidate_row jsonb;
+  v_source_json jsonb;
+  v_source record;
+  v_candidate_start timestamp without time zone;
+  v_candidate_end timestamp without time zone;
+  v_candidate_break integer;
+  v_candidate_shift_hash bytea;
+  v_durable_identity_hash bytea;
+  v_prior_work_event_id uuid;
+  v_work_event public.weekly_work_events%rowtype;
+  v_issue jsonb;
+  v_issues jsonb:='[]'::jsonb;
+  v_used_source_rows uuid[]:='{}'::uuid[];
+  v_seen_work_events uuid[]:='{}'::uuid[];
+  v_tie_count integer;
+  v_incident public.weekly_discrepancy_incidents%rowtype;
+  v_comparison public.weekly_issue_comparison_revisions%rowtype;
+  v_policy jsonb;
+  v_episode integer;
+  v_revision integer;
+  v_fingerprint bytea;
+  v_is_new boolean;
+  v_issue_family text;
+  v_presence text;
+  v_new_count integer:=0;
+  v_changed_count integer:=0;
+  v_unchanged_count integer:=0;
+  v_resolved_count integer:=0;
+  v_open_count integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_projection_publication_id is null or p_timesheet_id is null
+     or p_timesheet_hash is null or pg_catalog.octet_length(p_timesheet_hash)<>32 then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  if p_candidate_generation_id is null then
+    -- A newly published checking source must recompare already-signed weekly
+    -- evidence even when no submission request was needed or remains active.
+    if p_membership_id is not null then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_REQUEST_INVALID' using errcode='22023';
+    end if;
+    select * into strict v_publication
+    from public.weekly_source_projection_publications
+    where id=p_projection_publication_id and state='CURRENT';
+    select * into strict v_cycle from public.weekly_source_cycles
+    where id=v_publication.source_cycle_id for update;
+    select * into strict v_timesheet from public.timesheets
+    where timesheet_id=p_timesheet_id and is_current
+      and revoked_at is null and archived_at_utc is null
+      and sheet_scope='WEEKLY' and line_type='HOURS'
+      and authorised_at_server is null
+      and r2_nurse_key is not null and img_sha256_nurse is not null
+    for update;
+    select * into strict v_contract from public.contracts
+    where id=v_timesheet.contract_id;
+    v_generation.candidate_id:=v_contract.candidate_id;
+    v_membership.contract_id:=v_contract.id;
+    v_membership.client_id:=v_contract.client_id;
+    v_membership.week_ending:=v_timesheet.week_ending_date;
+  else
+    if p_membership_id is null then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_REQUEST_INVALID' using errcode='22023';
+    end if;
+    select * into strict v_generation
+    from public.weekly_candidate_outreach_generations
+    where id=p_candidate_generation_id and request_kind='SUBMIT_TIMESHEET'
+      and state='ACTIVE'
+    for update;
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_generation.source_cycle_id
+    for update;
+  end if;
+  perform private.weekly_source_query_current_publication_v1(
+    v_cycle.id,p_projection_publication_id
+  );
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id;
+  select * into strict v_publication
+  from public.weekly_source_projection_publications
+  where id=p_projection_publication_id
+    and source_cycle_id=v_cycle.id and state='CURRENT';
+  select * into strict v_upload from public.weekly_source_uploads
+  where id=v_publication.upload_id and source_cycle_id=v_cycle.id;
+  select profile.profile_code into strict v_profile_code
+  from public.weekly_source_format_profiles profile
+  where profile.id=v_upload.source_format_profile_id;
+  if v_profile_code='NHSP_PREFINAL_RELEASED_V1'
+     and (v_upload.confirmed_coverage_start_local_date is null
+       or v_upload.confirmed_coverage_end_local_date is null) then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000';
+  end if;
+  if p_candidate_generation_id is not null then
+    select * into strict v_submission
+    from public.weekly_timesheet_submission_requests
+    where candidate_cohort_id=v_generation.candidate_cohort_id
+      and candidate_id=v_generation.candidate_id
+      and source_cycle_id=v_cycle.id
+      and current_projection_publication_id=v_publication.id
+      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+    for update;
+    select * into strict v_membership
+    from public.weekly_timesheet_submission_request_memberships
+    where id=p_membership_id and submission_request_id=v_submission.id
+      and state='WAITING'
+    for update;
+    select * into strict v_contract from public.contracts
+    where id=v_membership.contract_id
+      and candidate_id=v_generation.candidate_id
+      and client_id=v_membership.client_id;
+    select * into strict v_timesheet from public.timesheets
+    where timesheet_id=p_timesheet_id and contract_id=v_membership.contract_id
+      and week_ending_date=v_membership.week_ending
+      and is_current and revoked_at is null and archived_at_utc is null
+      and sheet_scope='WEEKLY' and line_type='HOURS'
+      and authorised_at_server is null
+      and r2_nurse_key is not null and img_sha256_nurse is not null
+    for update;
+  end if;
+  if v_timesheet.version<1
+     or private.weekly_source_query_candidate_timesheet_hash_v1(v_timesheet.timesheet_id)
+          is distinct from p_timesheet_hash then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001';
+  end if;
+  v_policy:=private._weekly_source_effective_policy_v1(
+    v_contract.client_id,v_contract.id,v_membership.week_ending
+  );
+  if v_policy->>'source_group_id' is distinct from v_group.id::text
+     or v_policy->>'authority_mode'<>'SOURCE_AUTHORITY'
+     or v_policy->>'document_mode'<>'CHECK_ONLY' then
+    raise exception 'WEEKLY_SOURCE_SECURE_QUERY_NOT_APPLICABLE' using errcode='55000';
+  end if;
+  if exists(
+    select 1
+    from private.weekly_source_candidate_current_rows_v1(
+      v_publication.id,v_generation.candidate_id,v_membership.client_id,
+      v_membership.contract_id,v_membership.week_ending
+    ) source_row
+    where source_row.row_finalisation_state in (
+      'BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE'
+    )
+  ) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SOURCE_SCOPE_BLOCKED' using errcode='55000';
+  end if;
+
+  for v_candidate_row in
+    select value
+    from pg_catalog.jsonb_array_elements(
+      private.weekly_source_candidate_app_schedule_v1(
+        v_timesheet.actual_schedule_json,v_timesheet.additional_units_per_day
+      )
+    ) candidate_row
+    where v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'
+      or (candidate_row.value->>'date')::date between
+        v_upload.confirmed_coverage_start_local_date
+        and v_upload.confirmed_coverage_end_local_date
+    order by value->>'date',value->>'start',value->>'end',
+      coalesce(value->>'row_key','') collate "C"
+  loop
+    v_candidate_start:=(v_candidate_row->>'date')::date+
+      (v_candidate_row->>'start')::time;
+    v_candidate_end:=(v_candidate_row->>'date')::date+
+      (v_candidate_row->>'end')::time;
+    if v_candidate_end<=v_candidate_start then
+      v_candidate_end:=v_candidate_end+interval '1 day';
+    end if;
+    v_candidate_break:=coalesce(
+      nullif(v_candidate_row#>>'{break_entry,break_minutes}','')::integer,
+      nullif(v_candidate_row#>>'{break_entry,calculated_break_minutes}','')::integer,0
+    );
+    v_candidate_shift_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CANDIDATE_SHIFT_V1',
+      pg_catalog.jsonb_build_object(
+        'timesheet_id',v_timesheet.timesheet_id,'timesheet_revision',v_timesheet.version,
+        'row_key',v_candidate_row->>'row_key','work_date',v_candidate_row->>'date',
+        'start_at_local',v_candidate_start,'end_at_local',v_candidate_end,
+        'break_minutes',v_candidate_break,
+        'additional_units',coalesce(v_candidate_row->'additional_units','[]'::jsonb)
+      )
+    );
+
+    select pg_catalog.jsonb_build_object(
+      'source_row_id',source_row.source_row_id,'source_link_id',source_row.source_link_id,
+      'source_link_kind',(select link.link_kind
+        from public.weekly_work_event_source_links link
+        where link.id=source_row.source_link_id),
+      'work_event_id',source_row.work_event_id,'work_date',source_row.work_date,
+      'start_at_local',source_row.start_at_local,'end_at_local',source_row.end_at_local,
+      'break_minutes',source_row.break_minutes,
+      'row_finalisation_state',source_row.row_finalisation_state
+    ) into v_source_json
+    from private.weekly_source_candidate_current_rows_v1(
+      v_publication.id,v_generation.candidate_id,v_membership.client_id,
+      v_membership.contract_id,v_membership.week_ending
+    ) source_row
+    where not (source_row.source_row_id=any(v_used_source_rows))
+      and source_row.row_finalisation_state in (
+        'NOT_APPLICABLE','SOURCE_WORKED','SOURCE_UNFINALISED'
+      )
+      and (select link.link_kind from public.weekly_work_event_source_links link
+           where link.id=source_row.source_link_id)
+            not in ('FULL_NEGATIVE_SOURCE','ZERO_SOURCE')
+      and source_row.work_date=(v_candidate_row->>'date')::date
+      and source_row.start_at_local=v_candidate_start
+      and source_row.end_at_local=v_candidate_end
+      and coalesce(source_row.break_minutes,0)=v_candidate_break
+    order by source_row.source_row_id limit 1;
+
+    if v_source_json is null then
+      with possible as (
+        select source_row.*,
+          (select link.link_kind from public.weekly_work_event_source_links link
+           where link.id=source_row.source_link_id) as source_link_kind,
+          case
+            when source_row.start_at_local is null or source_row.end_at_local is null
+              then 1000000000::numeric
+            else
+              pg_catalog.abs(pg_catalog.date_part('epoch',
+                source_row.start_at_local-v_candidate_start)/60)
+              +pg_catalog.abs(pg_catalog.date_part('epoch',
+                source_row.end_at_local-v_candidate_end)/60)
+              +pg_catalog.abs(coalesce(source_row.break_minutes,0)-v_candidate_break)
+          end as distance
+        from private.weekly_source_candidate_current_rows_v1(
+          v_publication.id,v_generation.candidate_id,v_membership.client_id,
+          v_membership.contract_id,v_membership.week_ending
+        ) source_row
+        where not (source_row.source_row_id=any(v_used_source_rows))
+          and source_row.work_date=(v_candidate_row->>'date')::date
+          and source_row.row_finalisation_state in (
+            'NOT_APPLICABLE','SOURCE_WORKED','SOURCE_ABSENT_ZERO','SOURCE_UNFINALISED'
+          )
+      ),minimum as (select pg_catalog.min(distance) distance from possible)
+      select pg_catalog.count(*)::integer into v_tie_count
+      from possible,minimum where possible.distance=minimum.distance;
+      if v_tie_count>1 then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_AMBIGUOUS' using errcode='55000';
+      elsif v_tie_count=1 then
+        with possible as (
+          select source_row.*,
+            (select link.link_kind from public.weekly_work_event_source_links link
+             where link.id=source_row.source_link_id) as source_link_kind,
+            case
+              when source_row.start_at_local is null or source_row.end_at_local is null
+                then 1000000000::numeric
+              else
+                pg_catalog.abs(pg_catalog.date_part('epoch',
+                  source_row.start_at_local-v_candidate_start)/60)
+                +pg_catalog.abs(pg_catalog.date_part('epoch',
+                  source_row.end_at_local-v_candidate_end)/60)
+                +pg_catalog.abs(coalesce(source_row.break_minutes,0)-v_candidate_break)
+            end as distance
+          from private.weekly_source_candidate_current_rows_v1(
+            v_publication.id,v_generation.candidate_id,v_membership.client_id,
+            v_membership.contract_id,v_membership.week_ending
+          ) source_row
+          where not (source_row.source_row_id=any(v_used_source_rows))
+            and source_row.work_date=(v_candidate_row->>'date')::date
+            and source_row.row_finalisation_state in (
+              'NOT_APPLICABLE','SOURCE_WORKED','SOURCE_ABSENT_ZERO','SOURCE_UNFINALISED'
+            )
+        )
+        select pg_catalog.jsonb_build_object(
+          'source_row_id',source_row_id,'source_link_id',source_link_id,
+          'source_link_kind',source_link_kind,
+          'work_event_id',work_event_id,'work_date',work_date,
+          'start_at_local',start_at_local,'end_at_local',end_at_local,
+          'break_minutes',break_minutes,'row_finalisation_state',row_finalisation_state
+        ) into v_source_json
+        from possible order by distance,source_row_id limit 1;
+      end if;
+    end if;
+
+    if v_source_json is null then
+      -- A replacement NHSP file may omit a previously linked shift. Reuse
+      -- that durable event instead of inventing a new issue/notification clock.
+      v_prior_work_event_id:=null;
+      if p_candidate_generation_id is null then
+        with prior_events as (
+          select link.work_event_id,
+            pg_catalog.min(
+              pg_catalog.abs(pg_catalog.date_part('epoch',
+                source_row.start_at_local-v_candidate_start)/60)
+              +pg_catalog.abs(pg_catalog.date_part('epoch',
+                source_row.end_at_local-v_candidate_end)/60)
+              +pg_catalog.abs(coalesce(source_row.break_minutes,0)-v_candidate_break)
+            ) as distance
+          from public.weekly_source_uploads historical_upload
+          join public.weekly_source_upload_rows source_row
+            on source_row.upload_id=historical_upload.id
+          join public.weekly_source_row_resolutions resolution
+            on resolution.upload_row_id=source_row.id
+           and resolution.mapping_state='RESOLVED'
+          join public.weekly_work_event_source_links link
+            on link.upload_row_id=source_row.id
+           and link.row_resolution_id=resolution.id
+           and link.work_event_id=resolution.work_event_id
+          join public.weekly_work_events work_event
+            on work_event.id=link.work_event_id
+          where historical_upload.source_cycle_id=v_cycle.id
+            and historical_upload.id<>v_upload.id
+            -- A provisional check must not choose a final backing-report
+            -- event as the identity of a missing provisional shift.
+            and historical_upload.source_format_profile_id=v_upload.source_format_profile_id
+            and source_row.work_date=(v_candidate_row->>'date')::date
+            and source_row.start_at_local is not null
+            and source_row.end_at_local is not null
+            and resolution.candidate_id=v_generation.candidate_id
+            and resolution.client_id=v_membership.client_id
+            and resolution.contract_id=v_membership.contract_id
+            and work_event.first_source_group_id=v_group.id
+          group by link.work_event_id
+        ), nearest as (
+          select work_event_id,distance,
+            pg_catalog.count(*) over (partition by distance) as tie_count
+          from prior_events
+        )
+        select work_event_id,tie_count
+        into v_prior_work_event_id,v_tie_count
+        from nearest order by distance,work_event_id limit 1;
+        if v_tie_count>1 then
+          raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_AMBIGUOUS' using errcode='55000';
+        end if;
+      end if;
+      if v_prior_work_event_id is null then
+        v_durable_identity_hash:=private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_WORK_EVENT_SCHEDULE_TUPLE_V1',
+        pg_catalog.jsonb_build_object(
+          'source_group_id',v_group.id,
+          'source_format_profile_id',v_upload.source_format_profile_id,
+          'candidate_id',v_generation.candidate_id,
+          'client_id',v_membership.client_id,
+          'work_date',(v_candidate_row->>'date')::date,
+          'start_at_local',v_candidate_start,'end_at_local',v_candidate_end
+        )
+      );
+        insert into public.weekly_work_events(
+        candidate_id,client_id,work_date,identity_kind,profile_external_key,
+        durable_identity_hash,first_source_group_id,source_format_profile_id
+      ) values (
+        v_generation.candidate_id,v_membership.client_id,
+        (v_candidate_row->>'date')::date,'SCHEDULE_TUPLE',null,
+        v_durable_identity_hash,v_group.id,v_upload.source_format_profile_id
+      ) on conflict (durable_identity_hash) do nothing;
+        select * into strict v_work_event from public.weekly_work_events
+        where durable_identity_hash=v_durable_identity_hash;
+        if v_work_event.candidate_id is distinct from v_generation.candidate_id
+           or v_work_event.client_id is distinct from v_membership.client_id
+           or v_work_event.work_date is distinct from (v_candidate_row->>'date')::date
+           or v_work_event.first_source_group_id is distinct from v_group.id then
+          raise exception 'WEEKLY_SOURCE_WORK_EVENT_IDENTITY_COLLISION' using errcode='55000';
+        end if;
+      else
+        select * into strict v_work_event from public.weekly_work_events
+        where id=v_prior_work_event_id;
+      end if;
+      v_issue:=pg_catalog.jsonb_build_object(
+        'work_event_id',v_work_event.id,
+        'candidate_timesheet_id',v_timesheet.timesheet_id,
+        'candidate_timesheet_revision',v_timesheet.version,
+        'candidate_shift_fingerprint',pg_catalog.encode(v_candidate_shift_hash,'hex'),
+        'source_row_id',null,'source_work_event_link_id',null,
+        'contract_id',v_membership.contract_id,
+        'issue_family','SOURCE_MISSING_OR_NOT_AUTHORISED','source_presence','ABSENT',
+        'candidate_start_at_local',v_candidate_start,
+        'candidate_end_at_local',v_candidate_end,
+        'candidate_break_minutes',v_candidate_break,
+        'system_start_at_local',null,'system_end_at_local',null,
+        'system_break_minutes',null
+      );
+      v_issues:=v_issues||pg_catalog.jsonb_build_array(v_issue);
+    else
+      v_used_source_rows:=pg_catalog.array_append(
+        v_used_source_rows,(v_source_json->>'source_row_id')::uuid
+      );
+      if v_source_json->>'source_link_kind' in ('FULL_NEGATIVE_SOURCE','ZERO_SOURCE')
+         or v_source_json->>'row_finalisation_state'='SOURCE_ABSENT_ZERO' then
+        v_issue_family:='SOURCE_MISSING_OR_NOT_AUTHORISED';
+        v_presence:='ABSENT';
+      elsif v_source_json->>'row_finalisation_state'='SOURCE_UNFINALISED' then
+        v_issue_family:='HEALTHROSTER_NOT_FINALISED';
+        v_presence:='UNFINALISED';
+      elsif nullif(v_source_json->>'start_at_local','')::timestamp=v_candidate_start
+         and nullif(v_source_json->>'end_at_local','')::timestamp=v_candidate_end
+         and coalesce(nullif(v_source_json->>'break_minutes','')::integer,0)=v_candidate_break then
+        v_issue_family:=null;
+        v_presence:='PRESENT';
+      else
+        v_issue_family:='SOURCE_HOURS_DIFFER';
+        v_presence:='PRESENT';
+      end if;
+      if v_issue_family is not null then
+        v_issue:=pg_catalog.jsonb_build_object(
+          'work_event_id',(v_source_json->>'work_event_id')::uuid,
+          'candidate_timesheet_id',v_timesheet.timesheet_id,
+          'candidate_timesheet_revision',v_timesheet.version,
+          'candidate_shift_fingerprint',pg_catalog.encode(v_candidate_shift_hash,'hex'),
+          'source_row_id',(v_source_json->>'source_row_id')::uuid,
+          'source_work_event_link_id',(v_source_json->>'source_link_id')::uuid,
+          'contract_id',v_membership.contract_id,
+          'issue_family',v_issue_family,'source_presence',v_presence,
+          'candidate_start_at_local',v_candidate_start,
+          'candidate_end_at_local',v_candidate_end,
+          'candidate_break_minutes',v_candidate_break,
+          'system_start_at_local',case when v_presence='PRESENT'
+            then nullif(v_source_json->>'start_at_local','')::timestamp end,
+          'system_end_at_local',case when v_presence='PRESENT'
+            then nullif(v_source_json->>'end_at_local','')::timestamp end,
+          'system_break_minutes',case when v_presence='PRESENT'
+            then nullif(v_source_json->>'break_minutes','')::integer end
+        );
+        v_issues:=v_issues||pg_catalog.jsonb_build_array(v_issue);
+      end if;
+    end if;
+  end loop;
+
+  for v_source in
+    select *
+    from private.weekly_source_candidate_current_rows_v1(
+      v_publication.id,v_generation.candidate_id,v_membership.client_id,
+      v_membership.contract_id,v_membership.week_ending
+    ) source_row
+    where not (source_row.source_row_id=any(v_used_source_rows))
+      and source_row.row_finalisation_state<>'SOURCE_ABSENT_ZERO'
+      and (select link.link_kind from public.weekly_work_event_source_links link
+           where link.id=source_row.source_link_id)
+            not in ('FULL_NEGATIVE_SOURCE','ZERO_SOURCE')
+    order by source_row.work_date,source_row.start_at_local,
+      source_row.end_at_local,source_row.source_row_id
+  loop
+    v_candidate_shift_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CANDIDATE_SHIFT_V1',
+      pg_catalog.jsonb_build_object(
+        'timesheet_id',v_timesheet.timesheet_id,
+        'timesheet_revision',v_timesheet.version,
+        'work_event_id',v_source.work_event_id,'worked',false
+      )
+    );
+    if v_source.row_finalisation_state='SOURCE_UNFINALISED' then
+      v_issue_family:='HEALTHROSTER_NOT_FINALISED';
+      v_presence:='UNFINALISED';
+    elsif v_source.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED') then
+      v_issue_family:='SOURCE_HOURS_DIFFER';
+      v_presence:='PRESENT';
+    else
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SOURCE_SCOPE_BLOCKED' using errcode='55000';
+    end if;
+    v_issue:=pg_catalog.jsonb_build_object(
+      'work_event_id',v_source.work_event_id,
+      'candidate_timesheet_id',v_timesheet.timesheet_id,
+      'candidate_timesheet_revision',v_timesheet.version,
+      'candidate_shift_fingerprint',pg_catalog.encode(v_candidate_shift_hash,'hex'),
+      'source_row_id',v_source.source_row_id,
+      'source_work_event_link_id',v_source.source_link_id,
+      'contract_id',v_membership.contract_id,
+      'issue_family',v_issue_family,'source_presence',v_presence,
+      'candidate_start_at_local',null,'candidate_end_at_local',null,
+      'candidate_break_minutes',null,
+      'system_start_at_local',case when v_presence='PRESENT'
+        then v_source.start_at_local end,
+      'system_end_at_local',case when v_presence='PRESENT'
+        then v_source.end_at_local end,
+      'system_break_minutes',case when v_presence='PRESENT'
+        then v_source.break_minutes end
+    );
+    v_issues:=v_issues||pg_catalog.jsonb_build_array(v_issue);
+  end loop;
+
+  for v_issue in
+    select value from pg_catalog.jsonb_array_elements(v_issues)
+    order by value->>'work_event_id'
+  loop
+    select * into strict v_work_event from public.weekly_work_events
+    where id=(v_issue->>'work_event_id')::uuid
+      and candidate_id=v_generation.candidate_id
+      and client_id=v_membership.client_id
+      and first_source_group_id=v_group.id;
+    if v_work_event.id=any(v_seen_work_events) then
+      raise exception 'WEEKLY_SOURCE_QUERY_DUPLICATE_WORK_EVENT' using errcode='22023';
+    end if;
+    v_seen_work_events:=pg_catalog.array_append(v_seen_work_events,v_work_event.id);
+    v_issue_family:=v_issue->>'issue_family';
+    v_presence:=v_issue->>'source_presence';
+    v_policy:=private._weekly_source_effective_policy_v1(
+      v_membership.client_id,v_membership.contract_id,v_work_event.work_date
+    );
+    if v_policy->>'source_group_id' is distinct from v_group.id::text
+       or v_policy->>'authority_mode'<>'SOURCE_AUTHORITY'
+       or v_policy->>'document_mode'<>'CHECK_ONLY' then
+      raise exception 'WEEKLY_SOURCE_SECURE_QUERY_NOT_APPLICABLE' using errcode='55000';
+    end if;
+
+    perform 1 from public.weekly_work_events where id=v_work_event.id for update;
+    if private.weekly_source_query_resolved_decision_matches_v1(v_group.id,v_work_event.id,v_issue) then
+      v_unchanged_count:=v_unchanged_count+1;
+      continue;
+    end if;
+    select * into v_incident
+    from public.weekly_discrepancy_incidents
+    where source_group_id=v_group.id and work_event_id=v_work_event.id
+      and state='OPEN'
+    for update;
+    v_is_new:=not found;
+    if v_is_new then
+      select coalesce(pg_catalog.max(episode_number),0)+1 into v_episode
+      from public.weekly_discrepancy_incidents
+      where source_group_id=v_group.id and work_event_id=v_work_event.id;
+      insert into public.weekly_discrepancy_incidents(
+        source_group_id,work_event_id,episode_number,candidate_id,client_id,
+        source_cycle_id,state,reconciliation_state,candidate_action_state,
+        manager_potential_state,manager_action_state,waiting_source_state
+      ) values (
+        v_group.id,v_work_event.id,v_episode,v_generation.candidate_id,
+        v_membership.client_id,v_cycle.id,'OPEN','UNRESOLVED',
+        case when p_candidate_generation_id is null
+          and coalesce((v_policy->>'candidate_queries_enabled')::boolean,false)
+          then 'NOT_ASKED' else 'NOT_REQUIRED' end,
+        case when coalesce((v_policy->>'manager_queries_enabled')::boolean,false)
+                   and nullif(v_policy->>'manager_query_recipient','') is not null
+          then 'AVAILABLE' else 'NOT_AVAILABLE' end,
+        case when coalesce((v_policy->>'manager_queries_enabled')::boolean,false)
+                   and nullif(v_policy->>'manager_query_recipient','') is not null
+          then 'NOT_SENT' else 'NOT_REQUIRED' end,
+        'NOT_WAITING'
+      ) returning * into v_incident;
+      v_comparison.id:=null;
+      v_new_count:=v_new_count+1;
+    else
+      if v_incident.candidate_id is distinct from v_generation.candidate_id
+         or v_incident.client_id is distinct from v_membership.client_id
+         or v_incident.source_cycle_id is distinct from v_cycle.id
+         or v_incident.current_comparison_revision_id is null then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_INCIDENT_SCOPE_CONFLICT' using errcode='55000';
+      end if;
+      select * into strict v_comparison from public.weekly_issue_comparison_revisions
+      where id=v_incident.current_comparison_revision_id;
+      if v_comparison.contract_id is distinct from v_membership.contract_id then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_INCIDENT_SCOPE_CONFLICT' using errcode='55000';
+      end if;
+      v_episode:=v_incident.episode_number;
+    end if;
+
+    v_fingerprint:=private.weekly_source_query_comparison_fingerprint_v1(
+      v_incident.id,v_episode,v_work_event.id,v_issue
+    );
+    if not v_is_new and v_comparison.material_comparison_fingerprint<>v_fingerprint then
+      -- A re-signed candidate week changes the current comparison but not the
+      -- identity or outreach clock of an already-open work-event incident.
+      v_changed_count:=v_changed_count+1;
+    end if;
+    if v_comparison.id is not null
+       and v_comparison.material_comparison_fingerprint=v_fingerprint then
+      v_unchanged_count:=v_unchanged_count+1;
+    else
+      select coalesce(pg_catalog.max(revision_number),0)+1 into v_revision
+      from public.weekly_issue_comparison_revisions
+      where incident_id=v_incident.id;
+      insert into public.weekly_issue_comparison_revisions(
+        incident_id,revision_number,projection_publication_id,comparison_upload_id,
+        final_revision_id,candidate_timesheet_id,candidate_timesheet_revision,
+        candidate_shift_fingerprint,source_row_id,source_work_event_link_id,
+        contract_id,issue_family,source_presence,candidate_start_at_local,
+        candidate_end_at_local,candidate_break_minutes,system_start_at_local,
+        system_end_at_local,system_break_minutes,material_comparison_fingerprint
+      ) values (
+        v_incident.id,v_revision,v_publication.id,v_upload.id,null,
+        v_timesheet.timesheet_id,v_timesheet.version,
+        private.weekly_source_query_hex32_v1(
+          v_issue->>'candidate_shift_fingerprint',
+          'WEEKLY_SOURCE_CANDIDATE_SHIFT_HASH_INVALID'
+        ),nullif(v_issue->>'source_row_id','')::uuid,
+        nullif(v_issue->>'source_work_event_link_id','')::uuid,
+        v_membership.contract_id,v_issue_family,v_presence,
+        nullif(v_issue->>'candidate_start_at_local','')::timestamp,
+        nullif(v_issue->>'candidate_end_at_local','')::timestamp,
+        nullif(v_issue->>'candidate_break_minutes','')::integer,
+        nullif(v_issue->>'system_start_at_local','')::timestamp,
+        nullif(v_issue->>'system_end_at_local','')::timestamp,
+        nullif(v_issue->>'system_break_minutes','')::integer,v_fingerprint
+      ) returning * into v_comparison;
+      update public.weekly_discrepancy_incidents
+      set current_comparison_revision_id=v_comparison.id
+      where id=v_incident.id;
+      insert into public.weekly_discrepancy_events(
+        incident_id,issue_episode,projection_publication_id,
+        expected_comparison_fingerprint,event_kind,actor_kind,bounded_payload_json,
+        idempotency_key
+      ) values (
+        v_incident.id,v_incident.episode_number,v_publication.id,v_fingerprint,
+        'SOURCE_RECHECKED','SYSTEM',
+        pg_catalog.jsonb_build_object(
+          'issue_family',v_issue_family,'source_presence',v_presence,
+          'comparison_revision_id',v_comparison.id,
+          'origin','CANDIDATE_TIMESHEET_SUBMISSION'
+        ),
+        'SOURCE_RECHECKED:'||v_incident.id::text||':'||pg_catalog.encode(v_fingerprint,'hex')
+      ) on conflict (event_kind,idempotency_key) do nothing;
+      perform private.bpay_next_source_query_refresh_v1(v_membership.contract_id,v_incident.work_event_id);
+    end if;
+  end loop;
+
+  for v_incident in
+    select incident.*
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    where incident.source_group_id=v_group.id
+      and incident.source_cycle_id=v_cycle.id
+      and incident.candidate_id=v_generation.candidate_id
+      and incident.client_id=v_membership.client_id
+      and comparison.contract_id=v_membership.contract_id
+      and work_event.work_date between v_membership.week_ending-6 and v_membership.week_ending
+      and (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'
+        or work_event.work_date between v_upload.confirmed_coverage_start_local_date
+          and v_upload.confirmed_coverage_end_local_date)
+      and incident.state='OPEN'
+      and not (incident.work_event_id=any(v_seen_work_events))
+    order by incident.id for update of incident
+  loop
+    update public.weekly_discrepancy_incidents
+    set state='RESOLVED',reconciliation_state='RECONCILED',
+      candidate_action_state='NOT_REQUIRED',manager_potential_state='NOT_REQUIRED',
+      manager_action_state='NOT_REQUIRED',waiting_source_state='SOURCE_MATCHED',
+      resolved_at_utc=p_now_utc,resolution_kind='SOURCE_MATCHED'
+    where id=v_incident.id;
+    update public.weekly_candidate_outreach_memberships set state='RESOLVED'
+    where incident_id=v_incident.id and state in ('ACTIONABLE','ANSWERED');
+    update public.weekly_manager_review_items set response_state='FILTERED_RESOLVED'
+    where incident_id=v_incident.id and response_state='UNANSWERED';
+    update public.office_action_notifications
+    set operational_state='RESOLVED',resolved_at_utc=p_now_utc
+    where issue_id=v_incident.id and operational_state='OPEN';
+    insert into public.weekly_discrepancy_events(
+      incident_id,issue_episode,projection_publication_id,
+      expected_comparison_fingerprint,event_kind,actor_kind,bounded_payload_json,
+      idempotency_key
+    ) values (
+      v_incident.id,v_incident.episode_number,v_publication.id,null,
+      'RESOLVED','SYSTEM',
+      pg_catalog.jsonb_build_object(
+        'resolution','SOURCE_MATCHED','origin','CANDIDATE_TIMESHEET_SUBMISSION'
+      ),
+      'SOURCE_MATCHED:'||v_incident.id::text||':'||v_publication.id::text
+    ) on conflict (event_kind,idempotency_key) do nothing;
+    perform private.bpay_next_source_query_refresh_v1(v_membership.contract_id,v_incident.work_event_id);
+    v_resolved_count:=v_resolved_count+1;
+  end loop;
+
+  select pg_catalog.count(*)::integer into v_open_count
+  from public.weekly_discrepancy_incidents incident
+  join public.weekly_issue_comparison_revisions comparison
+    on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  where incident.source_cycle_id=v_cycle.id
+    and incident.candidate_id=v_generation.candidate_id
+    and incident.client_id=v_membership.client_id
+    and comparison.contract_id=v_membership.contract_id
+    and work_event.work_date between v_membership.week_ending-6 and v_membership.week_ending
+    and incident.state='OPEN';
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'outcome',case when v_open_count=0 then 'MATCHED' else 'ISSUES' end,
+    'open_issue_count',v_open_count,'new_incidents',v_new_count,
+    'changed_comparisons',v_changed_count,'unchanged_incidents',v_unchanged_count,
+    'resolved_incidents',v_resolved_count
+  );
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_STALE' using errcode='40001';
+end;
+$function$;
