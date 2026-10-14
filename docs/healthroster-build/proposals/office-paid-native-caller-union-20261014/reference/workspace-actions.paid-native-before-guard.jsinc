@@ -1,0 +1,1680 @@
+(function initialiseWeeklySourceWorkspaceActions(root, factory) {
+  'use strict';
+  const api = factory(root);
+  if (typeof module === 'object' && module && module.exports) module.exports = api;
+  if (typeof window === 'object' && root === window && !root.CloudTMSWeeklySourceWorkspaceActionsV1) {
+    Object.defineProperty(root, 'CloudTMSWeeklySourceWorkspaceActionsV1', {
+      configurable: false, enumerable: true, writable: false, value: api
+    });
+    root.addEventListener('cloudtms:weekly-source-preview', (event) => api.openPreview(event.detail));
+    root.addEventListener('cloudtms:weekly-source-batch-preview', (event) => api.openBatchPreview(event.detail));
+    root.addEventListener('cloudtms:weekly-source-action', (event) => api.handleAction(event.detail));
+    // The shared shell stores a dragged/centred position in pixels. Keep only
+    // this feature's child modal on screen when the window or device rotates.
+    root.addEventListener('resize', () => root.requestAnimationFrame(() => {
+      const modal = root.document?.getElementById('modal');
+      if (!modal?.querySelector('.ws-child')) return;
+      const bounds = modal.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const left = Math.max(12, Math.min(bounds.left, root.innerWidth - bounds.width - 12));
+      const top = Math.max(12, Math.min(bounds.top, root.innerHeight - bounds.height - 12));
+      if (Math.abs(left - bounds.left) < 1 && Math.abs(top - bounds.top) < 1) return;
+      Object.assign(modal.style, { left: `${left}px`, top: `${top}px`, right: 'auto', bottom: 'auto', transform: 'none' });
+    }));
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function buildWeeklySourceWorkspaceActions(root) {
+  'use strict';
+
+  const CONTRACT = 'WEEKLY_SOURCE_WORKSPACE_ACTIONS_V1';
+  const PROFILE_LABELS = Object.freeze({
+    NHSP_FINAL_BACKING_V1: 'NHSP backing report',
+    NHSP_PREFINAL_RELEASED_V1: 'NHSP released shifts',
+    HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1: 'HealthRoster Timesheet Export',
+    HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1: 'HealthRoster Full Timesheet Export',
+    ROSTER_WEEKLY_SUMMARY_ACTUAL_V1: 'Weekly source file'
+  });
+  const NON_TECHNICAL_DETAIL_LABELS = Object.freeze([
+    ['candidate', 'Candidate'], ['client', 'Client'], ['trust', 'Trust'], ['shift', 'Shift'],
+    ['day_date', 'Day/date'], ['candidate_hours', 'Candidate says they worked'], ['system_hours', 'System hours'],
+    ['issue', 'Issue'], ['status', 'Status'], ['age', 'Age'], ['manager', 'Manager'],
+    ['manager_contact', 'Manager'], ['candidate_asked_at', 'Candidate asked'],
+    ['manager_informed_at', 'Manager informed'], ['next_step', 'Next step'], ['problem', 'Problem'],
+    ['guidance', 'What to do'], ['file', 'File'], ['uploaded', 'Uploaded'], ['rows', 'Rows'],
+    ['coverage', 'Coverage'], ['weeks', 'Weeks ending'], ['report_number', 'Report number'], ['cutoff', 'Cutoff'],
+    ['source_reference', 'Source worker reference'], ['booking_reference', 'Booking reference'],
+    ['final_source', 'Final source']
+  ]);
+  const CHARGE_DETAIL_LABELS = Object.freeze([
+    ['commission', 'Commission'], ['total_cost', 'Total cost'], ['source_charge', 'Source charge'],
+    ['calculated_charge', 'Calculated charge'], ['difference', 'Difference']
+  ]);
+  const asText = (value) => String(value == null ? '' : value).trim();
+  const asArray = (value) => Array.isArray(value) ? value : [];
+  const asObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const escapeHtml = (value) => String(value == null ? '' : value)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+  const isoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(asText(value)) ? asText(value) : '';
+  const displayDate = (value) => {
+    const date = isoDate(value);
+    if (!date) return asText(value);
+    const [year, month, day] = date.split('-').map(Number);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${day} ${months[month - 1]} ${year}`;
+  };
+  const titleCaseStatus = (value) => asText(value).replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (token) => token.toUpperCase());
+  const workspaceApi = () => root.CloudTMSWeeklySourceImportWorkspaceV1;
+  const sourceAdmissionBusy = error => workspaceApi()?.isSourceAdmissionBusy?.(error) === true;
+  const sourceBusyMessage = 'Another Source update is in progress. Try again in a moment.';
+  const knownProtectedRefusal = (error) => (error?.status === 400
+      && /weekly_source_target_managed_root_prepare_atomic_v1 failed 400:[\s\S]*WEEKLY_SOURCE_TSFIN_IDENTITY_OR_POLICY_MISMATCH/i.test(asText(error?.message)))
+    || ['WEEKLY_PROTECTED_REVIEW_SOURCE_CHANGED', 'WEEKLY_PROTECTED_EXISTING_SHIFT_SELECTION_REQUIRED',
+      'WEEKLY_PROTECTED_CONTRACT_SCOPE_INVALID', 'WEEKLY_PROTECTED_FAMILY_REQUEST_INVALID', 'LOCAL_OWNER_REQUIRED', 'BPAY_NEXT_PROTECTED_LOCAL_OWNER_REQUIRED'].includes(error?.code);
+  const localPublisherRefusal = (error) => error?.code === 'WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY'
+    || (error?.status === 400 && /weekly_exceptional_pay_complete_local_v1 failed 400:[\s\S]*\bWEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY\b/i.test(asText(error?.message)));
+
+  function confirmedProtectedResult(result) {
+    const confirmed = root.CloudTMSWeeklySourcePresentationV1?.protectedActionConfirmation?.(result);
+    if (confirmed?.confirmed === true) return confirmed;
+    const code = asText(result?.code || result?.error_code);
+    const error = new Error(['LOCAL_OWNER_REQUIRED', 'BPAY_NEXT_PROTECTED_LOCAL_OWNER_REQUIRED'].includes(code)
+      ? 'Save this change through the Source editor. No payment change was accepted.'
+      : confirmed?.message || 'The save could not be confirmed. Retry exact request.');
+    error.code = code;
+    error.retryable = result?.retryable === true;
+    throw error;
+  }
+
+  async function saveProtectedOnce(pending) {
+    return await workspaceApi().issueCommand(pending.action, pending.payload);
+  }
+
+  function plainMessage(value, fallback = 'This item needs attention before you can continue.') {
+    const text = asText(value);
+    const guidance = {
+      WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY: 'The file repeats a booking reference. Correct the duplicate reference before uploading again.',
+      WEEKLY_SOURCE_UPLOAD_HAS_BLOCKERS: 'The file contains duplicate or malformed source rows. Correct the flagged rows before uploading again.',
+      WEEKLY_SOURCE_COVERAGE_SHRINK_ACKNOWLEDGEMENT_REQUIRED: 'This file covers a shorter period than the earlier file. Confirm the shorter coverage when reviewing a new upload.',
+      WEEKLY_SOURCE_COVERAGE_CONFIRMATION_NARROWER_THAN_EVIDENCE: 'The confirmed period excludes shifts contained in the file. Include every shift date in the export period.',
+      WEEKLY_SOURCE_CYCLE_NOT_OPEN: 'This period is already finalised. Use the final-source correction journey for a replacement.',
+      WEEKLY_SOURCE_REPORT_SCOPE_NOT_OPEN: 'This report is already finalised. Use the final-source correction journey for a replacement.',
+      WEEKLY_PROTECTED_EXISTING_SHIFT_SELECTION_REQUIRED: 'Work is already recorded for this candidate and time. Choose that existing shift instead of adding it again.',
+      WEEKLY_PROTECTED_EDITOR_SHIFT_STALE: 'This shift has changed. Close this window and recheck before continuing.',
+      WEEKLY_PROTECTED_EDITOR_SOURCE_SCOPE_REQUIRED: 'Choose the source group that covers this client and work date.',
+      WEEKLY_SOURCE_CANDIDATE_INACTIVE_OR_MISSING: 'The selected candidate is inactive or no longer available. If inactive, reactivate their Candidate record before linking this shift; otherwise choose an active candidate.',
+      WEEKLY_SOURCE_CLIENT_NOT_ELIGIBLE: 'That client does not belong to this source report. Choose the matching client.',
+      WEEKLY_SOURCE_CONTRACT_NOT_ELIGIBLE: 'That contract does not cover this candidate, client and shift date. Review the contract or choose another.',
+      WEEKLY_SOURCE_RECHECK_NOT_CURRENT: 'A newer file or comparison has replaced this one. Close this window and refresh Queries before continuing.',
+      WEEKLY_SOURCE_RECHECK_REPLAY_CONFLICT: 'This check was already started with a different choice. Close this window and refresh Queries before making another choice.',
+      WEEKLY_SOURCE_RECHECK_INCOMPLETE: 'Your selection was saved, but the source recheck did not finish. Close this window and retry the saved recheck in Office Checks.',
+      WEEKLY_SOURCE_PREVIEW_STALE: 'The source information has changed. Close this window and refresh Queries before continuing.',
+      WEEKLY_SOURCE_MANUAL_REVIEW_ALREADY_AUTHORISED: 'This Timesheet has already been authorised. Use the existing unauthorise control first if it is still permitted, then reopen this shift for review.',
+      WEEKLY_SOURCE_MANUAL_REVIEW_SOURCE_STALE: 'A newer import has changed this shift. Refresh Queries to review the current source hours before deciding.',
+      WEEKLY_SOURCE_TSFIN_IDENTITY_OR_POLICY_MISMATCH: 'The weekly Timesheet settings do not match this protected-pay request. No pay change was saved. Refresh the shift and try again.',
+      WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY: 'This pay change was not saved because payment processing is not ready. Existing approved pay is unchanged. Your request has been kept for retry.'
+    };
+    const code = [...text.matchAll(/WEEKLY_(?:SOURCE|PROTECTED)_[A-Z0-9_]+/g)]
+      .map((match) => match[0]).find((item) => guidance[item]);
+    if (guidance[code]) return guidance[code];
+    if (!text || /\b(uuid|hash|fingerprint|rpc|tsfin|manifest|stack|sql|exception|workbench|idempotency|generation|authority pointer|work event|rate class)\b/i.test(text)) return fallback;
+    return text.replace(/\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+){2,}\b/g, '').replace(/\s{2,}/g, ' ').trim() || fallback;
+  }
+
+  function isCandidateComparisonAmbiguity(error) {
+    return /WEEKLY_SOURCE_CANDIDATE_COMPARISON_AMBIGUOUS/i.test(
+      `${asText(error?.code)} ${asText(error?.message)}`
+    );
+  }
+
+  function rowDate(row) {
+    return isoDate(row.workDate || row.work_date || row.date || row.date_local);
+  }
+
+  function rowCandidate(row) {
+    return asText(row.workerName || row.worker_name || row.staff || row.staff_name || row.candidate);
+  }
+
+  function rowHours(row) {
+    const actual = asObject(row.actual);
+    const start = asText(actual.start || row.actualStart || row.actual_start || row.start_at_local || row.start);
+    const end = asText(actual.end || row.actualEnd || row.actual_end || row.end_at_local || row.end);
+    const breakMinutes = row.breakMinutes ?? row.break_minutes ?? actual.breakMinutes;
+    if (!start || !end) return '—';
+    return `${start}-${end}${Number.isFinite(Number(breakMinutes)) ? ` · ${Number(breakMinutes)} min break` : ''}`;
+  }
+
+  function previewIssue(value) {
+    const raw = asObject(value);
+    return { message: plainMessage(raw.message || value), physical_row: asText(raw.physicalRow || raw.physical_row) };
+  }
+
+  function normalisePreview(detail) {
+    const envelope = asObject(detail);
+    const preview = asObject(envelope.preview?.preview || envelope.preview);
+    const rows = asArray(preview.rows);
+    const dates = rows.map(rowDate).filter(Boolean).sort();
+    const profileId = asText(preview.profileId || envelope.accept_context?.profile_id);
+    const profileLabel = PROFILE_LABELS[profileId] || 'Weekly source file';
+    const scope = asObject(preview.scope);
+    const first = asObject(rows[0]);
+    const finalReport = profileId === 'NHSP_FINAL_BACKING_V1';
+    const groupWideNhspPrefinal = profileId === 'NHSP_PREFINAL_RELEASED_V1';
+    const trust = asText(scope.trust || asArray(scope.trusts)[0] || first.trust || first.clientName || first.client);
+    const reportNumber = asText(preview.reportNumber || preview.report_number || scope.backingReportNumber || scope.reportNumber || scope.report_number);
+    const cutoff = asText(envelope.accept_context?.cutoff || preview.cutoff || preview.cutoffLabel);
+    const fatal = asArray(preview.fatalErrors).map(previewIssue);
+    const warnings = asArray(preview.warnings).map(previewIssue)
+      .filter((issue) => !/round/i.test(issue.message));
+    const acceptContext = asObject(envelope.accept_context);
+    const previousCoverage = asObject(acceptContext.previous_coverage || preview.previousCoverage || preview.previous_coverage);
+    const baseAuthorityReady = [
+      acceptContext.file_key || envelope.file_key,
+      acceptContext.source_group_id,
+      acceptContext.source_cycle_id,
+      acceptContext.profile_id || profileId
+    ].every((value) => asText(value));
+    const clientReady = groupWideNhspPrefinal || !!asText(acceptContext.client_id);
+    const finalReportReady = !finalReport
+      || (!!trust && !!reportNumber && !!cutoff && !!asText(acceptContext.report_scope_id));
+    const authorityReady = baseAuthorityReady && clientReady && finalReportReady;
+    return {
+      ok: envelope.ok === true && preview.ok === true && fatal.length === 0 && authorityReady,
+      file_key: asText(envelope.file_key || envelope.accept_context?.file_key),
+      filename: asText(envelope.accept_context?.original_filename || preview.fileFacts?.filename),
+      profile_id: profileId,
+      profile_label: profileLabel,
+      final_report: finalReport,
+      trust, report_number: reportNumber, cutoff,
+      rows,
+      counts: asObject(preview.counts || preview.rowCounts),
+      coverage_start: dates[0] || '', coverage_end: dates.at(-1) || '',
+      previous_coverage_start: isoDate(previousCoverage.start_local_date || previousCoverage.start),
+      previous_coverage_end: isoDate(previousCoverage.end_local_date || previousCoverage.end),
+      fatal_errors: fatal, warnings,
+      accept_context: acceptContext,
+      authority_ready: authorityReady
+    };
+  }
+
+  function previewConfirmation(model, start, end) {
+    if (model.final_report) {
+      const trust = model.trust || 'the Trust shown';
+      const report = model.report_number ? `, report ${model.report_number},` : '';
+      return `I confirm this is the complete final NHSP backing report for ${trust}${report} for the cutoff shown.`;
+    }
+    if (!model.rows.length) return 'I confirm there are no shifts in this date range.';
+    if (model.profile_id === 'NHSP_PREFINAL_RELEASED_V1') {
+      return `I confirm this NHSP previously released export covers ${displayDate(start) || 'the start date shown'} to ${displayDate(end) || 'the end date shown'}.`;
+    }
+    return `I confirm this is the complete source file from ${displayDate(start) || 'the start date shown'} to ${displayDate(end) || 'the end date shown'}.`;
+  }
+
+  function previewRows(model) {
+    const rows = model.rows.slice(0, 100).map((row) => `<tr><td>${escapeHtml(rowCandidate(row) || '—')}</td><td>${escapeHtml(displayDate(rowDate(row)) || '—')}</td><td>${escapeHtml(rowHours(row))}</td><td>${escapeHtml(titleCaseStatus(row.rowKind || row.row_kind || row.sourcePosition || row.source_position) || 'Ready')}</td></tr>`).join('');
+    return `<div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr><th>Candidate</th><th>Day/date</th><th>System hours</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ws-empty">No shift rows are shown in this file.</td></tr>'}</tbody></table></div>${model.rows.length > 100 ? `<p class="mini">Showing the first 100 of ${model.rows.length} rows. The complete file will be checked before it is accepted.</p>` : ''}`;
+  }
+
+  function renderPreview(model, state = {}) {
+    const start = isoDate(state.coverage_start || model.coverage_start);
+    const end = isoDate(state.coverage_end || model.coverage_end);
+    const issueMarkup = !model.authority_ready
+      ? '<div class="ws-notice ws-notice--danger" role="alert"><strong>This file cannot be accepted yet</strong><span>Recheck the selected source, Trust or client, and finalisation period.</span></div>'
+      : model.fatal_errors.length
+      ? `<div class="ws-notice ws-notice--danger" role="alert"><strong>This file cannot be accepted yet</strong>${model.fatal_errors.map((issue) => `<span>${escapeHtml(issue.message)}</span>`).join('')}</div>`
+      : model.warnings.length
+        ? `<div class="ws-notice ws-notice--warning"><strong>Check this file</strong>${model.warnings.map((issue) => `<span>${escapeHtml(issue.message)}</span>`).join('')}</div>` : '';
+    const context = [
+      ['File', model.filename || 'Selected source file'], ['File type', model.profile_label],
+      ...(model.final_report ? [['Trust', model.trust || '—'], ['Report number', model.report_number || '—'], ['Cutoff', model.cutoff || 'As selected']] : [])
+    ].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+    const nhspPrefinal = model.profile_id === 'NHSP_PREFINAL_RELEASED_V1';
+    const coverage = model.final_report ? '' : `<fieldset class="ws-child-fieldset"><legend>${nhspPrefinal ? 'Export period' : 'Complete file period'}</legend><label>From<input type="date" data-wsa-coverage-start value="${escapeHtml(start)}" required></label><label>To<input type="date" data-wsa-coverage-end value="${escapeHtml(end)}" required></label></fieldset>`;
+    const importUse = !model.profile_id.startsWith('NHSP_')
+      ? `<label class="ws-confirm">Use this file for<select data-wsa-import-use><option value="CHECKING"${state.import_use !== 'PREPARE_FINALISATION' ? ' selected' : ''}>Check hours and resolve queries</option><option value="PREPARE_FINALISATION"${state.import_use === 'PREPARE_FINALISATION' ? ' selected' : ''}>Prepare for finalisation</option></select></label>` : '';
+    const replacementNotice = nhspPrefinal && model.previous_coverage_start && model.previous_coverage_end
+      ? `<div class="ws-notice ws-notice--warning"><strong>This replaces the current provisional comparison</strong><span>The earlier NHSP export covered ${escapeHtml(displayDate(model.previous_coverage_start))} to ${escapeHtml(displayDate(model.previous_coverage_end))}. Only shifts in this new file will appear in the current provisional comparison. Missing shifts are not cancelled or deducted from final NHSP pay; the final backing report remains the authority.</span></div>` : '';
+    const shorter = !model.final_report && !nhspPrefinal && !!model.previous_coverage_start && !!model.previous_coverage_end
+      && (!!start && start > model.previous_coverage_start || !!end && end < model.previous_coverage_end);
+    const shorterConfirmation = shorter ? `<div class="ws-notice ws-notice--warning"><span>This period is shorter than the previous complete file (${escapeHtml(displayDate(model.previous_coverage_start))} to ${escapeHtml(displayDate(model.previous_coverage_end))}).</span></div><label class="ws-confirm"><input type="checkbox" data-wsa-shrink-confirm${state.shrink_acknowledged ? ' checked' : ''}><span>I confirm this shorter date range is complete.</span></label>` : '';
+    const confirmation = previewConfirmation(model, start, end);
+    const acceptanceError = state.ambiguous
+      ? '<div class="ws-notice ws-notice--danger" role="alert"><strong>File saved; comparison paused</strong><span>An earlier candidate shift has more than one possible source match. The file is saved, but its comparison has not finished. Do not upload it again; contact support to resolve the match.</span></div>'
+      : state.error ? `<div class="ws-notice ws-notice--danger" role="alert"><strong>The source file was not accepted</strong><span>${escapeHtml(plainMessage(state.error, 'Recheck the file and try again.'))}</span></div>` : '';
+    return `<div class="ws-child" data-wsa-screen="preview"><div class="ws-child-context">${context}</div>${issueMarkup}${importUse}${coverage}${replacementNotice}${shorterConfirmation}${previewRows(model)}<label class="ws-confirm"><input type="checkbox" data-wsa-confirm${state.confirmed ? ' checked' : ''}${model.ok ? '' : ' disabled'}><span>${escapeHtml(confirmation)}</span></label>${acceptanceError}<div class="ws-child-actions"><button type="button" class="btn btn-outline" data-wsa-close>${state.ambiguous ? 'Close' : 'Cancel'}</button><button type="button" class="btn primary" data-wsa-accept${model.ok && state.confirmed && (!shorter || state.shrink_acknowledged) && !state.ambiguous ? '' : ' disabled'}>${state.busy ? 'Checking…' : state.ambiguous ? 'Comparison paused' : state.failed ? 'Try again' : 'Accept source file'}</button></div></div>`;
+  }
+
+  function buildUploadAcceptancePayload(model, state = {}) {
+    const context = asObject(model.accept_context);
+    const payload = {
+      file_key: asText(context.file_key || model.file_key),
+      original_filename: asText(context.original_filename || model.filename),
+      source_group_id: asText(context.source_group_id),
+      source_cycle_id: asText(context.source_cycle_id),
+      client_id: asText(context.client_id) || undefined,
+      report_scope_id: asText(context.report_scope_id) || undefined,
+      profile_id: asText(context.profile_id || model.profile_id),
+      import_use: model.final_report ? 'PREPARE_FINALISATION'
+        : !model.profile_id.startsWith('NHSP_') && state.import_use === 'PREPARE_FINALISATION' ? 'PREPARE_FINALISATION' : 'CHECKING',
+      parser_options: { ...asObject(context.parser_options), profileId: asText(context.profile_id || model.profile_id) }
+    };
+    if (!model.final_report) {
+      payload.coverage = {
+        start_local_date: isoDate(state.coverage_start || model.coverage_start),
+        end_local_date: isoDate(state.coverage_end || model.coverage_end),
+        proof_kind: model.rows.length ? (model.profile_id.startsWith('HEALTHROSTER_') ? 'HEALTHROSTER_COMPLETE_EXPORT_ATTESTATION' : 'OFFICE_COMPLETE_EXPORT_ATTESTATION') : 'EXPLICIT_EMPTY_CONFIRMATION',
+        shrink_acknowledged: state.shrink_acknowledged === true
+      };
+    }
+    Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
+    return payload;
+  }
+
+  function normaliseDetail(payload, label = 'View details') {
+    const raw = asObject(payload.detail || payload.details || payload);
+    const fields = NON_TECHNICAL_DETAIL_LABELS.map(([key, fieldLabel]) => ({ label: fieldLabel, value: asText(raw[key]) })).filter((field) => field.value);
+    const chargeFields = label === 'Open charge details'
+      ? CHARGE_DETAIL_LABELS.map(([key, fieldLabel]) => ({ label: fieldLabel, value: asText(raw[key]) })).filter((field) => field.value)
+      : [];
+    return {
+      title: label === 'Open charge details' ? 'Charge details' : label === 'View final source' ? 'Final source' : 'Weekly source details',
+      heading: asText(raw.heading || raw.title),
+      contract_id: asText(raw.contract_id),
+      body: plainMessage(raw.body || raw.message || raw.guidance, ''),
+      chargeGuidance: label === 'Open charge details' ? 'If the contract rates are wrong, correct the contract or create the appropriate one. If the NHSP charge is wrong, request a correction in NHSP. If it is still wrong in the final backing report, you can accept the final source charge in Finalise without holding candidate pay. A later corrected complete backing report creates separate invoice correction movements; it does not rewrite an issued invoice.' : '',
+      fields: [...fields, ...chargeFields],
+      accept_group: asObject(payload.accept_group),
+      shifts: asArray(raw.shifts).map((row) => ({
+        incident_id: asText(row.incident_id),
+        day_date: asText(row.day_date), candidate_hours: asText(row.candidate_hours),
+        candidate_response: asText(row.candidate_response), candidate_responded_at: asText(row.candidate_responded_at),
+        manager_response: asText(row.manager_response), manager_responded_at: asText(row.manager_responded_at),
+        manager_intended_hours: asText(row.manager_intended_hours),
+        system_hours: asText(row.system_hours), issue: plainMessage(row.issue, ''), status: asText(row.status?.text || (typeof row.status === 'string' ? row.status : ''))
+      }))
+    };
+  }
+
+  function renderDetail(model) {
+    const eligible = model.accept_group?.accept_system_hours_action?.enabled === true
+      ? new Set(asArray(model.accept_group.accept_system_hours_action.payload?.selection?.incident_ids)) : new Set();
+    const fields = model.fields.map((field) => `<div><span>${escapeHtml(field.label)}</span><strong>${escapeHtml(field.value)}</strong></div>`).join('');
+    const replyRows=model.shifts.filter(row=>row.candidate_response||row.manager_response).map(row=>`<tr><td>${escapeHtml(row.day_date)}</td><td>${escapeHtml(row.candidate_response||'No reply recorded')}<span class="ws-status-sub">${escapeHtml(row.candidate_responded_at)}</span></td><td>${escapeHtml(row.manager_response||'No reply recorded')}<span class="ws-status-sub">${escapeHtml(row.manager_responded_at)}</span>${row.manager_intended_hours?`<p>${escapeHtml(row.manager_intended_hours)}</p>`:''}</td></tr>`).join('');
+    const replies=replyRows?`<h3>Recorded replies</h3><div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr><th>Day/date</th><th>Candidate reply</th><th>Manager reply</th></tr></thead><tbody>${replyRows}</tbody></table></div>`:'';
+    const shifts = model.shifts.length ? `<div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr>${eligible.size?'<th>Select</th>':''}<th>Day/date</th><th>Candidate says they worked</th><th>System hours</th><th>Issue and status</th></tr></thead><tbody>${model.shifts.map((row) => `<tr>${eligible.size?`<td>${eligible.has(row.incident_id)?`<input type="checkbox" data-wsa-accept-incident="${escapeHtml(row.incident_id)}" aria-label="Select system hours for ${escapeHtml(row.day_date)}">`:''}</td>`:''}<td>${escapeHtml(row.day_date || '—')}</td><td>${escapeHtml(row.candidate_hours || '—')}</td><td>${escapeHtml(row.system_hours || '—')}</td><td>${escapeHtml([row.issue, row.status].filter(Boolean).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div>` : '';
+    return `<div class="ws-child" data-wsa-screen="details">${model.heading ? `<h3>${escapeHtml(model.heading)}</h3>` : ''}${model.body ? `<p>${escapeHtml(model.body)}</p>` : ''}${fields ? `<div class="ws-child-context">${fields}</div>` : ''}${model.chargeGuidance ? `<p class="ws-charge-guidance">${escapeHtml(model.chargeGuidance)}</p>` : ''}${shifts}${replies}<div class="ws-child-actions">${eligible.size?'<button type="button" class="btn btn-outline" data-wsa-accept-selected disabled>Accept selected system hours</button>':''}${model.contract_id ? '<button type="button" class="btn btn-outline" data-wsa-review-contract>Review contract</button>' : ''}<button type="button" class="btn primary" data-wsa-close>Close</button></div></div>`;
+  }
+
+  function normaliseContractChooser(payload) {
+    const raw = asObject(payload);
+    const seed = { ...asObject(raw.contract_seed) };
+    // The read projection supplies IDs/date separately from its display context.
+    // Carry those labels into the new draft; never infer an ID or rates from a name.
+    if (seed.candidate_id && !asText(seed.candidate_display)) seed.candidate_display = asText(raw.candidate);
+    if (seed.client_id && !asText(seed.client_name)) seed.client_name = asText(raw.client);
+    const choices = asArray(raw.choices || raw.contract_choices || raw.qualifying_contracts).map((entry) => {
+      const item = asObject(entry);
+      return {
+        id: asText(item.contract_id || item.id), role_band: asText(item.role_band || item.role || item.band),
+        site: asText(item.site || item.contract_site), dates: asText(item.dates || item.contract_dates),
+        pay_type: asText(item.pay_type), details_label: asText(item.details_label) || 'View contract'
+      };
+    }).filter((entry) => entry.id);
+    return {
+      choices, candidate: asText(raw.candidate), client: asText(raw.client), shift: asText(raw.shift),
+      source_role_band: asText(raw.source_role_band), source_row_ordinal: asText(raw.source_row_ordinal),
+      accept_payload: asObject(raw.accept_payload), existing_selections: asObject(raw.contract_selections),
+      recheck_payload: asObject(raw.recheck_payload), contract_seed: seed
+    };
+  }
+
+  function renderContractChooser(model, state = {}) {
+    const context = [['Candidate',model.candidate],['Client',model.client],['Shift',model.shift],['Source role / band',model.source_role_band]].filter(([,value]) => value).map(([label,value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+    const rows = model.choices.map((choice) => `<tr><td><input type="checkbox" name="wsa-contract" value="${escapeHtml(choice.id)}" aria-label="Choose ${escapeHtml(choice.role_band || 'contract')}"${state.selected === choice.id ? ' checked' : ''}${state.busy || state.pending ? ' disabled' : ''}></td><td>${escapeHtml(choice.role_band || '—')}</td><td>${escapeHtml(choice.site || '—')}</td><td>${escapeHtml(choice.dates || '—')}</td><td>${escapeHtml(choice.pay_type || '—')}</td><td><button type="button" class="btn btn-outline" data-wsa-view-contract="${escapeHtml(choice.id)}">${escapeHtml(choice.details_label)}</button></td></tr>`).join('');
+    const explanation = model.choices.length ? 'Review the contracts for this shift and choose the one that applies. Its eligibility will be checked again.' : 'No contract covers this shift. Create or correct the contract, then return to Imports and use Recheck.';
+    return `<div class="ws-child" data-wsa-screen="contract"><div class="ws-child-context">${context}</div><p>${explanation}</p><div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr><th>Choose</th><th>Role / band</th><th>Contract site</th><th>Contract dates</th><th>Pay type</th><th>Details</th></tr></thead><tbody>${rows}</tbody></table></div>${state.error ? `<div class="ws-notice ws-notice--danger" role="alert"><span>${escapeHtml(plainMessage(state.error))}</span></div>` : ''}<div class="ws-child-actions"><button type="button" class="btn btn-outline" data-wsa-close>Cancel</button>${model.contract_seed.candidate_id && model.contract_seed.client_id ? `<button type="button" class="btn btn-outline" data-wsa-create-contract${state.selected || state.busy ? ' disabled' : ''}>Create contract</button>` : ''}<button type="button" class="btn primary" data-wsa-use-contract${state.selected && !state.busy ? '' : ' disabled'}>${state.sourceAdmissionBusy ? 'Try again' : state.pending ? 'Retry exact request' : 'Use selected contract'}</button></div></div>`;
+  }
+
+  function normaliseCorrectFinal(payload) {
+    const raw = asObject(payload);
+    const base = asObject(raw.correction_payload || raw.command_payload);
+    return {
+      base_payload: base,
+      source_label: asText(raw.source_label) || 'Replacement source',
+      scope_label: asText(raw.scope_label),
+      current_label: asText(raw.current_label),
+      replacement_context: asObject(raw.replacement_context)
+    };
+  }
+
+  function normaliseCorrectFinalPreview(payload) {
+    const raw = asObject(payload);
+    const changes = asArray(raw.changes).map((rowValue) => {
+      const row = asObject(rowValue);
+      return {
+        candidate: plainMessage(row.candidate, 'Candidate'),
+        day_date: plainMessage(row.day_date, '—'),
+        current_final: plainMessage(row.current_final, '—'),
+        replacement: plainMessage(row.replacement, '—'),
+        result: plainMessage(row.result, 'Changed')
+      };
+    });
+    const blockers = asArray(raw.blockers).map((rowValue) => {
+      const row = asObject(rowValue);
+      return {
+        candidate: plainMessage(row.candidate, 'Candidate'),
+        day_date: plainMessage(row.day_date, '—'),
+        problem: plainMessage(row.problem),
+        action: plainMessage(row.action, 'View details')
+      };
+    });
+    return {
+      ready: raw.ok === true && raw.status === 'READY_FOR_CONFIRMATION'
+        && blockers.length === 0 && Object.keys(asObject(raw.apply_context)).length > 0,
+      changes,
+      blockers,
+      confirmation_text: plainMessage(raw.confirmation_text, 'I understand this will replace the current final version.'),
+      review_context: asObject(raw.review_context),
+      apply_context: asObject(raw.apply_context)
+    };
+  }
+
+  function correctFinalTable(model, activeTab) {
+    if (activeTab === 'blocked') {
+      const rows = model.blockers.map((row) => `<tr><td>${escapeHtml(row.candidate)}</td><td>${escapeHtml(row.day_date)}</td><td>${escapeHtml(row.problem)}</td><td>${escapeHtml(row.action)}</td></tr>`).join('');
+      return `<div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr><th>Candidate</th><th>Day/date</th><th>Problem</th><th>Action</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ws-empty">Nothing is blocking this correction.</td></tr>'}</tbody></table></div>`;
+    }
+    const rows = model.changes.map((row) => `<tr><td>${escapeHtml(row.candidate)}</td><td>${escapeHtml(row.day_date)}</td><td>${escapeHtml(row.current_final)}</td><td>${escapeHtml(row.replacement)}</td><td>${escapeHtml(row.result)}</td></tr>`).join('');
+    return `<div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr><th>Candidate</th><th>Day/date</th><th>Current final</th><th>Replacement</th><th>Result</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="ws-empty">No changed rows were found.</td></tr>'}</tbody></table></div>`;
+  }
+
+  function renderCorrectFinal(model, state = {}) {
+    const context = `<div class="ws-child-context">${model.current_label ? `<div><span>Current final</span><strong>${escapeHtml(model.current_label)}</strong></div>` : ''}${model.scope_label ? `<div><span>Trust and cutoff</span><strong>${escapeHtml(model.scope_label)}</strong></div>` : ''}${state.filename ? `<div><span>Replacement file</span><strong>${escapeHtml(state.filename)}</strong></div>` : ''}</div>`;
+    const error = state.error ? `<div class="ws-notice ws-notice--danger" role="alert"><strong>${state.sourceAdmissionBusy ? 'Source update in progress' : state.pendingApply ? 'Result not confirmed' : 'The replacement could not be reviewed'}</strong><span>${escapeHtml(plainMessage(state.error, state.phase === 'reviewed' ? 'Recheck the blockers and try again.' : 'Recheck the file and try again.'))}</span></div>` : '';
+    if (state.phase !== 'reviewed') {
+      return `<div class="ws-child" data-wsa-screen="correct-final"><p>The previous final version will remain in History.</p>${context}<div class="ws-child-fields"><span>Upload the replacement source file again</span><label class="btn btn-outline ws-file-button">Choose file<input type="file" data-wsa-replacement-file hidden accept=".xlsx,.xls,.csv,.htm,.html"${state.busy || state.pendingReview ? ' disabled' : ''}></label>${state.filename ? `<strong>${escapeHtml(state.filename)}</strong>` : ''}</div>${error}<div class="ws-child-actions"><button type="button" class="btn btn-outline" data-wsa-close>${state.busy ? 'Close' : 'Cancel'}</button><button type="button" class="btn primary" data-wsa-review-correction${state.file && !state.busy ? '' : ' disabled'}>${state.busy ? 'Reviewing…' : state.pendingReview ? state.sourceAdmissionBusy ? 'Try again' : 'Retry exact request' : 'Review replacement'}</button></div></div>`;
+    }
+    const preview = state.preview;
+    const activeTab = state.active_tab === 'blocked' ? 'blocked' : 'changes';
+    const tabs = `<div class="ws-child-tablist" role="tablist" aria-label="Correction review"><button type="button" role="tab" data-wsa-correction-tab="changes" aria-selected="${activeTab === 'changes'}">Changes (${preview.changes.length})</button><button type="button" role="tab" data-wsa-correction-tab="blocked" aria-selected="${activeTab === 'blocked'}">Blocked (${preview.blockers.length})</button></div>`;
+    const blocked = preview.blockers.length ? '<div class="ws-notice ws-notice--warning" role="status"><strong>This correction cannot be applied yet</strong><span>Resolve every blocked item, then review the replacement again.</span></div>' : '';
+    const confirmation = `<div class="ws-child-fields"><label>Reason<textarea data-wsa-correction-reason maxlength="1000" required${state.busy || state.pendingApply ? ' disabled' : ''}>${escapeHtml(state.reason || '')}</textarea></label></div><label class="ws-confirm"><input type="checkbox" data-wsa-correction-confirm${state.confirmed ? ' checked' : ''}${preview.ready && !state.busy && !state.pendingApply ? '' : ' disabled'}><span>${escapeHtml(preview.confirmation_text)}</span></label>`;
+    const applyEnabled = preview.ready && asText(state.reason) && state.confirmed && !state.busy;
+    return `<div class="ws-child" data-wsa-screen="correct-final"><p>The previous final version will remain in History.</p>${context}${blocked}${tabs}${correctFinalTable(preview, activeTab)}${confirmation}${error}<div class="ws-child-actions"><button type="button" class="btn btn-outline" data-wsa-close>Close</button>${preview.blockers.length ? `<button type="button" class="btn primary" data-wsa-review-correction${state.busy ? ' disabled' : ''}>${state.pendingReview ? state.sourceAdmissionBusy ? 'Try again' : 'Retry exact request' : 'Recheck'}</button>` : `<button type="button" class="btn primary" data-wsa-apply-correction${applyEnabled ? '' : ' disabled'}>${state.busy ? 'Applying…' : state.pendingApply ? state.sourceAdmissionBusy ? 'Try again' : 'Retry exact request' : 'Apply corrected final source'}</button>`}</div></div>`;
+  }
+
+  function renderCommandConfirmation(model, state = {}) {
+    return `<div class="ws-child" data-wsa-screen="command"><p>${escapeHtml(model.message)}</p>${model.context ? `<div class="ws-child-context">${NON_TECHNICAL_DETAIL_LABELS.map(([key,label]) => asText(model.context[key]) ? `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(asText(model.context[key]))}</strong></div>` : '').join('')}</div>` : ''}<label class="ws-confirm"><input type="checkbox" data-wsa-confirm${state.confirmed ? ' checked' : ''}><span>${escapeHtml(model.confirmation)}</span></label>${state.error ? `<div class="ws-notice ws-notice--danger" role="alert"><span>${escapeHtml(plainMessage(state.error))}</span></div>` : ''}<div class="ws-child-actions"><button type="button" class="btn btn-outline" data-wsa-close>Cancel</button><button type="button" class="btn primary" data-wsa-run-command${state.confirmed && !state.busy ? '' : ' disabled'}>${state.sourceAdmissionBusy ? 'Try again' : state.failed ? 'Retry exact request' : escapeHtml(model.action_label)}</button></div></div>`;
+  }
+
+  function currentChild(kind) {
+    const stack = Array.isArray(root.__modalStack) ? root.__modalStack : [];
+    const frame = stack[stack.length - 1];
+    return frame?.kind === kind ? frame : null;
+  }
+
+  function closeChild() {
+    const button = root.document?.getElementById('btnCloseModal');
+    if (button) button.click();
+    else root.closeModal?.();
+  }
+
+  function openChild({ title, kind, render, wire }) {
+    if (typeof root.showModal !== 'function') return false;
+    root.modalCtx = { entity: 'weekly-source-child', data: {}, weeklySourceChildKind: kind };
+    root.showModal(title, [{ key: 'main', label: title }], () => {
+      const markup = render();
+      setTimeout(wire, 0);
+      return typeof root.html === 'function' ? root.html(markup) : markup;
+    }, null, false, wire, { kind, noParentGate: true, showSave: false, showApply: false, runOnRender: true });
+    return true;
+  }
+
+  function rerender(kind) {
+    const frame = currentChild(kind);
+    if (frame?.setTab) Promise.resolve(frame.setTab('main')).catch(() => {});
+  }
+
+  function markCompletedChildClean() {
+    const stack = Array.isArray(root.__modalStack) ? root.__modalStack : [];
+    const frame = stack[stack.length - 1];
+    if (!frame || !asText(frame.kind).startsWith('weekly-source-')) return;
+    frame.isDirty = false;
+    frame._snapshot = null;
+    frame._updateButtons?.();
+  }
+
+  function protectedCaller(kind, actor, frame) {
+    const workspace = workspaceApi();
+    return () => !!actor && !!frame && currentChild(kind) === frame && workspaceApi() === workspace
+      && (typeof SESSION !== 'undefined' ? SESSION?.user?.id : null) === actor;
+  }
+
+  async function finishAction(confirmation, callerCurrent) {
+    if (callerCurrent && !callerCurrent()) return;
+    // The shared modal shell treats changes to confirmation controls as form
+    // edits. Once the server has completed the requested action, this child no
+    // longer owns unsaved input and must close without a discard prompt.
+    markCompletedChildClean();
+    closeChild();
+    if (confirmation?.message) root.__toast?.(confirmation.message);
+    await workspaceApi()?.refresh?.();
+  }
+
+  function normaliseBatchPreview(details) {
+    const entries = asArray(details).map((entry, index) => {
+      const model = entry?.detail ? normalisePreview(entry.detail) : null;
+      return {
+        index, filename: asText(entry?.filename || model?.filename) || `File ${index + 1}`,
+        model, error: asText(entry?.error), duplicate: false, status: 'PENDING'
+      };
+    });
+    const trusts = new Map();
+    for (const entry of entries) {
+      if (!entry.model?.ok || !entry.model.final_report || !entry.model.trust) continue;
+      const key = `${entry.model.trust.toLocaleLowerCase('en-GB')}|${entry.model.cutoff}`;
+      const group = trusts.get(key) || [];
+      group.push(entry);
+      trusts.set(key, group);
+    }
+    for (const group of trusts.values()) if (group.length > 1) group.forEach((entry) => { entry.duplicate = true; });
+    return entries;
+  }
+
+  function renderBatchPreview(entries, state) {
+    const rows = entries.map((entry) => {
+      const ready = entry.model?.ok && entry.model.final_report && !entry.duplicate && !entry.error;
+      const issue = entry.duplicate
+        ? 'More than one selected backing report belongs to this Trust and cutoff. Upload these separately.'
+        : entry.error || entry.model?.fatal_errors?.[0]?.message
+          || (!ready ? 'This backing report could not be prepared for acceptance.' : '');
+      const status = entry.status === 'ACCEPTED' ? 'Accepted'
+        : entry.sourceAdmissionBusy ? 'Try again'
+        : entry.pendingSourceAcceptance && entry.status === 'FAILED' ? 'Result not confirmed'
+        : entry.status === 'FAILED' ? 'Not accepted'
+          : ready ? 'Ready' : 'Needs attention';
+      return `<div class="ws-batch-report" data-wsa-batch-row="${entry.index}"><label class="ws-batch-report__select"><input type="checkbox" data-wsa-batch-select="${entry.index}"${ready && entry.status !== 'ACCEPTED' && !state.busy ? '' : ' disabled'}${state.selected.has(entry.index) && entry.status !== 'ACCEPTED' ? ' checked' : ''}><span class="ws-batch-report__file">${escapeHtml(entry.filename)}</span></label><div class="ws-batch-report__facts"><span>Trust <strong>${escapeHtml(entry.model?.trust || '—')}</strong></span><span>Report <strong>${escapeHtml(entry.model?.report_number || '—')}</strong></span><span>Cutoff <strong>${escapeHtml(entry.model?.cutoff || '—')}</strong></span><span class="ws-status ws-status--${entry.status === 'ACCEPTED' ? 'positive' : ready && entry.status !== 'FAILED' ? 'info' : 'warning'}">${status}</span></div>${issue || entry.status === 'FAILED' ? `<p class="ws-batch-report__issue">${escapeHtml(plainMessage(entry.error || issue, 'Recheck this file before retrying.'))}</p>` : ''}</div>`;
+    }).join('');
+    const pending = entries.filter((entry) => state.selected.has(entry.index) && entry.status !== 'ACCEPTED' && entry.model?.ok && !entry.duplicate);
+    const accepted = entries.filter((entry) => entry.status === 'ACCEPTED').length;
+    return `<div class="ws-child ws-batch-preview" data-wsa-screen="batch-preview"><p>Review each backing report before accepting it. Each Trust stays separate; no week is finalised here.</p><div class="ws-child-scroll ws-batch-preview__list">${rows}</div><label class="ws-confirm"><input type="checkbox" data-wsa-batch-confirm${state.confirmed ? ' checked' : ''}${pending.length && !state.busy ? '' : ' disabled'}><span>I confirm the selected reports and their Trusts.</span></label><div class="ws-child-actions"><span role="status">${accepted} accepted · ${pending.length} selected</span><button type="button" class="btn btn-outline" data-wsa-batch-close${state.busy ? ' disabled' : ''}>${accepted ? 'Done' : 'Close'}</button><button type="button" class="btn primary" data-wsa-batch-accept${pending.length && state.confirmed && !state.busy ? '' : ' disabled'}>${state.busy ? 'Accepting…' : entries.some(entry => entry.pendingSourceAcceptance && !entry.sourceAdmissionBusy) ? 'Retry exact request' : entries.some(entry => entry.sourceAdmissionBusy) ? 'Try again' : 'Accept selected reports'}</button></div></div>`;
+  }
+
+  function openBatchPreview(details) {
+    const entries = normaliseBatchPreview(details);
+    const state = {
+      selected: new Set(entries.filter((entry) => entry.model?.ok && entry.model.final_report && !entry.duplicate).map((entry) => entry.index)),
+      confirmed: false, busy: false
+    };
+    const kind = 'weekly-source-batch-preview-v1';
+    const actor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let frame;
+    const callerCurrent = () => protectedCaller(kind, actor, frame)();
+    const render = () => renderBatchPreview(entries, state);
+    const wire = () => {
+      const host = root.document?.querySelector('[data-wsa-screen="batch-preview"]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1';
+      host.querySelectorAll('[data-wsa-batch-select]').forEach((input) => input.addEventListener('change', () => {
+        const index = Number(input.dataset.wsaBatchSelect);
+        input.checked ? state.selected.add(index) : state.selected.delete(index);
+        state.confirmed = false;
+        rerender(kind);
+      }));
+      host.querySelector('[data-wsa-batch-confirm]')?.addEventListener('change', (event) => {
+        state.confirmed = event.target.checked;
+        rerender(kind);
+      });
+      host.querySelector('[data-wsa-batch-close]')?.addEventListener('click', async () => {
+        markCompletedChildClean();
+        closeChild();
+        if (entries.some((entry) => entry.status === 'ACCEPTED')) await workspaceApi()?.refresh?.('imports');
+      });
+      host.querySelector('[data-wsa-batch-accept]')?.addEventListener('click', async () => {
+        if (!state.confirmed || state.busy || !callerCurrent()) return;
+        state.busy = true;
+        rerender(kind);
+        for (const entry of entries) {
+          if (!state.selected.has(entry.index) || entry.status === 'ACCEPTED' || !entry.model?.ok || entry.duplicate) continue;
+          if (!callerCurrent()) return;
+          const retained = entry.pendingSourceAcceptance;
+          const payload = retained || JSON.parse(JSON.stringify(buildUploadAcceptancePayload(entry.model, { confirmed: true })));
+          entry.sourceAdmissionBusy = false;
+          try {
+            await workspaceApi()?.acceptUpload?.(payload);
+            if (!callerCurrent()) return;
+            entry.pendingSourceAcceptance = null;
+            entry.status = 'ACCEPTED';
+            entry.error = '';
+            state.selected.delete(entry.index);
+            workspaceApi()?.selectAcceptedScope?.(entry.model.accept_context);
+          } catch (error) {
+            if (!callerCurrent()) return;
+            entry.sourceAdmissionBusy = sourceAdmissionBusy(error);
+            if (entry.sourceAdmissionBusy || retained) entry.pendingSourceAcceptance = payload;
+            entry.status = 'FAILED';
+            entry.error = asText(error?.message) || 'This backing report was not accepted.';
+          }
+        }
+        state.busy = false;
+        state.confirmed = false;
+        rerender(kind);
+      });
+    };
+    const opened = openChild({ title: 'Review backing reports', kind, render, wire });
+    frame = currentChild(kind);
+    return opened;
+  }
+
+  function openPreview(detail) {
+    const model = normalisePreview(detail);
+    const state = { coverage_start: model.coverage_start, coverage_end: model.coverage_end, confirmed: false, busy: false, failed: false, ambiguous: false, error: '' };
+    const kind = 'weekly-source-preview-v1';
+    const actor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let frame;
+    const callerCurrent = () => protectedCaller(kind, actor, frame)();
+    const render = () => renderPreview(model, state);
+    const wire = () => {
+      const host = root.document?.querySelector('[data-wsa-screen="preview"]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1';
+      host.querySelector('[data-wsa-close]')?.addEventListener('click', closeChild);
+      const sync = () => {
+        if (state.pendingSourceAcceptance) return;
+        state.import_use = host.querySelector('[data-wsa-import-use]')?.value || 'CHECKING';
+        state.coverage_start = host.querySelector('[data-wsa-coverage-start]')?.value || state.coverage_start;
+        state.coverage_end = host.querySelector('[data-wsa-coverage-end]')?.value || state.coverage_end;
+        state.confirmed = host.querySelector('[data-wsa-confirm]')?.checked === true;
+        state.shrink_acknowledged = host.querySelector('[data-wsa-shrink-confirm]')?.checked === true;
+        const shorter = !model.final_report && model.profile_id !== 'NHSP_PREFINAL_RELEASED_V1'
+          && !!model.previous_coverage_start && !!model.previous_coverage_end
+          && (!!state.coverage_start && state.coverage_start > model.previous_coverage_start || !!state.coverage_end && state.coverage_end < model.previous_coverage_end);
+        const button = host.querySelector('[data-wsa-accept]');
+        if (button) button.disabled = !model.ok || !state.confirmed || (shorter && !state.shrink_acknowledged) || state.busy || state.ambiguous || (!model.final_report && (!isoDate(state.coverage_start) || !isoDate(state.coverage_end) || state.coverage_start > state.coverage_end));
+      };
+      host.querySelectorAll('[data-wsa-coverage-start],[data-wsa-coverage-end],[data-wsa-import-use]').forEach((input) => input.addEventListener('change', () => { sync(); rerender(kind); }));
+      host.querySelectorAll('[data-wsa-confirm],[data-wsa-shrink-confirm]').forEach((input) => input.addEventListener('change', sync));
+      sync();
+      if (state.pendingSourceAcceptance) {
+        host.querySelectorAll('input, select, textarea').forEach(control => { control.disabled = true; });
+        const retry = host.querySelector('[data-wsa-accept]');
+        if (retry) { retry.disabled = state.busy; retry.textContent = state.sourceAdmissionBusy ? 'Try again' : 'Retry exact request'; }
+      }
+      host.querySelector('[data-wsa-accept]')?.addEventListener('click', async () => {
+        if (state.busy || !callerCurrent()) return;
+        if (!state.pendingSourceAcceptance) sync();
+        const retained = state.pendingSourceAcceptance;
+        const payload = retained || JSON.parse(JSON.stringify(buildUploadAcceptancePayload(model, state)));
+        state.sourceAdmissionBusy = false; state.busy = true; state.error = ''; rerender(kind);
+        try {
+          await workspaceApi()?.acceptUpload?.(payload);
+          if (!callerCurrent()) return;
+          state.pendingSourceAcceptance = null; await finishAction(null, callerCurrent);
+        } catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+          if (state.sourceAdmissionBusy || retained) state.pendingSourceAcceptance = payload;
+          state.busy = false; state.failed = true; state.ambiguous = isCandidateComparisonAmbiguity(error);
+          state.error = error?.message; rerender(kind);
+        }
+      });
+    };
+    const opened = openChild({ title: 'Review source file', kind, render, wire });
+    frame = currentChild(kind);
+    return opened;
+  }
+
+  async function reviewContract(id, button) {
+    if (!id || button?.disabled) return;
+    if (button) button.disabled = true;
+    const host = button?.closest('.ws-child');
+    host?.querySelector('[data-wsa-contract-error]')?.remove();
+    try {
+      const fresh = typeof root.getContract === 'function' ? await root.getContract(id) : null;
+      if (!fresh || typeof root.openContract !== 'function') throw new Error('Contract details could not be loaded. Please try again.');
+      root.openContract(fresh, { noParentGate: true });
+    } catch (_) {
+      const notice = root.document?.createElement('div');
+      if (notice && host) {
+        notice.dataset.wsaContractError = '1';
+        notice.className = 'ws-notice ws-notice--danger';
+        notice.setAttribute('role', 'alert');
+        notice.textContent = 'Contract details could not be loaded. Please try again.';
+        host.appendChild(notice);
+      }
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function openDetail(payload, label) {
+    const model = normaliseDetail(payload, label);
+    const kind = 'weekly-source-details-v1';
+    return openChild({ title: model.title, kind, render: () => renderDetail(model), wire: () => {
+      const host = root.document?.querySelector('[data-wsa-screen="details"]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1'; host.querySelector('[data-wsa-close]')?.addEventListener('click', closeChild);
+      const accept = host.querySelector('[data-wsa-accept-selected]');
+      const selectedIds = () => [...host.querySelectorAll('[data-wsa-accept-incident]:checked')].map(input=>input.dataset.wsaAcceptIncident);
+      host.querySelectorAll('[data-wsa-accept-incident]').forEach(input=>input.addEventListener('change',()=>{
+        if(accept)accept.disabled=!workspaceApi()?.acceptSystemShiftSelectionPayload?.(model.accept_group,selectedIds());
+      }));
+      accept?.addEventListener('click',()=>{
+        const ids=selectedIds();
+        const request=workspaceApi()?.acceptSystemShiftSelectionPayload?.(model.accept_group,ids);
+        if(!request)return;
+        const shifts=model.shifts.filter(row=>ids.includes(row.incident_id));
+        markCompletedChildClean();closeChild();
+        openCommand({label:'Accept system hours',command:'ACCEPT_SYSTEM_HOURS',payload:request,
+          context:{candidate:model.accept_group.candidate,client:model.accept_group.client,
+            candidate_hours:shifts.map(row=>`${row.day_date}: ${row.candidate_hours}`).join('; '),
+            system_hours:shifts.map(row=>`${row.day_date}: ${row.system_hours}`).join('; ')}});
+      });
+      host.querySelector('[data-wsa-review-contract]')?.addEventListener('click', (event) => {
+        void reviewContract(model.contract_id, event.currentTarget);
+      });
+    } });
+  }
+
+  function openContractChooser(payload) {
+    const model = normaliseContractChooser(payload);
+    if (model.choices.length < 2 && !model.recheck_payload.request_id) {
+      return openDetail({ detail: { candidate: model.candidate, client: model.client,
+        problem: 'No contract choices are available for this source row.',
+        guidance: 'Create or correct the candidate’s contract, then use Recheck in Imports.' } }, 'Choose contract');
+    }
+    const state = { selected: '', busy: false, failed: false, error: '', pending: null };
+    const kind = 'weekly-source-contract-chooser-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const callerCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render = () => renderContractChooser(model, state);
+    const wire = () => {
+      const host = root.document?.querySelector('[data-wsa-screen="contract"]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1'; host.querySelector('[data-wsa-close]')?.addEventListener('click', closeChild);
+      host.querySelector('[data-wsa-create-contract]')?.addEventListener('click', () => {
+        if (!callerCurrent() || state.selected || state.busy || state.pending) return;
+        if (typeof root.openContract === 'function') root.openContract(model.contract_seed, { noParentGate: true });
+      });
+      host.querySelectorAll('input[name="wsa-contract"]').forEach((input) => input.addEventListener('change', () => {
+        if (!callerCurrent() || state.busy || state.pending) return;
+        state.selected = input.checked ? input.value : '';
+        host.querySelectorAll('input[name="wsa-contract"]').forEach((choice) => { choice.checked = choice.value === state.selected; });
+        host.querySelector('[data-wsa-use-contract]').disabled = !state.selected;
+        const create = host.querySelector('[data-wsa-create-contract]');
+        if (create) create.disabled = !!state.selected;
+      }));
+      host.querySelectorAll('[data-wsa-view-contract]').forEach((button) => button.addEventListener('click', () => {
+        const choice = model.choices.find((entry) => entry.id === button.dataset.wsaViewContract);
+        if (choice) void reviewContract(choice.id, button);
+      }));
+      host.querySelector('[data-wsa-use-contract]')?.addEventListener('click', async () => {
+        if (!callerCurrent() || state.busy || !state.selected || (!model.recheck_payload.request_id
+          && (!model.source_row_ordinal || !asText(model.accept_payload.file_key)))) return;
+        const request = state.pending || JSON.parse(JSON.stringify(model.recheck_payload.request_id
+          ? { command: 'RECHECK_SOURCE', payload: { ...model.recheck_payload, contract_id: state.selected } }
+          : { command: 'ACCEPT_UPLOAD', payload: { ...model.accept_payload, contract_selections: { ...model.existing_selections, [model.source_row_ordinal]: state.selected } } }));
+        state.busy = true; state.error = ''; rerender(kind);
+        try {
+          if (request.command === 'RECHECK_SOURCE') {
+            await workspaceApi()?.issueCommand?.(request.command, request.payload);
+          } else {
+            await workspaceApi()?.acceptUpload?.(request.payload);
+          }
+          await finishAction(undefined, callerCurrent);
+        } catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+          if (state.sourceAdmissionBusy || state.pending) state.pending = request;
+          state.failed = true; state.error = state.sourceAdmissionBusy ? sourceBusyMessage : state.pending
+            ? 'The result could not be confirmed. Retry exact request.' : error?.message;
+        } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      });
+    };
+    const opened = openChild({ title: 'Choose contract', kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+
+  function correctFinalAuthorityReady(payload) {
+    const raw = asObject(payload);
+    const kind = asText(raw.authority_scope_kind).toUpperCase();
+    return ['expected_current_final_revision_id', 'expected_final_manifest_hash', 'idempotency_key', 'source_cycle_id']
+      .every((key) => asText(raw[key]))
+      && ['CYCLE', 'NHSP_REPORT_SCOPE'].includes(kind)
+      && (kind === 'NHSP_REPORT_SCOPE') === !!asText(raw.report_scope_id);
+  }
+
+  function openCorrectFinal(payload) {
+    const model = normaliseCorrectFinal(payload);
+    if (!correctFinalAuthorityReady(model.base_payload)) {
+      return openDetail({ detail: { problem: 'This action is not available yet.', guidance: 'Recheck the Weekly source screen and try again.' } }, 'View details');
+    }
+    const state = { file: null, filename: '', phase: 'choose', preview: null, active_tab: 'changes', reason: '', confirmed: false, busy: false, error: '', recheck_count: 0, pendingReview: null, pendingApply: null };
+    const kind = 'weekly-source-correct-final-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const callerCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render = () => renderCorrectFinal(model, state);
+    const wire = () => {
+      const host = root.document?.querySelector('[data-wsa-screen="correct-final"]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1'; host.querySelector('[data-wsa-close]')?.addEventListener('click', closeChild);
+      const review = async () => {
+        const rechecking = state.phase === 'reviewed'
+          && state.preview?.blockers?.length > 0
+          && Object.keys(asObject(state.preview?.review_context)).length > 0;
+        if (!callerCurrent() || (!rechecking && !state.file) || state.busy) return;
+        state.busy = true; state.error = ''; rerender(kind);
+        try {
+          let request = state.pendingReview;
+          if (!request && rechecking) {
+            state.recheck_count += 1;
+            request = {
+              correction_context: state.preview.review_context,
+              idempotency_key: `${asText(model.base_payload.idempotency_key)}:recheck:${state.recheck_count}`
+            };
+          } else if (!request) {
+            if (typeof root.uploadImportFileToR2 !== 'function') throw new Error('File upload is unavailable.');
+            const stored = await root.uploadImportFileToR2(state.file);
+            if (!callerCurrent()) return;
+            const replacementSource = {
+              ...model.replacement_context,
+              file_key: asText(stored?.fileKey),
+              original_filename: asText(stored?.filename || state.filename)
+            };
+            request = { ...model.base_payload, replacement_source: replacementSource };
+          }
+          state.pendingReview = JSON.parse(JSON.stringify(request));
+          const response = await workspaceApi()?.issueCommand?.('PREVIEW_CORRECT_FINAL_SOURCE', state.pendingReview);
+          if (!callerCurrent()) return;
+          state.pendingReview = null; state.sourceAdmissionBusy = false;
+          state.preview = normaliseCorrectFinalPreview(response);
+          state.phase = 'reviewed';
+          state.active_tab = state.preview.blockers.length ? 'blocked' : 'changes';
+          state.confirmed = false; state.reason = ''; state.busy = false; rerender(kind);
+        } catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+          state.error = state.sourceAdmissionBusy ? sourceBusyMessage : state.pendingReview
+            ? 'The review result could not be confirmed. Retry exact request.' : error?.message;
+        } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      };
+      host.querySelector('[data-wsa-replacement-file]')?.addEventListener('change', (event) => {
+        if (!callerCurrent() || state.busy || state.pendingReview) return;
+        state.file = event.target.files?.[0] || null;
+        state.filename = state.file?.name || '';
+        rerender(kind);
+      });
+      host.querySelector('[data-wsa-review-correction]')?.addEventListener('click', review);
+      host.querySelectorAll('[data-wsa-correction-tab]').forEach((button) => button.addEventListener('click', () => {
+        state.active_tab = button.dataset.wsaCorrectionTab === 'blocked' ? 'blocked' : 'changes';
+        rerender(kind);
+      }));
+      const sync = () => {
+        if (state.busy || state.pendingApply) return;
+        state.reason = host.querySelector('[data-wsa-correction-reason]')?.value || state.reason;
+        state.confirmed = host.querySelector('[data-wsa-correction-confirm]')?.checked === true;
+        const apply = host.querySelector('[data-wsa-apply-correction]');
+        if (apply) apply.disabled = !state.preview?.ready || !asText(state.reason) || !state.confirmed || state.busy;
+      };
+      host.querySelector('[data-wsa-correction-reason]')?.addEventListener('input', sync);
+      host.querySelector('[data-wsa-correction-confirm]')?.addEventListener('change', sync);
+      host.querySelector('[data-wsa-apply-correction]')?.addEventListener('click', async () => {
+        sync();
+        if (!callerCurrent() || !state.preview?.ready || !asText(state.reason) || !state.confirmed || state.busy) return;
+        state.busy = true; state.error = ''; rerender(kind);
+        try {
+          state.pendingApply ||= JSON.parse(JSON.stringify({
+            correction_context: state.preview.apply_context,
+            reason: state.reason,
+            confirmation_text: state.preview.confirmation_text,
+            idempotency_key: `${asText(model.base_payload.idempotency_key)}:confirm`
+          }));
+          await workspaceApi()?.issueCommand?.('APPLY_CORRECT_FINAL_SOURCE', state.pendingApply);
+          await finishAction(undefined, callerCurrent);
+        } catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+          state.error = state.sourceAdmissionBusy ? sourceBusyMessage : 'The result could not be confirmed. Retry exact request.';
+        } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      });
+    };
+    const opened = openChild({ title: 'Correct final source', kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+
+  function commandModel(detail) {
+    const label = asText(detail.label);
+    const payload = asObject(detail.payload);
+    const context = asObject(detail.context);
+    if (detail.command === 'RECHECK_SOURCE') return {
+      title: 'Retry saved source check', message: 'This uses the saved source choice and its original request.',
+      confirmation: 'Retry this exact source check.', action_label: 'Try again', context
+    };
+    if (label === 'No shifts to import') return {
+      title: 'No shifts to import', message: 'Use this only when this Trust or client has no source shifts for the week shown.',
+      confirmation: 'I confirm there are no shifts to import for this week.', action_label: 'Confirm no shifts to import', context
+    };
+    if (label === 'Accept system hours') return {
+      title: 'Accept system hours', message: 'This resolves the selected hours queries using the system hours shown.',
+      confirmation: 'I confirm the system hours are correct for the selected shifts.', action_label: 'Accept system hours', context
+    };
+    if (label === 'Remind candidate' || label === 'Remind missing timesheet') return {
+      title: label, message: 'The candidate will receive another reminder for the existing request. The original deadline will not change.',
+      confirmation: 'Send this reminder now.', action_label: 'Send reminder', context
+    };
+    return {
+      title: label || 'Confirm action', message: plainMessage(payload.confirmation_message || payload.message),
+      confirmation: `I confirm I want to ${label.toLowerCase()}.`, action_label: label || 'Confirm', context
+    };
+  }
+
+  function commandFor(detail) {
+    const explicit = asText(detail.command).toUpperCase();
+    if (explicit) return explicit;
+    if (detail.label === 'Remind candidate' || detail.label === 'Remind missing timesheet') return 'REMIND_CANDIDATE';
+    if (detail.label === 'Accept system hours') return 'ACCEPT_SYSTEM_HOURS';
+    return '';
+  }
+
+  function commandAuthorityAvailable(command, payload) {
+    if (!command || !Object.keys(payload).length) return false;
+    if (command === 'REMIND_CANDIDATE') return !!asText(payload.candidate_generation_id) && !!asText(payload.projection_publication_id);
+    if (command === 'ACCEPT_SYSTEM_HOURS') {
+      const selection = asObject(payload.selection);
+      const groupKeys = asArray(selection.group_keys).map(asText).filter(Boolean);
+      const incidentIds = asArray(selection.incident_ids).map(asText).filter(Boolean);
+      const excluded = asArray(selection.excluded_group_keys).map(asText).filter(Boolean);
+      const proofs = asArray(selection.group_selection_proofs).map(asObject);
+      return asText(payload.action).toUpperCase() === 'ACCEPT_SYSTEM_HOURS'
+        && [payload.source_cycle_id, payload.projection_publication_id].every((value) => asText(value))
+        && /^[0-9a-f]{64}$/.test(asText(payload.expected_workspace_version).toLowerCase())
+        && asText(selection.mode).toUpperCase() === 'EXPLICIT'
+        && groupKeys.length > 0 && new Set(groupKeys).size === groupKeys.length
+        && groupKeys.every((value) => /^qg_[0-9a-f]{64}$/.test(value))
+        && incidentIds.length > 0 && new Set(incidentIds).size === incidentIds.length
+        && excluded.length === 0 && selection.selection_proof == null
+        && proofs.length === groupKeys.length
+        && new Set(proofs.map((proof) => asText(proof.group_key))).size === groupKeys.length
+        && proofs.every((proof) => groupKeys.includes(asText(proof.group_key))
+          && /^[0-9a-f]{64}$/.test(asText(proof.selection_proof).toLowerCase()));
+    }
+    if (command === 'RESOLVE_MANUAL_REVIEW') return !!asText(payload.review_id)
+      && ['OFFICE_ACCEPTED_SOURCE','PROTECTED_PAY'].includes(asText(payload.resolution_kind))
+      && (payload.resolution_kind !== 'OFFICE_ACCEPTED_SOURCE'
+        || /^[0-9a-f]{64}$/.test(asText(payload.expected_current_row_hash)));
+    if (command === 'OPEN_MANUAL_REVIEW') return !!asText(payload.source_row_id)
+      && !!asText(payload.reason);
+    if (command === 'RECHECK_SOURCE') return !!asText(payload.request_id);
+    if (command === 'CORRECT_FINAL_SOURCE') return false;
+    if (command === 'NO_SHIFTS_TO_IMPORT') return !!asText(payload.source_cycle_id)
+      && !!asText(payload.source_group_id)
+      && !!asText(payload.client_id)
+      && Number.isInteger(Number(payload.expected_cycle_version))
+      && Number(payload.expected_cycle_version) >= 0
+      && !!asText(payload.attestation_text);
+    if (command === 'PROTECT_PAY') return !!asText(payload.expected_record_version);
+    return false;
+  }
+
+  function openCommand(detail) {
+    const payload = JSON.parse(JSON.stringify(asObject(detail.payload)));
+    const command = commandFor(detail);
+    if (!commandAuthorityAvailable(command, payload)) return openDetail({ detail: { problem: 'This action is not available yet.', guidance: 'Recheck the Weekly source screen and try again.' } }, 'View details');
+    // One modal keeps one exact command across connection-loss retries.
+    if (command === 'RESOLVE_MANUAL_REVIEW') payload.command_id = root.crypto.randomUUID();
+    const model = commandModel(detail);
+    const state = { confirmed: false, busy: false, failed: false, error: '' };
+    const kind = 'weekly-source-command-confirm-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const callerCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render = () => renderCommandConfirmation(model, state);
+    const wire = () => {
+      const host = root.document?.querySelector('[data-wsa-screen="command"]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1'; host.querySelector('[data-wsa-close]')?.addEventListener('click', closeChild);
+      host.querySelector('[data-wsa-confirm]')?.addEventListener('change', (event) => { state.confirmed = event.target.checked; host.querySelector('[data-wsa-run-command]').disabled = !state.confirmed || state.busy; });
+      host.querySelector('[data-wsa-run-command]')?.addEventListener('click', async () => {
+        if (!callerCurrent() || !state.confirmed || state.busy) return; state.busy = true; state.error = ''; rerender(kind);
+        try {
+          await workspaceApi()?.issueCommand?.(command, payload);
+          if (!callerCurrent()) return;
+          if (command === 'ACCEPT_SYSTEM_HOURS') workspaceApi()?.clearShiftSelections?.();
+          await finishAction(undefined, callerCurrent);
+        }
+        catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error); state.failed = true;
+          state.error = state.sourceAdmissionBusy ? sourceBusyMessage : command === 'RECHECK_SOURCE'
+            && error?.code === 'WEEKLY_SOURCE_RECHECK_INCOMPLETE' ? plainMessage(error.code)
+            : 'The result could not be confirmed. Retry exact request.';
+          if (command === 'RECHECK_SOURCE' && error?.code === 'WEEKLY_SOURCE_RECHECK_INCOMPLETE')
+            await workspaceApi()?.refresh?.();
+        }
+        finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      });
+    };
+    const opened = openChild({ title: model.title, kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+
+  function normalisePaidMatch(payloadValue) {
+    const payload = asObject(payloadValue), question = asObject(payload.paid_match_question);
+    const keys = ['schema_version','state','reason_code','upload_row_id','upload_id','projection_publication_id',
+      'candidate_id','client_id','contract_id','expected_authority_scope_version','expected_row_manifest_hash',
+      'expected_paid_overlap_inputs_sha256','choices'];
+    const requestKeys = ['request_id','upload_id','upload_row_id','projection_publication_id',
+      'expected_authority_scope_version','expected_row_manifest_hash'];
+    const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+    const hash = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+    const closed = (value, fields) => value && typeof value === 'object' && !Array.isArray(value)
+      && Object.keys(value).length === fields.length && fields.every(key => Object.hasOwn(value,key));
+    const invalid = () => { throw new Error('The paid-shift comparison has changed. Refresh the workspace before choosing.'); };
+    if (!closed(question,keys) || question.schema_version !== 'WEEKLY_SOURCE_PAID_MATCH_QUESTION_V1'
+      || question.state !== 'READY' || question.reason_code !== null
+      || !['upload_row_id','upload_id','projection_publication_id','candidate_id','client_id','contract_id'].every(key => uuid(question[key]))
+      || !Number.isSafeInteger(question.expected_authority_scope_version) || question.expected_authority_scope_version < 1
+      || !hash(question.expected_row_manifest_hash) || !hash(question.expected_paid_overlap_inputs_sha256)
+      || !Array.isArray(question.choices) || !question.choices.length || question.choices.length > 100) invalid();
+    const request = payload.recheck_payload;
+    if (!closed(request,requestKeys) || !uuid(request.request_id)
+      || !requestKeys.slice(1).every(key => request[key] === question[key])
+      || payload.upload_row_id !== question.upload_row_id || payload.contract_id !== question.contract_id) invalid();
+    const ids = new Set();
+    const choices = question.choices.map(item => {
+      if (!closed(item,['work_event_id','work_date','start','end','break_minutes','contract_id','same_allowed'])
+        || !uuid(item.work_event_id) || !uuid(item.contract_id) || ids.has(item.work_event_id)
+        || typeof item.work_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.work_date)
+        || ![item.start,item.end].every(value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value))
+        || (item.break_minutes !== null && (!Number.isSafeInteger(item.break_minutes) || item.break_minutes < 0))
+        || typeof item.same_allowed !== 'boolean' || item.same_allowed !== (item.contract_id === question.contract_id)) invalid();
+      ids.add(item.work_event_id); return { ...item };
+    });
+    return { question: { ...question, choices }, request: { ...request },
+      candidate: asText(payload.candidate), client: asText(payload.client), shift: asText(payload.shift), system_hours: asText(payload.system_hours) };
+  }
+
+  function buildPaidMatchRequest(model, targetId, choice, reasonValue) {
+    const target = model.question.choices.find(item => item.work_event_id === targetId), reason = asText(reasonValue);
+    if (!target || !['SAME','SEPARATE'].includes(choice) || !reason || reason.length > 1000
+      || (choice === 'SAME' && target.same_allowed !== true)) throw new Error('Choose the paid shift, confirm Same or Separate, and enter a reason.');
+    const question = model.question;
+    return { ...model.request, candidate_id: question.candidate_id, client_id: question.client_id,
+      contract_id: question.contract_id, match_reason: reason,
+      paid_overlap_target_work_event_id: target.work_event_id,
+      expected_paid_overlap_inputs_sha256: question.expected_paid_overlap_inputs_sha256,
+      ...(choice === 'SAME' ? { pay_effect: 'NONE', work_event_id: target.work_event_id }
+        : { pay_effect: 'NORMAL', separate_shift: true }) };
+  }
+
+  function openPaidMatch(payloadValue) {
+    let model;
+    try { model = normalisePaidMatch(payloadValue); }
+    catch (error) { return openDetail({ detail: { problem: error.message } }, 'Compare paid shift'); }
+    const state = { target: '', choice: '', reason: '', busy: false, pending: null, error: '' };
+    const kind = 'weekly-source-paid-match-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const authority = workspaceApi();
+    const callerCurrent = () => workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render = () => {
+      const locked = state.busy || state.pending, target = model.question.choices.find(item => item.work_event_id === state.target);
+      return `<div class="ws-child" data-paid-match>
+        <p><strong>${escapeHtml(model.candidate)}</strong> · ${escapeHtml(model.client)} · ${escapeHtml(model.shift)}</p>
+        <p>Imported shift: <strong>${escapeHtml(model.system_hours)}</strong></p>
+        <p>This booking reference overlaps a paid shift. Confirm whether the imported row describes that work or separate work.</p>
+        <div class="ws-child-fields"><label>Paid shift<select data-paid-match-target${locked ? ' disabled' : ''}><option value="">Choose a shift</option>${model.question.choices.map(item => `<option value="${escapeHtml(item.work_event_id)}"${state.target === item.work_event_id ? ' selected' : ''}>${escapeHtml(displayDate(item.work_date))} · ${escapeHtml(item.start)}–${escapeHtml(item.end)} · ${item.break_minutes === null ? 'Break not recorded' : escapeHtml(item.break_minutes) + ' min break'}</option>`).join('')}</select></label>
+        <label>Comparison<select data-paid-match-choice${locked || !target ? ' disabled' : ''}><option value="">Choose Same or Separate</option><option value="SAME"${state.choice === 'SAME' ? ' selected' : ''}${target?.same_allowed ? '' : ' disabled'}>Same work — retain the earlier pay and invoice this source row</option><option value="SEPARATE"${state.choice === 'SEPARATE' ? ' selected' : ''}>Separate work — create a separate shift</option></select></label>
+        ${target && !target.same_allowed ? '<p>The selected shift uses a different contract. Same is unavailable for this row.</p>' : ''}
+        <label>Reason<textarea data-paid-match-reason maxlength="1000"${locked ? ' disabled' : ''}>${escapeHtml(state.reason)}</textarea></label></div>
+        ${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ''}<div class="ws-child-actions"><button class="btn btn-outline" data-paid-match-cancel${state.busy ? ' disabled' : ''}>Cancel</button><button class="btn primary" data-paid-match-save${state.busy ? ' disabled' : ''}>${state.sourceAdmissionBusy ? 'Try again' : state.pending ? 'Retry exact request' : 'Confirm and recheck'}</button></div></div>`;
+    };
+    const wire = () => {
+      const host = root.document?.querySelector('[data-paid-match]');
+      if (!host || host.dataset.wsaWired) return;
+      host.dataset.wsaWired = '1';
+      host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', closeChild);
+      host.querySelector('[data-paid-match-target]')?.addEventListener('change', event => {
+        if (state.pending || state.busy) return; state.target = event.target.value; state.choice = ''; rerender(kind);
+      });
+      host.querySelector('[data-paid-match-choice]')?.addEventListener('change', event => { if (!state.pending && !state.busy) state.choice = event.target.value; });
+      host.querySelector('[data-paid-match-reason]')?.addEventListener('input', event => { if (!state.pending && !state.busy) state.reason = event.target.value; });
+      host.querySelector('[data-paid-match-save]')?.addEventListener('click', async () => {
+        if (!callerCurrent() || state.busy) return;
+        try { state.pending ||= buildPaidMatchRequest(model,state.target,state.choice,state.reason); }
+        catch (error) { state.error = error.message; rerender(kind); return; }
+        state.busy = true; state.error = ''; rerender(kind);
+        try {
+          const result = await authority.issueCommand('RECHECK_SOURCE', state.pending);
+          if (!callerCurrent()) return;
+          // The native publisher returns publication/upload, not a fabricated
+          // request_id. The unchanged recheck owner binds exact request replay.
+          if (result?.ok !== true || result?.status !== 'CURRENT'
+            || result?.upload_id !== state.pending.upload_id
+            || typeof result?.publication_id !== 'string'
+            || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(result.publication_id)
+            || result.publication_id === state.pending.projection_publication_id) throw new Error('The saved comparison is not yet confirmed. Retry exact request.');
+          await finishAction(undefined, callerCurrent);
+        } catch (error) {
+          if (!callerCurrent()) return;
+          state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+          state.error = error?.code === 'WEEKLY_SOURCE_RECHECK_INCOMPLETE'
+            ? 'The comparison was saved, but rechecking is not yet confirmed. Retry this exact request.'
+            : plainMessage(error?.message, 'The comparison is not yet confirmed. Retry this exact request.');
+        } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      });
+    };
+    const opened = openChild({ title: 'Confirm paid shift match', kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+
+  function openProtectedMatch(payloadValue) {
+    const payload = asObject(payloadValue);
+    const choices = asArray(payload.match_choices).filter(item => item.contract_id === payload.contract_id);
+    const state = { selected: '', reason: '', busy: false, pending: null, error: '' };
+    const kind = 'weekly-source-protected-match-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const callerCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render = () => `<div class="ws-child" data-protected-match>
+      <p><strong>${escapeHtml(payload.candidate)}</strong> · ${escapeHtml(payload.client)} · ${escapeHtml(payload.shift)}</p>
+      <p>Imported shift: <strong>${escapeHtml(payload.system_hours)}</strong></p>
+      <p>Choose the protected shift this report refers to. Different hours or breaks do not necessarily mean different work. Matching does not change the protected hours; reconciliation is a separate choice.</p>
+      <div class="ws-child-fields"><label>Protected shift<select data-match-choice${state.busy || state.pending ? ' disabled' : ''}><option value="">Choose a shift</option>${choices.map(item => `<option value="${escapeHtml(item.work_event_id)}"${state.selected === item.work_event_id ? ' selected' : ''}>${escapeHtml(item.start)}–${escapeHtml(item.end)} · ${escapeHtml(item.break_minutes)} min break</option>`).join('')}<option value="NEW"${state.selected === 'NEW' ? ' selected' : ''}>This is separate work, not a protected shift</option></select></label><label>Reason<textarea data-match-reason maxlength="1000"${state.busy || state.pending ? ' disabled' : ''}>${escapeHtml(state.reason)}</textarea></label></div>
+      ${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ''}<div class="ws-child-actions"><button class="btn btn-outline" data-match-cancel${state.busy ? ' disabled' : ''}>Cancel</button><button class="btn primary" data-match-save${state.busy ? ' disabled' : ''}>${state.sourceAdmissionBusy ? 'Try again' : state.pending ? 'Retry exact request' : 'Confirm and recheck'}</button></div></div>`;
+    const wire = () => {
+      const host = root.document?.querySelector('[data-protected-match]');
+      if (!host || host.dataset.wsaWired) return;
+      host.dataset.wsaWired = '1';
+      host.querySelector('[data-match-cancel]')?.addEventListener('click', closeChild);
+      host.querySelector('[data-match-choice]')?.addEventListener('change', event => { state.selected = event.target.value; });
+      host.querySelector('[data-match-reason]')?.addEventListener('input', event => { state.reason = event.target.value; });
+      host.querySelector('[data-match-save]')?.addEventListener('click', async () => {
+        if (!callerCurrent() || state.busy) return;
+        if (!state.pending && (!state.selected || !asText(state.reason))) { state.error = 'Choose the shift and enter a reason.'; rerender(kind); return; }
+        state.pending ||= { ...payload.recheck_payload, contract_id: payload.contract_id, match_reason: asText(state.reason),
+          ...(state.selected === 'NEW' ? { separate_shift: true } : { work_event_id: state.selected }) };
+        state.busy = true; state.error = ''; rerender(kind);
+        try {
+          const result = await workspaceApi().issueCommand('RECHECK_SOURCE', state.pending);
+          if (result?.ok !== true) throw new Error('The saved comparison is not yet confirmed. Check its saved result.');
+          await finishAction(undefined, callerCurrent);
+        } catch(error){ if (!callerCurrent()) return; state.sourceAdmissionBusy = sourceAdmissionBusy(error); state.error = plainMessage(error?.message, 'The comparison is not yet confirmed. Check its saved result before starting another match.'); }
+        finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+      });
+    };
+    const opened = openChild({ title: 'Confirm shift match', kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+
+  function openUploadDetail(payload) {
+    const uploadId = asText(payload.upload_id);
+    const kind = 'weekly-source-upload-detail-v1';
+    const state = { model: null, busy: false, error: '' };
+    const render = () => {
+      const model = state.model;
+      const labels = [['candidate','Candidate'],['client','Client'],['day_date','Day/date'],
+        ['source_reference','Source worker reference'],['booking_reference','Booking reference'],
+        ['system_hours','Source hours / break'],['status','Status'],['issue','Issue']];
+      const rows = asArray(model?.shifts).map(row => `<tr>${labels.map(([key,label])=>`<td data-label="${escapeHtml(label)}">${escapeHtml(row[key]||'—')}</td>`).join('')}<td data-label="Action">${row.source_row_id && row.pay_query_open!==true?`<button class="btn btn-outline" data-wsa-file-query="${escapeHtml(row.source_row_id)}">Send to Pay Queries</button>`:''}</td></tr>`).join('');
+      const refusal = model?.reason_code ? `<div class="ws-notice ws-notice--warning"><strong>Why this file was refused</strong><span>${escapeHtml(plainMessage(model.reason_code, 'The saved attempt was refused. Quote the reference below when requesting an investigation.'))}</span><span>Reference: ${escapeHtml(model.reason_code)}</span></div>` : '';
+      return `<div class="ws-child" data-wsa-screen="upload-detail">${model?`<h3>${escapeHtml(model.file)}</h3><div class="ws-child-context">${[['purpose','Purpose'],['uploaded','Uploaded'],['coverage','Coverage'],['status','File status'],['rows','Source rows'],['final_source','Finalisation']].map(([key,label])=>`<div><span>${label}</span><strong>${escapeHtml(model[key])}</strong></div>`).join('')}</div>${refusal}<div class="ws-child-scroll" data-wsr-table><table class="grid mini ws-grid"><thead><tr>${labels.map(([,label])=>`<th>${label}</th>`).join('')}<th>Action</th></tr></thead><tbody>${rows||'<tr><td colspan="9">No source rows recorded.</td></tr>'}</tbody></table></div>`:'<p role="status">Loading file details…</p>'}${state.error?`<p role="alert">${escapeHtml(state.error)}</p>`:''}<div class="ws-child-actions">${model?.has_more?`<button class="btn btn-outline" data-wsa-file-more${state.busy?' disabled':''}>Load more shifts</button>`:''}${state.error&&!model?'<button class="btn btn-outline" data-wsa-file-retry>Retry</button>':''}<button class="btn primary" data-wsa-close>Close</button></div></div>`;
+    };
+    const load = async (append=false) => {
+      if(state.busy)return;
+      state.busy=true;state.error='';rerender(kind);
+      try {
+        const model=await workspaceApi().issueCommand('UPLOAD_DETAIL',{upload_id:uploadId,limit:50,
+          ...(append?{cursor:state.model.next_cursor}:{})});
+        if(model?.contract!=='WEEKLY_SOURCE_UPLOAD_DETAIL_V1'||model.upload_id!==uploadId)throw new Error('The file details could not be verified.');
+        if(append)model.shifts=[...state.model.shifts,...model.shifts];
+        state.model=model;
+      } catch(error){state.error=plainMessage(error?.message,'The file details could not be loaded.');}
+      finally {state.busy=false;rerender(kind);}
+    };
+    const wire=()=>{
+      const host=root.document?.querySelector('[data-wsa-screen="upload-detail"]');
+      if(!host||host.dataset.wsaWired)return;
+      host.dataset.wsaWired='1';
+      host.querySelector('[data-wsa-close]')?.addEventListener('click',closeChild);
+      host.querySelector('[data-wsa-file-more]')?.addEventListener('click',()=>load(true));
+      host.querySelector('[data-wsa-file-retry]')?.addEventListener('click',()=>load(false));
+      host.querySelectorAll('[data-wsa-file-query]').forEach(button=>button.addEventListener('click',()=>{
+        const row=asArray(state.model?.shifts).find(item=>item.source_row_id===button.dataset.wsaFileQuery);
+        if(row)openManualReview({...row,day_date:row.day_date});
+      }));
+    };
+    const opened=openChild({title:'Source file details',kind,render,wire});
+    if(opened)void load();
+    return opened;
+  }
+
+  function openManualReview(payloadValue) {
+    const payload=asObject(payloadValue);
+    const sourceRowId=asText(payload.source_row_id);
+    if(!sourceRowId)return openDetail({detail:{problem:'This imported shift is not available for manual review. Recheck the report.'}},'View details');
+    const state={reason:'',busy:false,error:'',pending:null};
+    const kind='weekly-source-manual-review-v1';
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const callerCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const render=()=>`<div class="ws-child" data-wsa-screen="manual-review"><h3>Send to Pay Queries</h3><p>${escapeHtml(payload.candidate||'Selected candidate')} · ${escapeHtml(payload.client||'Selected client')} · ${escapeHtml(payload.day_date||'Imported shift')}</p><p>This holds new payment for this shift until Office accepts source hours, protects pay, or finalises a later backing report containing the shift. It does not undo an existing payment or change invoices. It does not block report finalisation, contact the candidate or create another shift.</p><label>Reason<textarea data-wsa-manual-reason maxlength="1000" required${state.busy||state.pending?' disabled':''}>${escapeHtml(state.reason)}</textarea></label>${state.error?`<p role="alert">${escapeHtml(state.error)}</p>`:''}<div class="ws-child-actions"><button class="btn btn-outline" data-wsa-manual-cancel${state.busy?' disabled':''}>Cancel</button><button class="btn primary" data-wsa-manual-submit${state.busy?' disabled':''}>${state.sourceAdmissionBusy?'Try again':state.pending?'Retry exact request':'Send to Pay Queries'}</button></div></div>`;
+    const wire=()=>{
+      const host=root.document?.querySelector('[data-wsa-screen="manual-review"]');
+      if(!host||host.dataset.wsaWired==='1')return;
+      host.dataset.wsaWired='1';
+      host.querySelector('[data-wsa-manual-cancel]')?.addEventListener('click',closeChild);
+      host.querySelector('[data-wsa-manual-reason]')?.addEventListener('input',event=>{state.reason=event.target.value;});
+      host.querySelector('[data-wsa-manual-submit]')?.addEventListener('click',async()=>{
+        if (!callerCurrent() || state.busy) return;
+        if(!state.reason.trim()){state.error='Enter a reason.';rerender(kind);return;}
+        state.busy=true;state.error='';rerender(kind);
+        try{
+          if(!state.pending)state.pending={source_row_id:sourceRowId,reason:state.reason.trim(),command_id:root.crypto.randomUUID()};
+          const result=await workspaceApi().issueCommand('OPEN_MANUAL_REVIEW',state.pending);
+          if(result?.ok!==true)throw new Error('The query was not confirmed. Recheck this shift.');
+          await finishAction(undefined, callerCurrent);
+        }catch(error){ if (!callerCurrent()) return;state.sourceAdmissionBusy=sourceAdmissionBusy(error);state.error=plainMessage(error?.message,'The query could not be saved.');state.busy=false;rerender(kind);}
+      });
+    };
+    const opened = openChild({title:'Send to Pay Queries',kind,render,wire});
+    initiatingFrame = currentChild(kind);
+    return opened;
+  }
+
+  function openProtectedReview(payloadValue) {
+    const editor = root.CloudTMSProtectedShiftEditorV1;
+    if (!editor) return openDetail({ detail: { problem: 'Refresh the page to review protected pay.' } });
+    const initial = asObject(payloadValue);
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    const selection = { client_id: initial.client_id, candidate_id: initial.candidate_id,
+      source_group_id: initial.source_group_id, work_date: initial.work_date, work_event_id: initial.work_event_id };
+    let context = { ...initial, allowed: false };
+    const values = { reason: '' }, state = { busy: true, pending: null, error: '' };
+    const kind = 'weekly-source-protected-review-v1';
+    let initiatingFrame = null;
+    const frameCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const load = async () => {
+      if (!frameCurrent()) return;
+      state.busy = true; rerender(kind);
+      try {
+        const result = await workspaceApi().issueCommand('PROTECTED_EDITOR_CONTEXT', selection);
+        if (!frameCurrent()) return;
+        if (result?.contract !== 'WEEKLY_PROTECTED_EDITOR_V1') throw new Error('The protected shift could not be verified.');
+        context = result;
+      } catch (error) { if (!frameCurrent()) return; state.error = plainMessage(error?.message, 'Recheck the protected shift.'); }
+      finally { state.busy = false; if (frameCurrent()) rerender(kind); }
+    };
+    const submit = async (mode) => {
+      if (state.busy) return;
+      const callerCurrent = protectedCaller(kind, initiatingActor, initiatingFrame);
+      if (!callerCurrent()) return;
+      state.error = '';
+      try {
+        state.sourceAdmissionBusy = false;
+        state.busy = true; rerender(kind);
+        if (!state.pending) {
+          // Do not refresh the displayed source here: the user's confirmation
+          // must retain its exact reviewed source hash and family version.
+          state.pending = { ...editor.request(context, values, root.crypto.randomUUID(), mode), mode };
+        }
+        const result = await saveProtectedOnce(state.pending);
+          if (!callerCurrent()) return;
+        const confirmation = confirmedProtectedResult(result);
+        state.pending = null;
+        await finishAction(confirmation, callerCurrent);
+      } catch (error) {
+        if (!callerCurrent()) return;
+        state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+        if (state.sourceAdmissionBusy) { state.error = sourceBusyMessage; }
+        else if(error?.code==='WEEKLY_PROTECTED_REVIEW_SOURCE_CHANGED'){
+          // Both server refusals with this exact code precede calculation and
+          // durable publication. Do not treat a known stale review as an
+          // unknown payment outcome, or silently accept the replacement facts.
+          state.pending=null;
+          await load();
+          if (!callerCurrent()) return;
+          state.error='The imported hours have changed. Review the updated details and choose again.';
+        } else if(error?.code==='C1_DURABLE_RECOVERY_NOT_REQUIRED'){
+          // The server proved there is no staged publication for this exact
+          // saved request. A user retry may resume it through the normal owner.
+          state.error='No submitted result needs recovery. You can retry the saved request.';
+        } else {
+          if (knownProtectedRefusal(error)) state.pending = null;
+          state.error = ['LOCAL_OWNER_REQUIRED','BPAY_NEXT_PROTECTED_LOCAL_OWNER_REQUIRED'].includes(error?.code)
+            ? 'Save this change through the Source editor. No payment change was accepted.'
+            : plainMessage(localPublisherRefusal(error)
+            ? 'WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY' : error?.message,
+            'The save could not be confirmed. Retry exact request.');
+        }
+      } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+    };
+    const wire = () => {
+      if (!frameCurrent()) return;
+      const host = root.document?.querySelector('[data-protected-review]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1';
+      host.querySelector('[data-protected-review-close]')?.addEventListener('click', closeChild);
+      host.querySelector('[data-protected-review-reason]')?.addEventListener('input', event => { values.reason = event.target.value; });
+      host.querySelectorAll('[data-protected-review-action]').forEach(button => button.addEventListener('click', () => submit(button.dataset.protectedReviewAction)));
+    };
+    const opened = openChild({ title: 'Review protected pay', kind,
+      render: () => editor.renderReview(context, values, state), wire });
+    initiatingFrame = currentChild(kind);
+    if (opened) void load();
+    return opened;
+  }
+
+  function openProtectedShift(payloadValue, mode = 'approve') {
+    const editor = root.CloudTMSProtectedShiftEditorV1;
+    if (!editor) return openDetail({ detail: { problem: 'The protected shift editor is unavailable. Refresh the page.' } }, 'Protect shift pay');
+    const initial = asObject(payloadValue);
+    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let context = { ...initial, allowed: false, contracts: [] };
+    const values = { work_date: asText(initial.work_date), start: asText(initial.start || initial.start_at_local),
+      end: asText(initial.end || initial.end_at_local), break_minutes: initial.break_minutes ?? '',
+      contract_id: asText(initial.contract_id), shift_choice: asText(initial.work_event_id), reason: '' };
+    const state = { pendingPreparation: null, mode, busy: false, error: '', pending: null, idempotencyKey: null,
+      protectedSaved: false, userChanged: false, lastOverlapSignature: '' };
+    let readSequence = 0;
+    const kind = 'weekly-source-protected-shift-v1';
+    let initiatingFrame = null;
+    const frameCurrent = () => protectedCaller(kind, initiatingActor, initiatingFrame)();
+    const selection = () => ({ client_id: context.client_id, candidate_id: context.candidate_id,
+      work_date: values.work_date, ...(context.source_group_id ? { source_group_id: context.source_group_id } : {}),
+      ...(values.shift_choice && values.shift_choice !== 'NEW' ? { work_event_id: values.shift_choice } : {}) });
+    const reload = async () => {
+      if (!frameCurrent()) return;
+      const sequence = ++readSequence;
+      context.allowed = false; context.contracts = []; context.history = [];
+      if (!context.client_id || !context.candidate_id || !values.work_date) { rerender(kind); return; }
+      state.busy = true; state.error = ''; rerender(kind);
+      try {
+        const result = await workspaceApi().issueCommand('PROTECTED_EDITOR_CONTEXT', selection());
+        if (sequence !== readSequence || !frameCurrent()) return;
+        if (result?.contract !== 'WEEKLY_PROTECTED_EDITOR_V1') throw new Error('Recheck the candidate, client and work date.');
+        context = { ...result,
+          client: asText(result.client) || context.client,
+          candidate: asText(result.candidate) || context.candidate };
+        values.contract_id = editor.contractChoice(context.contracts, context.shift_contract_id || values.contract_id);
+        if (mode === 'amend' && context.current_schedule) Object.assign(values, context.current_schedule);
+        if (context.pending_approval && context.resume_request) {
+          const original = context.resume_request;
+          for (const field of ['work_date', 'start', 'end', 'break_minutes', 'reason', 'contract_id']) values[field] = original[field];
+        }
+      } catch (error) { if (sequence === readSequence && frameCurrent()) state.error = plainMessage(error?.message, 'The selected client, candidate or date is not eligible for protected pay.'); }
+      finally { if (sequence === readSequence && frameCurrent()) { state.busy = false; rerender(kind); setTimeout(() => { if (frameCurrent()) warnIfOverlapping(); }, 30); } }
+    };
+    const render = () => editor.render(context, values, { ...state, mode,
+      lockedIdentity: !!initial.work_event_id })
+      + (!state.busy && !state.pending && !state.pendingPreparation && context.allowed && !context.contracts.length
+        ? '<p>No eligible contract covers this date.</p><button type="button" class="btn btn-outline" data-protected-create-contract>Create contract</button><button type="button" class="btn btn-outline" data-protected-recheck>Recheck contracts</button>' : '');
+    const routeLabel = (event) => event.pay_query_open ? 'Open Pay Queries'
+      : event.final_report_key ? 'Open in History'
+      : event.finalise_source_cycle_id ? 'Open unfinalised report' : '';
+    const warnIfOverlapping = (force = false) => {
+      // An exact unfinished first save is a retry, not a proposed second shift.
+      // request() still validates its fingerprint-derived facts and other overlaps.
+      if (mode !== 'approve' || initial.work_event_id || context.pending_approval || state.busy || state.pending || state.pendingPreparation || !currentChild(kind)) return false;
+      const overlaps = editor.overlappingEvents(context, values);
+      if (!overlaps.length) { state.lastOverlapSignature = ''; return false; }
+      const signature = [context.client_id, context.candidate_id, values.work_date,
+        values.start, values.end, ...overlaps.map(item => item.work_event_id)].join('|');
+      if (!force && signature === state.lastOverlapSignature) return true;
+      state.lastOverlapSignature = signature;
+      const noticeKind = 'weekly-source-existing-shift-overlap-v1';
+      const notice = { confirm: null, busy: false };
+      const navigate = async (event) => {
+        const warning = currentChild(noticeKind);
+        if (warning) { warning.isDirty = false; closeChild(); }
+        const form = currentChild(kind);
+        if (form) { form.isDirty = false; form._snapshot = null; closeChild(); }
+        try {
+          const opened = await workspaceApi()?.navigateToExistingShift?.({ ...event,
+            source_group_id: context.source_group_id, client_id: context.client_id,
+            candidate: context.candidate });
+          if (!opened) throw new Error('The existing shift could not be opened. Recheck the source work.');
+        } catch (error) { root.__toast?.(plainMessage(error?.message, 'The existing shift could not be opened.')); }
+      };
+      const choose = async (event) => {
+        if (!routeLabel(event)) {
+          closeChild(); values.shift_choice = event.work_event_id; await reload(); return;
+        }
+        const form = (root.__modalStack || []).find(frame => frame.kind === kind);
+        if (state.userChanged || form?.isDirty) { notice.confirm = event; rerender(noticeKind); return; }
+        await navigate(event);
+      };
+      const noticeRender = () => notice.confirm
+        ? `<div class="ws-child" data-wsa-screen="existing-shift"><h3>Leave this protected shift draft?</h3><p>The details entered here have not been saved. Discard them and ${escapeHtml(routeLabel(notice.confirm).toLowerCase())}?</p><div class="ws-child-actions"><button class="btn btn-outline" data-wsa-overlap-back>Keep editing</button><button class="btn primary" data-wsa-overlap-confirm>Discard draft and open</button></div></div>`
+        : `<div class="ws-child" data-wsa-screen="existing-shift"><h3>Shift hours overlap</h3><p>${escapeHtml(context.candidate || 'This candidate')} already has a recorded shift during these hours${context.work_date ? ` on ${escapeHtml(context.work_date)}` : ''}. Protect the existing shift through its source work; do not create a second payable copy for the same work.</p><div class="ws-child-scroll"><table class="grid mini ws-child-table"><thead><tr><th>Recorded shift</th><th>Where to go</th></tr></thead><tbody>${overlaps.map((event, index) => `<tr><td>${escapeHtml(event.overlap_kind)}: ${escapeHtml(event.overlap_start)}–${escapeHtml(event.overlap_end)}${event.booking_reference ? ` · ${escapeHtml(event.booking_reference)}` : ''}</td><td><button class="btn btn-outline" data-wsa-overlap-route="${index}">${escapeHtml(routeLabel(event) || 'Use existing shift')}</button></td></tr>`).join('')}</tbody></table></div><p>If this is separate work, change its times so they do not overlap.</p><div class="ws-child-actions"><button class="btn primary" data-wsa-overlap-back>Edit times</button></div></div>`;
+      const noticeWire = () => {
+        const host = root.document?.querySelector('[data-wsa-screen="existing-shift"]');
+        if (!host || host.dataset.wsaWired) return;
+        host.dataset.wsaWired = '1';
+        host.querySelector('[data-wsa-overlap-back]')?.addEventListener('click', () => { notice.confirm = null; closeChild(); });
+        host.querySelector('[data-wsa-overlap-confirm]')?.addEventListener('click', () => navigate(notice.confirm));
+        host.querySelectorAll('[data-wsa-overlap-route]').forEach(button => button.addEventListener('click', () => choose(overlaps[Number(button.dataset.wsaOverlapRoute)])));
+      };
+      openChild({ title: 'Shift hours overlap', kind: noticeKind, render: noticeRender, wire: noticeWire });
+      return true;
+    };
+    const submit = async () => {
+      if (state.busy) return;
+      const callerCurrent = protectedCaller(kind, initiatingActor, initiatingFrame);
+      if (!callerCurrent()) return;
+      state.error = '';
+      let preparationRequest = null;
+      try {
+        if (!state.pending && !state.protectedSaved && warnIfOverlapping(true)) return;
+        // Validate all user-entered intent before cycle preparation. The exact
+        // qualified contract and source period are checked again server-side.
+        editor.schedule(values);
+        if (!asText(values.reason)) throw new Error('Enter a reason.');
+        if (!values.contract_id) throw new Error('Choose an eligible contract.');
+        state.sourceAdmissionBusy = false;
+        state.busy = true; rerender(kind);
+        if (!state.pending && !state.protectedSaved) {
+          preparationRequest = state.pendingPreparation || JSON.parse(JSON.stringify(selection()));
+          const prepared = await workspaceApi().issueCommand('PREPARE_PROTECTED_EDITOR', preparationRequest);
+          if (!callerCurrent()) return;
+          state.pendingPreparation = null;
+          context = { ...context, ...prepared };
+          state.idempotencyKey = context.resume_request?.idempotency_key || root.crypto.randomUUID();
+          state.pending = editor.request(context, values, state.idempotencyKey, mode);
+        }
+        if (!state.protectedSaved) {
+          const result = await saveProtectedOnce(state.pending);
+          if (!callerCurrent()) return;
+          state.confirmation = confirmedProtectedResult(result);
+          state.pending = null; state.protectedSaved = true;
+        }
+        // The server closes the matching manual query in the save transaction.
+        // A second browser command cannot qualify or repair a failed save.
+        await finishAction(state.confirmation, callerCurrent);
+      } catch (error) {
+        if (!callerCurrent()) return;
+        // These exact refusals occur in the first transactional family prepare,
+        // before an orchestration run or pay publication can survive. Unknown
+        // outcomes still retain their original command for explicit recovery.
+        state.sourceAdmissionBusy = sourceAdmissionBusy(error);
+        if (preparationRequest && (state.sourceAdmissionBusy || state.pendingPreparation)) state.pendingPreparation = preparationRequest;
+        if (knownProtectedRefusal(error)) { state.pending = null; state.pendingPreparation = null; }
+        state.error = state.sourceAdmissionBusy ? sourceBusyMessage : state.protectedSaved
+          ? 'Protected pay was saved, but the screen did not refresh. Close and refresh Queries.'
+          : ['LOCAL_OWNER_REQUIRED','BPAY_NEXT_PROTECTED_LOCAL_OWNER_REQUIRED'].includes(error?.code)
+            ? 'Save this change through the Source editor. No payment change was accepted.'
+          : localPublisherRefusal(error)
+            ? plainMessage(error?.code === 'WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY' ? error.code : error?.message)
+          : state.pending || state.pendingPreparation
+            ? 'The save could not be confirmed. Retry exact request.'
+            : plainMessage(error?.message, 'Recheck the selected contract and shift details.');
+      } finally { state.busy = false; if (callerCurrent()) rerender(kind); }
+    };
+    const wire = () => {
+      if (!frameCurrent()) return;
+      const host = root.document?.querySelector('[data-protected-editor]');
+      if (!host || host.dataset.wsaWired === '1') return;
+      host.dataset.wsaWired = '1';
+      host.querySelector('[data-protected-cancel]')?.addEventListener('click', closeChild);
+      host.querySelectorAll('[data-protected-field]').forEach((input) => input.addEventListener('change', async () => {
+        values[input.dataset.protectedField] = input.value;
+        state.userChanged = true;
+        if (input.dataset.protectedField === 'work_date') { values.shift_choice = ''; await reload(); }
+        else if (input.dataset.protectedField === 'shift_choice') await reload();
+        else {
+          const output = host.querySelector('[data-protected-net]');
+          try { const item = editor.schedule(values); output.textContent = `${Math.floor(item.net_minutes / 60)} hours ${item.net_minutes % 60} minutes`; }
+          catch (error) { output.textContent = error.message; }
+          if (input.dataset.protectedField === 'start' || input.dataset.protectedField === 'end') warnIfOverlapping();
+        }
+      }));
+      host.querySelectorAll('[data-protected-choose]').forEach((button) => button.addEventListener('click', () => {
+        const field = button.dataset.protectedChoose;
+        const picker = field === 'client' ? root.openClientPicker : root.openCandidatePicker;
+        if (typeof picker !== 'function') { state.error = 'The chooser is unavailable. Refresh the page.'; rerender(kind); return; }
+        picker(async ({ id, label }) => {
+          context[`${field}_id`] = id;
+          context[field] = asText(label);
+          state.userChanged = true;
+          values.contract_id = '';
+          values.shift_choice = '';
+          if (field === 'client') delete context.source_group_id;
+          await reload();
+        }, { title: `Choose ${field}` });
+      }));
+      host.querySelector('[data-protected-submit]')?.addEventListener('click', submit);
+      root.document?.querySelector('[data-protected-recheck]')?.addEventListener('click', reload);
+      root.document?.querySelector('[data-protected-create-contract]')?.addEventListener('click', () => {
+        root.openContract?.(context.create_contract_seed, { noParentGate: true });
+      });
+    };
+    const opened = openChild({ title: mode === 'amend' ? 'Change protected shift' : 'Protect shift pay', kind, render, wire });
+    initiatingFrame = currentChild(kind);
+    if (opened) void reload();
+    return opened;
+  }
+
+// SOURCE ONLY: one finite navigation adapter, no send/selection/status owner.
+function normaliseCheckOnlyD10ReviewAction(value, actorId) {
+  const closed = (object, keys) => object && typeof object === 'object' && !Array.isArray(object)
+    && Object.keys(object).length === keys.length && keys.every(key => Object.prototype.hasOwnProperty.call(object,key));
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const hash = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+  const keys = ['contract','actor_user_id','permission_view','scope','parent_group_key','item_id','proof_hash','action_bindings'];
+  if (!closed(value,keys) || value.contract !== 'WEEKLY_SOURCE_CHECK_ONLY_D10_REVIEW_ACTION_V1'
+    || !uuid(value.actor_user_id) || value.actor_user_id !== actorId || value.permission_view !== 'ADMIN'
+    || typeof value.parent_group_key !== 'string' || !/^d10g_[0-9a-f]{64}$/.test(value.parent_group_key)
+    || typeof value.item_id !== 'string' || value.item_id.length < 1 || value.item_id.length > 512 || !hash(value.proof_hash)
+    || !closed(value.scope,['source_group_id','client_id','source_cycle_id','week_ending'])
+    || !['source_group_id','client_id','source_cycle_id'].every(key => uuid(value.scope[key]))
+    || typeof value.scope.week_ending !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.scope.week_ending)
+    || !Array.isArray(value.action_bindings) || value.action_bindings.length < 1 || value.action_bindings.length > 5000) return null;
+  const seen = new Set(); let first = null;
+  for (const binding of value.action_bindings) {
+    if (!closed(binding,['owner','actor_user_id','scope','import_id','preview_generation','state_version','preview_fingerprint','action_id','action_kind','evidence_fingerprint'])
+      || binding.owner !== 'public.import_review_actions_page_v1' || binding.actor_user_id !== actorId || !uuid(binding.import_id)
+      || !closed(binding.scope,['source_group_id','client_id','source_cycle_id','week_ending'])
+      || !Object.keys(value.scope).every(key => binding.scope[key] === value.scope[key])
+      || !Number.isSafeInteger(binding.preview_generation) || binding.preview_generation < 1
+      || !Number.isSafeInteger(binding.state_version) || binding.state_version < 1
+      || !hash(binding.preview_fingerprint) || !hash(binding.action_id) || !hash(binding.evidence_fingerprint)
+      || !['EMAIL_ISSUE','EMAIL_REMINDER','ADVISORY'].includes(binding.action_kind) || seen.has(binding.action_id)) return null;
+    if (first && ['import_id','preview_generation','state_version','preview_fingerprint'].some(key => binding[key] !== first[key])) return null;
+    first = first || binding; seen.add(binding.action_id);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+async function assertCheckOnlyD10ReviewFresh(value, actorId, importId, initialHeader, loadPage, current) {
+  const action = normaliseCheckOnlyD10ReviewAction(value,actorId);
+  const stale = () => { throw new Error('This HealthRoster query changed. Return to Queries and recheck before opening it.'); };
+  if (!action || action.action_bindings[0].import_id !== importId || typeof current !== 'function' || !current()) stale();
+  const binding = action.action_bindings[0], remaining = new Map(action.action_bindings.map(item => [item.action_id,item]));
+  let header = initialHeader, cursor = null, visited = 0;
+  for (;;) {
+    if (!current() || header?.ok !== true || header?.import?.id !== importId
+      || header?.state?.last_opened_by_user_id !== actorId || header.state.preview_generation !== binding.preview_generation
+      || header.state.state_version !== binding.state_version || header.state.preview_fingerprint !== binding.preview_fingerprint
+      || ['ABANDONED','SUPERSEDED'].includes(header.state.status) || !Array.isArray(header.actions)) stale();
+    for (const native of header.actions) {
+      const expected = remaining.get(native.action_id);
+      if (expected && (native.kind !== expected.action_kind || native.evidence_fingerprint !== expected.evidence_fingerprint)) stale();
+      if (expected) remaining.delete(native.action_id);
+    }
+    visited += header.actions.length;
+    if (!remaining.size) return action;
+    const next = header.actions_next_cursor;
+    if (typeof next !== 'string' || !/^[0-9a-f]{64}$/.test(next) || next === cursor || visited >= 5000 || typeof loadPage !== 'function') stale();
+    cursor = next; header = await loadPage(cursor);
+  }
+}
+
+// Purpose-bound R254 intent UI; native SQL owns eligibility and staging.
+function normaliseCheckOnlyD10Reminder(value,actorId) {
+  const closed=(v,keys)=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(v,k));
+  const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v),hash=v=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
+  const date=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
+  if(!closed(value,['contract','actor_user_id','permission_view','scope','parent_group_key','parent_proof_hash','action_id','candidate_context_hash'])
+    ||value.contract!=='WEEKLY_SOURCE_CHECK_ONLY_D10_CANDIDATE_REMINDER_ACTION_V1'||!uuid(actorId)||value.actor_user_id!==actorId||value.permission_view!=='ADMIN'
+    ||!closed(value.scope,['source_group_id','source_cycle_id','client_id','week_ending'])
+    ||!['source_group_id','source_cycle_id','client_id'].every(k=>uuid(value.scope[k]))||!date(value.scope.week_ending)
+    ||typeof value.parent_group_key!=='string'||!/^d10g_[0-9a-f]{64}$/.test(value.parent_group_key)
+    ||!['parent_proof_hash','action_id','candidate_context_hash'].every(k=>hash(value[k])))return null;
+  return JSON.parse(JSON.stringify(value));
+}
+function openCheckOnlyD10Reminder(detail) {
+  const session=typeof SESSION!=='undefined'?SESSION:null,user=session?.user,actorId=user?.id;
+  const roles=JSON.stringify(user?.roles),flags=JSON.stringify([user?.role,user?.is_active]);
+  const action=normaliseCheckOnlyD10Reminder(detail.payload,actorId),workspace=workspaceApi();
+  if(detail.label!=='Remind candidate'||detail.enabled!==true||!action||user?.is_active!==true||String(user?.role??'').trim().toLowerCase()!=='admin'
+    ||typeof workspace?.issueCommand!=='function'||typeof root.showModal!=='function')
+    return openDetail({detail:{problem:'This reminder could not be verified. Refresh Queries before continuing.'}},'View details');
+  const sessionCurrent=()=>!!session&&!!user&&(typeof SESSION!=='undefined'?SESSION:null)===session&&SESSION.user===user
+    &&SESSION.user.id===actorId&&JSON.stringify(SESSION.user.roles)===roles&&JSON.stringify([SESSION.user.role,SESSION.user.is_active])===flags&&workspaceApi()===workspace;
+  const parents=Array.isArray(root.__modalStack)?root.__modalStack.slice():[],parentTokens=parents.map(p=>p._token),kind='weekly-source-check-only-reminder-v1';
+  const context={entity:'weekly-source-child',data:{},weeklySourceChildKind:kind};
+  const payload={descriptor:action,idempotency_key:root.crypto.randomUUID()},state={confirmed:false,busy:false,error:'',failed:false};
+  let frame=null,token=null;
+  const parentCurrent=()=>parents.length===(root.__modalStack||[]).length&&parents.every((p,i)=>root.__modalStack[i]===p&&p._token===parentTokens[i]);
+  const current=()=>sessionCurrent()&&!!frame&&frame._token===token&&(root.__modalStack||[]).length===parents.length+1
+    &&parents.every((p,i)=>root.__modalStack[i]===p&&p._token===parentTokens[i])&&(root.__modalStack||[]).at(-1)===frame;
+  const renderTab=()=>{
+    if(!sessionCurrent())return '';
+    if(!frame){
+      const stack=root.__modalStack||[],child=stack.at(-1);
+      if(stack.length!==parents.length+1||!parents.every((p,i)=>stack[i]===p&&p._token===parentTokens[i])||child?.kind!==kind
+        ||child.renderTab!==renderTab||child._ctxRef!==context)return '';
+      frame=child;token=child._token;
+    }
+    if(!current())return '';
+    const markup=renderCommandConfirmation({message:'Remind this candidate to submit the Timesheet through their Candidate App.',
+      confirmation:'Send this reminder to the candidate’s active App account.',action_label:state.failed?'Retry exact request':'Remind candidate',
+      context:detail.context},state);
+    setTimeout(wire,0);return typeof root.html==='function'?root.html(markup):markup;
+  };
+  const wire=()=>{
+    if(!current())return;
+    const host=root.document?.querySelector('[data-wsa-screen="command"]');if(!host||host.dataset.wsaWired==='1')return;
+    host.dataset.wsaWired='1';host.querySelector('[data-wsa-close]')?.addEventListener('click',()=>{if(current())closeChild();});
+    host.querySelector('[data-wsa-confirm]')?.addEventListener('change',event=>{if(!current())return;state.confirmed=event.target.checked;
+      host.querySelector('[data-wsa-run-command]').disabled=!state.confirmed||state.busy;});
+    host.querySelector('[data-wsa-run-command]')?.addEventListener('click',async()=>{
+      if(!current()||!state.confirmed||state.busy)return;state.busy=true;state.error='';rerender(kind);
+      try{
+        const result=await workspace.issueCommand('CHECK_ONLY_D10_REMIND_CANDIDATE',payload);
+        if(!current())return;
+        if(result?.ok!==true||result.contract!=='WEEKLY_SOURCE_CHECK_ONLY_CANDIDATE_REMINDER_V1'||result.actor_user_id!==actorId
+          ||result.action_id!==action.action_id||result.idempotency_key!==payload.idempotency_key||result.queued!==true
+          ||typeof result.notification_id!=='string'||typeof result.replay!=='boolean'
+          ||!result.scope||!Object.keys(action.scope).every(k=>result.scope[k]===action.scope[k]))throw new Error('Unconfirmed reminder');
+        markCompletedChildClean();closeChild();
+        if(!sessionCurrent()||!parentCurrent())return;
+        root.__toast?.('Reminder added to the Candidate App.');
+        await workspace.refresh?.('queries');
+        if(!sessionCurrent()||!parentCurrent())return;
+      }catch{
+        if(!current())return;state.failed=true;state.error='The reminder result could not be confirmed. Retry this exact request.';
+      }finally{state.busy=false;if(current())rerender(kind);}
+    });
+  };
+  root.modalCtx=context;
+  root.showModal('Remind candidate',[{key:'main',label:'Remind candidate'}],renderTab,null,false,wire,
+    {kind,noParentGate:true,showSave:false,showApply:false,runOnRender:true});
+  return !!frame&&current();
+}
+
+  function handleAction(detailValue) {
+    const detail = asObject(detailValue);
+    const label = asText(detail.label);
+    if (detail.kind === 'CHECK_ONLY_D10_CANDIDATE_REMINDER') return openCheckOnlyD10Reminder(detail);
+    if (detail.kind === 'CHECK_ONLY_D10_REVIEW') {
+      const actorId = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+      const action = normaliseCheckOnlyD10ReviewAction(detail.payload, actorId);
+      if (!action || label !== 'View details' || detail.enabled === false || typeof root.CloudTmsImportReviewV1?.openReview !== 'function') {
+        return openDetail({ detail: { problem: 'This HealthRoster query could not be verified. Return to Queries and recheck.' } }, 'View details');
+      }
+      const workspace = workspaceApi();
+      return root.CloudTmsImportReviewV1.openReview(action.action_bindings[0].import_id, {
+        checkOnlyD10Action: action, skipAutoRecheck: true,
+        returnTo: () => (typeof SESSION !== 'undefined' ? SESSION?.user?.id : null) === actorId
+          && workspaceApi() === workspace ? workspace?.refresh?.('queries') : undefined,
+        view: action.action_bindings.every(binding => ['EMAIL_ISSUE','EMAIL_REMINDER'].includes(binding.action_kind)) ? 'EMAIL' : 'PENDING'
+      });
+    }
+    if (label === 'Retry recheck' && detail.command === 'RECHECK_SOURCE' && detail.payload?.request_id) return openCommand(detail);
+    if(label==='Send to Pay Queries'||label==='Send back to Queries')return openManualReview({...asObject(detail.payload),...asObject(detail.context)});
+    if(label==='View'&&detail.payload?.upload_id)return openUploadDetail(detail.payload);
+    if (label === 'Confirm paid shift match') return openPaidMatch(detail.payload);
+    if (label === 'Confirm shift match') return openProtectedMatch(detail.payload);
+    if (['Review protected pay', 'Review and reconcile'].includes(label)) return openProtectedReview(detail.payload);
+    if (['Protect pay', 'Add protected shift', 'Change protected shift'].includes(label)) {
+      return openProtectedShift(detail.payload, label === 'Change protected shift' ? 'amend' : 'approve');
+    }
+    if (['Link candidate','Link client'].includes(label) && detail.payload?.recheck_payload?.request_id) {
+      const picker = label === 'Link candidate' ? root.openCandidatePicker : root.openClientPicker;
+      if (typeof picker !== 'function') return openDetail({ detail: { problem: 'The matching picker is unavailable. Refresh the page and try again.' } }, label);
+      const field = label === 'Link candidate' ? 'candidate_id' : 'client_id';
+      const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+      const workspace = workspaceApi();
+      const parentFrame = (root.__modalStack || []).at(-1);
+      const pickerKind = label === 'Link candidate' ? 'candidate-picker' : 'client-picker';
+      return picker(async ({ id, candidate }) => {
+        const stack = root.__modalStack || [];
+        if (!initiatingActor || (typeof SESSION !== 'undefined' ? SESSION?.user?.id : null) !== initiatingActor
+          || workspaceApi() !== workspace || stack.at(-2) !== parentFrame || !currentChild(pickerKind)) return;
+        if (label === 'Link candidate' && candidate?.active === false) {
+          throw new Error('This candidate is currently inactive. Reactivate their Candidate record before linking this shift.');
+        }
+        const request = JSON.parse(JSON.stringify({ ...detail.payload.recheck_payload, [field]: asText(id) }));
+        // Let the existing picker close, then present the exact selected choice.
+        // This schedules a screen only; a separate deliberate click sends it.
+        setTimeout(() => {
+          if ((root.__modalStack || []).at(-1) !== parentFrame || workspaceApi() !== workspace
+            || (typeof SESSION !== 'undefined' ? SESSION?.user?.id : null) !== initiatingActor) return;
+          openCommand({ label, command: 'RECHECK_SOURCE', payload: request, context: detail.context });
+        }, 0);
+      }, { title: label, seed_hint: { display_name: detail.payload.candidate },
+        seed_query: label === 'Link candidate' ? asText(detail.payload.candidate).split(/\s+/).filter(Boolean).at(-1) : '',
+        context: { staffName: detail.payload.candidate, unit: detail.payload.client, dateYmd: detail.payload.shift,
+          sourceReference: detail.payload.detail?.source_reference,
+          bookingReference: detail.payload.detail?.booking_reference } });
+    }
+    if (label === 'View Timesheet' && typeof root.openTimesheet === 'function') {
+      return root.openTimesheet({ timesheet_id: asText(detail.payload?.timesheet_id) });
+    }
+    if (label === 'Email manager') {
+      const importId = asText(detail.payload?.import_id);
+      if (importId && typeof root.CloudTmsImportReviewV1?.openReview === 'function') {
+        return root.CloudTmsImportReviewV1.openReview(importId);
+      }
+      return openDetail({ detail: { problem: 'The manager correction review is unavailable.',
+        guidance: 'Refresh the source checks before opening this action.' } }, 'View details');
+    }
+    if (label === 'Correct final source') return openCorrectFinal(detail.payload);
+    if (label === 'Choose contract') return openContractChooser(detail.payload);
+    if (label === 'Review' || label === 'Review pricing') {
+      if (detail.payload?.preview) return openPreview(detail.payload.preview);
+      return openDetail(detail.payload, label);
+    }
+    if ((label === 'Create contract' || label === 'Create contract for this band') && typeof root.openContract === 'function') {
+      const seed = asObject(detail.payload?.contract_seed);
+      if (Object.keys(seed).length) return root.openContract(seed, { noParentGate: true });
+    }
+    if (['View','View final source','View details','Open','Open charge details','Review source details','View query'].includes(label)) return openDetail(detail.payload, label);
+    if (detail.command || ['Remind candidate','Remind missing timesheet','Accept system hours','No shifts to import','Protect pay'].includes(label)) return openCommand(detail);
+    return openDetail({ detail: { problem: 'This action is not available yet.', guidance: 'Recheck the Weekly source screen and try again.' } }, 'View details');
+  }
+
+  return Object.freeze({
+    CONTRACT, normalisePreview, renderPreview, buildUploadAcceptancePayload, normalisePaidMatch, buildPaidMatchRequest,
+    normaliseDetail, renderDetail, normaliseContractChooser, renderContractChooser,
+    normaliseCorrectFinal, normaliseCorrectFinalPreview, renderCorrectFinal, renderCommandConfirmation,
+    openPreview, openBatchPreview, handleAction, _plainMessage: plainMessage,
+    _test: Object.freeze({ commandAuthorityAvailable, isCandidateComparisonAmbiguity })
+  });
+});

@@ -1,0 +1,31 @@
+{
+  "source_only": true,
+  "native": false,
+  "independent_review_pending": true,
+  "packet": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014",
+  "whole_owner_sha256": "acdb3e89f6eebf410eaa52b1d1a8597e92c8bf06dc3288afefc0447eae34c656",
+  "source_test_sha256": "dcc7702c6238ca2268bb5aacae5b8bba4d2cd01118531ac9fc6ee4cacd00bfda",
+  "passed": 7,
+  "failed": 0,
+  "actual_showModal_source_commit": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+  "actual_showModal_source_file": "js/main.js",
+  "complete_actual_host_in_VM": true,
+  "native_UI_acceptance": false,
+  "scaffold": "Inert DOM/events and close-button hook; actual full showModal/setTab source. No browser/server action.",
+  "reproduced_predecessor": "Same-ID SESSION object replacement still submits old paid request before new caller guard.",
+  "reversal": "Three Money28 whole file edits onto Native0e; eight guarded edits only inside the new paid dialog. Entire two whole-owner reverse layers verified.",
+  "source_integrity": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "passed": true
+  },
+  "retained_source_failures": [
+    "First Git host reader maxBuffer8MB refused actual17,832,956-byte main.js before tests. Bounded24MB reader corrected.",
+    "Initial inert close-button Element had no click method. Positive and old-predecessor close checks failed; fixed only fixture close-button hook. Production union unchanged."
+  ],
+  "holds": [
+    "Independent bounded union/caller review pending.",
+    "Native SQL/API/UI/security/financial/phone and final Part B remain required.",
+    "No source freeze overwritten, generic protectedCaller change, database connection, SQL, lock, runtime publication, activation, Bank message or app upload."
+  ]
+}

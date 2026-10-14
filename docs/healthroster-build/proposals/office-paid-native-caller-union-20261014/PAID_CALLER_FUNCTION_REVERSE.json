@@ -1,0 +1,60 @@
+{
+  "schema": "HEALTHROSTER_WHOLE_OWNER_COMPOSITION_V1",
+  "source_only": true,
+  "native": false,
+  "before_bytes": 5616,
+  "before_sha256": "bb399fec4c48a17189427f7adb585f0cdf68e55efdcb38b182e065f138455176",
+  "after_bytes": 6965,
+  "after_sha256": "7f28dab65aa9a678dbf1251e009072a639bbba1a19a354fcdc996eff3247460e",
+  "hunks": [
+    {
+      "name": "exact initiating session user roles and parent frame identity",
+      "before": "    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;\n    let initiatingFrame = null;\n    const authority = workspaceApi();\n    const callerCurrent = () => workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();",
+      "after": "    const initiatingSession = typeof SESSION !== 'undefined' ? SESSION : null;\n    const initiatingUser = initiatingSession?.user, initiatingActor = initiatingUser?.id;\n    const initiatingRoles = JSON.stringify(initiatingUser?.roles);\n    const initiatingFlags = JSON.stringify([initiatingUser?.role, initiatingUser?.is_active]);\n    const parents = Array.isArray(root.__modalStack) ? root.__modalStack.slice() : [];\n    const parentTokens = parents.map(frame => frame._token);\n    let initiatingFrame = null, initiatingFrameToken;\n    const authority = workspaceApi();\n    const sessionCurrent = () => !!initiatingSession && !!initiatingUser && !!initiatingActor\n      && (typeof SESSION !== 'undefined' ? SESSION : null) === initiatingSession\n      && SESSION.user === initiatingUser && SESSION.user.id === initiatingActor\n      && JSON.stringify(SESSION.user.roles) === initiatingRoles\n      && JSON.stringify([SESSION.user.role, SESSION.user.is_active]) === initiatingFlags\n      && workspaceApi() === authority;\n    const callerCurrent = () => sessionCurrent() && protectedCaller(kind, initiatingActor, initiatingFrame)()\n      && initiatingFrame._token === initiatingFrameToken\n      && (root.__modalStack || []).length === parents.length + 1\n      && parents.every((frame, index) => root.__modalStack[index] === frame && frame._token === parentTokens[index]);",
+      "byte_offset": 358
+    },
+    {
+      "name": "no stale session render",
+      "before": "    const render = () => {\n      const locked = state.busy || state.pending,",
+      "after": "    const render = () => {\n      if (!sessionCurrent() || (initiatingFrame && !callerCurrent())) return '';\n      const locked = state.busy || state.pending,",
+      "byte_offset": 1726
+    },
+    {
+      "name": "only the current child wires controls",
+      "before": "    const wire = () => {\n      const host =",
+      "after": "    const wire = () => {\n      if (!callerCurrent()) return;\n      const host =",
+      "byte_offset": 4082
+    },
+    {
+      "name": "current child owns cancellation",
+      "before": "host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', closeChild);",
+      "after": "host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', () => { if (callerCurrent()) closeChild(); });",
+      "byte_offset": 4304
+    },
+    {
+      "name": "current child owns target input",
+      "before": "        if (state.pending || state.busy) return; state.target",
+      "after": "        if (!callerCurrent() || state.pending || state.busy) return; state.target",
+      "byte_offset": 4517
+    },
+    {
+      "name": "current child owns choice input",
+      "before": "event => { if (!state.pending && !state.busy) state.choice",
+      "after": "event => { if (callerCurrent() && !state.pending && !state.busy) state.choice",
+      "byte_offset": 4747
+    },
+    {
+      "name": "current child owns reason input",
+      "before": "event => { if (!state.pending && !state.busy) state.reason",
+      "after": "event => { if (callerCurrent() && !state.pending && !state.busy) state.reason",
+      "byte_offset": 4931
+    },
+    {
+      "name": "capture actual created child token",
+      "before": "    initiatingFrame = currentChild(kind);\n    return opened;",
+      "after": "    initiatingFrame = currentChild(kind);\n    initiatingFrameToken = initiatingFrame?._token;\n    return opened;",
+      "byte_offset": 6847
+    }
+  ],
+  "whole_reverse_verified": true
+}

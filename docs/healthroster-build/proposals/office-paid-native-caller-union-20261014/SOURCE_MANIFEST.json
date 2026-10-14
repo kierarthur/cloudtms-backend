@@ -1,0 +1,52 @@
+{
+  "source_only": true,
+  "native": false,
+  "independent_review_pending": true,
+  "entries": [
+    {
+      "path": "forward/workspace-actions.jsinc",
+      "bytes": 131648,
+      "sha256": "acdb3e89f6eebf410eaa52b1d1a8597e92c8bf06dc3288afefc0447eae34c656"
+    },
+    {
+      "path": "forward/import-workspace.jsinc",
+      "bytes": 165012,
+      "sha256": "0ade9730da19455b83f95a20c48cff2b80f770329a2e560ee5ba1f011400e27a"
+    },
+    {
+      "path": "reference/workspace-actions.native-r254-before.jsinc",
+      "bytes": 120475,
+      "sha256": "fb1d4adef3bf19dd4aec1f6cfe99026855ac642e9b6c45d470796962cca17a73"
+    },
+    {
+      "path": "reference/workspace-actions.paid-native-before-guard.jsinc",
+      "bytes": 130299,
+      "sha256": "a6392fa3f93f3f55b786e2bae225ae2e93f33a6c7adffef66f7fb55eed954c96"
+    },
+    {
+      "path": "PAID_NATIVE_WHOLE_REVERSE.json",
+      "bytes": 11214,
+      "sha256": "77a3c6e062cd9af0458fd808a8b6c6e4f8df5b0548049b771555415a4c9a4062"
+    },
+    {
+      "path": "PAID_CALLER_WHOLE_REVERSE.json",
+      "bytes": 13294,
+      "sha256": "c91eaea551df625d3fb54dd6a98ef2c7e4dcf3684d644e971010798cf4c9f5cf"
+    },
+    {
+      "path": "PAID_CALLER_FUNCTION_REVERSE.json",
+      "bytes": 4237,
+      "sha256": "e44714ca36c708c4a56860155150bcc5d7bb616ad0af3cecba553bba3e2f9bcd"
+    },
+    {
+      "path": "SOURCE_PINS.json",
+      "bytes": 766,
+      "sha256": "2b09ffa0b7e555dadd0190b84d9efde1bc66e4336a2c3fae303048da3b9e529c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 757,
+      "sha256": "4644f29c299165676088d175b5436030e74c17d8c2423ecc05af9c2d432f1aaf"
+    }
+  ]
+}

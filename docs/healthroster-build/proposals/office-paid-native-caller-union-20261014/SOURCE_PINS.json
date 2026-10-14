@@ -1,0 +1,16 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review_pending": true,
+  "native_commit": "0e373d6c62286aa94718dd6698b256e611c04246",
+  "money_commit": "30a30f16b29d0b61c11fc91656fdc8abccb5ab64",
+  "Office_base": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+  "native_whole_sha256": "fb1d4adef3bf19dd4aec1f6cfe99026855ac642e9b6c45d470796962cca17a73",
+  "money_whole_function_file_sha256": "576dc06e0e88839f1c44c5e5e0c90d52567abe58e1b5eca3730b612b5fcc2948",
+  "complete_whole_union_sha256": "acdb3e89f6eebf410eaa52b1d1a8597e92c8bf06dc3288afefc0447eae34c656",
+  "new_function_guard_hunks": 8,
+  "retained_native_R254_and_D10": true,
+  "generic_protectedCaller_unchanged": true,
+  "authenticated_request_route_unchanged": true
+}

@@ -1,0 +1,83 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { composeOwnerSource, sourceSha256 } from '../scripts/healthroster-owner-source-compose.mjs';
+const root=process.cwd(),peers=path.dirname(root);
+const native={repo:path.join(peers,'healthroster-checklist-native-14102026'),commit:'0e373d6c62286aa94718dd6698b256e611c04246',
+ folder:'docs/healthroster-build/proposals/checklist-native-20261014'};
+const money={repo:path.join(peers,'healthroster-v2-money-build-13102026'),commit:'30a30f16b29d0b61c11fc91656fdc8abccb5ab64',
+ folder:'docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014'};
+const read=(lane,file)=>{const raw=execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','show',lane.commit+':'+lane.folder+'/'+file],
+ {cwd:lane.repo,windowsHide:true,maxBuffer:3000000});if(!raw.equals(fs.readFileSync(path.join(lane.repo,lane.folder,file))))throw Error('SAVED_GIT_SOURCE_CHANGED: '+file);return raw.toString();};
+const nativeSource=read(native,'office-workspace-actions-reminder.forward.jsinc');
+if(sourceSha256(nativeSource)!=='fb1d4adef3bf19dd4aec1f6cfe99026855ac642e9b6c45d470796962cca17a73')throw Error('NATIVE_WHOLE_SOURCE_PIN_MISMATCH');
+const records=JSON.parse(read(money,'COMPLETE_CURRENT_REVERSES.json')).records;
+const moneyRecord=records.find(r=>r.file==='frontend/js/weekly-source/workspace-actions.js');
+if(moneyRecord.hunks.length!==3)throw Error('MONEY_HUNK_SET_CHANGED');
+const combined=composeOwnerSource({source:nativeSource,expectedSha256:sourceSha256(nativeSource),hunks:moneyRecord.hunks});
+const start=combined.output.indexOf('  function openPaidMatch(payloadValue) {');
+const end=combined.output.indexOf('  function openProtectedMatch(payloadValue) {',start);
+if(start<0||end<=start)throw Error('PAID_FUNCTION_SCOPE_MISSING');
+const oldFunction=combined.output.slice(start,end);
+const callerBefore=`    const initiatingActor = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;
+    let initiatingFrame = null;
+    const authority = workspaceApi();
+    const callerCurrent = () => workspaceApi() === authority && protectedCaller(kind, initiatingActor, initiatingFrame)();`;
+const callerAfter=`    const initiatingSession = typeof SESSION !== 'undefined' ? SESSION : null;
+    const initiatingUser = initiatingSession?.user, initiatingActor = initiatingUser?.id;
+    const initiatingRoles = JSON.stringify(initiatingUser?.roles);
+    const initiatingFlags = JSON.stringify([initiatingUser?.role, initiatingUser?.is_active]);
+    const parents = Array.isArray(root.__modalStack) ? root.__modalStack.slice() : [];
+    const parentTokens = parents.map(frame => frame._token);
+    let initiatingFrame = null, initiatingFrameToken;
+    const authority = workspaceApi();
+    const sessionCurrent = () => !!initiatingSession && !!initiatingUser && !!initiatingActor
+      && (typeof SESSION !== 'undefined' ? SESSION : null) === initiatingSession
+      && SESSION.user === initiatingUser && SESSION.user.id === initiatingActor
+      && JSON.stringify(SESSION.user.roles) === initiatingRoles
+      && JSON.stringify([SESSION.user.role, SESSION.user.is_active]) === initiatingFlags
+      && workspaceApi() === authority;
+    const callerCurrent = () => sessionCurrent() && protectedCaller(kind, initiatingActor, initiatingFrame)()
+      && initiatingFrame._token === initiatingFrameToken
+      && (root.__modalStack || []).length === parents.length + 1
+      && parents.every((frame, index) => root.__modalStack[index] === frame && frame._token === parentTokens[index]);`;
+const guardHunks=[
+ {name:'exact initiating session user roles and parent frame identity',before:callerBefore,after:callerAfter},
+ {name:'no stale session render',before:'    const render = () => {\n      const locked = state.busy || state.pending,',
+  after:"    const render = () => {\n      if (!sessionCurrent() || (initiatingFrame && !callerCurrent())) return '';\n      const locked = state.busy || state.pending,"},
+ {name:'only the current child wires controls',before:'    const wire = () => {\n      const host =',after:'    const wire = () => {\n      if (!callerCurrent()) return;\n      const host ='},
+ {name:'current child owns cancellation',before:"host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', closeChild);",
+  after:"host.querySelector('[data-paid-match-cancel]')?.addEventListener('click', () => { if (callerCurrent()) closeChild(); });"},
+ {name:'current child owns target input',before:'        if (state.pending || state.busy) return; state.target',after:'        if (!callerCurrent() || state.pending || state.busy) return; state.target'},
+ {name:'current child owns choice input',before:"event => { if (!state.pending && !state.busy) state.choice",after:"event => { if (callerCurrent() && !state.pending && !state.busy) state.choice"},
+ {name:'current child owns reason input',before:"event => { if (!state.pending && !state.busy) state.reason",after:"event => { if (callerCurrent() && !state.pending && !state.busy) state.reason"},
+ {name:'capture actual created child token',before:'    initiatingFrame = currentChild(kind);\n    return opened;',
+  after:'    initiatingFrame = currentChild(kind);\n    initiatingFrameToken = initiatingFrame?._token;\n    return opened;'}
+];
+const guarded=composeOwnerSource({source:oldFunction,expectedSha256:sourceSha256(oldFunction),hunks:guardHunks});
+const final=composeOwnerSource({source:combined.output,expectedSha256:sourceSha256(combined.output),
+ hunks:[{name:'new paid dialog exact session and owned caller guard',before:oldFunction,after:guarded.output}]});
+const folder=path.join(root,'docs/healthroster-build/proposals/office-paid-native-caller-union-20261014');
+if(fs.existsSync(folder))throw Error('UNION_EXISTS_PRESERVE');
+const files=new Map([
+ ['forward/workspace-actions.jsinc',final.output],
+ ['forward/import-workspace.jsinc',read(money,'forward/frontend/js/weekly-source/import-workspace.js')],
+ ['reference/workspace-actions.native-r254-before.jsinc',nativeSource],
+ ['reference/workspace-actions.paid-native-before-guard.jsinc',combined.output],
+ ['PAID_NATIVE_WHOLE_REVERSE.json',JSON.stringify(combined.reverse,null,2)+'\n'],
+ ['PAID_CALLER_WHOLE_REVERSE.json',JSON.stringify(final.reverse,null,2)+'\n'],
+ ['PAID_CALLER_FUNCTION_REVERSE.json',JSON.stringify(guarded.reverse,null,2)+'\n'],
+ ['SOURCE_PINS.json',JSON.stringify({source_only:true,native:false,canonical_mounted:false,independent_review_pending:true,
+  native_commit:native.commit,money_commit:money.commit,Office_base:moneyRecord.commit,
+  native_whole_sha256:sourceSha256(nativeSource),money_whole_function_file_sha256:moneyRecord.after_sha256,
+  complete_whole_union_sha256:sourceSha256(final.output),new_function_guard_hunks:guardHunks.length,
+  retained_native_R254_and_D10:true,generic_protectedCaller_unchanged:true,authenticated_request_route_unchanged:true},null,2)+'\n'],
+ ['README.md','# Office paid-match, D10 and reminder caller union\n\nComplete workspace-actions composition of Native0e and Money28, followed by a narrow change only to the new paid-match dialog. Exact session/user identity, role/active state, workspace and parent/child frame identity are retained before and after its request. Current child ownership also guards render, input and cancellation. Same/Separate request/CAS/replay semantics and generic protectedCaller remain unchanged. Both entire reverses are retained.\n\nThe import-workspace full successor is copied unchanged from reviewed Money28. No installed source, native result, full host/UI acceptance or Part B sign-off is claimed. Independent source review and actual complete Office integration remain required.\n']
+]);
+// Recheck immutable inputs after composition before creating any output.
+if(read(native,'office-workspace-actions-reminder.forward.jsinc')!==nativeSource)throw Error('NATIVE_INPUT_CHANGED');
+if(JSON.stringify(JSON.parse(read(money,'COMPLETE_CURRENT_REVERSES.json')).records)!==JSON.stringify(records))throw Error('MONEY_INPUT_CHANGED');
+fs.mkdirSync(folder,{recursive:true});for(const[file,raw]of files){const dest=path.join(folder,file);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,raw,{flag:'wx'});}
+fs.writeFileSync(path.join(folder,'SOURCE_MANIFEST.json'),JSON.stringify({source_only:true,native:false,independent_review_pending:true,
+ entries:[...files].map(([file,raw])=>({path:file,bytes:Buffer.byteLength(raw),sha256:sourceSha256(raw)}))},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({folder,files:files.size+1,whole_sha256:sourceSha256(final.output),source_only:true,native:false}));

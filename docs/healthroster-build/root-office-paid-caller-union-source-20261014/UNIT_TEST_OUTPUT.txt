@@ -1,0 +1,15 @@
+✔ both complete Office composition layers reverse exactly and preserve the generic protected caller (11.3648ms)
+✔ complete actual pinned showModal pushes and renders the valid paid child, then submits the unchanged exact native request (18.5268ms)
+✔ same-ID session replacement is reproduced in the preserved predecessor and refused in the complete successor (8.5396ms)
+✔ all session user permission workspace and exact parent/child replacements refuse before request (27.9806ms)
+✔ all replacements while the native request is pending refuse old receipt completion or refresh (28.1585ms)
+✔ unconfirmed save retries the same immutable native request after a valid unchanged continuation (4.1698ms)
+✔ source manifest validates all exact whole owner and reverse artifacts (2.8367ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 415.799

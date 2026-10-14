@@ -1,0 +1,14 @@
+[
+  {
+    "file": "UNIT_TEST_OUTPUT.txt",
+    "sha256": "8552323341eeef04ca9a1b4370409170c6d2ba2e3215155cb458d7c742b03da0"
+  },
+  {
+    "file": "PREPARE_UNION_SOURCE.mjs.txt",
+    "sha256": "5cb01ef1452c5b5f2fb2040ff707abff6d36d70247fbd94a9f54b9cb8dac921d"
+  },
+  {
+    "file": "SOURCE_CHECKS.json",
+    "sha256": "e948995292db05b316375e43ef63d9afba5b7a996ab6c5b3ec6ac3dbfb7a0af6"
+  }
+]
