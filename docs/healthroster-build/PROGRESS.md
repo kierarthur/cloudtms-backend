@@ -1,5 +1,19 @@
 # HealthRoster v2 TEST build progress
 
+## Current checkpoint — 14 October 2026, 02:29 UTC
+
+Owner continuation is active. Install1 is saved, pushed and remote-matched at `807ffce239f86f9f1e104221e4b9400343ed19d2` on `codex/healthroster-install1-14102026`; the SQL contract remains `7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6`. Both full attempts remain held. Attempt1 was interrupted by a receipt observer write failure. Attempt2 completed its native session, final contract and explicit rollback, but the old stdin diagnostic adapter could not map at least one database error, and two business relations changed between fingerprints. There has been no HealthRoster promotion, protected install, activation or TestFlight; Banking `07e66fb2b2742fbe634a41582f2ad3e004eed3b9` remains the reviewed installed predecessor.
+
+Attempt2's complete source-safe receipt and disposition are preserved in the Install1 branch under `docs/healthroster-build/install1-rehearsal/FULL_ATTEMPT2_HELD_14102026.json` and `REHEARSAL_14102026_0127.md`. The owned turn explicitly released at01:52:14.838Z. Short owned read-only turns released at01:58:45.452Z and02:13:43.096Z; no waiting rehearsal/precheck connection remains. The repaired native adapter uses `psql -f -` and captures both SQLSTATE errors and client-command diagnostics with sealed source locations; the two short probes and28 focused protocol/harness tests passed their bounded purposes. Independent receipt repair critic is SOURCE PASS, not native rehearsal or final Part B sign-off. The exact807 committed-archive nine-group source preflight is running.
+
+Strict restoration remains held because `private.candidate_daily_batch_receipts` gained20 rows during attempt2 and `public.ts_financials_outbox` changed its row fingerprint. Data-free short observations show continuing SIGNED_SYSTEM/PROJECTION_CLAIM activity and finance-outbox retries. A temporary TEST quiet-window coordination question is pending in OWNER_QUESTIONS.md. No Google trigger, Cloudflare schedule, secret or other owner's session has been changed. The third full rehearsal and release wait for that coordination; source integration continues. No aggregate restoration assertion or relation is waived.
+
+Install2's separate registered worktree is `C:\Users\KierArthur\OneDrive - Arthur Rai\Documents\GitHub\.codex-worktrees\healthroster-install2-14102026`, own branch `codex/healthroster-install2-14102026`, initial source backup `dc95782df4bf67b90407f5464a666766596a64ab`. It preserves the complete Banking+WP-PP37 source, adds1047 exact nonconflicting broad-source paths, and canonically appends nine migration locks without changing the original389. Source integrity is398 migrations/1052 repeatables. Initial composition critic accepts these bounded facts; the complete runtime/SQL owner composition, final contract seal and native gates remain open. Inherited whitespace in frozen proposal patches and copied source is documented, not falsely claimed clean.
+
+Money/OFF's corrected immutable98-artifact packet is pushed at `d4b62cb15159d0afb02cfebf8c1e034c68c26550`; its five earlier P1s and malformed-OFF transport follow-up are source-closed. The new current-owner census forward packet is undergoing independent review after recursive-order and commented-DROP corrections. Report's immutable49-artifact packet is pushed at `c57746f82558dd698d13fe5b2fc43dd18d72af6c`; two source P1s concerning arbitrary native evidence and caller-labelled negative cases remain held while the separate runtime/slot-specific native mapper forward is completed. Frozen packets are preserved byte-for-byte. Root integration must retain complete current Banking hooks and actual PP owners.
+
+The owner maximum remains two normal TEST installs: frozen WP-PP-only features-OFF Install1, then complete remaining code in Install2, followed by genuine same-installed qualification, gated TEST activation, acceptance and TEST TestFlight/physical-phone checks. Allow roughly1–3hours for each successful full rehearsal/release cycle plus up to three repair rounds; source integration and native acceptance remain several hours per area, with the quiet window, Banking F17, Apple processing and actual device evidence as concrete dependencies. A genuine past open week with no existing client upload is allowed; there is no automatic22October wait. Both final Part B critics and final handback index are outstanding.
+
 ## Latest rehearsal checkpoint — 14 October 2026, 01:25 UTC
 
 Install1 source is backed up and remote-matched at `37ddadc0a50721834c9e8a6c06becfc983f0dc32`, branch `codex/healthroster-install1-14102026`, authoritative local path `C:\Users\KierArthur\OneDrive - Arthur Rai\Documents\GitHub\.codex-worktrees\healthroster-install1-14102026`. Exact SQL/runtime contract remains `7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6`; remoteTEST/installed release remains Banking `07e66fb2b2742fbe634a41582f2ad3e004eed3b9`. There has been no HealthRoster promotion, install, activation or TestFlight.
@@ -315,3 +329,16 @@ SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full reh
 SEND_7 turn: {"chat":"HealthRoster","task":"Fresh restoration proof after own interrupted Install1 rehearsal","status":"TAKEN","takenAt":"2026-10-14T01:17:04.156Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"Fresh restoration proof after own interrupted Install1 rehearsal","status":"RELEASED","takenAt":"2026-10-14T01:17:04.156Z","releasedAt":"2026-10-14T01:21:15.400Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"TAKEN","takenAt":"2026-10-14T01:27:21.678Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full rehearsal and managed TEST release","status":"RELEASED","takenAt":"2026-10-14T01:27:21.678Z","releasedAt":"2026-10-14T01:52:14.838Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic and changed-table metadata probe","status":"TAKEN","takenAt":"2026-10-14T01:58:44.135Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic and changed-table metadata probe","status":"RELEASED","takenAt":"2026-10-14T01:58:44.135Z","releasedAt":"2026-10-14T01:58:45.452Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic and changed-table metadata probe","status":"TAKEN","takenAt":"2026-10-14T02:13:41.559Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"Short readonly psql line-diagnostic and changed-table metadata probe","status":"RELEASED","takenAt":"2026-10-14T02:13:41.559Z","releasedAt":"2026-10-14T02:13:43.096Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
