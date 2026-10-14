@@ -1,0 +1,81 @@
+{
+  "source_only": true,
+  "current_input_commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "own_input_commit": "f1aa8d578b34d2016e916f29c43e5b0c617ed1e8",
+  "inputs": [
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "bytes": 18928,
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "bytes": 3929,
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "bytes": 5863,
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "commit": "f1aa8d578b34d2016e916f29c43e5b0c617ed1e8",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/00_missing_accept_inventory_inputs.sqlinc",
+      "bytes": 10600,
+      "sha256": "32082b0db4d061cc0f54fc1af40f1ac3953642a4032bb20f40eaa267d9a2d39d"
+    },
+    {
+      "commit": "f1aa8d578b34d2016e916f29c43e5b0c617ed1e8",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/01_missing_accept_prepare.sqlinc",
+      "bytes": 11569,
+      "sha256": "ea7e8774ad3d27c19cef8158ceea91635eb1a1769ba2b32be49fd42f65c902aa"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "bytes": 3520,
+      "sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "bytes": 6878,
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+      "bytes": 2849,
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+      "bytes": 6830,
+      "sha256": "01405bc854fb7b2e23cd740154f0302a8956cdd144b44c1f3e4eda67db80dcdd"
+    },
+    {
+      "commit": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    }
+  ],
+  "canonical_mounted": false,
+  "native_proof": false
+}

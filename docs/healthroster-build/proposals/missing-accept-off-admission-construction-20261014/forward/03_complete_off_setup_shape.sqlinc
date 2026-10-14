@@ -1,0 +1,56 @@
+create or replace function private.weekly_source_off_rule_setup_shape_assert_v1(p_auth jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare manifest jsonb:=p_auth->'fixture_manifest'; key text; ids jsonb; sorted jsonb; permitted text[];
+begin
+  if not private.weekly_source_qualification_closed_object_v1(manifest,array['group_code','client_ids','contract_ids','candidate_ids','client_refs','candidate_refs'])
+    or coalesce(manifest->>'group_code','') !~ '^WSQ_TEST_[A-Z0-9_]+$'
+    or coalesce(p_auth->>'week_ending','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    or (p_auth->>'week_ending')::date::text is distinct from p_auth->>'week_ending'
+    or extract(dow from (p_auth->>'week_ending')::date)<>0
+    or coalesce(p_auth->>'expires_at_utc','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$' then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+  for key in select unnest(array['client_ids','contract_ids','candidate_ids']) loop
+    ids:=manifest->key;
+    if jsonb_typeof(ids) is distinct from 'array' or jsonb_array_length(ids) not between 1 and 100
+      or exists(select 1 from jsonb_array_elements(ids) id where jsonb_typeof(id) is distinct from 'string'
+        or coalesce(id#>>'{}','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') then
+      raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+    select jsonb_agg(id order by id) into sorted from (select distinct id from jsonb_array_elements(ids) id) dedupe;
+    if ids is distinct from sorted then raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+  end loop;
+  if jsonb_typeof(manifest->'client_refs') is distinct from 'array' or jsonb_typeof(manifest->'candidate_refs') is distinct from 'array'
+    or (select coalesce(jsonb_agg(value->'client_id' order by ord),'[]'::jsonb) from jsonb_array_elements(manifest->'client_refs') with ordinality refs(value,ord)) is distinct from manifest->'client_ids'
+    or (select coalesce(jsonb_agg(value->'candidate_id' order by ord),'[]'::jsonb) from jsonb_array_elements(manifest->'candidate_refs') with ordinality refs(value,ord)) is distinct from manifest->'candidate_ids'
+    or exists(select 1 from jsonb_array_elements(manifest->'client_refs') ref where not private.weekly_source_qualification_closed_object_v1(ref,array['client_id','cli_ref'])
+      or coalesce(ref->>'cli_ref','') !~ '^CLI-913013[0-9]{2}$')
+    or exists(select 1 from jsonb_array_elements(manifest->'candidate_refs') ref where not private.weekly_source_qualification_closed_object_v1(ref,array['candidate_id','tms_ref'])
+      or coalesce(ref->>'tms_ref','') !~ '^CCR-913013[0-9]{2}$')
+    or (select count(distinct value->>'cli_ref') from jsonb_array_elements(manifest->'client_refs'))<>jsonb_array_length(manifest->'client_ids')
+    or (select count(distinct value->>'tms_ref') from jsonb_array_elements(manifest->'candidate_refs'))<>jsonb_array_length(manifest->'candidate_ids') then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+  permitted:=case p_auth->>'purpose' when 'SOURCE_FIXTURE_SETUP' then array[
+    'weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1','weekly_source_upload_seal_atomic_v1',
+    'weekly_source_projection_begin_atomic_v1','weekly_source_projection_rows_apply_atomic_v1','weekly_source_projection_publish_atomic_v1',
+    'weekly_source_import_prepare_atomic_v1','weekly_source_finalise_atomic_v1','weekly_source_finalisation_pay_open_atomic_v1',
+    'weekly_source_finalisation_pay_task_start_atomic_v1','weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1',
+    'REPORT_FIN_AB_FINALISE'] when 'AUTOMATIC_JOURNEY' then array['weekly_source_automatic_reconcile_atomic_v1','weekly_exceptional_pay_prepare_action_v1',
+    'weekly_exceptional_pay_action_context_v1','weekly_exceptional_pay_action_publication_status_v1','weekly_exceptional_pay_stage_c1_request_v1','weekly_source_missing_accept_context_v1','weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1'] else null end;
+  ids:=p_auth->'allowed_operations';
+  if permitted is null or jsonb_typeof(ids) is distinct from 'array' or jsonb_array_length(ids) not between 1 and cardinality(permitted)
+    or exists(select 1 from jsonb_array_elements(ids) op where jsonb_typeof(op)<>'string' or not(op#>>'{}'=any(permitted))) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+  select jsonb_agg(op order by op) into sorted from (select distinct op from jsonb_array_elements(ids) op) dedupe;
+  if ids is distinct from sorted then raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+  if p_auth->>'purpose'='AUTOMATIC_JOURNEY' and (not private.weekly_source_qualification_closed_object_v1(p_auth->'original_source_cas',
+      array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or p_auth#>>'{original_source_cas,schema_version}' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    or p_auth#>>'{original_source_cas,source_cycle_id}' is distinct from p_auth->>'source_cycle_id'
+    or p_auth#>'{original_source_cas,client_ids}' is distinct from manifest->'client_ids'
+    or jsonb_array_length(manifest->'client_ids')<>1
+    or coalesce(p_auth#>>'{original_source_cas,source_cas_sha256}','') !~ '^[0-9a-f]{64}$') then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
+exception when invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023';
+end;
+$function$;

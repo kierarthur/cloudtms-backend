@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "listed_artifacts": 23,
+  "manifests": 1,
+  "source_scan_files": 26,
+  "credential_rules": 4,
+  "credential_findings": 0,
+  "raw_hash_length_mismatches": 0,
+  "critic_sha256": "5874ff2ba710ab5e7bfbc514ba02b64c9e3b67fbc777d258b4059e60e1d99f32",
+  "source_vm_cases": 15,
+  "syntax_passed": 5,
+  "whole_owner_reversals": 7,
+  "unique_hunks": 12,
+  "continuity_predecessor_included": false,
+  "continuity_finding_open": true,
+  "canonical_mounted": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false,
+  "whitespace": {
+    "status": "PASS",
+    "findings": []
+  }
+}

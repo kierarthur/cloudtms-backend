@@ -1,0 +1,125 @@
+{
+  "schema_version": "MISSING_ACCEPT_FINITE_OFF_ADMISSION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_proof": false,
+  "artifact_count": 23,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 12575,
+      "sha256": "3b4488c1930ea5914a15a39254e8c6e9b9d0b937f86ca7b9fdc252f2c21033ee"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 4238,
+      "sha256": "a468f839182bdb494a6b494ab4ffe59d998837b2e740cbd1b5c82de9d7a37163"
+    },
+    {
+      "file": "CURRENT_INPUT_PINS.json",
+      "bytes": 3710,
+      "sha256": "48e6df5d1efbc3c827433ac58b884badf2ede225d175a90e265cd251c7a51b59"
+    },
+    {
+      "file": "NEW_INTERFACES_AND_RECIPE.json",
+      "bytes": 1930,
+      "sha256": "9680a45d11c26a0948c52598a669fbcbc448f522acb7365230f47f9b67be81c8"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 640,
+      "sha256": "9e9cc75f46be03e49d68b299186fd5b57a3de861d0d4f9447c3e8bd3b4e52431"
+    },
+    {
+      "file": "before/01_complete_off_command.sqlinc",
+      "bytes": 18928,
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "file": "before/02_complete_off_transport.sqlinc",
+      "bytes": 3929,
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+    },
+    {
+      "file": "before/03_complete_off_setup_shape.sqlinc",
+      "bytes": 5863,
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+    },
+    {
+      "file": "before/04_complete_off_parent_scope.sqlinc",
+      "bytes": 22606,
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "file": "before/05_complete_missing_accept_inputs.sqlinc",
+      "bytes": 10600,
+      "sha256": "32082b0db4d061cc0f54fc1af40f1ac3953642a4032bb20f40eaa267d9a2d39d"
+    },
+    {
+      "file": "before/06_complete_missing_accept_prepare.sqlinc",
+      "bytes": 11569,
+      "sha256": "ea7e8774ad3d27c19cef8158ceea91635eb1a1769ba2b32be49fd42f65c902aa"
+    },
+    {
+      "file": "before/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "file": "build-off-admission.mjs",
+      "bytes": 12197,
+      "sha256": "38f77073d51563d0d5f0b6133d547195f2946307467a656c8fafdac5328d02dc"
+    },
+    {
+      "file": "forward/00_missing_accept_admission.sqlinc",
+      "bytes": 3507,
+      "sha256": "a33b1bf069af24cfb1555b14e2f7267375e37b220abae848c335a65e5ee54f15"
+    },
+    {
+      "file": "forward/01_complete_off_command.sqlinc",
+      "bytes": 19659,
+      "sha256": "156942450f8d63f2a3b8661db261444d2c8d0c207ea485f744412af0f864578f"
+    },
+    {
+      "file": "forward/02_complete_off_transport.sqlinc",
+      "bytes": 4066,
+      "sha256": "dbcaeec9eefbfd49719d7a71845a331876f31f1f911521875e71ac6fb9be2258"
+    },
+    {
+      "file": "forward/03_complete_off_setup_shape.sqlinc",
+      "bytes": 6000,
+      "sha256": "5e71bdfcff67d2cbbcdcbff313eff9aa2bcbb3ec8810070cb2624f1ed78ff759"
+    },
+    {
+      "file": "forward/04_complete_off_parent_scope.sqlinc",
+      "bytes": 26467,
+      "sha256": "3f5f86c2eca05accb23637744e1388dbbff222b1f3f897a02ee72911573cb173"
+    },
+    {
+      "file": "forward/05_complete_missing_accept_inputs.sqlinc",
+      "bytes": 10706,
+      "sha256": "f9a70cae9a34b45c4d381e7366a42d66b4d74f222e92a15a36d51df00f431b77"
+    },
+    {
+      "file": "forward/06_complete_missing_accept_prepare.sqlinc",
+      "bytes": 11623,
+      "sha256": "047ce9eb2241b141a86c8106c842908353bc28373d0fbbbf61a87e37a94ca96a"
+    },
+    {
+      "file": "forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3775,
+      "sha256": "590b27fb67aca721e28cd8ac1c1edd1d5e0c7dd82b41cf7249bde17396056433"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2492,
+      "sha256": "8ca7848e5c5c7f2de8cb6cce63ce4535a00f9b2536e5d4bb0e1b0b5bf5c4b11a"
+    },
+    {
+      "file": "off-admission-source.test.mjs",
+      "bytes": 11294,
+      "sha256": "9ba1b057db526b6243b994d811dfeb453b54bcb568e3530ad1a66ba1c6e494ce"
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+-- Unfinished Source Accept construction: INPUTS only, not a paid-purpose
+-- writer, published bundle, receipt, approval or payment permission.
+create or replace function private.weekly_source_missing_accept_inventory_inputs_v1(
+  p_work_event_id uuid,p_root_timesheet_id uuid,p_projection_publication_id uuid,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_context jsonb; v_inventory jsonb; v_component record; v_value jsonb;
+  v_before jsonb:='[]'::jsonb; v_after jsonb:='[]'::jsonb; v_removed jsonb:='[]'::jsonb;
+  v_native_after jsonb; v_chosen_segments jsonb; v_source_segments jsonb; v_segment record;
+  v_root public.timesheets%rowtype; v_contract public.contracts%rowtype;
+  v_work public.weekly_work_events%rowtype; v_cycle public.weekly_source_cycles%rowtype;
+  v_target_final_revision uuid;
+  v_worked_count integer:=0; v_expense_count integer:=0; v_ordinal integer:=0;
+  v_remove boolean; v_result jsonb;
+begin
+  if p_work_event_id is null or p_root_timesheet_id is null or p_projection_publication_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_INPUT_INVALID' using errcode='22023';
+  end if;
+  v_context:=private.weekly_source_kept_as_paid_context_for_publication_v1(
+    p_work_event_id,p_actor_user_id,p_projection_publication_id);
+  select * into strict v_work from public.weekly_work_events where id=p_work_event_id;
+  select * into strict v_root from public.timesheets where timesheet_id=p_root_timesheet_id;
+  select * into strict v_contract from public.contracts where id=v_root.contract_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=(v_context->>'source_cycle_id')::uuid;
+  select revision.id into v_target_final_revision from public.weekly_source_final_revisions revision
+    join public.weekly_source_projection_publications publication on publication.upload_id=revision.upload_id
+    where publication.id=p_projection_publication_id and publication.state='CURRENT'
+      and v_cycle.current_projection_publication_id=publication.id
+      and revision.id=v_cycle.current_final_revision_id and revision.state='CURRENT'
+      and revision.authority_scope_kind='CYCLE' and revision.report_scope_id is null;
+  if not (v_context->'root_timesheet_ids') @> jsonb_build_array(p_root_timesheet_id)
+    or v_context->'source_present' is distinct from 'false'::jsonb
+    or not coalesce(v_context->'decision_available'='true'::jsonb,false)
+    or not v_root.is_current or v_root.sheet_scope is distinct from 'WEEKLY'::public.timesheet_scope_enum
+    or (v_contract.candidate_id,v_contract.client_id,v_contract.id)
+      is distinct from (v_work.candidate_id,v_work.client_id,(v_context->>'contract_id')::uuid)
+    or v_cycle.source_group_id is distinct from v_work.first_source_group_id then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_SCOPE_UNBOUND' using errcode='42501';
+  end if;
+  -- This is the same genuine native approver purpose as the existing later
+  -- change owner. Merely reading VIEW_PAY_WORK cannot prepare this operation.
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'APPROVE_PROTECTED_PAY',
+    v_cycle.source_group_id,v_contract.client_id,v_cycle.finalisation_week_ending);
+  v_inventory:=private.weekly_source_effective_inventory_v1(p_root_timesheet_id);
+  if v_inventory->'ok' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_INVENTORY_UNAVAILABLE' using errcode='55000';
+  end if;
+  for v_component in select value,ordinality from jsonb_array_elements(v_inventory->'components')
+    with ordinality order by ordinality loop
+    -- Strip only the readback hash field, then reuse the single current native
+    -- scalar/canonical component owner. No amount/rate/hours recomputation.
+    v_value:=private.weekly_source_publication_component_canonical_v1(
+      v_component.value-'component_sha256','missing_accept.before_component');
+    if v_value->>'component_id' is distinct from private.weekly_source_entitlement_component_id_v1(
+      v_value->>'component_kind',v_value->>'economic_key_type',v_value->>'economic_key_value',
+      v_value->>'component_member_identity')::text then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_COMPONENT_ID_UNBOUND' using errcode='55000';
+    end if;
+    v_before:=v_before||jsonb_build_array(v_value);
+    -- Exact existing Source member identities only. An ordinary/unknown UUID
+    -- or schedule overlap is not reclassified as a Source event here.
+    v_remove:=v_value->>'component_member_identity'=v_work.id::text and (
+      (v_value->>'component_kind'='WORKED_TIME' and v_value->>'economic_key_type'='SEGMENT'
+        and v_value->>'economic_key_value'='weekly-source-event:'||v_work.id::text
+        and v_value->>'segment_id'='weekly-source-event:'||v_work.id::text
+        and v_value->>'work_date'=v_work.work_date::text and v_value->>'origin'='WEEKLY_SOURCE')
+      or (v_value->>'component_kind'='SOURCE_FIXED_EXPENSE' and v_value->>'economic_key_type'='EXPENSE_AUTHORITY'
+        and v_value->>'economic_key_value'='weekly-source-expense:'||v_work.id::text
+        and v_value->>'origin'='WEEKLY_SOURCE_EXPENSE'));
+    if coalesce(v_remove,false) then
+      v_removed:=v_removed||jsonb_build_array(v_value);
+      if v_value->>'component_kind'='WORKED_TIME' then v_worked_count:=v_worked_count+1;
+      else v_expense_count:=v_expense_count+1; end if;
+    else
+      v_ordinal:=v_ordinal+1;
+      v_after:=v_after||jsonb_build_array(private.weekly_source_publication_component_canonical_v1(
+        v_value||jsonb_build_object('component_ordinal',v_ordinal),'missing_accept.after_component'));
+    end if;
+  end loop;
+  if v_worked_count<>1 or v_expense_count>1 then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_ACCEPT_INVENTORY_INPUTS_V1',
+      'available',false,'reason','GENUINE_CURRENT_SOURCE_COMPONENT_UNAVAILABLE_OR_AMBIGUOUS',
+      'work_event_id',v_work.id,'root_timesheet_id',v_root.timesheet_id,
+      'current_inventory',v_inventory,'native_context',v_context,
+      'paid_writer_permission',null,'publish_permission',null);
+  end if;
+  -- The real reviewed after-position is the native complete current Final
+  -- proposal, not a fabricated prior-head-only amendment. Keep every other
+  -- actual native update/addition/default-retained omission and Additional.
+  if v_target_final_revision is not null then
+    v_source_segments:=private.weekly_source_ordinary_projection_current_segments_v1(v_root.timesheet_id,v_target_final_revision);
+    v_chosen_segments:='[]'::jsonb;
+    for v_segment in select value,ordinality from jsonb_array_elements(v_source_segments) with ordinality order by ordinality loop
+      if v_segment.value->>'segment_id'='weekly-source-event:'||v_work.id::text then
+        if v_segment.value#>>'{weekly_source,work_event_id}' is distinct from v_work.id::text then
+          raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_SOURCE_SEGMENT_UNBOUND' using errcode='55000';
+        end if;
+      else v_chosen_segments:=v_chosen_segments||jsonb_build_array(v_segment.value); end if;
+    end loop;
+    v_native_after:=private.weekly_source_entitlement_components_v1(v_source_segments,
+      private.weekly_source_ordinary_projection_current_expenses_v1(v_root.timesheet_id,v_target_final_revision));
+    v_native_after:=private.weekly_source_retain_approved_additional_v2(v_root.timesheet_id,v_native_after);
+    v_after:='[]'::jsonb;v_ordinal:=0;v_worked_count:=0;v_expense_count:=0;
+    for v_component in select value,ordinality from jsonb_array_elements(v_native_after) with ordinality order by ordinality loop
+      v_value:=private.weekly_source_publication_component_canonical_v1(v_component.value,'missing_accept.native_after_component');
+      v_remove:=v_value->>'component_member_identity'=v_work.id::text and (
+        (v_value->>'component_kind'='WORKED_TIME' and v_value->>'economic_key_type'='SEGMENT'
+          and v_value->>'economic_key_value'='weekly-source-event:'||v_work.id::text
+          and v_value->>'segment_id'='weekly-source-event:'||v_work.id::text
+          and v_value->>'work_date'=v_work.work_date::text and v_value->>'origin'='WEEKLY_SOURCE')
+        or (v_value->>'component_kind'='SOURCE_FIXED_EXPENSE' and v_value->>'economic_key_type'='EXPENSE_AUTHORITY'
+          and v_value->>'economic_key_value'='weekly-source-expense:'||v_work.id::text
+          and v_value->>'origin'='WEEKLY_SOURCE_EXPENSE'));
+      if coalesce(v_remove,false) then
+        if v_value->>'component_kind'='WORKED_TIME' then v_worked_count:=v_worked_count+1;
+        else v_expense_count:=v_expense_count+1;end if;
+      else
+        v_ordinal:=v_ordinal+1;
+        v_after:=v_after||jsonb_build_array(private.weekly_source_publication_component_canonical_v1(
+          v_value||jsonb_build_object('component_ordinal',v_ordinal),'missing_accept.after_component'));
+      end if;
+    end loop;
+    if v_worked_count<>1 or v_expense_count>1 then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_FINAL_COMPONENT_UNAVAILABLE_OR_AMBIGUOUS' using errcode='55000';
+    end if;
+  end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_ACCEPT_INVENTORY_INPUTS_V1',
+    'available',true,'work_event_id',v_work.id,'root_timesheet_id',v_root.timesheet_id,
+    'candidate_id',v_contract.candidate_id,'client_id',v_contract.client_id,'contract_id',v_contract.id,
+    'family_booking_id',v_root.booking_id,'root_version',v_root.version,
+    'projection_publication_id',p_projection_publication_id,'source_cycle_id',v_cycle.id,
+    'target_final_revision_id',v_target_final_revision,'final_source_ready',v_target_final_revision is not null,
+    'facts_fingerprint',v_context->'facts_fingerprint','current_inventory',v_inventory,
+    'before_components',v_before,'after_components',v_after,'removed_components',v_removed,
+    'chosen_source_segments',v_chosen_segments,'native_final_components',v_native_after,
+    'native_context',v_context,'paid_writer_permission',null,'publish_permission',null,
+    'lock_scope_acquired',false);
+  return v_result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_ACCEPT_INVENTORY_INPUTS_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid) from public,anon,authenticated,service_role;

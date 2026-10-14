@@ -1,0 +1,47 @@
+-- HealthRoster fresh Missing proposals use the existing full operational
+-- certificate or the same owner-authored disabled TEST command frame.
+create or replace function private.weekly_source_missing_accept_admission_v1(
+  p_client_id uuid,p_cycle_id uuid,p_actor_user_id uuid
+) returns void language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_cycle public.weekly_source_cycles%rowtype;v_group public.weekly_source_groups%rowtype;
+  v_auth jsonb;v_frame jsonb;v_count integer;v_q jsonb;
+begin
+  if p_client_id is null or p_cycle_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_ADMISSION_UNBOUND' using errcode='42501';end if;
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id and active;
+  -- Existing non-HealthRoster Source owners retain their native admission.
+  -- This helper adds no NHSP assignment, qualification or permission.
+  if v_group.source_family is distinct from 'ROSTER' then return;end if;
+  v_auth:=private.weekly_source_rule_qualification_context_v1(p_client_id,v_cycle.id);
+  if v_auth is not null then
+    select count(*),jsonb_agg(audit.after_json)->0 into v_count,v_frame from public.audit_events audit
+      where audit.object_type='weekly_source_off_rule_command' and audit.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED'
+        and audit.event_sequence_is_authoritative and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text
+        and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+        and not exists(select 1 from public.audit_events closed where closed.object_type=audit.object_type
+          and closed.object_id_text=audit.object_id_text and closed.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED'
+          and closed.event_sequence_is_authoritative);
+    if v_count<>1 or v_auth->>'purpose' is distinct from 'AUTOMATIC_JOURNEY'
+      or v_auth->>'journey_actor_user_id' is distinct from p_actor_user_id::text
+      or v_auth->>'source_group_id' is distinct from v_group.id::text
+      or v_frame->>'actor_user_id' is distinct from p_actor_user_id::text
+      or v_frame->'authorization' is distinct from v_auth
+      or v_frame->>'native_operation' not in ('weekly_source_missing_accept_context_v1',
+        'weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1')
+      or not(v_auth->'allowed_operations' @> jsonb_build_array(v_frame->>'native_operation')) then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_OFF_SCOPE_REFUSED' using errcode='42501';end if;
+    return;
+  end if;
+  -- The actual current receipt owner validates the dated enabled assignment
+  -- and full certificate against the actual VERIFIED installed release.
+  v_q:=private.weekly_source_protected_capability_receipt_v1(v_cycle.id);
+  if v_q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'
+    or v_q->>'source_group_id' is distinct from v_group.id::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_OPERATIONAL_QUALIFICATION_REQUIRED' using errcode='55000';end if;
+end;
+$function$;
+alter function private.weekly_source_missing_accept_admission_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_accept_admission_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

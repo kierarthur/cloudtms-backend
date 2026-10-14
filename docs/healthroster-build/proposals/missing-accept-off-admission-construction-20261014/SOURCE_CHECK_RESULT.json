@@ -1,0 +1,22 @@
+{
+  "source_only": true,
+  "effect_free_source_vm_cases": 15,
+  "passed": 15,
+  "failed": 0,
+  "syntax_passed": 5,
+  "whole_owner_reversals": 7,
+  "unique_hunks": 12,
+  "new_private_signatures": 1,
+  "new_public_signatures": 0,
+  "finite_added_automatic_operations": 3,
+  "unchanged_public_request_abis": true,
+  "unchanged_actual_transport_exercised_with_mocks": true,
+  "unchanged_three_bundle_producer": true,
+  "canonical_mounted": false,
+  "sql_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "real_database_or_lab_calls": 0,
+  "scratch_created": false,
+  "remaining_gates": "CONSTRUCTION_BOUNDARY.md"
+}

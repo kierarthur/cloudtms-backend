@@ -1,0 +1,132 @@
+-- Purpose-bound native Source proposal producer. No publication, payment or
+-- invoice mutation occurs here; approval remains the actual later-change owner.
+create or replace function private.weekly_source_missing_accept_prepare_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;v_event_id uuid;v_root_id uuid;v_publication_id uuid;v_key text;
+  v_version bigint;v_request_hash bytea;v_inputs jsonb;v_initial jsonb;v_lock jsonb;
+  v_event public.weekly_work_events%rowtype;v_publication public.weekly_source_projection_publications%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;v_root public.timesheets%rowtype;v_contract public.contracts%rowtype;
+  v_group public.weekly_source_groups%rowtype;v_saved public.audit_events%rowtype;v_saved_count integer;
+  v_bundle uuid;v_head uuid;v_decision uuid;v_proposal jsonb;v_canonical jsonb;v_recorded jsonb;
+  v_proof jsonb;v_result jsonb;v_frame jsonb;
+  v_old_frame text:=coalesce(current_setting('cloudtms.weekly_source_missing_accept_prepare_frame',true),'');
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),
+    nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+  perform private.weekly_source_publication_require_keys_v1(p_request,array[
+    'schema_version','actor_user_id','work_event_id','root_timesheet_id','projection_publication_id',
+    'expected_root_version','expected_facts_fingerprint','expected_inventory_digest','idempotency_key'],
+    'missing_accept.prepare');
+  if p_request->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_V1' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID' using errcode='22023';end if;
+  v_actor:=(private.weekly_source_publication_scalar_v1(p_request->'actor_user_id','actor_user_id','UUID')#>>'{}')::uuid;
+  v_event_id:=(private.weekly_source_publication_scalar_v1(p_request->'work_event_id','work_event_id','UUID')#>>'{}')::uuid;
+  v_root_id:=(private.weekly_source_publication_scalar_v1(p_request->'root_timesheet_id','root_timesheet_id','UUID')#>>'{}')::uuid;
+  v_publication_id:=(private.weekly_source_publication_scalar_v1(p_request->'projection_publication_id','projection_publication_id','UUID')#>>'{}')::uuid;
+  v_version:=(private.weekly_source_publication_scalar_v1(p_request->'expected_root_version','expected_root_version','INT')#>>'{}')::bigint;
+  if v_version<1 or jsonb_typeof(p_request->'expected_facts_fingerprint') is distinct from 'string'
+    or not coalesce(p_request->>'expected_facts_fingerprint'~'^[0-9a-f]{64}$',false)
+    or jsonb_typeof(p_request->'expected_inventory_digest') is distinct from 'string'
+    or not coalesce(p_request->>'expected_inventory_digest'~'^[0-9a-f]{64}$',false)
+    or jsonb_typeof(p_request->'idempotency_key') is distinct from 'string' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID' using errcode='22023';end if;
+  v_key:=btrim(p_request->>'idempotency_key');
+  if char_length(v_key) not between 16 and 200 then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID' using errcode='22023';end if;
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_V1',p_request-'idempotency_key');
+  select * into strict v_event from public.weekly_work_events where id=v_event_id;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=v_publication_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  if v_cycle.source_group_id is distinct from v_event.first_source_group_id then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_SCOPE_UNBOUND' using errcode='42501';end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',
+    v_cycle.source_group_id,v_event.client_id,v_cycle.finalisation_week_ending);
+  -- Exact replay returns the real historical proposal; it does not claim that
+  -- its former current position is still current or append another proof.
+  select count(*) into v_saved_count from public.audit_events audit
+    where audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.after_json->>'idempotency_key'=v_key;
+  if v_saved_count>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_AMBIGUOUS' using errcode='55000';end if;
+  if v_saved_count=1 then
+    select * into strict v_saved from public.audit_events audit where audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.after_json->>'idempotency_key'=v_key;
+    if v_saved.actor_user_id is distinct from v_actor or v_saved.after_json->>'request_hash' is distinct from encode(v_request_hash,'hex')
+      or v_saved.after_json->'prepare_request' is distinct from p_request then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_REPLAY_CONFLICT' using errcode='22023';end if;
+    return v_saved.after_json->'result'||jsonb_build_object('idempotent_replay',true,'historical_proposal',true);
+  end if;
+  v_initial:=private.weekly_source_missing_accept_inventory_inputs_v1(v_event_id,v_root_id,v_publication_id,v_actor);
+  if v_initial->'available' is distinct from 'true'::jsonb or v_initial->'final_source_ready' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_CURRENT_FINAL_REQUIRED' using errcode='55000';end if;
+  v_lock:=private.weekly_source_lock_and_resolve_families_v1((v_initial->>'candidate_id')::uuid,array[v_root_id],
+    'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',gen_random_uuid(),'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  if v_lock->>'ok' is distinct from 'true' or v_lock->>'gate' is distinct from 'GRANTED' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_SCOPE_UNAVAILABLE' using errcode='55000';end if;
+  select count(*) into v_saved_count from public.audit_events audit
+    where audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.after_json->>'idempotency_key'=v_key;
+  if v_saved_count>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_AMBIGUOUS' using errcode='55000';end if;
+  if v_saved_count=1 then
+    select * into strict v_saved from public.audit_events audit where audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.after_json->>'idempotency_key'=v_key;
+    if v_saved.actor_user_id is distinct from v_actor or v_saved.after_json->>'request_hash' is distinct from encode(v_request_hash,'hex')
+      or v_saved.after_json->'prepare_request' is distinct from p_request then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_REPLAY_CONFLICT' using errcode='22023';end if;
+    return v_saved.after_json->'result'||jsonb_build_object('idempotent_replay',true,'historical_proposal',true);
+  end if;
+  v_inputs:=private.weekly_source_missing_accept_inventory_inputs_v1(v_event_id,v_root_id,v_publication_id,v_actor);
+  if v_inputs is distinct from v_initial or v_inputs->'available' is distinct from 'true'::jsonb
+    or v_inputs->'final_source_ready' is distinct from 'true'::jsonb
+    or v_inputs->>'root_version' is distinct from v_version::text
+    or v_inputs->>'facts_fingerprint' is distinct from p_request->>'expected_facts_fingerprint'
+    or v_inputs#>>'{current_inventory,inventory_digest}' is distinct from p_request->>'expected_inventory_digest' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_FACTS_CHANGED' using errcode='40001';end if;
+  select * into strict v_root from public.timesheets where timesheet_id=v_root_id;
+  select * into strict v_contract from public.contracts where id=v_root.contract_id;
+  select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id;
+  v_bundle:=gen_random_uuid();v_head:=gen_random_uuid();v_decision:=gen_random_uuid();
+  v_proposal:=private.weekly_source_entitlement_proposal_request_v1(v_root_id,(v_inputs->>'target_final_revision_id')::uuid,
+    'LOCKED_FINAL_SOURCE',v_bundle,1,v_head,v_decision,v_inputs->'after_components','UNCHANGED');
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(v_proposal,'IMMEDIATE',null::uuid);
+  v_recorded:=private.weekly_source_entitlement_proposal_record_v1(v_proposal,v_group.agency_id,
+    v_contract.id,v_root.week_ending_date,v_actor);
+  if v_recorded->'ok' is distinct from 'true'::jsonb or v_recorded->'created' is distinct from 'true'::jsonb
+    or v_recorded->>'decision_bundle_id' is distinct from v_bundle::text
+    or v_recorded->>'state' is distinct from 'PROPOSED' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_RECORD_FAILED' using errcode='55000';end if;
+  v_result:=jsonb_build_object('ok',true,'published',false,'decision_bundle_id',v_bundle,'bundle_revision',1,
+    'proposed_head_id',v_head,'decision_id',v_decision,'final_revision_id',v_inputs->'target_final_revision_id',
+    'work_event_id',v_event_id,'root_timesheet_id',v_root_id,'projection_publication_id',v_publication_id,
+    'request_digest',encode(private.weekly_source_publication_request_digest_v1(v_canonical),'hex'),
+    'before_inventory',v_inputs->'before_components','proposed_inventory',v_inputs->'after_components',
+    'idempotent_replay',false);
+  v_proof:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',
+    'idempotency_key',v_key,'request_hash',encode(v_request_hash,'hex'),'prepare_request',p_request,
+    'actor_user_id',v_actor,'work_event_id',v_event_id,'root_timesheet_id',v_root_id,
+    'projection_publication_id',v_publication_id,'decision_bundle_id',v_bundle,'bundle_revision',1,
+    'inputs',v_inputs,'canonical_proposal',v_canonical,'proposal_control',v_proposal->'control',
+    'native_lock_result',v_lock,'owner_transaction_id',pg_current_xact_id()::text,
+    'owner_backend_pid',pg_backend_pid(),'result',v_result);
+  v_proof:=v_proof||jsonb_build_object('proof_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',v_proof),'hex'));
+  v_frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_FRAME_V1',
+    'actor_user_id',v_actor,'owner_transaction_id',pg_current_xact_id()::text,'owner_backend_pid',pg_backend_pid(),
+    'proof',v_proof);
+  v_frame:=v_frame||jsonb_build_object('frame_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_FRAME_V1',v_frame),'hex'));
+  perform set_config('cloudtms.weekly_source_missing_accept_prepare_frame',v_frame::text,true);
+  perform public._audit_insert('weekly_source_entitlement_decision_bundles',v_bundle::text,
+    'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED',v_inputs->'current_inventory',v_proof,
+    'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE',v_actor);
+  perform set_config('cloudtms.weekly_source_missing_accept_prepare_frame',v_old_frame,true);
+  return v_result;
+exception when others then
+  perform set_config('cloudtms.weekly_source_missing_accept_prepare_frame',v_old_frame,true);raise;
+end;
+$function$;
+alter function private.weekly_source_missing_accept_prepare_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_missing_accept_prepare_v1(jsonb) from public,anon,authenticated,service_role;
