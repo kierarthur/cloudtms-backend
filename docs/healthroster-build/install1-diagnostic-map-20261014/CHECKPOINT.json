@@ -1,0 +1,18 @@
+{
+  "status": "REVIEWED_SOURCE_DIAGNOSTIC_FIX_ONLY",
+  "predecessor": "8ddd9c3b9fe100298c724fa5090f51550118493a",
+  "purpose": "Map PostgreSQL failing DO closing delimiters to their complete source statement instead of HARNESS_CONTROL.",
+  "savedSourceSha256": {
+    "scripts/healthroster-install1-full-rehearsal.mjs": "e22953b3e364000d644c0ac2d1f02aad3e9d5f74411fac02375673a741d56cb9",
+    "tests/healthroster-install1-full-rehearsal.test.mjs": "0474c1075aaedc33de9e29036d5fc6b22ad2f1043d60fb861241748d5992072c",
+    "docs/healthroster-build/install1-diagnostic-map-20261014/SOURCE_CRITIC.md": "eb1feee0685ee723a26e3d6fe1db88ba6b49e428a29bf3ed33e85b4f9ab83369"
+  },
+  "creatorChecks": {"tests":37,"passed":37,"failed":0},
+  "independentCritic": {"verdict":"SOURCE_ACCEPTED","tests":19,"passed":19,"wholeFileReversals":2,"syntaxChecks":2},
+  "sqlOrAssertionChanges": false,
+  "exclusionOrRestorationChanges": false,
+  "nativeRunForThisFix": false,
+  "installation": "NOT_RUN",
+  "fullRehearsal": "PREDECESSOR_RETRY_HELD_WITH_THREE_NATIVE_ERRORS",
+  "additionalFullRetryAuthorised": false
+}

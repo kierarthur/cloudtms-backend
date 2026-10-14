@@ -106,6 +106,21 @@ test('source-only actual current Install1 plan retains full 142 verifier bodies,
   const tx=scanManagedSql(plan.sql).statements.filter(x=>['BEGIN','COMMIT','ROLLBACK'].includes(x.tokens[0])&&x.tokens[1]!=='TO');
   assert.deepEqual(tx.map(x=>x.tokens.join(' ')),['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']);
   assert.equal(plan.lineMap.length,2271);assert.equal(plan.sqlHash,digest(plan.sql));
+  // Real psql reports a failing DO at its closing delimiter/semicolon line.
+  // These are the exact three locations observed in the held native retry.
+  for (const [closing,file,statement,code] of [
+    ['end $released_review$;','supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql',60,'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID'],
+    ['$verify_one_head$;','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',19,'WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH'],
+    ['$verify_fingerprint$;','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',20,'ASSERTION_FAILED']
+  ]) {
+    const line=plan.sql.split('\n').findIndex(value=>value.trim()===closing)+1;
+    assert.ok(line>0);
+    const location=plan.lineMap.find(row=>line>=row.startLine&&line<=row.endLine);
+    assert.equal(location.file,file);assert.equal(location.statement,statement);
+    const diagnostic=closedRehearsalDiagnostic('psql:<stdin>:'+line+': ERROR: 55000: '+code,plan.lineMap,new Set(plan.diagnosticCodes));
+    assert.equal(diagnostic.file,file);assert.equal(diagnostic.statement,statement);
+  }
+
   assert.ok(plan.sql.includes('do $hr_contract_compare$'));
   assert.ok(plan.sql.indexOf('do $hr_contract_compare$')<plan.sql.lastIndexOf('rollback;'));
   assert.ok(plan.diagnosticCodes.includes('WP_PP_FIXTURE_ID_COLLISION'));

@@ -262,7 +262,7 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   const sqlStart=body.indexOf(entry.sql,begin);requireThat(sqlStart>=0,'REHEARSAL_STATEMENT_MAP_REFUSED');
   for(const [statement,row] of scanManagedSql(entry.sql).statements.entries()){
    const startLine=lineOffset+body.slice(0,sqlStart+row.start).split('\n').length;
-   const endLine=lineOffset+body.slice(0,sqlStart+row.end).split('\n').length-1;
+   const endLine=lineOffset+body.slice(0,sqlStart+row.end).split('\n').length;
    lineMap.push({file:entry.file,kind:entry.kind,phase:entry.phase,statement:statement+1,object:statementObject(row),
     startLine,endLine:Math.max(startLine,endLine),statementHash:digest(entry.sql.slice(row.start,row.end))});
   }
