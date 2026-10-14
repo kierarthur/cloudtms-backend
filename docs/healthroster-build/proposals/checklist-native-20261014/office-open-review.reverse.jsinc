@@ -1,0 +1,79 @@
+  async function openReview(importId, options = {}) {
+    const previousReview = state.review;
+    const frames = Array.isArray(global.__modalStack) ? global.__modalStack : [];
+    const caller = frames[frames.length - 1] || null;
+    const returnOwner = typeof options.returnTo === 'function'
+      ? { callback: options.returnTo, caller, callerToken: caller?._token, reviewFrame: null, completed: false }
+      : previousReview?.importId === importId && !previousReview.returnOwner?.completed ? previousReview.returnOwner : null;
+    const returnCallerCurrent = () => {
+      if (!returnOwner) return true;
+      const stack = Array.isArray(global.__modalStack) ? global.__modalStack : [];
+      return !returnOwner.completed && !!returnOwner.caller
+        && typeof returnOwner.callerToken === 'string' && !!returnOwner.callerToken
+        && returnOwner.caller._token === returnOwner.callerToken
+        && stack[stack.length - 1] === (returnOwner.reviewFrame || returnOwner.caller);
+    };
+    if (!returnCallerCurrent()) return;
+    cancelDocumentPreparationPoll();
+    const epoch = ++state.reviewEpoch;
+    let header = await fetchReviewHeader(importId);
+    if (epoch !== state.reviewEpoch || !returnCallerCurrent()) return;
+    let autoRecheckWarning = '';
+    const canRefresh = Array.isArray(header?.state?.editability?.allowed_commands)
+      && header.state.editability.allowed_commands.includes('REFRESH');
+    if (options.skipAutoRecheck !== true && canRefresh) {
+      try {
+        await request(`/api/import-reviews/${encodeURIComponent(importId)}/refresh`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+            expected_state_version: header.state.state_version,
+            max_actions: 5000
+          })
+        });
+        header = await fetchReviewHeader(importId);
+      } catch (error) {
+        // Reopening must remain recoverable if evidence refresh is temporarily
+        // unavailable. The saved snapshot is shown explicitly as stale and the
+        // normal Recheck control remains available; nothing is ever applied.
+        header = await fetchReviewHeader(importId).catch(() => header);
+        autoRecheckWarning = `Current records could not be rechecked automatically. This saved view may be out of date; choose Recheck before continuing. ${error?.message || ''}`.trim();
+      }
+    }
+    if (epoch !== state.reviewEpoch || !returnCallerCurrent()) return;
+    const saved = header?.state?.ui_state || {};
+    const prior = options.preserveLocal === true && state.review && state.review.importId === importId ? state.review : null;
+    const savedView = ACTIVE_VIEWS.includes(String(saved.active_section || '').toUpperCase()) ? String(saved.active_section).toUpperCase() : 'PENDING';
+    const pageSize = PAGE_SIZES.includes(Number(saved.page_size)) ? Number(saved.page_size) : 25;
+    state.review = {
+      importId,
+      header,
+      returnOwner,
+      view: options.view || prior?.view || savedView,
+      page: options.page || prior?.page || Number(saved.page_number || 1),
+      pageSize: prior?.pageSize || pageSize,
+      sortBy: prior?.sortBy || String(saved.sort_by || 'CANDIDATE').toUpperCase(),
+      sortDirection: prior?.sortDirection || String(saved.sort_direction || 'ASC').toUpperCase(),
+      pageData: null,
+      scope: null,
+      dirty: prior?.dirty || new Map(),
+      // A newly opened review starts fully collapsed so the large recursive
+      // expand control is immediately available.  Deliberate branch choices
+      // are still retained while the same review remains open (paging/sort
+      // changes use the existing review state via preserveLocal).
+      expanded: prior?.expanded || new Set(),
+      saveChain: prior?.saveChain || Promise.resolve(true),
+      pendingSave: prior?.pendingSave || null,
+      conflictBuffer: prior?.conflictBuffer || null,
+      operationId: recoveryFor(importId)?.operation_id || null,
+      requestHash: recoveryFor(importId)?.request_hash || null,
+      confirmation: null,
+      confirmAcknowledged: false,
+      saveState: '', error: options.message || autoRecheckWarning || '', busy: false, screen: 'review', epoch
+    };
+    if (isSingleClientHealthRoster(state.review) && state.review.sortBy === 'CLIENT') state.review.sortBy = 'CANDIDATE';
+    state.review.scope = await fetchScope(importId, 1, 25).catch(() => null);
+    state.review.pageData = await fetchActionPage(state.review);
+    if (epoch !== state.reviewEpoch || !returnCallerCurrent()) return;
+    showScreen('Import review', renderReview, 'import-review-v1');
+    installReviewReturn(state.review);
+    scheduleDocumentPreparationPoll(state.review);
+  }

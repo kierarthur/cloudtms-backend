@@ -3,7 +3,7 @@
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 80,
+    "passed": 83,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -48,7 +48,7 @@
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/README.md",
-      "saved_sha256": "6a4b2e30976063a2e561afca04689bab2aa4d56c00fa77e1d32de493f6bc90ee"
+      "saved_sha256": "af4d5be0c08f4df9b891461ac45ca456159c210760562438ca8c5a2fb2017162"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/CANDIDATE_OWNER_CENSUS.md",
@@ -160,7 +160,7 @@
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/D10_ACTION_HANDOFF.md",
-      "saved_sha256": "2a6faf0eed793543bcb9597bd69ab5429499e2a40172e417d07a8fd0fb343d6c"
+      "saved_sha256": "442b3d3e51f64ba1cdd71e5f5271e1750f5c8c6fa35fc6aa6714e066bc9c0519"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-review-action.jsinc",
@@ -168,19 +168,27 @@
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/build-d10-review-packet.mjs",
-      "saved_sha256": "5a95cc4ff093f820ba5f1f36f9df4db3e80868bbf18c76e438c9d696f4d43639"
+      "saved_sha256": "6102aa32997d6e9f824bb758992e4ffbb34db8f6f9e2becf711cd5e60c4f75c6"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-review.forward.json",
-      "saved_sha256": "d5240902d32de53a2e8af21d0ec47b000b4ab3dd54e71ea333f66a8744b66698"
+      "saved_sha256": "ddca160dcc59169b67cdd99763bbefc602039c16eb7afd0aa730a5d616e7024e"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-review.reverse.json",
-      "saved_sha256": "c4478fd154c9cd9393b0434b3057077e89f8cbf8416994c593a8f955a2f6329c"
+      "saved_sha256": "50299bd619094270f116d1b61d9d9afe961b8033d7c10b90fb0dee200c10919c"
     },
     {
       "path": "tests/healthroster-checklist-d10-actions.test.mjs",
-      "saved_sha256": "a7d5e0105efae68be94faaca5d3652ec0f77262823f4f682190fbf77ef04191a"
+      "saved_sha256": "e67b199f540e6c09c330164ef1ccbab891f3541157f14fc0ad7ca6722ae7d2fa"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-open-review.forward.jsinc",
+      "saved_sha256": "55687f0b568d8d404bed0ce44a396baa8a99f88b4fbb5f3cfe8007a8d153cfe8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-open-review.reverse.jsinc",
+      "saved_sha256": "8a758f06863993c4284670f437e41e265bfc8ccaaf4da83c2a74afe0ba192c68"
     }
   ],
   "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
@@ -338,7 +346,7 @@
     "HISTORICAL_REAL_WITNESS_PREPARATION_CALLER_REQUIRED_BEFORE_FEATURE_ON",
     "D10_BOUND_REVIEW_NAVIGATION_OFFICE_MOUNT_AND_NATIVE_ACTOR_PREVIEW_ACCEPTANCE"
   ],
-  "predecessor_source_increment": "42f4ad74489158d6a39427dbcf7133a3f735f9b2",
+  "predecessor_source_increment": "144e49b9ec630ad15d6dc61d7e8637530fbc615e",
   "db_source_check": {
     "passed": true,
     "migrations": 399,
@@ -374,5 +382,13 @@
       "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/js/import-review-v1.js",
       "saved_sha256": "767051ef2f8f9a5beaf53067bfb80566e4db4992e194be4c6b9fc66320f17034"
     }
-  ]
+  ],
+  "d10_source_review": {
+    "critic_path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_BUILD_13102026/BUILD_CHECKLIST_D10_REVIEW_ACTION_SOURCE_CRITIC_14102026.md",
+    "critic_sha256": "699e4e7f2d9c455b1b114cdfa943031e5801e70e59fde985ee9bc276d8936f40",
+    "predecessor": "144e49b9ec630ad15d6dc61d7e8637530fbc615e",
+    "finding": "P1-D10-ACTOR1",
+    "successor_disposition": "WHOLE_ACTUAL_CALLER_SESSION_CONTINUATIONS_CORRECTED_AWAITING_INDEPENDENT_SOURCE_CLOSURE",
+    "native_UI_executed": false
+  }
 }

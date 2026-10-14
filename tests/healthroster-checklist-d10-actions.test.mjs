@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import crypto from 'node:crypto';
-import {d10OfficePins,d10ReviewEdits,applyD10ReviewEdits} from '../docs/healthroster-build/proposals/checklist-native-20261014/build-d10-review-packet.mjs';
+import {d10OfficePins,d10ReviewEdits,applyD10ReviewEdits,currentOpenReviewOwner,forwardOpenReviewOwner} from '../docs/healthroster-build/proposals/checklist-native-20261014/build-d10-review-packet.mjs';
 const directory=new URL('../docs/healthroster-build/proposals/checklist-native-20261014/',import.meta.url);
 const helper=fs.readFileSync(new URL('office-d10-review-action.jsinc',directory),'utf8');
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,H='a'.repeat(64),A='b'.repeat(64),B='c'.repeat(64);
@@ -49,16 +49,92 @@ test('fresh native D10 header/actions must match all bound actions across actual
   }
   await assert.rejects(()=>ctx.assertCheckOnlyD10ReviewFresh(action,actor,importId,first,async()=>header([]),()=>false));
 });
-test('current complete Office files retain exact native bodies under four-hunk reverse and compile with bound navigation',()=>{
+test('current complete Office files retain exact native bodies under full reverse and compile with bound navigation',()=>{
   for(const pin of d10OfficePins){
     const saved=fs.readFileSync(pin.path);assert.equal(crypto.createHash('sha256').update(saved).digest('hex'),pin.saved_sha256);
     const current=saved.toString('utf8').replaceAll('\r\n','\n'),forward=applyD10ReviewEdits(current,pin.path);
     assert.equal(applyD10ReviewEdits(forward,pin.path,'reverse'),current);new vm.Script(forward);
   }
-  assert.equal(d10ReviewEdits().length,4);
+  assert.equal(d10ReviewEdits().length,10);
   const changes=d10ReviewEdits().map(edit=>edit.after).join('\n');
   assert.ok(changes.includes('skipAutoRecheck: true'));assert.ok(changes.includes('assertCheckOnlyD10ReviewFresh'));
-  assert.doesNotMatch(changes,/method: 'POST'|method: 'PUT'|\/apply\b|\/selections\b|\.dirty\.set|REMIND_CANDIDATE|ASK_CANDIDATES/);
+  assert.doesNotMatch(changes,/method: 'PUT'|\/apply\b|\/selections\b|\.dirty\.set|REMIND_CANDIDATE|ASK_CANDIDATES/);
+  assert.equal((forwardOpenReviewOwner().match(/method: 'POST'/g)||[]).length,(currentOpenReviewOwner().match(/method: 'POST'/g)||[]).length);
+});
+
+function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
+function wholeReview({stage='scope',bound=true,original=false}={}){
+  const entered=deferred(),pending=deferred(),calls={header:0,scope:0,page:0,show:0,install:0,poll:0,return:0};
+  const oldState={review:null,reviewEpoch:0},parent={_token:'real-parent'},child={_token:'real-review'};
+  const root={__modalStack:[parent],setTimeout:callback=>{calls.timer=callback;return 1;},clearTimeout(){}};
+  const initialHeader=header(frame().action_bindings.map(native));
+  const dependencies={state:oldState,global:root,SESSION:{user:{id:actor,role:'admin',is_active:true,roles:['admin']}},
+    ACTIVE_VIEWS:['PENDING','READY','EMAIL','NO_ACTION'],PAGE_SIZES:[25,50,75,100],
+    cancelDocumentPreparationPoll(){},recoveryFor:()=>null,isSingleClientHealthRoster:()=>false,
+    fetchReviewHeader:async()=>{calls.header++;if(stage==='header'){entered.resolve();await pending.promise;}return initialHeader;},
+    fetchScope:async()=>{calls.scope++;if(stage==='scope'){entered.resolve();await pending.promise;}return {native_scope:true};},
+    fetchActionPage:async()=>{calls.page++;if(stage==='page'){entered.resolve();await pending.promise;}return {items:[{status:'TIMESHEET_EVIDENCE_PREPARING'}]};},
+    request:async()=>{throw Error('No native refresh or extra action page permitted in this fixture');},
+    renderReview:()=>({header:oldState.review?.header,actor:dependencies.SESSION.user.id}),
+    showScreen:(_title,render)=>{calls.show++;calls.render=render;calls.rendered=render();root.__modalStack=[parent,child];},
+    installReviewReturn:()=>{calls.install++;},scheduleDocumentPreparationPoll:()=>{calls.poll++;},
+    pageNeedsDocumentPreparationPoll:()=>true,currentImportScreenIsVisible:()=>true,currentImportFrame:()=>child,
+    notify:()=>{calls.notify=(calls.notify||0)+1;}
+  };
+  const ctx=vm.createContext(dependencies);vm.runInContext(helper+'\n'+(original?currentOpenReviewOwner():forwardOpenReviewOwner()),ctx);
+  const current=fs.readFileSync(d10OfficePins[1].path,'utf8').replaceAll('\r\n','\n');
+  const composed=original?current:applyD10ReviewEdits(current,d10OfficePins[1].path);
+  const install=composed.slice(composed.indexOf('  function installReviewReturn(review) {'),composed.indexOf('  async function leaveReview() {')).trim();
+  vm.runInContext(install,ctx);const nativeInstall=ctx.installReviewReturn;
+  ctx.installReviewReturn=review=>{calls.install++;nativeInstall(review);};
+  return {ctx,dependencies,root,parent,child,state:oldState,calls,entered,pending,
+    run:()=>ctx.openReview(importId,bound?{checkOnlyD10Action:frame(),skipAutoRecheck:true,returnTo:()=>{calls.return++;}}:{skipAutoRecheck:true})};
+}
+test('complete actual bound openReview cancels actor/user/session/permission replacement at header, scope and page await before state/render/poll',async()=>{
+  const mutations=[ctx=>vm.runInContext(`SESSION.user = {id:'${id(30)}',role:'admin',is_active:true};`,ctx),
+    ctx=>vm.runInContext('SESSION = {user: SESSION.user};',ctx),ctx=>vm.runInContext('SESSION.user = {...SESSION.user};',ctx),
+    ctx=>vm.runInContext("SESSION.user.role = 'pay_readonly';",ctx),ctx=>vm.runInContext("SESSION.user.roles.push('pay_readonly');",ctx)];
+  for(const stage of ['header','scope','page'])for(const mutate of mutations){
+    const fixture=wholeReview({stage}),run=fixture.run();await fixture.entered.promise;mutate(fixture.ctx);fixture.pending.resolve();await run;
+    assert.equal(fixture.state.review,null,stage);assert.equal(fixture.calls.show,0,stage);assert.equal(fixture.calls.install,0,stage);assert.equal(fixture.calls.poll,0,stage);
+    if(stage==='scope')assert.equal(fixture.calls.page,0);
+  }
+});
+test('complete unchanged bound review publishes once; ordinary unbound continuation matches actual predecessor',async()=>{
+  const positive=wholeReview(),run=positive.run();await positive.entered.promise;positive.pending.resolve();await run;
+  assert.equal(positive.calls.show,1);assert.equal(positive.calls.install,1);assert.equal(positive.calls.poll,1);
+  assert.equal(positive.state.review.header.state.last_opened_by_user_id,actor);assert.equal(positive.state.review.scope.native_scope,true);
+  vm.runInContext(`SESSION.user = {id:'${id(30)}'};`,positive.ctx);assert.equal(positive.calls.render(),'');
+  for(const original of [true,false]){
+    const ordinary=wholeReview({bound:false,original}),running=ordinary.run();await ordinary.entered.promise;
+    vm.runInContext(`SESSION.user = {id:'${id(30)}'};`,ordinary.ctx);ordinary.pending.resolve();await running;
+    assert.equal(ordinary.calls.show,1);assert.equal(ordinary.calls.install,1);assert.equal(ordinary.calls.poll,1);
+    assert.equal(ordinary.state.review.header.state.last_opened_by_user_id,actor);
+    assert.deepEqual(JSON.parse(JSON.stringify(ordinary.state.review.scope)),{native_scope:true});
+  }
+});
+test('actual composed poll and return-owner continuations refuse changed session and retain ordinary native modal ownership',async()=>{
+  const saved=fs.readFileSync(d10OfficePins[1].path,'utf8').replaceAll('\r\n','\n'),composed=applyD10ReviewEdits(saved,d10OfficePins[1].path);
+  const poll=composed.slice(composed.indexOf('  function scheduleDocumentPreparationPoll(review) {'),composed.indexOf('  function formatDate(value) {')).trim();
+  const install=composed.slice(composed.indexOf('  function installReviewReturn(review) {'),composed.indexOf('  async function leaveReview() {')).trim();
+  for(const replaceSession of [false,true]){
+    const fixture=wholeReview(),run=fixture.run();await fixture.entered.promise;fixture.pending.resolve();await run;
+    vm.runInContext(poll+'\n'+install,fixture.ctx);
+    fixture.ctx.scheduleDocumentPreparationPoll(fixture.state.review);fixture.ctx.installReviewReturn(fixture.state.review);
+    if(replaceSession)vm.runInContext('SESSION = {user:SESSION.user};',fixture.ctx);
+    if(replaceSession){await fixture.calls.timer();assert.equal(fixture.calls.header,1);assert.equal(fixture.calls.show,1);}
+    fixture.child._onDismiss();fixture.root.__modalStack=[fixture.parent];await Promise.resolve();await Promise.resolve();
+    assert.equal(fixture.calls.return,replaceSession?0:1);
+  }
+  for(const replaceSession of [false,true]){
+    const fixture=wholeReview(),run=fixture.run();await fixture.entered.promise;fixture.pending.resolve();await run;
+    const callbackEntered=deferred(),callbackPending=deferred();
+    fixture.state.review.returnOwner.callback=async()=>{callbackEntered.resolve();await callbackPending.promise;throw Error('native refresh refused');};
+    fixture.child._onDismiss();fixture.root.__modalStack=[fixture.parent];await callbackEntered.promise;
+    if(replaceSession)vm.runInContext('SESSION = {user:SESSION.user};',fixture.ctx);
+    callbackPending.resolve();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(fixture.calls.notify||0,replaceSession?0:1);
+  }
 });
 test('actual Office action handler opens existing native D10 review only, with current actor return and no command dispatch',async()=>{
   const saved=fs.readFileSync(d10OfficePins[0].path,'utf8').replaceAll('\r\n','\n');
