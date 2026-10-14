@@ -1,0 +1,27 @@
+{
+  "status": "SOURCE_CONSTRUCTION_SELECTED_CORRECTED_FIXTURE_NOT_NATIVE_PROOF",
+  "checkedAt": "2026-10-14T17:32:48.075Z",
+  "initialDraftPreserved": true,
+  "selectedFile": "02_NATIVE_HELPER_FIXTURE_OWNER_CONFLICT_FORWARD.sql",
+  "selectedSha256": "7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046",
+  "initialSha256": "af81c4452a29c8b4c14cc7d74a97be883dd030ad7eb10ac526d332ab189c8c4f",
+  "sourceAssertions": 13,
+  "statementCount": 43,
+  "uniqueWholeReverseHunks": 6,
+  "fixtureIdRange": {
+    "prefix": "f7120000-0000-4000-8000-",
+    "first": 1,
+    "last": 90
+  },
+  "reviewedOwner": {
+    "publishedCommit": "4c63b81b94406da7d750746520b2ae57b9b24a80",
+    "sourceManifest": "400b1b49fe5534b79baccbea9a9e3b7017458b40c84afeb66ebafedced92ff5c",
+    "helperSavedSha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d",
+    "criticSha256": "72662d08c841ce001ddadf48f9a32b29ade6e913c5953e83a0d9fdfb6342e53e"
+  },
+  "nativeExecuted": false,
+  "fixtureSchemaAndTriggerReviewComplete": false,
+  "independentFixtureReviewComplete": false,
+  "canonicalRegistered": false,
+  "helperMounted": false
+}

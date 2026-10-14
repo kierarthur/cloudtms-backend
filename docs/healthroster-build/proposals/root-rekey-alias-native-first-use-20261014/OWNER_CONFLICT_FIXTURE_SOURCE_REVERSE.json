@@ -1,0 +1,48 @@
+{
+  "status": "SOURCE_CONSTRUCTION_WAITING_REVIEWED_SUCCESSOR_AND_NATIVE",
+  "before": {
+    "file": "01_NATIVE_HELPER_FIXTURE.sql",
+    "sha256": "af81c4452a29c8b4c14cc7d74a97be883dd030ad7eb10ac526d332ab189c8c4f"
+  },
+  "after": {
+    "file": "02_NATIVE_HELPER_FIXTURE_OWNER_CONFLICT_FORWARD.sql",
+    "sha256": "7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046"
+  },
+  "hunks": [
+    {
+      "name": "bind intended successor ABI, retain initial draft",
+      "before": "-- Unmounted native helper first-use construction.",
+      "after": "-- Separate corrected first-use construction for the proposed all-owner\n-- alias census. Requires the independently reviewed OWNER_CONFLICT/55000 ABI;\n-- the earlier draft remains unchanged and must not be executed.\n-- Unmounted native helper first-use construction."
+    },
+    {
+      "name": "vacancy for both actual extra identities",
+      "before": "and not exists(select 1 from public.clients where cli_ref='CLI-991714')\n  and not exists(select 1 from public.candidates where tms_ref='CCR-991714')",
+      "after": "and not exists(select 1 from public.clients where cli_ref in('CLI-991714','CLI-991715'))\n  and not exists(select 1 from public.candidates where tms_ref in('CCR-991714','CCR-991715'))"
+    },
+    {
+      "name": "actual second Candidate/client/Contract admitted before cases",
+      "before": "create function pg_temp.hr_alias_seed_upload(p_id uuid,p_cycle uuid,p_profile text)",
+      "after": "insert into public.clients(id,cli_ref,name) values('f7120000-0000-4000-8000-000000000040','CLI-991715','Synthetic other alias client');\ninsert into public.candidates(id,tms_ref,display_name) values('f7120000-0000-4000-8000-000000000041','CCR-991715','Synthetic other alias candidate');\ninsert into public.contracts(id,client_id,candidate_id,start_date,end_date,pay_method_snapshot,rates_json)\nvalues('f7120000-0000-4000-8000-000000000042','f7120000-0000-4000-8000-000000000040',\n 'f7120000-0000-4000-8000-000000000041','2026-01-01','2026-12-31','PAYE',\n '{\"paye_day\":10,\"paye_night\":10,\"paye_sat\":10,\"paye_sun\":10,\"paye_bh\":10,\"charge_day\":20,\"charge_night\":20,\"charge_sat\":20,\"charge_sun\":20,\"charge_bh\":20}');\ninsert into public.weekly_source_group_clients(source_group_id,client_id,valid_from,created_by_user_id)\nvalues('f7120000-0000-4000-8000-000000000005','f7120000-0000-4000-8000-000000000040','2026-01-01','f7120000-0000-4000-8000-000000000001');\n\ncreate function pg_temp.hr_alias_seed_upload(p_id uuid,p_cycle uuid,p_profile text)"
+    },
+    {
+      "name": "extra historical alias upload",
+      "before": "select pg_temp.hr_alias_seed_upload('f7120000-0000-4000-8000-000000000013','f7120000-0000-4000-8000-000000000008','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1');",
+      "after": "select pg_temp.hr_alias_seed_upload('f7120000-0000-4000-8000-000000000013','f7120000-0000-4000-8000-000000000008','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1');\nselect pg_temp.hr_alias_seed_upload('f7120000-0000-4000-8000-000000000030','f7120000-0000-4000-8000-000000000008','HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1');"
+    },
+    {
+      "name": "foreign Candidate is a refusal, not a new key",
+      "before": " perform pg_temp.hr_alias_assert(private.weekly_source_known_source_key_v1('f7120000-0000-4000-8000-000000000024','f7120000-0000-4000-8000-000000000089',own_client) is null,'HR_ALIAS_WRONG_CANDIDATE');",
+      "after": " begin\n  perform private.weekly_source_known_source_key_v1('f7120000-0000-4000-8000-000000000024','f7120000-0000-4000-8000-000000000041',own_client);\n  raise exception 'HR_ALIAS_FOREIGN_CANDIDATE_NOT_REFUSED' using errcode='P0001';\n exception when sqlstate '55000' then\n  if SQLERRM is distinct from 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT' then raise;end if;\n end;\n begin\n  perform private.weekly_source_known_source_key_v1('f7120000-0000-4000-8000-000000000024',own_candidate,'f7120000-0000-4000-8000-000000000040');\n  raise exception 'HR_ALIAS_FOREIGN_CLIENT_NOT_REFUSED' using errcode='P0001';\n exception when sqlstate '55000' then\n  if SQLERRM is distinct from 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT' then raise;end if;\n end;"
+    },
+    {
+      "name": "prove hidden mixed ownership before canonical precedence",
+      "before": "-- Genuine current canonical-key precedence is tested",
+      "after": "-- A second genuine typed fixture B link is owned by a different actual\n-- Candidate/client. Both owners must survive the all-owner census; no local\n-- subset is allowed to hide the foreign owner and return a UUID.\ninsert into public.weekly_work_events(id,candidate_id,client_id,work_date,identity_kind,profile_external_key,durable_identity_hash,first_source_group_id,source_format_profile_id)\nselect 'f7120000-0000-4000-8000-000000000043','f7120000-0000-4000-8000-000000000041','f7120000-0000-4000-8000-000000000040',\n '2026-09-15','PROFILE_EXTERNAL_KEY','D',decode(repeat('7a',32),'hex'),'f7120000-0000-4000-8000-000000000005',id\nfrom public.weekly_source_format_profiles where profile_code='HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' and active;\ninsert into public.weekly_source_upload_rows(id,upload_id,source_row_ordinal,external_source_key,source_candidate_identity,\n source_client_identity,work_date,start_at_local,end_at_local,break_minutes,actual_net_minutes,row_finalisation_state,finalised_by,normalised_row_hash)\nvalues('f7120000-0000-4000-8000-000000000044','f7120000-0000-4000-8000-000000000030',1,'B','Synthetic other alias candidate',\n 'Synthetic other alias client','2026-09-15','2026-09-15 09:00','2026-09-15 17:00',30,450,'SOURCE_WORKED','Synthetic fixture',decode(repeat('7b',32),'hex'));\ninsert into public.weekly_source_row_resolutions(id,upload_row_id,generation,candidate_id,client_id,contract_id,work_event_id,\n paid_minutes,mapping_state,contract_selection_method,work_event_match_kind,work_event_match_fingerprint,\n qualification_profile_fingerprint,qualifying_contract_count,qualifying_contract_set_hash,source_row_fingerprint)\nvalues('f7120000-0000-4000-8000-000000000045','f7120000-0000-4000-8000-000000000044',1,\n 'f7120000-0000-4000-8000-000000000041','f7120000-0000-4000-8000-000000000040','f7120000-0000-4000-8000-000000000042',\n 'f7120000-0000-4000-8000-000000000043',450,'RESOLVED','DURABLE_LINEAGE','EXACT_DURABLE_LINEAGE',decode(repeat('75',32),'hex'),\n decode(repeat('76',32),'hex'),1,decode(repeat('77',32),'hex'),decode(repeat('7b',32),'hex'));\ninsert into public.weekly_work_event_source_links(id,work_event_id,upload_row_id,row_resolution_id,link_kind,link_hash)\nvalues('f7120000-0000-4000-8000-000000000046','f7120000-0000-4000-8000-000000000043','f7120000-0000-4000-8000-000000000044',\n 'f7120000-0000-4000-8000-000000000045','POSITIVE_SOURCE',private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_WORK_EVENT_LINK_V1',\n jsonb_build_object('work_event_id','f7120000-0000-4000-8000-000000000043'::uuid,'upload_row_id','f7120000-0000-4000-8000-000000000044'::uuid,\n 'resolution_id','f7120000-0000-4000-8000-000000000045'::uuid,'link_kind','POSITIVE_SOURCE')));\ndo $native_mixed_alias$\nbegin\n begin\n  perform private.weekly_source_known_source_key_v1('f7120000-0000-4000-8000-000000000024',\n   'f7120000-0000-4000-8000-000000000003','f7120000-0000-4000-8000-000000000002');\n  raise exception 'HR_ALIAS_MIXED_OWNER_NOT_REFUSED' using errcode='P0001';\n exception when sqlstate '55000' then\n  if SQLERRM is distinct from 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_AMBIGUOUS' then raise;end if;\n end;\nend;\n$native_mixed_alias$;\n\n-- Genuine current canonical-key precedence is tested"
+    }
+  ],
+  "wholeReverseVerified": true,
+  "sqlExecuted": false,
+  "expectedOwnerConflictCode": "WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT",
+  "expectedSqlstate": "55000",
+  "ownerSuccessorSourceFrozen": false
+}

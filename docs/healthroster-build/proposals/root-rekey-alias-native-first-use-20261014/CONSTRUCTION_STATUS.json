@@ -1,0 +1,20 @@
+{
+  "status": "UNMOUNTED_SOURCE_CONSTRUCTION_HELD_P1_REKEY1",
+  "sqlSha256": "af81c4452a29c8b4c14cc7d74a97be883dd030ad7eb10ac526d332ab189c8c4f",
+  "statements": 33,
+  "transactionEnvelope": [
+    "BEGIN",
+    "ROLLBACK"
+  ],
+  "nativeExecuted": false,
+  "safetyApproved": false,
+  "knownDefect": "Wrong-Candidate null assertion mirrors foreign alias ownership loss; preserve initial source, build separate corrected fixture with actual second Candidate and successor refusal.",
+  "remaining": [
+    "Full actual schema and unchanged trigger census",
+    "Independent source review",
+    "Exact corrected owner ABI and foreign collision case",
+    "PostgreSQL compilation",
+    "Actual native first use/fresh fixture absence",
+    "Full current context/projection/financial/concurrency acceptance"
+  ]
+}

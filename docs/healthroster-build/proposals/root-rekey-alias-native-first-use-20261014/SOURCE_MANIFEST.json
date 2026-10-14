@@ -1,0 +1,45 @@
+{
+  "status": "SOURCE_CONSTRUCTION_ONLY",
+  "files": [
+    {
+      "file": "01_NATIVE_HELPER_FIXTURE.sql",
+      "bytes": 12404,
+      "sha256": "af81c4452a29c8b4c14cc7d74a97be883dd030ad7eb10ac526d332ab189c8c4f"
+    },
+    {
+      "file": "02_NATIVE_HELPER_FIXTURE_OWNER_CONFLICT_FORWARD.sql",
+      "bytes": 17460,
+      "sha256": "7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046"
+    },
+    {
+      "file": "CONSTRUCTION_STATUS.json",
+      "bytes": 803,
+      "sha256": "e566b35cdcf2badd01bf01f781edd5cd0bf79ebfaf41785e6f6967385cb188b0"
+    },
+    {
+      "file": "CORRECTED_FIXTURE_SOURCE_CHECK.json",
+      "bytes": 1131,
+      "sha256": "54183df011da6c5c2dab1488b4cb85643bbe23d553a4b6a6232d306e659c8f20"
+    },
+    {
+      "file": "OWNER_CONFLICT_FIXTURE_SOURCE_REVERSE.json",
+      "bytes": 7822,
+      "sha256": "a9ab850c6119a7115cd0fb7572a98e3a0a08757be91357a5bbfd023bf1568a91"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3713,
+      "sha256": "d0189748115128f1660e7095a58d202ed7c1f9c6b9ef6d1ecf094d22fd5c0799"
+    },
+    {
+      "file": "build-owner-conflict-fixture.mjs",
+      "bytes": 8592,
+      "sha256": "7573f01331825ef65006885d199818f517aa28dc954ae6c2d44aeddf32f680c4"
+    },
+    {
+      "file": "check-fixture-source.mjs",
+      "bytes": 3732,
+      "sha256": "97f6b4838661861750c4fa5dded428d61f19b0e3717ee76efead3c6c8bcc5321"
+    }
+  ]
+}

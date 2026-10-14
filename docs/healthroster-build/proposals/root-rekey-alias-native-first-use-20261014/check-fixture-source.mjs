@@ -1,0 +1,34 @@
+// Source checks only; deliberately no PostgreSQL or network execution.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {scanManagedSql} from '../../../../scripts/cloudtms-managed-release-sql.mjs';
+const dir=path.dirname(fileURLToPath(import.meta.url));
+const read=f=>fs.readFileSync(path.join(dir,f),'utf8');
+const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
+const reverse=JSON.parse(read('OWNER_CONFLICT_FIXTURE_SOURCE_REVERSE.json'));
+const initial=read(reverse.before.file),selected=read(reverse.after.file);
+assert.equal(hash(initial),reverse.before.sha256);assert.equal(hash(selected),reverse.after.sha256);
+let reconstructed=selected;
+for(const h of [...reverse.hunks].reverse()){assert.equal(reconstructed.split(h.after).length,2);reconstructed=reconstructed.replace(h.after,h.before);}
+assert.equal(reconstructed,initial);
+const parsed=scanManagedSql(selected);
+assert.deepEqual(parsed.statements.filter(r=>['BEGIN','COMMIT','ROLLBACK'].includes(r.tokens[0])).map(r=>r.tokens.join(' ')),['BEGIN','ROLLBACK']);
+assert.equal(parsed.meta.filter(r=>/^\\ir\b/i.test(r.text)).length,0);
+assert.ok(selected.indexOf('HR_ALIAS_FIXTURE_NATURAL_KEY_COLLISION')<selected.indexOf('insert into public.tms_users'));
+assert.ok(!/\b(?:update|delete\s+from|truncate|disable\s+trigger|set\s+role)\b/i.test(selected));
+for(const code of ['HR_ALIAS_FOREIGN_CANDIDATE_NOT_REFUSED','HR_ALIAS_FOREIGN_CLIENT_NOT_REFUSED','HR_ALIAS_MIXED_OWNER_NOT_REFUSED'])assert.ok(selected.includes(code));
+assert.equal(selected.split("SQLERRM is distinct from 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT'").length-1,2);
+assert.ok(selected.includes("SQLERRM is distinct from 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_AMBIGUOUS'"));
+assert.ok(!selected.includes('HR_ALIAS_WRONG_CANDIDATE'));
+const ids=[...selected.matchAll(/f7120000-0000-4000-8000-(\d{12})/g)].map(r=>Number(r[1]));
+assert.ok(ids.every(id=>id>=1&&id<=90));
+const declaredCalls=[...selected.matchAll(/\b((?:public|private|pg_temp)\.[a-z_0-9]+)\s*\(/gi)].map(r=>r[1]);
+assert.deepEqual(declaredCalls.filter(n=>/claim|drain|provider|settlement|finalize|email.*send/i.test(n)),[]);
+const status={status:'SOURCE_CONSTRUCTION_SELECTED_CORRECTED_FIXTURE_NOT_NATIVE_PROOF',checkedAt:new Date().toISOString(),initialDraftPreserved:true,selectedFile:reverse.after.file,selectedSha256:hash(selected),initialSha256:hash(initial),sourceAssertions:13,statementCount:parsed.statements.length,uniqueWholeReverseHunks:reverse.hunks.length,fixtureIdRange:{prefix:'f7120000-0000-4000-8000-',first:1,last:90},reviewedOwner:{publishedCommit:'4c63b81b94406da7d750746520b2ae57b9b24a80',sourceManifest:'400b1b49fe5534b79baccbea9a9e3b7017458b40c84afeb66ebafedced92ff5c',helperSavedSha256:'3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d',criticSha256:'72662d08c841ce001ddadf48f9a32b29ade6e913c5953e83a0d9fdfb6342e53e'},nativeExecuted:false,fixtureSchemaAndTriggerReviewComplete:false,independentFixtureReviewComplete:false,canonicalRegistered:false,helperMounted:false};
+fs.writeFileSync(path.join(dir,'CORRECTED_FIXTURE_SOURCE_CHECK.json'),JSON.stringify(status,null,2)+'\n',{flag:'wx'});
+const files=fs.readdirSync(dir).filter(f=>f!=='SOURCE_MANIFEST.json').sort().map(file=>{const b=fs.readFileSync(path.join(dir,file));return{file,bytes:b.length,sha256:hash(b)};});
+fs.writeFileSync(path.join(dir,'SOURCE_MANIFEST.json'),JSON.stringify({status:'SOURCE_CONSTRUCTION_ONLY',files},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({status:status.status,statements:status.statementCount,hunks:reverse.hunks.length,files:files.length,nativeExecuted:false}));
