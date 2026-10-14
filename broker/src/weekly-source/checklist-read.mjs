@@ -25,7 +25,7 @@ export function decodeChecklistRead(value,request,user){
  const actor={actor_user_id:user.id,permission_view:user.payView?'PAY_READONLY':'ADMIN',active:true};
  closed(value,['ok','contract','command','actor_user_id','permission_view','binding','read_revision','rows','items','has_more','next_cursor','refresh_required','anchor']);
  if(value.ok!==true||value.contract!=='WEEKLY_SOURCE_CHECKLIST_V1'||value.command!==request.command||value.actor_user_id!==actor.actor_user_id||value.permission_view!==actor.permission_view
-  ||!HASH.test(value.binding)||!HASH.test(value.read_revision)||!Array.isArray(value.rows)||!Array.isArray(value.items)||value.rows.length>request.limit||value.items.length>request.limit
+  ||typeof value.binding!=='string'||!HASH.test(value.binding)||typeof value.read_revision!=='string'||!HASH.test(value.read_revision)||!Array.isArray(value.rows)||!Array.isArray(value.items)||value.rows.length>request.limit||value.items.length>request.limit
   ||typeof value.has_more!=='boolean'||typeof value.refresh_required!=='boolean'||(value.anchor!==null&&(typeof value.anchor!=='string'||value.anchor.length<1||value.anchor.length>4096))
   ||(value.has_more?(typeof value.next_cursor!=='string'||!value.next_cursor||value.next_cursor.length>4096):value.next_cursor!==null))fail('WEEKLY_SOURCE_CHECKLIST_RESPONSE_INVALID',502);
  if(value.refresh_required)fail('WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED',409);

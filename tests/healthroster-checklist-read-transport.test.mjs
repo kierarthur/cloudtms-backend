@@ -57,7 +57,7 @@ test('unknown withholding and pending decision remain NULL without invented zero
  const falseDecision=frame();falseDecision.rows[0].hold={...unavailableChecklistHold(),pending_decision:true};assert.throws(()=>decodeChecklistRead(falseDecision,req(''),actor));
 });
 test('private raw DTOs, extra payload fields, foreign actor/scope and unknown cursor state are rejected',async()=>{
- for(const alter of [p=>p.private_rows=[],p=>p.rows[0].submission_witness={private:true},p=>p.actor_user_id=id(8),p=>p.has_more=true,p=>p.rows[0].scope.client_id=id(8)]){const payload=frame();alter(payload);assert.equal((await dispatch('client_id='+id(2),actor,payload)).response.status,502);}
+ for(const alter of [p=>p.private_rows=[],p=>p.rows[0].submission_witness={private:true},p=>p.actor_user_id=id(8),p=>p.has_more=true,p=>p.rows[0].scope.client_id=id(8),p=>p.binding=[H],p=>p.read_revision=[R]]){const payload=frame();alter(payload);assert.equal((await dispatch('client_id='+id(2),actor,payload)).response.status,502);}
 });
 test('changed revision explicitly requests anchored refresh rather than false end-of-list',async()=>{
  const payload=frame();payload.refresh_required=true;const {response}=await dispatch('',actor,payload);assert.equal(response.status,409);assert.equal((await response.json()).error_code,'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED');
