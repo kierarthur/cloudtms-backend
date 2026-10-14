@@ -1,0 +1,49 @@
+UNIT_ONLY: source-bound compatibility and reversal vectors; no native execution or financial/permission proof.
+✔ whole Queries reverse reaches actual current0044 through retained Report and target layers (22.3223ms)
+✔ whole scopes D10 reverse reaches the retained Report overlay (5.7649ms)
+✔ PAY authority, reduction and permission tail remain byte-identical to current0044 (1.2485ms)
+✔ actual current Source query producer calls, filter and bulk proof domain are retained (1.9105ms)
+✔ actual native own-week date and preferred Client cycle are used in both consumers (1.1096ms)
+✔ native filter membership precedes one complete population count and page (0.8772ms)
+✔ normal D10 population no Source publication dependency (0.7564ms)
+✔ check-only scope never claims Source completed/prepared or contributes missing report totals (0.2408ms)
+✔ selective TIMESHEET_MISSING uses literal keys and keeps matching native action/child (1.1371ms)
+✔ selective HOURS_DIFFER uses literal keys and keeps matching native action/child (0.4714ms)
+✔ selective MISSING_SHIFT uses literal keys and keeps matching native action/child (0.2144ms)
+✔ unknown native fact stays visible under ALL but no fabricated selective membership (0.2569ms)
+✔ full mixed page sorts before slicing and total includes both owners (0.4781ms)
+✔ D10 cannot enter Source ALL_FILTERED selection in either sort direction (0.2039ms)
+✔ literal exact D10 target suppresses bulk and preserves only native parent (0.1517ms)
+✔ filtered or absent exact target causes stale refusal, not another parent fallback (1.2401ms)
+✔ duplicate native parent is refused even if one copy would be filtered out (0.3436ms)
+✔ foreign actor is refused in the bound compatibility model (0.2932ms)
+✔ foreign Client is refused in the bound compatibility model (0.6937ms)
+✔ wrong real week is refused in the bound compatibility model (0.3296ms)
+✔ outreach injection is refused in the bound compatibility model (0.1386ms)
+✔ absent revision is refused in the bound compatibility model (0.1241ms)
+✔ array revision is refused in the bound compatibility model (0.1305ms)
+✔ invalid filter scalar is refused in the bound compatibility model (3.718ms)
+✔ caller invented key is refused in the bound compatibility model (0.6784ms)
+✔ duplicate subject key is refused in the bound compatibility model (0.223ms)
+✔ PAY_READONLY accepts empty owner census and refuses private D10 parent (0.7839ms)
+✔ cursor seal binds actor_user_id (0.3244ms)
+✔ cursor seal binds permission_view (0.2179ms)
+✔ cursor seal binds source_group_id (0.1061ms)
+✔ cursor seal binds source_cycle_id (0.1151ms)
+✔ cursor seal binds client_id (0.1005ms)
+✔ cursor seal binds filters (0.1095ms)
+✔ cursor seal binds sort_key (0.21ms)
+✔ cursor seal binds sort_direction (0.2915ms)
+✔ cursor seal binds source_workspace_version (0.2143ms)
+✔ cursor seal binds d10_read_revisions (0.388ms)
+✔ cursor rejects overflow and malformed trailing bytes before integer conversion (1.5303ms)
+✔ query tuple raw provenance/filter internals do not escape public parent render (0.3534ms)
+✔ stable native read owners retain original search paths and signatures; no new write or grant (1.541ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 250.9405

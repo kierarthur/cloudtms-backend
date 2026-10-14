@@ -1,0 +1,60 @@
+{
+  "schema": "PPV2_D10_SCOPES_FULL_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "input": "scopes.root-report-overlay.sqlinc",
+  "output": "scopes.report-d10-population-forward.sqlinc",
+  "input_sha256": "48c48b34d9375c5418f60957a0906a2ce91b38d218dcb530f7bda46f611445c1",
+  "forward_sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac",
+  "hunks": [
+    {
+      "before": "  v_cutoffs jsonb;",
+      "after": "  v_cutoffs jsonb;\n  v_admin boolean;\n  v_d10_scope record;\n  v_d10_frame jsonb;\n  v_d10_scopes jsonb:='[]'::jsonb;"
+    },
+    {
+      "before": "      if v_offset is null or v_offset<0 then raise exception 'invalid offset'; end if;",
+      "after": "      if v_offset is null or v_offset<0 or v_offset>2147483547 then raise exception 'invalid offset'; end if;"
+    },
+    {
+      "before": "  with candidates as (",
+      "after": "  -- D10 adds only actual Admin-visible native query scopes. It does not make a\n  -- missing Source report, a completed final revision or an import-ready claim.\n  select lower(btrim(coalesce(actor.role,'')))='admin' into v_admin\n  from public.tms_users actor where actor.id=v_actor and actor.is_active;\n  if v_admin then\n    for v_d10_scope in\n      select distinct g.id group_id,g.display_name source_name,gc.client_id,cl.name client_name,\n        c.id cycle_id,c.scope_client_id,c.finalisation_week_ending,c.cutoff_at_utc,c.version cycle_version\n      from public.weekly_source_groups g\n      join public.weekly_source_cycles c on c.source_group_id=g.id\n      join public.weekly_source_group_clients gc on gc.source_group_id=g.id\n      join public.clients cl on cl.id=gc.client_id\n      where g.active and g.source_family='ROSTER'\n        and (v_group is null or g.id=v_group) and (v_client is null or gc.client_id=v_client)\n        and (v_week is null or c.finalisation_week_ending=v_week)\n        and (c.scope_client_id is null or c.scope_client_id=gc.client_id)\n        and (c.scope_client_id is not null or not exists(select 1 from public.weekly_source_cycles preferred\n          where preferred.source_group_id=g.id and preferred.scope_client_id=gc.client_id\n            and preferred.finalisation_week_ending=c.finalisation_week_ending))\n        and exists(select 1 from public.timesheets t\n          join public.weekly_source_client_policies p on p.source_group_id=g.id and p.client_id=gc.client_id\n          where t.week_ending_date between c.finalisation_week_ending-6 and c.finalisation_week_ending\n            and t.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)\n            and t.week_ending_date between p.effective_from and coalesce(p.effective_to,'infinity'::date)\n            and p.authority_mode='TIMESHEET_AUTHORITY' and p.document_mode='INVOICE_EVIDENCE_REQUIRED' and not p.self_bill_enabled)\n        -- Source candidates above keep their existing row and report totals.\n        and not exists(select 1 from public.weekly_source_client_policies p where p.source_group_id=g.id and p.client_id=gc.client_id\n          and p.authority_mode='SOURCE_AUTHORITY' and c.finalisation_week_ending between p.effective_from and coalesce(p.effective_to,'infinity'::date))\n      order by g.id,gc.client_id,c.finalisation_week_ending,c.id\n    loop\n      -- Enumerate real native weeks inside this exact cycle. Eligibility and\n      -- parent identity still come exclusively from the same shared D10 owner.\n      with native_scope_frames as materialized (\n        select native_week.week_ending_date,private.weekly_source_check_only_query_groups_v1(v_d10_scope.cycle_id,v_d10_scope.client_id,\n          jsonb_build_object('actor_user_id',v_actor,'source_group_id',v_d10_scope.group_id,'week_ending',native_week.week_ending_date)) value\n        from (select distinct t.week_ending_date from public.timesheets t\n          where t.week_ending_date between v_d10_scope.finalisation_week_ending-6 and v_d10_scope.finalisation_week_ending\n            and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=v_d10_scope.group_id\n              and gc.client_id=v_d10_scope.client_id and t.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))) native_week\n      )\n      select jsonb_build_object('revisions',coalesce(jsonb_agg(jsonb_build_object(\n        'week_ending',native_frame.week_ending_date,'read_revision',native_frame.value->>'read_revision',\n        'source_read_revision',native_frame.value->>'source_read_revision') order by native_frame.week_ending_date),'[]'::jsonb),\n        'group_count',coalesce(sum(jsonb_array_length(native_frame.value->'groups')),0),\n        'valid',coalesce(bool_and(coalesce(native_frame.value->>'contract'='WEEKLY_SOURCE_CHECK_ONLY_QUERY_GROUPS_V1'\n          and native_frame.value->>'actor_user_id'=v_actor::text and native_frame.value->>'permission_view'='ADMIN'\n          and native_frame.value#>>'{scope,source_group_id}'=v_d10_scope.group_id::text\n          and native_frame.value#>>'{scope,source_cycle_id}'=v_d10_scope.cycle_id::text\n          and native_frame.value#>>'{scope,client_id}'=v_d10_scope.client_id::text\n          and native_frame.value#>>'{scope,week_ending}'=native_frame.week_ending_date::text\n          and jsonb_typeof(native_frame.value->'groups')='array'\n          and native_frame.value->'source_outreach_eligible'='false'::jsonb and native_frame.value->'bulk_actions'='{}'::jsonb\n          and coalesce(native_frame.value->>'read_revision','')~'^[0-9a-f]{64}$'\n          and coalesce(native_frame.value->>'source_read_revision','')~'^[0-9a-f]{64}$',false)),false))\n      into v_d10_frame\n      from native_scope_frames native_frame;\n      if v_d10_frame->'valid' is distinct from 'true'::jsonb then\n        raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_READ_UNAVAILABLE' using errcode='55000';end if;\n      if (v_d10_frame->>'group_count')::integer>0 then\n        v_d10_scopes:=v_d10_scopes||jsonb_build_array(jsonb_build_object(\n          'group_id',v_d10_scope.group_id,'source_name',v_d10_scope.source_name,'client_id',v_d10_scope.client_id,'client_name',v_d10_scope.client_name,\n          'cycle_id',v_d10_scope.cycle_id,'scope_client_id',v_d10_scope.scope_client_id,'finalisation_week_ending',v_d10_scope.finalisation_week_ending,\n          'cutoff_at_utc',v_d10_scope.cutoff_at_utc,'cycle_version',v_d10_scope.cycle_version,\n          'query_read_revision',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_D10_SCOPE_CENSUS_V1',\n            jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_d10_scope.cycle_id,'client_id',v_d10_scope.client_id,\n              'native_read_revisions',v_d10_frame->'revisions')),'hex')));\n      end if;\n    end loop;\n  end if;\n  with candidates as ("
+    },
+    {
+      "before": "      coalesce(report.cutoff_at_utc,candidate.cutoff_at_utc) actual_cutoff",
+      "after": "      coalesce(report.cutoff_at_utc,candidate.cutoff_at_utc) actual_cutoff,\n      'SOURCE'::text scope_kind,null::text query_read_revision"
+    },
+    {
+      "before": "      fr.id,case when fr.id is not null then 'FINAL_SOURCE' end,fr.finalised_at_utc,encode(fr.manifest_hash,'hex'),rs.cutoff_at_utc",
+      "after": "      fr.id,case when fr.id is not null then 'FINAL_SOURCE' end,fr.finalised_at_utc,encode(fr.manifest_hash,'hex'),rs.cutoff_at_utc,\n      'SELF_BILL_REPORT'::text,null::text"
+    },
+    {
+      "before": "  ), facts as (\n    select scopes.*,private.weekly_source_import_is_prepared_v1(scopes.upload_id) prepared",
+      "after": "    union all\n    select q.group_id,q.source_name,'ROSTER'::text,q.client_id,q.client_name,q.cycle_id,q.scope_client_id,\n      q.finalisation_week_ending,q.cutoff_at_utc,q.cycle_version,null::uuid,null::uuid,\n      null::uuid,null::bigint,null::uuid,null::uuid,null::uuid,null::text,null::timestamptz,null::text,\n      q.cutoff_at_utc,'CHECK_ONLY_D10'::text,q.query_read_revision\n    from jsonb_to_recordset(v_d10_scopes) q(group_id uuid,source_name text,client_id uuid,client_name text,\n      cycle_id uuid,scope_client_id uuid,finalisation_week_ending date,cutoff_at_utc timestamptz,\n      cycle_version bigint,query_read_revision text)\n  ), facts as (\n    select scopes.*,case when scopes.scope_kind='CHECK_ONLY_D10' then null::boolean\n      else private.weekly_source_import_is_prepared_v1(scopes.upload_id) end prepared"
+    },
+    {
+      "before": "count(distinct (cycle_id,client_id)) filter(where completion_id is null and not client_has_prepared",
+      "after": "count(distinct (cycle_id,client_id)) filter(where scope_kind<>'CHECK_ONLY_D10' and completion_id is null and not client_has_prepared"
+    },
+    {
+      "before": "count(distinct (cycle_id,client_id)) filter(where completion_id is null and prepared)",
+      "after": "count(distinct (cycle_id,client_id)) filter(where scope_kind<>'CHECK_ONLY_D10' and completion_id is null and prepared)"
+    },
+    {
+      "before": "cycle_id,client_id,cycle_version,report_scope_id,report_version,upload_id,publication_id,completion_hash,prepared)",
+      "after": "cycle_id,client_id,cycle_version,report_scope_id,report_version,upload_id,publication_id,completion_hash,prepared,scope_kind,query_read_revision)"
+    },
+    {
+      "before": "      'prepared',prepared,'completed',completion_id is not null,'completion_kind',completion_kind,",
+      "after": "      'scope_kind',scope_kind,'query_read_revision',query_read_revision,\n      'prepared',prepared,'completed',case when scope_kind='CHECK_ONLY_D10' then null::boolean else completion_id is not null end,'completion_kind',completion_kind,"
+    },
+    {
+      "before": "'missing_previous_report',completion_id is null and not client_has_prepared",
+      "after": "'missing_previous_report',scope_kind<>'CHECK_ONLY_D10' and completion_id is null and not client_has_prepared"
+    }
+  ],
+  "full_reverse": true,
+  "shared_adapter_current_commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+  "shared_adapter_current_sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc",
+  "independent_review_pending": true,
+  "mount_ready": false
+}

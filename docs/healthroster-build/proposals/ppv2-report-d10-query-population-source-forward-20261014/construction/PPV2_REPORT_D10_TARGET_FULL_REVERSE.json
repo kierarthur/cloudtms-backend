@@ -1,0 +1,103 @@
+{
+  "source_only": true,
+  "native": false,
+  "current_definition_sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+  "root_report_overlay_definition_sha256": "a90ff894c594e2c74a12851d8f31ad67620038ca716967833bd43698c584874f",
+  "forward_definition_sha256": "a2db4af6d55764c08b96651da6feb47db7ece01b706b2a7b87a04d58a340b019",
+  "current_to_report_overlay_hunks": [
+    {
+      "before": "    'sort_direction','status','candidate','issue','cycle_filter'\n",
+      "after": "    'sort_direction','status','candidate','issue','cycle_filter','row_key'\n",
+      "before_line": 13,
+      "after_line": 13,
+      "after_byte_offset": 422
+    },
+    {
+      "before": "",
+      "after": "  v_query_row_key text;\n",
+      "before_line": 16,
+      "after_line": 16,
+      "after_byte_offset": 528
+    },
+    {
+      "before": "",
+      "after": "  v_query_row_key:=p_request->>'row_key';\n  if p_request ? 'row_key' and (jsonb_typeof(p_request->'row_key') is distinct from 'string'\n    or v_query_row_key='' or length(v_query_row_key)>512 or v_query_row_key~'[[:cntrl:]]'\n    or v_tab<>'queries' or v_group_id is null or v_cycle_id is null or v_client_id is null\n    or nullif(p_request->>'cursor','') is not null or v_report_scope_id is not null\n    or v_publication_id is not null) then\n    raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023';\n  end if;\n",
+      "before_line": 131,
+      "after_line": 132,
+      "after_byte_offset": 5043
+    },
+    {
+      "before": "",
+      "after": "  -- Report finalise remains a separate exact invoice scope, after native\n  -- actor, group, cycle, client and reduced-pay-view admission.\n  if v_tab='finalise' and exists(select 1 from public.weekly_source_report_scopes rs\n    where rs.id=v_report_scope_id and rs.self_bill_report_id is not null) then\n    return private.weekly_source_self_bill_report_workspace_v1(p_request);\n  end if;\n\n",
+      "before_line": 212,
+      "after_line": 221,
+      "after_byte_offset": 9958
+    },
+    {
+      "before": "    where (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child\n",
+      "after": "    where (v_query_row_key is null or (query.group_key=v_query_row_key and query.client_id=v_client_id))\n      and (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child\n",
+      "before_line": 290,
+      "after_line": 306,
+      "after_byte_offset": 14746
+    },
+    {
+      "before": "",
+      "after": "    if v_query_row_key is not null and v_query_count<>1 then\n      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';\n    end if;\n",
+      "before_line": 293,
+      "after_line": 310,
+      "after_byte_offset": 15104
+    },
+    {
+      "before": "      where (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child\n",
+      "after": "      where (v_query_row_key is null or (query.group_key=v_query_row_key and query.client_id=v_client_id))\n        and (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child\n",
+      "before_line": 926,
+      "after_line": 946,
+      "after_byte_offset": 57393
+    },
+    {
+      "before": "",
+      "after": "  if v_query_row_key is not null then\n    -- The exact scoped target comes from the unchanged native query universe\n    -- before pagination. A closed or out-of-scope target never falls back to\n    -- the first page; ordinary cursors and all row action proofs stay native.\n    if v_publication_id is null then\n      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';\n    end if;\n    -- ALL_FILTERED authority is broader than this deliberate single-row view.\n    -- Keep the row's actual explicit actions; do not advertise bulk authority.\n    v_bulk_actions:='{}'::jsonb;\n  end if;\n",
+      "before_line": 949,
+      "after_line": 970,
+      "after_byte_offset": 59347
+    },
+    {
+      "before": "      'id',coalesce(v_profile.profile_code,case when v_group.source_family='NHSP' then 'NHSP_FINAL_BACKING_V1' else 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' end),\n",
+      "after": "      'id',private.weekly_source_configured_upload_profile_v1(v_client_id,v_cycle.id,v_group.source_family,v_profile.profile_code),\n",
+      "before_line": 1647,
+      "after_line": 1679,
+      "after_byte_offset": 115096
+    }
+  ],
+  "report_overlay_to_d10_hunks": [
+    {
+      "before": "  v_query_row_key text;",
+      "after": "  v_query_row_key text;\n  v_d10_target boolean:=false;\n  v_d10_groups jsonb;\n  v_d10_rows jsonb;\n  v_d10_count integer;"
+    },
+    {
+      "before": "  v_query_row_key:=p_request->>'row_key';",
+      "after": "  v_query_row_key:=p_request->>'row_key';\n  v_d10_target:=coalesce(v_query_row_key~'^d10g_[0-9a-f]{64}$',false);"
+    },
+    {
+      "before": "    or v_query_row_key='' or length(v_query_row_key)>512 or v_query_row_key~'[[:cntrl:]]'",
+      "after": "    or v_query_row_key!~'^(qg|d10g)_[0-9a-f]{64}$'"
+    },
+    {
+      "before": "  if v_publication_id is not null then\n    select pg_catalog.count(*)::integer,",
+      "after": "  if v_publication_id is not null and not v_d10_target then\n    select pg_catalog.count(*)::integer,"
+    },
+    {
+      "before": "  if v_tab='queries' and v_publication_id is not null then\n    v_total:=v_query_count;",
+      "after": "  if v_tab='queries' and v_publication_id is not null and not v_d10_target then\n    v_total:=v_query_count;"
+    },
+    {
+      "before": "  if v_query_row_key is not null then\n    -- The exact scoped target comes from the unchanged native query universe",
+      "after": "  if v_d10_target then\n    -- The one shared native D10 census supplies the literal parent key. It is\n    -- independent of Source publication and never enters Source bulk selection.\n    if v_group.source_family<>'ROSTER' or v_pay_view or v_filters<>'{}'::jsonb then\n      raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023';end if;\n    v_d10_groups:=private.weekly_source_check_only_query_groups_v1(v_cycle.id,v_client_id,\n      jsonb_build_object('actor_user_id',v_actor,'source_group_id',v_group.id,'week_ending',v_cycle.finalisation_week_ending));\n    if v_d10_groups->>'contract' is distinct from 'WEEKLY_SOURCE_CHECK_ONLY_QUERY_GROUPS_V1'\n      or v_d10_groups->>'actor_user_id' is distinct from v_actor::text\n      or v_d10_groups->>'permission_view' is distinct from 'ADMIN'\n      or v_d10_groups#>>'{scope,source_group_id}' is distinct from v_group.id::text\n      or v_d10_groups#>>'{scope,source_cycle_id}' is distinct from v_cycle.id::text\n      or v_d10_groups#>>'{scope,client_id}' is distinct from v_client_id::text\n      or v_d10_groups#>>'{scope,week_ending}' is distinct from v_cycle.finalisation_week_ending::text\n      or jsonb_typeof(v_d10_groups->'groups') is distinct from 'array'\n      or v_d10_groups->'source_outreach_eligible' is distinct from 'false'::jsonb\n      or v_d10_groups->'bulk_actions' is distinct from '{}'::jsonb\n      or coalesce(v_d10_groups->>'read_revision','')!~'^[0-9a-f]{64}$' then\n      raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_READ_UNAVAILABLE' using errcode='55000';end if;\n    select count(*)::integer,coalesce(jsonb_agg(group_row order by group_row->>'group_key'),'[]'::jsonb)\n      into v_d10_count,v_d10_rows from jsonb_array_elements(v_d10_groups->'groups') group_row\n      where group_row->>'group_key'=v_query_row_key and group_row->>'client_id'=v_client_id::text;\n    if v_d10_count<>1 then\n      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';end if;\n    v_query_count:=v_d10_count;\n    v_queries:=jsonb_build_object('rows',v_d10_rows,'total_count',v_d10_count,'next_cursor','','has_more',false,\n      'record_version',v_d10_groups->>'read_revision','stale',false,'origin','CHECK_ONLY_D10');\n    v_bulk_actions:='{}'::jsonb;\n  elsif v_query_row_key is not null then\n    -- The exact scoped target comes from the unchanged native query universe"
+    }
+  ],
+  "complete_reverse_to_current_ppv2": true,
+  "shared_d10_adapter_sha256": "7c6b3a3aad2d6a7b734996dc2ffc94efaf156039b459ac8b1e5da5886e329722",
+  "normal_d10_population_union_complete": false,
+  "independent_review_pending": true,
+  "mount_ready": false
+}

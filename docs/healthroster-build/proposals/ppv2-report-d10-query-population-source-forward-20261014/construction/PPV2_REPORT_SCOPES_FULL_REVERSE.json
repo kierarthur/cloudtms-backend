@@ -1,0 +1,19 @@
+{
+  "source_only": true,
+  "native": false,
+  "input_sha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121",
+  "forward_sha256": "48c48b34d9375c5418f60957a0906a2ce91b38d218dcb530f7bda46f611445c1",
+  "hunks": [
+    {
+      "before": "",
+      "after": "    union all\n    select g.id,g.display_name,g.source_family,rs.client_id,cl.name,rc.id,rc.scope_client_id,\n      rc.finalisation_week_ending,rc.cutoff_at_utc,rc.version,rc.current_complete_upload_id,rc.current_projection_publication_id,\n      rs.id,rs.version,rs.current_complete_upload_id,rs.current_projection_publication_id,\n      fr.id,case when fr.id is not null then 'FINAL_SOURCE' end,fr.finalised_at_utc,encode(fr.manifest_hash,'hex'),rs.cutoff_at_utc\n    from public.weekly_source_report_scopes rs join public.weekly_source_self_bill_reports sr on sr.id=rs.self_bill_report_id\n    join public.weekly_source_cycles rc on rc.id=rs.source_cycle_id\n    join public.weekly_source_groups g on g.id=rs.source_group_id and g.active and g.source_family='ROSTER'\n    join public.clients cl on cl.id=rs.client_id\n    left join public.weekly_source_final_revisions fr on fr.id=rs.current_final_revision_id\n      and fr.report_scope_id=rs.id and fr.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and fr.state='CURRENT'\n    -- Invoice-only report scopes are hidden from the reduced pay workspace.\n    where exists(select 1 from public.tms_users actor where actor.id=v_actor and actor.is_active\n      and lower(btrim(coalesce(actor.role,'')))='admin')\n      and (v_group is null or rs.source_group_id=v_group) and (v_client is null or rs.client_id=v_client)\n      and (v_week is null or rc.finalisation_week_ending=v_week)\n      and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=rs.source_group_id\n        and gc.client_id=rs.client_id and rc.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))\n",
+      "after_byte_offset": 5711
+    },
+    {
+      "before": "    select facts.*,bool_or(prepared) over(partition by cycle_id,client_id) client_has_prepared,\n",
+      "after": "    select facts.*,bool_or(prepared) over(partition by cycle_id,client_id,\n      case when exists(select 1 from public.weekly_source_report_scopes rs where rs.id=facts.report_scope_id and rs.self_bill_report_id is not null)\n        then report_scope_id end) client_has_prepared,\n",
+      "after_byte_offset": 7518
+    }
+  ],
+  "complete_reverse_to_current_ppv2": true
+}

@@ -1,0 +1,88 @@
+  -- One shared native parent census. It is read before filters/count/page and
+  -- is independent of Source publication. Source bulk proofs keep their own
+  -- original population and workspace version; no d10g_ key enters them.
+  if v_tab='queries' and v_group.source_family='ROSTER' then
+    for v_d10_scope in
+      select distinct membership.client_id,t.week_ending_date
+      from public.weekly_source_group_clients membership
+      cross join public.timesheets t
+      where membership.source_group_id=v_group.id
+        and t.week_ending_date between v_cycle.finalisation_week_ending-6 and v_cycle.finalisation_week_ending
+        and t.week_ending_date between membership.valid_from
+          and coalesce(membership.valid_to,'infinity'::date)
+        and (v_client_id is null or membership.client_id=v_client_id)
+        and (v_cycle.scope_client_id is null or membership.client_id=v_cycle.scope_client_id)
+        and (v_cycle.scope_client_id is not null or not exists(
+          select 1 from public.weekly_source_cycles preferred
+          where preferred.source_group_id=v_group.id and preferred.scope_client_id=membership.client_id
+            and preferred.finalisation_week_ending=v_cycle.finalisation_week_ending))
+      order by membership.client_id,t.week_ending_date
+    loop
+      -- The date is an actual native Timesheet week, not the group's calendar
+      -- label. The shared owner alone decides signed/agency eligibility.
+      v_d10_groups:=private.weekly_source_check_only_query_groups_v1(v_cycle.id,v_d10_scope.client_id,
+        jsonb_build_object('actor_user_id',v_actor,'source_group_id',v_group.id,
+          'week_ending',v_d10_scope.week_ending_date));
+      if v_d10_groups->>'contract' is distinct from 'WEEKLY_SOURCE_CHECK_ONLY_QUERY_GROUPS_V1'
+        or v_d10_groups->>'actor_user_id' is distinct from v_actor::text
+        or v_d10_groups->>'permission_view' is distinct from case when v_pay_view then 'PAY_READONLY' else 'ADMIN' end
+        or v_d10_groups#>>'{scope,source_group_id}' is distinct from v_group.id::text
+        or v_d10_groups#>>'{scope,source_cycle_id}' is distinct from v_cycle.id::text
+        or v_d10_groups#>>'{scope,client_id}' is distinct from v_d10_scope.client_id::text
+        or v_d10_groups#>>'{scope,week_ending}' is distinct from v_d10_scope.week_ending_date::text
+        or jsonb_typeof(v_d10_groups->'groups') is distinct from 'array'
+        or v_d10_groups->'source_outreach_eligible' is distinct from 'false'::jsonb
+        or v_d10_groups->'bulk_actions' is distinct from '{}'::jsonb
+        or coalesce(v_d10_groups->>'read_revision','')!~'^[0-9a-f]{64}$'
+        or coalesce(v_d10_groups->>'source_read_revision','')!~'^[0-9a-f]{64}$'
+        or (v_pay_view and v_d10_groups->'groups'<>'[]'::jsonb) then
+        raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_READ_UNAVAILABLE' using errcode='55000';
+      end if;
+      v_d10_revisions:=v_d10_revisions||jsonb_build_array(jsonb_build_object(
+        'client_id',v_d10_scope.client_id,'week_ending',v_d10_scope.week_ending_date,
+        'read_revision',v_d10_groups->>'read_revision',
+        'source_read_revision',v_d10_groups->>'source_read_revision'));
+      for v_d10_row in select value from jsonb_array_elements(v_d10_groups->'groups') loop
+        if v_d10_row->>'origin' is distinct from 'CHECK_ONLY_D10'
+          or v_d10_row->>'client_id' is distinct from v_d10_scope.client_id::text
+          or coalesce(v_d10_row->>'group_key','')!~'^d10g_[0-9a-f]{64}$'
+          or v_d10_row->>'row_key' is distinct from v_d10_row->>'group_key'
+          or v_d10_row->'source_outreach_eligible' is distinct from 'false'::jsonb
+          or v_d10_row->'outreach_eligible' is distinct from 'false'::jsonb
+          or v_d10_row->'manager_eligible' is distinct from 'false'::jsonb
+          or v_d10_row->'bulk_actions' is distinct from '{}'::jsonb then
+          raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_READ_UNAVAILABLE' using errcode='55000';
+        end if;
+        -- Native5804 owns the real subject keys, including an empty array for
+        -- unknown/reference-only facts. Never classify its display wording.
+        if jsonb_typeof(v_d10_row->'issue_filter_keys') is distinct from 'array'
+          or jsonb_array_length(v_d10_row->'issue_filter_keys')>3
+          or exists(select 1 from jsonb_array_elements(v_d10_row->'issue_filter_keys') k
+            where jsonb_typeof(k)<>'string' or k#>>'{}' not in ('TIMESHEET_MISSING','HOURS_DIFFER','MISSING_SHIFT'))
+          or (select count(*)<>count(distinct k) from jsonb_array_elements(v_d10_row->'issue_filter_keys') k) then
+          raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_FILTER_AUTHORITY_UNAVAILABLE' using errcode='55000';
+        end if;
+        v_d10_keys:=v_d10_keys||jsonb_build_array(v_d10_row->>'group_key');
+        if (v_query_row_key is null or v_d10_row->>'group_key'=v_query_row_key)
+          and coalesce(v_filters->>'status','UNRESOLVED') in ('UNRESOLVED','ALL')
+          and (nullif(btrim(coalesce(v_filters->>'candidate','')),'') is null
+            or private.weekly_source_query_ascii_fold_v1(v_d10_row->>'candidate')
+              like '%'||private.weekly_source_query_ascii_fold_v1(v_filters->>'candidate')||'%')
+          and (coalesce(v_filters->>'issue','ALL')='ALL'
+            or v_d10_row->'issue_filter_keys' ? (v_filters->>'issue')) then
+          v_d10_rows:=v_d10_rows||jsonb_build_array(v_d10_row);
+        end if;
+      end loop;
+    end loop;
+    if exists(select 1 from jsonb_array_elements(v_d10_keys) g group by g having count(*)<>1) then
+      raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_PARENT_AMBIGUOUS' using errcode='55000';
+    end if;
+  end if;
+  if v_tab='queries' then
+    v_cursor_view_version:=encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_QUERIES_POPULATION_CURSOR_V1',jsonb_build_object(
+        'actor_user_id',v_actor,'permission_view',case when v_pay_view then 'PAY_READONLY' else 'ADMIN' end,
+        'source_group_id',v_group.id,'source_cycle_id',v_cycle.id,'client_id',v_client_id,
+        'source_workspace_version',v_workspace_version,'d10_read_revisions',v_d10_revisions,
+        'filters',v_filters,'sort_key',v_sort_key,'sort_direction',v_sort_direction)),'hex');
+  end if;

@@ -1,0 +1,127 @@
+{
+  "schema": "PPV2_REPORT_D10_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "pure_tests": {
+    "tests": 40,
+    "passed": 40,
+    "failed": 0,
+    "kind": "UNIT_ONLY source-bound compatibility/reference models and whole reversals"
+  },
+  "syntax": [
+    "construction/workspace-population.test.mjs",
+    "generators/prepare-ppv2-report-d10-target-forward.mjs",
+    "generators/prepare-ppv2-normal-query-population-forward.mjs",
+    "generators/prepare-ppv2-d10-scope-forward.mjs"
+  ],
+  "lexical": [
+    {
+      "path": "construction/workspace.report-d10-population-forward.sqlinc",
+      "statements": 1,
+      "sha256": "e46d0fc92985d330fcf01d4464a327f169c98b33d99da8965443a52bc23fd9ef"
+    },
+    {
+      "path": "construction/scopes.report-d10-population-forward.sqlinc",
+      "statements": 1,
+      "sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    }
+  ],
+  "root_input_count": 3,
+  "root_saved_git_mismatches": 0,
+  "native_dependencies": [
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "packet_path": "native5804/wp_u3_check_only_query_groups.sqlinc",
+      "bytes": 17106,
+      "sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "packet_path": "native5804/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 22344,
+      "sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "packet_path": "native5804/wp_u3_client_week_context.sqlinc",
+      "bytes": 19999,
+      "sha256": "eaedf37a1a206d79a1130e463c9673bd7404573a05024a880da5534ae9f5cbcb",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/D10_GROUP_ABI.md",
+      "packet_path": "native5804/D10_GROUP_ABI.md",
+      "bytes": 8523,
+      "sha256": "2e5e97f4e3d402f4af11a8c0f1a1f0f0fc3c630cbf94685a50d6cbe27342f08f",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_PINS.json",
+      "packet_path": "native5804/SOURCE_PINS.json",
+      "bytes": 25748,
+      "sha256": "981725e963ccda516e21a396c59697c8ffebb6e11607d7b97381f53328ee988d",
+      "saved_current_equal": true
+    }
+  ],
+  "complete_reverse_layers": {
+    "workspace_report": 9,
+    "workspace_target": 6,
+    "workspace_population": 6,
+    "scopes_report": 2,
+    "scopes_population": 11
+  },
+  "raw_whitespace": [
+    {
+      "path": "construction/workspace.current-before.sqlinc",
+      "raw_diff_check_exit": 0,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    },
+    {
+      "path": "construction/workspace.root-report-overlay.sqlinc",
+      "raw_diff_check_exit": 1,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    },
+    {
+      "path": "construction/workspace.report-d10-target-forward.sqlinc",
+      "raw_diff_check_exit": 1,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    },
+    {
+      "path": "construction/workspace.report-d10-population-forward.sqlinc",
+      "raw_diff_check_exit": 1,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    },
+    {
+      "path": "construction/scopes.current-before.sqlinc",
+      "raw_diff_check_exit": 1,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    },
+    {
+      "path": "construction/scopes.root-report-overlay.sqlinc",
+      "raw_diff_check_exit": 1,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    },
+    {
+      "path": "construction/scopes.report-d10-population-forward.sqlinc",
+      "raw_diff_check_exit": 1,
+      "raw_diff_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "limits": "Raw source-copy whitespace not certified inherited or PASS. Full body/reverse retains original bytes."
+    }
+  ],
+  "compiled_native_proof": null,
+  "independent_review_pending": true,
+  "mount_ready": false
+}

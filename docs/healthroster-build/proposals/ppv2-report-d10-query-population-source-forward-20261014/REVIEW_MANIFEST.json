@@ -1,0 +1,166 @@
+{
+  "schema": "PPV2_REPORT_D10_QUERY_POPULATION_MANIFEST_V1",
+  "source_only": true,
+  "native": false,
+  "consumed_root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "predecessor_report_pin": "9a803fbe50cf45f5ec22c8cce19d71e25850351d",
+  "independent_review_pending": true,
+  "mount_ready": false,
+  "entries": [
+    {
+      "path": "FINAL_COMPOSITION_RECIPE.json",
+      "bytes": 3589,
+      "sha256": "c9a0ae4435190ef9f5f031400e568392ab1afa9747e362ff2642ab0e158797e7"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 2897,
+      "sha256": "2740a402f4fcb6ad6e80800818aa82b6fe985a1776581f87b26e5f49f3a2bfbd"
+    },
+    {
+      "path": "PURE_TEST_OUTPUT.txt",
+      "bytes": 3348,
+      "sha256": "1ee46efa97514c9901a805276fd691a1664f127cf754edf46d07db060d002e62"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 5518,
+      "sha256": "fc53c914f409569b4337cddd1c5dab58f57cdf830f9a3b0cf41392af13b05f3e"
+    },
+    {
+      "path": "construction/CURRENT_WORKSPACE_INPUT_PINS.json",
+      "bytes": 2003,
+      "sha256": "5e2711fdaf18c6c595526b142cbbf9f22f0ab2e55ec7fd0e34c3aebb3b991e0a"
+    },
+    {
+      "path": "construction/PPV2_D10_POPULATION_FULL_REVERSE.json",
+      "bytes": 46539,
+      "sha256": "6477393af1f5c92124dbca10d3dfabbdb6db35f93ed1beffe51d021fbffd1290"
+    },
+    {
+      "path": "construction/PPV2_D10_SCOPES_FULL_REVERSE.json",
+      "bytes": 10194,
+      "sha256": "c900d807d2c423c1d6bd7b791bcd7e9732fbf46b92ac150e5809fc15f8f9eef7"
+    },
+    {
+      "path": "construction/PPV2_REPORT_D10_TARGET_FULL_REVERSE.json",
+      "bytes": 8341,
+      "sha256": "600677549d4069629b659a29a9fba1c2a523fec6852bb11deded94d365bb9b4e"
+    },
+    {
+      "path": "construction/PPV2_REPORT_SCOPES_FULL_REVERSE.json",
+      "bytes": 2511,
+      "sha256": "236399d1c05803e410f41044d771114b3579f2bdd8cc3e706574d59a02a589dd"
+    },
+    {
+      "path": "construction/d10-census.fragment.sql.txt",
+      "bytes": 6295,
+      "sha256": "a7f9ec94d7fabdb4c196ea64a5f244ee9dec56002665544fffbd6db4b3f69b5e"
+    },
+    {
+      "path": "construction/d10-population-page.fragment.sql.txt",
+      "bytes": 3611,
+      "sha256": "75a9876541bad57a85a7fc4fb3f98760d95a5d4669624c003d66b979ef649a61"
+    },
+    {
+      "path": "construction/d10-scope-census.fragment.sql.txt",
+      "bytes": 5858,
+      "sha256": "8df8076da2779c0fe036bdabd3e25c67fc53a0373cac575a700db19e00d9064b"
+    },
+    {
+      "path": "construction/scopes.actual-overlay.diff",
+      "bytes": 3743,
+      "sha256": "1c4750d2a74953e602663fb4cf8da9a5814c7f640803be039a5358bb48a33192"
+    },
+    {
+      "path": "construction/scopes.current-before.sqlinc",
+      "bytes": 9780,
+      "sha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121"
+    },
+    {
+      "path": "construction/scopes.report-d10-population-forward.sqlinc",
+      "bytes": 18701,
+      "sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    },
+    {
+      "path": "construction/scopes.root-report-overlay.sqlinc",
+      "bytes": 11629,
+      "sha256": "48c48b34d9375c5418f60957a0906a2ce91b38d218dcb530f7bda46f611445c1"
+    },
+    {
+      "path": "construction/workspace-population.test.mjs",
+      "bytes": 13554,
+      "sha256": "7868006f2f1aa370001a3aaf1c172800ac6efac914dbc0a2d1e1bd994a9e8d3f"
+    },
+    {
+      "path": "construction/workspace.actual-overlay.diff",
+      "bytes": 6832,
+      "sha256": "f6be658b3b7e638083fa9f63f7822c82df903529d74bb56b45eafd0c67414bf4"
+    },
+    {
+      "path": "construction/workspace.current-before.sqlinc",
+      "bytes": 117953,
+      "sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44"
+    },
+    {
+      "path": "construction/workspace.report-d10-population-forward.sqlinc",
+      "bytes": 129458,
+      "sha256": "e46d0fc92985d330fcf01d4464a327f169c98b33d99da8965443a52bc23fd9ef"
+    },
+    {
+      "path": "construction/workspace.report-d10-target-forward.sqlinc",
+      "bytes": 122306,
+      "sha256": "a2db4af6d55764c08b96651da6feb47db7ece01b706b2a7b87a04d58a340b019"
+    },
+    {
+      "path": "construction/workspace.root-report-overlay.sqlinc",
+      "bytes": 119872,
+      "sha256": "a90ff894c594e2c74a12851d8f31ad67620038ca716967833bd43698c584874f"
+    },
+    {
+      "path": "generators/prepare-ppv2-d10-scope-forward.mjs",
+      "bytes": 5304,
+      "sha256": "28d2344114b02eea0dbc753ff1cc9c8b36f9b441e8db0632a27b8d11ecd87278"
+    },
+    {
+      "path": "generators/prepare-ppv2-normal-query-population-forward.mjs",
+      "bytes": 4105,
+      "sha256": "a5d45b94cf537e17516aeb9f58b867980f0d5c3cb29a75b001761a8603980863"
+    },
+    {
+      "path": "generators/prepare-ppv2-report-d10-target-forward.mjs",
+      "bytes": 6925,
+      "sha256": "5856c803edc2d5620b20429f105cce61e8fab6e28ebb5d550de4a39146a10f44"
+    },
+    {
+      "path": "native5804/D10_GROUP_ABI.md",
+      "bytes": 8523,
+      "sha256": "2e5e97f4e3d402f4af11a8c0f1a1f0f0fc3c630cbf94685a50d6cbe27342f08f"
+    },
+    {
+      "path": "native5804/SOURCE_PINS.json",
+      "bytes": 25748,
+      "sha256": "981725e963ccda516e21a396c59697c8ffebb6e11607d7b97381f53328ee988d"
+    },
+    {
+      "path": "native5804/wp_u3_check_only_query_groups.sqlinc",
+      "bytes": 17106,
+      "sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc"
+    },
+    {
+      "path": "native5804/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 22344,
+      "sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd"
+    },
+    {
+      "path": "native5804/wp_u3_client_week_context.sqlinc",
+      "bytes": 19999,
+      "sha256": "eaedf37a1a206d79a1130e463c9673bd7404573a05024a880da5534ae9f5cbcb"
+    },
+    {
+      "path": "reference/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    }
+  ]
+}

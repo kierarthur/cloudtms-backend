@@ -1,0 +1,71 @@
+{
+  "schema": "PPV2_REPORT_D10_FINAL_OWNER_RECIPE_V1",
+  "source_only": true,
+  "native": false,
+  "consumed_root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "observed_root_head": "14dabc880b510e5d7a95154f3c4895f718cb65c4",
+  "predecessor_report_head": "9a803fbe50cf45f5ec22c8cce19d71e25850351d",
+  "final_replacements": [
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "before_sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+      "source": "construction/workspace.report-d10-population-forward.sqlinc",
+      "after_sha256": "e46d0fc92985d330fcf01d4464a327f169c98b33d99da8965443a52bc23fd9ef"
+    },
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "before_sha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121",
+      "source": "construction/scopes.report-d10-population-forward.sqlinc",
+      "after_sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    }
+  ],
+  "native_dependencies": [
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "packet_path": "native5804/wp_u3_check_only_query_groups.sqlinc",
+      "bytes": 17106,
+      "sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "packet_path": "native5804/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 22344,
+      "sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "packet_path": "native5804/wp_u3_client_week_context.sqlinc",
+      "bytes": 19999,
+      "sha256": "eaedf37a1a206d79a1130e463c9673bd7404573a05024a880da5534ae9f5cbcb",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/D10_GROUP_ABI.md",
+      "packet_path": "native5804/D10_GROUP_ABI.md",
+      "bytes": 8523,
+      "sha256": "2e5e97f4e3d402f4af11a8c0f1a1f0f0fc3c630cbf94685a50d6cbe27342f08f",
+      "saved_current_equal": true
+    },
+    {
+      "commit": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_PINS.json",
+      "packet_path": "native5804/SOURCE_PINS.json",
+      "bytes": 25748,
+      "sha256": "981725e963ccda516e21a396c59697c8ffebb6e11607d7b97381f53328ee988d",
+      "saved_current_equal": true
+    }
+  ],
+  "new_report_signatures": [],
+  "new_store_columns_grants": [],
+  "order": "Root must choose a NEW final chronological repeatable after current0044 and canonical-contain these two executable leaves plus literal relative includes. Existing native5804 private dependency definitions must precede final consumers; preserve their owner-only ACL/classification. Existing public service-only ACLs remain, followed by NOTIFY pgrst reload schema. Do not install the older1344 leaf alone or any intermediate target body.",
+  "compiled_contract_sha256": null,
+  "installed_catalogue_sha256": null,
+  "mount_ready": false,
+  "independent_review_pending": true
+}

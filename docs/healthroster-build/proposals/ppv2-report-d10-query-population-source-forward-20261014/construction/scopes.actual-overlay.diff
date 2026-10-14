@@ -1,0 +1,37 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\install2-agency-current-native-20261014\\ppv2-final-workspace-construction\\scopes.current-before.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\install2-agency-current-native-20261014\\ppv2-final-workspace-construction\\scopes.root-report-overlay.sqlinc"
+index 8606c7cb..72e26146 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\install2-agency-current-native-20261014\\ppv2-final-workspace-construction\\scopes.current-before.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\install2-agency-current-native-20261014\\ppv2-final-workspace-construction\\scopes.root-report-overlay.sqlinc"	
+@@ -91,11 +91,31 @@ begin
+         and revision.report_scope_id is not distinct from report.id
+       order by revision.revision_number desc,revision.id limit 1
+     ) final_report on true
++    union all
++    select g.id,g.display_name,g.source_family,rs.client_id,cl.name,rc.id,rc.scope_client_id,
++      rc.finalisation_week_ending,rc.cutoff_at_utc,rc.version,rc.current_complete_upload_id,rc.current_projection_publication_id,
++      rs.id,rs.version,rs.current_complete_upload_id,rs.current_projection_publication_id,
++      fr.id,case when fr.id is not null then 'FINAL_SOURCE' end,fr.finalised_at_utc,encode(fr.manifest_hash,'hex'),rs.cutoff_at_utc
++    from public.weekly_source_report_scopes rs join public.weekly_source_self_bill_reports sr on sr.id=rs.self_bill_report_id
++    join public.weekly_source_cycles rc on rc.id=rs.source_cycle_id
++    join public.weekly_source_groups g on g.id=rs.source_group_id and g.active and g.source_family='ROSTER'
++    join public.clients cl on cl.id=rs.client_id
++    left join public.weekly_source_final_revisions fr on fr.id=rs.current_final_revision_id
++      and fr.report_scope_id=rs.id and fr.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and fr.state='CURRENT'
++    -- Invoice-only report scopes are hidden from the reduced pay workspace.
++    where exists(select 1 from public.tms_users actor where actor.id=v_actor and actor.is_active
++      and lower(btrim(coalesce(actor.role,'')))='admin')
++      and (v_group is null or rs.source_group_id=v_group) and (v_client is null or rs.client_id=v_client)
++      and (v_week is null or rc.finalisation_week_ending=v_week)
++      and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=rs.source_group_id
++        and gc.client_id=rs.client_id and rc.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))
+   ), facts as (
+     select scopes.*,private.weekly_source_import_is_prepared_v1(scopes.upload_id) prepared
+     from scopes
+   ), ordered as (
+-    select facts.*,bool_or(prepared) over(partition by cycle_id,client_id) client_has_prepared,
++    select facts.*,bool_or(prepared) over(partition by cycle_id,client_id,
++      case when exists(select 1 from public.weekly_source_report_scopes rs where rs.id=facts.report_scope_id and rs.self_bill_report_id is not null)
++        then report_scope_id end) client_has_prepared,
+       row_number() over(order by private.weekly_source_query_ascii_fold_v1(client_name) collate "C",
+       client_id,finalisation_week_ending desc,group_id,report_scope_id nulls first) ordinal
+     from facts

@@ -1,0 +1,39 @@
+  if v_tab='queries' then
+    -- The complete rendered Source population and native D10 census meet only
+    -- here. Native Source row actions/proofs and D10 action bindings are retained.
+    v_query_population:=coalesce(v_queries->'rows','[]'::jsonb)||v_d10_rows;
+    if exists(select 1 from jsonb_array_elements(v_query_population) g
+      group by g->>'group_key' having count(*)<>1) then
+      raise exception 'WEEKLY_SOURCE_QUERY_PARENT_AMBIGUOUS' using errcode='55000';end if;
+    v_total:=jsonb_array_length(v_query_population);
+    if v_query_row_key is not null and v_total<>1 then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';end if;
+    select coalesce(jsonb_agg(page.row_json order by page.position),'[]'::jsonb) into v_rows
+    from (
+      select (g.value-array['_query_first_seen_at_utc','first_seen_at_utc','issue_filter_keys']) row_json,
+        row_number() over(order by
+          case when v_sort_key='candidate' and v_sort_direction='asc' then private.weekly_source_query_ascii_fold_v1(g.value->>'candidate') end collate "C" asc,
+          case when v_sort_key='candidate' and v_sort_direction='desc' then private.weekly_source_query_ascii_fold_v1(g.value->>'candidate') end collate "C" desc,
+          case when v_sort_key='client' and v_sort_direction='asc' then private.weekly_source_query_ascii_fold_v1(g.value->>'client') end collate "C" asc,
+          case when v_sort_key='client' and v_sort_direction='desc' then private.weekly_source_query_ascii_fold_v1(g.value->>'client') end collate "C" desc,
+          case when v_sort_key='issues' and v_sort_direction='asc' then (g.value->>'issues')::integer end asc,
+          case when v_sort_key='issues' and v_sort_direction='desc' then (g.value->>'issues')::integer end desc,
+          case when v_sort_key='candidate_asked' and v_sort_direction='asc' then (g.value->>'candidate_asked')::boolean end asc,
+          case when v_sort_key='candidate_asked' and v_sort_direction='desc' then (g.value->>'candidate_asked')::boolean end desc,
+          case when v_sort_key='manager_informed' and v_sort_direction='asc' then (g.value->>'manager_informed')::boolean end asc,
+          case when v_sort_key='manager_informed' and v_sort_direction='desc' then (g.value->>'manager_informed')::boolean end desc,
+          case when v_sort_key='status' and v_sort_direction='asc' then g.value#>>'{status,text}' end collate "C" asc,
+          case when v_sort_key='status' and v_sort_direction='desc' then g.value#>>'{status,text}' end collate "C" desc,
+          case when v_sort_key='age' and v_sort_direction='asc' then coalesce(g.value->>'_query_first_seen_at_utc',g.value->>'first_seen_at_utc')::timestamptz end asc,
+          case when v_sort_key='age' and v_sort_direction='desc' then coalesce(g.value->>'_query_first_seen_at_utc',g.value->>'first_seen_at_utc')::timestamptz end desc,
+          (g.value->>'group_key') collate "C") position
+      from jsonb_array_elements(v_query_population) g(value)
+    ) page where page.position>v_offset and page.position<=v_offset+v_limit;
+    v_next_cursor:=case when v_offset+v_limit<v_total
+      then v_cursor_view_version||':'||(v_offset+v_limit)::text else '' end;
+    v_query_count:=v_total;
+    v_queries:=jsonb_build_object('rows',v_rows,'total_count',v_total,'next_cursor',v_next_cursor,
+      'has_more',v_next_cursor<>'','record_version',v_cursor_view_version,'stale',false);
+    if v_query_row_key is not null then v_bulk_actions:='{}'::jsonb;end if;
+  end if;
+  v_queries:=v_queries||pg_catalog.jsonb_build_object('bulk_actions',v_bulk_actions);

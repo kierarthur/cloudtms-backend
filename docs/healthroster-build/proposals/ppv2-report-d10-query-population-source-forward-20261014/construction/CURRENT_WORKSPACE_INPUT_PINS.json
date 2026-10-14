@@ -1,0 +1,42 @@
+{
+  "source_only": true,
+  "native": false,
+  "input_root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "bytes": 311541,
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "bytes": 119953,
+      "sha256": "c968bad8bd17e046623d971c99c0e2a662e0230350c7edfaed0d14031835d6f4"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "bytes": 11717,
+      "sha256": "9ec33620f3e240e87d4160dc86df894d2b6a1d15b6f66af354ac2daf1e2f15cf"
+    }
+  ],
+  "owners": [
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "current_source": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "current_definition_sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+      "overlay_source": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "overlay_definition_sha256": "a90ff894c594e2c74a12851d8f31ad67620038ca716967833bd43698c584874f",
+      "difference_hunks": 7
+    },
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "current_source": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "current_definition_sha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121",
+      "overlay_source": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "overlay_definition_sha256": "48c48b34d9375c5418f60957a0906a2ce91b38d218dcb530f7bda46f611445c1",
+      "difference_hunks": 1
+    }
+  ],
+  "compiled_contract_sha256": null,
+  "mount_ready": false
+}
