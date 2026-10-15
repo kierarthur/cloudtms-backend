@@ -1,0 +1,62 @@
+create or replace function private.weekly_source_checklist_information_hold_facts_v1(
+  p_raw jsonb,p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; decision public.import_review_decisions%rowtype;
+  facts jsonb; hash text; count_rows integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select u.* into actor from public.tms_users u where u.id=p_actor_user_id and u.is_active and lower(btrim(coalesce(u.role,'')))='admin';
+  if actor.id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_ACTOR_DENIED' using errcode='42501'; end if;
+  if p_raw->>'item_kind' is distinct from 'SOURCE_INFORMATION'
+    or p_raw->'counts_for_row_admission' is distinct from 'false'::jsonb
+    or p_raw->'timesheet_id' is distinct from 'null'::jsonb
+    or p_raw->>'client_id' is distinct from p_scope->>'client_id'
+    or p_raw->>'week_ending' is distinct from p_scope->>'week_ending'
+    or p_raw->>'source_group_id' is distinct from p_scope->>'source_group_id'
+    or p_raw->>'source_cycle_id' is distinct from p_scope->>'source_cycle_id' then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_INFORMATION_FINANCIAL_SUBJECT_UNPROVED' using errcode='55000';
+  end if;
+  select count(*),(array_agg(d.action_id order by d.action_id))[1] into count_rows,decision.action_id
+    from public.import_review_decisions d
+    join public.import_review_states st on st.import_id=d.import_id and st.preview_generation=d.preview_generation
+      and st.superseded_at_utc is null and st.abandoned_at_utc is null
+    join public.hr_imports hi on hi.id=d.import_id and hi.pruned_at is null
+      and hi.source_system::text in('HEALTHROSTER','HEALTHROSTER_DAILY')
+    join public.hr_rows hr on hr.id=d.hr_row_id and hr.import_id=d.import_id
+    where d.import_id=(p_raw->>'query_import_id')::uuid and d.hr_row_id=(p_raw->>'hr_row_id')::uuid
+      and d.action_id=p_raw->>'action_id' and d.evidence_fingerprint=p_raw->>'evidence_fingerprint'
+      and d.client_id=(p_scope->>'client_id')::uuid and d.timesheet_id is null and d.is_current and not d.blocking
+      and d.action_kind='ADVISORY' and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
+      and d.summary_json->>'reason_code'=p_raw->>'native_reason_code'
+      and d.summary_json->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED',
+        'WEEKLY_TIMESHEET_AWAITING_MANAGER_APPROVAL','WEEKLY_TIMESHEET_COMPLETING')
+      and hr.date_local=(p_raw->>'work_date')::date
+      and hr.date_local between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date
+      and exists(select 1 from public.weekly_source_cycles c
+        join public.weekly_source_groups g on g.id=c.source_group_id and g.active and g.source_family='ROSTER'
+        join public.weekly_source_group_clients m on m.source_group_id=g.id and m.client_id=d.client_id
+        join public.weekly_source_client_policies p on p.source_group_id=g.id and p.client_id=d.client_id
+        join public.weekly_source_group_rule_assignments a on a.source_group_id=g.id
+          and a.feature_enabled and a.feature_purpose='SIGNED_CHECK_ONLY' and a.rule_set_version_id is null
+        where c.id=(p_scope->>'source_cycle_id')::uuid and g.id=(p_scope->>'source_group_id')::uuid
+          and ((p_scope->>'week_ending')::date) between c.finalisation_week_ending-6 and c.finalisation_week_ending
+          and (c.scope_client_id is null or c.scope_client_id=d.client_id)
+          and hr.date_local between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+          and ((p_scope->>'week_ending')::date) between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+          and hr.date_local between p.effective_from and coalesce(p.effective_to,'infinity'::date)
+          and ((p_scope->>'week_ending')::date) between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)
+          and p.authority_mode='TIMESHEET_AUTHORITY' and p.document_mode='INVOICE_EVIDENCE_REQUIRED' and not p.self_bill_enabled);
+  if count_rows<>1 then raise exception 'WEEKLY_SOURCE_CHECKLIST_INFORMATION_FINANCIAL_SUBJECT_UNPROVED' using errcode='55000'; end if;
+  select d.* into strict decision from public.import_review_decisions d where d.action_id=decision.action_id;
+  facts:=jsonb_build_object('owner','private.weekly_source_check_only_query_rows_v1','scope',p_scope,
+    'decision',to_jsonb(decision),'financial_subject','NONE','counts_for_row_admission',false);
+  hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_INFORMATION_FINANCIAL_FACTS_V1',facts),'hex');
+  return jsonb_build_object('native_facts',facts,'hold',jsonb_build_object('holds_pay',false,'holds_pay_scope',null,
+    'withheld_amount_pence','0','holds_invoice',false,'pending_decision',false,
+    'authority',jsonb_build_object('owner','SOURCE','hash',hash,'withholding_known',true)));
+end;
+$function$;
+alter function private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,29 @@
+create or replace function public.weekly_source_submitted_timesheet_prepare_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; timesheet_id uuid; result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','timesheet_id'],'WEEKLY_SOURCE_SUBMISSION_CYCLE_REQUEST_INVALID');
+  if jsonb_typeof(p_request->'actor_user_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'timesheet_id') is distinct from 'string' then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  timesheet_id:=(p_request->>'timesheet_id')::uuid;
+  select u.* into actor from public.tms_users u where u.id=(p_request->>'actor_user_id')::uuid and u.is_active;
+  if actor.id is null or actor.role::text is distinct from 'admin' then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_ACTOR_FORBIDDEN' using errcode='42501';
+  end if;
+  -- The existing dispatcher resolves fresh actual submission, Client/date,
+  -- dated signed membership/policy, and the same native I1/F1/lifecycle/G1.
+  -- Ordinary, planned/draft/expense-only/P0-only and non-signed rows are noops.
+  result:=private.weekly_source_checklist_submission_cycle_prepare_v1(timesheet_id,actor.id);
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_SUBMITTED_TIMESHEET_PREPARE_V1',
+    'actor_user_id',actor.id,'timesheet_id',timesheet_id,'result',result);
+end;
+$function$;
+alter function public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb) to service_role;

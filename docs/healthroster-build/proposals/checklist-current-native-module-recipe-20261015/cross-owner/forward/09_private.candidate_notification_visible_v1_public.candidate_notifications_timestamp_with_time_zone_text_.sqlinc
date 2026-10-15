@@ -1,0 +1,115 @@
+create or replace function private.candidate_notification_visible_v1(
+  p_notification public.candidate_notifications, p_now_utc timestamptz,
+  p_restored_state text default null
+) returns boolean language plpgsql stable security definer set search_path = ''
+as $function$
+declare
+  v_state text:=coalesce(p_restored_state,p_notification.state);
+  v_generation uuid;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_component public.candidate_expense_components%rowtype;
+  v_component_generation integer;
+begin
+  if v_state not in ('READ','UNREAD') then return false; end if;
+  -- Apply retention and explicit retirement even when evaluating a deleted
+  -- notification's prior state for Undo. Lifecycle branches cannot bypass them.
+  if p_notification.created_at_utc <= p_now_utc
+    - (case when v_state='READ' then interval '30 days' else interval '90 days' end)
+    or p_notification.deep_link_json->'obsolete'='true'::jsonb then return false; end if;
+  if p_notification.event_type='CHECK_ONLY_TIMESHEET_REMINDER' then
+    -- Purpose-bound in-app reminder: preserve common retention/Undo semantics
+    -- above, then delegate the same pure native-action/submission observation.
+    if pg_catalog.jsonb_typeof(p_notification.template_params->'scope') is distinct from 'object'
+      or pg_catalog.jsonb_typeof(p_notification.template_params->'native_action') is distinct from 'object'
+      or p_notification.candidate_id is null then return false; end if;
+    if not exists(select 1 from public.candidate_app_global_membership_links link
+      join public.candidate_app_accounts account on account.id=link.account_id
+      join public.weekly_source_groups source_group on source_group.environment=account.environment and source_group.active
+      where link.membership_id::text=p_notification.template_params->>'membership_id'
+        and link.account_id=p_notification.account_id and link.candidate_id=p_notification.candidate_id
+        and link.state='ACTIVE' and account.status='ACTIVE'
+        and source_group.id::text=p_notification.template_params#>>'{scope,source_group_id}') then return false; end if;
+    begin
+      return exists(select 1 from private.weekly_source_check_only_candidate_reminder_subject_v1(
+        p_notification.template_params->'scope',p_notification.template_params->>'action_id',p_notification.candidate_id) subject
+        where subject->'current_native_action'='true'::jsonb and subject->'actual_submission_present'='false'::jsonb
+          and subject->'native_action'=p_notification.template_params->'native_action');
+    exception when invalid_text_representation or invalid_parameter_value then return false; end;
+  end if;
+  if p_notification.deep_link_json->>'destination'='WEEKLY_SOURCE_REQUEST' then
+    begin v_generation:=(p_notification.deep_link_json->>'request_id')::uuid;
+    exception when invalid_text_representation then return false; end;
+    return exists(
+      select 1 from public.weekly_candidate_outreach_generations generation
+      where generation.id=v_generation and generation.candidate_id=p_notification.candidate_id
+        and generation.state='ACTIVE'
+        and private.weekly_source_candidate_generation_current_v1(generation.id)
+        and (
+          (generation.request_kind='SUBMIT_TIMESHEET' and exists(
+            select 1 from public.weekly_timesheet_submission_requests request
+            join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+            where request.candidate_cohort_id=generation.candidate_cohort_id
+              and request.source_cycle_id=generation.source_cycle_id
+              and request.candidate_id=generation.candidate_id
+              and request.request_generation=generation.generation_number
+              and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING'
+          )) or
+          (generation.request_kind='CHECK_HOURS' and p_now_utc<=generation.deadline_at_utc and exists(
+            select 1 from public.weekly_candidate_outreach_memberships membership
+            join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+            where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE'
+              and incident.state='OPEN' and not private.weekly_source_covered_hours_incident_v1(incident.id)
+          ))
+        )
+    );
+  end if;
+  -- Category rejection remains actionable even when its now-empty parent was
+  -- finalised/cancelled. Exact component lineage takes precedence over parent state.
+  if p_notification.event_type='OFFICE_REJECTED'
+     and p_notification.template_params->>'resubmission_scope'='EXPENSE_CATEGORY' then
+    begin
+      select * into v_component from public.candidate_expense_components component
+      where component.expense_component_id=(p_notification.template_params->>'expense_component_id')::uuid
+        and component.workflow_id=p_notification.workflow_id;
+    exception when invalid_text_representation then return false; end;
+    if not found then return false; end if;
+    select event.component_generation into v_component_generation
+    from public.candidate_expense_component_events event
+    where event.expense_component_id=v_component.expense_component_id
+      and event.event_type='OFFICE_REJECTED' and event.occurred_at_utc=p_notification.created_at_utc
+    order by event.component_generation desc limit 1;
+    -- Missing historical metadata is not permission to discard an unresolved rejection.
+    if v_component_generation is not null and v_component.component_generation<>v_component_generation then return false; end if;
+    if v_component.lifecycle_state<>'OFFICE_REJECTED' then return false; end if;
+    if exists(select 1 from public.candidate_expense_operations operation
+      where operation.action_code='RESUBMIT_EXPENSE_CATEGORY' and operation.state='COMMITTED'
+        and operation.candidate_id=p_notification.candidate_id
+        and operation.result_json->>'source_expense_component_id'=v_component.expense_component_id::text
+        and operation.result_json->>'source_component_generation'=v_component_generation::text
+    ) then return false; end if;
+    return true;
+  end if;
+  if p_notification.workflow_id is not null then
+    select * into v_workflow from public.candidate_submission_workflows workflow
+    where workflow.id=p_notification.workflow_id and workflow.account_id=p_notification.account_id
+      and workflow.candidate_id=p_notification.candidate_id;
+    if not found then return false; end if;
+    if p_notification.event_type='PAPER_PACK_READY' then
+      return v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN'
+        and p_notification.template_params->>'workflow_generation'=v_workflow.generation::text
+        and v_workflow.paper_return_manifest_sha256 is not null
+        and p_notification.dedupe_key like '%:'||pg_catalog.encode(v_workflow.paper_return_manifest_sha256,'hex');
+    end if;
+    if p_notification.event_type in ('OFFICE_REJECTED','MANAGER_REFUSED') then
+      return v_workflow.state in ('REJECTED','REFUSED')
+        and not private._candidate_rejection_replaced_v1(v_workflow.id);
+    end if;
+    if v_workflow.state in ('CANCELLED','EXPIRED','SUPERSEDED')
+      and p_notification.event_type not in ('CLAIM_CANCELLED','EXPENSE_CLAIM_CANCELLED','CLAIM_WITHDRAWN','EXPENSE_WITHDRAWN')
+      then return false; end if;
+  end if;
+  return true;
+end;
+$function$;
+alter function private.candidate_notification_visible_v1(public.candidate_notifications,timestamptz,text) owner to postgres;
+revoke all on function private.candidate_notification_visible_v1(public.candidate_notifications,timestamptz,text) from public,anon,authenticated,service_role;

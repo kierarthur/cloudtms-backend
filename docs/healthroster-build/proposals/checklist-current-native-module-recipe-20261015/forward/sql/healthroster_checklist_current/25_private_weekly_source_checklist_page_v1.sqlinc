@@ -1,0 +1,84 @@
+create or replace function private.weekly_source_checklist_page_v1(
+  p_records jsonb,p_request jsonb,p_actor uuid,p_view text,p_binding text,p_revision text
+) returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  command text:=p_request->>'command'; direction text:=p_request->>'direction';
+  page_limit integer:=(p_request->>'limit')::integer; token jsonb; anchor jsonb;
+  selected jsonb; page jsonb; last_record jsonb; more boolean; after_key jsonb;
+begin
+  if jsonb_typeof(p_records) is distinct from 'array' or p_view not in('ADMIN','PAY_READONLY')
+    or p_binding !~ '^[0-9a-f]{64}$' or p_revision !~ '^[0-9a-f]{64}$'
+    or command not in('CHECKLIST','CHECKLIST_ISSUES') or direction not in('ASC','DESC')
+    or page_limit not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_RESPONSE_INVALID' using errcode='55000';
+  end if;
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      token:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      perform private._weekly_source_settings_assert_request_v1(token,
+        array['contract','binding','read_revision','after'],'CURSOR');
+      if token->>'contract' is distinct from 'WEEKLY_SOURCE_CHECKLIST_CURSOR_V1'
+        or token->>'binding' is distinct from p_binding or token->>'read_revision' is distinct from p_revision
+        or jsonb_typeof(token->'after') is distinct from 'array'
+        or jsonb_array_length(token->'after')<>6
+        -- A cursor must name an actual admitted row in this exact revision.
+        -- A changed/closed subject cannot be used to manufacture an empty end.
+        or not exists(select 1 from jsonb_array_elements(p_records) r where r->'_key'=token->'after') then
+        raise exception 'cursor';
+      end if;
+      after_key:=token->'after';
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+    end;
+  end if;
+  if nullif(p_request->>'anchor','') is not null then
+    begin
+      anchor:=convert_from(decode(p_request->>'anchor','base64'),'UTF8')::jsonb;
+      perform private._weekly_source_settings_assert_request_v1(anchor,array['contract','binding','identity'],'ANCHOR');
+      if anchor->>'contract' is distinct from 'WEEKLY_SOURCE_CHECKLIST_ANCHOR_V1'
+        or anchor->>'binding' is distinct from p_binding
+        or jsonb_typeof(anchor->'identity') is distinct from 'string'
+        or length(anchor->>'identity') not between 1 and 512 then raise exception 'anchor'; end if;
+      -- Anchored refresh starts at the origin. The Office consumes its previous
+      -- prefix and finds the nearest surviving visible identity itself.
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+    end;
+  end if;
+  with candidates as (
+    select r from jsonb_array_elements(p_records) r
+    where after_key is null
+      or (direction='ASC' and (r#>>'{_key,0}') collate "C">(after_key->>0) collate "C")
+      or (direction='DESC' and (r#>>'{_key,0}') collate "C"<(after_key->>0) collate "C")
+      or (r#>>'{_key,0}'=after_key->>0 and
+        ((r#>>'{_key,1}') collate "C",(r#>>'{_key,2}') collate "C",(r#>>'{_key,3}') collate "C",(r#>>'{_key,4}') collate "C",(r#>>'{_key,5}') collate "C")>
+        ((after_key->>1) collate "C",(after_key->>2) collate "C",(after_key->>3) collate "C",(after_key->>4) collate "C",(after_key->>5) collate "C"))
+    order by case when direction='ASC' then r#>>'{_key,0}' end collate "C" asc,
+      case when direction='DESC' then r#>>'{_key,0}' end collate "C" desc,
+      r#>>'{_key,1}' collate "C",r#>>'{_key,2}' collate "C",r#>>'{_key,3}' collate "C",
+      r#>>'{_key,4}' collate "C",r#>>'{_key,5}' collate "C"
+    limit page_limit+1
+  ) select coalesce(jsonb_agg(r order by
+      case when direction='ASC' then r#>>'{_key,0}' end collate "C" asc,
+      case when direction='DESC' then r#>>'{_key,0}' end collate "C" desc,
+      r#>>'{_key,1}' collate "C",r#>>'{_key,2}' collate "C",r#>>'{_key,3}' collate "C",
+      r#>>'{_key,4}' collate "C",r#>>'{_key,5}' collate "C"),'[]'::jsonb),count(*)>page_limit into selected,more from candidates;
+  if more then selected:=selected-page_limit; end if;
+  last_record:=selected->(jsonb_array_length(selected)-1);
+  select coalesce(jsonb_agg(r-'_key' order by ordinal),'[]'::jsonb) into page from jsonb_array_elements(selected) with ordinality a(r,ordinal);
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_CHECKLIST_V1','command',command,
+    'actor_user_id',p_actor,'permission_view',p_view,'binding',p_binding,'read_revision',p_revision,
+    'rows',case when command='CHECKLIST' then page else '[]'::jsonb end,
+    'items',case when command='CHECKLIST_ISSUES' then page else '[]'::jsonb end,
+    'has_more',more,'next_cursor',case when more then replace(encode(convert_to(jsonb_build_object(
+      'contract','WEEKLY_SOURCE_CHECKLIST_CURSOR_V1','binding',p_binding,'read_revision',p_revision,
+      'after',last_record->'_key')::text,'UTF8'),'base64'),chr(10),'') end,
+    'refresh_required',false,'anchor',case when last_record is not null then replace(encode(convert_to(jsonb_build_object(
+      'contract','WEEKLY_SOURCE_CHECKLIST_ANCHOR_V1','binding',p_binding,
+      'identity',coalesce(last_record->>'row_id',last_record->>'item_id'))::text,'UTF8'),'base64'),chr(10),'') end);
+end;
+$function$;
+alter function private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text) owner to postgres;
+revoke all on function private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text) from public,anon,authenticated,service_role;

@@ -1,0 +1,13 @@
+create or replace function private.bpay_next_workbench_work_members_v1(p_work_id uuid,p_revision_id uuid)
+returns table(component_key text,approved_line_id uuid,approved_segment_id uuid,segment_key text,
+  component_kind text,tax_treatment text,work_date date,approved_quantity numeric,unit_label text,
+  approved_amount numeric,realised_amount numeric,held_amount numeric,source_pay_channel text,
+  parent_complete boolean,segment_attribution_complete boolean)
+language plpgsql security definer set search_path=pg_catalog,private
+as $function$
+begin
+  return query select * from private.weekly_source_checklist_native_members_core_v1(p_work_id,p_revision_id,true);
+end
+$function$;
+alter function private.bpay_next_workbench_work_members_v1(uuid,uuid) owner to postgres;
+revoke all on function private.bpay_next_workbench_work_members_v1(uuid,uuid) from public,anon,authenticated,service_role;

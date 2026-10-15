@@ -1,0 +1,41 @@
+create or replace function public.weekly_source_invoice_hold_release_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare actor uuid; row_id uuid; expected_hash bytea; expected_version bigint; kind text; choice text;
+  s public.weekly_source_upload_rows%rowtype; u public.weekly_source_uploads%rowtype; c public.weekly_source_cycles%rowtype;
+  g public.weekly_source_groups%rowtype; scope_row public.weekly_source_report_scopes%rowtype; rules jsonb; v_client_id uuid; existing public.weekly_source_invoice_hold_releases%rowtype;
+  net bigint; vat bigint; gross bigint; h bytea; id uuid; native_context jsonb;
+begin
+  native_context:=private.weekly_source_invoice_hold_release_context_core_v1(p_request,true);
+  actor:=(native_context->>'actor_user_id')::uuid;row_id:=(native_context->>'upload_row_id')::uuid;
+  expected_hash:=decode(native_context->>'expected_source_row_hash','hex');expected_version:=(native_context->>'expected_authority_scope_version')::bigint;
+  kind:=native_context->>'hold_kind';choice:=native_context->>'choice';rules:=native_context->'rules';v_client_id:=(native_context->>'client_id')::uuid;
+  s:=jsonb_populate_record(null::public.weekly_source_upload_rows,native_context->'row');
+  u:=jsonb_populate_record(null::public.weekly_source_uploads,native_context->'upload');
+  g:=jsonb_populate_record(null::public.weekly_source_groups,native_context->'group');
+  c:=jsonb_populate_record(null::public.weekly_source_cycles,native_context->'cycle');
+  scope_row:=jsonb_populate_record(null::public.weekly_source_report_scopes,native_context->'report_scope');
+  net:=s.source_shift_charge_pence;
+  vat:=case when choice='BILL_AT_NET_PLUS_20' then round(net::numeric*20/100)::bigint else s.source_vat_pence end;
+  gross:=case when choice='BILL_AT_NET_PLUS_20' then net+vat else s.source_gross_pence end;
+  select * into existing from public.weekly_source_invoice_hold_releases where upload_row_id=s.id and hold_kind=kind;
+  if found then
+    if existing.action<>choice or existing.net_pence<>net or existing.vat_pence<>vat or existing.gross_pence<>gross then
+      raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_REPLAY_CONFLICT' using errcode='40001'; end if;
+    return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_V1','status','RELEASED','idempotent',true,
+      'release_id',existing.id,'upload_row_id',s.id,'hold_kind',kind,'action',choice,'net_pence',net,'vat_pence',vat,'gross_pence',gross);
+  end if;
+  -- First-invoice purpose authority: admission shares the cycle lock. Preserve
+  -- every original movement, snapshot and manifest value and their hashes.
+  perform private.weekly_source_invoice_hold_first_invoice_assert_v1(s.id);
+  h:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_V1',jsonb_build_object('upload_row_id',s.id,
+    'source_row_hash',encode(s.normalised_row_hash,'hex'),'hold_kind',kind,'action',choice,'net_pence',net,'vat_pence',vat,'gross_pence',gross,'actor_user_id',actor));
+  insert into public.weekly_source_invoice_hold_releases(upload_row_id,hold_kind,action,net_pence,vat_pence,gross_pence,actor_user_id,release_hash)
+    values(s.id,kind,choice,net,vat,gross,actor,h) returning public.weekly_source_invoice_hold_releases.id into id;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_V1','status','RELEASED','idempotent',false,
+    'release_id',id,'upload_row_id',s.id,'hold_kind',kind,'action',choice,'net_pence',net,'vat_pence',vat,'gross_pence',gross);
+end;
+$function$;
+alter function public.weekly_source_invoice_hold_release_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_invoice_hold_release_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_invoice_hold_release_atomic_v1(jsonb) to service_role;

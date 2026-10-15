@@ -1,0 +1,857 @@
+{
+  "source_only": true,
+  "canonical_mounted": false,
+  "SQL_executed": false,
+  "files": [
+    {
+      "file": "ACL_COMPLETE_REVERSALS.json",
+      "bytes": 267112,
+      "sha256": "48e31f31248c76e0972814dc6ebb6bfb33c36cf297c8dea2672c131fe125cddc"
+    },
+    {
+      "file": "ALL_CHECKLIST_TEST_OUTPUT.txt",
+      "bytes": 30683,
+      "sha256": "c872d3195879406c39fa4b8b2df532cab45fb46cd91406fa5bf1d08355f5653c"
+    },
+    {
+      "file": "build-current-owner-amendments.mjs",
+      "bytes": 10507,
+      "sha256": "090bc73a8c1a9c6355ae687d3073fdbec91a886c7d2c0b1d308e422f2bbb1165"
+    },
+    {
+      "file": "build-module-recipe.mjs",
+      "bytes": 14812,
+      "sha256": "75a8e31eb87036152a0fe35e1448f9dabda9ec135b7da3bb584049f46db425d2"
+    },
+    {
+      "file": "build-read-graphs.mjs",
+      "bytes": 4029,
+      "sha256": "f3cac6ddd97e5b2df97bdbd6976d07795fc97a9fec564b7543e5c7a810b6b98b"
+    },
+    {
+      "file": "build-reader-preimages.mjs",
+      "bytes": 2351,
+      "sha256": "9a52e070c0906ee0b2474d6f7fbe35459fec2071570425bbff8529e9a307f870"
+    },
+    {
+      "file": "check-current-sources.mjs",
+      "bytes": 6441,
+      "sha256": "6fef103f1c904e9c423b6dcbeac0b86c3654511de450e4ce2d219b0be2603bbd"
+    },
+    {
+      "file": "compose-mount-plan.mjs",
+      "bytes": 5207,
+      "sha256": "423de8682db6b54b7d222be1c49ae2ec4d423eda064783c4cb397bee40a33b74"
+    },
+    {
+      "file": "cross-owner/current/01_private.bpay_next_workbench_refresh_work_core_v1_uuid_.sqlinc",
+      "bytes": 41616,
+      "sha256": "3fb912d42ee8bf3627bf2e1babb76032edd397bb351d65c2e98a1b34c43b0870"
+    },
+    {
+      "file": "cross-owner/current/02_private.bpay_next_append_work_skip_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 4493,
+      "sha256": "23f28e219dcd1d63516efb702df51574c9db23a9d3003a5cddf850b676ea7bb7"
+    },
+    {
+      "file": "cross-owner/current/03_private.bpay_next_create_preparation_v1_uuid_uuid_date_jsonb_uuid_jsonb_.sqlinc",
+      "bytes": 45054,
+      "sha256": "4140a0bf7c0268c08885857643112838726e6aae02533d9a5f6ed080d2a59c0d"
+    },
+    {
+      "file": "cross-owner/current/04_private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc",
+      "bytes": 10681,
+      "sha256": "c26bcf82f7a919c554feae011a1cbefacdcc845f488e57f9fae3f5b65776ec6e"
+    },
+    {
+      "file": "cross-owner/current/05_private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc",
+      "bytes": 9269,
+      "sha256": "38c16989b874b6568825090e6de5d0b912a71965afe85f17dfce69965c1c1e41"
+    },
+    {
+      "file": "cross-owner/current/06_private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc",
+      "bytes": 3426,
+      "sha256": "77ff5f5cc25ed4cc3ec4a7a228eaa4ec220869a4502f37179ce332ef8190ddfb"
+    },
+    {
+      "file": "cross-owner/current/07_private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc",
+      "bytes": 8959,
+      "sha256": "e897344e5f56454b0457fe42275503335e07ea5499b0af1d697d4b53c8bfa27e"
+    },
+    {
+      "file": "cross-owner/current/08_public.weekly_source_invoice_hold_release_atomic_v1_jsonb_.sqlinc",
+      "bytes": 8749,
+      "sha256": "0e0d1a581ab1840695c6806ef604fc3df816a4590672d300507bc9391900f7f4"
+    },
+    {
+      "file": "cross-owner/current/09_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc",
+      "bytes": 6083,
+      "sha256": "91513f37fbe2e7ebdc23328e6838aac6867c049bec04ee57c92f097c8259feb9"
+    },
+    {
+      "file": "cross-owner/current/09_public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc",
+      "bytes": 56478,
+      "sha256": "11aff7edd28b303476e34042542236d4a27366bf4430b206af13e854358df51b"
+    },
+    {
+      "file": "cross-owner/current/10_broker.src.weekly-source.routes.js",
+      "bytes": 66314,
+      "sha256": "8a6c38256b4cca19d7bce479f418800c8625067094fd35691509fc28b4824a3c"
+    },
+    {
+      "file": "cross-owner/current/10_public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc",
+      "bytes": 245419,
+      "sha256": "773d213a6927bb28c703df995100e465fcee52d8be730e5e84fa0c92a618c2e9"
+    },
+    {
+      "file": "cross-owner/current/11_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc",
+      "bytes": 6083,
+      "sha256": "91513f37fbe2e7ebdc23328e6838aac6867c049bec04ee57c92f097c8259feb9"
+    },
+    {
+      "file": "cross-owner/current/12_broker.src.weekly-source.routes.js",
+      "bytes": 66314,
+      "sha256": "8a6c38256b4cca19d7bce479f418800c8625067094fd35691509fc28b4824a3c"
+    },
+    {
+      "file": "cross-owner/current/13_broker.src.index.handle_imesheet_aily_anual_psert.js",
+      "bytes": 52810,
+      "sha256": "729b9c78c983fb6111b28c797a7fe704626e4ecd0432eca3660dc5afea50b722"
+    },
+    {
+      "file": "cross-owner/current/routes-base.js",
+      "bytes": 66314,
+      "sha256": "8a6c38256b4cca19d7bce479f418800c8625067094fd35691509fc28b4824a3c"
+    },
+    {
+      "file": "cross-owner/current/wp_u3_candidate_finalize_historical.sqlinc",
+      "bytes": 56048,
+      "sha256": "ef64ee3c3ab65347ec801ca3d3d0edbfcb3b0264c59dceb5d7dda650a7345c03"
+    },
+    {
+      "file": "cross-owner/current/wp_u3_candidate_notification_visible_historical.sqlinc",
+      "bytes": 5798,
+      "sha256": "80767e2f452f905864e74bcb5716840819cbdcf432b3879f895f525a324874c1"
+    },
+    {
+      "file": "cross-owner/current/wp_u3_candidate_transition_historical.sqlinc",
+      "bytes": 244989,
+      "sha256": "a3f71e8611d9bf392dd0b96e78a5ad5350da45b84d292931a19a7aa3b556d49f"
+    },
+    {
+      "file": "cross-owner/forward/01_private.bpay_next_workbench_refresh_work_core_v1_uuid_.sqlinc",
+      "bytes": 44834,
+      "sha256": "4094f71e012d2352a3c9677552733af106eb3005caf5e8308e3a93c5e6348f4a"
+    },
+    {
+      "file": "cross-owner/forward/02_private.bpay_next_append_work_skip_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 4657,
+      "sha256": "d544cb82dba5424b5396d832a7fbccb6ba13e79cf5c70c9c63a1a63bbb8c6b12"
+    },
+    {
+      "file": "cross-owner/forward/03_private.bpay_next_create_preparation_v1_uuid_uuid_date_jsonb_uuid_jsonb_.sqlinc",
+      "bytes": 45290,
+      "sha256": "026d2d2c088bbdef2c353b24d240a317869bd0fd2bb4fdae27ea0ef51f754b94"
+    },
+    {
+      "file": "cross-owner/forward/04_private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc",
+      "bytes": 1260,
+      "sha256": "6e92cce9957fc23af58a1598e58fc994a7e71f6ca39170a485d0c94408a6413c"
+    },
+    {
+      "file": "cross-owner/forward/05_private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc",
+      "bytes": 545,
+      "sha256": "5779e312e507fa916ac032846e785c373642237ff9bc610b93e5c7ef0131589c"
+    },
+    {
+      "file": "cross-owner/forward/06_private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc",
+      "bytes": 645,
+      "sha256": "6f3320715932ebc20aabe06eee52ac227e75e7c18b6005549723dcc0b7680a0c"
+    },
+    {
+      "file": "cross-owner/forward/07_private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc",
+      "bytes": 894,
+      "sha256": "169870ebd4dab8eb445027a048ca4182119adbaf1dbe85359b815a14c21a179d"
+    },
+    {
+      "file": "cross-owner/forward/08_public.weekly_source_invoice_hold_release_atomic_v1_jsonb_.sqlinc",
+      "bytes": 3942,
+      "sha256": "e3e09413cb1c659b6155e1cdaf6e044132fb26d0327fe351069dcc027518b2d4"
+    },
+    {
+      "file": "cross-owner/forward/09_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc",
+      "bytes": 7796,
+      "sha256": "14a9b6e027eea98c5d3f5313c927db886c6b4889b7a2c97f59286bdc96d35eb4"
+    },
+    {
+      "file": "cross-owner/forward/09_public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc",
+      "bytes": 57771,
+      "sha256": "3de35d309613cf5194dc43ed0a0178bf4a683bbff504f032d8acc7c37aaf6b0b"
+    },
+    {
+      "file": "cross-owner/forward/10_broker.src.weekly-source.routes.js",
+      "bytes": 67667,
+      "sha256": "a2e8d1689c8abb15181c89a068605d1c4fc40e3eda2a1a7981d0f5b93edf5c85"
+    },
+    {
+      "file": "cross-owner/forward/10_public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc",
+      "bytes": 247013,
+      "sha256": "ea2cb8dbab811db4cddf41e095916f67e3948cb31d6bbc1c149fa8dcafaa0ebf"
+    },
+    {
+      "file": "cross-owner/forward/11_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc",
+      "bytes": 7796,
+      "sha256": "14a9b6e027eea98c5d3f5313c927db886c6b4889b7a2c97f59286bdc96d35eb4"
+    },
+    {
+      "file": "cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "bytes": 67667,
+      "sha256": "a2e8d1689c8abb15181c89a068605d1c4fc40e3eda2a1a7981d0f5b93edf5c85"
+    },
+    {
+      "file": "cross-owner/forward/13_broker.src.index.handle_imesheet_aily_anual_psert.js",
+      "bytes": 53396,
+      "sha256": "5032f876e9a78d9b354b44568ce9f0f8b9e55c6c13c8e8daa4c5b1710894d21b"
+    },
+    {
+      "file": "cross-owner/forward/routes-native.js",
+      "bytes": 67667,
+      "sha256": "a2e8d1689c8abb15181c89a068605d1c4fc40e3eda2a1a7981d0f5b93edf5c85"
+    },
+    {
+      "file": "cross-owner/forward/wp_u3_candidate_finalize_historical.sqlinc",
+      "bytes": 57341,
+      "sha256": "4ed05cb7b61045c010687e5916959b15f98811793392cfd50f80677396b3aa5d"
+    },
+    {
+      "file": "cross-owner/forward/wp_u3_candidate_notification_visible_historical.sqlinc",
+      "bytes": 7511,
+      "sha256": "2b76776b7695505643e4991ce1629e9ed36671beb96484efd73c04e83b037861"
+    },
+    {
+      "file": "cross-owner/forward/wp_u3_candidate_transition_historical.sqlinc",
+      "bytes": 246583,
+      "sha256": "22bdf3acc7c14766a99ac5c5a271c8a31c21058d95a2e5ee9ee2b78a4b06b466"
+    },
+    {
+      "file": "cross-owner/INVOICE_ADMISSION_FINITE_HUNK.json",
+      "bytes": 749,
+      "sha256": "9ada73b95fc928c81fd6ae85ce5852bf3b5de6d74f13f2a89dd9e2d2713cc612"
+    },
+    {
+      "file": "CURRENT_OWNER_AMENDMENTS.json",
+      "bytes": 81764,
+      "sha256": "e8bd60cc6b6caca9740141219120463f7263303e551f80d3c4b9009eddfc26f3"
+    },
+    {
+      "file": "CURRENT_ROOT_INPUT_PINS.json",
+      "bytes": 385084,
+      "sha256": "3f28047638cfef7b5ae62a91b7964fc01d69898cf1943c5b9b12808d75229bef"
+    },
+    {
+      "file": "CURRENT_RUNTIME_REGRESSION_OUTPUT.txt",
+      "bytes": 30675,
+      "sha256": "ad2a74b0f711b7b3a113bae794c918a97b438b7bcb7c4d4fc5fa6b2ab8854d26"
+    },
+    {
+      "file": "CURRENT_RUNTIME_REGRESSION_PINS.json",
+      "bytes": 24623,
+      "sha256": "f33fafdca75f5951594082142ffd219b8938bc7232a4d11d5cd288c000f3e432"
+    },
+    {
+      "file": "current-module-forward/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 22344,
+      "sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd"
+    },
+    {
+      "file": "current-module-forward/wp_u3_client_calendar.sqlinc",
+      "bytes": 2076,
+      "sha256": "51509cebfcf3f6e8a263da7614d419294e0ab4ccea9f926add09b72f51091e3d"
+    },
+    {
+      "file": "current-module-forward/wp_u3_client_week_context.sqlinc",
+      "bytes": 22194,
+      "sha256": "60e50f2eb736e6c3da60d3dc704e430a7e4788e7647700e113c9329173d99237"
+    },
+    {
+      "file": "current-module-forward/wp_u3_signed_submission_read_context.sqlinc",
+      "bytes": 4711,
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "file": "current-module-forward/wp_u3_submission_context.sqlinc",
+      "bytes": 14466,
+      "sha256": "789fd5c9b9cfcf58d6d326b51c3c338ba153cc447a59ec84ff50ce2b7ddc49d3"
+    },
+    {
+      "file": "EXISTING_MODULE_READER_REVERSALS.json",
+      "bytes": 115695,
+      "sha256": "e200411641ec53c4ee369dd6f86a953f4b0f0e46e6f6a9f4ae77725af637280a"
+    },
+    {
+      "file": "forward/runtime/check-only-candidate-reminder.mjs",
+      "bytes": 3455,
+      "sha256": "a0a573a0e781f02680f85bebf16d1c13b8b54d43906dd3e0dfe70bd0956cd368"
+    },
+    {
+      "file": "forward/runtime/checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07"
+    },
+    {
+      "file": "forward/runtime/healthroster-checklist-source.mjs",
+      "bytes": 39189,
+      "sha256": "bc79256b6d0e3938f12f0d7e4f7a5bdcd817f7533b4730ac36e25c82e57d0c31"
+    },
+    {
+      "file": "forward/runtime/healthroster-prepare-historical-checklist.mjs",
+      "bytes": 10567,
+      "sha256": "96830dbfdf08dfd6d50ef446eee4f65c20778a87dcaaadd86d9a47b008770562"
+    },
+    {
+      "file": "forward/runtime/submission-cycle-prepare.mjs",
+      "bytes": 3318,
+      "sha256": "1f552a1fb8a14f8fe8c4667d47419d2043e23e1fe2a0b3e6668b95e2dd214803"
+    },
+    {
+      "file": "forward/sql/15102026_0600_healthroster_checklist_current_v1.sql",
+      "bytes": 5390,
+      "sha256": "b59fa11aa99c07748107b038cedf8f4a6cedbd05baf8b6545642621ccaeca555"
+    },
+    {
+      "file": "forward/sql/15102026_0601_healthroster_checklist_current_acl_v1.sql",
+      "bytes": 159,
+      "sha256": "011ad9f0c77f260e6d57076f1a7abd4c17392ca73a04e335c8a7a98e51c2bdd9"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/01_private_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "bytes": 14295,
+      "sha256": "f7241f54b3d8d4e67410cd736e8b9e0d3f8a270cdf4c1caa9970c1a7778dfbb3"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/02_private_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "bytes": 4471,
+      "sha256": "c30413ef5607b5b34393a7619dc2be04e413d2a25057261f60a70b36f7d70ff0"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/03_private_weekly_source_checklist_client_calendar_v1.sqlinc",
+      "bytes": 1920,
+      "sha256": "5f4bcb37a585fe960620f962a7ba5d67ebcae5208774eeb942f5862e3835b6c6"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/04_private_weekly_source_check_only_query_rows_v1.sqlinc",
+      "bytes": 22185,
+      "sha256": "686f01040be67787d4ee38ecb7ca993018aefe4dc044fd679b361910047588fd"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/05_private_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "bytes": 2278,
+      "sha256": "1d44e61ba42d7db2eae5f7976f4e6293310ee78f154e824edbdbbae7d86a7460"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/06_private_weekly_source_check_only_query_groups_v1.sqlinc",
+      "bytes": 15542,
+      "sha256": "522a3b84b66b6af5d7741dd77e98e12f4e4c947ed80372d605c6f58cbacbe946"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/07_private_weekly_source_checklist_native_initial_certificate_core_v1.sqlinc",
+      "bytes": 9662,
+      "sha256": "d1a5e1136b2116645dfb05681651377177481b95a9f86ff82a9a0fabcd9c9531"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/08_private_weekly_source_checklist_native_initial_bound_assert_core_v1.sqlinc",
+      "bytes": 3592,
+      "sha256": "85f76ba9164f9b6289ba37d56e8c0b0bee218d182082b0c6bacc8a2fa6213c5e"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/09_private_weekly_source_checklist_native_bound_snapshot_core_v1.sqlinc",
+      "bytes": 11677,
+      "sha256": "583186aa71cc2b7b29e1fe5f46a615a519a55de5628fdf7b424479ffaf925593"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/10_private_weekly_source_checklist_native_members_core_v1.sqlinc",
+      "bytes": 9199,
+      "sha256": "3a3be183a32378c9667619118a5a269214b220dcb761f9ce3e50a41f2e4991f0"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/11_private_weekly_source_invoice_hold_release_context_core_v1.sqlinc",
+      "bytes": 7022,
+      "sha256": "da81d0fff4dbcb3eeb76d4805a3c2490947c440c84a18368d9b590d6967b0c40"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/12_private_weekly_source_invoice_hold_first_invoice_assert_v1.sqlinc",
+      "bytes": 1434,
+      "sha256": "1e76c15c2d9fd87c99c84531a76f27c2fca1a75eb770d11eba706944a67eed82"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/13_private_weekly_source_invoice_unreleased_vat_fit_movements_v1.sqlinc",
+      "bytes": 956,
+      "sha256": "3154b8309d87c2cc55eb51c8b144f1613001b738a319b2daa6b26b125473c3a9"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/14_private_bpay_next_work_period_proof_v1.sqlinc",
+      "bytes": 4548,
+      "sha256": "cbed5046ba2c05c63222ed7339c4c0c9d91d4f3a8424a80970e61c79e84c4bb9"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/15_private_weekly_source_checklist_legacy_pay_state_core_v1.sqlinc",
+      "bytes": 40209,
+      "sha256": "db24c38f9e77e220bd00b4c9f8917c2ae07bbafc4da3fa2a48cb8c99e6b50a4a"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/16_private_weekly_source_checklist_legacy_read_frame_v1.sqlinc",
+      "bytes": 8161,
+      "sha256": "110981bdbac1794422e689ce3b9283519c85de916a2411758ba4d02f5b0647db"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/17_private_weekly_source_checklist_timesheet_hold_facts_v1.sqlinc",
+      "bytes": 6713,
+      "sha256": "b8e4f7234a2d8eeb8e80f205dcb9824bf7d806bf30c90166ba551c9770e31d13"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/18_private_weekly_source_checklist_information_hold_facts_v1.sqlinc",
+      "bytes": 5281,
+      "sha256": "d1aa23035627f9ce771050989698ecee8c398777788405ec246b6e5f3f1ccc43"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/19_private_weekly_source_checklist_ordinary_next_hold_money_v1.sqlinc",
+      "bytes": 27925,
+      "sha256": "da49b05fbd535cdea4688ef6aee170dc634f5f39e915e70ff49b2108dc39f4b9"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/20_private_weekly_source_checklist_source_shift_query_money_v1.sqlinc",
+      "bytes": 23146,
+      "sha256": "378d0dfb05c9a86f870140231f8b11c44d39f64ec59e8edef7b4a0117990ae50"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/21_private_weekly_source_checklist_source_invoice_block_items_v1.sqlinc",
+      "bytes": 9337,
+      "sha256": "6d6039da6464255e9e610d0efe1bc7dfa609da828f0b0bf2a4d3630ef694ddcc"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/22_private_weekly_source_checklist_source_invoice_decision_items_v1.sqlinc",
+      "bytes": 9740,
+      "sha256": "c4a2e4da54b47c24ee73925f87284fdffbceab92f19ba2c52558ea9fef825448"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/23_private_weekly_source_checklist_process_publication_v1.sqlinc",
+      "bytes": 13292,
+      "sha256": "cb3f0a9c545059e477159ef5f6cff900e3d0b3272ac175efc9f5631c37275f38"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/24_private_weekly_source_checklist_process_v1.sqlinc",
+      "bytes": 8039,
+      "sha256": "f986e162baba361d4971989c80030aa63a3608d2ebd7915fd634d30ae29ed692"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/25_private_weekly_source_checklist_page_v1.sqlinc",
+      "bytes": 5731,
+      "sha256": "1dc3632561abeb527fb2ed7d2b23604da75352061b7a2d8c44f1f1ddd20acc61"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/26_private_weekly_source_office_tracker_v1.sqlinc",
+      "bytes": 6674,
+      "sha256": "e23e9b4872891304be50d9f8b9c8828571671d32b8dabafa400a9259f8517c3f"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/27_private_weekly_source_healthroster_checklist_leaf_v1.sqlinc",
+      "bytes": 22036,
+      "sha256": "39edefabaf28e4147f91d849c9b6e7c9a1bdeb74a331a1487e4952a70ded3304"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/28_private_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "bytes": 5474,
+      "sha256": "bb23b8c0fed028fe3f264887453e559f02936022515df25d471a04d211362c5f"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/29_private_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "bytes": 9467,
+      "sha256": "6cbf2d426045ece02f484cb92be1f33800d18017215fba23751e376a2570e61a"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/30_public_weekly_source_check_only_candidate_reminder_atomic_v1.sqlinc",
+      "bytes": 10734,
+      "sha256": "4017a65cefc1d8faba5a7b5f6c2ad83e221736a452e283f413f51f72908b9495"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/31_private_weekly_source_checklist_submission_cycle_admit_v1.sqlinc",
+      "bytes": 5557,
+      "sha256": "760ca3eb62ad5d71bd244c53ec3f77c23530b1ea008b59fd038d910e9c53b9e0"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/32_private__weekly_source_settings_ensure_open_cycle_v1.sqlinc",
+      "bytes": 6392,
+      "sha256": "1a8dc8a8a7197225366a29e191db8063e3b36c0d793a80ec66643eb4b6c6fae0"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/33_private_weekly_source_checklist_submission_cycle_prepare_v1.sqlinc",
+      "bytes": 2463,
+      "sha256": "2e2b3461fdf8e6126337b649f86902187b2fca6728fb5e73871eb03d8e939c8c"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/34_public_weekly_source_submitted_timesheet_prepare_atomic_v1.sqlinc",
+      "bytes": 1988,
+      "sha256": "68d9aaf940d2f0224281b67c5f08fc932702fb3c956741abf17d527352789908"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/35_private_weekly_source_checklist_historical_submission_descriptor_v1.sqlinc",
+      "bytes": 5828,
+      "sha256": "0b518e6f6aeb0676103163c0fb678407c43db0d19e1fab9423f976e5b5b5a292"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/36_public_weekly_source_checklist_submission_manifest_v1.sqlinc",
+      "bytes": 5195,
+      "sha256": "cec186a394ae1f7d03d19307dd8c6b4ac53db1c8e8734e3f6fa9a6122013f86c"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/37_public_weekly_source_checklist_historical_prepare_atomic_v1.sqlinc",
+      "bytes": 3941,
+      "sha256": "7257b6adf9429366cd5a74645477c95af592a00cd70074b923bd1e00bb3c353d"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/38_public_weekly_source_checklist_v1.sqlinc",
+      "bytes": 59148,
+      "sha256": "9aa9fa0d5c58b23ec20ecfe8226880750ade9d6942adbc785fc85b317d08a72c"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/central_acl_inventory.sqlinc",
+      "bytes": 61974,
+      "sha256": "dfd8d8c2db38f5c8a56d43400b60cb9cef1e81471497f74678ab63121c9b62dc"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/01_private.bpay_next_workbench_refresh_work_core_v1_uuid_.sqlinc",
+      "bytes": 44834,
+      "sha256": "4094f71e012d2352a3c9677552733af106eb3005caf5e8308e3a93c5e6348f4a"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/02_private.bpay_next_append_work_skip_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 4657,
+      "sha256": "d544cb82dba5424b5396d832a7fbccb6ba13e79cf5c70c9c63a1a63bbb8c6b12"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/03_private.bpay_next_create_preparation_v1_uuid_uuid_date_jsonb_uuid_jsonb_.sqlinc",
+      "bytes": 45290,
+      "sha256": "026d2d2c088bbdef2c353b24d240a317869bd0fd2bb4fdae27ea0ef51f754b94"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/04_private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc",
+      "bytes": 1260,
+      "sha256": "6e92cce9957fc23af58a1598e58fc994a7e71f6ca39170a485d0c94408a6413c"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/05_private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc",
+      "bytes": 545,
+      "sha256": "5779e312e507fa916ac032846e785c373642237ff9bc610b93e5c7ef0131589c"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/06_private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc",
+      "bytes": 645,
+      "sha256": "6f3320715932ebc20aabe06eee52ac227e75e7c18b6005549723dcc0b7680a0c"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/07_private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc",
+      "bytes": 894,
+      "sha256": "169870ebd4dab8eb445027a048ca4182119adbaf1dbe85359b815a14c21a179d"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/08_public.weekly_source_invoice_hold_release_atomic_v1_jsonb_.sqlinc",
+      "bytes": 3942,
+      "sha256": "e3e09413cb1c659b6155e1cdaf6e044132fb26d0327fe351069dcc027518b2d4"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/09_public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc",
+      "bytes": 57771,
+      "sha256": "3de35d309613cf5194dc43ed0a0178bf4a683bbff504f032d8acc7c37aaf6b0b"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/10_public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc",
+      "bytes": 247013,
+      "sha256": "ea2cb8dbab811db4cddf41e095916f67e3948cb31d6bbc1c149fa8dcafaa0ebf"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/current_owner/11_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc",
+      "bytes": 7796,
+      "sha256": "14a9b6e027eea98c5d3f5313c927db886c6b4889b7a2c97f59286bdc96d35eb4"
+    },
+    {
+      "file": "forward/sql/healthroster_checklist_current/final_acl_union.sqlinc",
+      "bytes": 85108,
+      "sha256": "1bfd119d401ccbe741ee163811a722d478faa2ae12a391d248257e220a37c49c"
+    },
+    {
+      "file": "forward/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 95293,
+      "sha256": "1b946d7451118599b1fd4a63a8f0693af6ceb5ad6df9492233eab27fda2b20b2"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 6208,
+      "sha256": "857517cfca02bc07ed1b932694b697aed7f2370beb0aa7792cee134d19bcd7c9"
+    },
+    {
+      "file": "harness-history/initial-central-acl-inventory.sql.txt",
+      "bytes": 61974,
+      "sha256": "dfd8d8c2db38f5c8a56d43400b60cb9cef1e81471497f74678ab63121c9b62dc"
+    },
+    {
+      "file": "INITIAL_RECIPE_HARNESS_REFUSALS.txt",
+      "bytes": 1216,
+      "sha256": "e327d7b7a1dd563fa2039650a484fe8df9c671002d8ad89670f04f21f6f4a70a"
+    },
+    {
+      "file": "INITIAL_TREATMENT_GRAPH_HARNESS_REFUSAL.txt",
+      "bytes": 621,
+      "sha256": "2f7c98f7c6fdbb11b540817df779478288c29aec9d8e77e3844236f489e6cc57"
+    },
+    {
+      "file": "input/01_wp_u3_submission_context.sqlinc",
+      "bytes": 14466,
+      "sha256": "789fd5c9b9cfcf58d6d326b51c3c338ba153cc447a59ec84ff50ce2b7ddc49d3"
+    },
+    {
+      "file": "input/02_wp_u3_signed_submission_read_context.sqlinc",
+      "bytes": 4711,
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "file": "input/03_wp_u3_client_calendar.sqlinc",
+      "bytes": 2076,
+      "sha256": "51509cebfcf3f6e8a263da7614d419294e0ab4ccea9f926add09b72f51091e3d"
+    },
+    {
+      "file": "input/04_wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 22344,
+      "sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd"
+    },
+    {
+      "file": "input/05_wp_u3_check_only_query_groups.sqlinc",
+      "bytes": 18284,
+      "sha256": "9329a0b8f443755dd7f29a303f5cbcc4673ea82ac336e6cf34dc2cf86f2893de"
+    },
+    {
+      "file": "input/06_Native77_shared_financial_kernel.sqlinc",
+      "bytes": 37379,
+      "sha256": "884a92f62d998fa62dff3c0545abe91b82a28aa6a55685d6d818e84b90b064ba"
+    },
+    {
+      "file": "input/07_NATIVE_RELEASE_QUALIFICATION.forward.sqlinc",
+      "bytes": 12077,
+      "sha256": "aa7f6d3a60e30498abee52507e53cedcf5554d0a62533c5c0180197ba38c4815"
+    },
+    {
+      "file": "input/08_wp_u3_invoice_block_native.forward.sqlinc",
+      "bytes": 48481,
+      "sha256": "5c51c1f970587d5d983f8a3951487b2eed6d42c0ce19fe4898f725add94c7cb7"
+    },
+    {
+      "file": "input/09_15102026_0405_native_work_period_proof.sqlinc",
+      "bytes": 4698,
+      "sha256": "ff3b97a92e006a1f5323b7b033b12b7e80a12d11ed4ee8b488cb4af4f72cd967"
+    },
+    {
+      "file": "input/10_wp_u3_legacy_pay_state_core.sqlinc",
+      "bytes": 40209,
+      "sha256": "db24c38f9e77e220bd00b4c9f8917c2ae07bbafc4da3fa2a48cb8c99e6b50a4a"
+    },
+    {
+      "file": "input/11_wp_u3_legacy_read_frame.sqlinc",
+      "bytes": 8314,
+      "sha256": "b56b0c313ac6ea8bce7a5536437be94a43260a63b7a3360b95ee9bf406322518"
+    },
+    {
+      "file": "input/12_wp_u3_native_hold_facts.sqlinc",
+      "bytes": 12527,
+      "sha256": "7792fff54583ffab3e51973e39b904e9f419ed0fc57ef3c3536b68f7c3995ba9"
+    },
+    {
+      "file": "input/13_wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 28251,
+      "sha256": "94c754acd3837df530d181bcfcb74d47c2980571b4c727be31a2bcf7b7850fa5"
+    },
+    {
+      "file": "input/14_wp_u3_source_shift_query_money.sqlinc",
+      "bytes": 23526,
+      "sha256": "3aab97a21d117d1cf3350511f224e25f15405241a0e63296058eb84a0f5da0af"
+    },
+    {
+      "file": "input/15_wp_u3_source_invoice_block.sqlinc",
+      "bytes": 9570,
+      "sha256": "bf3a074947e8f116e5e2180081e6224c596dc58d724db92885798c936be5f01e"
+    },
+    {
+      "file": "input/16_wp_u3_source_invoice_decisions.sqlinc",
+      "bytes": 9968,
+      "sha256": "20717d0e82aac0062002d0beae2f690933988b567d74f4969f91ddf9c5e0559e"
+    },
+    {
+      "file": "input/17_wp_u3_process_publication.sqlinc",
+      "bytes": 13445,
+      "sha256": "b082605089a9a78011aaf7579908bbc1b69c48e1bccb773d3e3432ef597e657c"
+    },
+    {
+      "file": "input/18_wp_u3_native_process.sqlinc",
+      "bytes": 8186,
+      "sha256": "4fafea382271fbcb641ab131247f28a40202c3f864f4622221b38aca8fce278c"
+    },
+    {
+      "file": "input/19_wp_u3_native_page.sqlinc",
+      "bytes": 5887,
+      "sha256": "dd0137cb3facc3000011a675a510c187519260617398b62df8164ece4624abc2"
+    },
+    {
+      "file": "input/20_wp_u3_native_tracker.sqlinc",
+      "bytes": 6834,
+      "sha256": "c4280d60a53d795300ffb83764861d5d6fe0edc11a284546498f7d20a292051c"
+    },
+    {
+      "file": "input/21_wp_u3_client_week_context.sqlinc",
+      "bytes": 22194,
+      "sha256": "60e50f2eb736e6c3da60d3dc704e430a7e4788e7647700e113c9329173d99237"
+    },
+    {
+      "file": "input/22_wp_u3_check_only_candidate_reminder_subject.sqlinc",
+      "bytes": 5783,
+      "sha256": "c5bce88819ef7c78b694c9b703bf61e38a48f103b1b6ed4c1f7120f7346043fa"
+    },
+    {
+      "file": "input/23_wp_u3_check_only_candidate_reminder_context.sqlinc",
+      "bytes": 9625,
+      "sha256": "78b238d508a0591a4af33eb86f4e6afe8fc801f98ac51a07bc7bab73ec0d37bf"
+    },
+    {
+      "file": "input/24_wp_u3_check_only_candidate_reminder_atomic.sqlinc",
+      "bytes": 10957,
+      "sha256": "e82e4eefb059d7d8bb0923e871faf7ba0dfa228f321259323576f0b0f43e9117"
+    },
+    {
+      "file": "input/25_wp_u3_submission_cycle_admit.sqlinc",
+      "bytes": 5859,
+      "sha256": "371bae5f12c87dbc1802b0ba022b6b9c14ae303e8442c175db1a495ccb8d77c1"
+    },
+    {
+      "file": "input/26_wp_u3_submission_cycle_prepare.sqlinc",
+      "bytes": 6694,
+      "sha256": "e50d9358b79b08e9dda23e35e4deba868641430e8f58ebfc37bcac76a74ba22e"
+    },
+    {
+      "file": "input/27_wp_u3_submission_cycle_dispatch.sqlinc",
+      "bytes": 2619,
+      "sha256": "3456667adc4c06a0c3e5a52ca72913f87a5d8dc9876c4cd3cf4463cad2c1de17"
+    },
+    {
+      "file": "input/28_wp_u3_submission_cycle_service.sqlinc",
+      "bytes": 2226,
+      "sha256": "50a1c031df5596d22e2cbe43624146a629e8b4dae4b6e8d781d334e1fe2b12c9"
+    },
+    {
+      "file": "input/29_wp_u3_historical_submission_manifest.sqlinc",
+      "bytes": 11339,
+      "sha256": "be3e4e6aa7b3599d1461267dcb711665521307468ee1af2e7432edb6d32d17e4"
+    },
+    {
+      "file": "input/30_wp_u3_historical_submission_prepare.sqlinc",
+      "bytes": 4092,
+      "sha256": "8e58767712bb46314b2c053f675ab5724c41d8a9ae7a6ae01d0a0f8fe3f2a80b"
+    },
+    {
+      "file": "input/31_wp_u3_native_checklist.sqlinc",
+      "bytes": 59378,
+      "sha256": "d87ac5d415df6d61195b657e61fb2a90f2fa6cec8c59ce58a69e0e456188ed83"
+    },
+    {
+      "file": "input/32_13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "bytes": 34870,
+      "sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7"
+    },
+    {
+      "file": "input/33_13_complete_final_acl_union.sqlinc",
+      "bytes": 58831,
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+    },
+    {
+      "file": "input/34_15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 92707,
+      "sha256": "a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631"
+    },
+    {
+      "file": "input/35_healthroster-checklist-source.mjs",
+      "bytes": 39189,
+      "sha256": "bc79256b6d0e3938f12f0d7e4f7a5bdcd817f7533b4730ac36e25c82e57d0c31"
+    },
+    {
+      "file": "input/36_checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07"
+    },
+    {
+      "file": "input/37_routes.js",
+      "bytes": 67708,
+      "sha256": "18a5a5eb5fe5dbd950c3fca74f28764067e1b495a7b26f470746f7694ebcf1d6"
+    },
+    {
+      "file": "input/38_submission-cycle-prepare.mjs",
+      "bytes": 3318,
+      "sha256": "1f552a1fb8a14f8fe8c4667d47419d2043e23e1fe2a0b3e6668b95e2dd214803"
+    },
+    {
+      "file": "input/39_check-only-candidate-reminder.mjs",
+      "bytes": 3455,
+      "sha256": "a0a573a0e781f02680f85bebf16d1c13b8b54d43906dd3e0dfe70bd0956cd368"
+    },
+    {
+      "file": "input/40_healthroster-prepare-historical-checklist.mjs",
+      "bytes": 10567,
+      "sha256": "96830dbfdf08dfd6d50ef446eee4f65c20778a87dcaaadd86d9a47b008770562"
+    },
+    {
+      "file": "input/current-module-preimages/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 19902,
+      "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5"
+    },
+    {
+      "file": "input/current-module-preimages/wp_u3_client_calendar.sqlinc",
+      "bytes": 2076,
+      "sha256": "51509cebfcf3f6e8a263da7614d419294e0ab4ccea9f926add09b72f51091e3d"
+    },
+    {
+      "file": "input/current-module-preimages/wp_u3_client_week_context.sqlinc",
+      "bytes": 16622,
+      "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13"
+    },
+    {
+      "file": "input/current-module-preimages/wp_u3_signed_submission_read_context.sqlinc",
+      "bytes": 4711,
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "file": "input/current-module-preimages/wp_u3_submission_context.sqlinc",
+      "bytes": 11146,
+      "sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8"
+    },
+    {
+      "file": "MODULE_RECIPE.json",
+      "bytes": 240664,
+      "sha256": "c1edc609597b67ae424ae87c4350b8ef555b3b6cbb347f6e31f4d45b9674433c"
+    },
+    {
+      "file": "MOUNT_PLAN.json",
+      "bytes": 32908,
+      "sha256": "0ad282416d539a7d9ada2e3d4b6d0ad5e3c005b7e93c4fcc4c08053cea581590"
+    },
+    {
+      "file": "read-root-source-index.mjs",
+      "bytes": 3685,
+      "sha256": "10e559e5399cfadab2950fac289dfeba8b3426b6224be652c36ddbe605ba8b32"
+    },
+    {
+      "file": "run-current-recipe-regressions.mjs",
+      "bytes": 2269,
+      "sha256": "d94cffea592954d7e4762a01e59f8386b4752971411007f4d1396ecfcfde7775"
+    },
+    {
+      "file": "verify-module-recipe.mjs",
+      "bytes": 10327,
+      "sha256": "318c6b90a6fc4508da835b82fc3656fc670b6972df80092063732aebe74e0cc3"
+    }
+  ]
+}

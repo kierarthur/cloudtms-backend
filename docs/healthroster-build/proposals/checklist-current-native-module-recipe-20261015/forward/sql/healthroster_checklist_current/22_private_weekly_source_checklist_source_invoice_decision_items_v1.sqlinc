@@ -1,0 +1,121 @@
+create or replace function private.weekly_source_checklist_source_invoice_decision_items_v1(
+  p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $decision_items$
+declare blocks jsonb; again jsonb; item jsonb; items jsonb:='[]'::jsonb;
+  source_row public.weekly_source_upload_rows%rowtype; cycle public.weekly_source_cycles%rowtype;
+  row_id uuid; request jsonb; context jsonb; context_again jsonb; fact jsonb;
+  decisions jsonb:='[]'::jsonb; witness jsonb; proof text; known boolean; choices_known boolean;
+  file_request jsonb; file_context jsonb; file_context_again jsonb;
+begin
+  -- One complete scope census precedes ALL row qualifications. It owns fresh
+  -- service/Admin/VIEW_SOURCE_PROGRESS, dated membership and actual catalogue.
+  blocks:=private.weekly_source_checklist_source_invoice_block_items_v1(p_scope,p_actor_user_id);
+  select c.* into strict cycle from public.weekly_source_cycles c
+    where c.id=(p_scope->>'source_cycle_id')::uuid;
+  for item in select value from jsonb_array_elements(blocks->'items') loop
+    row_id:=(item#>>'{native_invoice_witness,upload_row_id}')::uuid;
+    select s.* into strict source_row from public.weekly_source_upload_rows s where s.id=row_id;
+    known:=false;choices_known:=false;context:=null;context_again:=null;request:=null;
+    file_request:=null;file_context:=null;file_context_again:=null;item:=item||jsonb_build_object('action',null);
+    fact:=jsonb_build_object('native_invoice_witness',item->'native_invoice_witness');
+    if cycle.version is null or cycle.version<0 or cycle.version>9007199254740991 then
+      fact:=fact||jsonb_build_object('decision_known',false,'reason','NATIVE_RELEASE_VERSION_TRANSPORT_UNAVAILABLE');
+    elsif octet_length(source_row.normalised_row_hash) is distinct from 32 then
+      fact:=fact||jsonb_build_object('decision_known',false,'reason','NATIVE_RELEASE_ROW_HASH_UNAVAILABLE');
+    else
+      request:=jsonb_build_object('actor_user_id',p_actor_user_id,'upload_row_id',row_id,
+        'source_cycle_id',cycle.id,'report_scope_id',null,
+        'expected_source_row_hash',encode(source_row.normalised_row_hash,'hex'),
+        'expected_authority_scope_version',cycle.version,'hold_kind','VAT_FIT','action','BILL_AT_NET_PLUS_20');
+      fact:=fact||jsonb_build_object('native_release_request',request);
+      begin
+        -- Read mode is an owner-private literal. The complete current native
+        -- qualification and first-invoice predicates remain their sole owners.
+        context:=private.weekly_source_invoice_hold_release_context_core_v1(request,false);
+        perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);
+        context_again:=private.weekly_source_invoice_hold_release_context_core_v1(request,false);
+        perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);
+        if context is distinct from context_again then
+          raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;
+        known:=true;
+      exception when sqlstate '55000' or sqlstate '40001' or sqlstate '22023' then
+        -- Preserve the base item and actual invoice hold on unsupported native
+        -- qualification. Permission/unexpected failures propagate to the owner.
+        if sqlerrm='WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' then raise; end if;
+        fact:=fact||jsonb_build_object('decision_known',false,'reason','NATIVE_RELEASE_QUALIFICATION_UNAVAILABLE',
+          'qualification_sqlstate',sqlstate,'qualification_code',sqlerrm);
+      end;
+      fact:=fact||jsonb_build_object('native_release_context',context,'native_release_context_again',context_again);
+      if known and (context->>'actor_user_id' is distinct from p_actor_user_id::text
+        or context->>'upload_row_id' is distinct from row_id::text
+        or context->>'client_id' is distinct from p_scope->>'client_id'
+        or context#>>'{cycle,id}' is distinct from p_scope->>'source_cycle_id'
+        or context#>>'{group,id}' is distinct from p_scope->>'source_group_id'
+        or context->>'expected_source_row_hash' is distinct from request->>'expected_source_row_hash'
+        or context->>'expected_authority_scope_version' is distinct from request->>'expected_authority_scope_version'
+        or context#>>'{upload,report_scope_id}' is not null or context->>'hold_kind' is distinct from 'VAT_FIT'
+        or context->>'choice' is distinct from 'BILL_AT_NET_PLUS_20'
+        or context#>>'{rules,invoice_sender}' is distinct from 'CLIENT_SELF_BILL'
+        or context#>>'{rules,invoice_amount_basis}' is distinct from 'SOURCE_AMOUNT'
+        or context#>>'{rules,source_amount_basis}' is distinct from 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY') then
+        known:=false;fact:=fact||jsonb_build_object('decision_known',false,'reason','NATIVE_RELEASE_DECISION_GRAIN_UNAVAILABLE');
+      end if;
+    end if;
+    if known then
+      if exists(select 1 from public.weekly_source_invoice_hold_releases r
+        where r.upload_row_id=row_id and r.hold_kind='VAT_FIT') then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;
+      -- Choice eligibility is native-owned. Do not infer BILL_AS_FILE from the
+      -- default qualification, calculate money or expose a public lock mode.
+      file_request:=request||jsonb_build_object('action','BILL_AS_FILE');
+      begin
+        file_context:=private.weekly_source_invoice_hold_release_context_core_v1(file_request,false);
+        perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);
+        file_context_again:=private.weekly_source_invoice_hold_release_context_core_v1(file_request,false);
+        perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);
+        if file_context is distinct from file_context_again or (file_context-'choice') is distinct from (context-'choice')
+          or file_context->>'choice' is distinct from 'BILL_AS_FILE' then
+          raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;
+        choices_known:=true;
+      exception when sqlstate '55000' or sqlstate '40001' or sqlstate '22023' then
+        if sqlerrm='WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' then raise; end if;
+        fact:=fact||jsonb_build_object('choice_qualification_sqlstate',sqlstate,'choice_qualification_code',sqlerrm);
+      end;
+      fact:=fact||jsonb_build_object('decision_known',true,'pending_decision',true,'native_release_choices_known',choices_known,
+        'native_file_release_request',file_request,'native_file_release_context',file_context,'native_file_release_context_again',file_context_again);
+      proof:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_DECISION_V1',fact),'hex');
+      witness:=jsonb_build_object('owner','private.weekly_source_invoice_hold_release_context_core_v1',
+        'actor_user_id',p_actor_user_id,'scope',p_scope,
+        'billing_movement_id',item#>>'{native_invoice_witness,billing_movement_id}',
+        'client_manifest_id',item#>>'{native_invoice_witness,client_manifest_id}','upload_row_id',row_id,
+        'invoice_block_read_proof_hash',item#>>'{native_invoice_witness,read_proof_hash}',
+        'source_row_hash',encode(source_row.normalised_row_hash,'hex'),'authority_scope_version',cycle.version,
+        'hold_kind','VAT_FIT','qualification_choice','BILL_AT_NET_PLUS_20','read_proof_hash',proof);
+      item:=item||jsonb_build_object('action',case when choices_known then jsonb_build_object(
+          'kind','INVOICE_HOLD_DECISION','label','Review invoice hold','native_allowed',true,
+          'target',jsonb_build_object('contract','WEEKLY_SOURCE_CHECKLIST_INVOICE_HOLD_DECISION_ACTION_V1',
+            'actor_user_id',p_actor_user_id,'permission_view','ADMIN','scope',p_scope,
+            'billing_movement_id',witness->'billing_movement_id','client_manifest_id',witness->'client_manifest_id','upload_row_id',row_id,
+            'expected_source_row_hash',witness->'source_row_hash','expected_authority_scope_version',cycle.version,
+            'hold_kind','VAT_FIT','decision_read_proof_hash',proof,'choices',jsonb_build_array('BILL_AT_NET_PLUS_20','BILL_AS_FILE'))) end,
+        'native_invoice_decision_witness',witness,
+        'hold',jsonb_build_object('holds_pay',null,'holds_pay_scope',null,'withheld_amount_pence',null,
+          'holds_invoice',true,'pending_decision',true,
+          'authority',jsonb_build_object('owner','SOURCE_INVOICE_DECISION','hash',proof,'withholding_known',false)));
+    end if;
+    -- Both positive and unknown decision outcomes keep every base item.
+    items:=items||jsonb_build_array(item);decisions:=decisions||jsonb_build_array(fact);
+  end loop;
+  -- One second complete census for the entire scope proves the same actor,
+  -- catalogue and binding. Never re-census the whole scope for every movement.
+  again:=private.weekly_source_checklist_source_invoice_block_items_v1(p_scope,p_actor_user_id);
+  if blocks is distinct from again then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;
+  return jsonb_build_object('items',items,'native_facts',jsonb_build_object(
+    'native_invoice_blocks',blocks->'native_facts','native_release_qualifications',decisions));
+end;
+$decision_items$;
+alter function private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid) from public,anon,authenticated,service_role;

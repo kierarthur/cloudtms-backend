@@ -1,0 +1,74 @@
+create or replace function private.weekly_source_checklist_submission_cycle_admit_v1(
+  p_workflow_id uuid,p_environment text,p_candidate_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  workflow public.candidate_submission_workflows%rowtype;
+  target public.timesheets%rowtype; v_client_id uuid; groups integer; family_lock jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select w.* into workflow from public.candidate_submission_workflows w
+    where w.id=p_workflow_id and w.environment=p_environment and w.candidate_id=p_candidate_id;
+  if workflow.id is null or workflow.workflow_kind not in('CONTRACT_HOURS','CONTRACT_COMBINED','DAILY')
+    or workflow.target_timesheet_id is null or workflow.cancelled_at_utc is not null then
+    return jsonb_build_object('applies',false);
+  end if;
+  select t.* into target from public.timesheets t where t.timesheet_id=workflow.target_timesheet_id
+    and t.is_current and t.archived_at_utc is null and t.revoked_at is null
+    and t.status::text not in('REVOKED','ARCHIVED','CANCELLED') and t.line_type::text='HOURS'
+    and t.sheet_scope::text in('WEEKLY','DAILY') and t.contract_id is not distinct from workflow.contract_id
+    and ((workflow.scope='WEEKLY' and t.week_ending_date=workflow.week_ending_date)
+      or (workflow.scope='DAILY' and workflow.week_ending_date is null and workflow.contract_week_id is null
+        and workflow.work_date between t.week_ending_date-6 and t.week_ending_date));
+  if target.timesheet_id is null or target.correction_kind='WHOLE_TIMESHEET_REVERSAL'
+    or exists(select 1 from private.timesheet_correction_requests r where
+      (r.state='WAITING' and r.replacement_timesheet_id=target.timesheet_id)
+      or (r.state='APPLIED' and r.reversed_timesheet_id=target.timesheet_id)) then
+    return jsonb_build_object('applies',false);
+  end if;
+  if target.contract_id is not null then
+    select c.client_id into v_client_id from public.contracts c where c.id=target.contract_id and c.candidate_id=p_candidate_id;
+  else
+    -- Native Daily may have a null Contract. Require exactly one current TF
+    -- owner, including the actual Candidate, rather than inventing a Contract.
+    select case when count(*)=1 then (array_agg(f.client_id))[1] end into v_client_id
+      from public.timesheets_financials f where f.timesheet_id=target.timesheet_id
+        and f.is_current and f.timesheet_version=target.version and f.candidate_id=p_candidate_id;
+  end if;
+  if v_client_id is null then return jsonb_build_object('applies',false); end if;
+  -- This is a potential signed scope only, used to acquire native locks early.
+  -- No claim, financial verdict or cycle is manufactured from a draft.
+  select count(distinct g.id) into groups from public.weekly_source_groups g
+    join public.weekly_source_group_clients m on m.source_group_id=g.id and m.client_id=v_client_id
+    join public.weekly_source_group_rule_assignments a on a.source_group_id=g.id
+      and a.feature_enabled and a.feature_purpose='SIGNED_CHECK_ONLY' and a.rule_set_version_id is null
+    join public.weekly_source_client_policies p on p.source_group_id=g.id and p.client_id=v_client_id
+    where g.active and g.environment=p_environment and g.source_family='ROSTER'
+      and target.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+      and coalesce(workflow.work_date,target.week_ending_date) between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+      and target.week_ending_date between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)
+      and coalesce(workflow.work_date,target.week_ending_date) between p.effective_from and coalesce(p.effective_to,'infinity'::date)
+      and p.authority_mode='TIMESHEET_AUTHORITY' and p.document_mode='INVOICE_EVIDENCE_REQUIRED' and not p.self_bill_enabled;
+  if groups=0 then return jsonb_build_object('applies',false); end if;
+  if groups<>1 then raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_SIGNED_SCOPE_AMBIGUOUS' using errcode='55000'; end if;
+  -- The complete current transition calls here before its workflow/TS/TF row
+  -- locks. Post-freeze prepare reacquires these same locks reentrantly, then
+  -- takes the existing lifecycle advisory/G1 locks. Preserve I1 -> F1 -> G1.
+  perform private.weekly_source_pay_query_admit_v2();
+  family_lock:=private.weekly_source_lock_family_rows_v1(array[target.timesheet_id],null);
+  if family_lock->'ok' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_FAMILY_UNAVAILABLE' using errcode='55000';
+  end if;
+  if not exists(select 1 from public.candidate_submission_workflows w where w.id=workflow.id
+    and w.environment=workflow.environment and w.candidate_id=workflow.candidate_id
+    and w.target_timesheet_id=target.timesheet_id and w.generation=workflow.generation
+    and w.updated_at_utc is not distinct from workflow.updated_at_utc) then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_WORKFLOW_STALE' using errcode='40001';
+  end if;
+  return jsonb_build_object('applies',true,'timesheet_id',target.timesheet_id,'workflow_id',workflow.id,
+    'workflow_generation',workflow.generation);
+end;
+$function$;
+alter function private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid) from public,anon,authenticated,service_role;

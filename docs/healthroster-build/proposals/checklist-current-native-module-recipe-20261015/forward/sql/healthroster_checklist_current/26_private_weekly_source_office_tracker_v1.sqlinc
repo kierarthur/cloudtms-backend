@@ -1,0 +1,86 @@
+create or replace function private.weekly_source_office_tracker_v1(p_cycle_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_actor uuid:=p_actor_user_id; v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype; v_tracker jsonb;
+begin
+  select c.* into v_cycle from public.weekly_source_cycles c where c.id=p_cycle_id;
+  select g.* into v_group from public.weekly_source_groups g where g.id=v_cycle.source_group_id and g.active;
+  if v_cycle.id is null or v_group.id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='22023'; end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS',v_group.id);
+  select pg_catalog.jsonb_build_object(
+    'title','Finalisation progress','cycle_label','Week ending '||to_char(v_cycle.finalisation_week_ending,'FMDD Mon YYYY'),
+    'cycle_id',v_cycle.id,
+    'cycle_options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'value',item.id,'label','Week ending '||to_char(item.finalisation_week_ending,'FMDD Mon YYYY'))
+      order by item.finalisation_week_ending desc,item.id)
+      from public.weekly_source_cycles item where item.source_group_id=v_group.id),'[]'::jsonb),
+    'complete',not exists(
+      select 1 from public.weekly_source_group_clients membership
+      where membership.source_group_id=v_group.id
+        and (v_cycle.scope_client_id is null or membership.client_id=v_cycle.scope_client_id)
+        and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+        and not exists(select 1 from public.weekly_source_client_cycle_completions completion
+          where completion.source_cycle_id=v_cycle.id and completion.client_id=membership.client_id and completion.state='CURRENT')
+    ),
+    'rows',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'row_key','tracker-'||membership.client_id::text,'source',v_group.display_name,'client',client.name,
+      'status',pg_catalog.jsonb_build_object(
+        'text',case when completion.id is not null then case completion.completion_kind
+          when 'FINAL_SOURCE' then 'Finalised' else 'No shifts this week' end else 'Not finalised' end,
+        'tone',case when completion.id is not null then 'positive' else 'warning' end),
+      'detail',case when completion.id is not null then to_char(completion.attested_at_utc at time zone 'Europe/London','DD Mon YYYY HH24:MI') else '' end,
+      'actions',case
+        when completion.id is null
+         and v_cycle.state not in ('FINALISING','FINALISED')
+         and not exists(select 1 from public.weekly_source_final_revisions revision
+           join public.weekly_source_final_snapshot_lines snapshot on snapshot.final_revision_id=revision.id
+           where revision.source_cycle_id=v_cycle.id and revision.state in ('PREPARED','CURRENT')
+             and snapshot.client_id=membership.client_id)
+         and not exists(select 1 from public.weekly_source_uploads upload
+           join public.weekly_source_upload_rows source_row on source_row.upload_id=upload.id
+           left join lateral (select resolution.* from public.weekly_source_row_resolutions resolution
+             where resolution.upload_row_id=source_row.id order by resolution.generation desc,resolution.id desc limit 1) resolution on true
+           where upload.source_cycle_id=v_cycle.id
+             and (upload.id=v_cycle.current_complete_upload_id or upload.state='CURRENT')
+             and resolution.mapping_state is distinct from 'RESOLVED')
+         and not exists(select 1 from public.weekly_source_report_scopes scope
+           where scope.source_cycle_id=v_cycle.id and scope.client_id=membership.client_id
+             and (scope.current_complete_upload_id is not null or scope.current_projection_publication_id is not null or scope.current_final_revision_id is not null))
+         and not exists(select 1 from public.weekly_source_upload_rows source_row
+           join public.weekly_source_uploads upload on upload.id=source_row.upload_id and upload.source_cycle_id=v_cycle.id and upload.state='CURRENT'
+           join lateral (select resolution.* from public.weekly_source_row_resolutions resolution
+             where resolution.upload_row_id=source_row.id order by resolution.generation desc,resolution.id desc limit 1) resolution
+             on resolution.mapping_state='RESOLVED' and resolution.client_id=membership.client_id)
+         and not exists(select 1 from public.weekly_discrepancy_incidents incident
+           where incident.source_cycle_id=v_cycle.id and incident.client_id=membership.client_id and incident.state='OPEN')
+        then pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'label','No shifts to import','enabled',true,'kind','COMMAND','command','NO_SHIFTS_TO_IMPORT',
+          'context',pg_catalog.jsonb_build_object(
+            'trust',client.name,
+            'cutoff',to_char(v_cycle.cutoff_at_utc at time zone 'Europe/London','Dy FMDD Mon YYYY HH24:MI')
+          ),
+          'payload',pg_catalog.jsonb_build_object(
+            'actor_user_id',v_actor,
+            'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,
+            'client_id',membership.client_id,'expected_cycle_version',v_cycle.version,
+            'attestation_text','No shifts to import'
+          )))
+        else pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'label','View','enabled',true,'payload',pg_catalog.jsonb_build_object('client_id',membership.client_id)
+        )) end
+    ) order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",client.id)
+    from public.weekly_source_group_clients membership
+    join public.clients client on client.id=membership.client_id
+    left join public.weekly_source_client_cycle_completions completion
+      on completion.source_cycle_id=v_cycle.id and completion.client_id=membership.client_id and completion.state='CURRENT'
+    where membership.source_group_id=v_group.id
+      and (v_cycle.scope_client_id is null or membership.client_id=v_cycle.scope_client_id)
+      and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)),'[]'::jsonb)
+  ) into v_tracker;
+  return v_tracker;
+end;
+$function$;
+alter function private.weekly_source_office_tracker_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_office_tracker_v1(uuid,uuid) from public,anon,authenticated,service_role;

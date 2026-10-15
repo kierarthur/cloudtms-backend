@@ -1,0 +1,100 @@
+create or replace function private.weekly_source_checklist_source_invoice_block_items_v1(p_scope jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; cycle public.weekly_source_cycles%rowtype;
+  group_row public.weekly_source_groups%rowtype; revision public.weekly_source_final_revisions%rowtype;
+  manifest public.weekly_source_client_manifests%rowtype; source_row public.weekly_source_upload_rows%rowtype;
+  upload public.weekly_source_uploads%rowtype; member public.weekly_source_billing_movements%rowtype;
+  worker public.candidates%rowtype; fact jsonb; facts jsonb:='[]'::jsonb; items jsonb:='[]'::jsonb;
+  witness jsonb; hash text; seen uuid[]:='{}'::uuid[]; row_text text;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_scope,
+    array['source_group_id','source_cycle_id','client_id','week_ending'],'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_INVALID');
+  if jsonb_typeof(p_scope->'source_group_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_group_id','uuid')
+    or jsonb_typeof(p_scope->'source_cycle_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_cycle_id','uuid')
+    or jsonb_typeof(p_scope->'client_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'client_id','uuid')
+    or jsonb_typeof(p_scope->'week_ending') is distinct from 'string' or not pg_input_is_valid(p_scope->>'week_ending','date') then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_INVALID' using errcode='22023'; end if;
+  select u.* into actor from public.tms_users u where u.id=p_actor_user_id and u.is_active
+    and lower(btrim(coalesce(u.role,'')))='admin';
+  if actor.id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_ACTOR_DENIED' using errcode='42501'; end if;
+  -- Finance and invoice-only population are never read under a reduced pay actor.
+  perform private.weekly_source_office_authority_v1(actor.id,'VIEW_SOURCE_PROGRESS',
+    (p_scope->>'source_group_id')::uuid,(p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date);
+  select c.* into cycle from public.weekly_source_cycles c where c.id=(p_scope->>'source_cycle_id')::uuid
+    and c.source_group_id=(p_scope->>'source_group_id')::uuid
+    and (c.scope_client_id is null or c.scope_client_id=(p_scope->>'client_id')::uuid)
+    and (p_scope->>'week_ending')::date between c.finalisation_week_ending-6 and c.finalisation_week_ending;
+  select g.* into group_row from public.weekly_source_groups g where g.id=cycle.source_group_id and g.active and g.source_family='ROSTER';
+  if group_row.id is null or not exists(select 1 from public.weekly_source_group_clients m
+    where m.source_group_id=group_row.id and m.client_id=(p_scope->>'client_id')::uuid
+      and (p_scope->>'week_ending')::date between m.valid_from and coalesce(m.valid_to,'infinity'::date)) then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_SCOPE_UNPROVED' using errcode='55000'; end if;
+  -- Match the native CURRENT CYCLE completion/revision grain. A subsequent
+  -- report publication does not erase the actual export invoice ledger.
+  for manifest in select cm.* from public.weekly_source_client_manifests cm
+    join public.weekly_source_final_revisions fr on fr.id=cm.final_revision_id and fr.state='CURRENT'
+      and fr.source_cycle_id=cycle.id and fr.authority_scope_kind='CYCLE' and fr.report_scope_id is null
+    where cm.source_cycle_id=cycle.id and cm.source_group_id=group_row.id and cm.client_id=(p_scope->>'client_id')::uuid
+      and cm.invoice_state='READY'
+    order by cm.id
+  loop
+    select fr.* into strict revision from public.weekly_source_final_revisions fr where fr.id=manifest.final_revision_id;
+    -- Only conserved actual native manifest members can present a hold fact.
+    -- Do not turn malformed native scope into a shorter/empty catalogue.
+    if octet_length(manifest.manifest_hash) is distinct from 32 or octet_length(revision.manifest_hash) is distinct from 32
+      or (select count(*) from public.weekly_source_manifest_movements mm where mm.client_manifest_id=manifest.id)<>manifest.movement_count
+      or exists(select 1 from public.weekly_source_manifest_movements mm left join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+        where mm.client_manifest_id=manifest.id and (m.id is null or mm.movement_hash is distinct from m.movement_economic_hash
+          or m.final_revision_id is distinct from revision.id or m.finalisation_cycle_id is distinct from cycle.id
+          or m.actual_client_id is distinct from manifest.client_id)) then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_MANIFEST_UNAVAILABLE' using errcode='55000'; end if;
+    fact:=jsonb_build_object('scope',p_scope,'actor',to_jsonb(actor),'cycle',to_jsonb(cycle),
+      'manifest',to_jsonb(manifest),'revision',to_jsonb(revision));
+    facts:=facts||jsonb_build_array(fact);
+    for member in select m.* from private.weekly_source_invoice_unreleased_vat_fit_movements_v1(manifest.id) m order by m.id loop
+      if not exists(select 1 from public.weekly_source_client_cycle_completions c where c.source_cycle_id=cycle.id
+        and c.client_id=manifest.client_id and c.final_revision_id=revision.id and c.completion_kind='FINAL_SOURCE' and c.state='CURRENT') then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_COMPLETION_UNAVAILABLE' using errcode='55000'; end if;
+      row_text:=member.source_facts_json->>'upload_row_id';
+      if not pg_input_is_valid(row_text,'uuid') or row_text is null then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_ITEM_IDENTITY_UNAVAILABLE' using errcode='55000'; end if;
+      select s.* into source_row from public.weekly_source_upload_rows s where s.id=row_text::uuid;
+      select u.* into upload from public.weekly_source_uploads u where u.id=source_row.upload_id and u.source_cycle_id=cycle.id
+        and u.report_scope_id is null;
+      if source_row.id is null or upload.id is null or source_row.work_date is null or source_row.work_date='infinity'::date
+        or source_row.work_date='-infinity'::date or member.candidate_id is null or octet_length(member.movement_economic_hash) is distinct from 32 then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_ITEM_IDENTITY_UNAVAILABLE' using errcode='55000'; end if;
+      fact:=fact||jsonb_build_object('movement',to_jsonb(member),'source_row',to_jsonb(source_row),'upload',to_jsonb(upload));
+      -- Observe all exact native blockers for revision freshness, including
+      -- rows whose own Client week is outside this expansion's date interval.
+      facts:=facts||jsonb_build_array(fact);
+      if source_row.work_date not between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date then continue; end if;
+      select c.* into worker from public.candidates c where c.id=member.candidate_id;
+      if worker.id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_ITEM_IDENTITY_UNAVAILABLE' using errcode='55000'; end if;
+      if member.id=any(seen) then raise exception 'WEEKLY_SOURCE_CHECKLIST_INVOICE_ITEM_AMBIGUOUS' using errcode='55000'; end if;
+      seen:=array_append(seen,member.id);
+      -- An already admitted movement cannot be called a current admission
+      -- hold; native admission refuses its placement before the hold guard.
+      if member.placement_state<>'UNPLACED' or exists(select 1 from public.weekly_source_invoice_line_bindings b
+        where b.billing_movement_id=member.id and b.state='CURRENT') then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_PLACEMENT_CONFLICT' using errcode='55000'; end if;
+      hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_BLOCK_V1',fact),'hex');
+      witness:=jsonb_build_object('owner','private.weekly_source_invoice_unreleased_vat_fit_movements_v1',
+        'actor_user_id',actor.id,'scope',p_scope,'final_revision_id',revision.id,'client_manifest_id',manifest.id,
+        'billing_movement_id',member.id,'upload_row_id',source_row.id,'work_event_id',member.work_event_id,
+        'manifest_hash',encode(manifest.manifest_hash,'hex'),'movement_economic_hash',encode(member.movement_economic_hash,'hex'),'read_proof_hash',hash);
+      items:=items||jsonb_build_array(jsonb_build_object('item_id','native-invoice:'||member.id::text,'worker',
+        coalesce(nullif(btrim(worker.first_name||' '||worker.last_name),''),worker.id::text),
+        'work_date',source_row.work_date,'native_invoice_witness',witness,
+        'hold',jsonb_build_object('holds_pay',null,'holds_pay_scope',null,'withheld_amount_pence',null,'holds_invoice',true,'pending_decision',null,
+          'authority',jsonb_build_object('owner','SOURCE_INVOICE_BLOCK','hash',hash,'withholding_known',false))));
+    end loop;
+  end loop;
+  return jsonb_build_object('items',items,'native_facts',facts);
+end;
+$function$;
+alter function private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid) from public,anon,authenticated,service_role;

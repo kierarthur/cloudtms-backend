@@ -1,0 +1,18 @@
+create or replace function private.weekly_source_invoice_hold_first_invoice_assert_v1(p_upload_row_id uuid)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $first_invoice$
+begin
+  if exists(select 1 from public.weekly_source_billing_movements m where
+      (m.source_facts_json->>'upload_row_id'=p_upload_row_id::text or m.self_bill_report_row_id=p_upload_row_id)
+      and m.movement_role in ('POSITIVE','REPLACEMENT','STANDALONE_NEGATIVE')
+      and (m.placement_state<>'UNPLACED' or exists(select 1 from public.weekly_source_invoice_line_bindings b
+        where b.billing_movement_id=m.id and b.state='CURRENT')
+        or exists(select 1 from public.weekly_source_invoice_placements p join public.invoices i on i.id=p.invoice_id
+          where p.billing_movement_id=m.id and i.status::text='ISSUED')))
+    or exists(select 1 from public.weekly_source_final_snapshot_lines line join public.weekly_source_final_revisions r on r.id=line.final_revision_id
+      where line.upload_row_id=p_upload_row_id and r.state='PREPARED') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_ALREADY_PLACED' using errcode='55000'; end if;
+end;
+$first_invoice$;
+alter function private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid) from public,anon,authenticated,service_role;

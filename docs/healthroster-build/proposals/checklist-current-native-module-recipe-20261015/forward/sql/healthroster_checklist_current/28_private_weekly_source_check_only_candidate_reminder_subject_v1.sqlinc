@@ -1,0 +1,71 @@
+create or replace function private.weekly_source_check_only_candidate_reminder_subject_v1(
+  p_scope jsonb,p_action_id text,p_candidate_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare decision public.import_review_decisions%rowtype; hr public.hr_rows%rowtype;
+  preview public.import_review_states%rowtype; cycle public.weekly_source_cycles%rowtype;
+  witness jsonb; submitted jsonb:='[]'::jsonb; ts record;
+begin
+  perform private._weekly_source_settings_assert_request_v1(p_scope,
+    array['source_group_id','source_cycle_id','client_id','week_ending'],'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SCOPE_INVALID');
+  if jsonb_typeof(p_scope->'source_group_id') is distinct from 'string'
+    or jsonb_typeof(p_scope->'source_cycle_id') is distinct from 'string'
+    or jsonb_typeof(p_scope->'client_id') is distinct from 'string'
+    or jsonb_typeof(p_scope->'week_ending') is distinct from 'string'
+    or not pg_input_is_valid(p_scope->>'source_group_id','uuid')
+    or not pg_input_is_valid(p_scope->>'source_cycle_id','uuid')
+    or not pg_input_is_valid(p_scope->>'client_id','uuid')
+    or not pg_input_is_valid(p_scope->>'week_ending','date')
+    or p_action_id is null or p_action_id!~'^[0-9a-f]{64}$' or p_candidate_id is null then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SCOPE_INVALID' using errcode='22023';
+  end if;
+  select c.* into cycle from public.weekly_source_cycles c where c.id=(p_scope->>'source_cycle_id')::uuid
+    and c.source_group_id=(p_scope->>'source_group_id')::uuid
+    and (c.scope_client_id is null or c.scope_client_id=(p_scope->>'client_id')::uuid)
+    and (p_scope->>'week_ending')::date between c.finalisation_week_ending-6 and c.finalisation_week_ending;
+  if cycle.id is null then return jsonb_build_object('current_native_action',false,'reason','SCOPE_UNAVAILABLE'); end if;
+  select d.* into decision from public.import_review_decisions d join public.hr_imports i on i.id=d.import_id
+    and i.pruned_at is null and i.source_system::text in('HEALTHROSTER','HEALTHROSTER_DAILY')
+    and (i.client_id is null or i.client_id=d.client_id)
+    where d.action_id=p_action_id and d.is_current and d.client_id=(p_scope->>'client_id')::uuid
+      and d.candidate_id=p_candidate_id and d.timesheet_id is null and d.action_kind='ADVISORY'
+      and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
+      and d.summary_json->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED');
+  if decision.action_id is null then return jsonb_build_object('current_native_action',false,'reason','NATIVE_ACTION_NO_LONGER_CURRENT'); end if;
+  select h.* into hr from public.hr_rows h where h.id=decision.hr_row_id and h.import_id=decision.import_id
+    and h.date_local between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date;
+  select s.* into preview from public.import_review_states s where s.import_id=decision.import_id
+    and s.preview_generation=decision.preview_generation and s.superseded_at_utc is null and s.abandoned_at_utc is null;
+  if hr.id is null or preview.import_id is null then
+    return jsonb_build_object('current_native_action',false,'reason','NATIVE_PREVIEW_NO_LONGER_CURRENT');
+  end if;
+  -- No planned clocks, workflow-state shortcut or new submission predicate.
+  -- A genuine pending Daily immutable submission can precede physical clocks;
+  -- that native witness already resolves the submit reminder, while the real
+  -- D10 catalogue/ADVISORY remains unchanged for its existing review owner.
+  for ts in select t.timesheet_id from public.timesheets t
+    where t.week_ending_date=(p_scope->>'week_ending')::date
+      and t.sheet_scope::text=case when decision.summary_json->>'reason_code'='DAILY_TIMESHEET_NOT_SUBMITTED' then 'DAILY' else 'WEEKLY' end
+    order by t.timesheet_id
+  loop
+    witness:=private.weekly_source_actual_timesheet_submission_v1(ts.timesheet_id);
+    if witness->'actual_submitted'='true'::jsonb and witness->>'candidate_id'=p_candidate_id::text
+      and witness->>'client_id'=p_scope->>'client_id'
+      and ((decision.summary_json->>'reason_code'='DAILY_TIMESHEET_NOT_SUBMITTED' and witness->>'work_date'=hr.date_local::text)
+        or (decision.summary_json->>'reason_code'='WEEKLY_TIMESHEET_NOT_SUBMITTED'
+          and decision.contract_id is not null and witness->>'contract_id'=decision.contract_id::text)) then
+      submitted:=submitted||jsonb_build_array(witness);
+    end if;
+  end loop;
+  return jsonb_build_object('current_native_action',true,'actual_submission_present',jsonb_array_length(submitted)>0,
+    'native_action',jsonb_build_object('action_id',decision.action_id,'candidate_id',decision.candidate_id,
+      'import_id',decision.import_id,'hr_row_id',hr.id,'work_date',hr.date_local,'contract_id',decision.contract_id,
+      'preview_generation',preview.preview_generation,'state_version',preview.state_version,
+      'preview_fingerprint',preview.preview_fingerprint,'evidence_fingerprint',decision.evidence_fingerprint,
+      'native_reason_code',decision.summary_json->>'reason_code'),
+    'actual_submission_witnesses',submitted);
+end;
+$function$;
+alter function private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) owner to postgres;
+revoke all on function private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) from public,anon,authenticated,service_role;

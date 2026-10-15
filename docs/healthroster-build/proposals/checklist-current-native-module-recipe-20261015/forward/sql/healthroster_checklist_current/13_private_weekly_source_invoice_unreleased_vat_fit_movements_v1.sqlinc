@@ -1,0 +1,10 @@
+create or replace function private.weekly_source_invoice_unreleased_vat_fit_movements_v1(p_client_manifest_id uuid)
+returns setof public.weekly_source_billing_movements language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $native_blocker$
+select m.* from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+    where mm.client_manifest_id=p_client_manifest_id and m.source_facts_json->>'invoice_hold'='VAT_FIT'
+      and not exists(select 1 from public.weekly_source_invoice_hold_releases receipt where receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT');
+$native_blocker$;
+alter function private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid) from public,anon,authenticated,service_role;

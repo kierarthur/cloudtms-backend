@@ -1,0 +1,10 @@
+create or replace function private.bpay_next_initial_tsfin_certificate_v1(p_root_authorisation_id uuid)
+returns jsonb language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+begin
+  return private.weekly_source_checklist_native_initial_certificate_core_v1(p_root_authorisation_id,true);
+end
+$function$;
+alter function private.bpay_next_initial_tsfin_certificate_v1(uuid) owner to postgres;
+revoke all on function private.bpay_next_initial_tsfin_certificate_v1(uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,30 @@
+create or replace function private.weekly_source_checklist_client_calendar_v1(
+  p_client_id uuid,p_local_today date
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare authority jsonb; weekday integer; latest_week date;
+begin
+  if p_client_id is null or p_local_today is null then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_CLIENT_WEEK_AUTHORITY_UNAVAILABLE' using errcode='22023';
+  end if;
+  authority:=private._contract_settings_effective_core_v1(p_client_id,null,p_local_today,'OFFICE',null);
+  if authority->>'authority_version' is distinct from 'CONTRACT_SETTINGS_AUTHORITY_V1'
+    or authority->>'client_id' is distinct from p_client_id::text
+    or not pg_input_is_valid(coalesce(authority#>>'{values,week_ending_weekday}',''),'integer')
+    or coalesce(authority->>'authority_fingerprint','')!~'^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_CLIENT_WEEK_AUTHORITY_UNAVAILABLE' using errcode='55000';
+  end if;
+  weekday:=(authority#>>'{values,week_ending_weekday}')::integer;
+  if weekday not between 0 and 6 then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_CLIENT_WEEK_AUTHORITY_UNAVAILABLE' using errcode='55000';
+  end if;
+  -- A week ending today has not ended yet. Walk back from yesterday.
+  latest_week:=p_local_today-1-((extract(dow from p_local_today-1)::integer-weekday+7)%7);
+  return jsonb_build_object('contract','WEEKLY_SOURCE_CHECKLIST_CLIENT_CALENDAR_V1',
+    'client_id',p_client_id,'local_today',p_local_today,'week_ending_weekday',weekday,
+    'latest_ended_week',latest_week,'authority_fingerprint',authority->>'authority_fingerprint');
+end;
+$function$;
+alter function private.weekly_source_checklist_client_calendar_v1(uuid,date) owner to postgres;
+revoke all on function private.weekly_source_checklist_client_calendar_v1(uuid,date) from public,anon,authenticated,service_role;

@@ -1,0 +1,434 @@
+create or replace function private.weekly_source_checklist_native_initial_certificate_core_v1(p_root_authorisation_id uuid,p_native_locks boolean)
+returns jsonb language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare
+  a public.weekly_source_root_authorisations%rowtype;
+  t public.timesheets%rowtype;f public.timesheets_financials%rowtype;
+  w private.bpay_next_work%rowtype;r private.bpay_next_work_revision%rowtype;
+  p private.bpay_next_publication%rowtype;c public.contracts%rowtype;
+  inventory jsonb;basis jsonb;origin jsonb;details jsonb;n integer;epoch bigint;
+begin
+  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;
+  if p_root_authorisation_id is null then
+    raise exception 'BPAY_NEXT_INITIAL_AUTH_ID_REQUIRED' using errcode='22023';end if;
+  if p_native_locks then
+  select m.owner_epoch into epoch from private.bpay_next_module_control m
+    where m.id=1 and m.active_owner='NEXT' for share;
+  else
+  select m.owner_epoch into epoch from private.bpay_next_module_control m
+    where m.id=1 and m.active_owner='NEXT';
+  end if;
+  if epoch is null then raise exception 'BPAY_NEXT_BINDING_NEXT_REQUIRED' using errcode='55000';end if;
+  select x.* into strict a from public.weekly_source_root_authorisations x where x.id=p_root_authorisation_id;
+  select x.* into strict t from public.timesheets x where x.timesheet_id=a.root_timesheet_id;
+  select x.* into strict c from public.contracts x where x.id=t.contract_id;
+  select x.* into strict r from private.bpay_next_work_revision x where x.source_event_id=a.id;
+  select x.* into strict w from private.bpay_next_work x where x.id=r.work_id;
+  select x.* into strict f from public.timesheets_financials x where x.id=r.financial_snapshot_id;
+  select x.* into strict p from private.bpay_next_publication x
+    where x.command_id=private.bpay_next_source_command_id_v1(a.id);
+  if a.withdrawn_at_utc is not null or a.current_entitlement_head_id is not null
+     or exists(select 1 from public.weekly_source_entitlement_heads h where btrim(h.root_family_booking_id)=btrim(t.booking_id))
+     or t.is_current is distinct from true or t.authorised_at_server is null
+     or t.revoked_at is not null or t.archived_at_utc is not null
+     or (a.family_booking_id,a.timesheet_version) is distinct from (t.booking_id,t.version)
+     or (w.work_kind,w.candidate_id,w.contract_id,w.original_timesheet_id,w.booking_id,w.week_ending_date,(case when w.current_revision_id is not null and exists(select 1 from private.bpay_next_work_revision cr where cr.id=w.current_revision_id and cr.sealed_at_utc is not null and cr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.current_revision_id) else w.current_revision_id end))
+       is distinct from ('SOURCE'::text,c.candidate_id,c.id,t.timesheet_id,t.booking_id,t.week_ending_date,r.id)
+     or w.approval_state is distinct from 'APPROVED'
+     or (r.source_kind,r.source_head_id,r.source_event_id,r.physical_timesheet_id,r.physical_timesheet_version,r.week_ending_date)
+       is distinct from ('SOURCE'::text,null::uuid,a.id,t.timesheet_id,t.version,t.week_ending_date)
+     or r.approved_at_utc is null or r.sealed_at_utc is null
+     or f.is_current is distinct from true or f.is_stale is distinct from false or f.authorised_at_utc is null
+     or (f.timesheet_id,f.timesheet_version,f.candidate_id,f.client_id)
+       is distinct from (t.timesheet_id,t.version,w.candidate_id,c.client_id)
+     or (p.work_id,p.revision_id,p.candidate_id,p.revision_no)
+       is distinct from (w.id,r.id,w.candidate_id,r.revision_no)
+     or not exists(select 1 from private.bpay_next_command command
+       join private.bpay_next_command_member member on member.command_id=command.id and member.candidate_id=w.candidate_id
+       where command.id=p.command_id and command.command_kind='POSITION_APPLY'
+         and command.module_epoch=epoch and command.status in ('SEALED','COMPLETE')
+         and command.sealed_at_utc is not null and command.expected_member_count=1 and member.member_no=1
+         -- INITIAL_METADATA_PHASE_V2_BEGIN: no fabricated enrollment/job.
+         and ((command.status='SEALED' and command.enrolled_member_count=0
+           and p.status='QUEUED' and p.phase='NEW' and p.applied_at_utc is null
+           and not exists(select 1 from private.bpay_next_job job where job.command_id=command.id))
+          or (command.status='COMPLETE' and command.enrolled_member_count=1
+           and p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+           and (select count(*) from private.bpay_next_job job where job.command_id=command.id)=1
+           and exists(select 1 from private.bpay_next_job job
+             join private.bpay_next_worker_control ctl on ctl.candidate_id=job.candidate_id
+             where job.command_id=command.id and job.candidate_id=w.candidate_id
+               and job.job_kind='POSITION_APPLY' and job.command_sequence=command.agency_sequence
+               and job.module_epoch=command.module_epoch and job.status='DONE' and job.phase='DONE'
+               and job.owner_epoch>0 and job.owner_epoch<=ctl.active_owner_epoch
+               and job.lease_nonce is null and job.lease_until_utc is null)))
+         -- INITIAL_METADATA_PHASE_V2_END
+       )
+  then raise exception 'BPAY_NEXT_INITIAL_AUTH_NOT_CURRENT' using errcode='55000';end if;
+  inventory:=private.weekly_source_effective_inventory_v1(t.timesheet_id);
+  basis:=inventory->'approval_basis';origin:=basis->'origin';
+  details:=jsonb_build_object('segments',f.invoice_breakdown_json->'segments','additional_units',f.additional_units_json,
+    'actual_schedule',f.actual_schedule_json,'rate_source_refs',f.rate_source_refs_json);
+  if inventory->>'ok' is distinct from 'true' or inventory->>'authority' is distinct from 'TSFIN'
+     or inventory->>'head_id' is not null or jsonb_typeof(inventory->'components') is distinct from 'array'
+     or jsonb_typeof(basis) is distinct from 'object' or basis->'coverage_complete' is distinct from 'true'::jsonb
+     or basis is distinct from private.weekly_source_inventory_approval_basis_v2(t.timesheet_id,inventory)
+     or origin is distinct from jsonb_build_object('kind','INITIAL_AUTHORISED_TSFIN_V1',
+       'root_authorisation_id',a.id,'financial_snapshot_id',f.id,'authorisation_generation',a.authorisation_generation,
+       'root_timesheet_id',t.timesheet_id,'root_version',t.version::text,'authorised_row_signature',a.authorised_row_signature,
+       'financial_snapshot_digest',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_FINANCIAL_SNAPSHOT_V2',
+         jsonb_build_object('policy',f.policy_snapshot_json,'details',details,'components',inventory->'components')),'hex'),
+       'inventory_digest',basis->>'inventory_digest','entitlement_digest',basis->>'entitlement_digest')
+     or basis->>'detail_digest' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_DETAIL_V2',details),'hex')
+     or basis->>'policy_fingerprint' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_POLICY_V2',f.policy_snapshot_json),'hex')
+     or r.source_inventory_digest is distinct from decode(basis->>'inventory_digest','hex')
+     or r.approved_source_ex_vat is distinct from (basis->>'approved_pay_ex_vat')::numeric
+     or r.expected_line_count is distinct from jsonb_array_length(inventory->'components')
+  then raise exception 'BPAY_NEXT_INITIAL_I1_CERTIFICATE_REQUIRED' using errcode='55000';end if;
+  select count(*) into n from private.bpay_next_approved_line l where l.revision_id=r.id;
+  if n<>r.expected_line_count or exists(select 1 from jsonb_array_elements(inventory->'components') component
+      left join private.bpay_next_approved_line l on l.revision_id=r.id
+        and l.source_component_id=(component.value->>'component_id')::uuid
+        and l.component_key='SOURCE:'||(component.value->>'component_id')
+      where l.id is null or l.line_no is distinct from (component.value->>'component_ordinal')::integer
+        or l.evidence_ref is distinct from 'source-component:'||(component.value->>'component_id')||'#'||(component.value->>'component_sha256')
+        or l.source_pay_ex_vat is distinct from case when (component.value->>'exclude_from_pay')::boolean then 0 else (component.value->>'pay_ex_vat')::numeric end
+        or l.component_kind is distinct from case component.value->>'component_kind' when 'WORKED_TIME' then 'WORK' when 'ADDITIONAL_UNIT' then 'ADDITIONAL' else 'EXPENSE' end
+        or l.tax_treatment is distinct from case when component.value->>'component_kind' in ('WORKED_TIME','ADDITIONAL_UNIT') then 'TAXABLE'::text
+          when component.value->>'component_kind' in ('EXPENSE','SOURCE_FIXED_EXPENSE') then 'NON_TAXABLE'::text else null::text end)
+  then raise exception 'BPAY_NEXT_INITIAL_SEALED_COMPONENTS_MISMATCH' using errcode='23514';end if;
+  return jsonb_build_object('candidate_id',w.candidate_id,'work_id',w.id,'revision_id',r.id,'command_id',p.command_id,
+    'source_channel',r.source_pay_channel,'origin',origin,'basis',basis,'components',inventory->'components',
+    'certificate_digest',encode(private.weekly_source_sha256_jsonb_v1('BPAY_NEXT_INITIAL_TSFIN_CERTIFICATE_V1',basis),'hex'));
+end
+$function$;
+alter function private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_checklist_native_initial_bound_assert_core_v1(p_binding_version_id uuid,p_native_locks boolean)
+returns void language plpgsql security definer set search_path=pg_catalog,private,public
+as $function$
+declare v private.bpay_next_source_component_binding_version%rowtype;l private.bpay_next_approved_line%rowtype;
+  cert jsonb;origin jsonb;basis jsonb;component jsonb;
+begin
+  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;
+  select x.* into strict v from private.bpay_next_source_component_binding_version x where x.id=p_binding_version_id;
+  if v.origin_kind is distinct from 'INITIAL_AUTHORISED_TSFIN_V1' then
+    raise exception 'BPAY_NEXT_INITIAL_ORIGIN_REQUIRED' using errcode='23514';end if;
+  cert:=private.weekly_source_checklist_native_initial_certificate_core_v1(v.initial_root_authorisation_id,p_native_locks);origin:=cert->'origin';basis:=cert->'basis';
+  select value into strict component from jsonb_array_elements(cert->'components') x(value)
+    where (value->>'component_id')::uuid=v.source_component_id;
+  select x.* into strict l from private.bpay_next_approved_line x
+    where x.revision_id=(cert->>'revision_id')::uuid and x.source_component_id=v.source_component_id;
+  if (v.candidate_id,v.canonical_work_id,v.approval_work_id,v.approval_revision_id,v.publication_command_id_1,
+      v.initial_financial_snapshot_id,v.initial_root_timesheet_id,v.initial_root_version,v.initial_authorisation_generation,
+      v.initial_authorised_row_signature,v.initial_financial_snapshot_digest,v.initial_inventory_digest,v.initial_entitlement_digest,
+      v.initial_detail_digest,v.initial_policy_digest,v.initial_certificate_digest,v.component_sha256)
+    is distinct from ((cert->>'candidate_id')::uuid,(cert->>'work_id')::uuid,(cert->>'work_id')::uuid,(cert->>'revision_id')::uuid,
+      (cert->>'command_id')::uuid,(origin->>'financial_snapshot_id')::uuid,(origin->>'root_timesheet_id')::uuid,
+      (origin->>'root_version')::integer,(origin->>'authorisation_generation')::integer,origin->>'authorised_row_signature',
+      decode(origin->>'financial_snapshot_digest','hex'),decode(basis->>'inventory_digest','hex'),decode(basis->>'entitlement_digest','hex'),
+      decode(basis->>'detail_digest','hex'),decode(basis->>'policy_fingerprint','hex'),decode(cert->>'certificate_digest','hex'),
+      decode(component->>'component_sha256','hex'))
+     or (v.approved_line_id,v.classification_line_id,v.canonical_component_key,v.approval_component_key,
+         v.approval_source_channel,v.tax_treatment,v.publication_work_id_1,v.publication_revision_id_1)
+       is distinct from (l.id,l.id,l.component_key,l.component_key,cert->>'source_channel',l.tax_treatment,
+         (cert->>'work_id')::uuid,(cert->>'revision_id')::uuid)
+     or v.binding_digest is distinct from sha256(convert_to(jsonb_build_array('INITIAL_AUTHORISED_TSFIN_V1',v.canonical_work_id,
+       v.canonical_component_key,v.approval_revision_id,v.approved_line_id,v.initial_root_authorisation_id,
+       cert->>'certificate_digest',cert->>'command_id',component->>'component_sha256')::text,'UTF8'))
+  then raise exception 'BPAY_NEXT_INITIAL_CAPTURE_CERTIFICATE_CHANGED' using errcode='23514';end if;
+end
+$function$;
+alter function private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_checklist_native_bound_snapshot_core_v1(p_binding_version_id uuid,p_expected_book_revision bigint,p_native_locks boolean)
+returns table(qualification_state text,selection_state text,candidate_id uuid,
+  canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint,
+  approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid,
+  source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid,
+  approved_source_ex_vat private.bpay_next_penny_amount,
+  native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount,
+  native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount)
+language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare v_version private.bpay_next_source_component_binding_version%rowtype;
+  v_binding private.bpay_next_source_component_binding%rowtype;
+  v_position private.bpay_next_position%rowtype;v_line private.bpay_next_approved_line%rowtype;
+  v_revision private.bpay_next_work_revision%rowtype;v_count integer;
+begin
+  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;
+  if p_binding_version_id is null or p_expected_book_revision is null or p_expected_book_revision<1 then
+    raise exception using errcode='22023',message='BPAY_NEXT_BOUND_SNAPSHOT_ID_REQUIRED';end if;
+  if p_native_locks then
+  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT' for share;
+  else
+  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT';
+  end if;
+  if not found then raise exception using errcode='55000',message='BPAY_NEXT_BINDING_NEXT_REQUIRED';end if;
+  select v.* into strict v_version from private.bpay_next_source_component_binding_version v where v.id=p_binding_version_id;
+  if p_native_locks then
+  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id for share;
+  else
+  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id;
+  end if;
+  if not found then raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CONTROL_REQUIRED';end if;
+  if p_native_locks then
+  select b.* into strict v_binding from private.bpay_next_source_component_binding b
+    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key for share;
+  else
+  select b.* into strict v_binding from private.bpay_next_source_component_binding b
+    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key;
+  end if;
+  if v_binding.current_binding_version_id is distinct from p_binding_version_id then
+    qualification_state:='SUPERSEDED';return next;return;end if;
+  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
+    perform private.weekly_source_checklist_native_initial_bound_assert_core_v1(v_version.id,p_native_locks);
+  else
+  if not exists(select 1 from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=v_version.decision_bundle_id and b.bundle_revision=v_version.bundle_revision
+      and b.state='COMMITTED') then
+    qualification_state:='BUNDLE_PENDING';return next;return;end if;
+  end if;
+  if p_native_locks then
+  select p.* into v_position from private.bpay_next_position p
+    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key for share;
+  else
+  select p.* into v_position from private.bpay_next_position p
+    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key;
+  end if;
+  if not found then qualification_state:='POSITION_PENDING';return next;return;end if;
+  -- Retain actual Position applicability during the native apply interval:
+  -- Work.applied may still be the predecessor while this Position is new.
+  if not exists(select 1 from private.bpay_next_work w where w.id=v_position.work_id
+    and (v_position.applied_revision_id=w.current_revision_id or v_position.applied_revision_id=w.applied_revision_id)) then
+    qualification_state:='POSITION_PENDING';return next;return;end if;
+  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
+    select pg_catalog.count(*) into v_count from private.bpay_next_publication p
+      join private.bpay_next_work w on w.id=p.work_id
+      join private.bpay_next_command c on c.id=p.command_id
+      join private.bpay_next_command_member m on m.command_id=c.id and m.candidate_id=w.candidate_id
+      join private.bpay_next_job j on j.command_id=c.id and j.candidate_id=w.candidate_id and j.job_kind='POSITION_APPLY'
+      join private.bpay_next_worker_control ctl on ctl.candidate_id=w.candidate_id
+      join private.bpay_next_module_control module on module.id=1 and module.active_owner='NEXT'
+      where p.command_id=v_version.publication_command_id_1 and p.work_id=v_version.approval_work_id
+        and p.revision_id=v_version.approval_revision_id and p.candidate_id=v_version.candidate_id
+        and p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+        and (case when w.current_revision_id is not null and exists(select 1 from private.bpay_next_work_revision cr where cr.id=w.current_revision_id and cr.sealed_at_utc is not null and cr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.current_revision_id) else w.current_revision_id end)=p.revision_id and (case when w.applied_revision_id is not null and exists(select 1 from private.bpay_next_work_revision apr where apr.id=w.applied_revision_id and apr.sealed_at_utc is not null and apr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.applied_revision_id) else w.applied_revision_id end)=p.revision_id
+        and c.id=private.bpay_next_source_command_id_v1(v_version.initial_root_authorisation_id)
+        and c.command_kind='POSITION_APPLY' and c.status='COMPLETE' and c.module_epoch=module.owner_epoch
+        and c.expected_member_count=1 and c.enrolled_member_count=1 and c.sealed_at_utc is not null
+        and j.status='DONE' and j.phase='DONE' and j.module_epoch=c.module_epoch
+        and j.command_sequence=c.agency_sequence and j.owner_epoch>0 and j.owner_epoch<=ctl.active_owner_epoch
+        and j.lease_nonce is null and j.lease_until_utc is null
+        and (case when v_position.applied_revision_id is not null and exists(select 1 from private.bpay_next_work_revision pr where pr.id=v_position.applied_revision_id and pr.sealed_at_utc is not null and pr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(v_position.applied_revision_id) else v_position.applied_revision_id end)=p.revision_id;
+  else
+  select pg_catalog.count(*) into v_count from private.bpay_next_source_binding_members_v1(v_version.source_receipt_id) m
+    join private.bpay_next_publication p on p.command_id=m.publication_command_id
+    join private.bpay_next_work w on w.id=m.work_id
+    where p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+      and (case when w.current_revision_id is not null and exists(select 1 from private.bpay_next_work_revision cr where cr.id=w.current_revision_id and cr.sealed_at_utc is not null and cr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.current_revision_id) else w.current_revision_id end)=m.revision_id and (case when w.applied_revision_id is not null and exists(select 1 from private.bpay_next_work_revision apr where apr.id=w.applied_revision_id and apr.sealed_at_utc is not null and apr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.applied_revision_id) else w.applied_revision_id end)=m.revision_id
+      and ((m.publication_command_id=v_version.publication_command_id_1
+            and m.work_id=v_version.publication_work_id_1 and m.revision_id=v_version.publication_revision_id_1)
+        or (m.publication_command_id=v_version.publication_command_id_2
+            and m.work_id=v_version.publication_work_id_2 and m.revision_id=v_version.publication_revision_id_2));
+  end if;
+  if v_count is distinct from (case when v_version.publication_command_id_2 is null then 1 else 2 end) then
+    qualification_state:='PUBLICATION_PENDING';return next;return;end if;
+  if v_position.source_book_state is distinct from 'READY' then qualification_state:='BOOK_UNBOUND';return next;return;end if;
+  if v_position.source_book_revision is distinct from p_expected_book_revision then
+    qualification_state:='BOOK_REVISION_STALE';return next;return;end if;
+  if v_position.source_basis_channel is distinct from v_position.source_book_seed_channel
+     or (v_position.source_book_seed_channel='PAYE' and
+       (v_position.native_realised_paye is distinct from v_position.realised_source_ex_vat
+        or v_position.native_held_paye is distinct from v_position.held_source_ex_vat))
+     or (v_position.source_book_seed_channel='UMBRELLA' and
+       (v_position.native_realised_umbrella is distinct from v_position.realised_source_ex_vat
+        or v_position.native_held_umbrella is distinct from v_position.held_source_ex_vat)) then
+    qualification_state:='BOOK_POSTING_REQUIRED';return next;return;end if;
+  if v_version.tax_treatment is null or v_version.classification_line_id is null then
+    qualification_state:='CLASSIFICATION_UNBOUND';return next;return;end if;
+  select r.* into strict v_revision from private.bpay_next_work_revision r where r.id=v_version.approval_revision_id;
+  if v_version.component_state='PRESENT' then
+    select l.* into strict v_line from private.bpay_next_approved_line l where l.id=v_version.approved_line_id;
+    approved_source_ex_vat:=v_line.source_pay_ex_vat;
+  else
+    if exists(select 1 from private.bpay_next_approved_line l
+      where l.revision_id=v_version.approval_revision_id and l.component_key=v_version.approval_component_key) then
+      raise exception using errcode='23514',message='BPAY_NEXT_BINDING_REMOVAL_LINE_CONFLICT';end if;
+    approved_source_ex_vat:=0;
+  end if;
+  candidate_id:=v_version.candidate_id;canonical_work_id:=v_version.canonical_work_id;
+  canonical_component_key:=v_version.canonical_component_key;binding_version_id:=v_version.id;
+  source_book_revision:=v_position.source_book_revision;approval_work_id:=v_version.approval_work_id;
+  approval_revision_id:=v_version.approval_revision_id;approved_line_id:=v_version.approved_line_id;
+  head_id:=v_version.head_id;source_receipt_id:=v_version.source_receipt_id;source_channel:=v_version.approval_source_channel;
+  tax_treatment:=v_version.tax_treatment;classification_line_id:=v_version.classification_line_id;
+  valuation_policy_id:=v_revision.valuation_policy_id;
+  native_realised_paye:=v_position.native_realised_paye;native_realised_umbrella:=v_position.native_realised_umbrella;
+  native_held_paye:=v_position.native_held_paye;native_held_umbrella:=v_position.native_held_umbrella;
+  selection_state:='UNBOUND';qualification_state:='READY';return next;
+end
+$function$;
+alter function private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean) owner to postgres;
+revoke all on function private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_checklist_native_members_core_v1(p_work_id uuid,p_revision_id uuid,p_native_locks boolean)
+returns table(component_key text,approved_line_id uuid,approved_segment_id uuid,segment_key text,
+  component_kind text,tax_treatment text,work_date date,approved_quantity numeric,unit_label text,
+  approved_amount numeric,realised_amount numeric,held_amount numeric,source_pay_channel text,
+  parent_complete boolean,segment_attribution_complete boolean)
+language plpgsql security definer set search_path=pg_catalog,private
+as $function$
+declare v_revision private.bpay_next_work_revision%rowtype;v_approval uuid;v_event uuid;
+begin
+  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;
+  perform private.bpay_next_workbench_require_next_v1();
+  select x.* into v_revision from private.bpay_next_work_revision x where x.id=p_revision_id and x.work_id=p_work_id;
+  v_approval:=p_revision_id;v_event:=v_revision.source_event_id;
+  if v_revision.payment_treatment_approval_revision_id is not null and v_revision.sealed_at_utc is not null then
+    v_approval:=private.bpay_next_treatment_approval_revision_v1(v_revision.id);
+    select x.source_event_id into v_event from private.bpay_next_work_revision x where x.id=v_approval and x.work_id=p_work_id;
+  end if;
+  return query
+  with source_books as materialized (
+    select p.component_key,book.qualification_state,book.approval_revision_id,book.approved_line_id,
+      book.source_channel,book.approved_source_ex_vat,book.native_realised_paye,book.native_realised_umbrella,
+      book.native_held_paye,book.native_held_umbrella
+    from private.bpay_next_work w join private.bpay_next_work_revision r on r.id=p_revision_id and r.work_id=w.id
+    join private.bpay_next_position p on p.work_id=w.id and p.source_book_state='READY' and p.source_book_revision>0
+    left join private.bpay_next_approved_line a on a.revision_id=r.id and a.component_key=p.component_key
+    join private.bpay_next_source_component_binding b on b.canonical_work_id=w.id and b.canonical_component_key=p.component_key
+    join private.bpay_next_source_component_binding_version v on v.id=b.current_binding_version_id
+      and v.approval_work_id=w.id and v.approval_revision_id=v_approval and v.approval_component_key=p.component_key
+    left join private.bpay_next_approved_line original_class on original_class.id=coalesce(v.classification_line_id,b.canonical_line_id)
+    cross join lateral private.weekly_source_checklist_native_bound_snapshot_core_v1(v.id,p.source_book_revision,p_native_locks) book
+    where w.id=p_work_id and w.work_kind='SOURCE' and coalesce(a.component_kind,original_class.component_kind)='WORK' and (r.source_head_id is not null
+      or (r.source_kind='SOURCE' and v_event is not null and r.financial_snapshot_id is not null))
+  ), keys as (
+    select a.component_key from private.bpay_next_approved_line a where a.revision_id=p_revision_id
+    union select p.component_key from private.bpay_next_position p where p.work_id=p_work_id
+  ), parents as (
+    select k.component_key,a.id line_id,coalesce(a.component_kind,original_class.component_kind) component_kind,
+      case when a.id is not null then a.tax_treatment else original_class.tax_treatment end tax_treatment,
+      case when a.id is not null then a.work_date else original_class.work_date end work_date,a.approved_quantity,a.unit_label,
+      p.approved_source_ex_vat a,p.realised_source_ex_vat c,p.held_source_ex_vat h,p.source_basis_channel,
+      p.realised_target_ex_vat,p.realised_target_vat,p.realised_target_inc_vat,
+      p.held_target_ex_vat,p.held_target_vat,p.held_target_inc_vat,
+      (p.work_id is not null and p.applied_revision_id=p_revision_id
+        and p.approved_source_ex_vat=coalesce(a.source_pay_ex_vat,0)
+        and (a.id is not null or p.approved_source_ex_vat=0)
+        and (w.work_kind<>'SOURCE' or a.id is not null or original_class.id is not null)
+        and (not (w.work_kind='SOURCE' and coalesce(a.component_kind,original_class.component_kind)='WORK' and (r.source_head_id is not null
+          or (r.source_kind='SOURCE' and v_event is not null and r.financial_snapshot_id is not null)))
+          or (book.qualification_state='READY' and book.approval_revision_id=v_approval
+            and book.approved_line_id is not distinct from aa.id and book.source_channel=r.source_pay_channel
+            and (book.approved_source_ex_vat,book.native_realised_paye,book.native_held_paye,book.native_realised_umbrella,book.native_held_umbrella)
+              is not distinct from (p.approved_source_ex_vat,
+                case when r.source_pay_channel='PAYE' then p.realised_source_ex_vat else 0::numeric end,
+                case when r.source_pay_channel='PAYE' then p.held_source_ex_vat else 0::numeric end,
+                case when r.source_pay_channel='UMBRELLA' then p.realised_source_ex_vat else 0::numeric end,
+                case when r.source_pay_channel='UMBRELLA' then p.held_source_ex_vat else 0::numeric end)))) complete,
+      (exists(select 1 from private.bpay_next_approved_segment s where s.revision_id=p_revision_id and s.component_key=k.component_key)
+        or exists(select 1 from private.bpay_next_work_segment_origin_share s where s.work_id=p_work_id and s.component_key=k.component_key)) segmented
+    from keys k left join private.bpay_next_approved_line a on a.revision_id=p_revision_id and a.component_key=k.component_key
+    left join private.bpay_next_approved_line aa on aa.revision_id=v_approval and aa.component_key=k.component_key
+    left join private.bpay_next_position p on p.work_id=p_work_id and p.component_key=k.component_key
+    join private.bpay_next_work w on w.id=p_work_id
+    left join private.bpay_next_work_revision r on r.id=p_revision_id and r.work_id=w.id
+    left join private.bpay_next_source_component_binding binding on binding.canonical_work_id=w.id and binding.canonical_component_key=k.component_key
+    left join private.bpay_next_source_component_binding_version version on version.id=binding.current_binding_version_id
+    left join private.bpay_next_approved_line original_class on original_class.id=coalesce(version.classification_line_id,binding.canonical_line_id)
+    left join source_books book on book.component_key=k.component_key
+  ), segment_keys as (
+    select s.component_key,s.segment_key from private.bpay_next_approved_segment s where s.revision_id=p_revision_id
+    union select s.component_key,s.segment_key from private.bpay_next_work_segment_origin_share s where s.work_id=p_work_id
+  ), members as (
+    select p.*,s.segment_key,seg.id segment_id,seg.work_date segment_date,seg.approved_hours,
+      coalesce(seg.approved_source_ex_vat,0) segment_a,b.realised_source_ex_vat segment_c,b.active_held_source_ex_vat segment_h
+    from parents p join segment_keys s on s.component_key=p.component_key
+    left join private.bpay_next_approved_segment seg on seg.revision_id=p_revision_id
+      and seg.component_key=s.component_key and seg.segment_key=s.segment_key
+    cross join lateral private.bpay_next_work_segment_gross_balance_v1(p_work_id,s.component_key,s.segment_key) b
+  ), totals as (
+    select m.component_key,sum(m.segment_a) a,sum(m.segment_c) c,sum(m.segment_h) h from members m group by m.component_key
+  ), target_credit as (
+    select e.component_key,sum(e.target_ex_vat) ex,sum(e.target_vat) vat,sum(e.target_inc_vat) inc
+    from private.bpay_next_work_segment_effect_share e where e.work_id=p_work_id group by e.component_key
+  ), target_hold as (
+    select s.component_key,sum(s.target_reserved_ex_vat) ex,sum(s.target_reserved_vat) vat,sum(s.target_reserved_inc_vat) inc
+    from private.bpay_next_work_segment_origin_share s join private.bpay_next_hold h on h.id=s.hold_id and h.status='ACTIVE'
+    where s.work_id=p_work_id group by s.component_key
+  )
+  select m.component_key,m.line_id,m.segment_id,m.segment_key,m.component_kind,m.tax_treatment,
+    m.segment_date,m.approved_hours,'hours'::text,m.segment_a,m.segment_c,m.segment_h,m.source_basis_channel,
+    coalesce(m.complete,false),
+    ((t.a,t.c,t.h,coalesce(c.ex,0),coalesce(c.vat,0),coalesce(c.inc,0),coalesce(h.ex,0),coalesce(h.vat,0),coalesce(h.inc,0))
+      is not distinct from (m.a,m.c,m.h,m.realised_target_ex_vat,m.realised_target_vat,m.realised_target_inc_vat,
+        m.held_target_ex_vat,m.held_target_vat,m.held_target_inc_vat))
+    from members m join totals t on t.component_key=m.component_key
+      left join target_credit c on c.component_key=m.component_key left join target_hold h on h.component_key=m.component_key
+  union all
+  select p.component_key,p.line_id,null::uuid,null::text,p.component_kind,p.tax_treatment,p.work_date,
+    p.approved_quantity,p.unit_label,p.a,p.c,p.h,p.source_basis_channel,coalesce(p.complete,false),true
+    from parents p where not p.segmented;
+end
+$function$;
+alter function private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean) from public,anon,authenticated,service_role;
+
+create or replace function private.bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid,p_expected_book_revision bigint)
+returns table(qualification_state text,selection_state text,candidate_id uuid,
+  canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint,
+  approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid,
+  source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid,
+  approved_source_ex_vat private.bpay_next_penny_amount,
+  native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount,
+  native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount)
+language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+begin
+  return query select * from private.weekly_source_checklist_native_bound_snapshot_core_v1(p_binding_version_id,p_expected_book_revision,true);
+end
+$function$;
+alter function private.bpay_next_bound_source_snapshot_v1(uuid,bigint) owner to postgres;
+revoke all on function private.bpay_next_bound_source_snapshot_v1(uuid,bigint) from public,anon,authenticated,service_role;
+
+create or replace function private.bpay_next_initial_tsfin_certificate_v1(p_root_authorisation_id uuid)
+returns jsonb language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+begin
+  return private.weekly_source_checklist_native_initial_certificate_core_v1(p_root_authorisation_id,true);
+end
+$function$;
+alter function private.bpay_next_initial_tsfin_certificate_v1(uuid) owner to postgres;
+revoke all on function private.bpay_next_initial_tsfin_certificate_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.bpay_next_initial_tsfin_bound_assert_v1(p_binding_version_id uuid)
+returns void language plpgsql security definer set search_path=pg_catalog,private,public
+as $function$
+begin
+  perform private.weekly_source_checklist_native_initial_bound_assert_core_v1(p_binding_version_id,true);
+end
+$function$;
+alter function private.bpay_next_initial_tsfin_bound_assert_v1(uuid) owner to postgres;
+revoke all on function private.bpay_next_initial_tsfin_bound_assert_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.bpay_next_workbench_work_members_v1(p_work_id uuid,p_revision_id uuid)
+returns table(component_key text,approved_line_id uuid,approved_segment_id uuid,segment_key text,
+  component_kind text,tax_treatment text,work_date date,approved_quantity numeric,unit_label text,
+  approved_amount numeric,realised_amount numeric,held_amount numeric,source_pay_channel text,
+  parent_complete boolean,segment_attribution_complete boolean)
+language plpgsql security definer set search_path=pg_catalog,private
+as $function$
+begin
+  return query select * from private.weekly_source_checklist_native_members_core_v1(p_work_id,p_revision_id,true);
+end
+$function$;
+alter function private.bpay_next_workbench_work_members_v1(uuid,uuid) owner to postgres;
+revoke all on function private.bpay_next_workbench_work_members_v1(uuid,uuid) from public,anon,authenticated,service_role;

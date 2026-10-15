@@ -1,0 +1,137 @@
+-- Explicit setup manifest, outside Checklist GET. No fixed calendar lookback.
+-- This descriptor delegates the same genuine submission/signed admission owners
+-- as the existing metadata writer. It is not another submission classifier.
+create or replace function private.weekly_source_checklist_historical_submission_descriptor_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare witness jsonb; route_read jsonb; g public.weekly_source_groups%rowtype;
+  v_client_id uuid; own_week date; work_date date; cycle_week date; group_id uuid; groups integer;
+  calendar jsonb; dated_calendar jsonb; membership jsonb; policies jsonb; assignments jsonb;
+  cycle_id uuid; owners integer; admission jsonb; witness_identity jsonb;
+begin
+  witness:=private.weekly_source_actual_timesheet_submission_v1(p_timesheet_id);
+  if witness->'actual_submitted' is distinct from 'true'::jsonb then return null; end if;
+  v_client_id:=(witness->>'client_id')::uuid; own_week:=(witness->>'week_ending_date')::date;
+  work_date:=(witness->>'work_date')::date;
+  select count(distinct source.id),(array_agg(distinct source.id order by source.id))[1] into groups,group_id
+    from public.weekly_source_groups source
+    cross join lateral(select private.weekly_source_signed_submission_read_context_v1(p_timesheet_id,source.id) context) signed_read
+    where source.active and source.source_family='ROSTER' and signed_read.context->'eligible'='true'::jsonb;
+  if groups=0 then return null; end if;
+  if groups<>1 then raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_SIGNED_SCOPE_AMBIGUOUS' using errcode='55000'; end if;
+  select source.* into g from public.weekly_source_groups source where source.id=group_id;
+  calendar:=private.weekly_source_checklist_client_calendar_v1(v_client_id,(statement_timestamp() at time zone g.timezone)::date);
+  if own_week>(calendar->>'latest_ended_week')::date then return null; end if;
+  dated_calendar:=private.weekly_source_checklist_client_calendar_v1(v_client_id,own_week+1);
+  if dated_calendar->>'latest_ended_week' is distinct from own_week::text then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_CLIENT_WEEK_UNPROVED' using errcode='55000';
+  end if;
+  route_read:=private.weekly_source_signed_submission_read_context_v1(p_timesheet_id,group_id);
+  select coalesce(jsonb_agg(to_jsonb(m) order by to_jsonb(m)::text),'[]'::jsonb) into membership
+    from public.weekly_source_group_clients m where m.source_group_id=group_id and m.client_id=v_client_id
+      and own_week between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+      and work_date between m.valid_from and coalesce(m.valid_to,'infinity'::date);
+  select coalesce(jsonb_agg(to_jsonb(p) order by to_jsonb(p)::text),'[]'::jsonb) into policies
+    from public.weekly_source_client_policies p where p.source_group_id=group_id and p.client_id=v_client_id
+      and work_date between p.effective_from and coalesce(p.effective_to,'infinity'::date)
+      and p.authority_mode='TIMESHEET_AUTHORITY' and p.document_mode='INVOICE_EVIDENCE_REQUIRED' and not p.self_bill_enabled;
+  select coalesce(jsonb_agg(to_jsonb(a) order by to_jsonb(a)::text),'[]'::jsonb) into assignments
+    from public.weekly_source_group_rule_assignments a where a.source_group_id=group_id and a.feature_enabled
+      and a.feature_purpose='SIGNED_CHECK_ONLY' and a.rule_set_version_id is null
+      and own_week between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date);
+  if route_read->'eligible' is distinct from 'true'::jsonb or jsonb_array_length(membership)=0
+    or jsonb_array_length(policies)=0 or jsonb_array_length(assignments)=0 then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_STALE' using errcode='40001';
+  end if;
+  -- Seal real dated admission independently of mutable cycle bookkeeping so
+  -- separate Timesheets in the same week may safely reuse the first receipt.
+  admission:=jsonb_build_object('submission_read',route_read,'source_group',to_jsonb(g),
+    'membership',membership,'policies',policies,'assignments',assignments,
+    'client_calendar',calendar,'dated_client_calendar',dated_calendar);
+  cycle_week:=own_week+((7-extract(dow from own_week)::integer)%7);
+  select case when count(*) filter(where c.scope_client_id=v_client_id)>0
+      then count(*) filter(where c.scope_client_id=v_client_id) else count(*) end,
+    (array_agg(c.id order by (c.scope_client_id is not null) desc,c.id))[1] into owners,cycle_id
+    from public.weekly_source_cycles c where c.source_group_id=group_id and c.finalisation_week_ending=cycle_week
+      and (c.scope_client_id is null or c.scope_client_id=v_client_id);
+  if owners>1 then raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_OWNER_AMBIGUOUS' using errcode='55000'; end if;
+  witness_identity:=jsonb_build_object('authority',witness->>'authority',
+    'workflow_id',witness->'workflow_id','workflow_generation',witness->'workflow_generation',
+    'hours_component_id',witness->'hours_component_id','candidate_signature_component_id',witness->'candidate_signature_component_id',
+    'document_version_id',witness->'document_version_id');
+  return jsonb_build_object('timesheet_id',p_timesheet_id,'timesheet_version',witness->'timesheet_version',
+    'source_group_id',group_id,'client_id',v_client_id,'week_ending',own_week,'native_cycle_week_ending',cycle_week,
+    'source_cycle_id',cycle_id,'witness_identity',witness_identity,
+    'submission_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_V1',witness),'hex'),
+    'admission_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HISTORICAL_SUBMISSION_ADMISSION_V1',admission),'hex'));
+end;
+$function$;
+alter function private.weekly_source_checklist_historical_submission_descriptor_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_historical_submission_descriptor_v1(uuid) from public,anon,authenticated,service_role;
+
+-- Service-only Admin setup read; no read-side creation, locks or fake cycle.
+create or replace function public.weekly_source_checklist_submission_manifest_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; all_rows jsonb; missing jsonb; selected jsonb; entry jsonb;
+  binding text; revision text; token jsonb; after_id uuid; last_id text; more boolean; page_limit integer:=100;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,array['actor_user_id','cursor','limit'],'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID');
+  if jsonb_typeof(p_request->'actor_user_id') is distinct from 'string'
+    or (p_request?'cursor' and jsonb_typeof(p_request->'cursor') is distinct from 'string')
+    or (p_request?'limit' and (jsonb_typeof(p_request->'limit') is distinct from 'number'
+      or not pg_input_is_valid(p_request->>'limit','integer'))) then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023';
+  end if;
+  page_limit:=coalesce((p_request->>'limit')::integer,100);
+  if page_limit not between 1 and 100 then raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023'; end if;
+  if p_request?'cursor' and length(p_request->>'cursor') not between 1 and 4096 then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select u.* into actor from public.tms_users u where u.id=(p_request->>'actor_user_id')::uuid and u.is_active;
+  if actor.id is null or actor.role::text is distinct from 'admin' then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_ACTOR_FORBIDDEN' using errcode='42501';
+  end if;
+  with candidates as materialized (
+    select private.weekly_source_checklist_historical_submission_descriptor_v1(t.timesheet_id) descriptor
+      from public.timesheets t where t.is_current and t.archived_at_utc is null and t.revoked_at is null
+        and t.line_type::text='HOURS' and t.sheet_scope::text in('DAILY','WEEKLY')
+  ) select coalesce(jsonb_agg(descriptor order by descriptor->>'timesheet_id') filter(where descriptor is not null),'[]'::jsonb)
+    into all_rows from candidates;
+  for entry in select r from jsonb_array_elements(all_rows) r loop
+    perform private.weekly_source_office_authority_v1(actor.id,'VIEW_SOURCE_PROGRESS',
+      (entry->>'source_group_id')::uuid,(entry->>'client_id')::uuid,(entry->>'week_ending')::date);
+  end loop;
+  binding:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_MANIFEST_BINDING_V1',
+    jsonb_build_object('actor',to_jsonb(actor),'order','ACTUAL_TIMESHEET_UUID_ASC')),'hex');
+  revision:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_MANIFEST_REVISION_V1',all_rows),'hex');
+  select coalesce(jsonb_agg(r order by r->>'timesheet_id'),'[]'::jsonb) into missing
+    from jsonb_array_elements(all_rows) r where r->'source_cycle_id'='null'::jsonb;
+  if p_request?'cursor' then
+    begin
+      token:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      perform private._weekly_source_settings_assert_request_v1(token,array['contract','binding','read_revision','after'],'CURSOR');
+      if token->>'contract' is distinct from 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_CURSOR_V1'
+        or token->>'binding' is distinct from binding or token->>'read_revision' is distinct from revision
+        or jsonb_typeof(token->'after') is distinct from 'string'
+        or not exists(select 1 from jsonb_array_elements(missing) r where r->>'timesheet_id'=token->>'after') then raise exception 'cursor'; end if;
+      after_id:=(token->>'after')::uuid;
+    exception when others then raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REFRESH_REQUIRED' using errcode='40001'; end;
+  end if;
+  select coalesce(jsonb_agg(r order by r->>'timesheet_id'),'[]'::jsonb),count(*)>page_limit into selected,more
+    from(select r from jsonb_array_elements(missing) r where after_id is null or (r->>'timesheet_id')::uuid>after_id
+      order by (r->>'timesheet_id')::uuid limit page_limit+1) page;
+  if more then selected:=selected-page_limit; end if;
+  last_id:=selected->(jsonb_array_length(selected)-1)->>'timesheet_id';
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_SUBMISSION_MANIFEST_V1','actor_user_id',actor.id,'permission_view','ADMIN',
+    'binding',binding,'read_revision',revision,'eligible_count',jsonb_array_length(all_rows),'missing_count',jsonb_array_length(missing),
+    'rows',selected,'has_more',more,'next_cursor',case when more then replace(encode(convert_to(jsonb_build_object(
+      'contract','WEEKLY_SOURCE_SUBMISSION_MANIFEST_CURSOR_V1','binding',binding,'read_revision',revision,'after',last_id)::text,'UTF8'),'base64'),chr(10),'') end);
+end;
+$function$;
+alter function public.weekly_source_checklist_submission_manifest_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_checklist_submission_manifest_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_checklist_submission_manifest_v1(jsonb) to service_role;

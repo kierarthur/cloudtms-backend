@@ -1,0 +1,222 @@
+-- One check-only/D10 parent census, shared by Checklist and the final native
+-- Queries workspace. Real D10 comparison is independent of Source publication.
+-- Facts/reasons/delivery remain in the existing row owner and D10 decisions.
+-- No second discrepancy, query, send, finance or outreach owner is introduced.
+-- Filter compatibility projects only persisted native reason/comparison codes.
+-- It never compares clocks/amounts or interprets display wording.
+create or replace function private.weekly_source_check_only_issue_filter_keys_v1(p_action_kind text,p_summary jsonb)
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare keys jsonb:='[]'::jsonb; comparisons jsonb; evidence jsonb;
+begin
+  if p_action_kind is null or p_action_kind not in('EMAIL_ISSUE','EMAIL_REMINDER','ADVISORY') or jsonb_typeof(p_summary) is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_FILTER_FACT_INVALID' using errcode='55000';
+  end if;
+  comparisons:=case when jsonb_typeof(p_summary->'comparisons')='array' then p_summary->'comparisons' else '[]'::jsonb end;
+  evidence:=case when jsonb_typeof(p_summary->'evidence_rows')='array' then p_summary->'evidence_rows' else '[]'::jsonb end;
+  if p_action_kind='ADVISORY' and p_summary->>'authority_mode'='VALIDATION_ONLY'
+    and p_summary->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED') then
+    keys:=keys||jsonb_build_array('TIMESHEET_MISSING');
+  end if;
+  if p_action_kind in('EMAIL_ISSUE','EMAIL_REMINDER') and (
+    p_summary->>'reason_code' in('ACTUAL_HOURS_MISMATCH','START_END_MISMATCH','BREAK_MINUTES_MISMATCH')
+    or exists(select 1 from jsonb_array_elements(comparisons) cx where cx->>'match_status'='MISMATCH')
+    or exists(select 1 from jsonb_array_elements(evidence) e cross join lateral jsonb_array_elements_text(
+      case when jsonb_typeof(e->'difference_codes')='array' then e->'difference_codes' else '[]'::jsonb end) code
+      where code in('WORKED_HOURS','START_TIME','END_TIME','BREAK_MINUTES'))) then
+    keys:=keys||jsonb_build_array('HOURS_DIFFER');
+  end if;
+  if p_action_kind in('EMAIL_ISSUE','EMAIL_REMINDER') and (p_summary->>'reason_code'='MISSING_FROM_IMPORT'
+    or exists(select 1 from jsonb_array_elements(comparisons) cx where cx->>'match_status' in('UNMATCHED','HR_ONLY'))) then
+    keys:=keys||jsonb_build_array('MISSING_SHIFT');
+  end if;
+  return keys;
+end;
+$function$;
+alter function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) owner to postgres;
+revoke all on function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_check_only_query_groups_v1(
+  p_source_cycle_id uuid,p_client_id uuid,p_filters jsonb
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  actor public.tms_users%rowtype; cycle public.weekly_source_cycles%rowtype;
+  scope jsonb; view text; authority jsonb; page jsonb; cursor text; raw_revision text;
+  rows jsonb:='[]'::jsonb; raw jsonb; preview jsonb; native_issue jsonb;
+  groups jsonb:='[]'::jsonb; targets jsonb:='[]'::jsonb; children jsonb; child jsonb;
+  parent_identity jsonb; parent_key text; parent_proof text; binding text; revision text;
+  action_bindings jsonb; child_binding jsonb; review_action jsonb; latest_decision public.import_review_decisions%rowtype;
+  state public.import_review_states%rowtype; first_seen timestamptz; group_row jsonb;
+  native_status jsonb; native_summary jsonb; actual_item_id text; native_actions text[]; child_filter_keys jsonb; group_filter_keys jsonb;
+  reminder_facts jsonb; reminder_action jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_filters,
+    array['actor_user_id','source_group_id','week_ending'],'WEEKLY_SOURCE_CHECK_ONLY_GROUP_FILTER_INVALID');
+  select u.* into actor from public.tms_users u where u.id=(p_filters->>'actor_user_id')::uuid and u.is_active;
+  if actor.id is null then raise exception 'WEEKLY_SOURCE_OFFICE_ACTOR_INACTIVE' using errcode='42501'; end if;
+  view:=case when lower(btrim(coalesce(actor.role,'')))='admin' then 'ADMIN' else 'PAY_READONLY' end;
+  if not pg_input_is_valid(coalesce(p_filters->>'week_ending',''),'date') then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_GROUP_FILTER_INVALID' using errcode='22023';
+  end if;
+  select c.* into cycle from public.weekly_source_cycles c where c.id=p_source_cycle_id;
+  if cycle.id is null or cycle.source_group_id::text is distinct from p_filters->>'source_group_id'
+    or p_client_id is null or (cycle.scope_client_id is not null and cycle.scope_client_id<>p_client_id)
+    or (p_filters->>'week_ending')::date not between cycle.finalisation_week_ending-6 and cycle.finalisation_week_ending then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='22023';
+  end if;
+  scope:=jsonb_build_object('source_group_id',cycle.source_group_id,'client_id',p_client_id,
+    'source_cycle_id',cycle.id,'week_ending',p_filters->>'week_ending');
+  authority:=private.weekly_source_office_authority_v1(actor.id,
+    case when view='ADMIN' then 'VIEW_SOURCE_PROGRESS' else 'VIEW_PAY_WORK' end,
+    cycle.source_group_id,p_client_id,(p_filters->>'week_ending')::date);
+  binding:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_QUERY_GROUP_BINDING_V1',
+    jsonb_build_object('actor',actor.id,'view',view,'authority',authority,'scope',scope)),'hex');
+  cursor:=null;
+  loop
+    page:=private.weekly_source_check_only_query_rows_v1(cycle.id,p_client_id,
+      jsonb_strip_nulls(p_filters||jsonb_build_object('limit',100,'cursor',cursor)));
+    if page->'ok' is distinct from 'true'::jsonb then
+      raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_READ_UNAVAILABLE' using errcode='55000';
+    end if;
+    if raw_revision is not null and raw_revision is distinct from page->>'read_revision' then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+    end if;
+    raw_revision:=page->>'read_revision'; rows:=rows||page->'rows';
+    exit when page->'has_more'='false'::jsonb;
+    if cursor is not distinct from page->>'next_cursor' then
+      raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_READ_UNAVAILABLE' using errcode='55000';
+    end if;
+    cursor:=page->>'next_cursor';
+  end loop;
+  -- HR comparison/questions are invoice subjects. Pay-only actors see no D10
+  -- parents or private import/action frames; their authority still binds this
+  -- empty census. Native Source pay subjects retain their separate existing path.
+  if view='ADMIN' then
+    for raw in select value from jsonb_array_elements(rows) loop
+      preview:=raw->'query_preview';
+      if preview is null or preview='null'::jsonb then continue; end if;
+      select s.* into state from public.import_review_states s where s.import_id=(preview->>'import_id')::uuid
+        and s.preview_generation=(preview->>'preview_generation')::integer and s.state_version=(preview->>'state_version')::bigint
+        and s.preview_fingerprint=preview->>'preview_fingerprint' and s.superseded_at_utc is null and s.abandoned_at_utc is null;
+      if state.import_id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001'; end if;
+      children:='[]'::jsonb; action_bindings:='[]'::jsonb; native_actions:='{}'::text[]; first_seen:=null; group_filter_keys:='[]'::jsonb;
+      for native_issue in select value from jsonb_array_elements(case when raw->>'item_kind'='SOURCE_INFORMATION' then
+        jsonb_build_array(jsonb_build_object('action_id',raw->'action_id','action_kind',raw->'action_kind',
+          'evidence_fingerprint',raw->'evidence_fingerprint','reason_code',raw->'native_reason_code','summary',raw->'summary'))
+        else coalesce(raw->'native_issues','[]'::jsonb) end) order by value->>'action_id'
+      loop
+        -- Action IDs are the native decision PK. Reprove current import/preview,
+        -- actual subject and evidence; no lookup by a display name or guessed TS.
+        select d.* into latest_decision from public.import_review_decisions d
+          where d.action_id=native_issue->>'action_id' and d.import_id=state.import_id
+            and d.preview_generation=state.preview_generation and d.client_id=p_client_id and d.is_current
+            and d.evidence_fingerprint=native_issue->>'evidence_fingerprint'
+            and d.action_kind=native_issue->>'action_kind'
+            and ((raw->>'item_kind'='SOURCE_INFORMATION' and d.timesheet_id is null
+              and d.hr_row_id=(raw->>'hr_row_id')::uuid and d.action_kind='ADVISORY'
+              and d.summary_json->>'authority_mode'='VALIDATION_ONLY')
+              or (raw->>'item_kind'='ACTUAL_TIMESHEET' and d.timesheet_id=(raw->>'timesheet_id')::uuid
+                and d.action_kind in('EMAIL_ISSUE','EMAIL_REMINDER')));
+        if latest_decision.action_id is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001'; end if;
+        if latest_decision.action_id=any(native_actions) then
+          raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_ACTION_AMBIGUOUS' using errcode='55000';
+        end if;
+        native_actions:=array_append(native_actions,latest_decision.action_id);
+        child_binding:=jsonb_build_object('owner','public.import_review_actions_page_v1','actor_user_id',actor.id,
+          'scope',scope,'import_id',state.import_id,'preview_generation',state.preview_generation,'state_version',state.state_version,
+          'preview_fingerprint',state.preview_fingerprint,'action_id',latest_decision.action_id,
+          'action_kind',latest_decision.action_kind,'evidence_fingerprint',latest_decision.evidence_fingerprint);
+        action_bindings:=action_bindings||jsonb_build_array(child_binding);
+        native_summary:=latest_decision.summary_json;
+        child_filter_keys:=private.weekly_source_check_only_issue_filter_keys_v1(latest_decision.action_kind,native_summary);
+        select coalesce(jsonb_agg(key order by key),'[]'::jsonb) into group_filter_keys
+          from(select distinct key from jsonb_array_elements_text(group_filter_keys||child_filter_keys) key) native_keys;
+        native_status:=case when jsonb_typeof(native_summary->'status')='object' then native_summary->'status'
+          else jsonb_build_object('text',coalesce(nullif(native_summary->>'outcome_label',''),
+            nullif(native_summary->>'reason_code',''),latest_decision.action_kind),'tone','muted') end;
+        first_seen:=least(first_seen,latest_decision.created_at_utc);
+        child:=jsonb_build_object('row_key',latest_decision.action_id,'origin','CHECK_ONLY_D10',
+          'day_date',to_char((raw->>'work_date')::date,'Dy FMDD Mon YYYY'),
+          'job_role',coalesce(native_summary#>>'{imported_evidence,role}',''),
+          'candidate_hours',coalesce(native_summary#>>'{current_evidence,worked_hours}',''),
+          'system_hours',coalesce(native_summary#>>'{imported_evidence,worked_hours}',''),
+          'issue',coalesce(native_summary->>'outcome_label',native_summary->>'reason_code',latest_decision.action_kind),
+          'issue_filter_keys',child_filter_keys,
+          'status',native_status,'incident_id',null,'accept_eligible',false,'actions','[]'::jsonb,
+          'native_action_binding',child_binding,
+          'delivery',case when raw->>'item_kind'='ACTUAL_TIMESHEET' then jsonb_build_object(
+            'sent_verified',native_issue->'sent_verified','last_sent_at',native_issue->'last_sent_at',
+            'sent_count',native_issue->'sent_count','issue_id',native_issue->'issue_id','issue_fingerprint',native_issue->'issue_fingerprint') end);
+        children:=children||jsonb_build_array(child);
+      end loop;
+      if jsonb_array_length(children)=0 then continue; end if;
+      actual_item_id:=raw->>'item_id';
+      -- This owner creates the new native parent once from authentic identities.
+      -- Consumers receive the literal key and proof; they never re-hash a child
+      -- or infer a parent from candidate/client text. Preview/CAS changes make an
+      -- old exact target stale, even when the physical Timesheet is unchanged.
+      parent_identity:=jsonb_build_object('scope',scope,'item_id',actual_item_id,'preview',preview,'actions',action_bindings);
+      -- Strip actor only from the ordered native action frames, preserving one
+      -- stable parent across authorised Admin readers. Permission is in binding.
+      parent_identity:=jsonb_set(parent_identity,'{actions}',(select jsonb_agg(a.value-'actor_user_id' order by a.ordinality)
+        from jsonb_array_elements(action_bindings) with ordinality a(value,ordinality)),false);
+      parent_key:='d10g_'||encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_QUERY_PARENT_V1',parent_identity),'hex');
+      parent_proof:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_QUERY_PARENT_PROOF_V1',
+        jsonb_build_object('owner_identity',parent_identity,'actor',actor.id,'authority',authority,'children',children)),'hex');
+      -- Deliberate navigation delegates the complete existing native D10
+      -- selection/APPLY/committed-email owner. A GET never invokes that owner.
+      -- This descriptor grants no send, selection, Source outreach or Reminder.
+      review_action:=jsonb_build_object('label','View details','kind','CHECK_ONLY_D10_REVIEW','enabled',true,
+        'payload',jsonb_build_object('contract','WEEKLY_SOURCE_CHECK_ONLY_D10_REVIEW_ACTION_V1',
+          'actor_user_id',actor.id,'permission_view',view,'scope',scope,'parent_group_key',parent_key,
+          'item_id',actual_item_id,'proof_hash',parent_proof,'action_bindings',action_bindings),
+        'context',jsonb_build_object('candidate',raw->'worker','client',raw->'client'));
+      reminder_action:=null;
+      if raw->>'item_kind'='SOURCE_INFORMATION' and raw->>'native_reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED') then
+        reminder_facts:=private.weekly_source_check_only_candidate_reminder_context_v1(actor.id,scope,raw->>'action_id');
+        if reminder_facts->'available'='true'::jsonb then
+          reminder_action:=jsonb_build_object('label','Remind candidate','kind','CHECK_ONLY_D10_CANDIDATE_REMINDER','enabled',true,
+            'payload',jsonb_build_object('contract','WEEKLY_SOURCE_CHECK_ONLY_D10_CANDIDATE_REMINDER_ACTION_V1',
+              'actor_user_id',actor.id,'permission_view',view,'scope',scope,'parent_group_key',parent_key,
+              'parent_proof_hash',parent_proof,'action_id',raw->>'action_id','candidate_context_hash',reminder_facts->>'context_hash'),
+            'context',jsonb_build_object('candidate',raw->'worker','client',raw->'client'));
+        end if;
+      end if;
+      group_row:=jsonb_build_object('row_key',parent_key,'group_key',parent_key,'origin','CHECK_ONLY_D10',
+        'client_id',p_client_id,'candidate_id',raw->'candidate_id','candidate_sort',private.weekly_source_query_ascii_fold_v1(raw->>'worker'),
+        'candidate',raw->'worker','client',raw->'client','issues',jsonb_array_length(children),'issue_filter_keys',group_filter_keys,
+        'candidate_asked',null,'manager_informed',null,'status',jsonb_build_object('text','HealthRoster comparison','tone','muted'),
+        'age',case when first_seen is null then '—' when transaction_timestamp()-first_seen<interval '1 hour' then 'Less than 1 hour'
+          when transaction_timestamp()-first_seen<interval '24 hours' then floor(extract(epoch from (transaction_timestamp()-first_seen))/3600)::integer||' hours'
+          else floor(extract(epoch from (transaction_timestamp()-first_seen))/86400)::integer||' days' end,
+        'first_seen_at_utc',first_seen,'children',children,'actions',jsonb_build_array(review_action),
+        'outreach_eligible',false,'manager_eligible',false,'candidate_app_available',false,
+        'source_outreach_eligible',false,'bulk_actions','{}'::jsonb,'proof_hash',parent_proof);
+      if exists(select 1 from jsonb_array_elements(groups) g where g->>'group_key'=parent_key) then
+        raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_PARENT_AMBIGUOUS' using errcode='55000';
+      end if;
+      if reminder_action is not null then group_row:=jsonb_set(group_row,'{actions}',group_row->'actions'||jsonb_build_array(reminder_action),false); end if;
+      groups:=groups||jsonb_build_array(group_row);
+      targets:=targets||jsonb_build_array(jsonb_build_object('item_id',actual_item_id,'parent_group_key',parent_key,
+        'owner','private.weekly_source_check_only_query_groups_v1','actor_user_id',actor.id,'permission_view',view,
+        'import_id',state.import_id,'preview_generation',state.preview_generation,'state_version',state.state_version,
+        'preview_fingerprint',state.preview_fingerprint,'proof_hash',parent_proof));
+    end loop;
+  end if;
+  select coalesce(jsonb_agg(g.value order by g.value->>'candidate_sort' collate "C",g.value->>'group_key' collate "C"),'[]'::jsonb)
+    into groups from jsonb_array_elements(groups) g(value);
+  select coalesce(jsonb_agg(t.value order by t.value->>'item_id' collate "C"),'[]'::jsonb)
+    into targets from jsonb_array_elements(targets) t(value);
+  revision:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_QUERY_GROUP_READ_V1',
+    jsonb_build_object('binding',binding,'source_read_revision',raw_revision,'groups',groups,'item_targets',targets)),'hex');
+  return jsonb_build_object('contract','WEEKLY_SOURCE_CHECK_ONLY_QUERY_GROUPS_V1','actor_user_id',actor.id,
+    'permission_view',view,'scope',scope,'binding',binding,'read_revision',revision,'source_read_revision',raw_revision,
+    'groups',groups,'item_targets',targets,'source_outreach_eligible',false,'bulk_actions','{}'::jsonb);
+end;
+$function$;
+alter function private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;

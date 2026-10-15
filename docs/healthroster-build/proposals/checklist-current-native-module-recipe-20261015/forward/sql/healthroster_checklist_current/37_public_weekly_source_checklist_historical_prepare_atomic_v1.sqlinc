@@ -1,0 +1,53 @@
+create or replace function public.weekly_source_checklist_historical_prepare_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; expected_actor jsonb; descriptor jsonb; after_descriptor jsonb; result jsonb;
+  timesheet_id uuid; expected_witness text; expected_admission text;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','timesheet_id','submission_witness_sha256','admission_sha256'],'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID');
+  if jsonb_typeof(p_request->'actor_user_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'timesheet_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'submission_witness_sha256') is distinct from 'string'
+    or jsonb_typeof(p_request->'admission_sha256') is distinct from 'string'
+    or p_request->>'submission_witness_sha256'!~'^[0-9a-f]{64}$' or p_request->>'admission_sha256'!~'^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023';
+  end if;
+  timesheet_id:=(p_request->>'timesheet_id')::uuid;
+  expected_witness:=p_request->>'submission_witness_sha256'; expected_admission:=p_request->>'admission_sha256';
+  select u.* into actor from public.tms_users u where u.id=(p_request->>'actor_user_id')::uuid and u.is_active;
+  if actor.id is null or actor.role::text is distinct from 'admin' then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_ACTOR_FORBIDDEN' using errcode='42501';
+  end if;
+  expected_actor:=to_jsonb(actor);
+  descriptor:=private.weekly_source_checklist_historical_submission_descriptor_v1(timesheet_id);
+  if descriptor is null or descriptor->>'submission_witness_sha256' is distinct from expected_witness
+    or descriptor->>'admission_sha256' is distinct from expected_admission then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_STALE' using errcode='40001';
+  end if;
+  -- Reuse the complete established lifecycle owner: genuine witness/dated
+  -- membership/client calendar, I1 -> F1 -> lifecycle advisory/G1, native
+  -- Sunday/cutoff/default created_at and unique/CAS. No business save here.
+  result:=private.weekly_source_checklist_submission_cycle_prepare_v1(timesheet_id,actor.id);
+  after_descriptor:=private.weekly_source_checklist_historical_submission_descriptor_v1(timesheet_id);
+  if result->'applies' is distinct from 'true'::jsonb or after_descriptor is null
+    or after_descriptor->>'submission_witness_sha256' is distinct from expected_witness
+    or after_descriptor->>'admission_sha256' is distinct from expected_admission
+    or after_descriptor->'source_cycle_id' is distinct from result->'source_cycle_id' then
+    -- Exception rolls this metadata-only transaction back; earlier distinct
+    -- Timesheet transactions remain accurately recorded by the setup caller.
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_STALE' using errcode='40001';
+  end if;
+  select u.* into actor from public.tms_users u where u.id=actor.id and u.is_active;
+  if to_jsonb(actor) is distinct from expected_actor then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_ACTOR_FORBIDDEN' using errcode='42501';
+  end if;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_HISTORICAL_SUBMISSION_PREPARE_V1',
+    'actor_user_id',actor.id,'timesheet_id',timesheet_id,'metadata_only',true,'descriptor',after_descriptor);
+end;
+$function$;
+alter function public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb) to service_role;

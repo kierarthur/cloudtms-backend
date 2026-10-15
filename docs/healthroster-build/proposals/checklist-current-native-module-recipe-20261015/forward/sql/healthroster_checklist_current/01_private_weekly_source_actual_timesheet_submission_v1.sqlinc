@@ -1,0 +1,182 @@
+create or replace function private.weekly_source_actual_timesheet_submission_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare t public.timesheets%rowtype; c public.contracts%rowtype; f public.timesheets_financials%rowtype;
+  w public.candidate_submission_workflows%rowtype; h public.candidate_submission_components%rowtype;
+  sig public.candidate_submission_components%rowtype; v_client uuid; v_candidate uuid;
+  v_count integer; v_date date; v_input jsonb; v_patch jsonb; v_evidence jsonb; v_reason text;
+  v_artifact_generation integer; v_final_receipt jsonb;
+begin
+  select * into t from public.timesheets where timesheet_id=p_timesheet_id;
+  if t.timesheet_id is null or not t.is_current or t.archived_at_utc is not null or t.revoked_at is not null
+    or t.status::text in('REVOKED','ARCHIVED','CANCELLED') or t.line_type::text<>'HOURS' or t.sheet_scope::text not in('WEEKLY','DAILY') then
+    return jsonb_build_object('actual_submitted',false,'support_state','NOT_SUBMITTED','reason','NO_CURRENT_HOURS_TIMESHEET');
+  end if;
+  -- A waiting Office proposal is never a worker submission. Applied pair
+  -- selection excludes displaced original and reversal before aggregation.
+  if t.correction_kind='WHOLE_TIMESHEET_REVERSAL'
+    or exists(select 1 from private.timesheet_correction_requests r where
+      (r.state='WAITING' and r.replacement_timesheet_id=t.timesheet_id)
+      or (r.state='APPLIED' and r.reversed_timesheet_id=t.timesheet_id)) then
+    return jsonb_build_object('actual_submitted',false,'support_state','NOT_SUBMITTED','reason','CORRECTION_MEMBER_NOT_COUNTED');
+  end if;
+  select count(*),(array_agg(id order by id))[1] into v_count,f.id from public.timesheets_financials
+    where timesheet_id=t.timesheet_id and is_current and timesheet_version=t.version;
+  if v_count>1 then
+    return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','CURRENT_FINANCIAL_IDENTITY_AMBIGUOUS');
+  end if;
+  if f.id is not null then select * into f from public.timesheets_financials where id=f.id; end if;
+  if t.contract_id is not null then
+    select * into c from public.contracts where id=t.contract_id;
+    if c.id is null then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','ACTUAL_CONTRACT_UNAVAILABLE');
+    end if;
+    v_client:=c.client_id; v_candidate:=c.candidate_id;
+    if f.id is not null and (f.client_id is distinct from v_client or f.candidate_id is distinct from v_candidate) then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','ACTUAL_FINANCIAL_OWNER_MISMATCH');
+    end if;
+  elsif t.sheet_scope::text='DAILY' and f.id is not null then
+    v_client:=f.client_id; v_candidate:=f.candidate_id;
+  else
+    return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','NULL_CONTRACT_DAILY_OWNER_UNAVAILABLE');
+  end if;
+  if v_client is null or v_candidate is null or (nullif(t.settings_authority_json->>'client_id','') is not null
+    and lower(t.settings_authority_json->>'client_id') is distinct from v_client::text) then
+    return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','ACTUAL_OWNER_UNAVAILABLE');
+  end if;
+  -- Exact target binding can precede final TS workflow bookkeeping. Require
+  -- one real submitted HOURS workflow for the actual Candidate and target.
+  select count(*),(array_agg(id order by id))[1] into v_count,w.id
+  from public.candidate_submission_workflows wf where (wf.target_timesheet_id=t.timesheet_id
+    or (wf.state='FINALISED' and wf.workflow_kind='CONTRACT_COMBINED' and wf.id=t.candidate_workflow_id
+      and exists(select 1 from public.candidate_submission_components actual_hours
+        where actual_hours.workflow_id=wf.id and actual_hours.workflow_generation=wf.generation-1
+          and actual_hours.component_kind='HOURS_TIMESHEET' and actual_hours.state='IMMUTABLE'
+          and actual_hours.required and actual_hours.timesheet_id=t.timesheet_id)))
+    and wf.candidate_id=v_candidate and wf.workflow_kind in('CONTRACT_HOURS','CONTRACT_COMBINED','DAILY')
+    and wf.state in('WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+      'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+      'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
+    and wf.worker_submitted_at_utc is not null and wf.cancelled_at_utc is null
+    and (t.candidate_workflow_id is null or wf.id=t.candidate_workflow_id);
+  if v_count>1 then
+    return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','SUBMISSION_WORKFLOW_AMBIGUOUS');
+  end if;
+  if w.id is not null then
+    select * into w from public.candidate_submission_workflows where id=w.id;
+    if jsonb_typeof(w.immutable_submission_json) is distinct from 'object'
+      or octet_length(w.immutable_submission_sha256) is distinct from 32
+      or private._candidate_sha256_jsonb_v1(w.immutable_submission_json) is distinct from w.immutable_submission_sha256
+      or w.contract_id is distinct from t.contract_id
+      or (t.sheet_scope::text='WEEKLY' and w.week_ending_date is distinct from t.week_ending_date)
+      or (t.sheet_scope::text='DAILY' and (w.week_ending_date is not null or w.contract_week_id is not null))
+      or w.scope is distinct from t.sheet_scope::text
+      or (t.sheet_scope::text='DAILY') is distinct from (w.workflow_kind='DAILY') then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','IMMUTABLE_SUBMISSION_IDENTITY_UNPROVED');
+    end if;
+    -- Native WORKER_SUBMIT owns the signed artifact generation. Ordinary
+    -- FINALISED bookkeeping advances the workflow exactly once without
+    -- replacing those immutable components or the TS artifact binding.
+    -- Accept that finite arm only with the actual retained native receipt.
+    v_artifact_generation:=w.generation;
+    if w.state='FINALISED' then
+      select count(*),(jsonb_agg(a.after_json order by a.id))->0 into v_count,v_final_receipt
+        from public.audit_events a where a.object_type='candidate_workflow_finalisation_completion'
+          and a.object_id_text=w.id::text and a.action='CANDIDATE_WORKFLOW_FINALISATION_COMPLETED'
+          and a.before_json->>'contract_version'='CANDIDATE_FINALISATION_COMPLETION_V1'
+          and a.before_json->>'workflow_generation'=(w.generation-1)::text
+          and a.after_json->'ok'='true'::jsonb and a.after_json->>'workflow_id'=w.id::text
+          and a.after_json->>'generation'=w.generation::text and a.after_json->>'state'='FINALISED'
+          and (a.after_json->>'timesheet_id'=t.timesheet_id::text
+            or (w.workflow_kind='CONTRACT_COMBINED'
+              and a.after_json#>>'{canonical_result,hours_timesheet_id}'=t.timesheet_id::text
+              and a.after_json#>'{canonical_result,hours_result,ok}'='true'::jsonb))
+          and a.after_json->>'canonical_financial_sha256_hex'=encode(w.canonical_financial_sha256,'hex')
+          and a.before_json->>'finalisation_identity_sha256'=encode(private._candidate_sha256_jsonb_v1(
+            a.before_json->'finalisation_identity'),'hex');
+      if v_count<>1 or w.finalised_at_utc is null or octet_length(w.canonical_financial_sha256) is distinct from 32 then
+        return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','NATIVE_FINALISATION_ARTIFACT_BINDING_UNPROVED');
+      end if;
+      v_artifact_generation:=w.generation-1;
+    end if;
+    -- A freshly re-submitted pending claim can precede native TS bookkeeping;
+    -- its exact current target, immutable claim and signature own the new
+    -- witness. A future/absent TS generation is never accepted, and FINALISED
+    -- still requires its exact retained artifact generation/receipt binding.
+    if t.candidate_workflow_id is not null and (t.candidate_workflow_generation is null
+      or t.candidate_workflow_generation<1 or t.candidate_workflow_generation>v_artifact_generation
+      or (w.state='FINALISED' and t.candidate_workflow_generation is distinct from v_artifact_generation)) then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','NATIVE_ARTIFACT_GENERATION_MISMATCH');
+    end if;
+    v_input:=coalesce(w.immutable_submission_json->'hours_submission',w.immutable_submission_json);
+    if jsonb_typeof(v_input) is distinct from 'object' then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','IMMUTABLE_HOURS_SUBMISSION_UNAVAILABLE');
+    end if;
+    v_patch:=coalesce(v_input->'timesheet_patch_json',v_input);
+    if jsonb_typeof(v_patch) is distinct from 'object' or (t.sheet_scope::text='WEEKLY'
+      and jsonb_typeof(coalesce(v_patch->'actual_schedule_json',v_input#>'{canonical_tsfin_snapshot,actual_schedule_json}')) is distinct from 'array') then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','FROZEN_WORKER_HOURS_CLAIM_UNAVAILABLE');
+    end if;
+    select count(*),(array_agg(id order by id))[1] into v_count,h.id
+    from public.candidate_submission_components component where component.workflow_id=w.id
+      and component.workflow_generation=v_artifact_generation and component.component_kind='HOURS_TIMESHEET'
+      and component.required and component.state='IMMUTABLE' and component.immutable_at_utc is not null
+      and (component.timesheet_id is null or component.timesheet_id=t.timesheet_id);
+    if v_count<>1 then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','IMMUTABLE_HOURS_COMPONENT_UNPROVED');
+    end if;
+    select * into h from public.candidate_submission_components where id=h.id;
+    -- Electronic submission requires its native immutable Candidate signature.
+    -- Paper workflows without that receipt remain a precise engineering gate;
+    -- a later verified manual/QR source can qualify through the legacy arm.
+    select * into sig from public.candidate_submission_components where id=w.candidate_signature_component_id
+      and workflow_id=w.id and workflow_generation=v_artifact_generation and document_role='CANDIDATE_SIGNATURE'
+      and state='IMMUTABLE' and immutable_at_utc is not null;
+    if sig.id is null or w.candidate_signed_at_utc is null or nullif(btrim(sig.storage_key),'') is null
+      or octet_length(sig.source_content_sha256) is distinct from 32
+      or sig.source_content_sha256 is distinct from w.candidate_signature_sha256 then
+      v_reason:='CANDIDATE_SUBMISSION_SIGNATURE_UNPROVED';
+    else
+      if t.sheet_scope::text='DAILY' then
+        -- This unchanged native helper performs the actual submitted-hours
+        -- patch projection; no guessed Daily JSON layout or booked fallback.
+        v_patch:=private._candidate_daily_canonical_save_input_v1(w.id,w.generation)->'timesheet_patch_json';
+        if not pg_input_is_valid(coalesce(v_patch->>'worked_start_iso',''),'timestamp with time zone')
+          or not pg_input_is_valid(coalesce(v_patch->>'worked_end_iso',''),'timestamp with time zone') then
+          return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','SUBMITTED_DAILY_WORK_DATE_UNAVAILABLE');
+        end if;
+        v_date:=( (v_patch->>'worked_start_iso')::timestamptz at time zone 'Europe/London')::date;
+        if v_date is distinct from w.work_date or v_date<t.week_ending_date-6 or v_date>t.week_ending_date then
+          return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','SUBMITTED_DAILY_WORK_DATE_MISMATCH');
+        end if;
+      else v_date:=t.week_ending_date; end if;
+      return jsonb_build_object('actual_submitted',true,'support_state','PROVED','authority','CANDIDATE_IMMUTABLE_HOURS',
+        'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'client_id',v_client,'candidate_id',v_candidate,
+        'contract_id',t.contract_id,'sheet_scope',t.sheet_scope,'week_ending_date',t.week_ending_date,'work_date',v_date,
+        'workflow_id',w.id,'workflow_generation',v_artifact_generation,'submission_sha256',encode(w.immutable_submission_sha256,'hex'),
+        'hours_component_id',h.id,'candidate_signature_component_id',sig.id,'submitted_at_utc',w.worker_submitted_at_utc,
+        'manager_approved_at_utc',w.manager_approved_at_utc,'workflow_state',w.state);
+    end if;
+  end if;
+  -- Reuse the normal read-only complete source/document contract. A manual
+  -- key, planned clocks or bare schedule alone can never qualify this arm.
+  v_evidence:=public._import_review_query_evidence_core_v1(t.timesheet_id);
+  if coalesce((v_evidence->>'source_complete')::boolean,false)
+    and coalesce((v_evidence->>'document_ready')::boolean,false) then
+    v_date:=case when t.sheet_scope::text='DAILY' then (t.worked_start_iso at time zone 'Europe/London')::date else t.week_ending_date end;
+    if v_date is null or v_date<t.week_ending_date-6 or v_date>t.week_ending_date then
+      return jsonb_build_object('actual_submitted',false,'support_state','UNPROVED','reason','LEGACY_ACTUAL_WORK_DATE_UNAVAILABLE');
+    end if;
+    return jsonb_build_object('actual_submitted',true,'support_state','PROVED','authority','VERIFIED_LEGACY_SOURCE_DOCUMENT',
+      'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'client_id',v_client,'candidate_id',v_candidate,
+      'contract_id',t.contract_id,'sheet_scope',t.sheet_scope,'week_ending_date',t.week_ending_date,'work_date',v_date,
+      'document_version_id',v_evidence->'document_version_id','source_evidence_fingerprint',v_evidence->'evidence_fingerprint');
+  end if;
+  return jsonb_build_object('actual_submitted',false,'support_state',case when w.id is null
+    and not coalesce((v_evidence->>'source_complete')::boolean,false) then 'NOT_SUBMITTED' else 'UNPROVED' end,
+    'reason',coalesce(v_reason,'ACTUAL_SUBMISSION_SOURCE_WITNESS_UNAVAILABLE'));
+end;
+$function$;
+alter function private.weekly_source_actual_timesheet_submission_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_actual_timesheet_submission_v1(uuid) from public,anon,authenticated,service_role;

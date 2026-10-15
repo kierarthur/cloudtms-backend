@@ -1,0 +1,64 @@
+create or replace function private.bpay_next_append_work_skip_v1(p_run_id uuid,p_work_id uuid,p_revision_id uuid)
+returns text language plpgsql security invoker set search_path=pg_catalog,private,public
+as $function$
+declare v_run private.bpay_next_pay_run%rowtype;v_work private.bpay_next_work%rowtype;
+ v_revision private.bpay_next_work_revision%rowtype;v_gate jsonb;v_skip text;
+begin
+ select src.* into strict v_run from private.bpay_next_pay_run src where id=p_run_id;
+ -- Accepted acknowledgements use the original per-Work skip, including a
+ -- held Work with no work_choice. Never read newer hold to amend that offer.
+ if v_run.accepted_choice_descriptor is not null then
+  select skip_code into v_skip from private.bpay_next_run_choice_member
+   where run_id=p_run_id and work_id=p_work_id and member_kind='WORK';
+  if found then return v_skip;end if;
+  if exists(select 1 from private.bpay_next_work_choice where run_id=p_run_id and work_id=p_work_id
+    and expected_revision_id=p_revision_id) then return null;end if;
+  raise exception using errcode='23514',message='BPAY_NEXT_CHOICE_DESCRIPTOR_MISSING';
+ end if;
+ select src.* into strict v_work from private.bpay_next_work src where id=p_work_id for share;
+ if p_revision_id is not null and not exists(select 1 from private.bpay_next_work_revision
+   where work_id=p_work_id and id=p_revision_id) then
+  raise exception using errcode='23514',message='BPAY_NEXT_CHOICE_REVISION_CONFLICT';end if;
+ select src.* into v_revision from private.bpay_next_work_revision src
+   where work_id=p_work_id and id=p_revision_id;
+ if v_work.approval_state is distinct from 'APPROVED' or v_revision.approved_at_utc is null
+   or v_revision.sealed_at_utc is null then return 'BPAY_NEXT_SELECTION_WORK_NOT_APPROVED';end if;
+ if v_work.current_revision_id is distinct from p_revision_id or v_work.applied_revision_id is distinct from p_revision_id then
+  return 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT';end if;
+ if v_work.week_ending_date-6>date_trunc('week',v_run.snooze_business_date::timestamp)::date then
+  return 'BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE';end if;
+ if not exists(select 1 from public.timesheets t join public.timesheets_financials tf
+   on tf.timesheet_id=t.timesheet_id and tf.is_current
+   where t.booking_id=v_work.booking_id and t.is_current) then
+  return 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT';end if;
+ if exists(select 1 from public.timesheets t join public.timesheets_financials tf
+   on tf.timesheet_id=t.timesheet_id and tf.is_current=true
+   where t.booking_id=v_work.booking_id and t.is_current=true and tf.pay_on_hold is true) then
+  return 'BPAY_NEXT_SELECTION_ON_HOLD';end if;
+ if not exists(select 1 from private.bpay_next_revision_worker_basis where revision_id=p_revision_id) then
+  raise exception using errcode='55000',message='BPAY_NEXT_SELECTION_BASIS_UNAVAILABLE';end if;
+ if exists(select 1 from private.bpay_next_snooze sn
+   join lateral(select ev.after_state from private.bpay_next_snooze_event ev
+     where ev.snooze_id=sn.id and ev.control_sequence<=v_run.snooze_control_sequence
+     order by ev.control_sequence desc limit 1) e on true
+   join private.bpay_next_revision_worker_basis b on b.revision_id=p_revision_id
+   where sn.work_id=p_work_id and sn.scope_kind='WHOLE_TIMESHEET' and (e.after_state->>'active')::boolean
+     and ((e.after_state->>'until_date') is null or (e.after_state->>'until_date')::date>=v_run.snooze_business_date)
+     and (e.after_state->>'worker_pay_basis')::bytea=b.whole_basis) then
+  return 'BPAY_NEXT_SELECTION_SNOOZED';end if;
+ if v_revision.source_kind in ('SOURCE','PROTECTED') then
+  begin
+   perform private.weekly_source_pay_query_admit_v2();
+   v_gate:=private.weekly_source_pay_query_gate_v1(v_revision.physical_timesheet_id);
+   if v_gate->'ok' is distinct from 'true'::jsonb or v_gate->>'code' is distinct from 'OK'
+     or jsonb_typeof(v_gate->'blocked') is distinct from 'boolean' then
+    return 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE';end if;
+   if v_gate->'blocked'='true'::jsonb and
+     private.bpay_next_source_query_segment_exclusions_v1(p_revision_id,v_gate) is null then return 'SOURCE_PAY_QUERY_OPEN';end if;
+  exception when others then return 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE';end;
+ end if;
+ return null;
+end
+$function$;
+alter function private.bpay_next_append_work_skip_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.bpay_next_append_work_skip_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

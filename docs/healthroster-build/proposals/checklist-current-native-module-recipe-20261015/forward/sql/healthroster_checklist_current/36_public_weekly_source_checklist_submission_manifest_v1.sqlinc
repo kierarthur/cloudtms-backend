@@ -1,0 +1,64 @@
+create or replace function public.weekly_source_checklist_submission_manifest_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; all_rows jsonb; missing jsonb; selected jsonb; entry jsonb;
+  binding text; revision text; token jsonb; after_id uuid; last_id text; more boolean; page_limit integer:=100;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,array['actor_user_id','cursor','limit'],'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID');
+  if jsonb_typeof(p_request->'actor_user_id') is distinct from 'string'
+    or (p_request?'cursor' and jsonb_typeof(p_request->'cursor') is distinct from 'string')
+    or (p_request?'limit' and (jsonb_typeof(p_request->'limit') is distinct from 'number'
+      or not pg_input_is_valid(p_request->>'limit','integer'))) then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023';
+  end if;
+  page_limit:=coalesce((p_request->>'limit')::integer,100);
+  if page_limit not between 1 and 100 then raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023'; end if;
+  if p_request?'cursor' and length(p_request->>'cursor') not between 1 and 4096 then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select u.* into actor from public.tms_users u where u.id=(p_request->>'actor_user_id')::uuid and u.is_active;
+  if actor.id is null or actor.role::text is distinct from 'admin' then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_ACTOR_FORBIDDEN' using errcode='42501';
+  end if;
+  with candidates as materialized (
+    select private.weekly_source_checklist_historical_submission_descriptor_v1(t.timesheet_id) descriptor
+      from public.timesheets t where t.is_current and t.archived_at_utc is null and t.revoked_at is null
+        and t.line_type::text='HOURS' and t.sheet_scope::text in('DAILY','WEEKLY')
+  ) select coalesce(jsonb_agg(descriptor order by descriptor->>'timesheet_id') filter(where descriptor is not null),'[]'::jsonb)
+    into all_rows from candidates;
+  for entry in select r from jsonb_array_elements(all_rows) r loop
+    perform private.weekly_source_office_authority_v1(actor.id,'VIEW_SOURCE_PROGRESS',
+      (entry->>'source_group_id')::uuid,(entry->>'client_id')::uuid,(entry->>'week_ending')::date);
+  end loop;
+  binding:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_MANIFEST_BINDING_V1',
+    jsonb_build_object('actor',to_jsonb(actor),'order','ACTUAL_TIMESHEET_UUID_ASC')),'hex');
+  revision:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_MANIFEST_REVISION_V1',all_rows),'hex');
+  select coalesce(jsonb_agg(r order by r->>'timesheet_id'),'[]'::jsonb) into missing
+    from jsonb_array_elements(all_rows) r where r->'source_cycle_id'='null'::jsonb;
+  if p_request?'cursor' then
+    begin
+      token:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      perform private._weekly_source_settings_assert_request_v1(token,array['contract','binding','read_revision','after'],'CURSOR');
+      if token->>'contract' is distinct from 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_CURSOR_V1'
+        or token->>'binding' is distinct from binding or token->>'read_revision' is distinct from revision
+        or jsonb_typeof(token->'after') is distinct from 'string'
+        or not exists(select 1 from jsonb_array_elements(missing) r where r->>'timesheet_id'=token->>'after') then raise exception 'cursor'; end if;
+      after_id:=(token->>'after')::uuid;
+    exception when others then raise exception 'WEEKLY_SOURCE_SUBMISSION_MANIFEST_REFRESH_REQUIRED' using errcode='40001'; end;
+  end if;
+  select coalesce(jsonb_agg(r order by r->>'timesheet_id'),'[]'::jsonb),count(*)>page_limit into selected,more
+    from(select r from jsonb_array_elements(missing) r where after_id is null or (r->>'timesheet_id')::uuid>after_id
+      order by (r->>'timesheet_id')::uuid limit page_limit+1) page;
+  if more then selected:=selected-page_limit; end if;
+  last_id:=selected->(jsonb_array_length(selected)-1)->>'timesheet_id';
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_SUBMISSION_MANIFEST_V1','actor_user_id',actor.id,'permission_view','ADMIN',
+    'binding',binding,'read_revision',revision,'eligible_count',jsonb_array_length(all_rows),'missing_count',jsonb_array_length(missing),
+    'rows',selected,'has_more',more,'next_cursor',case when more then replace(encode(convert_to(jsonb_build_object(
+      'contract','WEEKLY_SOURCE_SUBMISSION_MANIFEST_CURSOR_V1','binding',binding,'read_revision',revision,'after',last_id)::text,'UTF8'),'base64'),chr(10),'') end);
+end;
+$function$;
+alter function public.weekly_source_checklist_submission_manifest_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_checklist_submission_manifest_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_checklist_submission_manifest_v1(jsonb) to service_role;

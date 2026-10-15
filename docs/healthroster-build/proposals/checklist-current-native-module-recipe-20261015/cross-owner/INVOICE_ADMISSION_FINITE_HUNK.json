@@ -1,0 +1,10 @@
+{
+  "source_only": true,
+  "current_whole_Money_Report_owner_required": true,
+  "old_whole_admission_excluded": true,
+  "existing_WEEEKLY_SOURCE_INVOICE_VAT_FIT_HELD_preserved": true,
+  "hunk": {
+    "before": "select 1 from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id\n    where mm.client_manifest_id=v_manifest.id and m.source_facts_json->>'invoice_hold'='VAT_FIT'\n      and not exists(select 1 from public.weekly_source_invoice_hold_releases receipt where receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT')",
+    "after": "select 1 from private.weekly_source_invoice_unreleased_vat_fit_movements_v1(v_manifest.id)"
+  }
+}

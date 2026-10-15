@@ -1,0 +1,96 @@
+create or replace function private.weekly_source_checklist_process_v1(p_cycle uuid,p_client uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare revision record; task record; run public.weekly_source_finalisation_pay_runs%rowtype;
+  receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype; contexts jsonb;
+  facts jsonb:='[]'::jsonb; proof boolean; tasks_proved boolean; count_tasks integer;
+  publication_proof jsonb;publication_proof_after jsonb;publication_facts jsonb;
+begin
+  for revision in
+    -- History is independent per real scope. A report completion must never
+    -- erase the export pay revision merely by superseding a client completion.
+    select distinct on(fr.authority_scope_kind,fr.report_scope_id) fr.*,cm.id client_manifest_id,cm.manifest_hash client_manifest_hash
+    from public.weekly_source_final_revisions fr
+    join public.weekly_source_client_manifests cm on cm.final_revision_id=fr.id and cm.client_id=p_client
+      and cm.source_cycle_id=fr.source_cycle_id
+    where fr.source_cycle_id=p_cycle and fr.state in('CURRENT','SUPERSEDED')
+    order by fr.authority_scope_kind,fr.report_scope_id,fr.revision_number desc,fr.id desc
+  loop
+    proof:=isfinite(revision.finalised_at_utc) and octet_length(revision.manifest_hash)=32
+      and octet_length(revision.client_manifest_hash)=32
+      and exists(select 1 from public.weekly_source_uploads u
+        join public.weekly_source_upload_attempts a on a.logical_upload_id=u.id and a.result='ACCEPTED'
+        join public.weekly_source_projection_publications publication on publication.upload_id=u.id
+          and publication.source_cycle_id=p_cycle
+          and publication.report_scope_id is not distinct from revision.report_scope_id
+          and publication.authority_scope_kind=revision.authority_scope_kind
+        where u.id=revision.upload_id and u.source_cycle_id=p_cycle
+          and u.report_scope_id is not distinct from revision.report_scope_id);
+    publication_facts:='[]'::jsonb;
+    if revision.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' then
+      select * into run from public.weekly_source_finalisation_pay_runs r where r.final_revision_id=revision.id;
+      select coalesce(jsonb_agg(t.prepared_context_json||jsonb_build_object(
+        'prepared_context_hash',encode(t.prepared_context_hash,'hex')) order by t.root_timesheet_id),'[]'::jsonb),count(*)::integer
+        into contexts,count_tasks from public.weekly_source_finalisation_pay_tasks t where t.run_id=run.id;
+      proof:=proof and run.id is not null and run.source_cycle_id=p_cycle and run.state='COMPLETE'
+        and isfinite(run.completed_at_utc) and run.final_revision_manifest_hash=revision.manifest_hash
+        and run.task_count=count_tasks and run.terminal_task_count=run.task_count and run.action_required_task_count=0
+        and run.run_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_FINALISATION_PAY_RUN_V1',jsonb_build_object(
+          'final_revision_id',run.final_revision_id,'source_cycle_id',run.source_cycle_id,'requested_by_user_id',run.requested_by_user_id,
+          'final_revision_manifest_hash',encode(run.final_revision_manifest_hash,'hex'),
+          'task_manifest_hash',encode(run.task_manifest_hash,'hex'),'task_count',run.task_count))
+        and run.task_manifest_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_FINALISATION_PAY_TASK_MANIFEST_V1',contexts);
+      tasks_proved:=true;
+      for task in select t.*,m.client_id from public.weekly_source_finalisation_pay_tasks t
+        join public.weekly_source_client_manifests m on m.id=t.client_manifest_id where t.run_id=run.id
+      loop
+        select * into receipt from public.weekly_source_ordinary_pay_projection_receipts r where r.id=task.projection_receipt_id;
+        tasks_proved:=tasks_proved and task.state in('PREPARED_FOR_AUTHORISATION','PROPOSED','NO_OP_FIRST_NEGATIVE','TARGET_MANAGED_SUPPRESSED')
+          and isfinite(task.completed_at_utc) and receipt.id is not null
+          and receipt.final_revision_id=revision.id and receipt.source_cycle_id=p_cycle
+          and receipt.client_id=task.client_id and receipt.root_timesheet_id=task.root_timesheet_id
+          and receipt.actor_user_id=run.requested_by_user_id and receipt.outcome=task.state
+          and receipt.idempotency_key=task.projection_idempotency_key
+          and receipt.final_manifest_hash=revision.manifest_hash and receipt.final_policy_fingerprint=revision.policy_fingerprint
+          and private.weekly_source_report_projection_receipt_assert_v1(receipt) is true
+          and task.prepared_context_hash=private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_FINALISATION_PAY_ROOT_CONTEXT_V1',task.prepared_context_json)
+          and task.prepared_context_json->>'schema_version'='WEEKLY_SOURCE_FINALISATION_PAY_ROOT_CONTEXT_V1'
+          and task.prepared_context_json->>'final_revision_id'=revision.id::text
+          and task.prepared_context_json->>'source_cycle_id'=p_cycle::text
+          and task.prepared_context_json->>'client_id'=task.client_id::text
+          and task.prepared_context_json->>'client_manifest_id'=task.client_manifest_id::text
+          and task.prepared_context_json->>'root_timesheet_id'=task.root_timesheet_id::text;
+        -- Orchestration alone still proves nothing. Require the SAME actual
+        -- receipt revision's current native publication, for every actual event.
+        if task.client_id=p_client and task.state in('PROPOSED','TARGET_MANAGED_SUPPRESSED') then
+          publication_proof:=private.weekly_source_checklist_process_publication_v1(receipt.id);
+          publication_proof_after:=private.weekly_source_checklist_process_publication_v1(receipt.id);
+          if publication_proof is distinct from publication_proof_after then
+            raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';end if;
+          publication_facts:=publication_facts||jsonb_build_array(jsonb_build_object('task_id',task.id,'publication',publication_proof));
+          tasks_proved:=tasks_proved and publication_proof->'proved'='true'::jsonb;
+        end if;
+        if task.state='PREPARED_FOR_AUTHORISATION' and not exists(select 1 from public.timesheets_financials f
+          join public.timesheets root on root.timesheet_id=task.root_timesheet_id
+          where f.id=receipt.published_timesheet_financial_id and f.timesheet_id=task.root_timesheet_id
+            and f.client_id=task.client_id and f.timesheet_version=task.root_timesheet_version
+            and root.booking_id=task.root_family_booking_id) then tasks_proved:=false; end if;
+      end loop;
+      proof:=proof and tasks_proved;
+    end if;
+    facts:=facts||jsonb_build_array(jsonb_build_object('final_revision_id',revision.id,
+      'authority_scope_kind',revision.authority_scope_kind,'report_scope_id',revision.report_scope_id,
+      'client_manifest_id',revision.client_manifest_id,'manifest_hash',encode(revision.manifest_hash,'hex'),
+      'client_manifest_hash',encode(revision.client_manifest_hash,'hex'),'finalised_at_utc',revision.finalised_at_utc,
+      'process_complete',coalesce(proof,false),'native_publication_facts',publication_facts,'pay_run_id',case when revision.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' then run.id end,
+      'pay_run_hash',case when revision.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' then encode(run.run_hash,'hex') end));
+  end loop;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_CHECKLIST_PROCESS_V1','source_cycle_id',p_cycle,'client_id',p_client,
+    'scopes',facts,'financial_withholding_proved',false,
+    'read_revision',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_PROCESS_V1',facts),'hex'));
+end;
+$function$;
+alter function private.weekly_source_checklist_process_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_process_v1(uuid,uuid) from public,anon,authenticated,service_role;

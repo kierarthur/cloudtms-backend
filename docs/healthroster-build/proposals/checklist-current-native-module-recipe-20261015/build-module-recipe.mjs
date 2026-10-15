@@ -1,0 +1,74 @@
+// Complete explicit current source recipe. Writes only this owned proposal.
+// Never executes SQL or changes shared canonical source.
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{execFileSync}from'node:child_process';import{fileURLToPath}from'node:url';
+import{scanManagedSql}from'../../../../scripts/cloudtms-managed-release-sql.mjs';
+import{functionEvents}from'../checklist-native-20261014/financial-native-input-20261014/PINNED_A0_CURRENT_SOURCE_INDEX.mjs';
+import{readRootSourceIndex,sha}from'./read-root-source-index.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),rootRepo=path.resolve(repo,'../healthroster-install2-14102026');
+const sourceCommit='6346f699029201de90288514e4c0751d43e10553',rootCommit='62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9';
+const processFixCommit=process.argv[2];assert(/^[a-f0-9]{40}$/.test(processFixCommit??''),'exact published process-fix commit required');
+const prefix='supabase/repeatable/healthroster_wp_u3_source_proposals/',proposal='docs/healthroster-build/proposals/';
+const inputs=[],owners=[],seen=new Set(),modules=[],mount='healthroster_checklist_current';
+const raw=(commit,file)=>execFileSync('git',['-c','maintenance.auto=false','cat-file','blob',commit+':'+file],{cwd:repo,maxBuffer:20e6});
+for(const dir of ['input','forward/sql/'+mount,'forward/runtime','forward/verification','cross-owner'])fs.mkdirSync(path.join(here,dir),{recursive:true});
+function pin(commit,file,kind='owned'){const b=raw(commit,file),saved=path.join(kind==='root'?rootRepo:repo,file);assert.deepEqual(b,fs.readFileSync(saved),'saved '+file);const dest='input/'+String(inputs.length+1).padStart(2,'0')+'_'+path.basename(file);fs.writeFileSync(path.join(here,dest),b);inputs.push({commit,file,kind,saved_file:dest,bytes:b.length,sha256:sha(b)});return b.toString().replaceAll('\r\n','\n');}
+const norm=s=>s.toLowerCase().replaceAll('"','').replaceAll(/\s+/g,'');
+function select(file,only=null,commit=sourceCommit){const text=pin(commit,file),scan=scanManagedSql(text),selected=[];
+ for(const statement of scan.statements){const part=text.slice(statement.start,statement.end),e=functionEvents(part).events.find(e=>e.kind==='CREATE');if(!e||only&&!only(e))continue;assert(!seen.has(e.id),'duplicate '+e.id);seen.add(e.id);
+  const acl=scan.statements.map(s=>text.slice(s.start,s.end)).filter(s=>{const m=s.match(/(?:alter\s+function|on\s+function)\s+((?:public|private)\.[a-z0-9_]+\s*\([^)]*\))/i);return m&&norm(m[1])===norm(e.id)&&/^\s*(?:--[^\n]*\n\s*)*(?:alter|revoke|grant)\b/i.test(s);});
+  assert(acl.some(s=>/owner\s+to\s+postgres/i.test(s)),'owner '+e.id);assert(acl.some(s=>/revoke\s+all/i.test(s)),'revoke '+e.id);
+  const id=String(owners.length+1).padStart(2,'0')+'_'+e.name.replaceAll('.','_')+'.sqlinc',output='forward/sql/'+mount+'/'+id,body=e.definition+'\n'+acl.map(s=>s.trim()).join('\n')+'\n';
+  fs.writeFileSync(path.join(here,output),body);owners.push({id:e.id,name:e.name,source_commit:commit,source_file:file,source_file_sha256:sha(raw(commit,file)),definition_sha256:sha(e.definition),output,output_sha256:sha(body),ACL:acl.map(s=>s.trim()),definition:e.definition,body:e.body});selected.push(output);}
+ assert(selected.length,file);modules.push(...selected);}
+// Actual submission/read identity before every financial and public owner.
+for(const f of ['wp_u3_submission_context.sqlinc','wp_u3_signed_submission_read_context.sqlinc','wp_u3_client_calendar.sqlinc','wp_u3_check_only_query_rows.sqlinc','wp_u3_check_only_query_groups.sqlinc'])select(prefix+f);
+select(proposal+'checklist-native-ordinary-next-hold-20261015/input/Native77_shared_financial_kernel.sqlinc',e=>e.name.startsWith('private.weekly_source_checklist_native_'));
+select(proposal+'checklist-native-invoice-decision-transport-20261015/shared-owner/NATIVE_RELEASE_QUALIFICATION.forward.sqlinc',e=>e.name.startsWith('private.'));
+select(prefix+'wp_u3_invoice_block_native.forward.sqlinc',e=>e.name==='private.weekly_source_invoice_unreleased_vat_fit_movements_v1');
+select(proposal+'checklist-native-own-calendar-20261015/forward/15102026_0405_native_work_period_proof.sqlinc');
+for(const f of ['wp_u3_legacy_pay_state_core.sqlinc','wp_u3_legacy_read_frame.sqlinc','wp_u3_native_hold_facts.sqlinc'])select(proposal+'checklist-native-legacy-read-frame-20261015/forward/'+f);
+select(proposal+'checklist-native-ordinary-treatment-20261015/forward/wp_u3_ordinary_next_hold.sqlinc');
+select(proposal+'checklist-native-own-calendar-20261015/forward/wp_u3_source_shift_query_money.sqlinc');
+select(prefix+'wp_u3_source_invoice_block.sqlinc');
+select(proposal+'checklist-invoice-decision-action-20261015/forward/wp_u3_source_invoice_decisions.sqlinc');
+select(proposal+'checklist-process-event-coverage-fix-20261015/forward/wp_u3_process_publication.sqlinc',null,processFixCommit);
+select(proposal+'checklist-native-process-publication-20261015/forward/wp_u3_native_process.sqlinc');
+for(const f of ['wp_u3_native_page.sqlinc','wp_u3_native_tracker.sqlinc'])select(prefix+f);
+select(proposal+'checklist-native-ordinary-next-hold-20261015/forward/wp_u3_client_week_context.sqlinc');
+for(const f of ['wp_u3_check_only_candidate_reminder_subject.sqlinc','wp_u3_check_only_candidate_reminder_context.sqlinc','wp_u3_check_only_candidate_reminder_atomic.sqlinc','wp_u3_submission_cycle_admit.sqlinc','wp_u3_submission_cycle_prepare.sqlinc','wp_u3_submission_cycle_dispatch.sqlinc','wp_u3_submission_cycle_service.sqlinc','wp_u3_historical_submission_manifest.sqlinc','wp_u3_historical_submission_prepare.sqlinc'])select(prefix+f);
+select(proposal+'checklist-native-next-daily-hold-20261015/forward/wp_u3_native_checklist.sqlinc');
+const rootSource=readRootSourceIndex(repo,rootCommit),live=new Map(rootSource.index.live),byName=new Map();for(const o of owners)live.set(o.id,o);for(const o of live.values()){if(!byName.has(o.name))byName.set(o.name,[]);byName.get(o.name).push(o);}
+const dependencies=[];for(const o of owners)for(const name of rootSource.references(o.body)){if(name==='extensions.digest'){dependencies.push({caller:o.id,callee:name,boundary:'opaque_native_extension_ABI',native:false});continue;}assert(byName.has(name),'unresolved '+o.id+' -> '+name);for(const r of byName.get(name))dependencies.push({caller:o.id,callee:r.id,owner:seen.has(r.id)?'NEW_CURRENT_MODULE':'EXISTING_CURRENT_ROOT',source_commit:seen.has(r.id)?r.source_commit:rootCommit,source_file:r.source_file??r.file,definition_sha256:r.definition_sha256??sha(r.definition)});}
+const publicOwners=owners.filter(o=>o.name.startsWith('public.')),privateOwners=owners.filter(o=>o.name.startsWith('private.'));
+assert(publicOwners.every(o=>o.ACL.some(s=>/grant\s+execute[\s\S]*to\s+service_role/i.test(s))));assert(privateOwners.every(o=>!o.ACL.some(s=>/^grant\b/i.test(s))));
+const newRoot='-- Current Native/Checklist source module. Root mounts only after independent disposition.\n\\set ON_ERROR_STOP on\nbegin;\n'+modules.map(f=>'\\ir '+mount+'/'+path.basename(f)).join('\n')+'\ncommit;\n';fs.writeFileSync(path.join(here,'forward/sql/15102026_0600_healthroster_checklist_current_v1.sql'),newRoot);
+// Registry declarations derive from the ACTUAL final current root declaration,
+// then preserve all central and independent entries. No old frozen count wins.
+const central='supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql',final='supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc',independent='supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql';
+const centralText=pin(rootCommit,central,'root'),finalText=pin(rootCommit,final,'root'),verifierText=pin(rootCommit,independent,'root');
+const contract=(s,name)=>{const e=functionEvents(s).events.find(e=>e.name===name&&e.kind==='CREATE');assert(e,name);return{e,rows:[...e.body.matchAll(/\('([^']+)'\)/g)].map(m=>m[1])};};
+const privateName='private._weekly_source_acl_private_helper_contract_v1',serviceName='private._weekly_source_acl_service_rpc_contract_v1';
+const basePrivate=contract(finalText,privateName).rows,baseService=contract(finalText,serviceName).rows;
+const parseArray=(s,key)=>{const m=s.match(new RegExp(key+'\\s+text\\[\\]\\s*:=\\s*array\\[([\\s\\S]*?)\\];','i'));assert(m,key);return{match:m[0],body:m[1],rows:[...m[1].matchAll(/'([^']+)'/g)].map(m=>m[1])};};
+const arrays={private:parseArray(verifierText,'v_expected_private_helpers'),service:parseArray(verifierText,'v_expected_service_rpcs')};
+const privateSet=new Set([...basePrivate,...contract(centralText,privateName).rows,...arrays.private.rows,...privateOwners.map(o=>o.id)]),serviceSet=new Set([...baseService,...contract(centralText,serviceName).rows,...arrays.service.rows,...publicOwners.map(o=>o.id)]);
+for(const k of privateSet)assert(!serviceSet.has(k),'private/service overlap '+k);
+for(const s of [centralText]){for(const x of contract(s,privateName).rows)assert(privateSet.has(x),'lost central private '+x);for(const x of contract(s,serviceName).rows)assert(serviceSet.has(x),'lost central service '+x);}
+for(const x of arrays.private.rows)assert(privateSet.has(x),'lost independent private '+x);for(const x of arrays.service.rows)assert(serviceSet.has(x),'lost independent service '+x);
+const privateRows=[...privateSet].sort(),serviceRows=[...serviceSet].sort(),aclReversals=[];
+function registryForward(s,file){const hunks=[];for(const[name,rows]of[[privateName,privateRows],[serviceName,serviceRows]]){const{e}=contract(s,name),body='\n  values\n'+rows.map(x=>"    ('"+x+"')").join(',\n')+';\n',replacement=e.definition.replace(e.body,()=>body);assert.notEqual(replacement,e.definition);assert.equal(s.split(e.definition).length,2);hunks.push({before:e.definition,after:replacement});s=s.replace(e.definition,()=>replacement);}aclReversals.push({source_commit:rootCommit,source_path:file,hunks});return s;}
+const centralAfter=registryForward(centralText,central),finalAfter=registryForward(finalText,final);let verifierAfter=verifierText;const vh=[];for(const [key,rows]of[['v_expected_private_helpers',privateRows],['v_expected_service_rpcs',serviceRows]]){const a=parseArray(verifierAfter,key),next=key+' text[]:=array[\n'+rows.map(x=>"    '"+x+"'").join(',\n')+'\n  ];';vh.push({before:a.match,after:next});verifierAfter=verifierAfter.replace(a.match,()=>next);}aclReversals.push({source_commit:rootCommit,source_path:independent,hunks:vh});
+for(const [name,text]of[['central_acl_inventory.sqlinc',centralAfter],['final_acl_union.sqlinc',finalAfter]])fs.writeFileSync(path.join(here,'forward/sql/'+mount+'/'+name),text);fs.writeFileSync(path.join(here,'forward/verification/15092026_1534_weekly_source_acl_contract_v1.sql'),verifierAfter);
+fs.writeFileSync(path.join(here,'forward/sql/15102026_0601_healthroster_checklist_current_acl_v1.sql'),'\\set ON_ERROR_STOP on\n\\ir '+mount+'/central_acl_inventory.sqlinc\nbegin;\n\\ir '+mount+'/final_acl_union.sqlinc\ncommit;\n');
+for(let i=0;i<aclReversals.length;i++){const r=aclReversals[i],before=raw(r.source_commit,r.source_path).toString().replaceAll('\r\n','\n');let after=[centralAfter,finalAfter,verifierAfter][i];r.before_sha256=sha(before);r.after_sha256=sha(after);for(const h of [...r.hunks].reverse()){assert.equal(after.split(h.after).length,2);after=after.replace(h.after,()=>h.before);}assert.equal(after,before);r.whole_reverse_equal=true;}fs.writeFileSync(path.join(here,'ACL_COMPLETE_REVERSALS.json'),JSON.stringify({source_only:true,records:aclReversals},null,2)+'\n');
+// Exact current DTO/transport; preserve current root route owner via finite
+// later transport/Candidate amendments, not an older whole routes.js overwrite.
+for(const f of ['healthroster-checklist-source.mjs','checklist-read.mjs']){const text=pin(sourceCommit,proposal+'checklist-native-next-daily-hold-20261015/forward/'+f);fs.writeFileSync(path.join(here,'forward/runtime/'+f),text);}
+const runtimeTargets=[];for(const file of ['broker/src/weekly-source/routes.js','broker/src/weekly-source/submission-cycle-prepare.mjs','broker/src/weekly-source/check-only-candidate-reminder.mjs','scripts/healthroster-prepare-historical-checklist.mjs']){const text=pin(sourceCommit,file);if(!file.endsWith('/routes.js')){const output='forward/runtime/'+path.basename(file);fs.writeFileSync(path.join(here,output),text);runtimeTargets.push({target:file,output,sha256:sha(text)});}}
+fs.writeFileSync(path.join(here,'CURRENT_ROOT_INPUT_PINS.json'),JSON.stringify({commit:rootCommit,source_only:true,compiled_effective_body_coverage:false,inputs:rootSource.inputs},null,2)+'\n');
+// Preserve the exact current root Source/A0 closure and its recorded mandatory
+// verifier bodies; no recipe output may write any of these paths.
+const composition=JSON.parse(raw(rootCommit,'docs/healthroster-build/install2-a0-physical-source-canonical-20261015/COMPOSITION.json'));
+const protectedPins=composition.outputs.map(p=>{const b=raw(rootCommit,p.file);assert.deepEqual(b,fs.readFileSync(path.join(rootRepo,p.file)));return{file:p.file,sha256:sha(b),bytes:b.length,commit:rootCommit};});
+const metadata={source_only:true,canonical_mounted:false,SQL_executed:false,source_commit:sourceCommit,current_root_commit:rootCommit,current_source_roots:rootSource.roots.length,current_source_inputs:rootSource.inputs.length,current_source_occurrences:rootSource.occurrences.length,compiled_effective_body_coverage:false,inputs,runtime_targets:runtimeTargets,owners:owners.map(({definition,body,...o})=>o),dependencies,private_registry:{before:basePrivate.length,after:privateRows.length,added:privateRows.filter(s=>!basePrivate.includes(s)),signatures:privateRows},service_registry:{before:baseService.length,after:serviceRows.length,added:serviceRows.filter(s=>!baseService.includes(s)),signatures:serviceRows},protected_root_Source_A0_pins:protectedPins,old_public_invoice_admission_excluded:true,old_public_Bank_wrappers_excluded:true,old_whole_Bank_calendar_files_excluded:true,shared_owner_amendments:'CURRENT_OWNER_AMENDMENTS.json; independent current preimage review required',source_current_dispatcher_preserved:true,Legacy_withholding_positive:false,whole_ordinary_process_completion:false,native_acceptance:false,final_release:false};
+fs.writeFileSync(path.join(here,'MODULE_RECIPE.json'),JSON.stringify(metadata,null,2)+'\n');console.log(JSON.stringify({source_only:true,owners:owners.length,private:privateOwners.length,public:publicOwners.length,inputs:inputs.length,dependencies:dependencies.length,private_registry:[basePrivate.length,privateRows.length],service_registry:[baseService.length,serviceRows.length],protected_current_pins:protectedPins.length,canonical_mounted:false}));

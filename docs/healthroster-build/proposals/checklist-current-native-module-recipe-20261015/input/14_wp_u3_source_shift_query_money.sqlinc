@@ -1,0 +1,254 @@
+-- Finite Source WORK-segment certificate. Amounts are the actual native
+-- PAY_QUERY_OPEN AVAILABLE projection, never a new A/C/H positive classifier.
+-- The one extracted native member/binding kernel is entered with literal read
+-- mode, after genuine actor/client/group/root/event permission. No refresh,
+-- public Bank page, selector, reservation-as-withholding or fake zero.
+create or replace function private.weekly_source_checklist_source_shift_query_money_v1(
+  p_root_timesheet_id uuid,p_work_event_id uuid,p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; root public.timesheets%rowtype; financial public.timesheets_financials%rowtype;
+  event public.weekly_work_events%rowtype; work private.bpay_next_work%rowtype; revision private.bpay_next_work_revision%rowtype;
+  group_row private.bpay_next_workbench_group%rowtype; metadata private.bpay_next_workbench_candidate_metadata%rowtype;
+  gate jsonb; gate_after jsonb; native_scope jsonb; exclusions jsonb; members jsonb; members_after jsonb; member jsonb; items jsonb;
+  count_rows bigint; worker_revision bigint; approval_revision_id uuid; source_event_id uuid; native_sequence bigint;
+  native_today date:=(transaction_timestamp() at time zone 'Europe/London')::date;
+  totals record; actual_member_count bigint; matching_count bigint; positive_count bigint; source_amount numeric; pence numeric;
+  facts jsonb; proof_hash text; permission jsonb; current_frame jsonb; current_frame_after jsonb;v_native_period jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_scope,
+    array['source_group_id','source_cycle_id','client_id','week_ending'],'WEEKLY_SOURCE_CHECKLIST_SOURCE_MONEY_SCOPE_INVALID');
+  if jsonb_typeof(p_scope->'source_group_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_group_id','uuid')
+    or jsonb_typeof(p_scope->'source_cycle_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'source_cycle_id','uuid')
+    or jsonb_typeof(p_scope->'client_id') is distinct from 'string' or not pg_input_is_valid(p_scope->>'client_id','uuid')
+    or jsonb_typeof(p_scope->'week_ending') is distinct from 'string' or not pg_input_is_valid(p_scope->>'week_ending','date')
+    or p_root_timesheet_id is null or p_work_event_id is null then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_SOURCE_MONEY_SCOPE_INVALID' using errcode='22023';
+  end if;
+  select u.* into actor from public.tms_users u where u.id=p_actor_user_id and u.is_active;
+  if actor.id is null or (lower(btrim(coalesce(actor.role,'')))<>'admin' and not private.weekly_source_pay_actor_allowed_v1(actor.id)) then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_ACTOR_DENIED' using errcode='42501';
+  end if;
+  permission:=private.weekly_source_office_authority_v1(actor.id,'VIEW_PAY_WORK',(p_scope->>'source_group_id')::uuid,
+    (p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date);
+  facts:=jsonb_build_object('scope',p_scope,'actor_user_id',actor.id,'permission',permission,
+    'root_timesheet_id',p_root_timesheet_id,'work_event_id',p_work_event_id,'amount_basis','SOURCE_EX_VAT','grain','WORK_SEGMENT');
+  if not exists(select 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT') then
+    return jsonb_build_object('known',false,'reason','NATIVE_NEXT_OWNER_UNAVAILABLE','native_facts',facts);
+  end if;
+  select t.* into root from public.timesheets t where t.timesheet_id=p_root_timesheet_id;
+  native_scope:=private.weekly_source_pay_query_scope_v1(p_root_timesheet_id);
+  select e.* into event from public.weekly_work_events e where e.id=p_work_event_id
+    and e.client_id=(p_scope->>'client_id')::uuid and e.first_source_group_id=(p_scope->>'source_group_id')::uuid
+    and e.work_date between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date;
+  facts:=facts||jsonb_build_object('native_scope',native_scope,'root',to_jsonb(root),'work_event',to_jsonb(event));
+  if native_scope is null or root.authorised_at_server is null or event.id is null
+    or root.is_current is distinct from true or root.revoked_at is not null or root.archived_at_utc is not null
+    or native_scope->>'root_timesheet_id' is distinct from root.timesheet_id::text
+    or native_scope->>'client_id' is distinct from p_scope->>'client_id'
+    or native_scope->>'candidate_id' is distinct from event.candidate_id::text
+    or native_scope->>'week_ending_date' is distinct from p_scope->>'week_ending'
+    or not exists(select 1 from public.weekly_source_row_timesheet_lineages l
+      where l.work_event_id=event.id and l.timesheet_id=root.timesheet_id)
+    or not exists(select 1 from public.weekly_source_cycles c join public.weekly_source_group_clients m on m.source_group_id=c.source_group_id
+      where c.id=(p_scope->>'source_cycle_id')::uuid and c.source_group_id=(p_scope->>'source_group_id')::uuid
+        and m.client_id=event.client_id and event.work_date between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+        and root.week_ending_date between c.finalisation_week_ending-6 and c.finalisation_week_ending
+        and (c.scope_client_id is null or c.scope_client_id=event.client_id)) then
+    return jsonb_build_object('known',false,'reason','ACTUAL_SOURCE_SHIFT_SCOPE_UNAVAILABLE','native_facts',facts);
+  end if;
+  select count(*),(array_agg(f.id order by f.id))[1] into count_rows,financial.id from public.timesheets_financials f
+    where f.timesheet_id=root.timesheet_id and f.timesheet_version=root.version and f.is_current;
+  if count_rows<>1 then return jsonb_build_object('known',false,'reason','CURRENT_FINANCIAL_IDENTITY_UNAVAILABLE','native_facts',facts); end if;
+  select f.* into strict financial from public.timesheets_financials f where f.id=financial.id;
+  facts:=facts||jsonb_build_object('current_financial',to_jsonb(financial));
+  if financial.is_stale is distinct from false or financial.authorised_at_utc is null
+    or financial.candidate_id is distinct from event.candidate_id or financial.client_id is distinct from event.client_id
+    or coalesce(financial.pay_on_hold,false) then
+    return jsonb_build_object('known',false,'reason','CURRENT_FINANCIAL_OR_OTHER_HOLD_UNAVAILABLE','native_facts',facts);
+  end if;
+  select count(*),(array_agg(w.id order by w.id))[1] into count_rows,work.id
+    from private.bpay_next_work w join private.bpay_next_work_revision r on r.id=w.current_revision_id and r.work_id=w.id
+    where w.work_kind='SOURCE' and w.candidate_id=event.candidate_id and w.contract_id=(native_scope->>'contract_id')::uuid
+      and w.booking_id=root.booking_id and w.week_ending_date=root.week_ending_date
+      and r.physical_timesheet_id=root.timesheet_id and r.physical_timesheet_version=root.version
+      and r.source_kind in('SOURCE','PROTECTED');
+  if count_rows<>1 then return jsonb_build_object('known',false,'reason','NATIVE_WORK_IDENTITY_UNAVAILABLE','native_facts',facts); end if;
+  select w.* into strict work from private.bpay_next_work w where w.id=work.id;
+  select r.* into strict revision from private.bpay_next_work_revision r where r.id=work.current_revision_id and r.work_id=work.id;
+  v_native_period:=private.bpay_next_work_period_proof_v1(work.id,revision.id,native_today);
+  facts:=facts||jsonb_build_object('work',to_jsonb(work),'revision',to_jsonb(revision),'native_work_period',v_native_period);
+  if v_native_period->'valid' is distinct from 'true'::jsonb then
+    return jsonb_build_object('known',false,'reason','NATIVE_WORK_PERIOD_UNAVAILABLE','native_facts',facts);end if;
+  if work.approval_state<>'APPROVED' or work.applied_revision_id is distinct from revision.id or revision.sealed_at_utc is null
+    or (select count(*) from private.bpay_next_approved_line l where l.revision_id=revision.id)<>revision.expected_line_count then
+    return jsonb_build_object('known',false,'reason','NATIVE_CURRENT_SEALED_WORK_UNAVAILABLE','native_facts',facts);
+  end if;
+  approval_revision_id:=revision.id;source_event_id:=revision.source_event_id;
+  if revision.payment_treatment_approval_revision_id is not null then
+    approval_revision_id:=private.bpay_next_treatment_approval_revision_v1(revision.id);
+    select r.source_event_id into source_event_id from private.bpay_next_work_revision r where r.id=approval_revision_id and r.work_id=work.id;
+  end if;
+  if source_event_id is null then return jsonb_build_object('known',false,'reason','NATIVE_SOURCE_EVENT_UNAVAILABLE','native_facts',facts); end if;
+  select g.* into group_row from private.bpay_next_workbench_group g where g.group_key='WORK:'||work.id::text and g.work_id=work.id;
+  select m.* into metadata from private.bpay_next_workbench_candidate_metadata m where m.candidate_id=work.candidate_id;
+  select c.financial_view_revision into worker_revision from private.bpay_next_worker_control c where c.candidate_id=work.candidate_id;
+  facts:=facts||jsonb_build_object('group',to_jsonb(group_row),'metadata',to_jsonb(metadata),'worker_financial_view_revision',worker_revision);
+  if group_row.group_key is null or metadata.candidate_id is null or worker_revision is null
+    or group_row.group_kind<>'WORK' or group_row.complete is distinct from true or group_row.dirty is distinct from false or group_row.progress_state<>'CURRENT'
+    or group_row.current_revision_id is distinct from revision.id or group_row.physical_timesheet_id is distinct from root.timesheet_id
+    or group_row.candidate_id is distinct from event.candidate_id or group_row.client_id is distinct from event.client_id
+    or group_row.contract_id is distinct from work.contract_id or group_row.week_ending_date is distinct from root.week_ending_date
+    or group_row.financial_view_revision is distinct from worker_revision or metadata.continuation_pending is distinct from false
+    or metadata.adopted_metadata_version is distinct from metadata.metadata_version or group_row.metadata_version is distinct from metadata.metadata_version
+    or not exists(select 1 from public.candidates c left join public.umbrellas u on u.id=c.umbrella_id
+      where c.id=work.candidate_id and c.active and c.pay_method::text in('PAYE','UMBRELLA')
+        and group_row.target_pay_channel=c.pay_method::text
+        and (c.pay_method::text<>'UMBRELLA' or (u.enabled and u.vat_chargeable is not null))) then
+    return jsonb_build_object('known',false,'reason','NATIVE_PROJECTION_FRESHNESS_UNAVAILABLE','native_facts',facts);
+  end if;
+  gate:=private.weekly_source_pay_query_gate_v1(root.timesheet_id);
+  facts:=facts||jsonb_build_object('query_gate',gate);
+  if gate->'ok' is distinct from 'true'::jsonb or gate->>'code' is distinct from 'OK' or gate->'scope' is distinct from native_scope
+    or gate->'blocked' is distinct from 'true'::jsonb then
+    return jsonb_build_object('known',false,'reason','NATIVE_OPEN_QUERY_SCOPE_UNAVAILABLE','native_facts',facts);
+  end if;
+  exclusions:=private.bpay_next_source_query_segment_exclusions_v1(revision.id,gate);
+  facts:=facts||jsonb_build_object('segment_query_exclusions',exclusions);
+  if jsonb_typeof(exclusions) is distinct from 'array' or not exists(select 1 from jsonb_array_elements(exclusions) e where e->>'segment_key'=event.id::text) then
+    return jsonb_build_object('known',false,'reason','NATIVE_SHIFT_QUERY_EXCLUSION_UNAVAILABLE','native_facts',facts);
+  end if;
+  -- This is the SAME complete native member/binding/publication/command/job/
+  -- treatment/attribution derivation consumed by the native locked wrapper.
+  -- No new positive amount is computed, and no browser can select its mode.
+  begin
+    select coalesce(jsonb_agg(to_jsonb(m) order by m.component_key,m.segment_key nulls first),'[]'::jsonb),count(*)
+      into members,actual_member_count from private.weekly_source_checklist_native_members_core_v1(work.id,revision.id,false) m;
+  exception when sqlstate '55000' or sqlstate '23514' or no_data_found or too_many_rows then
+    return jsonb_build_object('known',false,'reason','NATIVE_BINDING_MEMBER_CERTIFICATE_UNAVAILABLE',
+      'native_facts',facts||jsonb_build_object('native_qualification_sqlstate',sqlstate));
+  end;
+  select coalesce(jsonb_agg(to_jsonb(i) order by i.component_key,i.member_key,i.portion_kind),'[]'::jsonb)
+    into items from private.bpay_next_workbench_item i where i.group_key=group_row.group_key;
+  facts:=facts||jsonb_build_object('members',members,'items',items,'source_event_id',source_event_id);
+  if actual_member_count=0 or exists(select 1 from jsonb_array_elements(members) m
+    where m->'parent_complete' is distinct from 'true'::jsonb or m->'segment_attribution_complete' is distinct from 'true'::jsonb)
+    or exists(select 1 from jsonb_array_elements(members) m group by m->>'component_key',m->>'segment_key' having count(*)<>1)
+    or exists(select 1 from private.bpay_next_workbench_item i where i.group_key=group_row.group_key and
+      (i.work_id is distinct from work.id or i.revision_id is distinct from revision.id or i.progress_state<>'CURRENT'
+        or i.projection_revision is distinct from group_row.projection_revision or i.financial_view_revision is distinct from worker_revision
+        or i.metadata_version is distinct from metadata.metadata_version or i.amount_known is distinct from true
+        or i.candidate_id is distinct from event.candidate_id or i.client_id is distinct from event.client_id
+        or i.contract_id is distinct from work.contract_id or i.physical_timesheet_id is distinct from root.timesheet_id
+        or i.week_ending_date is distinct from root.week_ending_date
+        or i.target_pay_channel is distinct from group_row.target_pay_channel)) then
+    return jsonb_build_object('known',false,'reason','NATIVE_COMPLETE_MEMBER_PROJECTION_UNAVAILABLE','native_facts',facts);
+  end if;
+  -- Reprove full actual membership and the native conserved member quantities.
+  -- Do not reproduce GREATEST(A-C-H), a priority ladder or a booking quantity.
+  for member in select value from jsonb_array_elements(members) loop
+    select count(*),sum(i.approved_source_ex_vat) a,sum(i.realised_source_ex_vat) c,sum(i.active_reserved_source_ex_vat) h,
+      sum(i.residual_source_ex_vat) residual,
+      sum(i.included_source_ex_vat+i.excluded_source_ex_vat-i.recovery_source_ex_vat-i.held_overhang_source_ex_vat) split_residual
+      into totals from private.bpay_next_workbench_item i where i.group_key=group_row.group_key and i.component_key=member->>'component_key'
+        and i.member_kind=case when member->>'segment_key' is null then 'WORK_COMPONENT' else 'WORK_SEGMENT' end
+        and i.member_key=coalesce(member->>'segment_key',member->>'component_key')
+        and i.approved_line_id is not distinct from (member->>'approved_line_id')::uuid
+        and i.approved_segment_id is not distinct from (member->>'approved_segment_id')::uuid;
+    if totals.count=0 or (totals.a,totals.c,totals.h,totals.residual,totals.split_residual) is distinct from
+      ((member->>'approved_amount')::numeric,(member->>'realised_amount')::numeric,(member->>'held_amount')::numeric,
+        (member->>'approved_amount')::numeric-(member->>'realised_amount')::numeric-(member->>'held_amount')::numeric,
+        (member->>'approved_amount')::numeric-(member->>'realised_amount')::numeric-(member->>'held_amount')::numeric) then
+      return jsonb_build_object('known',false,'reason','NATIVE_MEMBER_CONSERVATION_UNAVAILABLE','native_facts',facts);
+    end if;
+  end loop;
+  if exists(select 1 from private.bpay_next_workbench_item i where i.group_key=group_row.group_key and not exists(
+    select 1 from jsonb_array_elements(members) m where m->>'component_key'=i.component_key
+      and coalesce(m->>'segment_key',m->>'component_key')=i.member_key
+      and (m->>'approved_line_id')::uuid is not distinct from i.approved_line_id
+      and (m->>'approved_segment_id')::uuid is not distinct from i.approved_segment_id
+      and i.member_kind=case when m->>'segment_key' is null then 'WORK_COMPONENT' else 'WORK_SEGMENT' end
+      and i.segment_key is not distinct from m->>'segment_key'
+      and i.component_kind is not distinct from m->>'component_kind'
+      and i.source_pay_channel is not distinct from m->>'source_pay_channel'
+      and i.work_date is not distinct from (m->>'work_date')::date)) then
+    return jsonb_build_object('known',false,'reason','NATIVE_FOREIGN_MEMBER_PROJECTION_UNAVAILABLE','native_facts',facts);
+  end if;
+  select count(*) into matching_count from jsonb_array_elements(members) m
+    where m->>'segment_key'=event.id::text and m->>'component_kind' in('WORK','PROTECTED_WORK');
+  select c.last_sequence into native_sequence from private.bpay_next_command_clock c where c.id=1;
+  -- Reuse the exact current native accepted/snooze readers. Their genuine
+  -- frozen selection/cut is never inferred from a cached null accepted ID.
+  if native_sequence is null or root.week_ending_date-6>native_today
+    or exists(select 1 from private.bpay_next_workbench_item i where i.group_key=group_row.group_key
+      and i.segment_key=event.id::text and i.component_kind in('WORK','PROTECTED_WORK') and i.portion_kind='AVAILABLE'
+      and (exists(select 1 from private.bpay_next_workbench_accepted_work_v1(work.id,i.component_key,i.segment_key))
+        or private.bpay_next_snooze_at_cut_v1(work.id,revision.id,i.segment_key,i.component_key,native_sequence,native_today) is not null)) then
+    return jsonb_build_object('known',false,'reason','NATIVE_CURRENT_ACCEPTED_OR_EXCLUDED_CUT_UNAVAILABLE',
+      'native_facts',facts||jsonb_build_object('native_sequence',native_sequence,'native_business_date',native_today));
+  end if;
+  select count(*),sum(i.included_source_ex_vat) into positive_count,source_amount from private.bpay_next_workbench_item i
+    where i.group_key=group_row.group_key and i.member_kind='WORK_SEGMENT' and i.segment_key=event.id::text
+      and i.component_kind in('WORK','PROTECTED_WORK') and i.portion_kind='AVAILABLE' and i.direction='PAYMENT'
+      and i.query_qualified and i.query_state='OPEN' and i.reason_code='PAY_QUERY_OPEN' and i.section='ACTION'
+      and not i.selectable and not i.is_selected and i.amount_known and i.included_source_ex_vat>0
+      and i.pay_hold is false and i.accepted_run_id is null and i.accepted_command_id is null;
+  if matching_count=0 or positive_count=0 or source_amount is null or source_amount<=0 or exists(
+    select 1 from private.bpay_next_workbench_item i where i.group_key=group_row.group_key and i.segment_key=event.id::text
+      and i.component_kind in('WORK','PROTECTED_WORK') and i.portion_kind='AVAILABLE' and not i.is_selected and i.included_source_ex_vat>0
+      and (i.query_qualified is distinct from true or i.query_state<>'OPEN' or i.reason_code<>'PAY_QUERY_OPEN' or i.section<>'ACTION')) then
+    return jsonb_build_object('known',false,'reason','NATIVE_POSITIVE_QUERY_MONEY_UNAVAILABLE','native_facts',facts);
+  end if;
+  -- The false-mode native core is VOLATILE to preserve its original locked
+  -- caller. Recheck its entire observation before certifying a GET, rather
+  -- than treating a dirty flag or binding timestamp as a sealed snapshot.
+  current_frame:=jsonb_build_object('root',to_jsonb(root),'financial',to_jsonb(financial),'event',to_jsonb(event),
+    'work',to_jsonb(work),'revision',to_jsonb(revision),'group',to_jsonb(group_row),'metadata',to_jsonb(metadata),
+    'worker_revision',worker_revision,'items',items);
+  select jsonb_build_object('root',to_jsonb(t),'financial',to_jsonb(f),'event',to_jsonb(e),'work',to_jsonb(w),'revision',to_jsonb(r),
+    'group',to_jsonb(g),'metadata',to_jsonb(md),'worker_revision',ctl.financial_view_revision,
+    'items',(select coalesce(jsonb_agg(to_jsonb(i) order by i.component_key,i.member_key,i.portion_kind),'[]'::jsonb)
+      from private.bpay_next_workbench_item i where i.group_key=g.group_key)) into current_frame_after
+    from public.timesheets t join public.timesheets_financials f on f.id=financial.id
+    join public.weekly_work_events e on e.id=event.id join private.bpay_next_work w on w.id=work.id
+    join private.bpay_next_work_revision r on r.id=w.current_revision_id and r.work_id=w.id
+    join private.bpay_next_workbench_group g on g.group_key=group_row.group_key
+    join private.bpay_next_workbench_candidate_metadata md on md.candidate_id=w.candidate_id
+    join private.bpay_next_worker_control ctl on ctl.candidate_id=w.candidate_id where t.timesheet_id=root.timesheet_id;
+  begin
+    select coalesce(jsonb_agg(to_jsonb(m) order by m.component_key,m.segment_key nulls first),'[]'::jsonb)
+      into members_after from private.weekly_source_checklist_native_members_core_v1(work.id,revision.id,false) m;
+  exception when sqlstate '55000' or sqlstate '23514' or no_data_found or too_many_rows then
+    return jsonb_build_object('known',false,'reason','NATIVE_BINDING_MEMBER_CERTIFICATE_CHANGED',
+      'native_facts',facts||jsonb_build_object('native_qualification_sqlstate',sqlstate));
+  end;
+  gate_after:=private.weekly_source_pay_query_gate_v1(root.timesheet_id);
+  permission:=private.weekly_source_office_authority_v1(actor.id,'VIEW_PAY_WORK',(p_scope->>'source_group_id')::uuid,
+    (p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date);
+  if v_native_period is distinct from private.bpay_next_work_period_proof_v1(work.id,revision.id,native_today)
+    or current_frame_after is distinct from current_frame or members_after is distinct from members or gate_after is distinct from gate
+    or exclusions is distinct from private.bpay_next_source_query_segment_exclusions_v1(revision.id,gate_after) then
+    return jsonb_build_object('known',false,'reason','NATIVE_COMPLETE_OBSERVATION_CHANGED','native_facts',facts);
+  end if;
+  if not exists(select 1 from public.tms_users u where u.id=actor.id and u.is_active
+    and (lower(btrim(coalesce(u.role,'')))='admin' or private.weekly_source_pay_actor_allowed_v1(u.id))) then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_ACTOR_DENIED' using errcode='42501';
+  end if;
+  pence:=source_amount*100;
+  if pence<>trunc(pence) or pence<1 or pence>999999999999999999 then
+    return jsonb_build_object('known',false,'reason','NATIVE_MINOR_UNIT_RANGE_UNAVAILABLE','native_facts',facts);
+  end if;
+  facts:=facts||jsonb_build_object('native_scope',native_scope,'work',to_jsonb(work),'revision',to_jsonb(revision),'source_event_id',source_event_id,
+    'group',to_jsonb(group_row),'metadata',to_jsonb(metadata),'worker_financial_view_revision',worker_revision,
+    'members',members,'items',items,'query_gate',gate,'segment_query_exclusions',exclusions,
+    'positive_query_item_count',positive_count,'withheld_source_ex_vat',source_amount);
+  proof_hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_SOURCE_SHIFT_QUERY_MONEY_V1',facts),'hex');
+  return jsonb_build_object('known',true,'native_facts',facts,'hold',jsonb_build_object('holds_pay',true,'holds_pay_scope','SHIFT',
+    'withheld_amount_pence',pence::bigint::text,'holds_invoice',null,'pending_decision',null,
+    'authority',jsonb_build_object('owner','SOURCE_QUERY_EX_VAT','hash',proof_hash,'withholding_known',true)));
+end;
+$function$;
+alter function private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid) from public,anon,authenticated,service_role;

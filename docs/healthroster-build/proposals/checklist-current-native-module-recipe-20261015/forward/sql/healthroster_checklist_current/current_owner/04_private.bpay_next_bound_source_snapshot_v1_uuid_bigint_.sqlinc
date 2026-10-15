@@ -1,0 +1,17 @@
+create or replace function private.bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid,p_expected_book_revision bigint)
+returns table(qualification_state text,selection_state text,candidate_id uuid,
+  canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint,
+  approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid,
+  source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid,
+  approved_source_ex_vat private.bpay_next_penny_amount,
+  native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount,
+  native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount)
+language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+begin
+  return query select * from private.weekly_source_checklist_native_bound_snapshot_core_v1(p_binding_version_id,p_expected_book_revision,true);
+end
+$function$;
+alter function private.bpay_next_bound_source_snapshot_v1(uuid,bigint) owner to postgres;
+revoke all on function private.bpay_next_bound_source_snapshot_v1(uuid,bigint) from public,anon,authenticated,service_role;

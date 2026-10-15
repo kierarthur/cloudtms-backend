@@ -1,0 +1,161 @@
+-- Current native publication proof for a genuine finalisation task receipt.
+-- No Report line, invoice readiness, amount or cash status is substituted.
+create or replace function private.weekly_source_checklist_process_publication_v1(p_receipt_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $process_publication$
+declare receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype;
+ fr public.weekly_source_final_revisions%rowtype;root public.timesheets%rowtype;
+ head public.weekly_source_entitlement_heads%rowtype;bundle public.weekly_source_entitlement_decision_bundles%rowtype;
+ publication private.weekly_source_entitlement_publication_receipts%rowtype;
+ generation public.weekly_exceptional_pay_generations%rowtype;approval public.weekly_exceptional_payment_approvals%rowtype;
+ local_receipt private.weekly_source_local_protected_decision_receipts%rowtype;
+ c1_request public.weekly_exceptional_c1_publication_requests%rowtype;
+ inventory jsonb;basis jsonb;native_origin jsonb;witness jsonb;current_receipt jsonb;next_application jsonb;
+ event record;current_root uuid;current_approval uuid;current_event uuid;member integer;n bigint;
+ facts jsonb;events jsonb:='[]'::jsonb;event_fact jsonb;proved boolean:=false;event_proved boolean;
+ source_units jsonb;source_expenses jsonb;expected_events jsonb;expected_event jsonb;event_matches bigint;
+begin
+ select r.* into receipt from public.weekly_source_ordinary_pay_projection_receipts r where r.id=p_receipt_id;
+ select r.* into fr from public.weekly_source_final_revisions r where r.id=receipt.final_revision_id;
+ select t.* into root from public.timesheets t where t.timesheet_id=receipt.root_timesheet_id;
+ facts:=jsonb_build_object('receipt',to_jsonb(receipt),'final_revision',to_jsonb(fr),'root',to_jsonb(root));
+ if receipt.id is null or fr.id is null or root.timesheet_id is null
+  or private.weekly_source_report_projection_receipt_assert_v1(receipt) is distinct from true
+  or receipt.source_cycle_id is distinct from fr.source_cycle_id
+  or receipt.final_manifest_hash is distinct from fr.manifest_hash
+  or receipt.final_policy_fingerprint is distinct from fr.policy_fingerprint
+  or fr.state not in('CURRENT','SUPERSEDED')
+  or not exists(select 1 from public.contracts c where c.id=root.contract_id and c.client_id=receipt.client_id)
+  or receipt.outcome not in('PROPOSED','TARGET_MANAGED_SUPPRESSED') then
+  return jsonb_build_object('proved',false,'native_facts',facts);end if;
+ -- The caller proves its immutable task/run/context. This private leaf proves
+ -- the current native publication only, at that SAME receipt revision.
+ if receipt.outcome='PROPOSED' then
+  inventory:=private.weekly_source_effective_inventory_v1(root.timesheet_id);basis:=inventory->'approval_basis';
+  if basis->'coverage_complete'='true'::jsonb and inventory->>'authority'='HEAD' then
+   select h.* into head from public.weekly_source_entitlement_heads h where h.id=(inventory->>'head_id')::uuid;
+   select b.* into bundle from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=head.decision_bundle_id and b.bundle_revision=head.bundle_revision;
+   select count(*) into n from private.weekly_source_entitlement_publication_receipts p
+    where p.decision_bundle_id=head.decision_bundle_id and p.bundle_revision=head.bundle_revision and p.request_digest=bundle.request_digest;
+   if n=1 then
+    select p.* into strict publication from private.weekly_source_entitlement_publication_receipts p
+     where p.decision_bundle_id=head.decision_bundle_id and p.bundle_revision=head.bundle_revision and p.request_digest=bundle.request_digest;
+    member:=array_position(publication.head_ids,head.id);native_origin:=head.source_origin_json;
+    if bundle.state='COMMITTED' and bundle.bundle_kind='SINGLE_ROOT' and cardinality(publication.head_ids)=1
+     and member=1 and publication.member_root_ids[member]=root.timesheet_id
+     and publication.member_family_booking_ids[member]=root.booking_id
+     and publication.member_root_versions[member]=head.root_timesheet_version
+     and publication.candidate_id=(select c.candidate_id from public.contracts c where c.id=root.contract_id)
+     and head.authority_kind='LOCKED_FINAL_SOURCE'
+     and native_origin->>'final_revision_id'=fr.id::text and native_origin->>'source_cycle_id'=fr.source_cycle_id::text
+     and native_origin->>'revision_number'=fr.revision_number::text
+     and native_origin->>'manifest_hash'=encode(fr.manifest_hash,'hex')
+     and native_origin->>'policy_fingerprint'=encode(fr.policy_fingerprint,'hex')
+     and head.source_generation_digest=private.weekly_source_publication_request_digest_v1(native_origin)
+     and bundle.source_revision_digest=head.source_generation_digest
+     and head.decision_bundle_id=private.weekly_source_entitlement_derived_uuid_v1(
+      'WEEKLY_SOURCE_DECISION_BUNDLE_V1',btrim(root.booking_id)||'|'||fr.id::text) then proved:=true;end if;
+   end if;
+  end if;
+  facts:=facts||jsonb_build_object('inventory',inventory,'head',to_jsonb(head),'bundle',to_jsonb(bundle),'publication',to_jsonb(publication));
+ end if;
+ if not proved then
+  -- A task can contain multiple actual Source work events. Every corresponding
+  -- snapshot/lineage member must carry its OWN current generation publication.
+  source_units:=private.weekly_source_ordinary_projection_source_units_v1(fr.id,root.timesheet_id);
+  source_expenses:=private.weekly_source_ordinary_projection_current_expenses_v1(root.timesheet_id,fr.id);
+  facts:=facts||jsonb_build_object('native_source_units',source_units,'native_source_expenses',source_expenses);
+  if source_units is distinct from receipt.source_unit_outcomes_json
+   or source_expenses is distinct from receipt.source_expense_authorities_json
+   or exists(select 1 from jsonb_array_elements(source_units||source_expenses) unit
+    where jsonb_typeof(unit->'work_event_id') is distinct from 'string'
+     or pg_input_is_valid(unit->>'work_event_id','uuid') is distinct from true) then
+   return jsonb_build_object('proved',false,'native_facts',facts);end if;
+  select coalesce(jsonb_agg(event_id order by event_id),'[]'::jsonb) into expected_events
+   from (select distinct unit->>'work_event_id' event_id from jsonb_array_elements(source_units||source_expenses) unit) complete_events;
+  facts:=facts||jsonb_build_object('expected_native_events',expected_events);
+  n:=0;proved:=true;
+  for expected_event in select value from jsonb_array_elements(expected_events)
+  loop
+   select count(*) into event_matches
+   from public.weekly_source_final_snapshot_lines fs
+   join public.weekly_source_row_resolutions rr on rr.id=fs.row_resolution_id and rr.upload_row_id=fs.upload_row_id
+    and rr.work_event_id=fs.work_event_id and rr.candidate_id=fs.candidate_id and rr.client_id=fs.client_id
+    and rr.contract_id=fs.contract_id and rr.mapping_state='RESOLVED'
+   join public.weekly_source_row_timesheet_lineages l on l.row_resolution_id=rr.id
+    and l.work_event_id=fs.work_event_id and l.candidate_id=fs.candidate_id and l.client_id=fs.client_id
+    and l.contract_id=fs.contract_id and l.source_cycle_id=fr.source_cycle_id
+    and l.family_booking_id=root.booking_id and l.week_ending_date=root.week_ending_date
+    and l.timesheet_id=any(private.weekly_source_invoice_family_timesheet_ids_v1(root.timesheet_id))
+   where fs.final_revision_id=fr.id and fs.work_event_id=(expected_event#>>'{}')::uuid
+    and fs.client_id=receipt.client_id and fs.contract_id=root.contract_id
+    and fs.candidate_id=(select c.candidate_id from public.contracts c where c.id=root.contract_id)
+    and exists(select 1 from public.weekly_source_projection_publications p
+     where p.upload_id=fr.upload_id and p.source_cycle_id=fr.source_cycle_id
+      and p.authority_scope_kind=fr.authority_scope_kind and p.report_scope_id is not distinct from fr.report_scope_id
+      and p.state in('CURRENT','SUPERSEDED') and rr.generation=coalesce(p.projection_generation,p.authority_scope_version));
+   if event_matches<>1 then
+    return jsonb_build_object('proved',false,'native_facts',facts||jsonb_build_object(
+     'unproved_expected_event',expected_event,'exact_snapshot_lineage_matches',event_matches));end if;
+   select fs.work_event_id,fs.candidate_id,fs.client_id,fs.contract_id into strict event
+    from public.weekly_source_final_snapshot_lines fs where fs.final_revision_id=fr.id and fs.work_event_id=(expected_event#>>'{}')::uuid;
+   n:=n+1;event_proved:=false;current_receipt:=null;current_approval:=null;current_event:=null;
+   approval:=null;generation:=null;local_receipt:=null;c1_request:=null;inventory:=null;basis:=null;next_application:=null;
+   witness:=private.weekly_source_protected_wait_witness_v1(event.work_event_id,fr.source_cycle_id);
+   if witness is not null and exists(select 1 from public.timesheets t
+    where t.timesheet_id=(witness->>'root_timesheet_id')::uuid and t.booking_id=root.booking_id
+     and t.contract_id=root.contract_id and t.week_ending_date=root.week_ending_date
+     and t.sheet_scope='WEEKLY' and t.line_type='HOURS' and t.is_adjustment is false) then
+    current_root:=(witness->>'root_timesheet_id')::uuid;
+    select g.* into strict generation from public.weekly_exceptional_pay_generations g where g.id=(witness->>'current_generation_id')::uuid;
+    select count(*),(array_agg(t.approval_id))[1] into member,current_approval
+     from public.weekly_exceptional_pay_target_events t where t.family_id=(witness->>'family_id')::uuid and t.financial_generation_id=generation.id;
+    if member=1 then
+     select a.* into strict approval from public.weekly_exceptional_payment_approvals a where a.id=current_approval;
+     select count(*),(array_agg(e.id))[1] into member,current_event
+      from public.weekly_exceptional_pay_family_events e where e.family_id=approval.pay_target_family_id
+       and e.durable_work_event_id=approval.work_event_id and e.evidence_approval_id=approval.id and e.state='WAIT'
+       and not exists(select 1 from public.weekly_exceptional_pay_family_events newer where newer.family_id=e.family_id
+        and newer.durable_work_event_id=e.durable_work_event_id and newer.event_sequence>e.event_sequence);
+     if member=1 then current_receipt:=private.weekly_source_protected_wait_receipt_v1(current_root,current_event)->'accepted_receipt';end if;
+    end if;
+    if current_receipt->>'receipt_state' in('COMPLETE','PUBLISHED') and current_receipt->>'generation_id'=generation.id::text
+     and approval.candidate_id=event.candidate_id and approval.client_id=event.client_id and approval.contract_id=event.contract_id then
+     if current_receipt->>'lane'='SOURCE_LOCAL' then
+      select l.* into local_receipt from private.weekly_source_local_protected_decision_receipts l
+       where l.generation_id=generation.id and l.publication_request_id=(current_receipt->>'publication_request_id')::uuid;
+      inventory:=private.weekly_source_effective_inventory_v1(current_root);basis:=inventory->'approval_basis';
+      if basis->'coverage_complete'='true'::jsonb and basis#>>'{scope,candidate_id}'=event.candidate_id::text
+       and basis#>>'{scope,client_id}'=event.client_id::text and basis#>>'{scope,contract_id}'=event.contract_id::text then
+       if local_receipt.result_json->>'authority'='COMMON_ENTITLEMENT_HEAD'
+        and basis#>>'{origin,source_revision,generation_id}'=generation.id::text
+        and basis#>>'{origin,source_revision,publication_request_id}'=local_receipt.publication_request_id::text then event_proved:=true;
+       elsif local_receipt.result_json->>'authority'='UNAUTHORISED_TSFIN'
+        and basis#>>'{origin,financial_snapshot_id}'=local_receipt.result_json->>'timesheet_financials_id' then event_proved:=true;end if;
+      end if;
+     elsif current_receipt->>'lane'='RETAINED_C1' then
+      select c.* into c1_request from public.weekly_exceptional_c1_publication_requests c
+       where c.id=(current_receipt->>'publication_request_id')::uuid and c.generation_id=generation.id;
+      if c1_request.state='PUBLISHED' and c1_request.financial_row_id is not null then event_proved:=true;end if;
+     elsif current_receipt->>'lane'='DIRECT_NEXT' then
+      next_application:=private.bpay_next_source_origin_state_v1((current_receipt->>'work_id')::uuid,(current_receipt->>'revision_id')::uuid);
+      event_proved:=true;
+     end if;
+    end if;
+   end if;
+   event_fact:=jsonb_build_object('work_event_id',event.work_event_id,'candidate_id',event.candidate_id,'client_id',event.client_id,
+    'contract_id',event.contract_id,'witness',witness,'generation',to_jsonb(generation),'approval',to_jsonb(approval),
+    'current_receipt',current_receipt,'local_receipt',to_jsonb(local_receipt),'c1_request',to_jsonb(c1_request),
+    'inventory',inventory,'next_application',next_application,'proved',event_proved);
+   events:=events||jsonb_build_array(event_fact);proved:=proved and event_proved;
+  end loop;
+  proved:=proved and n>0 and n=jsonb_array_length(expected_events);
+  facts:=facts||jsonb_build_object('native_current_publications',events);
+ end if;
+ return jsonb_build_object('proved',coalesce(proved,false),'native_facts',facts);
+end;
+$process_publication$;
+alter function private.weekly_source_checklist_process_publication_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_process_publication_v1(uuid) from public,anon,authenticated,service_role;

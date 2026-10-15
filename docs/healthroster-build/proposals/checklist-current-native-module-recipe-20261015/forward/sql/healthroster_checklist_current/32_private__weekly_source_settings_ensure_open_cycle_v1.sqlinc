@@ -1,0 +1,87 @@
+create or replace function private._weekly_source_settings_ensure_open_cycle_v1(
+  p_source_group_id uuid,p_timesheet_id uuid,p_expected_witness_hash bytea,p_actor_user_id uuid default null
+) returns uuid language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  group_row public.weekly_source_groups%rowtype; ts public.timesheets%rowtype;
+  witnessed jsonb; route_read jsonb; family_lock jsonb; calendar jsonb; client_id uuid;
+  own_week date; cycle_week date; cutoff_at timestamptz; cycle_id uuid; owners integer; expected_group jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_source_group_id is null or p_timesheet_id is null or octet_length(p_expected_witness_hash) is distinct from 32 then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select t.* into ts from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  witnessed:=private.weekly_source_actual_timesheet_submission_v1(p_timesheet_id);
+  if witnessed->'actual_submitted' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_ACTUAL_SUBMISSION_REQUIRED' using errcode='55000';
+  end if;
+  if p_expected_witness_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_V1',witnessed) then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_STALE' using errcode='40001';
+  end if;
+  route_read:=private.weekly_source_signed_submission_read_context_v1(p_timesheet_id,p_source_group_id);
+  if route_read->'eligible' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_SIGNED_SCOPE_REQUIRED' using errcode='55000';
+  end if;
+  client_id:=(witnessed->>'client_id')::uuid; own_week:=(witnessed->>'week_ending_date')::date;
+  if p_actor_user_id is not null then
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_SOURCE_PROGRESS',p_source_group_id,client_id,own_week);
+  end if;
+  select g.* into group_row from public.weekly_source_groups g where g.id=p_source_group_id and g.active and g.source_family='ROSTER';
+  if group_row.id is null then raise exception 'WEEKLY_SOURCE_CYCLE_GROUP_NOT_ACTIVE' using errcode='22023'; end if;
+  expected_group:=to_jsonb(group_row);
+  -- Native Source ordering is I1/F1 before G1. Reuse the actual family owner,
+  -- then the existing cycle-lifecycle lock identity and native group lock.
+  perform private.weekly_source_pay_query_admit_v2();
+  family_lock:=private.weekly_source_lock_family_rows_v1(array[p_timesheet_id],null);
+  if family_lock->'ok' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_FAMILY_UNAVAILABLE' using errcode='55000';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-cycle-lifecycle:'||p_source_group_id::text,0));
+  select g.* into group_row from public.weekly_source_groups g where g.id=p_source_group_id for update;
+  if to_jsonb(group_row) is distinct from expected_group then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_GROUP_STALE' using errcode='40001';
+  end if;
+  -- Reprove actual membership, effective policy, submitted immutable claim and
+  -- current physical member after the same native family/group locks.
+  route_read:=private.weekly_source_signed_submission_read_context_v1(p_timesheet_id,p_source_group_id);
+  if route_read->'eligible' is distinct from 'true'::jsonb
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_V1',route_read->'submission_witness') is distinct from p_expected_witness_hash then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_STALE' using errcode='40001';
+  end if;
+  if p_actor_user_id is not null then
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_SOURCE_PROGRESS',p_source_group_id,client_id,own_week);
+  end if;
+  calendar:=private.weekly_source_checklist_client_calendar_v1(client_id,own_week+1);
+  if calendar->>'latest_ended_week' is distinct from own_week::text then
+    raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_CLIENT_WEEK_UNPROVED' using errcode='55000';
+  end if;
+  cycle_week:=own_week+((7-extract(dow from own_week)::integer)%7);
+  -- Same historical cutoff expression as the original lifecycle owner; this
+  -- does not supply a fake p_now_utc or alter created_at_utc's genuine default.
+  cutoff_at:=((cycle_week+group_row.cutoff_weekday)+group_row.cutoff_local_time) at time zone group_row.timezone;
+  select case when count(*) filter(where c.scope_client_id=client_id)>0
+      then count(*) filter(where c.scope_client_id=client_id) else count(*) end,
+    (array_agg(c.id order by (c.scope_client_id is not null) desc,c.id))[1] into owners,cycle_id from public.weekly_source_cycles c
+    where c.source_group_id=p_source_group_id and c.finalisation_week_ending=cycle_week
+      and (c.scope_client_id is null or c.scope_client_id=client_id);
+  if owners>1 then raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_OWNER_AMBIGUOUS' using errcode='55000'; end if;
+  if owners=1 then return cycle_id; end if;
+  -- Metadata only, at the original native unique constraint and lock identity.
+  -- No completion, comparison, Timesheet, finance, email, pay or provider work.
+  -- Missing historical signed-client bookkeeping is Client-scoped, an existing
+  -- native scope. The original owner counts only group-scoped open cycles;
+  -- backfill must not introduce MULTIPLE_OPEN_CYCLES into that current view.
+  insert into public.weekly_source_cycles(source_group_id,scope_client_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state)
+    values(p_source_group_id,client_id,cycle_week,cutoff_at,'OPEN',0,'NONE')
+    on conflict on constraint weekly_source_cycles_group_week_client_uq do nothing returning id into cycle_id;
+  if cycle_id is null then
+    select c.id into strict cycle_id from public.weekly_source_cycles c where c.source_group_id=p_source_group_id
+      and c.finalisation_week_ending=cycle_week and c.scope_client_id=client_id;
+  end if;
+  return cycle_id;
+end;
+$function$;
+alter function private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid) owner to postgres;
+revoke all on function private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid) from public,anon,authenticated,service_role;

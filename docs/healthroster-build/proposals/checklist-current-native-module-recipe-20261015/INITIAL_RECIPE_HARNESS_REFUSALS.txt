@@ -1,0 +1,19 @@
+Source-only harness refusals, retained before the final receipt. No SQL ran.
+
+1. Current-owner ACL extraction initially inspected schema calls inside CREATE
+   function bodies before classifying the statement as ALTER/REVOKE/GRANT.
+   inputIdentity refused a nested/truncated argument expression. Correction:
+   classify the actual statement first, then inspect only ACL signatures.
+
+2. Candidate hook differencing initially included the historical file's
+   SOURCE ONLY header comment, which is outside the current complete function
+   definition. It correctly reported two missing preimages and produced no
+   accepted conflicting owner. Correction: diff complete parsed function
+   definitions and retain raw full-file predecessor pins separately. All six
+   actual Candidate hook hunks then matched current A0 bodies uniquely.
+
+3. verify-module-recipe.mjs initially asserted 55 staged constructors.
+   Actual scan: AssertionError 58 !== 55. The 49 module/current-owner functions
+   are followed by nine actual existing ACL function definitions. Correction:
+   reassert the actual 58 constructor count. No production SQL definition,
+   registry entry, role, ACL, or source qualification was changed for this fix.

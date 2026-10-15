@@ -1,0 +1,10 @@
+create or replace function private.bpay_next_initial_tsfin_bound_assert_v1(p_binding_version_id uuid)
+returns void language plpgsql security definer set search_path=pg_catalog,private,public
+as $function$
+begin
+  perform private.weekly_source_checklist_native_initial_bound_assert_core_v1(p_binding_version_id,true);
+end
+$function$;
+alter function private.bpay_next_initial_tsfin_bound_assert_v1(uuid) owner to postgres;
+revoke all on function private.bpay_next_initial_tsfin_certificate_v1(uuid),private.bpay_next_initial_tsfin_bind_v1(uuid),
+  private.bpay_next_initial_tsfin_bound_assert_v1(uuid) from public,anon,authenticated,service_role;
