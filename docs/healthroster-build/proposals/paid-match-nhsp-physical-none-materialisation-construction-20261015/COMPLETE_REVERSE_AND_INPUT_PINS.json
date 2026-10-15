@@ -1,0 +1,215 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "unqualified": true,
+  "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+  "owners": [
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/02_complete_native_movement_factory.sqlinc",
+      "before_file": "before/02_complete_native_movement_factory.sqlinc",
+      "after_file": "forward/02_complete_native_movement_factory.sqlinc",
+      "before_sha256": "c52293ad192309fdfc49d040df02621187c2316c483f4eff85cda8a9e0f2ca63",
+      "after_sha256": "44ccecac8f84859dd2006a88d1ee5c8e2c5355b2395826b68c7ce5fba78f4322",
+      "hunks": [
+        {
+          "name": "derived NONE locals only; existing signature/security/inputs unchanged",
+          "before": "  v_id uuid;",
+          "after": "  v_id uuid;v_pay_effect text:='NORMAL';v_total_pay_pence bigint;v_nhsp_none_basis jsonb;"
+        },
+        {
+          "name": "actual row effect admits only a genuine physical positive with its current separate NORMAL witness",
+          "before": "  v_pay_vector:=private.weekly_source_finalisation_vector_v1(v_economic.id,'PAY',1::smallint);",
+          "after": "  v_total_pay_pence:=v_economic.total_pay_pence;\n  if v_resolution.pay_effect='NONE' then\n    if p_source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or p_source_line_kind<>'NHSP_PHYSICAL_POSITIVE'\n      or p_movement_role<>'POSITIVE' or p_nhsp_upload_row_id is distinct from v_source_row.id\n      or p_transition_id is not null or p_correction_unit_id is not null or p_prior_movement_id is not null\n      or v_economic.row_sign<>1 then\n      raise exception 'WEEKLY_SOURCE_NHSP_NONE_MOVEMENT_SCOPE_UNBOUND' using errcode='55000';end if;\n    v_nhsp_none_basis:=private.weekly_source_nhsp_none_invoice_basis_v1(v_resolution.id,p_final_revision_id);\n    if not exists(select 1 from public.weekly_source_final_revisions target_revision\n      join public.weekly_source_report_scopes target_scope on target_scope.id=target_revision.report_scope_id\n      where target_revision.id=(v_nhsp_none_basis->>'normal_pay_final_revision_id')::uuid\n        and target_revision.state='CURRENT' and target_scope.current_final_revision_id=target_revision.id)\n      or not exists(select 1 from public.weekly_source_final_revisions revision\n        where revision.id=p_final_revision_id and revision.state='CURRENT' and revision.reason='INITIAL_FINALISATION'\n          and revision.predecessor_revision_id is null)\n      or v_nhsp_none_basis->>'invoice_timesheet_id' is distinct from p_invoice_timesheet_id::text\n      or v_nhsp_none_basis#>>'{native_invoice_values,source_shift_charge_pence}' is distinct from p_invoice_presentation_charge_pence::text then\n      raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_NOT_CURRENT' using errcode='55000';end if;\n    -- The raw physical B source remains this origin. Removing only its generic\n    -- pay-lineage key cannot mint a replacement of A's genuine NORMAL origin.\n    v_source_facts:=(v_source_facts-'row_resolution_id')||jsonb_build_object(\n      'bound_row_resolution_id',v_resolution.id,'pay_effect','NONE','nhsp_none_invoice_basis',v_nhsp_none_basis);\n    v_pay_effect:='NONE';v_total_pay_pence:=0;\n  end if;\n  v_pay_vector:=case when v_pay_effect='NONE' then private.weekly_source_nhsp_invoice_only_vector_v1('PAY',0)\n    else private.weekly_source_finalisation_vector_v1(v_economic.id,'PAY',1::smallint) end;"
+        },
+        {
+          "name": "only actual NONE uses the native invoice-only charge vector; NORMAL retains native C1 vector",
+          "before": "  v_charge_vector:=private.weekly_source_finalisation_vector_v1(v_economic.id,'CHARGE',1::smallint);",
+          "after": "  v_charge_vector:=case when v_pay_effect='NONE' then private.weekly_source_nhsp_invoice_only_vector_v1('CHARGE',p_invoice_presentation_charge_pence)\n    else private.weekly_source_finalisation_vector_v1(v_economic.id,'CHARGE',1::smallint) end;"
+        },
+        {
+          "name": "native movement hash binds zero PAY for actual NONE only",
+          "before": "      'total_pay_pence',v_economic.total_pay_pence,",
+          "after": "      'total_pay_pence',v_total_pay_pence,"
+        },
+        {
+          "name": "actual NONE effect is hash-bound; NORMAL hash JSON keys and values stay identical",
+          "before": "    )\n  );\n  insert into public.weekly_source_billing_movements(",
+          "after": "    )||case when v_pay_effect='NONE' then jsonb_build_object('pay_effect','NONE') else '{}'::jsonb end\n  );\n  insert into public.weekly_source_billing_movements("
+        },
+        {
+          "name": "persist the derived effect alongside the existing physical origin",
+          "before": "    transition_id,nhsp_upload_row_id,final_revision_id,finalisation_cycle_id,\n",
+          "after": "    transition_id,nhsp_upload_row_id,pay_effect,final_revision_id,finalisation_cycle_id,\n"
+        },
+        {
+          "name": "only owner-derived effect is written; no caller parameter added",
+          "before": "    p_transition_id,p_nhsp_upload_row_id,p_final_revision_id,p_finalisation_cycle_id,\n",
+          "after": "    p_transition_id,p_nhsp_upload_row_id,v_pay_effect,p_final_revision_id,p_finalisation_cycle_id,\n"
+        },
+        {
+          "name": "physical NONE column amount is zero; NORMAL economics retain exact native amount",
+          "before": "    v_economic.total_pay_pence::numeric/100,v_economic.calculated_charge_pence,",
+          "after": "    v_total_pay_pence::numeric/100,v_economic.calculated_charge_pence,"
+        },
+        {
+          "name": "assert complete actual NONE invoice origin immediately after materialisation",
+          "before": "  return v_id;\nend;",
+          "after": "  if v_pay_effect='NONE' then perform private.weekly_source_nhsp_none_invoice_origin_assert_v1(v_id);end if;\n  return v_id;\nend;"
+        }
+      ]
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "input_file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/06_complete_origin_dispatch.sqlinc",
+      "before_file": "before/04_complete_origin_dispatch.sqlinc",
+      "after_file": "forward/04_complete_origin_dispatch.sqlinc",
+      "before_sha256": "55084c0f3421b1afc729b12181bef3d3dc81489f28c128225bb66fce5b80e7a4",
+      "after_sha256": "b1b577e1549a34c1ee92ed5e5c1a190f21977575fb6a8e0cc53b5256d7b58595",
+      "hunks": [
+        {
+          "name": "actual NHSP physical NONE dispatch precedes snapshot/expense paths; all old origins unchanged",
+          "before": "  if m.invoice_only_snapshot_line_id is not null and m.source_line_kind='SOURCE_FIXED_EXPENSE' then",
+          "after": "  if m.pay_effect='NONE' and m.source_profile_kind='NHSP_TRUST_BACKING_REPORT' and m.nhsp_upload_row_id is not null then\n    return private.weekly_source_nhsp_none_invoice_origin_assert_v1(m.id);\n  end if;\n  if m.invoice_only_snapshot_line_id is not null and m.source_line_kind='SOURCE_FIXED_EXPENSE' then"
+        }
+      ]
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/02_complete_native_capture_movement.sqlinc",
+      "before_file": "before/05_complete_native_capture_movement.sqlinc",
+      "after_file": "forward/05_complete_native_capture_movement.sqlinc",
+      "before_sha256": "47795eac894fc766d764ae6bdd8ee681d7766a1ccebc9a450161efcae3e57727",
+      "after_sha256": "ffd11a3279d91ac24cc565dd928ce4edb78a2e133fccf9b0cf4f7d3666be9e00",
+      "hunks": [
+        {
+          "name": "NONE never enters native current magnitude/cash capture; all NORMAL capture bytes retained",
+          "before": "  if not found or v_m.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or v_m.prior_movement_id is not null",
+          "after": "  if not found or v_m.pay_effect<>'NORMAL' or v_m.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or v_m.prior_movement_id is not null"
+        }
+      ]
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "input_file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "signature": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "source_bytes": 32206,
+      "source_sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51",
+      "before_file": "before/06_complete_native_publish_revision.sqlinc",
+      "after_file": "forward/06_complete_native_publish_revision.sqlinc",
+      "before_sha256": "caad2578fe7cde9405f3411d28ef246ebd69459fb49f73210e2c9f80744ff22e",
+      "after_sha256": "b0da248a04380cf8f04628a0ae3645ef29fc98d5f93c45226d313dc823956f71",
+      "hunks": [
+        {
+          "name": "current publish emission index reads only NORMAL physical origins; NONE retains A separate current witness",
+          "before": "      and m.source_profile_kind='NHSP_TRUST_BACKING_REPORT'",
+          "after": "      and m.pay_effect='NORMAL' and m.source_profile_kind='NHSP_TRUST_BACKING_REPORT'"
+        }
+      ]
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "input_file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/09_complete_invoice_admission.sqlinc",
+      "before_file": "before/07_complete_expense_nhsp_none_invoice_admission.sqlinc",
+      "after_file": "forward/07_complete_expense_nhsp_none_invoice_admission.sqlinc",
+      "before_sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e",
+      "after_sha256": "6786db6d67e9037cf0652927ebca4306404b36ab773d7420f00be9175aa70bda",
+      "hunks": [
+        {
+          "name": "native NHSP physical NONE uses its exact origin integrity before ordinary physical presentation",
+          "before": "    elsif v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then\n      select * into strict v_source_row",
+          "after": "    elsif v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then\n      if v_movement.pay_effect='NONE' then\n        perform private.weekly_source_nhsp_none_invoice_origin_assert_v1(v_movement.id);\n        if v_count<>1 or v_is_net then raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_GROUP_UNBOUND' using errcode='55000';end if;\n      end if;\n      select * into strict v_source_row"
+        },
+        {
+          "name": "real NONE C1 hours are invoice evidence while zero pay vector/rates and raw physical charge remain authoritative",
+          "before": "      v_reference:=v_source_row.external_source_key;\n    else\n      select snapshot.* into strict v_snapshot",
+          "after": "      v_reference:=v_source_row.external_source_key;\n      if v_movement.pay_effect='NONE' then\n        select e.hours_day,e.hours_night,e.hours_sat,e.hours_sun,e.hours_bh\n          into strict v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh\n          from public.weekly_source_row_economic_snapshots e\n          where e.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid;\n      end if;\n    else\n      select snapshot.* into strict v_snapshot"
+        }
+      ]
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "input_file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/one-time/00_paid_shift_choice_fields.sqlinc",
+      "before_file": "before/00_complete_paid_choice_fields.sqlinc",
+      "after_file": "one-time/00_complete_paid_choice_fields.sqlinc",
+      "before_sha256": "aad80d0146e0194d22ce5eefcbe768e8c12c293921d05d9223ea75c430b425b2",
+      "after_sha256": "f86d0e45fd15513229e95f443ba25c3e6aefc0e59f311337e353662c1689ed65",
+      "hunks": [
+        {
+          "name": "complete existing movement-effect CHECK preserves original snapshot arm and admits only explicit zero-pay positive NHSP physical origin",
+          "before": "    pay_effect in ('NORMAL','NONE') and (pay_effect='NORMAL' or\n      (invoice_only_snapshot_line_id is not null and total_pay_ex_vat=0))",
+          "after": "    pay_effect in ('NORMAL','NONE') and (pay_effect='NORMAL' or\n      (total_pay_ex_vat=0 and (invoice_only_snapshot_line_id is not null\n        or (nhsp_upload_row_id is not null and transition_id is null and invoice_only_snapshot_line_id is null\n          and expense_authority_generation_id is null and self_bill_report_row_id is null and vat_rounding_revision_id is null\n          and source_profile_kind='NHSP_TRUST_BACKING_REPORT' and source_line_kind='NHSP_PHYSICAL_POSITIVE'\n          and movement_role='POSITIVE' and correction_unit_id is null and prior_movement_id is null\n          and coalesce(canonical_pay_vector_json->>'total_pence'='0'\n            and (canonical_pay_vector_json->>'paid_minutes')::numeric=0\n            and (canonical_pay_vector_json->>'break_minutes')::numeric=0\n            and canonical_pay_vector_json->'hours'='{\"day\":0,\"night\":0,\"sat\":0,\"sun\":0,\"bh\":0}'::jsonb,false)))))"
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/04_complete_fin4.sqlinc",
+      "saved": "input/current_fin4.sqlinc",
+      "bytes": 115756,
+      "sha256": "10ed70cdb810dd79513569910ddbd8c193336cb24bf6140c6f360fc694a7ba4e"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/05_nhsp_native_invoice_values.sqlinc",
+      "saved": "input/current_nhsp_invoice_values.sqlinc",
+      "bytes": 3260,
+      "sha256": "4046f609cf4df621d4c8ee3159a7f9de18ba6abed6ddd7b10a77d3752f2f79f5"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/02_complete_choice_current_and_lock.sqlinc",
+      "saved": "input/current_choice.sqlinc",
+      "bytes": 15000,
+      "sha256": "05991dd5b1608f56b9cb8f260b609120e9f4074ecc0f8d10b849ee022f74d9d6"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-choice-comparison-consumer-20261015/forward/01_nhsp_negative_comparison.sqlinc",
+      "saved": "input/current_negative_comparison.sqlinc",
+      "bytes": 9957,
+      "sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/one-time/08_complete_snapshot_origin_constraints.sqlinc",
+      "saved": "input/current_all_origin_constraints.sqlinc",
+      "bytes": 6509,
+      "sha256": "4a1ffa698e0277589e29a1fc028e80e5ed78cffd263f5f5779f3775a5c00afb6"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/input/source_schema.sql",
+      "saved": "input/source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/10_complete_billing_hash.sqlinc",
+      "saved": "input/current_movement_hash.sqlinc",
+      "bytes": 1700,
+      "sha256": "68489f1f09e1375c144072816067c67e76cec45c7bbe48339fdd9920580d55d0"
+    },
+    {
+      "commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/CURRENT_SOURCE_OWNER_INPUTS.sqlinc",
+      "saved": "input/current_invoice_only_vector.sqlinc",
+      "signature": "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+      "source_bytes": 2090211,
+      "source_sha256": "914e7d74092fe19eee02a39228f0b6c00bcf0766d72e7de5c84f9d90c1b89738",
+      "bytes": 918,
+      "sha256": "6306b752b2f03f5bd1e2156f045bab82b297eb71cfdb1e2c7f44c8316b5fda86"
+    }
+  ],
+  "scope": "ORDINARY NHSP DIFFERENT REPORT SCOPE ONLY; SAME-SCOPE/CORRECTION REMAINS REQUIRED UNFINISHED ENGINEERING",
+  "additions": [
+    "forward/00_nhsp_invoice_only_vector.sqlinc",
+    "forward/01_nhsp_none_invoice_basis.sqlinc",
+    "forward/03_nhsp_none_invoice_origin.sqlinc"
+  ],
+  "native_calls": 0,
+  "canonical_mounted": false
+}

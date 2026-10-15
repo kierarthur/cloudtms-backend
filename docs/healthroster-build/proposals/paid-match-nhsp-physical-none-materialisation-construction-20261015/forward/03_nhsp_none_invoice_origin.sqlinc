@@ -1,0 +1,78 @@
+-- Historical origin integrity. No current cash/permission/repricing fallback:
+-- every value derives from the physical C1 row, immutable final census and the
+-- original NORMAL pay witness. The writer separately required current scope.
+create or replace function private.weekly_source_nhsp_none_invoice_origin_assert_v1(p_movement_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp' as $function$
+declare m public.weekly_source_billing_movements%rowtype;r public.weekly_source_row_resolutions%rowtype;
+  row public.weekly_source_upload_rows%rowtype;e public.weekly_source_row_economic_snapshots%rowtype;
+  basis jsonb;invoice jsonb;vat jsonb;admission jsonb;pay jsonb;charge jsonb;state jsonb;mapping bytea;expected bytea;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict m from public.weekly_source_billing_movements where id=p_movement_id;
+  if m.pay_effect<>'NONE' or m.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT'
+    or m.source_line_kind<>'NHSP_PHYSICAL_POSITIVE' or m.movement_role<>'POSITIVE'
+    or m.nhsp_upload_row_id is null or m.invoice_only_snapshot_line_id is not null or m.transition_id is not null
+    or m.expense_authority_generation_id is not null or m.self_bill_report_row_id is not null or m.vat_rounding_revision_id is not null
+    or m.correction_unit_id is not null or m.prior_movement_id is not null or m.total_pay_ex_vat<>0
+    or m.source_facts_json ? 'row_resolution_id'
+    or m.source_facts_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_NHSP_PHYSICAL_FACTS_V1'
+    or m.source_facts_json->>'pay_effect' is distinct from 'NONE' then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_ORIGIN_UNBOUND' using errcode='55000';end if;
+  select * into strict r from public.weekly_source_row_resolutions where id=(m.source_facts_json->>'bound_row_resolution_id')::uuid;
+  select * into strict row from public.weekly_source_upload_rows where id=r.upload_row_id;
+  basis:=private.weekly_source_nhsp_none_invoice_basis_v1(r.id,m.final_revision_id);
+  invoice:=basis->'native_invoice_values';vat:=invoice->'native_line_vat';admission:=invoice->'native_price_admission';
+  select * into strict e from public.weekly_source_row_economic_snapshots where id=(invoice->>'economic_snapshot_id')::uuid;
+  pay:=private.weekly_source_nhsp_invoice_only_vector_v1('PAY',0);
+  charge:=private.weekly_source_nhsp_invoice_only_vector_v1('CHARGE',row.source_shift_charge_pence);
+  mapping:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_MAPPING_RATE_POLICY_V1',jsonb_build_object(
+    'row_resolution_id',r.id,'work_event_id',r.work_event_id,'candidate_id',r.candidate_id,'client_id',r.client_id,'contract_id',r.contract_id,
+    'contract_and_rate_fingerprint',encode(e.contract_and_rate_fingerprint,'hex'),'effective_policy_fingerprint',encode(e.effective_policy_fingerprint,'hex'),
+    'invoice_vat_policy_fingerprint',encode(e.invoice_vat_policy_fingerprint,'hex'),'calculation_fingerprint',encode(e.calculation_fingerprint,'hex')));
+  if (m.work_event_id,m.candidate_id,m.actual_client_id,m.contract_id) is distinct from (r.work_event_id,r.candidate_id,r.client_id,r.contract_id)
+    or m.nhsp_upload_row_id is distinct from row.id or m.finalisation_cycle_id::text is distinct from basis->>'source_cycle_id'
+    or m.invoice_timesheet_id::text is distinct from basis->>'invoice_timesheet_id'
+    or m.source_facts_json->'nhsp_none_invoice_basis' is distinct from basis
+    or m.source_facts_json->>'upload_row_id' is distinct from row.id::text
+    or m.source_facts_json->>'report_scope_id' is distinct from basis->>'report_scope_id'
+    or m.source_facts_json->>'source_row_ordinal' is distinct from row.source_row_ordinal::text
+    or m.source_facts_json->'work_date' is distinct from to_jsonb(row.work_date)
+    or m.source_facts_json->'start_at_local' is distinct from to_jsonb(row.start_at_local)
+    or m.source_facts_json->'end_at_local' is distinct from to_jsonb(row.end_at_local)
+    or m.source_facts_json->'break_minutes' is distinct from coalesce(to_jsonb(row.break_minutes),'null'::jsonb)
+    or m.source_facts_json->'actual_net_minutes' is distinct from to_jsonb(row.actual_net_minutes)
+    or m.source_facts_json->'source_commission_pence' is distinct from to_jsonb(row.source_commission_pence)
+    or m.source_facts_json->'source_total_cost_pence' is distinct from to_jsonb(row.source_total_cost_pence)
+    or m.source_facts_json->'source_shift_charge_pence' is distinct from to_jsonb(row.source_shift_charge_pence)
+    or m.source_facts_json->>'physical_sign' is distinct from 'POSITIVE'
+    or m.canonical_pay_vector_json is distinct from pay or m.canonical_charge_vector_json is distinct from charge
+    or m.calculated_comparison_charge_pence is distinct from e.calculated_charge_pence
+    or m.source_validation_charge_pence is distinct from row.source_shift_charge_pence
+    or m.invoice_presentation_charge_pence is distinct from row.source_shift_charge_pence
+    or m.vat_rate_pct is distinct from (vat->>'vat_rate_pct')::numeric
+    or m.vat_amount is distinct from (vat->>'vat_amount')::numeric
+    or m.total_inc_vat is distinct from (vat->>'total_inc_vat')::numeric
+    or m.price_check_result is distinct from admission->>'price_admission_result'
+    or m.price_check_fingerprint is distinct from e.calculation_fingerprint
+    or m.charge_acceptance_id::text is distinct from admission#>>'{charge_acceptance,id}'
+    or m.mapping_rate_policy_fingerprint is distinct from mapping then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_VALUES_UNBOUND' using errcode='55000';end if;
+  state:=jsonb_build_object('transition_id',m.transition_id,'nhsp_upload_row_id',m.nhsp_upload_row_id,
+    'final_revision_id',m.final_revision_id,'finalisation_cycle_id',m.finalisation_cycle_id,
+    'actual_client_id',r.client_id,'candidate_id',r.candidate_id,'contract_id',r.contract_id,'work_event_id',r.work_event_id,
+    'movement_role',m.movement_role,'correction_unit_id',m.correction_unit_id,'prior_movement_id',m.prior_movement_id,
+    'source_profile_kind',m.source_profile_kind,'source_line_kind',m.source_line_kind,'source_facts',m.source_facts_json,
+    'pay_vector',pay,'charge_vector',charge,'total_pay_pence',0,'calculated_comparison_charge_pence',e.calculated_charge_pence,
+    'source_validation_charge_pence',m.source_validation_charge_pence,'invoice_presentation_charge_pence',m.invoice_presentation_charge_pence,
+    'vat_rate_pct',m.vat_rate_pct,'vat_amount',m.vat_amount,'total_inc_vat',m.total_inc_vat,'price_check_result',m.price_check_result,
+    'price_check_fingerprint',encode(m.price_check_fingerprint,'hex'),'charge_acceptance_id',m.charge_acceptance_id,
+    'mapping_rate_policy_fingerprint',encode(mapping,'hex'),'invoice_timesheet_id',m.invoice_timesheet_id,'pay_effect','NONE');
+  expected:=private.weekly_source_billing_movement_hash_v1(state);
+  if expected is distinct from m.movement_economic_hash then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_HASH_UNBOUND' using errcode='55000';end if;
+  return basis;
+end;
+$function$;
+alter function private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid) from public,anon,authenticated,service_role;

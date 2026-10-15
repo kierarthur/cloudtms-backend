@@ -1,0 +1,12 @@
+create or replace function private.weekly_source_invoice_only_vector_v1(p_kind text,p_total_pence bigint)
+returns jsonb language plpgsql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_kind is null or p_kind not in ('PAY','CHARGE') or p_total_pence is null or abs(p_total_pence::numeric)>999999999999
+    or (p_kind='PAY' and p_total_pence<>0) then raise exception 'WEEKLY_SOURCE_INVOICE_VECTOR_INVALID' using errcode='22023'; end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_RATE_VECTOR_V1','kind',p_kind,
+    'source_mode','HEALTHROSTER_WEEKLY','rate_method','SPLIT_RATE_WINDOWS','row_sign',case when p_total_pence<0 then -1 else 1 end,
+    'paid_minutes',0,'break_minutes',0,'hours',jsonb_build_object('day',0,'night',0,'sat',0,'sun',0,'bh',0),
+    'rates',jsonb_build_object('day',0,'night',0,'sat',0,'sun',0,'bh',0),'total_pence',p_total_pence);
+end;
+$function$;

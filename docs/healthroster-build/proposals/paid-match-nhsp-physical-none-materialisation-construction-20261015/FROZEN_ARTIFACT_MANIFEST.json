@@ -1,0 +1,166 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_PHYSICAL_NONE_MATERIALISATION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 31,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 16793,
+      "sha256": "6a2074b7e4eb440601b5601a9032c3b241f3f103b4785f1767a1fe2965a2ec97"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 4699,
+      "sha256": "b1b49a22dcba69ab5fd872b2961d5a079510ae3b39ab12ae02d069f4c006af26"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 2914,
+      "sha256": "34e7ab82a7ae2855c4181c78c50b8511d6ececc84cf4295e98b682bd1fd7408b"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 593,
+      "sha256": "1358c03adbf6e8e1d1dab6883e80506c2d6f06dad27f0db47c593ef8138ab8c2"
+    },
+    {
+      "file": "before/00_complete_paid_choice_fields.sqlinc",
+      "bytes": 5117,
+      "sha256": "aad80d0146e0194d22ce5eefcbe768e8c12c293921d05d9223ea75c430b425b2"
+    },
+    {
+      "file": "before/02_complete_native_movement_factory.sqlinc",
+      "bytes": 15963,
+      "sha256": "c52293ad192309fdfc49d040df02621187c2316c483f4eff85cda8a9e0f2ca63"
+    },
+    {
+      "file": "before/04_complete_origin_dispatch.sqlinc",
+      "bytes": 11410,
+      "sha256": "55084c0f3421b1afc729b12181bef3d3dc81489f28c128225bb66fce5b80e7a4"
+    },
+    {
+      "file": "before/05_complete_native_capture_movement.sqlinc",
+      "bytes": 4470,
+      "sha256": "47795eac894fc766d764ae6bdd8ee681d7766a1ccebc9a450161efcae3e57727"
+    },
+    {
+      "file": "before/06_complete_native_publish_revision.sqlinc",
+      "bytes": 4665,
+      "sha256": "caad2578fe7cde9405f3411d28ef246ebd69459fb49f73210e2c9f80744ff22e"
+    },
+    {
+      "file": "before/07_complete_expense_nhsp_none_invoice_admission.sqlinc",
+      "bytes": 50147,
+      "sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 13045,
+      "sha256": "b1caf7b5f46b91bbd4dbaf70362ae8d8629ce2c2ed4f324b72e94d52a44b129a"
+    },
+    {
+      "file": "factory-none-admission.sqlinc",
+      "bytes": 2048,
+      "sha256": "edb7782638a00ae7729b68bf97d48ed00317ef15944b4ca7dde525c921a35059"
+    },
+    {
+      "file": "forward/00_nhsp_invoice_only_vector.sqlinc",
+      "bytes": 809,
+      "sha256": "bc54662f670f83c13dc092beecbeac367e3ae88c93bb0ec43f4efd1f900cdc5d"
+    },
+    {
+      "file": "forward/01_nhsp_none_invoice_basis.sqlinc",
+      "bytes": 12094,
+      "sha256": "996985692726199709c835921efba3e8e274bdceb712c95c0d7ce1de68ebd13e"
+    },
+    {
+      "file": "forward/02_complete_native_movement_factory.sqlinc",
+      "bytes": 18551,
+      "sha256": "44ccecac8f84859dd2006a88d1ee5c8e2c5355b2395826b68c7ce5fba78f4322"
+    },
+    {
+      "file": "forward/03_nhsp_none_invoice_origin.sqlinc",
+      "bytes": 7336,
+      "sha256": "ac223c50ef3db363aee807bc85806e99e6d919eb948f2db4dcb8e0e6c78553c6"
+    },
+    {
+      "file": "forward/04_complete_origin_dispatch.sqlinc",
+      "bytes": 11616,
+      "sha256": "b1b577e1549a34c1ee92ed5e5c1a190f21977575fb6a8e0cc53b5256d7b58595"
+    },
+    {
+      "file": "forward/05_complete_native_capture_movement.sqlinc",
+      "bytes": 4498,
+      "sha256": "ffd11a3279d91ac24cc565dd928ce4edb78a2e133fccf9b0cf4f7d3666be9e00"
+    },
+    {
+      "file": "forward/06_complete_native_publish_revision.sqlinc",
+      "bytes": 4691,
+      "sha256": "b0da248a04380cf8f04628a0ae3645ef29fc98d5f93c45226d313dc823956f71"
+    },
+    {
+      "file": "forward/07_complete_expense_nhsp_none_invoice_admission.sqlinc",
+      "bytes": 50805,
+      "sha256": "6786db6d67e9037cf0652927ebca4306404b36ab773d7420f00be9175aa70bda"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5695,
+      "sha256": "89a77de1112b952524942ea62f9c44f69cadbdbeb009f4a100234ab67c5f0b58"
+    },
+    {
+      "file": "input/current_all_origin_constraints.sqlinc",
+      "bytes": 6509,
+      "sha256": "4a1ffa698e0277589e29a1fc028e80e5ed78cffd263f5f5779f3775a5c00afb6"
+    },
+    {
+      "file": "input/current_choice.sqlinc",
+      "bytes": 15000,
+      "sha256": "05991dd5b1608f56b9cb8f260b609120e9f4074ecc0f8d10b849ee022f74d9d6"
+    },
+    {
+      "file": "input/current_fin4.sqlinc",
+      "bytes": 115756,
+      "sha256": "10ed70cdb810dd79513569910ddbd8c193336cb24bf6140c6f360fc694a7ba4e"
+    },
+    {
+      "file": "input/current_invoice_only_vector.sqlinc",
+      "bytes": 918,
+      "sha256": "6306b752b2f03f5bd1e2156f045bab82b297eb71cfdb1e2c7f44c8316b5fda86"
+    },
+    {
+      "file": "input/current_movement_hash.sqlinc",
+      "bytes": 1700,
+      "sha256": "68489f1f09e1375c144072816067c67e76cec45c7bbe48339fdd9920580d55d0"
+    },
+    {
+      "file": "input/current_negative_comparison.sqlinc",
+      "bytes": 9957,
+      "sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91"
+    },
+    {
+      "file": "input/current_nhsp_invoice_values.sqlinc",
+      "bytes": 3260,
+      "sha256": "4046f609cf4df621d4c8ee3159a7f9de18ba6abed6ddd7b10a77d3752f2f79f5"
+    },
+    {
+      "file": "input/source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "materialisation-source.test.mjs",
+      "bytes": 11990,
+      "sha256": "9ec84b1fa3ada4eb46b8d32ab9d77c5b5429fc5c985c17334d1d2f76a48491ad"
+    },
+    {
+      "file": "one-time/00_complete_paid_choice_fields.sqlinc",
+      "bytes": 5890,
+      "sha256": "f86d0e45fd15513229e95f443ba25c3e6aefc0e59f311337e353662c1689ed65"
+    }
+  ]
+}

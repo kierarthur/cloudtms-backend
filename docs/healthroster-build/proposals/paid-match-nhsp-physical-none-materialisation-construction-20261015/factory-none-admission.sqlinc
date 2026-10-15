@@ -1,0 +1,24 @@
+  v_total_pay_pence:=v_economic.total_pay_pence;
+  if v_resolution.pay_effect='NONE' then
+    if p_source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or p_source_line_kind<>'NHSP_PHYSICAL_POSITIVE'
+      or p_movement_role<>'POSITIVE' or p_nhsp_upload_row_id is distinct from v_source_row.id
+      or p_transition_id is not null or p_correction_unit_id is not null or p_prior_movement_id is not null
+      or v_economic.row_sign<>1 then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_MOVEMENT_SCOPE_UNBOUND' using errcode='55000';end if;
+    v_nhsp_none_basis:=private.weekly_source_nhsp_none_invoice_basis_v1(v_resolution.id,p_final_revision_id);
+    if not exists(select 1 from public.weekly_source_final_revisions target_revision
+      join public.weekly_source_report_scopes target_scope on target_scope.id=target_revision.report_scope_id
+      where target_revision.id=(v_nhsp_none_basis->>'normal_pay_final_revision_id')::uuid
+        and target_revision.state='CURRENT' and target_scope.current_final_revision_id=target_revision.id)
+      or not exists(select 1 from public.weekly_source_final_revisions revision
+        where revision.id=p_final_revision_id and revision.state='CURRENT' and revision.reason='INITIAL_FINALISATION'
+          and revision.predecessor_revision_id is null)
+      or v_nhsp_none_basis->>'invoice_timesheet_id' is distinct from p_invoice_timesheet_id::text
+      or v_nhsp_none_basis#>>'{native_invoice_values,source_shift_charge_pence}' is distinct from p_invoice_presentation_charge_pence::text then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_NOT_CURRENT' using errcode='55000';end if;
+    -- The raw physical B source remains this origin. Removing only its generic
+    -- pay-lineage key cannot mint a replacement of A's genuine NORMAL origin.
+    v_source_facts:=(v_source_facts-'row_resolution_id')||jsonb_build_object(
+      'bound_row_resolution_id',v_resolution.id,'pay_effect','NONE','nhsp_none_invoice_basis',v_nhsp_none_basis);
+    v_pay_effect:='NONE';v_total_pay_pence:=0;
+  end if;

@@ -1,0 +1,47 @@
+create or replace function private.bpay_next_source_current_capture_movement_v1(p_movement uuid)
+returns jsonb language plpgsql security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_m public.weekly_source_billing_movements%rowtype;v_origin private.bpay_next_source_current_origins%rowtype;
+  v_revision record;v_scope uuid;v_resolution uuid;v_lineage public.weekly_source_row_timesheet_lineages%rowtype;
+  v_economic uuid;v_magnitude jsonb;v_hash bytea;v_inserted boolean;
+begin
+  select m.* into v_m from public.weekly_source_billing_movements m where m.id=p_movement;
+  if not found or v_m.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or v_m.prior_movement_id is not null
+    or v_m.source_line_kind not in ('NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE')
+    or v_m.movement_role not in ('POSITIVE','REVERSAL','REPLACEMENT') or v_m.expense_authority_generation_id is not null then
+    raise exception 'BPAY_NEXT_SOURCE_MOVEMENT_NOT_ADMITTED' using errcode='55000';end if;
+  select o.* into v_origin from private.bpay_next_source_current_origins o where o.origin_kind='MOVEMENT' and o.origin_id=p_movement;
+  if found and v_origin.source_hash is distinct from v_m.movement_economic_hash then
+    raise exception 'BPAY_NEXT_SOURCE_ORIGIN_CHANGED' using errcode='55000';end if;
+  if found and (v_origin.active or v_origin.retracted_by_session_id is not null) then
+    return jsonb_build_object('origin_id',p_movement,'active',v_origin.active,'idempotent',true);end if;
+  select * into strict v_revision from private.bpay_next_source_current_revision_v1(v_m.final_revision_id);
+  v_resolution:=(v_m.source_facts_json->>'row_resolution_id')::uuid;
+  v_scope:=private.bpay_next_source_current_scope_v1(v_resolution,v_revision.source_group_id,v_m.work_event_id,v_m.contract_id);
+  select l.* into strict v_lineage from public.weekly_source_row_timesheet_lineages l where l.row_resolution_id=v_resolution;
+  if v_m.candidate_id is distinct from v_lineage.candidate_id or v_m.actual_client_id is distinct from v_lineage.client_id then
+    raise exception 'BPAY_NEXT_SOURCE_MOVEMENT_LINEAGE_UNBOUND' using errcode='55000';end if;
+  select e.id into strict v_economic from public.weekly_source_row_economic_snapshots e where e.row_resolution_id=v_resolution;
+  v_magnitude:=private.bpay_next_source_nhsp_magnitude_v1(v_m.source_facts_json,v_m.canonical_pay_vector_json,v_m.canonical_charge_vector_json);
+  v_hash:=private.weekly_source_sha256_jsonb_v1('BPAY_NEXT_SOURCE_NHSP_MAGNITUDE_V1',v_magnitude);
+  insert into private.bpay_next_source_current_magnitudes(scope_id,work_event_id,magnitude_hash,economic_magnitude)
+    values(v_scope,v_m.work_event_id,v_hash,v_magnitude) on conflict do nothing;
+  if not exists(select 1 from private.bpay_next_source_current_magnitudes m where m.scope_id=v_scope
+    and m.work_event_id=v_m.work_event_id and m.magnitude_hash=v_hash and m.economic_magnitude=v_magnitude) then
+    raise exception 'BPAY_NEXT_SOURCE_MAGNITUDE_HASH_COLLISION' using errcode='55000';end if;
+  insert into private.bpay_next_source_current_events(scope_id,work_event_id,source_kind,source_present,source_group_id,client_id,work_date)
+    select v_scope,v_m.work_event_id,'NHSP',false,v_revision.source_group_id,w.client_id,w.work_date
+    from public.weekly_work_events w where w.id=v_m.work_event_id on conflict do nothing;
+  if not exists(select 1 from private.bpay_next_source_current_events e where e.scope_id=v_scope
+    and e.work_event_id=v_m.work_event_id and e.source_kind='NHSP') then
+    raise exception 'BPAY_NEXT_SOURCE_EVENT_KIND_CHANGED' using errcode='55000';end if;
+  insert into private.bpay_next_source_current_origins(origin_kind,origin_id,movement_id,scope_id,work_event_id,
+    final_revision_id,order_key,source_hash,row_resolution_id,lineage_id,economic_snapshot_id,
+    magnitude_hash,contribution,representative_created_at)
+    values('MOVEMENT',v_m.id,v_m.id,v_scope,v_m.work_event_id,v_m.final_revision_id,v_revision.order_key,
+      v_m.movement_economic_hash,v_resolution,v_lineage.id,v_economic,v_hash,
+      case when v_m.movement_role='REVERSAL' then -1 else 1 end,v_m.created_at_utc) on conflict do nothing;
+  v_inserted:=found;
+  perform private.bpay_next_source_current_toggle_v1('MOVEMENT',p_movement,v_revision.is_current);
+  return jsonb_build_object('origin_id',p_movement,'active',v_revision.is_current,'idempotent',not v_inserted and not v_revision.is_current);
+end $f$;

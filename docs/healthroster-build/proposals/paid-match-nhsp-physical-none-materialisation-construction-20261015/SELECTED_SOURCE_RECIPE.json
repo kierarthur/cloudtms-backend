@@ -1,0 +1,67 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "unqualified": true,
+  "containing_checkpoint": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+  "selected_order": [
+    "one-time/00_complete_paid_choice_fields.sqlinc",
+    "forward/00_nhsp_invoice_only_vector.sqlinc",
+    "forward/01_nhsp_none_invoice_basis.sqlinc",
+    "forward/03_nhsp_none_invoice_origin.sqlinc",
+    "forward/02_complete_native_movement_factory.sqlinc",
+    "forward/04_complete_origin_dispatch.sqlinc",
+    "forward/05_complete_native_capture_movement.sqlinc",
+    "forward/06_complete_native_publish_revision.sqlinc",
+    "forward/07_complete_expense_nhsp_none_invoice_admission.sqlinc"
+  ],
+  "complete_owner_reverses": 6,
+  "unique_hunks": 15,
+  "current_inputs": 8,
+  "new_private_signatures": [
+    "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+    "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)"
+  ],
+  "new_public_signatures": [],
+  "new_table_column_calculator": 0,
+  "existing_physical_origin": "nhsp_upload_row_id; native B row only; no fabricated Roster snapshot",
+  "ordinary_different_report_scope_only": true,
+  "same_scope_correction_required_unfinished": true,
+  "prior_phased_3_CASE_parenthesis_root_repair_REQUIRED": true,
+  "invoice_admission_alternative": "Money expense26 full owner + finite NHSP NONE addition; final root composition with mutually exclusive Report04/05/07 REQUIRED",
+  "NORMAL_hash_key_set_amount_vectors_VAT_and_current_witness_untouched": true,
+  "historical_source_census_audit_cash_and_actual_C1_rebound": true,
+  "native_capture_excludes_NONE": true,
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-phased-projection-consumer-20261015",
+      "artifacts": 43,
+      "manifest_sha256": "96fe710ee94b765fe945bab01236cae2b0989838cf9e425650ab2c7f86ea8b48"
+    },
+    {
+      "packet": "paid-match-nhsp-native-invoice-values-construction-20261015",
+      "artifacts": 17,
+      "manifest_sha256": "cbae56a4c479d7d53660ea93de981f7c01e03ac24d228fea2779ac555aeb1296"
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "artifacts": 26,
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e"
+    },
+    {
+      "packet": "paid-match-nhsp-negative-population-construction-20261015",
+      "artifacts": 21,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    },
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "artifacts": 58,
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453"
+    }
+  ],
+  "final_private_registry_ACL_catalogue_contract_and_all_native_gates_REQUIRED": true,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}
