@@ -1,0 +1,34 @@
+{
+  "files": [
+    {
+      "file": "ACTUAL_TRANSPORT_CHECKS.txt",
+      "bytes": 5304,
+      "sha256": "ad1de102bf81092a3d933fc2c98c5fc4ee4f90eb426975bc27877555fbacb675"
+    },
+    {
+      "file": "ACTUAL_TRANSPORT_LOADER.mjs",
+      "bytes": 514,
+      "sha256": "2f3acfd26f3c601acf23c4223ebdad69056a279998dbb5b6ce5ef19929b8216d"
+    },
+    {
+      "file": "CANONICAL_REGRESSIONS.txt",
+      "bytes": 2585,
+      "sha256": "b1d1f90197c8e6c98ab741aa5efeb647ef3cf6ae2d504cf5223108ef6b3f834a"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 768,
+      "sha256": "b9d3ad9afe2d4202a53faffa597e098781c64d405e79bf2964ac5aaaeb05d48a"
+    },
+    {
+      "file": "MOUNT_RECEIPT.json",
+      "bytes": 1341,
+      "sha256": "3abe9ec75488c8e2ae28ce688b956a8be6d17dc1ea3923ed4d3854fe8a845295"
+    },
+    {
+      "file": "SOURCE_MOUNT.mjs",
+      "bytes": 3706,
+      "sha256": "fc252bc5a5b848a1e556e22e9822324abbc48a55289337cd6a8eb8242b755b87"
+    }
+  ]
+}

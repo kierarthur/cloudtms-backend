@@ -1,0 +1,21 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';
+const sha=b=>createHash('sha256').update(b).digest('hex'),pin='41b9004e1290b6c5a46a92cb972427d3b31dfb4d';
+const prefix='docs/healthroster-build/proposals/agency-prospective-contract-fixed-approval-native-forward-20261015/';
+const blob=file=>execFileSync('git',['cat-file','blob',pin+':'+prefix+file],{maxBuffer:32e6});
+const dir='docs/healthroster-build/install2-contract-native-transport-20261015';assert(!fs.existsSync(dir));
+const reverse=JSON.parse(blob('WORKER_COMPLETE_REVERSES.json')),before=fs.readFileSync('broker/src/index.js','utf8');
+assert.equal(sha(before),reverse.inputs[0].sha256,'actual current canonical index must equal reviewed f500 preimage');
+let output=reverse.import_addition+before;
+for(const h of reverse.function_hunks){assert.equal(output.split(h.before).length,2,h.name+' exact current complete handler');output=output.replace(h.before,()=>h.after);}
+const selected=blob('forward/125_complete_current_worker_index_with_contract_persistence.js').toString('utf8');
+assert.equal(output,selected,'finite complete-handler composition equals reviewed current alternative125');assert.equal(sha(output),reverse.current_forward_sha256);
+let restored=output.slice(reverse.import_addition.length);for(const h of reverse.function_hunks){assert.equal(restored.split(h.after).length,2);restored=restored.replace(h.after,()=>h.before);}assert.equal(restored,before);
+const module=blob('contract-preset-write.mjs');assert(!fs.existsSync('broker/src/weekly-source/contract-preset-write.mjs'));
+const candidatePaths=['broker/src/candidate-app-backend.js','broker/src/invoice-presentation-contract.js','broker/src/timesheet-official-pdf.js'];
+const candidateBefore=candidatePaths.map(file=>({file,sha256:sha(fs.readFileSync(file))}));
+fs.mkdirSync(dir,{recursive:true});fs.writeFileSync('broker/src/index.js',output);fs.writeFileSync('broker/src/weekly-source/contract-preset-write.mjs',module);
+assert.deepEqual(candidatePaths.map(file=>({file,sha256:sha(fs.readFileSync(file))})),candidateBefore);
+const receipt={source_commit:pin,source_packet:prefix,canonical_base:'62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9',complete_current_handler_reversals:reverse.function_hunks.length,actual_routed_calls:reverse.call_hunks.length,input_index_sha256:sha(before),output_index_sha256:sha(output),actual_transport_sha256:sha(module),reviewed_current_forward:'125',preferred_joined_forward126_deferred_until_current_OFF_union:true,other_candidate_runtime_preserved:candidateBefore,native_SQL_module:'PENDING current final once-only union; service RPC not installed or invoked',deployed:false};
+fs.writeFileSync(dir+'/MOUNT_RECEIPT.json',JSON.stringify(receipt,null,2)+'\n');
+fs.writeFileSync(dir+'/HANDOFF.md','# Contract native write transport\n\nEight exact current admin handlers now route ten Contract POST/PATCH writes through the finite 20-second service RPC adapter. The three date handlers retain the exact row version used for calculations, duplicate retains its native source identity, and printed policy retains its existing URL CAS. Every complete handler reverses to the current canonical preimage; the output equals reviewed current alternative125. The three Candidate/presentation/PDF files remain byte-identical.\n\nThis is source integration only. The SQL owner remains in the unmounted current Agency union; final compile, role, first-use, receipt, race, API and real application acceptance remain mandatory before Install2. No TEST write or deployment is claimed.\n');
+console.log(JSON.stringify(receipt));

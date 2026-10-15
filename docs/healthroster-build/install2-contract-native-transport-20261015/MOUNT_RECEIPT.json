@@ -1,0 +1,28 @@
+{
+  "source_commit": "41b9004e1290b6c5a46a92cb972427d3b31dfb4d",
+  "source_packet": "docs/healthroster-build/proposals/agency-prospective-contract-fixed-approval-native-forward-20261015/",
+  "canonical_base": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+  "complete_current_handler_reversals": 8,
+  "actual_routed_calls": 10,
+  "input_index_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+  "output_index_sha256": "0bf6e3bdb15210a3963183ad1d832f57a18586ac1b9a5e02a8f4e797bb7d2f45",
+  "actual_transport_sha256": "d567fb8d69765833965fe4fca43d186771124b4dbf99e0e5abdc8fa36a6f36ae",
+  "reviewed_current_forward": "125",
+  "preferred_joined_forward126_deferred_until_current_OFF_union": true,
+  "other_candidate_runtime_preserved": [
+    {
+      "file": "broker/src/candidate-app-backend.js",
+      "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+    },
+    {
+      "file": "broker/src/invoice-presentation-contract.js",
+      "sha256": "18fdb8421f95485d264941bde5b678932a7b2a94f62dbcd490e5fedebadb1fd3"
+    },
+    {
+      "file": "broker/src/timesheet-official-pdf.js",
+      "sha256": "52e4aa425727ccc6153037ffefa0017139faab284538d7a67e4981b7a199735b"
+    }
+  ],
+  "native_SQL_module": "PENDING current final once-only union; service RPC not installed or invoked",
+  "deployed": false
+}

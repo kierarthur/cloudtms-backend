@@ -1,0 +1,120 @@
+{
+  "verdict": "FAIL_MISSING_GENUINE_SCHEMA_PREREQUISITE",
+  "native_source_commit": "82a8dc04214d5542613df3776093a04f67d4dd21",
+  "selected_function_source": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+  "account": "kierarthur1978@gmail.com",
+  "native_tool": "cloudtms-miget-transaction-lab-kier1978/miget_db_transaction_rollback",
+  "database": "cloudtms_test_clone",
+  "prepared": {
+    "source_packet_sha256": "5e3dd99c71aa207d4c8996847a207ca439922c4da30c1a60fc1d2b430650c3b2",
+    "sql_bytes": 848615,
+    "sql_characters": 848566,
+    "sql_sha256": "c22b4f04b80d0441fe015840268e401b0b475587af1a65f69810bd70c95ba40a",
+    "statements": 162,
+    "fingerprint_sha256": "a5c608c4097d3c9061e99c92e23e2b0d31a4b4906c04923d1dce157d5fb88b83",
+    "scope": "50 complete function constructors and original ACL tails; catalog-only assertions; not business/role/native-writer/full-release acceptance",
+    "logical_owner_mapping": "Only audited postgres logical owner mapped by release library to CURRENT_USER"
+  },
+  "finished_statement_records": 33,
+  "error": {
+    "statement": 33,
+    "error": {
+      "message": "relation \"public.weekly_source_invoice_hold_releases\" does not exist",
+      "code": "42P01",
+      "where": "compilation of PL/pgSQL function \"weekly_source_invoice_hold_release_context_core_v1\" near line 4",
+      "routine": "RangeVarGetRelidExtended"
+    }
+  },
+  "rolledBack": true,
+  "connectedFresh": true,
+  "entire_routine_trigger_frame_identical": true,
+  "routines": 50,
+  "triggers": 862,
+  "current_existing_rpc_names": 10,
+  "current_existing_rpc_overload_definitions": [
+    {
+      "schema": "private",
+      "name": "bpay_next_append_work_skip_v1",
+      "identity_arguments": "p_run_id uuid, p_work_id uuid, p_revision_id uuid",
+      "definition_sha256": "b9e8377877193139bd16b8658e50bf54eb2f8ee94639ca699949a3b41858436d"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_bound_source_snapshot_v1",
+      "identity_arguments": "p_binding_version_id uuid, p_expected_book_revision bigint",
+      "definition_sha256": "03bb2fb0d6272ee08a4d3fa865afb6c65c53180503b21f49b9c07f1a817bf52e"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_create_preparation_v1",
+      "identity_arguments": "p_run_id uuid, p_actor_user_id uuid, p_pay_date date",
+      "definition_sha256": "f584c335a6f44739c60c695924054535bdc887f71a8a14420aa2ba09c7db37c4"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_create_preparation_v1",
+      "identity_arguments": "p_run_id uuid, p_actor_user_id uuid, p_pay_date date, p_descriptor jsonb, p_command_id uuid",
+      "definition_sha256": "a31a58767a51e66591a983d3810277a466be775a8916ba8fd08dc4eeb9a979b6"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_create_preparation_v1",
+      "identity_arguments": "p_run_id uuid, p_actor_user_id uuid, p_pay_date date, p_descriptor jsonb, p_command_id uuid, p_guard jsonb",
+      "definition_sha256": "7ceadad6737802ec7e0a5c93eb73f3d1d0a4f220b0689141c1c989c269e522d9"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_initial_tsfin_bound_assert_v1",
+      "identity_arguments": "p_binding_version_id uuid",
+      "definition_sha256": "f852c52c3780c9120f1c94088eb8ef82fa5169d4fe712cb14f1489bca3bbb8f3"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_initial_tsfin_certificate_v1",
+      "identity_arguments": "p_root_authorisation_id uuid",
+      "definition_sha256": "3218ca5e8c7acf95f2a5c72da8fc2c4ee04692e5b5da272d67a4e5579fa188f1"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_workbench_refresh_work_core_v1",
+      "identity_arguments": "p_work_id uuid",
+      "definition_sha256": "a03d6ee4c7605fcc8c57e18bfa99975c4c5ef4b1623e1c005f4d42e8160e019b"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_workbench_work_members_v1",
+      "identity_arguments": "p_work_id uuid, p_revision_id uuid",
+      "definition_sha256": "09f71c958036f56cb4815b1ed115d630dbe6b10314e2c997064ede81096d63ad"
+    },
+    {
+      "schema": "private",
+      "name": "candidate_notification_visible_v1",
+      "identity_arguments": "p_notification candidate_notifications, p_now_utc timestamp with time zone, p_restored_state text",
+      "definition_sha256": "1cb77387e5a11bc91e8317d887d3d735eb6df4daccd6862da773f57bc8a892ff"
+    },
+    {
+      "schema": "public",
+      "name": "candidate_submission_finalize_atomic_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb",
+      "definition_sha256": "2ea7d395959ec5cb93e70097eb117e4ddfcee0a4d0388c79a4ccf82d9be04fc5"
+    },
+    {
+      "schema": "public",
+      "name": "candidate_workflow_transition_atomic_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone",
+      "definition_sha256": "0ff12be5ae3cb04cb3447552af1e76dd8a18b25fe7a5afad5f0be87c566863df"
+    }
+  ],
+  "shared_turn": {
+    "key": [
+      20261013,
+      1
+    ],
+    "taken_at": "2026-10-15T08:06:24.280Z",
+    "released_at": "2026-10-15T08:07:05.467Z",
+    "explicit_unlock_confirmed": true,
+    "connection_closed": true
+  },
+  "native_business_or_full_release_acceptance": false,
+  "next": "Include exact committed invoice-hold schema prerequisites and current Candidate successor; retain check_function_bodies and all complete assertions. Do not use surrogate tables."
+}

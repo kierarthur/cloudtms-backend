@@ -1,0 +1,10 @@
+{
+  "source_packet_sha256": "5e3dd99c71aa207d4c8996847a207ca439922c4da30c1a60fc1d2b430650c3b2",
+  "sql_bytes": 848615,
+  "sql_characters": 848566,
+  "sql_sha256": "c22b4f04b80d0441fe015840268e401b0b475587af1a65f69810bd70c95ba40a",
+  "statements": 162,
+  "fingerprint_sha256": "a5c608c4097d3c9061e99c92e23e2b0d31a4b4906c04923d1dce157d5fb88b83",
+  "scope": "50 complete function constructors and original ACL tails; catalog-only assertions; not business/role/native-writer/full-release acceptance",
+  "logical_owner_mapping": "Only audited postgres logical owner mapped by release library to CURRENT_USER"
+}

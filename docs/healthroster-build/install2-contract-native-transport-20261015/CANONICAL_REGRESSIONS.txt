@@ -1,0 +1,44 @@
+✔ ACTUAL_TRANSPORT dependency validation refuses incomplete factory (1.0979ms)
+✔ ACTUAL_TRANSPORT POST uses exact actor, unchanged ordinary values and 20-second RPC and returns actual full native row (17.8662ms)
+✔ ACTUAL_TRANSPORT PATCH carries original same-read CAS without a fresh read (0.4429ms)
+✔ ACTUAL_TRANSPORT actual printed-policy URL CAS retained exactly (0.3041ms)
+✔ ACTUAL_TRANSPORT duplicate carries native source identity/version and no caller policy object (0.2966ms)
+✔ ACTUAL_TRANSPORT rejects foreign origin (0.3659ms)
+✔ ACTUAL_TRANSPORT rejects foreign table (0.2278ms)
+✔ ACTUAL_TRANSPORT rejects actor absent (0.2235ms)
+✔ ACTUAL_TRANSPORT rejects DELETE (0.228ms)
+✔ ACTUAL_TRANSPORT rejects array payload (0.2569ms)
+✔ ACTUAL_TRANSPORT rejects null payload (0.8003ms)
+✔ ACTUAL_TRANSPORT rejects empty payload (0.212ms)
+✔ ACTUAL_TRANSPORT rejects malformed JSON (0.2051ms)
+✔ ACTUAL_TRANSPORT rejects oversized payload (0.1169ms)
+✔ ACTUAL_TRANSPORT rejects ordinary caller approval (0.1272ms)
+✔ ACTUAL_TRANSPORT rejects duplicate source incomplete (0.0933ms)
+✔ ACTUAL_TRANSPORT rejects duplicate source nonstring version (0.0715ms)
+✔ ACTUAL_TRANSPORT rejects PATCH missing original version (0.0899ms)
+✔ ACTUAL_TRANSPORT rejects PATCH nonstring version (0.108ms)
+✔ ACTUAL_TRANSPORT rejects PATCH multiple ids (0.1217ms)
+✔ ACTUAL_TRANSPORT rejects PATCH multiple versions (0.099ms)
+✔ ACTUAL_TRANSPORT rejects PATCH non-equality (0.0827ms)
+✔ ACTUAL_TRANSPORT rejects PATCH policy source (0.1292ms)
+✔ ACTUAL_TRANSPORT rejects unknown query filter (0.0975ms)
+✔ ACTUAL_TRANSPORT rejects POST id filter (0.0872ms)
+✔ ACTUAL_TRANSPORT maps stale native CAS (0.2712ms)
+✔ ACTUAL_TRANSPORT maps native admin denial (0.161ms)
+✔ ACTUAL_TRANSPORT maps native invalid values (0.1241ms)
+✔ ACTUAL_TRANSPORT maps current RPC cache miss (0.132ms)
+✔ ACTUAL_TRANSPORT maps closed unknown failure (0.0944ms)
+✔ ACTUAL_TRANSPORT malformed/foreign native result null (0.2469ms)
+✔ ACTUAL_TRANSPORT malformed/foreign native result false (0.1383ms)
+✔ ACTUAL_TRANSPORT malformed/foreign native result [] (0.0922ms)
+✔ ACTUAL_TRANSPORT malformed/foreign native result {} (0.0785ms)
+✔ ACTUAL_TRANSPORT malformed/foreign native result {"id":"00000000-0000-0000-0000-000000000003"} (0.0695ms)
+✔ ACTUAL_TRANSPORT malformed/foreign native result {"id":"invalid"} (0.0862ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 152.9821

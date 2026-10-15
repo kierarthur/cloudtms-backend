@@ -1,3 +1,5 @@
+import { createContractPresetWriteTransport } from './weekly-source/contract-preset-write.mjs';
+const contractPresetWriteFetch = createContractPresetWriteTransport({ sbRpc, unwrapRpcJsonb });
 import { createNativeCorrectionSnapshotProducers } from './native-correction-snapshot-producers.mjs';
 import { buildExactRequestA0WeeklyClockSnapshot } from './exact-request-a0-weekly-clock-arm.mjs';
 import { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';
@@ -8154,7 +8156,7 @@ async function handleContractsCreate(env, req) {
   }
 
   // Insert contract
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
+  const res = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify({
@@ -11603,11 +11605,11 @@ async function handleContractsUpdate(env, req, contractId) {
 
   try { console.log('[CONTRACTS][UPDATE] patch', { contractId, patch }); } catch {}
 
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+  const res = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return-representation' },
     body: JSON.stringify(patch)
-  });
+  }, { expectedUpdatedAt: current.updated_at });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   let updated = (await res.json().catch(()=>[]))[0];
 
@@ -11655,11 +11657,11 @@ async function handleContractsUpdate(env, req, contractId) {
   if (normStart) normEnd = normEnd || normStart;
 
   if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
-    const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+    const normRes = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
       method: 'PATCH',
       headers: { ...sbHeaders(env), 'Prefer': 'return-representation' },
       body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })
-    });
+    }, { expectedUpdatedAt: updated?.updated_at });
     if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
   }
 
@@ -12284,11 +12286,11 @@ async function handleContractsReplace(env, req, contractId) {
 
   try { console.log('[CONTRACTS][REPLACE] patch', { contractId, patch }); } catch {}
 
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+  const res = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify(patch)
-  });
+  }, { expectedUpdatedAt: current.updated_at });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   let updated = (await res.json().catch(()=>[]))[0];
 
@@ -12359,11 +12361,11 @@ async function handleContractsReplace(env, req, contractId) {
   if (normStart) normEnd = normEnd || normStart;
 
   if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
-    const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+    const normRes = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
       method: 'PATCH',
       headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
       body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })
-    });
+    }, { expectedUpdatedAt: updated?.updated_at });
     if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
   }
 
@@ -12620,11 +12622,11 @@ async function handleContractsDuplicate(env, req, contractId) {
       updated_at: nowIso()
     };
 
-    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
+    const ins = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts`, {
       method: 'POST',
       headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
       body: JSON.stringify(payload)
-    });
+    }, { policySource: { id: src.id, updated_at: src.updated_at } });
     if (!ins.ok) {
       const txt = await ins.text().catch(()=> '');
       return duplicateFailureResponse(`Failed to duplicate contract: ${txt || ins.status}`);
@@ -106578,7 +106580,7 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts`
-      + `?id=eq.${enc(contractId)}&select=id,start_date,end_date`
+      + `?id=eq.${enc(contractId)}&select=id,start_date,end_date,updated_at`
   );
 
   if (!c) return withCORS(env, req, notFound('Contract not found'));
@@ -106625,14 +106627,14 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
 
   // 4) Patch contract end_date to safeEnd
   try {
-    const res = await fetch(
+    const res = await contractPresetWriteFetch(env, user.id,
       `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return=representation' },
         body: JSON.stringify({ end_date: safeEnd, updated_at: nowIso() })
       }
-    );
+    , { expectedUpdatedAt: c.updated_at });
     if (!res.ok) {
       const t = await res.text();
       return withCORS(env, req, badRequest('Contract end update failed: ' + t));
@@ -141347,7 +141349,7 @@ async function handleContractPrintedTimesheetPolicyUpdate(env, req, contractId) 
     return withCORS(env, req, ok({ contract: current, unchanged: true }));
   }
 
-  const res = await fetch(
+  const res = await contractPresetWriteFetch(env, user.id,
     `${env.SUPABASE_URL}/rest/v1/contracts` +
       `?id=eq.${enc(contractId)}` +
       `&updated_at=eq.${enc(current.updated_at)}`,
@@ -141360,7 +141362,16 @@ async function handleContractPrintedTimesheetPolicyUpdate(env, req, contractId) 
       })
     }
   );
-  if (!res.ok) return printedTimesheetPolicyErrorResponse(env, req, 'The Contract printed-timesheet policy was not changed.');
+  if (!res.ok) {
+    const failure = await res.json().catch(() => null);
+    const code = /^CANDIDATE_[A-Z0-9_]+$/.test(String(failure?.code || ''))
+      ? failure.code : 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_FAILED';
+    const message = code === 'CANDIDATE_FIXED_APPROVAL_CONTRACT_DEPENDENCY_UNAVAILABLE'
+      ? 'The Contract settings service is temporarily unavailable. Retry after it is restored.'
+      : res.status === 409 ? 'The Contract changed. Reload and try again.'
+      : 'The Contract settings request could not be completed. Reload before retrying.';
+    return printedTimesheetPolicyErrorResponse(env, req, message, res.status === 409 ? 409 : 503, code);
+  }
   const rows = await res.json().catch(() => []);
   const row = Array.isArray(rows) ? rows[0] : rows;
   if (!row) return printedTimesheetPolicyErrorResponse(env, req, 'The Contract changed. Reload and try again.', 409, 'CONTRACT_VERSION_CONFLICT');
@@ -175029,7 +175040,8 @@ async function handleContractsPlanRanges(env, req, contractId) {
           'default_submission_mode',
           'overrideclientsettings',
           'week_ending_weekday_snapshot',
-          'std_schedule_json'
+          'std_schedule_json',
+          'updated_at'
         ].join(',')
     );
     if (!c) return withCORS(env, req, badRequest('Contract not found'));
@@ -175075,11 +175087,11 @@ async function handleContractsPlanRanges(env, req, contractId) {
         }
 
         if (newStart !== c.start_date || newEnd !== c.end_date) {
-          const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
+          const res = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
             method: 'PATCH',
             headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
             body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })
-          });
+          }, { expectedUpdatedAt: c.updated_at });
           if (!res.ok) return withCORS(env, req, serverError(await res.text()));
 
           const upd = (await res.json().catch(() => []))[0] || c;
@@ -175423,7 +175435,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
 
     const c = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot`
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot,updated_at`
     );
     if (!c) {
       warn('Contract not found');
@@ -176040,11 +176052,11 @@ async function handleContractsUnplanRanges(env, req, contractId) {
         oldStart: c.start_date, oldEnd: c.end_date, newStart, newEnd
       });
 
-      const pr = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
+      const pr = await contractPresetWriteFetch(env, user.id, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
         method: 'PATCH',
         headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
         body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })
-      });
+      }, { expectedUpdatedAt: c.updated_at });
 
       if (!pr.ok) {
         const txt = await pr.text();

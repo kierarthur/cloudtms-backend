@@ -1,0 +1,34 @@
+{
+  "files": [
+    {
+      "file": "BEFORE_CATALOGUE_FRAME.json",
+      "bytes": 222894,
+      "sha256": "48438d9536f343b3eb90e7227a49abf1f48d8aade69bd95b9b6aeb2963946e45"
+    },
+    {
+      "file": "PREPARATION_MANIFEST.json",
+      "bytes": 606,
+      "sha256": "b63ea80f3bcf43ed4f3547da46b709ad84e6ac098fd961b4714480a68e67fe90"
+    },
+    {
+      "file": "REPORT.md",
+      "bytes": 1359,
+      "sha256": "814160e0fa2b94633e2d3499168f7c1afa621d42c5b3f3a34bda3fec224b5b58"
+    },
+    {
+      "file": "SOURCE_PREPARATION.mjs",
+      "bytes": 2602,
+      "sha256": "c0a250d8a6de8801ac9c18f937b209f439cf099a9ae053b45c0154467461fe4c"
+    },
+    {
+      "file": "SUMMARY.json",
+      "bytes": 5655,
+      "sha256": "441d5c54bb761a4a5c481f9bb9e8afdd7cfa173bf6da8073b082145bc4c011c3"
+    },
+    {
+      "file": "TRIAL_RESULT.json",
+      "bytes": 307985,
+      "sha256": "4b6192ef623c361dd6d59697fcde20c0b7b386503018e5748689198dd4f0bcb9"
+    }
+  ]
+}
