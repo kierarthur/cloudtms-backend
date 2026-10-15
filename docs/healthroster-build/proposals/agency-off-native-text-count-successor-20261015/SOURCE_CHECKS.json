@@ -1,0 +1,36 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "independent_review": "PENDING",
+  "compiled_contract_sha256": null,
+  "package": "agency-off-native-text-count-successor-20261015",
+  "root_input_pin": "fee53465a85b6c8fa7ac059d225429022db7260a",
+  "pure_cases": 8,
+  "pure_tap": "TAP version 13\n# Subtest: UNIT_ONLY real codec/native character bound astral exactly2000\nok 1 - UNIT_ONLY real codec/native character bound astral exactly2000\n  ---\n  duration_ms: 0.9184\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY real codec/native character bound astral over2000\nok 2 - UNIT_ONLY real codec/native character bound astral over2000\n  ---\n  duration_ms: 1.0592\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY real codec/native character bound combining exactly2000\nok 3 - UNIT_ONLY real codec/native character bound combining exactly2000\n  ---\n  duration_ms: 0.0973\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY real codec/native character bound combining over2000\nok 4 - UNIT_ONLY real codec/native character bound combining over2000\n  ---\n  duration_ms: 0.0952\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY real codec/native character bound ASCII exactly2000\nok 5 - UNIT_ONLY real codec/native character bound ASCII exactly2000\n  ---\n  duration_ms: 0.1088\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY real codec/native character bound ASCII over2000\nok 6 - UNIT_ONLY real codec/native character bound ASCII over2000\n  ---\n  duration_ms: 0.0853\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY real codec/native character bound empty\nok 7 - UNIT_ONLY real codec/native character bound empty\n  ---\n  duration_ms: 0.0617\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY native length predicate and full unique reverse preserve34\nok 8 - SOURCE_ONLY native length predicate and full unique reverse preserve34\n  ---\n  duration_ms: 1.6345\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 137.0688\n",
+  "syntax_files": [
+    "build-off-agency-text-count-successor.mjs",
+    "off-agency-text-count-construction-20261015/runtime/off-rule-native-proxy.mjs",
+    "off-agency-text-count-construction-20261015/text-count.test.mjs"
+  ],
+  "syntax_pass": true,
+  "sql_lexical_pages": [
+    {
+      "path": "reference/actual-native-text-bounds.sqlinc",
+      "statements": 3
+    }
+  ],
+  "sql_lexical_total": 3,
+  "sql_lexical_not_postgresql_compilation": true,
+  "preserved_ecbd_files": 29,
+  "preserved_ecbd_mismatches": 0,
+  "credential_pattern_findings": 0,
+  "credential_scan_scope": "private key / GitHub token source patterns only; no credential files inspected",
+  "raw_whitespace_pass": false,
+  "raw_whitespace_note": "Inherited full-owner/evidence whitespace not reclassified.",
+  "mandatory_unrun": [
+    "Independent source review of34 plus this final codec successor",
+    "PostgreSQL native UTF-8 text/JSON bounds and actual dedicated fixture command evidence",
+    "All34 mandatory compilation/role/caller/source/lease/worker/phase/financial/API/phone gates"
+  ]
+}

@@ -1,0 +1,12 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),dir=path.join(here,'off-agency-text-count-construction-20261015');
+const pin='fee53465a85b6c8fa7ac059d225429022db7260a',base='docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/';
+const input=base+'runtime/off-rule-native-proxy.mjs',raw=fs.readFileSync(path.join(repo,input));assert.ok(raw.equals(execFileSync('git',['cat-file','blob',pin+':'+input],{cwd:repo,maxBuffer:96e6})));
+const before=raw.toString(),a=" const id=v=>typeof v==='string'&&uuid.test(v),text=(v,max)=>typeof v==='string'&&v.length>=1&&v.length<=max;",b=" const id=v=>typeof v==='string'&&uuid.test(v),text=(v,max)=>typeof v==='string'&&Array.from(v).length>=1&&Array.from(v).length<=max;";
+assert.equal(before.split(a).length,2);const after=before.replace(a,()=>b);assert.equal(after.split(b).length,2);assert.equal(after.replace(b,()=>a),before);
+const sha=v=>crypto.createHash('sha256').update(v).digest('hex'),save=(p,v)=>{fs.mkdirSync(path.dirname(path.join(dir,p)),{recursive:true});fs.writeFileSync(path.join(dir,p),v);};
+save('runtime/off-rule-native-proxy.mjs',after);save('before/off-rule-native-proxy.mjs.txt',raw);
+const native=fs.readFileSync(path.join(repo,base,'96_off_agency_native_parent.sqlinc'));assert.ok(native.equals(execFileSync('git',['cat-file','blob',pin+':'+base+'96_off_agency_native_parent.sqlinc'],{cwd:repo,maxBuffer:96e6})));save('reference/actual-native-text-bounds.sqlinc',native);
+save('FULL_REVERSE.json',JSON.stringify({source_only:true,native:false,mount_ready:false,pin,input,before_sha256:sha(raw),after_sha256:sha(after),native_source_sha256:sha(native),hunks:[{before:a,after:b}],new_signatures:[],
+ finding:'Creator self-review: JavaScript UTF-16 length refused a valid native 2000-code-point astral reason. Native PostgreSQL length counts Unicode code points.',ordinary_non_agency_bytes_unchanged:true},null,2)+'\n');
+console.log(JSON.stringify({source_only:true,native:false,whole_owner:1,unique_hunks:1,sha256:sha(after)}));

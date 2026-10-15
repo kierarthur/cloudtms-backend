@@ -1,0 +1,52 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "entries": [
+    {
+      "path": "FULL_REVERSE.json",
+      "bytes": 1066,
+      "sha256": "e6c76e6bbfd2665d455a26c7b4ad53757fc13b1937e277dfe6fc0f1207c09926"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 1232,
+      "sha256": "5e92ef4f9546319ba186b838f41ff73203cfde661c6540eb38b651badd560159"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 3074,
+      "sha256": "e8379f02c47acad5a2850ad042a182cefe1970a1264c2d717543a54f910f1939"
+    },
+    {
+      "path": "before/off-rule-native-proxy.mjs.txt",
+      "bytes": 6615,
+      "sha256": "8776976a5447c92ad7448900455c0d6aaf16a75afac15c04cf6604fb3427548c"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 2278,
+      "sha256": "4c06910d46e780743f3ff562df1750df62016722ff76d293f98cbee4fcded883"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 10016,
+      "sha256": "c1e369f550ea909012cb7bcba4cb80cde2cb57122744ac75b3d7ee30d49f7741"
+    },
+    {
+      "path": "reference/actual-native-text-bounds.sqlinc",
+      "bytes": 10944,
+      "sha256": "c6f7b865a2f9d770fd4af0bcf282c18a5d8a1b11c138340e0f7c7f4618631910"
+    },
+    {
+      "path": "runtime/off-rule-native-proxy.mjs",
+      "bytes": 6639,
+      "sha256": "a2b7ab7bc838b64ae9fb7caed5cfbf118d295531f9021c1c8c4d7dfa5edf613c"
+    },
+    {
+      "path": "text-count.test.mjs",
+      "bytes": 2103,
+      "sha256": "400830160a3d0f8757c682b60077fd37bbb2593bc569111e83672275fe72c584"
+    }
+  ]
+}

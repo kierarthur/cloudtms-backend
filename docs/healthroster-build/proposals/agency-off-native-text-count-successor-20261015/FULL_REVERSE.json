@@ -1,0 +1,19 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "pin": "fee53465a85b6c8fa7ac059d225429022db7260a",
+  "input": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/runtime/off-rule-native-proxy.mjs",
+  "before_sha256": "8776976a5447c92ad7448900455c0d6aaf16a75afac15c04cf6604fb3427548c",
+  "after_sha256": "a2b7ab7bc838b64ae9fb7caed5cfbf118d295531f9021c1c8c4d7dfa5edf613c",
+  "native_source_sha256": "c6f7b865a2f9d770fd4af0bcf282c18a5d8a1b11c138340e0f7c7f4618631910",
+  "hunks": [
+    {
+      "before": " const id=v=>typeof v==='string'&&uuid.test(v),text=(v,max)=>typeof v==='string'&&v.length>=1&&v.length<=max;",
+      "after": " const id=v=>typeof v==='string'&&uuid.test(v),text=(v,max)=>typeof v==='string'&&Array.from(v).length>=1&&Array.from(v).length<=max;"
+    }
+  ],
+  "new_signatures": [],
+  "finding": "Creator self-review: JavaScript UTF-16 length refused a valid native 2000-code-point astral reason. Native PostgreSQL length counts Unicode code points.",
+  "ordinary_non_agency_bytes_unchanged": true
+}
