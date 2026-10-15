@@ -1,0 +1,75 @@
+-- One-time SOURCE proposal only. Existing immutable per-row choices remain
+-- the single decision store; no cash/pay/settlement record is rewritten.
+alter table private.weekly_source_office_row_choices
+  add column pay_effect text not null default 'NORMAL',
+  add column paid_overlap_target_work_event_id uuid references public.weekly_work_events(id) on delete restrict,
+  add column paid_overlap_inputs_json jsonb,
+  add column paid_overlap_inputs_sha256 bytea,
+  add constraint weekly_source_office_paid_overlap_effect_check check (
+    pay_effect in ('NORMAL','NONE')
+    and ((paid_overlap_target_work_event_id is null and paid_overlap_inputs_json is null
+      and paid_overlap_inputs_sha256 is null and pay_effect='NORMAL')
+      or (paid_overlap_target_work_event_id is not null
+        and jsonb_typeof(paid_overlap_inputs_json) is not distinct from 'object'
+        and paid_overlap_inputs_sha256 is not null and octet_length(paid_overlap_inputs_sha256)=32
+        and candidate_id is not null and client_id is not null and contract_id is not null
+        and match_reason is not null and char_length(btrim(match_reason)) between 1 and 1000
+        and ((pay_effect='NONE' and not separate_shift and work_event_id is not null and work_event_id=paid_overlap_target_work_event_id)
+          or (pay_effect='NORMAL' and separate_shift and work_event_id is null))))
+  );
+
+-- Projection stores the effect rederived from that exact immutable choice,
+-- never a Worker-supplied paid/no-pay Boolean.
+alter table public.weekly_source_row_resolutions
+  add column pay_effect text not null default 'NORMAL',
+  add column paid_overlap_choice_id bigint references private.weekly_source_office_row_choices(id) on delete restrict,
+  add constraint weekly_source_resolution_pay_effect_check check (
+    pay_effect in ('NORMAL','NONE') and (pay_effect='NORMAL' or paid_overlap_choice_id is not null));
+
+-- Invoice-only companion snapshots retain the true Source row and economic
+-- result. Only NORMAL is a payable snapshot; the pay basis stays independent.
+alter table public.weekly_source_final_snapshot_lines
+  add column pay_effect text not null default 'NORMAL',
+  add column paid_overlap_choice_id bigint references private.weekly_source_office_row_choices(id) on delete restrict,
+  add constraint weekly_source_snapshot_pay_effect_check check (
+    pay_effect in ('NORMAL','NONE') and (pay_effect='NORMAL' or paid_overlap_choice_id is not null));
+alter table public.weekly_source_billing_movements
+  add column pay_effect text not null default 'NORMAL',
+  add column invoice_only_snapshot_line_id uuid references public.weekly_source_final_snapshot_lines(id) on delete restrict,
+  add constraint weekly_source_movement_pay_effect_check check (
+    pay_effect in ('NORMAL','NONE') and (pay_effect='NORMAL' or
+      (invoice_only_snapshot_line_id is not null and total_pay_ex_vat=0)));
+
+alter table public.weekly_source_final_revisions
+  add column paid_overlap_choice_census jsonb not null default '{}'::jsonb,
+  add constraint weekly_source_paid_choice_census_object check (jsonb_typeof(paid_overlap_choice_census)='object');
+alter table public.weekly_source_state_transitions
+  add column pay_basis_kind text not null default 'CURRENT_SOURCE_SNAPSHOT',
+  add column paid_match_source_rows jsonb,
+  add constraint weekly_source_paid_match_basis_check check (
+    (pay_basis_kind='CURRENT_SOURCE_SNAPSHOT' and paid_match_source_rows is null)
+    or (pay_basis_kind='RETAINED_PAID_MATCH' and outcome='NO_CHANGE' and new_present and previous_present
+      and new_snapshot_line_id=previous_snapshot_line_id and jsonb_typeof(paid_match_source_rows)='array'
+      and jsonb_array_length(paid_match_source_rows)>0));
+
+-- The original snapshot unique is discovered by its exact ordered attributes,
+-- not a guessed provider/truncated name. NONE companions may share the same
+-- real work event with the one payable NORMAL snapshot. No old row changes.
+do $migration$
+declare v_name text;v_count integer;v_keys smallint[];
+begin
+  select array_agg(attnum::smallint order by ord) into v_keys
+  from unnest(array['final_revision_id','work_event_id']) with ordinality key(name,ord)
+  join pg_catalog.pg_attribute a on a.attrelid='public.weekly_source_final_snapshot_lines'::regclass
+    and a.attname=key.name and not a.attisdropped;
+  select count(*),min(conname::text) into v_count,v_name from pg_catalog.pg_constraint
+    where conrelid='public.weekly_source_final_snapshot_lines'::regclass and contype='u' and conkey=v_keys;
+  if v_count<>1 or cardinality(v_keys)<>2 then
+    raise exception 'WEEKLY_SOURCE_PAYABLE_SNAPSHOT_UNIQUE_UNBOUND' using errcode='55000';end if;
+  execute format('alter table public.weekly_source_final_snapshot_lines drop constraint %I',v_name);
+end;
+$migration$;
+create unique index weekly_source_payable_snapshot_event_uq
+  on public.weekly_source_final_snapshot_lines(final_revision_id,work_event_id) where pay_effect='NORMAL';
+create unique index weekly_source_invoice_only_snapshot_row_uq
+  on public.weekly_source_final_snapshot_lines(final_revision_id,upload_row_id) where pay_effect='NONE';

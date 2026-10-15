@@ -1,0 +1,116 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_NEGATIVE_POPULATION_CONSTRUCTION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 21,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 9824,
+      "sha256": "7156ab52fe9bd38868514ff895742cf7d3de4a246b15426dd9698756f974dc0d"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 2350,
+      "sha256": "8ed8664891b78e675a4ae739f049b3127facbbbf9cf01c9dc05b80d759f414fc"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 9108,
+      "sha256": "8c56d0ec38446b4ab327e718d68dae93acdd72cf9de2b7cdf2af57d0f0457ba7"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 677,
+      "sha256": "99b449f3cc0b003b246adc3ed2d7b2ae920d0003a5be2d87f1ac7343cef63419"
+    },
+    {
+      "file": "before/02_complete_native_capture_movement.sqlinc",
+      "bytes": 5036,
+      "sha256": "c3a21c935d061b3fa26e2f75f4201d8411775447793e07b8817452c914cd23ee"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 6703,
+      "sha256": "d1e6ad9ae5a3b9ab095d67e0ff2acd250a825a6557755b9f3462217970110c7c"
+    },
+    {
+      "file": "forward/01_native_magnitude_core.sqlinc",
+      "bytes": 1334,
+      "sha256": "f3816cce0f413c6bb02b2f5eb5be8a093fab2e388d0addfc1cebdd1e03cefccb"
+    },
+    {
+      "file": "forward/02_complete_native_capture_movement.sqlinc",
+      "bytes": 4470,
+      "sha256": "47795eac894fc766d764ae6bdd8ee681d7766a1ccebc9a450161efcae3e57727"
+    },
+    {
+      "file": "forward/03_nhsp_negative_population.sqlinc",
+      "bytes": 11997,
+      "sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5761,
+      "sha256": "64528666b560d735232a8450c269e910b2686595bd1fb17aea1d002a6bfba41d"
+    },
+    {
+      "file": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "file": "input/current_projection_rows.sqlinc",
+      "bytes": 74228,
+      "sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2"
+    },
+    {
+      "file": "input/native_current_schema.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "file": "input/native_economic_assert.sqlinc",
+      "bytes": 12030,
+      "sha256": "050c417af4f30105cc8b6c7de9b36baff478ecce7a5532800804d8875c6f50a4"
+    },
+    {
+      "file": "input/native_manifest.sqlinc",
+      "bytes": 1920,
+      "sha256": "957f1e4053356c0e627b9c25592a3c64081d6379bd03a4a7faacdcb6c78e10ec"
+    },
+    {
+      "file": "input/native_manifest_hash.sqlinc",
+      "bytes": 372,
+      "sha256": "ec71d5684f12c015d198ea69da1f53ec51e9d744f8706fe4d32bc07f8d1e6ce0"
+    },
+    {
+      "file": "input/native_movement_factory.sqlinc",
+      "bytes": 15899,
+      "sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c"
+    },
+    {
+      "file": "input/native_vector.sqlinc",
+      "bytes": 2189,
+      "sha256": "ac0076cef8e1e4d9b5b0c273a57c59ca667f4b3b7f435675ea5a3f723a633910"
+    },
+    {
+      "file": "input/prerequisite_paid_choice_fields.sqlinc",
+      "bytes": 5117,
+      "sha256": "aad80d0146e0194d22ce5eefcbe768e8c12c293921d05d9223ea75c430b425b2"
+    },
+    {
+      "file": "input/source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "negative-population-source.test.mjs",
+      "bytes": 10908,
+      "sha256": "b181cc8f150e388e4c6cb80d64cf87e28c95594442d9323a21da5586cecbb965"
+    }
+  ]
+}

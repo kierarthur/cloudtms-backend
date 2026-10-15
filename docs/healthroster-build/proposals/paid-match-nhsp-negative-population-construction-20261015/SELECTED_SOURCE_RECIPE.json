@@ -1,0 +1,169 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_order": [
+    "forward/01_native_magnitude_core.sqlinc",
+    "forward/02_complete_native_capture_movement.sqlinc",
+    "forward/03_nhsp_negative_population.sqlinc"
+  ],
+  "existing_native_capture_signature": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+  "capture_before_sha256": "c3a21c935d061b3fa26e2f75f4201d8411775447793e07b8817452c914cd23ee",
+  "capture_after_sha256": "47795eac894fc766d764ae6bdd8ee681d7766a1ccebc9a450161efcae3e57727",
+  "whole_reverse": true,
+  "reverse_hunks": 2,
+  "new_private_signatures": [
+    "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+    "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)"
+  ],
+  "new_public_signatures": [],
+  "new_table_column_calculator": 0,
+  "source_prerequisite": "Existing paid-shift choice schema ONE-TIME00, current NHSP basis17 and one Source-purpose payment fact/kernel; all are unmounted proposed predecessors. No schema is silently assumed installed.",
+  "shared_native_capture_change": "PROPOSED_EXACT_EXTRACTION_ONLY; NO CANONICAL BANK FILE EDIT",
+  "existing_capture_leaf": "BODY_ONLY; final atomic composition must immediately retain exact current logical owner and owner-private ACL. No public/service grant added.",
+  "new_helpers_owner_private": true,
+  "native_magnitude_assembly_single_exact_extraction": true,
+  "C1_economic_and_vector_calculators_unchanged": true,
+  "all_negative_native_resolutions_required": true,
+  "zero_negative_requires_full_manifest_population_publication": true,
+  "unresolved_negative_remains_unknown": true,
+  "paid_writer_permission": null,
+  "actual_choice_admission_NONE_invoice_capture_prepared_Office_pipeline_still_incomplete": true,
+  "inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "saved": "before/02_complete_native_capture_movement.sqlinc",
+      "signature": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "source_bytes": 57447,
+      "source_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "definition_sha256": "d200408b57027c2ab9db5a140950593379997068eacd6d53cdf7611e4e2b56de",
+      "body_sha256": "24f4c2f1de18d1732aec672cdf449b4941191cd6d5f4cbcc7889ebbf1031842e",
+      "bytes": 5036,
+      "sha256": "c3a21c935d061b3fa26e2f75f4201d8411775447793e07b8817452c914cd23ee"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "saved": "input/source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "saved": "input/native_current_schema.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "saved": "input/native_vector.sqlinc",
+      "signature": "private.weekly_source_finalisation_vector_v1(uuid,text,smallint)",
+      "source_bytes": 154709,
+      "source_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "definition_sha256": "caac6412431d40ff9e359bda2b0bbad8842159526127234e4904cddc7fcda0b7",
+      "body_sha256": "7791d1ac87048ce4780a42e1b3d102f49906ae1bb79afc5f21bbae94e6a899b8",
+      "bytes": 2189,
+      "sha256": "ac0076cef8e1e4d9b5b0c273a57c59ca667f4b3b7f435675ea5a3f723a633910"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "saved": "input/native_economic_assert.sqlinc",
+      "signature": "private.weekly_source_finalisation_economic_assert_v1(uuid,uuid,text)",
+      "source_bytes": 93531,
+      "source_sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "definition_sha256": "1936fd624560bc1e1b504496809109634010a0a56a63f99b2b53bf70b45d7934",
+      "body_sha256": "6ea6a4b977525bfae2c705c1bcec4c2008e162ac43d8a3885c39e2dc2a3b5b1d",
+      "bytes": 12030,
+      "sha256": "050c417af4f30105cc8b6c7de9b36baff478ecce7a5532800804d8875c6f50a4"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "saved": "input/native_movement_factory.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "source_bytes": 206075,
+      "source_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "definition_sha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4",
+      "body_sha256": "36f365daa85ee035a2b2d8296d718b053dc8a9f25ab28f9076801b3d07b3af6a",
+      "bytes": 15899,
+      "sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "saved": "input/native_manifest_hash.sqlinc",
+      "signature": "private.weekly_source_upload_manifest_hash_v1(uuid)",
+      "source_bytes": 162591,
+      "source_sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b",
+      "definition_sha256": "8dc3587f4a20348985d8830152bd4cccdf3b60f7a72681f132a643611962e0b1",
+      "body_sha256": "c70c568e7a4cc21e16e099d24cfeb2bd099b4d692501892ebfe7f3323349326b",
+      "bytes": 372,
+      "sha256": "ec71d5684f12c015d198ea69da1f53ec51e9d744f8706fe4d32bc07f8d1e6ce0"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "saved": "input/native_manifest.sqlinc",
+      "signature": "private.weekly_source_upload_manifest_v1(uuid)",
+      "source_bytes": 162591,
+      "source_sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b",
+      "definition_sha256": "9942f0e68027bd09e69671d7841be7a972e62ffa69db240b8ebe70a822e23315",
+      "body_sha256": "b9a6bf888bdebff3923bfe72a7ba114946917033a65fce1634db0cbd4e5aeea6",
+      "bytes": 1920,
+      "sha256": "957f1e4053356c0e627b9c25592a3c64081d6379bd03a4a7faacdcb6c78e10ec"
+    },
+    {
+      "commit": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "saved": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "commit": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-separate-event-writer-construction-20261015/forward/01_complete_projection_rows.sqlinc",
+      "saved": "input/current_projection_rows.sqlinc",
+      "bytes": 74228,
+      "sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2"
+    },
+    {
+      "commit": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/one-time/00_paid_shift_choice_fields.sqlinc",
+      "saved": "input/prerequisite_paid_choice_fields.sqlinc",
+      "bytes": 5117,
+      "sha256": "aad80d0146e0194d22ce5eefcbe768e8c12c293921d05d9223ea75c430b425b2"
+    }
+  ],
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-current-native-basis-construction-20261015",
+      "artifacts": 16,
+      "manifest_sha256": "67c33d965c537452c16ab52313ced8801429eb30f7f16a654e5b1bb35519f75c"
+    },
+    {
+      "packet": "paid-match-nhsp-separate-event-writer-construction-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "2e5864cb22b9e1a86525b1c430b048b0613f9cab278c189f23df9f061c1fa89f"
+    },
+    {
+      "packet": "paid-match-legacy-current-viewer-consumer-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9"
+    },
+    {
+      "packet": "source-next-paid-purpose-current-consumer-20261015",
+      "artifacts": 23,
+      "manifest_sha256": "eca309accc589dea4b40dfa09c5c50f06e68d85373128bd68ef4633245b64928"
+    }
+  ],
+  "final_current_effective_owner_registry_verifier_schema_contract_catalogue_REQUIRED": true,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

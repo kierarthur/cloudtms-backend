@@ -1,0 +1,43 @@
+create or replace function private.weekly_source_upload_manifest_v1(
+  p_upload_id uuid
+) returns jsonb
+language sql stable security definer
+set search_path to 'public','pg_catalog','pg_temp'
+as $function$
+  select pg_catalog.jsonb_build_object(
+    'manifest_version','WEEKLY_SOURCE_ROW_MANIFEST_V1',
+    'rows',coalesce((
+      select pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'ordinal',physical.source_row_ordinal,
+          'classification',physical.classification,
+          'physical_sha256',pg_catalog.encode(physical.row_sha256,'hex'),
+          'normalised_sha256',case when normalised.id is null then null
+            else pg_catalog.encode(normalised.normalised_row_hash,'hex') end,
+          'money_token_sha256',coalesce((
+            select pg_catalog.jsonb_agg(
+              pg_catalog.jsonb_build_object(
+                'kind',money.money_field_kind,
+                'sha256',pg_catalog.encode(money.token_sha256,'hex')
+              ) order by money.money_field_kind
+            )
+            from public.weekly_source_money_cell_evidence money
+            where money.upload_id=physical.upload_id
+              and money.source_row_ordinal=physical.source_row_ordinal
+          ),'[]'::jsonb),
+          'expense_token_sha256',(
+            select pg_catalog.encode(expense.token_sha256,'hex')
+            from public.weekly_source_expense_cell_evidence expense
+            where expense.upload_id=physical.upload_id
+              and expense.source_row_ordinal=physical.source_row_ordinal
+          )
+        ) order by physical.source_row_ordinal
+      )
+      from public.weekly_source_physical_rows physical
+      left join public.weekly_source_upload_rows normalised
+        on normalised.upload_id=physical.upload_id
+       and normalised.source_row_ordinal=physical.source_row_ordinal
+      where physical.upload_id=p_upload_id
+    ),'[]'::jsonb)
+  );
+$function$;

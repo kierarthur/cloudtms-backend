@@ -1,0 +1,20 @@
+-- Proposed shared native extraction. This is the exact existing NHSP
+-- magnitude assembly, factored once; it grants no financial or writer authority.
+create or replace function private.bpay_next_source_nhsp_magnitude_v1(
+  p_source_facts jsonb,p_pay_vector jsonb,p_charge_vector jsonb
+) returns jsonb language plpgsql immutable security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_magnitude jsonb;v_bucket text;v_hours jsonb:='{}';
+begin
+  foreach v_bucket in array array['day','night','sat','sun','bh'] loop
+    v_hours:=v_hours||jsonb_build_object('hours_'||v_bucket,round(abs((p_pay_vector#>>array['hours',v_bucket])::numeric),2)::text);
+  end loop;
+  v_magnitude:=jsonb_build_object('work_date',p_source_facts->>'work_date',
+    'start_at_local',p_source_facts->>'start_at_local','end_at_local',p_source_facts->>'end_at_local',
+    'break_minutes',p_source_facts->>'break_minutes',
+    'pay_pence',abs((p_pay_vector->>'total_pence')::bigint)::text,
+    'charge_pence',abs((p_charge_vector->>'total_pence')::bigint)::text)||v_hours;
+  return v_magnitude;
+end $f$;
+alter function private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb) owner to postgres;
+revoke all on function private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb) from public,anon,authenticated,service_role;

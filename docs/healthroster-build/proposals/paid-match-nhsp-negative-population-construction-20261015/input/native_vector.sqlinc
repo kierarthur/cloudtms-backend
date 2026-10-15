@@ -1,0 +1,51 @@
+create or replace function private.weekly_source_finalisation_vector_v1(
+  p_economic_snapshot_id uuid,
+  p_vector_kind text,
+  p_multiplier smallint default 1
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_economic public.weekly_source_row_economic_snapshots%rowtype;
+  v_kind text:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_vector_kind,'')));
+begin
+  if p_economic_snapshot_id is null or v_kind not in ('PAY','CHARGE')
+     or p_multiplier not in (-1,1) then
+    raise exception 'WEEKLY_SOURCE_VECTOR_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into v_economic
+  from public.weekly_source_row_economic_snapshots
+  where id=p_economic_snapshot_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ECONOMIC_SNAPSHOT_MISSING' using errcode='55000';
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'schema_version','WEEKLY_SOURCE_RATE_VECTOR_V1',
+    'kind',v_kind,
+    'source_mode',v_economic.source_mode,
+    'rate_method',v_economic.rate_method,
+    'row_sign',(v_economic.row_sign*p_multiplier),
+    'paid_minutes',v_economic.paid_minutes,
+    'break_minutes',v_economic.break_minutes,
+    'hours',pg_catalog.jsonb_build_object(
+      'day',v_economic.hours_day*p_multiplier,
+      'night',v_economic.hours_night*p_multiplier,
+      'sat',v_economic.hours_sat*p_multiplier,
+      'sun',v_economic.hours_sun*p_multiplier,
+      'bh',v_economic.hours_bh*p_multiplier
+    ),
+    'rates',case when v_kind='PAY' then pg_catalog.jsonb_build_object(
+      'day',v_economic.pay_day,'night',v_economic.pay_night,
+      'sat',v_economic.pay_sat,'sun',v_economic.pay_sun,'bh',v_economic.pay_bh
+    ) else pg_catalog.jsonb_build_object(
+      'day',v_economic.charge_day,'night',v_economic.charge_night,
+      'sat',v_economic.charge_sat,'sun',v_economic.charge_sun,'bh',v_economic.charge_bh
+    ) end,
+    'total_pence',case when v_kind='PAY'
+      then v_economic.total_pay_pence*p_multiplier
+      else v_economic.calculated_charge_pence*p_multiplier end,
+    'calculation_fingerprint',pg_catalog.encode(v_economic.calculation_fingerprint,'hex')
+  );
+end;
+$function$;
