@@ -1,0 +1,219 @@
+{
+  "source_only": true,
+  "current_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+  "canonical_mounted": false,
+  "native_calls": 0,
+  "records": [
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "current_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "hunks": [
+        {
+          "packet": "kept-pay-identical-rekey-current-root-forward-20261014",
+          "metadata": "KEPT_CREDIT_CURRENT_OWNERS_AND_INPUT_PINS.json",
+          "name": null,
+          "before": "  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',",
+          "after": "  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',\r\n  'KEEP_AS_PAID',"
+        },
+        {
+          "packet": "kept-pay-identical-rekey-current-root-forward-20261014",
+          "metadata": "KEPT_CREDIT_CURRENT_OWNERS_AND_INPUT_PINS.json",
+          "name": null,
+          "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+          "after": "  if (action === 'KEEP_AS_PAID') {\r\n    const keys = ['schema_version', 'work_event_id', 'decision', 'reason',\r\n      'credit_invoice_line_id', 'expected_facts_fingerprint', 'idempotency_key'];\r\n    const sourceUuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;\r\n    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'payload')\r\n        || Object.keys(payload).length !== keys.length || !keys.every((key) => Object.hasOwn(payload, key))\r\n        || payload.schema_version !== 'WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_V1'\r\n        || typeof payload.work_event_id !== 'string' || !sourceUuid.test(payload.work_event_id)\r\n        || payload.decision !== 'KEEP_AS_PAID' || !['CREDITED', 'NOT_INVOICED_DISAPPEARED'].includes(payload.reason)\r\n        || (payload.reason === 'CREDITED' ? typeof payload.credit_invoice_line_id !== 'string'\r\n          || !sourceUuid.test(payload.credit_invoice_line_id) : payload.credit_invoice_line_id !== null)\r\n        || typeof payload.expected_facts_fingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(payload.expected_facts_fingerprint)\r\n        || typeof payload.idempotency_key !== 'string' || payload.idempotency_key !== payload.idempotency_key.trim()\r\n        || payload.idempotency_key.length < 16 || payload.idempotency_key.length > 200) {\r\n      fail('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_INVALID', 'This decision could not be prepared.', 400);\r\n    }\r\n    const result = await withRefusalRecording(dependencies,\r\n      'broker:weekly-source:weekly_source_keep_as_paid_decide_atomic_v1', user.id,\r\n      () => callRpc(dependencies, 'weekly_source_keep_as_paid_decide_atomic_v1', request));\r\n    return jsonResponse(200, result);\r\n  }\r\n\r\n  if (action === 'LATER_CHANGE_DECISION') {"
+        },
+        {
+          "packet": "missing-accept-current-native-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "finite closed preparation parser import",
+          "before": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';",
+          "after": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';\r\nimport {missingAcceptPrepareRequest,missingAcceptContextRequest} from './missing-accept.mjs';"
+        },
+        {
+          "packet": "missing-accept-current-native-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "real Office admin commands to literal Source context/producer only",
+          "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+          "after": "  if (action === 'MISSING_ACCEPT_CONTEXT' || action === 'PREPARE_MISSING_ACCEPT') {\r\n    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body,'payload')) {\r\n      fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400);\r\n    }\r\n    let preparation;\r\n    try { preparation=action==='MISSING_ACCEPT_CONTEXT'\r\n      ? missingAcceptContextRequest(payload,user.id) : missingAcceptPrepareRequest(payload,user.id); }\r\n    catch { fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400); }\r\n    let owner;\r\n    try {\r\n      if (typeof dependencies.bpayNextOwnerStatusRpc !== 'function') throw new Error();\r\n      owner=normalizeBpayNextOwnerStatus(await dependencies.bpayNextOwnerStatusRpc(env));\r\n    } catch { fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE','This proposal is unavailable; try again shortly.',503); }\r\n    if (owner.active_owner !== 'NEXT') {\r\n      fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED','This proposal is not available for this agency yet.',409);\r\n    }\r\n    const rpc=action==='MISSING_ACCEPT_CONTEXT' ? 'weekly_source_missing_accept_context_v1'\r\n      : 'weekly_source_missing_accept_prepare_atomic_v1';\r\n    const result=await withRefusalRecording(dependencies,'broker:weekly-source:'+rpc,user.id,\r\n      ()=>callRpc(dependencies,rpc,preparation));\r\n    return jsonResponse(200,result);\r\n  }\r\n\r\n  if (action === 'LATER_CHANGE_DECISION') {"
+        }
+      ],
+      "before_bytes": 66355,
+      "before_sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef",
+      "after_bytes": 69596,
+      "after_sha256": "b3bfb58ef67848af2cbd855f8184cd34754300f792f22c29aafd2e9cf1177045",
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "current_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "hunks": [
+        {
+          "packet": "paid-shift-match-writer-none-construction-20261014",
+          "metadata": "RUNTIME_REVERSE.json",
+          "name": "literal real paid choice and native paid overlap blocker, preserving existing protected picker",
+          "before": "  if (sourceAuthority) {\n    const matches = (row.protected_matches ?? []).filter(item => item.contract_id === qualified.selectedContractId);",
+          "after": "  const paidChoice = row.paid_overlap_choice;\n  if (sourceAuthority && paidChoice != null) {\n    if (paidChoice.schema_version !== 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'\n      || !['NORMAL', 'NONE'].includes(paidChoice.pay_effect)\n      || paidChoice.upload_row_id !== row.upload_row_id\n      || paidChoice.candidate_id !== row.candidate_id || paidChoice.client_id !== row.client_id\n      || paidChoice.contract_id !== qualified.selectedContractId\n      || typeof paidChoice.paid_overlap_target_work_event_id !== 'string'\n      || typeof paidChoice.choice_proof_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(paidChoice.choice_proof_sha256)) {\n      return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',\n        blocker_code: 'PAID_SHIFT_MATCH_CHOICE_STALE', qualifying_contract_ids: qualified.eligibleContractIds };\n    }\n    base.prior_work_event_id = paidChoice.pay_effect === 'NONE' ? paidChoice.paid_overlap_target_work_event_id : null;\n    // The native constructor re-reads the actual immutable choice and derives\n    // pay_effect itself. No pay/evidence assertion enters p_rows from Worker.\n  } else if (sourceAuthority && ROSTER_EXTERNAL.has(row.profile_id) && row.row_finalisation_state === 'SOURCE_WORKED'\n    && !base.prior_work_event_id && (row.paid_overlap_inputs?.overlaps ?? []).some(item => item.native_payment_facts?.paid !== false)) {\n    return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',\n      blocker_code: 'PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED', qualifying_contract_ids: qualified.eligibleContractIds };\n  } else if (sourceAuthority) {\n    const matches = (row.protected_matches ?? []).filter(item => item.contract_id === qualified.selectedContractId);"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "literal native correction status only when returned owner scope binds request",
+          "before": "      if (!begun?.ok || !['BUILDING', 'CURRENT'].includes(begun.status)) {",
+          "after": "      const correction = begun?.purpose === 'FINAL_SOURCE_CORRECTION';\n      if (correction !== Object.hasOwn(request,'correction_session_id')) {\n        fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved source purpose changed.', 409);\n      }\n      if (correction && (begun.correction_session_id !== request.correction_session_id\n          || begun.upload_id !== request.upload_id)) {\n        fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved correction scope changed.', 409);\n      }\n      if (!begun?.ok || !(correction ? ['BUILDING', 'CORRECTION_READY'] : ['BUILDING', 'CURRENT']).includes(begun.status)) {"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "exact native completed correction replay",
+          "before": "      if (begun.status === 'CURRENT') return begun;",
+          "after": "      if (begun.status === 'CURRENT' || (correction && begun.status === 'CORRECTION_READY')) return begun;"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "context uses actual purpose and session derived by native owner",
+          "before": "          ...scopeRequest({}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),",
+          "after": "          ...scopeRequest(correction ? { purpose: 'FINAL_SOURCE_CORRECTION',\n            correction_session_id: begun.correction_session_id } : {}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "no CURRENT relabel of genuinely inactive replacement comparison",
+          "before": "        if (!result?.ok || result.status !== 'CURRENT') {",
+          "after": "        if (!result?.ok || result.status !== (correction ? 'CORRECTION_READY' : 'CURRENT')) {"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "sealed native context is the same real correction scope",
+          "before": "        const reportRecheckRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {",
+          "after": "        if (correction && (context.upload_id !== begun.upload_id\n          || context.correction_session_id !== begun.correction_session_id\n          || context.source_cycle_id !== begun.correction_review_identity?.source_cycle_id)) {\n          fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH','The saved correction context changed.',409);\n        }\n        const reportRecheckRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "literal finite review import",
+          "before": "import { REPORT_PROFILE,",
+          "after": "import { reviewWeeklyCorrectFinalPaidMatchRecheck } from './correct-final-source-orchestrator.mjs';\nimport { REPORT_PROFILE,"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "complete native saved-recheck replay recovers original review",
+          "before": "      if (begun.status === 'CURRENT' || (correction && begun.status === 'CORRECTION_READY')) return begun;",
+          "after": "      if (begun.status === 'CURRENT') return begun;\n      if (correction && begun.status === 'CORRECTION_READY') return {\n        ...begun, correction_review: await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,begun),\n      };"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "complete native fresh correction review only after actual publish",
+          "before": "        return result;\n      } catch {\n        // Begin is a separate committed transaction.",
+          "after": "        return correction ? { ...result,\n          correction_review: await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,result),\n        } : result;\n      } catch {\n        // Begin is a separate committed transaction."
+        },
+        {
+          "packet": "paid-match-nhsp-phased-projection-consumer-20261015",
+          "metadata": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+          "name": "trusted service context may supply finite NHSP projection intent; native owner must still rederive admission",
+          "before": "    if (paidChoice.schema_version !== 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'\n",
+          "after": "    const nativeNhspIntent = row.profile_id === 'NHSP_FINAL_BACKING_V1'\n      && paidChoice.schema_version === 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1'\n      && paidChoice.fresh_choice_admission === false\n      && paidChoice.upload_id === body.native_projection_upload_id\n      && paidChoice.projection_publication_id === body.native_projection_publication_id\n      && typeof paidChoice.lock_input_sha256 === 'string' && /^[0-9a-f]{64}$/.test(paidChoice.lock_input_sha256);\n    if ((!nativeNhspIntent && paidChoice.schema_version !== 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1')\n"
+        },
+        {
+          "packet": "paid-match-nhsp-phased-projection-consumer-20261015",
+          "metadata": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+          "name": "native intent remains separately named and never impersonates current choice hash",
+          "before": "      || typeof paidChoice.choice_proof_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(paidChoice.choice_proof_sha256)) {",
+          "after": "      || (!nativeNhspIntent && (typeof paidChoice.choice_proof_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(paidChoice.choice_proof_sha256)))) {"
+        },
+        {
+          "packet": "paid-match-nhsp-phased-projection-consumer-20261015",
+          "metadata": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+          "name": "same service context supplies native projection scope after all caller fields",
+          "before": "    profile_id: context.profile_id,\n  }));",
+          "after": "    profile_id: context.profile_id,\n    native_projection_upload_id: context.upload_id,\n    native_projection_publication_id: context.projection_publication_id,\n  }));"
+        }
+      ],
+      "before_bytes": 53302,
+      "before_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "after_bytes": 57128,
+      "after_sha256": "840ee729a0acef3c2e5bed4f8ac6de9a8ea1705e296fdf9d8fe023474766b25e",
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "current_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "hunks": [
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "actual native eight-key changes preserve amount and Boolean fields",
+          "before": "    changes: Object.freeze(preview.changes.map((row) => plainPreviewRow(\n      row,\n      ['candidate', 'day_date', 'current_final', 'replacement', 'result'],\n      'Correction change',\n    ))),",
+          "after": "    changes: Object.freeze(preview.changes.map((row) => {\n      const fields=['candidate','day_date','current_final','replacement','result',\n        'current_final_amount','replacement_amount','amount_changed'];\n      if (!row || typeof row!=='object' || Array.isArray(row)\n        || !sameJson(Object.keys(row).sort(),fields.sort()) || typeof row.amount_changed!=='boolean'\n        || fields.filter(key=>key!=='amount_changed').some(key=>typeof row[key]!=='string')) {\n        fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Correction change is invalid.',502);\n      }\n      const strings=plainPreviewRow(Object.fromEntries(fields.filter(key=>key!=='amount_changed').map(key=>[key,row[key]])),\n        fields.filter(key=>key!=='amount_changed'),'Correction change');\n      return Object.freeze({...strings,amount_changed:row.amount_changed});\n    })),\n    paid_match_questions: normaliseCorrectFinalPaidQuestions(preview.paid_match_questions),"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "same finite question decoder and actual saved native review consumer",
+          "before": "function normaliseOfficePreview(value) {",
+          "after": "function normaliseCorrectFinalPaidQuestions(value) {\n  if (value === undefined) return Object.freeze([]);\n  if (!Array.isArray(value) || value.length>10000) {\n    fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift questions are invalid.',502);\n  }\n  const seen=new Set();\n  return Object.freeze(value.map(raw=>{\n    const row=plainObject(raw,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question',502);\n    if (!sameJson(Object.keys(row).sort(),['candidate','client','shift','system_hours','paid_match_question'].sort()))\n      fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question is invalid.',502);\n    const q=plainObject(row.paid_match_question,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question',502);\n    const keys=['schema_version','state','reason_code','upload_row_id','upload_id','projection_publication_id',\n      'candidate_id','client_id','contract_id','expected_authority_scope_version','expected_row_manifest_hash',\n      'expected_paid_overlap_inputs_sha256','choices'];\n    if (!sameJson(Object.keys(q).sort(),keys.sort()) || q.schema_version!=='WEEKLY_SOURCE_PAID_MATCH_QUESTION_V1'\n      || q.state!=='READY' || q.reason_code!==null || !Array.isArray(q.choices) || !q.choices.length || q.choices.length>100\n      || typeof q.expected_authority_scope_version!=='number' || !Number.isSafeInteger(q.expected_authority_scope_version)\n      || q.expected_authority_scope_version<1) fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question is invalid.',502);\n    for (const key of ['upload_row_id','upload_id','projection_publication_id','candidate_id','client_id','contract_id']) {\n      if (typeof q[key]!=='string' || !UUID_PATTERN.test(q[key]))\n        fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift identity is invalid.',502);\n    }\n    for (const key of ['expected_row_manifest_hash','expected_paid_overlap_inputs_sha256']) {\n      if (typeof q[key]!=='string' || !SHA256_PATTERN.test(q[key]))\n        fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift proof is invalid.',502);\n    }\n    if (seen.has(q.upload_row_id)) fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift row is duplicated.',502);\n    seen.add(q.upload_row_id);\n    const targets=new Set();\n    const choices=q.choices.map(item=>{\n      if (!item || typeof item!=='object' || Array.isArray(item)\n        || !sameJson(Object.keys(item).sort(),['work_event_id','work_date','start','end','break_minutes','contract_id','same_allowed'].sort())\n        || typeof item.work_event_id!=='string' || !UUID_PATTERN.test(item.work_event_id)\n        || typeof item.contract_id!=='string' || !UUID_PATTERN.test(item.contract_id)\n        || typeof item.work_date!=='string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.work_date)\n        || ![item.start,item.end].every(v=>typeof v==='string'&&/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(v))\n        || (item.break_minutes!==null&&(!Number.isSafeInteger(item.break_minutes)||item.break_minutes<0))\n        || typeof item.same_allowed!=='boolean' || item.same_allowed!==(item.contract_id===q.contract_id)\n        || targets.has(item.work_event_id)) fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift target is invalid.',502);\n      targets.add(item.work_event_id);return Object.freeze({...item});\n    });\n    return Object.freeze({candidate:text(row.candidate,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Candidate',502),\n      client:text(row.client,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Client',502),\n      shift:text(row.shift,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Shift',502),\n      system_hours:text(row.system_hours,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Imported hours',502),\n      paid_match_question:Object.freeze({...q,choices:Object.freeze(choices)})});\n  }));\n}\n\n// Finite internal consumer of actual native begin/publish receipts. The existing\n// public review owner independently rederives every pointer/hash/session CAS.\nexport async function reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies, request, begun, published) {\n  const frame = plainObject(begun?.correction_review_identity,\n    'WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'Saved correction scope', 502);\n  const fields = ['schema_version','correction_session_id','source_cycle_id',\n    'expected_current_final_revision_id','expected_final_manifest_hash'];\n  if (!sameJson(Object.keys(frame).sort(), fields.sort())\n    || frame.schema_version !== 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_RECHECK_CONTEXT_V1'\n    || begun.purpose !== 'FINAL_SOURCE_CORRECTION'\n    || frame.correction_session_id !== request.correction_session_id\n    || begun.correction_session_id !== frame.correction_session_id\n    || begun.upload_id !== request.upload_id || published.upload_id !== request.upload_id\n    || published.status !== 'CORRECTION_READY' || published.ok !== true\n    || published.publication_id !== begun.publication_id\n    || published.authority_scope_version !== request.expected_authority_scope_version) {\n    fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved correction scope changed.', 409);\n  }\n  const actorUserId = uuid(request.actor_user_id,'WEEKLY_SOURCE_ACTOR_REQUIRED','Office user');\n  const identity = Object.freeze({\n    sourceCycleId: uuid(frame.source_cycle_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Source cycle'),\n    scopeKind: 'CYCLE', reportScopeId: null,\n    correctionSessionId: uuid(frame.correction_session_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Correction session'),\n    expectedCurrentFinalRevisionId: uuid(frame.expected_current_final_revision_id,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Current final source'),\n    expectedFinalManifestHash: sha256(frame.expected_final_manifest_hash,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Current final-source proof'),\n    replacementUploadId: uuid(published.upload_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement upload'),\n    replacementProjectionPublicationId: uuid(published.publication_id,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement comparison'),\n    expectedAuthorityScopeVersion: integer(published.authority_scope_version,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Authority version',502,1),\n    expectedRowManifestHash: sha256(request.expected_row_manifest_hash,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement row proof'),\n    expectedComparisonManifestHash: sha256(published.comparison_manifest_hash,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement comparison proof'),\n    expectedIssueSetHash: sha256(published.issue_set_hash,\n      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement issue proof'),\n  });\n  const version=integer(published.ready_session_version,\n    'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Saved correction version',502,1);\n  const reviewKey=uuid(request.request_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Saved recheck reference')+':review';\n  const reviewed=validateReviewed(await rpc(dependencies,'weekly_source_correct_final_review_atomic_v1',\n    reviewRequest(actorUserId,identity,version,reviewKey)),identity,version);\n  const context=correctionContext(identity,version,reviewKey,reviewed);\n  return Object.freeze({ok:true,status:reviewed.status,correction_session_id:identity.correctionSessionId,\n    changes:reviewed.office_preview.changes,blockers:reviewed.office_preview.blockers,\n    confirmation_text:reviewed.office_preview.confirmation_text,\n    paid_match_questions:reviewed.office_preview.paid_match_questions ?? Object.freeze([]),\n    review_context:context,apply_context:reviewed.status==='READY_FOR_CONFIRMATION'?context:null});\n}\n\nfunction normaliseOfficePreview(value) {"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "original recheck preview exposes real question set",
+          "before": "      changes: reviewed.office_preview.changes,",
+          "after": "      paid_match_questions: reviewed.office_preview.paid_match_questions,\n      changes: reviewed.office_preview.changes,"
+        },
+        {
+          "packet": "paid-match-correct-final-choice-construction-20261014",
+          "metadata": "COMPLETE_CURRENT_REVERSES.json",
+          "name": "original upload preview exposes real question set",
+          "before": "    changes: reviewed.office_preview.changes,\n    blockers: reviewed.office_preview.blockers,",
+          "after": "    paid_match_questions: reviewed.office_preview.paid_match_questions,\n    changes: reviewed.office_preview.changes,\n    blockers: reviewed.office_preview.blockers,"
+        }
+      ],
+      "before_bytes": 39315,
+      "before_sha256": "0815260d495a35c0c612dbd7cbb9f07940d719236e5fbbc0d335b57695e128f6",
+      "after_bytes": 47983,
+      "after_sha256": "58415de1d25d8d1f489c7aa1d5cbca12306c2c6604dfeaba73103e44b380ff42",
+      "whole_reverse_verified": true
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "current_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "hunks": [
+        {
+          "packet": "paid-match-off-command-consumer-construction-20261014",
+          "metadata": "COMPLETE_CONSUMER_REVERSES.json",
+          "name": "closed native operation entry in existing server dependency proxy",
+          "before": "sourceOperations=Object.freeze(['weekly_source_upload_context_v1'",
+          "after": "sourceOperations=Object.freeze(['weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1'"
+        }
+      ],
+      "before_bytes": 3638,
+      "before_sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "after_bytes": 3678,
+      "after_sha256": "bfdf5ce1e828827e11ca763228a2a47321d1b7dc36c8c74248da30e8e77aeb48",
+      "whole_reverse_verified": true
+    }
+  ],
+  "inputs": [
+    {
+      "commit": "228268c9c834faada1fea61a079e555e4dbba093",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/broker/src/weekly-source/missing-accept.mjs",
+      "destination": "broker/src/weekly-source/missing-accept.mjs",
+      "sha256": "da8e025bb779aaf7e9deaeb48a12b6590413b55dd2f5f5f62169416b655ca978"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "broker/src/index.js",
+      "sha256": "0bf6e3bdb15210a3963183ad1d832f57a18586ac1b9a5e02a8f4e797bb7d2f45",
+      "preserve_exact": true,
+      "root_owns_later_Office_finite_union": true
+    }
+  ],
+  "whole_file_reversals": 4,
+  "unique_hunks": 21,
+  "existing_current_Report_imports_provenance_receipt_validation_preserved": true,
+  "existing_current_Native_routes_preserved": true,
+  "root_index_not_overwritten": true
+}

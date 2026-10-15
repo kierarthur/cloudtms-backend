@@ -1,0 +1,72 @@
+{
+  "source_only": true,
+  "native_calls": 0,
+  "SQL_compiled": false,
+  "canonical_mounted": false,
+  "actual_source_tests": 16,
+  "actual_current_Worker_tests": 4,
+  "syntax_checks": 9,
+  "builder_reproductions": 2,
+  "checks": [
+    {
+      "command": "node build-module.mjs --verify",
+      "exit_code": 0,
+      "stdout": "{\"source_only\":true,\"selected\":103,\"foundation\":40,\"once\":5,\"triggers\":10,\"missing\":[],\"overlaps\":11,\"nonidentical\":[\"public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)\",\"public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)\",\"private.weekly_source_agency_change_capture_v1(uuid,uuid)\",\"private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)\"]}\n"
+    },
+    {
+      "command": "node build-runtime.mjs --verify",
+      "exit_code": 0,
+      "stdout": "{\"source_only\":true,\"current\":\"9d2873bd9180acd8588a44a6223d70bcf6403310\",\"complete_runtime_files\":4,\"new_parser\":1,\"hunks\":21,\"whole_reverse\":true}\n"
+    },
+    {
+      "command": "node --test foundation-source.test.mjs",
+      "exit_code": 0,
+      "stdout": "✔ complete financial103 owners occur once across atomic and repeatable stages (4.8912ms)\n✔ all previously selected Money71 complete definitions survive exact (61.8556ms)\n✔ every full foundation owner is selected or explicitly superseded by current Money, never replaced by helper-only closure (0.6499ms)\n✔ reserved Missing namespace admission and proof guard/index remain one exact atomic page (42.614ms)\n✔ the original complete Keep schema is once-only with forced RLS and immutable audit semantics (4.3437ms)\n✔ whole existing owner reversals use current root full definitions and new interfaces have explicit inverses (1792.3447ms)\n✔ final union deduplicates shared OFF owners and selects sole native Candidate and current protected-match successors (7.0062ms)\n✔ four complete current registry owners preserve every root tuple including all lifecycle ordinals and private service exceptions (151.4767ms)\n✔ native price policy and current rebill record fields are preserved on actual four-argument FIN4 (0.4054ms)\n✔ all21 finite runtime hunks reverse entire current9d files byte for byte (180.1313ms)\n✔ current Report validation and Native routes survive the actual Worker union (1.2499ms)\n✔ actual current Worker dispatches Missing preparation and context once with trusted actor and no effect receipt claim (62.5232ms)\n✔ actual current Worker rejects forged Missing facts, nonadmin and unavailable owner before RPC (47.8905ms)\n✔ actual current Worker Keep binds exact native facts and rejects asserted money or actor (45.6584ms)\n✔ actual current Worker preserves native stale refusal without fabricating success (43.8176ms)\n✔ no SQL transaction or business execution is reported by source construction (0.5255ms)\nℹ tests 16\nℹ suites 0\nℹ pass 16\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2607.5146\n"
+    },
+    {
+      "command": "node --check build-module.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check build-runtime.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check freeze-source.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check foundation-source.test.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check forward/runtime/broker/src/weekly-source/routes.js",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check forward/runtime/broker/src/weekly-source/upload-publication-owner.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check forward/runtime/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check forward/runtime/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    },
+    {
+      "command": "node --check forward/runtime/broker/src/weekly-source/missing-accept.mjs",
+      "exit_code": 0,
+      "stdout": ""
+    }
+  ]
+}

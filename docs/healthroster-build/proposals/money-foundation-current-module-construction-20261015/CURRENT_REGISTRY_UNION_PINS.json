@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "root": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+  "root_registry_input": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+  "complete_function_count": 4,
+  "signature_rows": {
+    "private": 706,
+    "service": 176
+  },
+  "all_current_rows_preserved": true,
+  "private_service_exceptions_preserved": [
+    "private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)",
+    "private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)",
+    "private.weekly_source_invoice_batch_snapshot_v1()",
+    "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+    "private.weekly_source_managed_root_guard_decision_v1(uuid)",
+    "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+    "private.weekly_source_pay_actor_allowed_v1(uuid)",
+    "private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)"
+  ],
+  "Banking95_28_not_replaced_by_registry": true,
+  "native_and_Agency_targets_are_dependencies_not_mounted_by_this_file": true
+}

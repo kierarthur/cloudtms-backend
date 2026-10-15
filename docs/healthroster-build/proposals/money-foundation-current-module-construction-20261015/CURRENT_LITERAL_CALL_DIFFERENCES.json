@@ -1,0 +1,356 @@
+{
+  "source_only": true,
+  "root": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+  "functions": [
+    {
+      "id": "private._weekly_source_immutable_record_guard_v1()",
+      "current_owner": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "current_owner": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_correction_scope_v1",
+        "private.weekly_source_known_source_key_v1",
+        "private.weekly_source_identical_rekey_prior_v1",
+        "private.weekly_source_paid_overlap_candidates_v1",
+        "private.weekly_source_nhsp_projection_lock_input_v1",
+        "private.weekly_source_paid_overlap_choice_current_v1"
+      ]
+    },
+    {
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "current_owner": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_overlap_projection_lock_v1",
+        "private.weekly_source_paid_overlap_choice_current_v1",
+        "private.weekly_source_paid_overlap_candidates_v1",
+        "private.weekly_source_nhsp_projection_choice_recheck_v1",
+        "private.weekly_source_known_source_key_v1",
+        "private.weekly_source_identical_rekey_prior_v1"
+      ]
+    },
+    {
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_invoice_credited_targets_admit_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_sha256_jsonb_v1",
+        "private.weekly_source_kept_as_paid_context_v1",
+        "private.weekly_source_kept_as_paid_facts_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "current_owner": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_retained_transition_assert_v1",
+        "private.weekly_source_missing_cancel_transition_assert_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "current_owner": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_finalise_engine_v1"
+      ]
+    },
+    {
+      "id": "private.bpay_next_source_current_inventory_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "current_owner": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_missing_finalisation_roots_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_invoice_duty_v1(uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_prepared_census_recheck_v1",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1",
+        "private.weekly_source_missing_prepared_census_recheck_v1"
+      ]
+    },
+    {
+      "id": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_prepared_census_recheck_v1"
+      ]
+    },
+    {
+      "id": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "current_owner": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_missing_accept_proposal_v1"
+      ]
+    },
+    {
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "current_owner": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_correction_scope_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_paid_overlap_choice_admit_v1",
+        "public._audit_insert"
+      ]
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "current_owner": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "removed_literal_call_names": [
+        "private.weekly_source_charge_acceptance_policy_fingerprint_v1"
+      ],
+      "added_literal_call_names": [
+        "private.weekly_source_missing_finalisation_roots_v1",
+        "private.weekly_source_paid_overlap_choice_current_v1",
+        "private.weekly_source_roster_prior_states_v1",
+        "private.weekly_source_missing_cancel_basis_v1",
+        "private.weekly_source_paid_match_invoice_movement_insert_v1",
+        "private.weekly_source_paid_match_expense_invoice_insert_v1",
+        "private.weekly_source_nhsp_price_admission_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "current_owner": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_invoice_origin_assert_v1"
+      ]
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_invoice_origin_assert_v1",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "current_owner": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_invoice_origin_assert_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "current_owner": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_fixed_expense_invoice_values_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "current_owner": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_self_bill_report_workspace_v1",
+        "private.weekly_source_check_only_query_groups_v1",
+        "private.weekly_source_paid_match_question_v1",
+        "private.weekly_source_configured_upload_profile_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_paid_match_question_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_off_rule_agency_parent_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_off_rule_agency_parent_v1",
+        "public.weekly_source_office_recheck_begin_v1",
+        "public.weekly_source_agency_timesheet_change_v1",
+        "public.weekly_source_agency_change_worker_context_v1",
+        "public.weekly_source_agency_change_worker_apply_v1",
+        "public.weekly_source_agency_validation_context_v1",
+        "public.weekly_source_agency_validation_apply_v1",
+        "public.weekly_source_agency_change_authorise_step_v1",
+        "public.weekly_source_agency_change_return_step_v1",
+        "public.weekly_source_missing_accept_context_v1",
+        "public.weekly_source_missing_accept_prepare_atomic_v1",
+        "public.weekly_source_later_change_decide_atomic_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_off_rule_agency_parent_v1"
+      ]
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "current_owner": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.bpay_next_source_current_capture_nhsp_none_v1",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_nhsp_none_invoice_basis_v1",
+        "private.weekly_source_nhsp_none_write_admit_v1",
+        "private.weekly_source_nhsp_invoice_only_vector_v1",
+        "private.weekly_source_native_line_vat_v1",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1"
+      ]
+    },
+    {
+      "id": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "current_owner": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "current_owner": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_check_only_query_groups_v1"
+      ]
+    },
+    {
+      "id": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "current_owner": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    },
+    {
+      "id": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "current_owner": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_nhsp_selected_pay_origin_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "current_owner": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": [
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1"
+      ]
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+      "current_owner": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "removed_literal_call_names": [],
+      "added_literal_call_names": []
+    }
+  ]
+}

@@ -1,0 +1,2016 @@
+{
+  "source_only": true,
+  "pins": {
+    "root": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+    "runtime_root": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+    "money": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+    "foundation": "228268c9c834faada1fea61a079e555e4dbba093",
+    "report": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+    "native": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+    "shared": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+    "report_successor": "4822cfc767fda9a57a0de34b9b9beee764097a14"
+  },
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "selected_functions": 242,
+  "repeatable_function_declarations": 240,
+  "atomic_one_time_functions": 2,
+  "selected_definitions": [
+    {
+      "id": "private._weekly_source_immutable_record_guard_v1()",
+      "name": "private._weekly_source_immutable_record_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d",
+      "input_index": 0,
+      "layer": "FOUNDATION_SCHEMA"
+    },
+    {
+      "id": "private.weekly_source_missing_accept_proof_guard_v1()",
+      "name": "private.weekly_source_missing_accept_proof_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "0e684f33e5cd2af2bcbdcf842919c1bdfe4e801c625d3ef8fc5d758d977d0a72",
+      "input_index": 2,
+      "layer": "FOUNDATION_SCHEMA"
+    },
+    {
+      "id": "private.weekly_source_identical_rekey_prior_v1(uuid)",
+      "name": "private.weekly_source_identical_rekey_prior_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "859a6d3057f0becf6651e73475f3ec79a8a822ac14d393c3b7d47e5dc6b20f15",
+      "input_index": 54,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "name": "public.weekly_source_upload_context_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "43668bb2f85b3a0f9102fe3439bcdc0cbb91beb207eb691a25d3ecc821320008",
+      "input_index": 69,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "definition_sha256": "af0dcb77e2ae4abe0a62ad6f5c474f72be21e7d32f7be886db5994e95d2ae19d",
+      "input_index": 70,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+      "name": "private.weekly_source_kept_as_paid_facts_v1",
+      "inputTypes": "uuid,text",
+      "definition_sha256": "77c57c74390f3353f4b7478faceba58e1119b95e0b1a560de521ef4e0f9cfca7",
+      "input_index": 20,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "name": "private.weekly_source_kept_as_paid_context_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4",
+      "input_index": 63,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)",
+      "name": "public.weekly_source_keep_as_paid_decide_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "e9204278256649abea25e2c6a65743ef22ebb1b0b3d7bef2297b8b569eecf624",
+      "input_index": 8,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_invoice_credited_targets_admit_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "cd9428188dbc64ba593b217b3bb9dd98e0d322e38611a04ea7a2d5a7d990882e",
+      "input_index": 14,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "name": "public.invoice_apply_edits",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "a93ea33136b2163bf234a8f5920c6cf46a1c21ee2838e86c74273848350fbd14",
+      "input_index": 15,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_invoice_adjustments_apply_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "7affd6db823b60dedd95906a2466f0af32a6ea69e759bf97a6f6faceef2160e9",
+      "input_index": 16,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "name": "private.weekly_source_invoice_adjustment_line_valid_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "f96f300828e3c1ea123c2756cb86aa6ad4acabdaaef16f75cd046ca9607834ca",
+      "input_index": 12,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_keep_ack_native_guard_v1()",
+      "name": "private.weekly_source_keep_ack_native_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "f605173a01e313887071c9f51eacbe70a7a1b681d612eb2b1d4cb0b8d6de5417",
+      "input_index": 17,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+      "name": "private.weekly_source_kept_as_paid_facts_for_publication_v1",
+      "inputTypes": "uuid,text,uuid",
+      "definition_sha256": "4543671e94d7fd1279a5aaf549caa20397f30e8c8fc8f9201622bafd285c264a",
+      "input_index": 20,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_kept_as_paid_context_for_publication_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "af606e111da8b6232890cc3b04b16367085ef1e11deee33855d476ce9ed1ab7e",
+      "input_index": 62,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "name": "private.weekly_source_missing_snapshot_movement_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "18a5cac5a29e5e18d913a70a870d7f5ad1de03f6300e390744e802316145fc5d",
+      "input_index": 22,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_cancel_basis_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "cfb5f905742701cda1e14cb4a538080ef1f277210d22484c34a4aeecdf226098",
+      "input_index": 47,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "name": "private.weekly_source_missing_finalisation_roots_v1",
+      "inputTypes": "uuid,integer,uuid,uuid,uuid,date,date",
+      "definition_sha256": "847a0dd09838e33fd7ce829c09c1380d35ae243098d4f44aaedbba55786a25bc",
+      "input_index": 24,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "name": "private.weekly_source_missing_cancel_transition_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "b0f1939da34fc99da209535e605893f73734777b73839fa47acc33ba962624c6",
+      "input_index": 25,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+      "name": "private.weekly_source_missing_cancel_native_insert_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "9c702c8e13bb2ab7c45b891799ebed9ce65edbadac3deb18f17a46405682d709",
+      "input_index": 26,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "name": "private.bpay_next_source_current_capture_transition_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "1bc3d3b8a544d2360e4f2619b264fe5afc68656cd07a1237c9fb8e2adbfadca8",
+      "input_index": 87,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_current_selection_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "758152e7d3350133f663219c61671a4ce0ee540760918df62fa674d6995ba847",
+      "input_index": 28,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean",
+      "definition_sha256": "89cfce7cb0fdc47bb2326b52eb8f19a33c1ac5182517975bd843737589ff0969",
+      "input_index": 29,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.bpay_next_source_current_inventory_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "name": "private.bpay_next_source_current_inventory_v1",
+      "inputTypes": "uuid,integer,uuid,uuid,uuid,date,date",
+      "definition_sha256": "6b588dd59bc8eec60c6bed17d34c9e192716d2a94ab30c92426dcf3c39ec0452",
+      "input_index": 30,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_invoice_duty_v1(uuid)",
+      "name": "private.weekly_source_invoice_duty_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "d0d9e663e6aeaaee6cbf4725139bfb3de1401a7d174f2130c8972417a2b7931f",
+      "input_index": 31,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+      "name": "private.weekly_source_missing_prepared_census_recheck_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "f3df0daa23aaa68fd20fa1ed09423eddca38531cac8643cac9c43afaa107e826",
+      "input_index": 48,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "name": "private.weekly_source_correct_final_prepared_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1",
+      "input_index": 93,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9",
+      "input_index": 94,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55",
+      "input_index": 95,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_correction_baseline_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "20417e4400e38b6715a16f096f5372620ae34ab1eca66c5cdbcb9c6852c325a7",
+      "input_index": 40,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_revision_census_guard_v1()",
+      "name": "private.weekly_source_missing_revision_census_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "a8aecf1ff0a4b35f1528011172e29ef4770af9715f4bd7feaa38bda5d4d21e82",
+      "input_index": 41,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_accept_inventory_inputs_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "bdf0f3c18477dfbc1176e7bbbf9de37df92d1a868a5bf7c62d333d09a9c07e69",
+      "input_index": 42,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "name": "private.weekly_source_missing_accept_prepare_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "50600262cd5a7fab72b5d6867657ef1c4ff3d383242f4fc14a5ab9dbf2ce3612",
+      "input_index": 43,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+      "name": "private.weekly_source_missing_accept_proposal_v1",
+      "inputTypes": "uuid,bigint,uuid",
+      "definition_sha256": "70dc5e55f2b2d89e7060d4d1870f65071dd9edf9a957a6e11a072ebecffc6d97",
+      "input_index": 44,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_accept_current_removal_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "ea094db787ddc67a30368c45e9b3cd58c1781ae4b6908c43b4296080e4250a40",
+      "input_index": 53,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "name": "public.weekly_source_later_change_decide_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "35d76cceee276aa58638e19cb7b84b7f4835c91651e427dd30d72d5b8dbfe116",
+      "input_index": 46,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+      "name": "public.weekly_source_missing_accept_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "db851b2b3e1dc05c28c84924f628be1f57e3d25aee87b56f9908eea50a603b05",
+      "input_index": 50,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "public.weekly_source_missing_accept_context_v1(jsonb)",
+      "name": "public.weekly_source_missing_accept_context_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "9e0969a2806ef02a8559ca8fd72a23e6f024f8e1a5a3d2b7c1c8682a0c4be1de",
+      "input_index": 51,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "name": "private.weekly_source_missing_accept_head_chain_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "74d14b510e661e84dde17d91a9ae9ca0afbf122e307447cafe5c73e7ca3b282a",
+      "input_index": 52,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_known_source_key_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911",
+      "input_index": 57,
+      "layer": "FOUNDATION"
+    },
+    {
+      "id": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_work_event_payment_facts_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427",
+      "input_index": 61,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_paid_overlap_candidates_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891",
+      "input_index": 64,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "name": "private.weekly_source_paid_overlap_choice_admit_v1",
+      "inputTypes": "jsonb,jsonb",
+      "definition_sha256": "94ced00a3c96bf194075e75804e176b8a1fc37360a32e2014708b187963a6775",
+      "input_index": 65,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "080f545a2d854f0e63fa04da6bb4becb12889bffccb26626a1863c0b1a60a78b",
+      "input_index": 66,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_overlap_choice_current_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "7c4dd3806fe515ac7ac55b4282aaea5d5b80f9333d4876f9747b1b06605c044a",
+      "input_index": 67,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_paid_overlap_projection_lock_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de",
+      "input_index": 68,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean,text",
+      "definition_sha256": "f8b82163a56af483e30e4d1a03f31df124bb97abc6073fe473374ee632035e45",
+      "input_index": 71,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "name": "private.weekly_source_paid_choice_revision_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31",
+      "input_index": 72,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_match_invoice_movement_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "51db47d57c908e6da251e7d457dc5e30a833dbb2371626455ea4c969c2e55bac",
+      "input_index": 73,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "name": "private.weekly_source_paid_match_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "68045b8b6b0323b2ce115ee510e4b67b6c4feb1f0bf0f70e5e1ce33fe1a4c37c",
+      "input_index": 74,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "name": "private.weekly_source_billing_movement_hash_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306",
+      "input_index": 75,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "name": "private.weekly_source_invoice_movement_window_id_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7",
+      "input_index": 76,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "name": "private.weekly_source_invoice_source_amount_movement_valid_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580",
+      "input_index": 77,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "name": "public.weekly_source_invoice_admit_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "98ed85cdacec920cc52830d1abb54880ebc0c4e554076f8b00a2a2bdc2e43b94",
+      "input_index": 78,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "name": "private.weekly_source_shift_on_self_bill_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669",
+      "input_index": 79,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "name": "private.weekly_source_ordinary_projection_source_units_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5",
+      "input_index": 80,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_selected_source_witness_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6",
+      "input_index": 81,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "name": "public.weekly_source_finalisation_pay_open_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804",
+      "input_index": 82,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be",
+      "input_index": 83,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "name": "private.weekly_source_paid_overlap_current_snapshot_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,uuid,uuid[]",
+      "definition_sha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2",
+      "input_index": 84,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "name": "private.weekly_source_paid_match_retained_transition_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "66f4f50a76855da26d87ae0c6087dd5c964bc06a7fa1c3884148195e01fcdd0c",
+      "input_index": 85,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_paid_match_question_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "7246cae44d4a67b904efc12c08702d437b55583e3b341755b6df9c1070461c1b",
+      "input_index": 86,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "name": "private.weekly_source_fixed_expense_invoice_values_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d",
+      "input_index": 88,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "name": "private.weekly_source_finalisation_materialise_expense_invoice_v1",
+      "inputTypes": "uuid,uuid,text,uuid,uuid,uuid,uuid,text",
+      "definition_sha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1",
+      "input_index": 89,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "name": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "eed3f2fa8ec6bbf829019fab4fcf4c0cf0b7a862c6cdf5161639ea40816e745b",
+      "input_index": 90,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_match_expense_invoice_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "90ab0047ebf8ed86f2588da1bb69cb506ef3214661424c8a2e5a4faf00f6f8ab",
+      "input_index": 91,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_match_prepared_census_recheck_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434",
+      "input_index": 92,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "name": "private.weekly_source_ordinary_projection_current_expenses_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4",
+      "input_index": 96,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "name": "public.weekly_source_office_workspace_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2",
+      "input_index": 97,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "name": "private.weekly_source_paid_match_correction_scope_v1",
+      "inputTypes": "uuid,uuid,boolean",
+      "definition_sha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0",
+      "input_index": 98,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e",
+      "input_index": 99,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+      "name": "private.weekly_source_roster_prior_states_v1",
+      "inputTypes": "uuid,uuid,text,date",
+      "definition_sha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36",
+      "input_index": 100,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_legacy_signed_source_membership_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f",
+      "input_index": 101,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "name": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid",
+      "definition_sha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912",
+      "input_index": 102,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "name": "private.weekly_source_off_rule_setup_shape_assert_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "ce5df0ccb6d5aecf67176ce14cc9a349cb100b0d3e22b3854f41594f86682403",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "name": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "inputTypes": "jsonb,uuid,jsonb",
+      "definition_sha256": "20d9dab05d326a76136fb35361f3c3e1dbe0d5f2de2bab5055e49decf76d4748",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "name": "private.weekly_source_rule_qualification_setup_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "name": "private.weekly_source_rule_qualification_execute_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "eb195c08dafb3c460b7467c3b743b52fbc2922e2caa9fd7755a8d9c2797a1dc1",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "name": "private.weekly_source_rule_qualification_transport_status_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "b000a53cdc7b6e5e7cdc243bcd8ab888eebd21c1dbb4767195f3b67a2fe981fc",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_paid_overlap_basis_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552",
+      "input_index": 107,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+      "name": "private.bpay_next_source_nhsp_magnitude_v1",
+      "inputTypes": "jsonb,jsonb,jsonb",
+      "definition_sha256": "64841d3b64a0ba320486c2e0ba24acd45f0868851f56c72248a55ef098b7b4cc",
+      "input_index": 108,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "name": "private.bpay_next_source_current_capture_movement_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "2a556a35454ad88eede73ec65a59567b10c1967d77fee916e77cc861cca2b68c",
+      "input_index": 109,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_negative_population_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a",
+      "input_index": 110,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+      "name": "private.weekly_source_native_line_vat_v1",
+      "inputTypes": "bigint,boolean,numeric",
+      "definition_sha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd",
+      "input_index": 111,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "name": "private.weekly_source_finalisation_insert_current_movement_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid",
+      "definition_sha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658",
+      "input_index": 112,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "name": "private.weekly_source_nhsp_price_admission_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5",
+      "input_index": 113,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "name": "private.weekly_source_nhsp_invoice_values_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc",
+      "input_index": 114,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+      "name": "private.weekly_source_nhsp_negative_comparison_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886",
+      "input_index": 115,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "name": "private.weekly_source_paid_choice_immutable_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "6f7aaf19538756f693219af349babe1fd09f578996cb8009454dfac54f9462d0",
+      "input_index": 116,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_projection_lock_input_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "4127a77d0e86c76563c5a749c4a67fe05da33fb0a42fc7c9ad358454045fb4a2",
+      "input_index": 117,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_projection_choice_recheck_v1",
+      "inputTypes": "jsonb,jsonb,uuid,uuid",
+      "definition_sha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df",
+      "input_index": 118,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+      "name": "private.weekly_source_nhsp_invoice_only_vector_v1",
+      "inputTypes": "text,bigint",
+      "definition_sha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7",
+      "input_index": 119,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "name": "private.weekly_source_nhsp_none_invoice_basis_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "b181f1b63458db135d44fa0fe17d751be36b07ef0514fa80bb6c72355d08e5a2",
+      "input_index": 120,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "name": "private.weekly_source_nhsp_none_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7",
+      "input_index": 121,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "name": "private.bpay_next_source_current_publish_revision_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "74c1dd652a4a703a38913ff89bd62c13288d3de3c7b32c2da5db667847beea23",
+      "input_index": 122,
+      "layer": "MONEY"
+    },
+    {
+      "id": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac",
+      "input_index": 123,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "name": "private.bpay_next_source_current_toggle_v1",
+      "inputTypes": "text,uuid,boolean",
+      "definition_sha256": "f7f2917f10469a2b422e17d40d696366f42a3fac705af2e71368287ea05bb30d",
+      "input_index": 124,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "name": "private.weekly_source_nhsp_none_write_admit_v1",
+      "inputTypes": "jsonb,uuid",
+      "definition_sha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9",
+      "input_index": 125,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+      "name": "private.bpay_next_source_current_capture_nhsp_none_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "6356f2864e7ae442ac68c08e4bcd58da44fbceed4cf766db898107e4c192ff77",
+      "input_index": 126,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_selected_pay_origin_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554",
+      "input_index": 127,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "name": "private.bpay_next_source_current_event_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "895443cbb1efa841154cb53a50f1c56c17d70404a423a6fbf1a93ef384f72ad8",
+      "input_index": 128,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "name": "private.weekly_source_ordinary_projection_active_movements_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04",
+      "input_index": 129,
+      "layer": "MONEY"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+      "name": "private.weekly_source_rule_qualification_scope_assert_v1",
+      "inputTypes": "jsonb,uuid,boolean",
+      "definition_sha256": "b14ef129a2f06168eccf227b15bdb9ab3de1967e7a461fa223e7baec40c8a7cc",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_contract_fixed_approval_locks_v1(uuid[])",
+      "name": "private.weekly_source_contract_fixed_approval_locks_v1",
+      "inputTypes": "uuid[]",
+      "definition_sha256": "f6d4ba82a94f5892f126b7c141cb48d0a0de0d34ed3b1a17017b55644fdd78d7",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_contract_fixed_approval_sync_v1(uuid,uuid)",
+      "name": "private.weekly_source_contract_fixed_approval_sync_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "8b4cefab67fb4e04089bf3f739602b8197397ada5c691ac545f7e27ce8e41cb0",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_contract_write_atomic_v1(jsonb)",
+      "name": "public.weekly_source_contract_write_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "5b0ed3d0567b4e26f200261b5f9b244aba4bc97d5e31e7bbb8ca783a022382b2",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_submitted_claim_v1(uuid)",
+      "name": "private.weekly_source_agency_submitted_claim_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "db5c6563bb765afd8fbecbdffa46715fcc005a31a106c8c312b47af0ea6ca9a9",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_native_pay_scope_v1(uuid)",
+      "name": "private.weekly_source_agency_native_pay_scope_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "e7202b10ca885fc74403a15b84b94e6dde9b739d999e5b4c137ae30f51616b08",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_legacy_original_document_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_agency_legacy_original_document_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "e39840c8aee511328e13797b9063386a84145bf04ab303b4ff3694e514c4321d",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_original_pay_identity_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_agency_original_pay_identity_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "0c0f7012cdf7183bc2aaa4cd1959d010778e1981e3c8bd0ceba926bf64cc09ff",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_paid_write_purpose_v1(uuid)",
+      "name": "private.weekly_source_agency_paid_write_purpose_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "27ef624eb4cc991925ccad4253a2bc8443757003ab31426a88080af0e2b44724",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_ordinary_collection_inputs_v1(uuid)",
+      "name": "private.weekly_source_agency_ordinary_collection_inputs_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "2bdbe4650565f7f00b3d2a59afa23aa2181e39bdfc71eb1c40b6857b44c72ee6",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_before_collection_inputs_v1(uuid,uuid)",
+      "name": "private.weekly_source_agency_before_collection_inputs_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "38d0a9cfaf55835600f91d36fc2e63dc6b5f375ce8f3cfe727830e26ac8186a2",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_candidate_admit_v1(uuid,uuid)",
+      "name": "private.weekly_source_agency_candidate_admit_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "e56831005188094b57553defe1bc31640a7db9822d77e7088923c3dbc662dff4",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_physical_pay_inputs_v1(uuid,uuid)",
+      "name": "private.weekly_source_agency_physical_pay_inputs_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "ba17cd011fe298297f3545fe2f37e8930bfd0b397eb208858887ee6d77a61971",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_segment_flags_apply_v1(uuid)",
+      "name": "private.weekly_source_agency_segment_flags_apply_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "e43f8bf6aac7f171b5a654f381629166acc304ff0fdb819d91246652ca8ceebc",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_native_query_facts_v1(uuid)",
+      "name": "private.weekly_source_agency_native_query_facts_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "bd2e1b942dc7e44adec733d782ff0f2df72c4837388ff5d24af388ed60ddaf32",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_invoice_segment_selection_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_agency_invoice_segment_selection_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "32f8fae2e3e8e85869e243b672e96857241aba022a9ca77a740bdf0c14b6aeb3",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_draft_round_trip_v1(text,text,uuid)",
+      "name": "private.weekly_source_agency_draft_round_trip_v1",
+      "inputTypes": "text,text,uuid",
+      "definition_sha256": "77d5540adfd87813b5243fb989dd04a8d9ee9144457ddf943560c60900600aa0",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_week_facts_v1(uuid)",
+      "name": "private.weekly_source_agency_week_facts_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "748b09a56c5778eb8ec86ec59ac23d7865fdb96384714bfa5b0a6fec6cf37f72",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_week_complete_v1(uuid)",
+      "name": "private.weekly_source_agency_week_complete_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "ae4cfdf57d6c537aa2e622caf8ac8a54f10ce314b7b6f769ed9040d08a37a0e2",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_week_validation_refresh_v1(uuid,uuid)",
+      "name": "public.weekly_source_agency_week_validation_refresh_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "703cedb28d48f937c3875040c67d77cb251fd006b7df05aa23852753e78fb3e8",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_validation_source_guard_v1()",
+      "name": "private.weekly_source_agency_validation_source_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "1f14f44d36d9a0a8f7cebecf45b9af580601fb5db8e654888e6e699a59349d42",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_validation_context_v1(uuid)",
+      "name": "private.weekly_source_agency_validation_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "62139fdd38092bf06802167fcf418da24c78673ce8f63114954dece1faefdf53",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_validation_context_v1(uuid)",
+      "name": "public.weekly_source_agency_validation_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "37178fd92c03089d27bfa3e4adb60de8fd6284c5f87a9aa8d6b95edff2d76ca3",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_validation_frame_open_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_agency_validation_frame_open_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "bad2f19dfa22ae06e759dc57b2a175743df73bf1b0fe4d788bd4c771825b7804",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_validation_write_assert_v1(uuid,jsonb,uuid,uuid)",
+      "name": "private.weekly_source_agency_validation_write_assert_v1",
+      "inputTypes": "uuid,jsonb,uuid,uuid",
+      "definition_sha256": "109795daff1a8de22781a5573f645a64bcfdf2954600b72d7c3ab10a421bde83",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_validation_write_observe_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_agency_validation_write_observe_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "40433d95e01cc1f64a9dc6c901c614636fc5e480c7e23e10cafd9dae56d21223",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_validation_apply_v1(uuid,bigint,text,jsonb)",
+      "name": "public.weekly_source_agency_validation_apply_v1",
+      "inputTypes": "uuid,bigint,text,jsonb",
+      "definition_sha256": "9e8168f035a8030d7baa9d7c4cab622e0bbb9f22e3afd67dee0c3e439ca059b5",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_financial_frame_open_v1(uuid,text,jsonb,uuid)",
+      "name": "private.weekly_source_agency_financial_frame_open_v1",
+      "inputTypes": "uuid,text,jsonb,uuid",
+      "definition_sha256": "f53b288283e42788b103b160785cb5a7be33af661a5831949c1eccaca6ac0532",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)",
+      "name": "private.weekly_source_agency_financial_write_assert_v1",
+      "inputTypes": "uuid,jsonb,uuid,uuid",
+      "definition_sha256": "00c14e61c87a42e108effd04b10ea86cf7155662e3d4c43954ef8f99130caf1e",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_financial_write_observe_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_agency_financial_write_observe_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "1160690126b8a6dd193db8212d0e0f32afdf8a1b64a1502dcbe417e690f5090b",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_segment_flags_v1(uuid)",
+      "name": "private.weekly_source_agency_segment_flags_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "11ab845ca48485defcd0fcf29434acbf41519974f211a369278a4610070b70fb",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_change_authorise_step_v1(uuid,uuid)",
+      "name": "private.weekly_source_agency_change_authorise_step_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "03ee729ab29fceed1252ab21db87da886a7631a22f661649f426918ebcff8ce2",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_change_authorise_step_v1(uuid,uuid)",
+      "name": "public.weekly_source_agency_change_authorise_step_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "4b4dab611c9bd295a1d3506420a78852838253e778244771a01e53fd128f15cb",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_publication_validation_v1(uuid)",
+      "name": "private.weekly_source_agency_publication_validation_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "7e549bff47bfa39712edf833ee316c138b7b314908c4378ce2c6d2a30008bd6a",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_authorise_validation_after_v1()",
+      "name": "private.weekly_source_agency_authorise_validation_after_v1",
+      "inputTypes": "",
+      "definition_sha256": "32f24e20fa7ddc99efda95a84ee8b3d9bcd6a22b4290977719fbb4d20f4c37d9",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_legacy_import_validation_admit_v1(uuid)",
+      "name": "private.weekly_source_agency_legacy_import_validation_admit_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "e3594ac46cb341afc9534aad8442aa988c6c2b6f854ca73db42847412f95f4e4",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_legacy_import_validation_admit_v1(uuid,uuid)",
+      "name": "public.weekly_source_agency_legacy_import_validation_admit_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "3b9821650c6e2d9d2ca0aa27762556545a3ed8834bfed8c083103a2424770be6",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_change_return_step_v1(uuid,uuid)",
+      "name": "private.weekly_source_agency_change_return_step_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "7415467534934de3b63daede9f4658451771470dc368c8ebfb69ea00f80fa8d9",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_change_return_step_v1(uuid,uuid)",
+      "name": "public.weekly_source_agency_change_return_step_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "331c565c0e1265876c4460d5ed95f99467741337a765a60937d067466463b4d7",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_snapshot_provenance_assert_v1(uuid,jsonb)",
+      "name": "private.weekly_source_agency_snapshot_provenance_assert_v1",
+      "inputTypes": "uuid,jsonb",
+      "definition_sha256": "c2e2c7607bbe799f5ccbb336390d8ccc0ba2a7b280dee273a656f03d33db4264",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_change_worker_apply_v1(uuid,bigint,text,jsonb)",
+      "name": "public.weekly_source_agency_change_worker_apply_v1",
+      "inputTypes": "uuid,bigint,text,jsonb",
+      "definition_sha256": "6509e4aee11ee3f2c24d6de811dfda19af6137791d5d0f578f1f54278afa6781",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_change_worker_targets_v1(uuid[])",
+      "name": "public.weekly_source_agency_change_worker_targets_v1",
+      "inputTypes": "uuid[]",
+      "definition_sha256": "421c369256c6734340dc28cffda30fe7e01244bc6331bd9e62d836340fef3561",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_change_worker_context_v1(uuid)",
+      "name": "private.weekly_source_agency_change_worker_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "39fc6b1a430e390f6e83f8b844091615ac1aa0d70cb66390e3270af6ce914f21",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_change_worker_context_v1(uuid)",
+      "name": "public.weekly_source_agency_change_worker_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "d58abbaaa701618e47e349714928a74bd4aa4fea868ef50036dab9175db74d3e",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_timesheet_change_v1(uuid,text,text,text,uuid)",
+      "name": "public.weekly_source_agency_timesheet_change_v1",
+      "inputTypes": "uuid,text,text,text,uuid",
+      "definition_sha256": "a7a62b5f9e1e5ff2260e378fbf247e1f9cdf178648189c13c700d271902c0121",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_crosscheck_context_v1(uuid)",
+      "name": "private.weekly_source_agency_crosscheck_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "796873055867dd3fcae3c398e36757f0531e58ed48fcffcd35fded25565baab6",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_agency_crosscheck_context_v1(uuid)",
+      "name": "public.weekly_source_agency_crosscheck_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "d96795c69cdbcded035b2d40ef65b1556a38975a1b2d86f6f8f97bdb6ce397ad",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_issue_requirements_v1(uuid)",
+      "name": "private.weekly_source_agency_issue_requirements_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "f07f7095753ceaf9d0ed6e24c1b8521b78b3a1422fba1f6358775a022e9dbe3f",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_issue_close_v1(uuid)",
+      "name": "private.weekly_source_agency_issue_close_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "7f5a807292a3b75a6eff4cae313d98a2353d02f14763e84d28c39beb831728e2",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_mode_a_units_v1(uuid)",
+      "name": "private.weekly_source_agency_mode_a_units_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "ab482d37ebd0f8f3db167721662bad464e8620f7019ebd5f8c5c2c416700c678",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_change_identity_guard_v1()",
+      "name": "private.weekly_source_agency_change_identity_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "d28b7da95baf0d3c428d5c1dda0fd6e51f056bed59cd110dc58752c14bf347af",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_source_phase_admit_v1(uuid,uuid,uuid,uuid,uuid,jsonb,jsonb)",
+      "name": "private.weekly_source_agency_source_phase_admit_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,jsonb,jsonb",
+      "definition_sha256": "6a53e2a67bb29ae2e70e05e95a8e050b50b3da1d7b4560663feaae76e5a30b33",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_source_mutation_basis_v1(text,jsonb)",
+      "name": "private.weekly_source_agency_source_mutation_basis_v1",
+      "inputTypes": "text,jsonb",
+      "definition_sha256": "1ad938339981094904e201ffe19ec57c0da7d52e1df7f1917c2367333db0fd70",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_active_source_mutation_assert_v1(text,jsonb,jsonb,jsonb)",
+      "name": "private.weekly_source_agency_active_source_mutation_assert_v1",
+      "inputTypes": "text,jsonb,jsonb,jsonb",
+      "definition_sha256": "d3018fd9ae759e4a279ebd2aaca7f7a9dafdc95e88a80c203953df7a1f5a3eac",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_change_capture_v1(uuid,uuid)",
+      "name": "private.weekly_source_agency_change_capture_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "1967917b3bf9ee2fedab4c815c8e4668320e195dc19eee097b9c6de77bc30674",
+      "input_index": 188,
+      "layer": "REPORT_ROUTING_PROTECTION"
+    },
+    {
+      "id": "private.weekly_source_agency_change_request_sha256_v1(uuid,text,text,text,uuid,jsonb)",
+      "name": "private.weekly_source_agency_change_request_sha256_v1",
+      "inputTypes": "uuid,text,text,text,uuid,jsonb",
+      "definition_sha256": "0accee8765a3ceb495385516b80a773770b0ad6e621bd4dcef82d869bed4b59f",
+      "input_index": 188,
+      "layer": "REPORT_ROUTING_PROTECTION"
+    },
+    {
+      "id": "private.weekly_source_agency_original_claim_recheck_v1(uuid)",
+      "name": "private.weekly_source_agency_original_claim_recheck_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "d78eb847dc57bf77886c9591628119b37619eabd12e620609cbe28ae51414cc3",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)",
+      "name": "private.weekly_source_agency_change_request_assert_v1",
+      "inputTypes": "uuid,text,text,text,uuid",
+      "definition_sha256": "1dd7a6f99aa198af4ff09fb536ea37f661a980a762b974a205ed95a9e4197522",
+      "input_index": 189,
+      "layer": "REPORT_ROUTING_PROTECTION"
+    },
+    {
+      "id": "private.weekly_source_agency_change_begin_v1(uuid,text,text,text,uuid)",
+      "name": "private.weekly_source_agency_change_begin_v1",
+      "inputTypes": "uuid,text,text,text,uuid",
+      "definition_sha256": "9ff23d00ac03e34e4a33a2c4a347036fbd9aedae5490ebf1b4404febc24f3b7b",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.timesheet_correction_a0_source_raw_tokens_v1(text,jsonb)",
+      "name": "private.timesheet_correction_a0_source_raw_tokens_v1",
+      "inputTypes": "text,jsonb",
+      "definition_sha256": "183075f2818043f1c469da1f5fa5bef76ad27142ed2aa51e28a611c99b4a2551",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.timesheet_correction_a0_source_revision_tokens_v1(text,jsonb)",
+      "name": "private.timesheet_correction_a0_source_revision_tokens_v1",
+      "inputTypes": "text,jsonb",
+      "definition_sha256": "dd299d75379f06b36a9a2f402357e10a8c79226c369e8d807255d903870dde7e",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.timesheet_correction_a0_source_policy_tokens_v1(text,jsonb)",
+      "name": "private.timesheet_correction_a0_source_policy_tokens_v1",
+      "inputTypes": "text,jsonb",
+      "definition_sha256": "321400d802d28cd8d4053663413e281f5e7047a66724d03b041a4b7984ab6450",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.timesheet_correction_a0_source_reference_before_v1()",
+      "name": "private.timesheet_correction_a0_source_reference_before_v1",
+      "inputTypes": "",
+      "definition_sha256": "206573a6a1f9d7fa26cb983b06335709a6d78941dc6be26a694ead93affb0c98",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.timesheet_correction_a0_source_reference_final_before_v1()",
+      "name": "private.timesheet_correction_a0_source_reference_final_before_v1",
+      "inputTypes": "",
+      "definition_sha256": "949ed51d167562e3fe594b5c95775e4a9da0058cad91424aeeffe2b5d1ff2d0e",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "name": "private._candidate_manager_authoriser_policy_normalize_v2",
+      "inputTypes": "jsonb,text",
+      "definition_sha256": "fd2a54af3d95c0a7bf1c014fc0baa91e76c38aca0ec27fb5c919a4b7750e0677",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "name": "private._candidate_manager_authoriser_effective_v2",
+      "inputTypes": "jsonb,jsonb",
+      "definition_sha256": "e7d304e85999744cd41e0e1cf21f8bcd98f34714916e94a5fb9831262414cb84",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)",
+      "name": "public.contract_manager_authoriser_policy_update_v1",
+      "inputTypes": "uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone",
+      "definition_sha256": "92342e6801dd6878034f8d477b7d87ae5aea70995f250635e67bb733efb89cb2",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean)",
+      "name": "private.weekly_source_off_rule_agency_parent_v1",
+      "inputTypes": "text,jsonb,uuid,boolean",
+      "definition_sha256": "9841731cedbe7d3290a05b6d3e4939c1cad7e1094affc1c88643f075c7e33b13",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_client_settings_save_atomic_v1(jsonb)",
+      "name": "public.weekly_source_client_settings_save_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "145cb1cf260cf53cbce60980a1e020154926952fab82e5fae111a6dd4ab58962",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "name": "public.weekly_source_group_rule_feature_set_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "1e049db74bd9916bc8d73518ae0eed3ef598decd1bbd143e5b24121e9a44671c",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private._candidate_policy_resolve_v1(uuid,uuid,date)",
+      "name": "private._candidate_policy_resolve_v1",
+      "inputTypes": "uuid,uuid,date",
+      "definition_sha256": "5a4a1f8370ded559850088545c8f2b23384c4e4cbe7d8899434e0692eb3379e0",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "name": "public.candidate_workflow_transition_atomic_v1",
+      "inputTypes": "uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone",
+      "definition_sha256": "65c2545150297d8ea0c06554767bcd2d1431ff69a7c008bc369bf8797f7b54ce",
+      "input_index": 186,
+      "layer": "SHARED_NATIVE_REPORT"
+    },
+    {
+      "id": "private._candidate_component_render_contract_v1(uuid,integer,uuid,text)",
+      "name": "private._candidate_component_render_contract_v1",
+      "inputTypes": "uuid,integer,uuid,text",
+      "definition_sha256": "509c9b8e4a1ff728c9b7ffd8985f0fb2d905f7eb8623510a53938e7d05a1fd41",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
+      "name": "public.candidate_submission_finalize_atomic_v1",
+      "inputTypes": "uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb",
+      "definition_sha256": "f7908839b1257fb56eb94a13c2e0e3459df7bb9a242a8a7aa0dd28b041434f6a",
+      "input_index": 185,
+      "layer": "SHARED_NATIVE_REPORT"
+    },
+    {
+      "id": "public.tsfin_prepare_write(uuid)",
+      "name": "public.tsfin_prepare_write",
+      "inputTypes": "uuid",
+      "definition_sha256": "6c8c14d38a260608d37071225a76ce0b0b244cd46c0f5fd67f6d58bd302ab7ad",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.tsfin_write_current_snapshot_single_bounded(uuid,integer,jsonb,uuid,timestamp with time zone)",
+      "name": "public.tsfin_write_current_snapshot_single_bounded",
+      "inputTypes": "uuid,integer,jsonb,uuid,timestamp with time zone",
+      "definition_sha256": "cc24785572fd1ae8e61a290f370b179498b4019bdef1c108638e245f122b2a16",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.tsfin_write_snapshots_and_complete(jsonb)",
+      "name": "public.tsfin_write_snapshots_and_complete",
+      "inputTypes": "jsonb",
+      "definition_sha256": "cba99033db1752348fe6c1bc268280abb10c1673b622eee7ed4b33ecbfe460e7",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.timesheets_invalidate_prevalidation_on_change()",
+      "name": "public.timesheets_invalidate_prevalidation_on_change",
+      "inputTypes": "",
+      "definition_sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "name": "public.weekly_source_projection_publish_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private._invoice_issue_validate_batch(jsonb,date)",
+      "name": "private._invoice_issue_validate_batch",
+      "inputTypes": "jsonb,date",
+      "definition_sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.invoice_issue_one(uuid,uuid)",
+      "name": "public.invoice_issue_one",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private._invoice_issue_advance_core_v8(jsonb,timestamp with time zone)",
+      "name": "private._invoice_issue_advance_core_v8",
+      "inputTypes": "jsonb,timestamp with time zone",
+      "definition_sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public._import_review_ready_action_ids_core_v1(uuid)",
+      "name": "public._import_review_ready_action_ids_core_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "name": "public.hr_weekly_apply_transactional",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_mode_a_reference_apply_atomic_v1(jsonb)",
+      "name": "public.weekly_source_mode_a_reference_apply_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.weekly_source_mode_a_dispatch_atomic_v1(jsonb)",
+      "name": "public.weekly_source_mode_a_dispatch_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.contracts_clone_and_extend_atomic(uuid,date,date,date,boolean,uuid,text,jsonb,boolean,boolean,boolean,uuid)",
+      "name": "public.contracts_clone_and_extend_atomic",
+      "inputTypes": "uuid,date,date,date,boolean,uuid,text,jsonb,boolean,boolean,boolean,uuid",
+      "definition_sha256": "025b8f92598ba77242b6dd54778ef8e280f0556026878f34e239792d49d00caf",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.contract_week_delete_planned(uuid,uuid)",
+      "name": "public.contract_week_delete_planned",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "06fdf4da4469c3480f69b7d32b6fbf0aa98b0d7cfd29361166c47e7479484870",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "public.timesheet_weekly_chain_delete_apply(uuid,uuid,uuid[],uuid[],uuid[],text)",
+      "name": "public.timesheet_weekly_chain_delete_apply",
+      "inputTypes": "uuid,uuid,uuid[],uuid[],uuid[],text",
+      "definition_sha256": "5252b8f23d092f055a9d6728dfb46584b1e3920e3a95e7e319e07aad9bc5a527",
+      "input_index": 132,
+      "layer": "REPORT"
+    },
+    {
+      "id": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "name": "private.weekly_source_actual_timesheet_submission_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500",
+      "input_index": 134,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "name": "private.weekly_source_signed_submission_read_context_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "6b1b21e7cae703b2e2c6ef8e31689f1328a81c56ab5ae1a75dc39e6a9a105797",
+      "input_index": 135,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_client_calendar_v1(uuid,date)",
+      "name": "private.weekly_source_checklist_client_calendar_v1",
+      "inputTypes": "uuid,date",
+      "definition_sha256": "50b4b863b755e14ebb3bd6d23cb82a5778910d181f2dc4c7ba60a4c0a4962319",
+      "input_index": 136,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "name": "private.weekly_source_check_only_query_rows_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "definition_sha256": "f115abf9c5a260f339623e40121a937dac41d8a716379a35f4b936ffc84041ab",
+      "input_index": 137,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "name": "private.weekly_source_check_only_issue_filter_keys_v1",
+      "inputTypes": "text,jsonb",
+      "definition_sha256": "d762b216e1a0aefbc1fc3d6ab86ec4f28622d73eecb42bc06f960ee50575defc",
+      "input_index": 138,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "name": "private.weekly_source_check_only_query_groups_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "definition_sha256": "9d0358f439dec88abdb7264ad7cd4709ea88739a4bdc442ee764f1ab0c410fd0",
+      "input_index": 139,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)",
+      "name": "private.weekly_source_checklist_native_initial_certificate_core_v1",
+      "inputTypes": "uuid,boolean",
+      "definition_sha256": "ef5ce9d473fd80c9134d23e7c32305af70f36d0c06618d10868b039615c10af1",
+      "input_index": 140,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)",
+      "name": "private.weekly_source_checklist_native_initial_bound_assert_core_v1",
+      "inputTypes": "uuid,boolean",
+      "definition_sha256": "318887be00ac528a3dd988682c264ddacde15974d112b82aeac12faa754f0226",
+      "input_index": 141,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)",
+      "name": "private.weekly_source_checklist_native_bound_snapshot_core_v1",
+      "inputTypes": "uuid,bigint,boolean",
+      "definition_sha256": "781219bb45111ecf0afa14fb08b11195b06cbd4f56b45a26b54249492162012d",
+      "input_index": 142,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)",
+      "name": "private.weekly_source_checklist_native_members_core_v1",
+      "inputTypes": "uuid,uuid,boolean",
+      "definition_sha256": "520cc261070a9eaa0291ce647adc5dcff9ed5153846b5a8cde3d8dbbfe063444",
+      "input_index": 143,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)",
+      "name": "private.weekly_source_invoice_hold_release_context_core_v1",
+      "inputTypes": "jsonb,boolean",
+      "definition_sha256": "3184b1d9174d2e2ade22d7205dafc6b5a1bc17d181626ffe158f71785cedd5b6",
+      "input_index": 144,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)",
+      "name": "private.weekly_source_invoice_hold_first_invoice_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "237e2f0c7a36f54e22b5179efe4d5f5d2cc4c9fd5bf6ee33b322ac0e828a3683",
+      "input_index": 145,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)",
+      "name": "private.weekly_source_invoice_unreleased_vat_fit_movements_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "bfa7db3ed86c72be0ba31bdef7cf6faf3005bf03a546e084d60c4da2cbf74f86",
+      "input_index": 146,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_work_period_proof_v1(uuid,uuid,date)",
+      "name": "private.bpay_next_work_period_proof_v1",
+      "inputTypes": "uuid,uuid,date",
+      "definition_sha256": "2f244ca84d1551a899d5a9461e9eba6afe5557794c2138101cd6d19a6fea131c",
+      "input_index": 147,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)",
+      "name": "private.weekly_source_checklist_legacy_pay_state_core_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "ca9d19c90c5d8724140eb536a10f3eabd24f2b70353dc6a8110b7e3b76abc6d2",
+      "input_index": 148,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_legacy_read_frame_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "4f874a5f4df09c56568b9657563ba87635471f235cc476ffa9e6cffdf974d11c",
+      "input_index": 149,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_timesheet_hold_facts_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "22135444210ec820825d6be42189271720057a939a45fc3bf206b382eb496f70",
+      "input_index": 150,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_information_hold_facts_v1",
+      "inputTypes": "jsonb,jsonb,uuid",
+      "definition_sha256": "ad26d8941e0bf9b37668853261ebe2662237507327c7def7a1218d41f2c901a3",
+      "input_index": 151,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_ordinary_next_hold_money_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "f8143a5dedabf8a244f809b2be49e3d18e4671276c7791f37e1cac0d0363884a",
+      "input_index": 152,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_source_shift_query_money_v1",
+      "inputTypes": "uuid,uuid,jsonb,uuid",
+      "definition_sha256": "c9f6c1b0c6d95899e566bf1cca618633080ec284b097d422eac80d50c81d846f",
+      "input_index": 153,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)",
+      "name": "private.weekly_source_checklist_source_invoice_block_items_v1",
+      "inputTypes": "jsonb,uuid",
+      "definition_sha256": "e89835919efed2abae2a2788094a2327df435cc9366ede7855a3fcc52fd6851e",
+      "input_index": 154,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)",
+      "name": "private.weekly_source_checklist_source_invoice_decision_items_v1",
+      "inputTypes": "jsonb,uuid",
+      "definition_sha256": "35016299cea0ba196f1c810aca36930691526bff02656c9b5625eb3187f3caed",
+      "input_index": 155,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_process_publication_v1(uuid)",
+      "name": "private.weekly_source_checklist_process_publication_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "779063cc774c2248efd88fe08ef20c6a357013e299d3061e4ed9de6920ea3b5c",
+      "input_index": 156,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_process_v1(uuid,uuid)",
+      "name": "private.weekly_source_checklist_process_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "f44d30496303d8ba7d49330b83f39a79496367a7ed3d9c12290f3aff2b3fc737",
+      "input_index": 157,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)",
+      "name": "private.weekly_source_checklist_page_v1",
+      "inputTypes": "jsonb,jsonb,uuid,text,text,text",
+      "definition_sha256": "602620cd3875d8fb2cc77dbb771084a3d0cae05e68c4d069c3679d0f1be81237",
+      "input_index": 158,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_office_tracker_v1(uuid,uuid)",
+      "name": "private.weekly_source_office_tracker_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "acc75c15bedf412dbfe72d1d0e5d08ff609e7646f17572a6142ffa8dc7faef97",
+      "input_index": 159,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "name": "private.weekly_source_healthroster_checklist_leaf_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "c9a0cc54135738f33e871034cc154e79cc8ed5700c25c4b5f0d4599900da952c",
+      "input_index": 160,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "name": "private.weekly_source_check_only_candidate_reminder_subject_v1",
+      "inputTypes": "jsonb,text,uuid",
+      "definition_sha256": "ed1dc759462ffab59e1c5d231a37b3f936028712f1dc4f94432ea62f3ae21d2c",
+      "input_index": 161,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "name": "private.weekly_source_check_only_candidate_reminder_context_v1",
+      "inputTypes": "uuid,jsonb,text",
+      "definition_sha256": "29844609a04bf348655277a3c78065645e7fa6c2dfd1bbb32a6709e215a40692",
+      "input_index": 162,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)",
+      "name": "public.weekly_source_check_only_candidate_reminder_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "1ed9546f75ac4bdef03e8a780f5fb596835314a10e88f334f9d9ef0ecae44ff6",
+      "input_index": 163,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)",
+      "name": "private.weekly_source_checklist_submission_cycle_admit_v1",
+      "inputTypes": "uuid,text,uuid",
+      "definition_sha256": "c06fe4d00108f0db783d54e0401e1216867a12860a1e58c60abcdb26e2017304",
+      "input_index": 164,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)",
+      "name": "private._weekly_source_settings_ensure_open_cycle_v1",
+      "inputTypes": "uuid,uuid,bytea,uuid",
+      "definition_sha256": "ca8b0cc21411ea475c7cbf4c491d0eb59a22f5686a8d75754c737eb484980550",
+      "input_index": 165,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)",
+      "name": "private.weekly_source_checklist_submission_cycle_prepare_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "3966dba008aaf551e36627de8128282a7f7036ffaa9951a212055d9bc67c18e3",
+      "input_index": 166,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)",
+      "name": "public.weekly_source_submitted_timesheet_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "bb4250f0a8d19f0e54610f79a46bc8e4a7eb9fb3edeb96f59eb2abb0d1585263",
+      "input_index": 167,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)",
+      "name": "private.weekly_source_checklist_historical_submission_descriptor_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "2f01ada9c32651ebb7e363dc231b62b2105b1e78d0bb54d39e38ecdf5f95a13d",
+      "input_index": 168,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_checklist_submission_manifest_v1(jsonb)",
+      "name": "public.weekly_source_checklist_submission_manifest_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "4e818404c6868fe9e7533ac318bed62af8e422d8c150bdc709197c98d58e4035",
+      "input_index": 169,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)",
+      "name": "public.weekly_source_checklist_historical_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "49cd50a88f97b6cfdd15f17f9360e6369ffd5875d79d7d276ac4d29e2fe76fc2",
+      "input_index": 170,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_checklist_v1(jsonb)",
+      "name": "public.weekly_source_checklist_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "320aa72099dbf8626b45a2d0ed79c2a4894f10bf033216e8c7957535020540eb",
+      "input_index": 171,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "name": "private.bpay_next_workbench_refresh_work_core_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "01c88e386fbc2737c2833b6ac7692501439894091f229b0c410653185b5dfe41",
+      "input_index": 172,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+      "name": "private.bpay_next_append_work_skip_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "213279b58c7dfa8e28d7d477ebb81fcea1a4cc3eb11aa514586cc65eea7162bf",
+      "input_index": 173,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "name": "private.bpay_next_create_preparation_v1",
+      "inputTypes": "uuid,uuid,date,jsonb,uuid,jsonb",
+      "definition_sha256": "dc901f193fcb33f0800e3f06886095fe0b5599debcbdc6233dcf43eab4799160",
+      "input_index": 174,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+      "name": "private.bpay_next_bound_source_snapshot_v1",
+      "inputTypes": "uuid,bigint",
+      "definition_sha256": "4fa6cbafed4dec3493321a83ec5ce0fbd7eb8713eb8269359d97b178b622ed5e",
+      "input_index": 175,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "name": "private.bpay_next_initial_tsfin_certificate_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "4b773184d8fed57e7e659642c4f4b0e40e2e402b3dda63205781816150b0be66",
+      "input_index": 176,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+      "name": "private.bpay_next_initial_tsfin_bound_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "9510a9d963e5296f1a6161383a6e6e375999760b434c6bbd658fa2cfbc029ba7",
+      "input_index": 177,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "name": "private.bpay_next_workbench_work_members_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "952aa86f5de8f4342ab1ebd6a1cf096ea712f5b93f0606ec84951707a2bdde44",
+      "input_index": 178,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)",
+      "name": "public.weekly_source_invoice_hold_release_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "be4e5742c896847956f6ba80ecd74c4edd80f8b78cda7a4b9c61ce731c119761",
+      "input_index": 179,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)",
+      "name": "private.candidate_notification_visible_v1",
+      "inputTypes": "public.candidate_notifications,timestamp with time zone,text",
+      "definition_sha256": "2b76776b7695505643e4991ce1629e9ed36671beb96484efd73c04e83b037861",
+      "input_index": 182,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_legacy_hold_review_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "definition_sha256": "e632a4359006ee96ad31d60f7c02ad962419e5e01a953066c7cfe92215b9f798",
+      "input_index": 183,
+      "layer": "NATIVE"
+    },
+    {
+      "id": "public.weekly_source_office_authorise_scope_v1(jsonb)",
+      "name": "public.weekly_source_office_authorise_scope_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "6b5ea6e2fa8350155e7e10af9d4da443159e6ccdcac0a6e20e00fdf97e864462",
+      "input_index": 190,
+      "layer": "REPORT_ROUTING_PROTECTION"
+    },
+    {
+      "id": "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_protected_match_candidates_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "a8bdf59409a53554f3b0179453557d8806bf21b458944708e7ebeb905e73e9e7",
+      "input_index": 191,
+      "layer": "REPORT_ROUTING_PROTECTION"
+    },
+    {
+      "id": "private.weekly_source_check_only_protection_identity_guard_v1()",
+      "name": "private.weekly_source_check_only_protection_identity_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "be153df28b87843e4f6381d77afdbdb3b221b7ceb1a722364b0dc0b30929a66c",
+      "input_index": 192,
+      "layer": "REPORT_ROUTING_PROTECTION"
+    }
+  ],
+  "one_time_money": [
+    {
+      "input_index": 0,
+      "file": "one-time/00_00_complete_one_time_kept_decisions.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 1,
+      "file": "one-time/01_04_cancel_exclusion_schema.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 2,
+      "file": "one-time/02_01_complete_reserved_namespace_guard.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 59,
+      "file": "one-time/03_00_complete_paid_choice_fields.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 60,
+      "file": "one-time/04_08_complete_snapshot_origin_constraints.sqlinc",
+      "atomic": true
+    }
+  ],
+  "one_time_Agency": {
+    "commit": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+    "file": "docs/healthroster-build/proposals/agency-once-only-current-module-20261015/03_complete_once_only_agency_schemas.sqlinc"
+  },
+  "one_time_Agency_protection": {
+    "commit": "4822cfc767fda9a57a0de34b9b9beee764097a14",
+    "file": "docs/healthroster-build/proposals/agency-routing-protection-current-source-forward-20261015/migration/01_same_planned_check_only_protection_store.sqlinc"
+  },
+  "one_time_native_hold_release": "Select the Native lane complete genuine schema prerequisite successor before ANY registration trigger or current hold-release consumer; current root42P01 trial is not passed.",
+  "final_repeatable_order": [
+    "05_complete_current_money_report_native_runtime.sqlinc",
+    "07_complete_current_agency_registration_and_guards.sqlinc",
+    "02_complete_money_foundation_guards.sqlinc",
+    "04_complete_current_registry_union.sqlinc",
+    "06_complete_current_union_acl.sqlinc"
+  ],
+  "component_runtime_files_EXCLUDED": [
+    "01_complete_money_foundation_runtime.sqlinc",
+    "03_selected_owner_acl_and_schema_reload.sqlinc",
+    "Report94/97 complete runtime",
+    "Native50/48 complete runtime include roots",
+    "older Money71 complete module"
+  ],
+  "shared_Candidate_owners": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+  "Native_D10_current_successor_selected": true,
+  "Money_Report_OFF_six_identical_deduplicated": true,
+  "Agency_nonfunction_statements_preserved": 84,
+  "exact_current_Worker_complete_union": "CURRENT_RUNTIME_COMPLETE_REVERSES.json",
+  "preserve_current_index_and_contract_module": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+  "Office_outer_wrapper": "Root selects reviewed current Native finite wrapper after the selected complete Report/D10+Money inner public workspace once; no older public workspace may run after the wrapper.",
+  "global_registry_final_current_rows_preserved": true,
+  "required_final_native_API_role_census_Office_contract_and_business_gates_unrun": true
+}

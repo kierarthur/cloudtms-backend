@@ -1,0 +1,97 @@
+-- Execute inside the one-time atomic migration. Hold the native table lock
+-- through empty-namespace admission and all reserved guard/index creation.
+lock table public.audit_events in share row exclusive mode;
+-- One-time prerequisite, never a repeatable reset/backfill. A pre-existing
+-- generic audit label cannot become native protected preparation evidence.
+do $source_missing_accept_namespace$
+begin
+  if exists(select 1 from public.audit_events audit where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED') then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_RESERVED_NAMESPACE_NOT_EMPTY' using errcode='55000';
+  end if;
+end;
+$source_missing_accept_namespace$;
+
+-- Reserved typed audit evidence in the existing audit authority. This is not
+-- another decision/financial store and no generic route may manufacture it.
+create or replace function private.weekly_source_missing_accept_proof_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_frame jsonb;v_stack text;v_proof jsonb;v_actor uuid;v_canonical jsonb;
+begin
+  if tg_op='TRUNCATE' then
+    if exists(select 1 from public.audit_events audit where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED') then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_IMMUTABLE' using errcode='55000';end if;
+    return null;
+  elsif tg_op='UPDATE' then
+    if old.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' or new.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_IMMUTABLE' using errcode='55000';end if;
+    return new;
+  elsif tg_op='DELETE' then
+    if old.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' then
+      raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_IMMUTABLE' using errcode='55000';end if;
+    return old;
+  elsif tg_op is distinct from 'INSERT' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_OPERATION_INVALID' using errcode='55000';
+  end if;
+  if new.action is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' then return new;end if;
+  get diagnostics v_stack=pg_context;
+  if v_stack !~* 'PL/pgSQL function (private[.])?weekly_source_missing_accept_prepare_v1[(]jsonb[)]'
+    or coalesce(current_setting('request.jwt.claim.role',true),
+      nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_NATIVE_OWNER_REQUIRED' using errcode='42501';end if;
+  begin v_frame:=nullif(current_setting('cloudtms.weekly_source_missing_accept_prepare_frame',true),'')::jsonb;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_FRAME_INVALID' using errcode='55000';end;
+  v_proof:=new.after_json;v_actor:=new.actor_user_id;
+  if v_frame is null or v_frame->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_FRAME_V1'
+    or v_frame->>'actor_user_id' is distinct from v_actor::text
+    or v_frame->>'owner_transaction_id' is distinct from pg_current_xact_id()::text
+    or v_frame->>'owner_backend_pid' is distinct from pg_backend_pid()::text
+    or v_frame->'proof' is distinct from v_proof
+    or v_frame->>'frame_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_FRAME_V1',v_frame-'frame_sha256'),'hex')
+    or v_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1'
+    or v_proof->>'actor_user_id' is distinct from v_actor::text
+    or v_proof->>'owner_transaction_id' is distinct from pg_current_xact_id()::text
+    or v_proof->>'owner_backend_pid' is distinct from pg_backend_pid()::text
+    or v_proof->>'proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',v_proof-'proof_sha256'),'hex')
+    or new.object_type is distinct from 'weekly_source_entitlement_decision_bundles'
+    or new.object_id_text is distinct from v_proof->>'decision_bundle_id'
+    or new.reason is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE'
+    or new.before_json is distinct from v_proof#>'{inputs,current_inventory}'
+    or v_proof#>>'{native_lock_result,ok}' is distinct from 'true'
+    or v_proof#>>'{native_lock_result,gate}' is distinct from 'GRANTED' then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_FRAME_UNBOUND' using errcode='55000';end if;
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(v_proof->'canonical_proposal','IMMEDIATE',null::uuid);
+  if v_canonical is distinct from v_proof->'canonical_proposal'
+    or v_canonical->>'decision_bundle_id' is distinct from v_proof->>'decision_bundle_id'
+    or v_canonical->>'bundle_revision' is distinct from v_proof->>'bundle_revision'
+    or v_canonical#>>'{member_root_ids,0}' is distinct from v_proof->>'root_timesheet_id'
+    or v_canonical#>'{financial_request,member_entitlements,0,components}' is distinct from v_proof#>'{inputs,after_components}'
+    or v_canonical#>>'{financial_request,source_revision,final_revision_id}' is distinct from v_proof#>>'{inputs,target_final_revision_id}'
+    or not exists(select 1 from public.weekly_source_entitlement_decision_bundles bundle
+      where bundle.decision_bundle_id=(v_proof->>'decision_bundle_id')::uuid
+        and bundle.bundle_revision=(v_proof->>'bundle_revision')::bigint and bundle.state='PROPOSED'
+        and bundle.decided_by_user_id=v_actor and bundle.source_root_timesheet_id=(v_proof->>'root_timesheet_id')::uuid
+        and bundle.request_digest=private.weekly_source_publication_request_digest_v1(v_canonical)) then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_UNBOUND' using errcode='55000';end if;
+  return new;
+end;
+$function$;
+alter function private.weekly_source_missing_accept_proof_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_missing_accept_proof_guard_v1() from public,anon,authenticated,service_role;
+create or replace trigger weekly_source_missing_accept_proof_insert_guard before insert on public.audit_events
+for each row execute function private.weekly_source_missing_accept_proof_guard_v1();
+create or replace trigger weekly_source_missing_accept_proof_update_guard before update on public.audit_events
+for each row execute function private.weekly_source_missing_accept_proof_guard_v1();
+create or replace trigger weekly_source_missing_accept_proof_delete_guard before delete on public.audit_events
+for each row execute function private.weekly_source_missing_accept_proof_guard_v1();
+create or replace trigger weekly_source_missing_accept_proof_truncate_guard before truncate on public.audit_events
+for each statement execute function private.weekly_source_missing_accept_proof_guard_v1();
+-- Exactly the finite native preparation purpose. Other audit idempotency
+-- domains and unrelated audit rows remain untouched.
+create unique index if not exists weekly_source_missing_accept_prepare_key_uq
+on public.audit_events((after_json->>'idempotency_key'))
+where action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED';

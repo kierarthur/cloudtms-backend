@@ -1,0 +1,39 @@
+create or replace trigger zzzz_weekly_source_keep_ack_native_guard
+  before insert on public.audit_events for each row
+  when (new.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED')
+  execute function private.weekly_source_keep_ack_native_guard_v1();
+
+create or replace trigger zzzz_weekly_source_keep_ack_update_guard
+  before update on public.audit_events for each row
+  when (old.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED' or new.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED')
+  execute function private.weekly_source_keep_ack_native_guard_v1();
+
+create or replace trigger zzzz_weekly_source_keep_ack_delete_guard
+  before delete on public.audit_events for each row
+  when (old.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED')
+  execute function private.weekly_source_keep_ack_native_guard_v1();
+
+create or replace trigger zzzz_weekly_source_missing_cancel_native_insert_guard
+  after insert on public.weekly_source_state_transitions for each row
+  execute function private.weekly_source_missing_cancel_native_insert_guard_v1();
+
+create or replace trigger weekly_source_missing_revision_census_update_guard
+before update on public.weekly_source_final_revisions for each row
+execute function private.weekly_source_missing_revision_census_guard_v1();
+
+create or replace trigger weekly_source_missing_revision_census_delete_guard
+before delete on public.weekly_source_final_revisions for each row
+execute function private.weekly_source_missing_revision_census_guard_v1();
+
+create or replace trigger weekly_source_missing_revision_census_truncate_guard
+before truncate on public.weekly_source_final_revisions for each statement
+execute function private.weekly_source_missing_revision_census_guard_v1();
+
+create or replace trigger weekly_source_paid_choice_revision_update_guard
+before update on public.weekly_source_final_revisions for each row execute function private.weekly_source_paid_choice_revision_guard_v1();
+
+create or replace trigger weekly_source_paid_choice_revision_delete_guard
+before delete on public.weekly_source_final_revisions for each row execute function private.weekly_source_paid_choice_revision_guard_v1();
+
+create or replace trigger weekly_source_paid_choice_revision_truncate_guard
+before truncate on public.weekly_source_final_revisions for each statement execute function private.weekly_source_paid_choice_revision_guard_v1();

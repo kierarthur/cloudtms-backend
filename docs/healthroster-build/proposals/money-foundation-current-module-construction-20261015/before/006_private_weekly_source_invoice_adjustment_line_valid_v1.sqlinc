@@ -1,0 +1,34 @@
+create or replace function private.weekly_source_invoice_adjustment_line_valid_v1(p_invoice_line_id uuid,p_invoice_id uuid)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare line public.invoice_lines%rowtype; v_authority jsonb; v_actual jsonb; v_ids uuid[]; v_meta jsonb;
+begin
+  select * into line from public.invoice_lines where id=p_invoice_line_id and invoice_id=p_invoice_id;
+  if not found or line.timesheet_id is not null or line.booking_id is not null or line.source_key not like 'ADJ:%'
+    or line.meta_json->>'line_type' is distinct from 'ADJUSTMENT' or line.total_pay_ex_vat is distinct from 0
+    or line.total_charge_ex_vat is null or line.total_charge_ex_vat>=0 or line.margin_ex_vat is distinct from line.total_charge_ex_vat
+    or (line.hours_day,line.hours_night,line.hours_sat,line.hours_sun,line.hours_bh) is distinct from (0::numeric,0::numeric,0::numeric,0::numeric,0::numeric)
+    or (line.pay_day,line.pay_night,line.pay_sat,line.pay_sun,line.pay_bh,line.charge_day,line.charge_night,line.charge_sat,line.charge_sun,line.charge_bh)
+      is distinct from (null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric)
+    or line.vat_amount is null or line.vat_rate_pct is null
+    or line.total_inc_vat is distinct from round(line.total_charge_ex_vat+line.vat_amount,2)
+    or line.meta_json ? 'credited_work_event_id' then return false; end if;
+  v_authority:=line.meta_json->'weekly_source_adjustment_authority';
+  if jsonb_typeof(v_authority) is distinct from 'object' or jsonb_typeof(v_authority->'binding_ids') is distinct from 'array' then return false; end if;
+  select array_agg(value::uuid order by value::uuid) into v_ids from jsonb_array_elements_text(v_authority->'binding_ids') value;
+  v_actual:=private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,v_ids);
+  v_meta:=line.meta_json;
+  if exists(select 1 from jsonb_object_keys(v_meta) k where k not in(
+    'line_type','client_token','description','amount_ex_vat','vat_rate_pct','vat_amount','vat_chargeable',
+    'vat_overridden','weekly_source_adjustment_authority')) then return false; end if;
+  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority
+    and line.vat_rate_pct=(v_actual->>'vat_rate_pct')::numeric
+    and line.source_key='ADJ:'||(v_meta->>'client_token') and line.description=v_meta->>'description'
+    and line.total_charge_ex_vat=(v_meta->>'amount_ex_vat')::numeric and line.vat_amount=(v_meta->>'vat_amount')::numeric
+    and jsonb_typeof(v_meta->'vat_overridden')='boolean'
+    and jsonb_typeof(v_meta->'vat_chargeable')='boolean'
+    and (v_meta->>'vat_chargeable')::boolean=(line.vat_rate_pct<>0)
+    and ((v_meta->>'vat_overridden')::boolean or line.vat_amount=public._inv_round2(line.total_charge_ex_vat*line.vat_rate_pct/100)),false);
+exception when invalid_text_representation or numeric_value_out_of_range or invalid_parameter_value then return false;
+end;
+$function$;

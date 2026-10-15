@@ -1,0 +1,1147 @@
+{
+  "source_only": true,
+  "pins": {
+    "root": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+    "runtime_root": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+    "money": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+    "foundation": "228268c9c834faada1fea61a079e555e4dbba093",
+    "report": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+    "native": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+    "shared": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+    "report_successor": "4822cfc767fda9a57a0de34b9b9beee764097a14"
+  },
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "full_primary_complete": false,
+  "foundation_full_owner_selection_not_helper_subset": true,
+  "one_time_atomic_files_once_only": [
+    {
+      "input_index": 0,
+      "file": "one-time/00_00_complete_one_time_kept_decisions.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 1,
+      "file": "one-time/01_04_cancel_exclusion_schema.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 2,
+      "file": "one-time/02_01_complete_reserved_namespace_guard.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 59,
+      "file": "one-time/03_00_complete_paid_choice_fields.sqlinc",
+      "atomic": true
+    },
+    {
+      "input_index": 60,
+      "file": "one-time/04_08_complete_snapshot_origin_constraints.sqlinc",
+      "atomic": true
+    }
+  ],
+  "repeatable_files_once_only": [
+    "01_complete_money_foundation_runtime.sqlinc",
+    "02_complete_money_foundation_guards.sqlinc",
+    "03_selected_owner_acl_and_schema_reload.sqlinc"
+  ],
+  "current_registry_union_after_all_external_owners": "04_complete_current_registry_union.sqlinc",
+  "selected_complete_owners_once_only": [
+    {
+      "name": "private.weekly_source_identical_rekey_prior_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_identical_rekey_prior_v1(uuid)",
+      "input_index": 54,
+      "layer": "FOUNDATION",
+      "definition_sha256": "859a6d3057f0becf6651e73475f3ec79a8a822ac14d393c3b7d47e5dc6b20f15",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_upload_context_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "input_index": 69,
+      "layer": "MONEY",
+      "definition_sha256": "43668bb2f85b3a0f9102fe3439bcdc0cbb91beb207eb691a25d3ecc821320008",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "input_index": 70,
+      "layer": "MONEY",
+      "definition_sha256": "af0dcb77e2ae4abe0a62ad6f5c474f72be21e7d32f7be886db5994e95d2ae19d",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_kept_as_paid_facts_v1",
+      "inputTypes": "uuid,text",
+      "id": "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+      "input_index": 20,
+      "layer": "FOUNDATION",
+      "definition_sha256": "77c57c74390f3353f4b7478faceba58e1119b95e0b1a560de521ef4e0f9cfca7",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_kept_as_paid_context_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "input_index": 63,
+      "layer": "MONEY",
+      "definition_sha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_keep_as_paid_decide_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)",
+      "input_index": 8,
+      "layer": "FOUNDATION",
+      "definition_sha256": "e9204278256649abea25e2c6a65743ef22ebb1b0b3d7bef2297b8b569eecf624",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_credited_targets_admit_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "id": "private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)",
+      "input_index": 14,
+      "layer": "FOUNDATION",
+      "definition_sha256": "cd9428188dbc64ba593b217b3bb9dd98e0d322e38611a04ea7a2d5a7d990882e",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.invoice_apply_edits",
+      "inputTypes": "uuid,jsonb,uuid",
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "input_index": 15,
+      "layer": "FOUNDATION",
+      "definition_sha256": "a93ea33136b2163bf234a8f5920c6cf46a1c21ee2838e86c74273848350fbd14",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_adjustments_apply_v1",
+      "inputTypes": "uuid,jsonb,uuid",
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "input_index": 16,
+      "layer": "FOUNDATION",
+      "definition_sha256": "7affd6db823b60dedd95906a2466f0af32a6ea69e759bf97a6f6faceef2160e9",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_adjustment_line_valid_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "input_index": 12,
+      "layer": "FOUNDATION",
+      "definition_sha256": "f96f300828e3c1ea123c2756cb86aa6ad4acabdaaef16f75cd046ca9607834ca",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_keep_ack_native_guard_v1",
+      "inputTypes": "",
+      "id": "private.weekly_source_keep_ack_native_guard_v1()",
+      "input_index": 17,
+      "layer": "FOUNDATION",
+      "definition_sha256": "f605173a01e313887071c9f51eacbe70a7a1b681d612eb2b1d4cb0b8d6de5417",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_kept_as_paid_facts_for_publication_v1",
+      "inputTypes": "uuid,text,uuid",
+      "id": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+      "input_index": 20,
+      "layer": "FOUNDATION",
+      "definition_sha256": "4543671e94d7fd1279a5aaf549caa20397f30e8c8fc8f9201622bafd285c264a",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_kept_as_paid_context_for_publication_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "input_index": 62,
+      "layer": "MONEY",
+      "definition_sha256": "af606e111da8b6232890cc3b04b16367085ef1e11deee33855d476ce9ed1ab7e",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_snapshot_movement_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "input_index": 22,
+      "layer": "FOUNDATION",
+      "definition_sha256": "18a5cac5a29e5e18d913a70a870d7f5ad1de03f6300e390744e802316145fc5d",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_cancel_basis_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+      "input_index": 47,
+      "layer": "FOUNDATION",
+      "definition_sha256": "cfb5f905742701cda1e14cb4a538080ef1f277210d22484c34a4aeecdf226098",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_finalisation_roots_v1",
+      "inputTypes": "uuid,integer,uuid,uuid,uuid,date,date",
+      "id": "private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "input_index": 24,
+      "layer": "FOUNDATION",
+      "definition_sha256": "847a0dd09838e33fd7ce829c09c1380d35ae243098d4f44aaedbba55786a25bc",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_cancel_transition_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "input_index": 25,
+      "layer": "FOUNDATION",
+      "definition_sha256": "b0f1939da34fc99da209535e605893f73734777b73839fa47acc33ba962624c6",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_cancel_native_insert_guard_v1",
+      "inputTypes": "",
+      "id": "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+      "input_index": 26,
+      "layer": "FOUNDATION",
+      "definition_sha256": "9c702c8e13bb2ab7c45b891799ebed9ce65edbadac3deb18f17a46405682d709",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_capture_transition_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "input_index": 87,
+      "layer": "MONEY",
+      "definition_sha256": "1bc3d3b8a544d2360e4f2619b264fe5afc68656cd07a1237c9fb8e2adbfadca8",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_current_selection_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)",
+      "input_index": 28,
+      "layer": "FOUNDATION",
+      "definition_sha256": "758152e7d3350133f663219c61671a4ce0ee540760918df62fa674d6995ba847",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean",
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "input_index": 29,
+      "layer": "FOUNDATION",
+      "definition_sha256": "89cfce7cb0fdc47bb2326b52eb8f19a33c1ac5182517975bd843737589ff0969",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_duty_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_invoice_duty_v1(uuid)",
+      "input_index": 31,
+      "layer": "FOUNDATION",
+      "definition_sha256": "d0d9e663e6aeaaee6cbf4725139bfb3de1401a7d174f2130c8972417a2b7931f",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_prepared_census_recheck_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+      "input_index": 48,
+      "layer": "FOUNDATION",
+      "definition_sha256": "f3df0daa23aaa68fd20fa1ed09423eddca38531cac8643cac9c43afaa107e826",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_correct_final_prepared_context_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "input_index": 93,
+      "layer": "MONEY",
+      "definition_sha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "input_index": 94,
+      "layer": "MONEY",
+      "definition_sha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "input_index": 95,
+      "layer": "MONEY",
+      "definition_sha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_correction_baseline_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+      "input_index": 40,
+      "layer": "FOUNDATION",
+      "definition_sha256": "20417e4400e38b6715a16f096f5372620ae34ab1eca66c5cdbcb9c6852c325a7",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_revision_census_guard_v1",
+      "inputTypes": "",
+      "id": "private.weekly_source_missing_revision_census_guard_v1()",
+      "input_index": 41,
+      "layer": "FOUNDATION",
+      "definition_sha256": "a8aecf1ff0a4b35f1528011172e29ef4770af9715f4bd7feaa38bda5d4d21e82",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_accept_inventory_inputs_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "id": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 42,
+      "layer": "FOUNDATION",
+      "definition_sha256": "bdf0f3c18477dfbc1176e7bbbf9de37df92d1a868a5bf7c62d333d09a9c07e69",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_accept_prepare_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "input_index": 43,
+      "layer": "FOUNDATION",
+      "definition_sha256": "50600262cd5a7fab72b5d6867657ef1c4ff3d383242f4fc14a5ab9dbf2ce3612",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_accept_proposal_v1",
+      "inputTypes": "uuid,bigint,uuid",
+      "id": "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+      "input_index": 44,
+      "layer": "FOUNDATION",
+      "definition_sha256": "70dc5e55f2b2d89e7060d4d1870f65071dd9edf9a957a6e11a072ebecffc6d97",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_accept_current_removal_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "id": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 53,
+      "layer": "FOUNDATION",
+      "definition_sha256": "ea094db787ddc67a30368c45e9b3cd58c1781ae4b6908c43b4296080e4250a40",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_later_change_decide_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "input_index": 46,
+      "layer": "FOUNDATION",
+      "definition_sha256": "35d76cceee276aa58638e19cb7b84b7f4835c91651e427dd30d72d5b8dbfe116",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_missing_accept_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+      "input_index": 50,
+      "layer": "FOUNDATION",
+      "definition_sha256": "db851b2b3e1dc05c28c84924f628be1f57e3d25aee87b56f9908eea50a603b05",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_missing_accept_context_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_missing_accept_context_v1(jsonb)",
+      "input_index": 51,
+      "layer": "FOUNDATION",
+      "definition_sha256": "9e0969a2806ef02a8559ca8fd72a23e6f024f8e1a5a3d2b7c1c8682a0c4be1de",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_missing_accept_head_chain_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "input_index": 52,
+      "layer": "FOUNDATION",
+      "definition_sha256": "74d14b510e661e84dde17d91a9ae9ca0afbf122e307447cafe5c73e7ca3b282a",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_known_source_key_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "input_index": 57,
+      "layer": "FOUNDATION",
+      "definition_sha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_work_event_payment_facts_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "input_index": 61,
+      "layer": "MONEY",
+      "definition_sha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_overlap_candidates_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 64,
+      "layer": "MONEY",
+      "definition_sha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_overlap_choice_admit_v1",
+      "inputTypes": "jsonb,jsonb",
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "input_index": 65,
+      "layer": "MONEY",
+      "definition_sha256": "94ced00a3c96bf194075e75804e176b8a1fc37360a32e2014708b187963a6775",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "input_index": 66,
+      "layer": "MONEY",
+      "definition_sha256": "080f545a2d854f0e63fa04da6bb4becb12889bffccb26626a1863c0b1a60a78b",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_overlap_choice_current_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "input_index": 67,
+      "layer": "MONEY",
+      "definition_sha256": "7c4dd3806fe515ac7ac55b4282aaea5d5b80f9333d4876f9747b1b06605c044a",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_overlap_projection_lock_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "input_index": 68,
+      "layer": "MONEY",
+      "definition_sha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean,text",
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "input_index": 71,
+      "layer": "MONEY",
+      "definition_sha256": "f8b82163a56af483e30e4d1a03f31df124bb97abc6073fe473374ee632035e45",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_choice_revision_guard_v1",
+      "inputTypes": "",
+      "id": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "input_index": 72,
+      "layer": "MONEY",
+      "definition_sha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_invoice_movement_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "input_index": 73,
+      "layer": "MONEY",
+      "definition_sha256": "51db47d57c908e6da251e7d457dc5e30a833dbb2371626455ea4c969c2e55bac",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "input_index": 74,
+      "layer": "MONEY",
+      "definition_sha256": "68045b8b6b0323b2ce115ee510e4b67b6c4feb1f0bf0f70e5e1ce33fe1a4c37c",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_billing_movement_hash_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "input_index": 75,
+      "layer": "MONEY",
+      "definition_sha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_movement_window_id_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "input_index": 76,
+      "layer": "MONEY",
+      "definition_sha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_source_amount_movement_valid_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "input_index": 77,
+      "layer": "MONEY",
+      "definition_sha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_invoice_admit_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "input_index": 78,
+      "layer": "MONEY",
+      "definition_sha256": "98ed85cdacec920cc52830d1abb54880ebc0c4e554076f8b00a2a2bdc2e43b94",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_shift_on_self_bill_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "input_index": 79,
+      "layer": "MONEY",
+      "definition_sha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_source_units_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "input_index": 80,
+      "layer": "MONEY",
+      "definition_sha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_selected_source_witness_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "input_index": 81,
+      "layer": "MONEY",
+      "definition_sha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_finalisation_pay_open_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "input_index": 82,
+      "layer": "MONEY",
+      "definition_sha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "input_index": 83,
+      "layer": "MONEY",
+      "definition_sha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_overlap_current_snapshot_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,uuid,uuid[]",
+      "id": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "input_index": 84,
+      "layer": "MONEY",
+      "definition_sha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_retained_transition_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "input_index": 85,
+      "layer": "MONEY",
+      "definition_sha256": "66f4f50a76855da26d87ae0c6087dd5c964bc06a7fa1c3884148195e01fcdd0c",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_question_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "input_index": 86,
+      "layer": "MONEY",
+      "definition_sha256": "7246cae44d4a67b904efc12c08702d437b55583e3b341755b6df9c1070461c1b",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_fixed_expense_invoice_values_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "input_index": 88,
+      "layer": "MONEY",
+      "definition_sha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_finalisation_materialise_expense_invoice_v1",
+      "inputTypes": "uuid,uuid,text,uuid,uuid,uuid,uuid,text",
+      "id": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "input_index": 89,
+      "layer": "MONEY",
+      "definition_sha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "input_index": 90,
+      "layer": "MONEY",
+      "definition_sha256": "eed3f2fa8ec6bbf829019fab4fcf4c0cf0b7a862c6cdf5161639ea40816e745b",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_expense_invoice_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "input_index": 91,
+      "layer": "MONEY",
+      "definition_sha256": "90ab0047ebf8ed86f2588da1bb69cb506ef3214661424c8a2e5a4faf00f6f8ab",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_prepared_census_recheck_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "input_index": 92,
+      "layer": "MONEY",
+      "definition_sha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_current_expenses_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "input_index": 96,
+      "layer": "MONEY",
+      "definition_sha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_office_workspace_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "input_index": 97,
+      "layer": "MONEY",
+      "definition_sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_match_correction_scope_v1",
+      "inputTypes": "uuid,uuid,boolean",
+      "id": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "input_index": 98,
+      "layer": "MONEY",
+      "definition_sha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "input_index": 99,
+      "layer": "MONEY",
+      "definition_sha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_roster_prior_states_v1",
+      "inputTypes": "uuid,uuid,text,date",
+      "id": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+      "input_index": 100,
+      "layer": "MONEY",
+      "definition_sha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_legacy_signed_source_membership_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "id": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 101,
+      "layer": "MONEY",
+      "definition_sha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid",
+      "id": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "input_index": 102,
+      "layer": "MONEY",
+      "definition_sha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_off_rule_setup_shape_assert_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "input_index": 103,
+      "layer": "MONEY",
+      "definition_sha256": "ce5df0ccb6d5aecf67176ce14cc9a349cb100b0d3e22b3854f41594f86682403",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "inputTypes": "jsonb,uuid,jsonb",
+      "id": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "input_index": 104,
+      "layer": "MONEY",
+      "definition_sha256": "20d9dab05d326a76136fb35361f3c3e1dbe0d5f2de2bab5055e49decf76d4748",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_setup_atomic_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "input_index": 105,
+      "layer": "MONEY",
+      "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_execute_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "input_index": 105,
+      "layer": "MONEY",
+      "definition_sha256": "eb195c08dafb3c460b7467c3b743b52fbc2922e2caa9fd7755a8d9c2797a1dc1",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_transport_status_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "input_index": 106,
+      "layer": "MONEY",
+      "definition_sha256": "b000a53cdc7b6e5e7cdc243bcd8ab888eebd21c1dbb4767195f3b67a2fe981fc",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_paid_overlap_basis_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "input_index": 107,
+      "layer": "MONEY",
+      "definition_sha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_nhsp_magnitude_v1",
+      "inputTypes": "jsonb,jsonb,jsonb",
+      "id": "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+      "input_index": 108,
+      "layer": "MONEY",
+      "definition_sha256": "64841d3b64a0ba320486c2e0ba24acd45f0868851f56c72248a55ef098b7b4cc",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_capture_movement_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "input_index": 109,
+      "layer": "MONEY",
+      "definition_sha256": "2a556a35454ad88eede73ec65a59567b10c1967d77fee916e77cc861cca2b68c",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_negative_population_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "id": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 110,
+      "layer": "MONEY",
+      "definition_sha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_native_line_vat_v1",
+      "inputTypes": "bigint,boolean,numeric",
+      "id": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+      "input_index": 111,
+      "layer": "MONEY",
+      "definition_sha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_finalisation_insert_current_movement_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid",
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "input_index": 112,
+      "layer": "MONEY",
+      "definition_sha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_price_admission_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "input_index": 113,
+      "layer": "MONEY",
+      "definition_sha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_invoice_values_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "input_index": 114,
+      "layer": "MONEY",
+      "definition_sha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_negative_comparison_v1",
+      "inputTypes": "jsonb",
+      "id": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+      "input_index": 115,
+      "layer": "MONEY",
+      "definition_sha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_paid_choice_immutable_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "input_index": 116,
+      "layer": "MONEY",
+      "definition_sha256": "6f7aaf19538756f693219af349babe1fd09f578996cb8009454dfac54f9462d0",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_projection_lock_input_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "input_index": 117,
+      "layer": "MONEY",
+      "definition_sha256": "4127a77d0e86c76563c5a749c4a67fe05da33fb0a42fc7c9ad358454045fb4a2",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_projection_choice_recheck_v1",
+      "inputTypes": "jsonb,jsonb,uuid,uuid",
+      "id": "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+      "input_index": 118,
+      "layer": "MONEY",
+      "definition_sha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_invoice_only_vector_v1",
+      "inputTypes": "text,bigint",
+      "id": "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+      "input_index": 119,
+      "layer": "MONEY",
+      "definition_sha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_none_invoice_basis_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "input_index": 120,
+      "layer": "MONEY",
+      "definition_sha256": "b181f1b63458db135d44fa0fe17d751be36b07ef0514fa80bb6c72355d08e5a2",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_none_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "input_index": 121,
+      "layer": "MONEY",
+      "definition_sha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_publish_revision_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "input_index": 122,
+      "layer": "MONEY",
+      "definition_sha256": "74c1dd652a4a703a38913ff89bd62c13288d3de3c7b32c2da5db667847beea23",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "inputTypes": "jsonb",
+      "id": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "input_index": 123,
+      "layer": "MONEY",
+      "definition_sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_toggle_v1",
+      "inputTypes": "text,uuid,boolean",
+      "id": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "input_index": 124,
+      "layer": "MONEY",
+      "definition_sha256": "f7f2917f10469a2b422e17d40d696366f42a3fac705af2e71368287ea05bb30d",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_none_write_admit_v1",
+      "inputTypes": "jsonb,uuid",
+      "id": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "input_index": 125,
+      "layer": "MONEY",
+      "definition_sha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_capture_nhsp_none_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+      "input_index": 126,
+      "layer": "MONEY",
+      "definition_sha256": "6356f2864e7ae442ac68c08e4bcd58da44fbceed4cf766db898107e4c192ff77",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_nhsp_selected_pay_origin_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "id": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "input_index": 127,
+      "layer": "MONEY",
+      "definition_sha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_event_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "input_index": 128,
+      "layer": "MONEY",
+      "definition_sha256": "895443cbb1efa841154cb53a50f1c56c17d70404a423a6fbf1a93ef384f72ad8",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_scope_assert_v1",
+      "inputTypes": "jsonb,uuid,boolean",
+      "id": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+      "input_index": 130,
+      "layer": "MONEY",
+      "definition_sha256": "b14ef129a2f06168eccf227b15bdb9ab3de1967e7a461fa223e7baec40c8a7cc",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.bpay_next_source_current_inventory_v1",
+      "inputTypes": "uuid,integer,uuid,uuid,uuid,date,date",
+      "id": "private.bpay_next_source_current_inventory_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "input_index": 30,
+      "layer": "FOUNDATION",
+      "definition_sha256": "6b588dd59bc8eec60c6bed17d34c9e192716d2a94ab30c92426dcf3c39ec0452",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_active_movements_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "input_index": 129,
+      "layer": "MONEY",
+      "definition_sha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04",
+      "emitted_stage": "REPEATABLE"
+    },
+    {
+      "name": "private._weekly_source_immutable_record_guard_v1",
+      "inputTypes": "",
+      "id": "private._weekly_source_immutable_record_guard_v1()",
+      "input_index": 0,
+      "layer": "FOUNDATION_SCHEMA",
+      "definition_sha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d",
+      "emitted_stage": "ONE_TIME_ATOMIC"
+    },
+    {
+      "name": "private.weekly_source_missing_accept_proof_guard_v1",
+      "inputTypes": "",
+      "id": "private.weekly_source_missing_accept_proof_guard_v1()",
+      "input_index": 2,
+      "layer": "FOUNDATION_SCHEMA",
+      "definition_sha256": "0e684f33e5cd2af2bcbdcf842919c1bdfe4e801c625d3ef8fc5d758d977d0a72",
+      "emitted_stage": "ONE_TIME_ATOMIC"
+    }
+  ],
+  "foundation_declared_before_money": [
+    "private._weekly_source_immutable_record_guard_v1()",
+    "private.weekly_source_missing_accept_proof_guard_v1()",
+    "private.weekly_source_identical_rekey_prior_v1(uuid)",
+    "public.weekly_source_upload_context_v1(jsonb)",
+    "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+    "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+    "public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)",
+    "private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)",
+    "public.invoice_apply_edits(uuid,jsonb,uuid)",
+    "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "private.weekly_source_keep_ack_native_guard_v1()",
+    "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+    "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+    "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+    "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+    "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+    "private.bpay_next_source_current_capture_transition_v1(uuid)",
+    "private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)",
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+    "private.bpay_next_source_current_inventory_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+    "private.weekly_source_invoice_duty_v1(uuid)",
+    "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+    "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+    "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+    "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_revision_census_guard_v1()",
+    "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+    "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+    "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+    "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+    "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_missing_accept_context_v1(jsonb)",
+    "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+    "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)"
+  ],
+  "selected_trigger_count": 10,
+  "actual_service_signatures": [
+    "public.weekly_source_upload_context_v1(jsonb)",
+    "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+    "public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)",
+    "public.invoice_apply_edits(uuid,jsonb,uuid)",
+    "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+    "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+    "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_missing_accept_context_v1(jsonb)",
+    "public.weekly_source_office_recheck_begin_v1(jsonb)",
+    "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+    "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+    "public.weekly_source_office_workspace_v1(jsonb)",
+    "public.weekly_source_workspace_scopes_v1(jsonb)"
+  ],
+  "owner_only_private_signatures": [
+    "private.weekly_source_identical_rekey_prior_v1(uuid)",
+    "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+    "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+    "private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)",
+    "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "private.weekly_source_keep_ack_native_guard_v1()",
+    "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+    "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+    "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+    "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+    "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+    "private.bpay_next_source_current_capture_transition_v1(uuid)",
+    "private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)",
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+    "private.weekly_source_invoice_duty_v1(uuid)",
+    "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+    "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+    "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+    "private.weekly_source_missing_revision_census_guard_v1()",
+    "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+    "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+    "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+    "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+    "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+    "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+    "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+    "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+    "private.weekly_source_paid_choice_revision_guard_v1()",
+    "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+    "private.weekly_source_billing_movement_hash_v1(jsonb)",
+    "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+    "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+    "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+    "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+    "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+    "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+    "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+    "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+    "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+    "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+    "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+    "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+    "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+    "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+    "private.weekly_source_correct_final_office_preview_v1(uuid)",
+    "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+    "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+    "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+    "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+    "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+    "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+    "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+    "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+    "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+    "private.bpay_next_source_current_capture_movement_v1(uuid)",
+    "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+    "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+    "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+    "private.weekly_source_paid_choice_immutable_v1(uuid)",
+    "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+    "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+    "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+    "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+    "private.bpay_next_source_current_publish_revision_v1(uuid)",
+    "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+    "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+    "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+    "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+    "private.bpay_next_source_current_event_v1(uuid,uuid)",
+    "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+    "private.bpay_next_source_current_inventory_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+    "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+    "private._weekly_source_immutable_record_guard_v1()",
+    "private.weekly_source_missing_accept_proof_guard_v1()"
+  ],
+  "external_literal_names_not_in_selected_or_root_or_current_external_modules": [],
+  "cross_lane_overlaps": "CROSS_LANE_OWNER_CENSUS.json",
+  "provenance_is_not_install_order": true,
+  "excluded_duplicate_schema": "Keep04 is already in complete Keep00; Missing namespace proof guard emitted only in its atomic one-time page.",
+  "excluded_superseded_whole_owners": [
+    "Missing06 FIN4",
+    "Missing09 capture transition",
+    "Missing15/16/17 prepared owners",
+    "continuity01 removal",
+    "rekey00 known source key",
+    "older Money OFF whole bodies",
+    "Report04/05/07 admission whole predecessor",
+    "Native admission whole predecessor extraction"
+  ],
+  "Office": "Complete Report/D10+Money inner workspace selected once; final reviewed Native outer wrapper remains a separate root-owned exact finite composition. Do not reapply this public inner owner after that wrapper.",
+  "global_registry": "Exact complete root+Native+Report+Money registry union is emitted; preserve the Bank95/28 consumer files and original nested private service exceptions.",
+  "no_DB_or_application_claim": true
+}

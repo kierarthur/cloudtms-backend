@@ -1,0 +1,32 @@
+create or replace function private.bpay_next_source_current_inventory_v1(
+  p_upload uuid,p_generation integer,p_old_revision uuid,p_group uuid,p_client uuid,p_start date,p_end date
+) returns table(root_timesheet_id uuid) language sql stable security definer
+set search_path=pg_catalog,private,public as $f$
+  select cw.timesheet_id
+  from public.weekly_source_upload_rows u
+  join public.weekly_source_row_resolutions r on r.upload_row_id=u.id and r.generation=p_generation
+  join public.contracts c on c.id=r.contract_id
+  join public.contract_weeks cw on cw.contract_id=r.contract_id and cw.additional_seq=0
+    and cw.week_ending_date=u.work_date+((coalesce(c.week_ending_weekday_snapshot,0)-extract(dow from u.work_date)::integer+7)%7)
+  where u.upload_id=p_upload and cw.timesheet_id is not null
+  union
+  select s.root_timesheet_id from private.bpay_next_source_current_events e
+  join private.bpay_next_source_current_scopes s on s.id=e.scope_id
+  join public.weekly_work_events w on w.id=e.work_event_id
+  where e.source_group_id=p_group and e.client_id=p_client and e.work_date between p_start and p_end
+    and e.source_kind='HR' and (e.source_present or e.ambiguous)
+    and w.first_source_group_id=e.source_group_id and w.client_id=e.client_id and w.work_date=e.work_date
+  union
+  select s.root_timesheet_id from private.bpay_next_source_current_expenses e
+  join private.bpay_next_source_current_scopes s on s.id=e.scope_id
+  join public.weekly_work_events w on w.id=e.work_event_id
+  where e.source_group_id=p_group and e.client_id=p_client and e.work_date between p_start and p_end and e.positive
+    and w.first_source_group_id=e.source_group_id and w.client_id=e.client_id and w.work_date=e.work_date
+  union
+  select s.root_timesheet_id from private.bpay_next_source_current_observations o
+  join private.bpay_next_source_current_scopes s on s.id=o.scope_id
+  where o.final_revision_id=p_old_revision and o.active
+  union
+  select r.root_timesheet_id from public.weekly_source_ordinary_pay_projection_receipts r
+  where r.final_revision_id=p_old_revision and r.outcome in ('PREPARED_FOR_AUTHORISATION','PROPOSED')
+$f$;
