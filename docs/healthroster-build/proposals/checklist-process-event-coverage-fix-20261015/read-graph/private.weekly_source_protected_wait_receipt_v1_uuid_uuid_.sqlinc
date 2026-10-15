@@ -1,0 +1,89 @@
+create or replace function private.weekly_source_protected_wait_receipt_v1(
+  p_root_timesheet_id uuid,p_family_event_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_scope jsonb; v_latest public.weekly_exceptional_pay_family_events%rowtype;
+  v_generation uuid; v_count integer; v_approval_run uuid; v_invalid_wait_audit boolean;
+  v_local_count integer; v_c1_count integer; v_next_count integer; v_audit_count integer;
+  v_local jsonb; v_c1 jsonb; v_next jsonb; v_receipt jsonb; v_exception jsonb; v_unavailable boolean:=false;
+begin
+  v_scope:=private.weekly_source_pay_query_scope_v1(p_root_timesheet_id);
+  if v_scope is null or v_scope->>'target_family_id' is null then return null; end if;
+  select event.* into v_latest from public.weekly_exceptional_pay_family_events event
+  where event.id=p_family_event_id and event.family_id=(v_scope->>'target_family_id')::uuid
+    and event.state='WAIT' and not exists(select 1 from public.weekly_exceptional_pay_family_events newer
+      where newer.family_id=event.family_id and newer.durable_work_event_id=event.durable_work_event_id
+        and newer.event_sequence>event.event_sequence);
+  if not found then return null; end if;
+      -- Choose the actual approval's UNIQUE financial target-generation link.
+      -- The Wait owner also appends generation-less, money-neutral audit rows
+      -- for that same approval. They are not second payment publications, but
+      -- must be genuine unchanged-vector WAIT evidence, never arbitrary nulls.
+      -- A sibling publication may supersede the original financial generation;
+      -- today's current_generation is not the immutable approval's pin.
+      select count(*) filter (where t.financial_generation_id is not null),
+        (array_agg(t.financial_generation_id) filter (where t.financial_generation_id is not null))[1],
+        coalesce(bool_or(t.financial_generation_id is null and (
+          t.reason is distinct from 'WAIT'
+          or t.resulting_lifecycle_state is distinct from 'WAITING_SOURCE'
+          or t.actor_user_id is null
+          or t.complete_prior_family_vector_fingerprint is distinct from t.complete_next_family_vector_fingerprint
+          or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',
+            t.fixed_target_component_snapshot) is distinct from t.complete_next_family_vector_fingerprint
+          or jsonb_typeof(t.current_source_proposal_snapshot) is distinct from 'object'
+          or t.event_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_PROTECTED_TARGET_EVENT_V1',jsonb_build_object(
+              'family_id',t.family_id,'event_sequence',t.event_sequence,
+              'approval_id',t.approval_id,'generation_id',null,
+              'prior_vector_hash',encode(t.complete_prior_family_vector_fingerprint,'hex'),
+              'next_vector_hash',encode(t.complete_next_family_vector_fingerprint,'hex'),
+              'reason','WAIT','actor_user_id',t.actor_user_id))
+        )),false)
+        into v_count,v_generation,v_invalid_wait_audit
+        from public.weekly_exceptional_pay_target_events t
+        where t.family_id=v_latest.family_id and t.approval_id=v_latest.evidence_approval_id;
+      if v_latest.evidence_approval_id is null or v_count<>1 or v_generation is null or v_invalid_wait_audit then
+        v_unavailable:=true;
+      else
+        v_local:=private.weekly_source_pay_query_local_receipt_v1(p_root_timesheet_id,
+          v_latest.evidence_approval_id,v_generation);
+        v_c1:=private.weekly_source_pay_query_c1_receipt_v1(p_root_timesheet_id,
+          v_latest.evidence_approval_id,v_generation);
+        v_next:=private.weekly_source_pay_query_next_receipt_v1(p_root_timesheet_id,
+          v_latest.evidence_approval_id,v_generation);
+        v_count:=(v_local is not null)::integer+(v_c1 is not null)::integer+(v_next is not null)::integer;
+        select a.creation_orchestration_run_id into v_approval_run
+          from public.weekly_exceptional_payment_approvals a where a.id=v_latest.evidence_approval_id;
+        -- Count partial evidence too. A local RETIRED request is its audit row,
+        -- not a second transport lane; unrelated sibling/history stays excluded.
+        select count(*) into v_local_count
+          from private.weekly_source_local_protected_decision_receipts l
+          join public.weekly_exceptional_c1_publication_requests r on r.id=l.publication_request_id
+          where l.generation_id=v_generation or r.orchestration_run_id=v_approval_run;
+        select count(*),count(*) filter (where
+          (v_local is not null and r.id::text=v_local->>'publication_request_id' and r.state='RETIRED')
+          or (v_c1 is not null and r.id::text=v_c1->>'publication_request_id' and r.state='PUBLISHED'))
+          into v_c1_count,v_audit_count
+          from public.weekly_exceptional_c1_publication_requests r
+          where r.generation_id=v_generation or r.orchestration_run_id=v_approval_run;
+        select count(*) into v_next_count from private.bpay_next_protected_source_receipt r
+          where r.approval_id=v_latest.evidence_approval_id or r.generation_id=v_generation
+            or r.orchestration_run_id=v_approval_run;
+        if v_count<>1 or v_approval_run is null
+           or (v_local is not null and (v_local_count<>1 or v_c1_count<>1 or v_audit_count<>1 or v_next_count<>0))
+           or (v_c1 is not null and (v_local_count<>0 or v_c1_count<>1 or v_audit_count<>1 or v_next_count<>0))
+           or (v_next is not null and (v_local_count<>0 or v_c1_count<>0 or v_next_count<>1)) then v_unavailable:=true;
+        else
+          v_receipt:=coalesce(v_local,v_c1,v_next);
+          v_exception:=jsonb_build_object('family_id',v_latest.family_id,
+            'bound_version',v_scope->>'family_bound_version','event_sequence',v_latest.event_sequence::text,
+            'state','WAIT','evidence_approval_id',v_latest.evidence_approval_id,'accepted_receipt',v_receipt);
+        end if;
+      end if;
+
+  if v_unavailable then return null; end if;
+  return v_exception;
+end;
+$function$;

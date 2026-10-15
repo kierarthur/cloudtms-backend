@@ -1,0 +1,30 @@
+create table public.weekly_source_row_resolutions (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,
+  generation integer not null check (generation>=1),
+  candidate_id uuid references public.candidates(id) on delete restrict,
+  client_id uuid references public.clients(id) on delete restrict,
+  contract_id uuid references public.contracts(id) on delete restrict,
+  work_event_id uuid references public.weekly_work_events(id) on delete restrict,
+  paid_minutes integer check (paid_minutes is null or paid_minutes>=0),
+  rate_classifications_json jsonb check (rate_classifications_json is null or pg_catalog.jsonb_typeof(rate_classifications_json)='object'),
+  mapping_state text not null check (mapping_state in (
+    'RESOLVED','CANDIDATE_NOT_FOUND','CLIENT_NOT_FOUND','NO_ELIGIBLE_CONTRACT',
+    'AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED','SOURCE_ROW_BLOCKED'
+  )),
+  blocker_code text,
+  contract_selection_method text check (contract_selection_method is null or contract_selection_method in ('AUTO_UNIQUE','OFFICE_SELECTED','DURABLE_LINEAGE')),
+  work_event_match_kind text check (work_event_match_kind is null or work_event_match_kind in ('NEW_PROFILE_KEY','REUSED_PROFILE_KEY','NEW_SCHEDULE_TUPLE','EXACT_DURABLE_LINEAGE')),
+  work_event_match_fingerprint bytea check (work_event_match_fingerprint is null or pg_catalog.octet_length(work_event_match_fingerprint)=32),
+  qualification_profile_fingerprint bytea not null check (pg_catalog.octet_length(qualification_profile_fingerprint)=32),
+  qualifying_contract_count integer not null default 0 check (qualifying_contract_count>=0),
+  qualifying_contract_set_hash bytea not null check (pg_catalog.octet_length(qualifying_contract_set_hash)=32),
+  source_row_fingerprint bytea not null check (pg_catalog.octet_length(source_row_fingerprint)=32),
+  contract_and_rate_fingerprint bytea check (contract_and_rate_fingerprint is null or pg_catalog.octet_length(contract_and_rate_fingerprint)=32),
+  effective_policy_fingerprint bytea check (effective_policy_fingerprint is null or pg_catalog.octet_length(effective_policy_fingerprint)=32),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  check ((mapping_state='RESOLVED')=(candidate_id is not null and client_id is not null and contract_id is not null and work_event_id is not null and blocker_code is null)),
+  check ((mapping_state='RESOLVED')=(contract_selection_method is not null)),
+  check ((mapping_state='RESOLVED')=(work_event_match_kind is not null and work_event_match_fingerprint is not null)),
+  unique (upload_row_id,generation)
+);

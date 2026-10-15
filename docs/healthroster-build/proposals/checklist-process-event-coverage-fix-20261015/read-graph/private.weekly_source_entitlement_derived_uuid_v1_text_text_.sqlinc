@@ -1,0 +1,28 @@
+create or replace function private.weekly_source_entitlement_derived_uuid_v1(
+  p_domain text,
+  p_key text
+) returns uuid
+language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_hex text;
+begin
+  if p_domain is null or p_key is null then
+    raise exception 'WEEKLY_SOURCE_ENTITLEMENT_DERIVED_IDENTITY_KEY_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_ENTITLEMENT_DERIVED_IDENTITY_KEY_INVALID',
+              'reason','NULL_NOT_ALLOWED',
+              'domain_is_null',p_domain is null,
+              'key_is_null',p_key is null)::text;
+  end if;
+  v_hex:=pg_catalog.encode(pg_catalog.sha256(
+           pg_catalog.convert_to(p_domain||'|'||p_key,'UTF8')),'hex');
+  return (
+    pg_catalog.substr(v_hex,1,8)||'-'||pg_catalog.substr(v_hex,9,4)||'-'||
+    pg_catalog.substr(v_hex,13,4)||'-'||pg_catalog.substr(v_hex,17,4)||'-'||
+    pg_catalog.substr(v_hex,21,12)
+  )::uuid;
+end;
+$function$;

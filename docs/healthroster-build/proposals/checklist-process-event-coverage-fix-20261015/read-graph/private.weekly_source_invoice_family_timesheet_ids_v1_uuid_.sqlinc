@@ -1,0 +1,35 @@
+create or replace function private.weekly_source_invoice_family_timesheet_ids_v1(
+  p_timesheet_id uuid
+) returns uuid[]
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with canonical_split_siblings as (
+    select sibling.timesheet_id
+    from public.timesheets sibling
+    join public.timesheets requested
+      on requested.timesheet_id=p_timesheet_id
+     and pg_catalog.btrim(requested.booking_id)<>''
+    where pg_catalog.btrim(sibling.booking_id)
+          =pg_catalog.btrim(requested.booking_id)
+      and sibling.booking_id<>requested.booking_id
+  ),
+  resolver_seeds as (
+    select p_timesheet_id as timesheet_id
+    union
+    select canonical_split_siblings.timesheet_id from canonical_split_siblings
+  )
+  select coalesce(
+    (
+      select pg_catalog.array_agg(distinct scope.family_timesheet_id)
+      from public._pay_timesheet_rotation_scope(
+        (
+          select pg_catalog.array_agg(resolver_seeds.timesheet_id)
+          from resolver_seeds
+        )
+      ) scope
+      where scope.family_timesheet_id is not null
+    ),
+    array[p_timesheet_id]::uuid[]
+  );
+$function$;

@@ -1,0 +1,71 @@
+create or replace function private.weekly_source_canonical_json_text_v1(
+  p_value jsonb
+) returns text
+language plpgsql
+immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_type text;
+  v_num numeric;
+  v_parts text[];
+begin
+  if p_value is null then
+    return 'null';
+  end if;
+  v_type:=pg_catalog.jsonb_typeof(p_value);
+
+  if v_type='null' then
+    return 'null';
+
+  elsif v_type='boolean' then
+    return case when p_value::boolean then 'true' else 'false' end;
+
+  elsif v_type='number' then
+    v_num:=pg_catalog.trim_scale(p_value::numeric);
+    if pg_catalog.scale(v_num)<>0 then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_DIGEST_NON_INTEGER'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_DIGEST_NON_INTEGER',
+                'value',p_value)::text;
+    end if;
+    return v_num::text;
+
+  elsif v_type='string' then
+    -- PostgreSQL's own JSON string escaping: " -> \", \ -> \\, the five short
+    -- escapes \b \f \n \r \t, every other control character below 0x20 as
+    -- \u00xx with lower-case hex, / unescaped, non-ASCII emitted literally.
+    return pg_catalog.to_jsonb(p_value #>> '{}')::text;
+
+  elsif v_type='array' then
+    select coalesce(
+             pg_catalog.array_agg(
+               private.weekly_source_canonical_json_text_v1(array_element.value)
+               order by array_element.ordinality),
+             array[]::text[])
+      into v_parts
+      from pg_catalog.jsonb_array_elements(p_value)
+           with ordinality as array_element(value,ordinality);
+    return '['||pg_catalog.array_to_string(v_parts,',')||']';
+
+  elsif v_type='object' then
+    select coalesce(
+             pg_catalog.array_agg(
+               pg_catalog.to_jsonb(object_entry.key)::text
+               ||':'
+               ||private.weekly_source_canonical_json_text_v1(object_entry.value)
+               order by object_entry.key collate "C"),
+             array[]::text[])
+      into v_parts
+      from pg_catalog.jsonb_each(p_value) as object_entry(key,value);
+    return '{'||pg_catalog.array_to_string(v_parts,',')||'}';
+  end if;
+
+  raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+    using errcode='22023',
+          detail=pg_catalog.jsonb_build_object(
+            'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+            'reason','UNKNOWN_JSON_TYPE','jsonb_typeof',v_type)::text;
+end;
+$function$;

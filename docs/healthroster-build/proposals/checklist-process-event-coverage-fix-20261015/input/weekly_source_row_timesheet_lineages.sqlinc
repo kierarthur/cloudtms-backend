@@ -1,0 +1,25 @@
+create table public.weekly_source_row_timesheet_lineages (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  row_resolution_id uuid not null references public.weekly_source_row_resolutions(id) on delete restrict,
+  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,
+  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  client_id uuid not null references public.clients(id) on delete restrict,
+  contract_id uuid not null references public.contracts(id) on delete restrict,
+  contract_week_id uuid not null references public.contract_weeks(id) on delete restrict,
+  timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  -- Decision D8: this relation is the per-source-row BINDING, written by the
+  -- ensure owner before any Office authorisation.  family_booking_id and
+  -- timesheet_version are kept as binding-time facts because stale detection
+  -- needs them, but the authorisation record itself is per ROOT and lives in
+  -- public.weekly_source_root_authorisations (proof/34 section 4's write-set
+  -- table gives the first-authorisation owner as the only writer of a
+  -- generation, after the ordinary Authorise succeeds).
+  family_booking_id text not null check (pg_catalog.char_length(family_booking_id) between 1 and 200),
+  timesheet_version integer not null check (timesheet_version>=1),
+  week_ending_date date not null,
+  lineage_fingerprint bytea not null check (pg_catalog.octet_length(lineage_fingerprint)=32),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  unique (row_resolution_id),
+  unique (lineage_fingerprint)
+);

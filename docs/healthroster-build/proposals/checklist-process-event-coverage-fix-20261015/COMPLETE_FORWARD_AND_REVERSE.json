@@ -1,0 +1,55 @@
+{
+  "source_only": true,
+  "prior_finding": "P1-PROCESS-LINEAGE-SCHEMA-AND-EVENT-COVERAGE",
+  "SQL_executed": false,
+  "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+  "source_path": "docs/healthroster-build/proposals/checklist-native-process-publication-20261015/forward/wp_u3_process_publication.sqlinc",
+  "input": "input/wp_u3_process_publication.sqlinc",
+  "output": "forward/wp_u3_process_publication.sqlinc",
+  "before_sha256": "eab026b187d0463beff0f93c5d8ca1a3888c028247310ceeca44713abeb7f258",
+  "after_sha256": "b082605089a9a78011aaf7579908bbc1b69c48e1bccb773d3e3432ef597e657c",
+  "hunks": [
+    {
+      "label": "complete native receipt source-unit and expense event frame locals",
+      "before": " facts jsonb;events jsonb:='[]'::jsonb;event_fact jsonb;proved boolean:=false;event_proved boolean;",
+      "after": " facts jsonb;events jsonb:='[]'::jsonb;event_fact jsonb;proved boolean:=false;event_proved boolean;\n source_units jsonb;source_expenses jsonb;expected_events jsonb;expected_event jsonb;event_matches bigint;"
+    },
+    {
+      "label": "derive ALL expected task events from the exact native immutable receipt source owners; no surviving join can erase a member",
+      "before": "  n:=0;proved:=true;\n  for event in\n   select distinct fs.work_event_id,fs.candidate_id,fs.client_id,fs.contract_id\n   from public.weekly_source_final_snapshot_lines fs\n   join public.weekly_source_row_timesheet_lineages l on l.upload_row_id=fs.upload_row_id\n    and l.timesheet_id=root.timesheet_id\n   where fs.final_revision_id=fr.id and fs.client_id=receipt.client_id\n    and fs.contract_id=root.contract_id\n  loop\n   n:=n+1;event_proved:=false;current_receipt:=null;current_approval:=null;current_event:=null;",
+      "after": "  source_units:=private.weekly_source_ordinary_projection_source_units_v1(fr.id,root.timesheet_id);\n  source_expenses:=private.weekly_source_ordinary_projection_current_expenses_v1(root.timesheet_id,fr.id);\n  facts:=facts||jsonb_build_object('native_source_units',source_units,'native_source_expenses',source_expenses);\n  if source_units is distinct from receipt.source_unit_outcomes_json\n   or source_expenses is distinct from receipt.source_expense_authorities_json\n   or exists(select 1 from jsonb_array_elements(source_units||source_expenses) unit\n    where jsonb_typeof(unit->'work_event_id') is distinct from 'string'\n     or pg_input_is_valid(unit->>'work_event_id','uuid') is distinct from true) then\n   return jsonb_build_object('proved',false,'native_facts',facts);end if;\n  select coalesce(jsonb_agg(event_id order by event_id),'[]'::jsonb) into expected_events\n   from (select distinct unit->>'work_event_id' event_id from jsonb_array_elements(source_units||source_expenses) unit) complete_events;\n  facts:=facts||jsonb_build_object('expected_native_events',expected_events);\n  n:=0;proved:=true;\n  for expected_event in select value from jsonb_array_elements(expected_events)\n  loop\n   select count(*) into event_matches\n   from public.weekly_source_final_snapshot_lines fs\n   join public.weekly_source_row_resolutions rr on rr.id=fs.row_resolution_id and rr.upload_row_id=fs.upload_row_id\n    and rr.work_event_id=fs.work_event_id and rr.candidate_id=fs.candidate_id and rr.client_id=fs.client_id\n    and rr.contract_id=fs.contract_id and rr.mapping_state='RESOLVED'\n   join public.weekly_source_row_timesheet_lineages l on l.row_resolution_id=rr.id\n    and l.work_event_id=fs.work_event_id and l.candidate_id=fs.candidate_id and l.client_id=fs.client_id\n    and l.contract_id=fs.contract_id and l.source_cycle_id=fr.source_cycle_id\n    and l.family_booking_id=root.booking_id and l.week_ending_date=root.week_ending_date\n    and l.timesheet_id=any(private.weekly_source_invoice_family_timesheet_ids_v1(root.timesheet_id))\n   where fs.final_revision_id=fr.id and fs.work_event_id=(expected_event#>>'{}')::uuid\n    and fs.client_id=receipt.client_id and fs.contract_id=root.contract_id\n    and fs.candidate_id=(select c.candidate_id from public.contracts c where c.id=root.contract_id)\n    and exists(select 1 from public.weekly_source_projection_publications p\n     where p.upload_id=fr.upload_id and p.source_cycle_id=fr.source_cycle_id\n      and p.authority_scope_kind=fr.authority_scope_kind and p.report_scope_id is not distinct from fr.report_scope_id\n      and p.state in('CURRENT','SUPERSEDED') and rr.generation=coalesce(p.projection_generation,p.authority_scope_version));\n   if event_matches<>1 then\n    return jsonb_build_object('proved',false,'native_facts',facts||jsonb_build_object(\n     'unproved_expected_event',expected_event,'exact_snapshot_lineage_matches',event_matches));end if;\n   select fs.work_event_id,fs.candidate_id,fs.client_id,fs.contract_id into strict event\n    from public.weekly_source_final_snapshot_lines fs where fs.final_revision_id=fr.id and fs.work_event_id=(expected_event#>>'{}')::uuid;\n   n:=n+1;event_proved:=false;current_receipt:=null;current_approval:=null;current_event:=null;"
+    },
+    {
+      "label": "nonempty complete event census must all prove its current publication",
+      "before": "  proved:=proved and n>0;facts:=facts||jsonb_build_object('native_current_publications',events);",
+      "after": "  proved:=proved and n>0 and n=jsonb_array_length(expected_events);\n  facts:=facts||jsonb_build_object('native_current_publications',events);"
+    }
+  ],
+  "whole_reverse_equal": true,
+  "schema_pins": [
+    {
+      "table": "weekly_source_row_timesheet_lineages",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_file_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "saved_file": "input/weekly_source_row_timesheet_lineages.sqlinc",
+      "definition_sha256": "fd992df1a0c8dc2f1013ef5d0e2c1d70e4fafd8753f2f9aa14e591744f7ec020"
+    },
+    {
+      "table": "weekly_source_row_resolutions",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_file_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "saved_file": "input/weekly_source_row_resolutions.sqlinc",
+      "definition_sha256": "443f40c6006f097e8bd4700870405eadf764a6e2c90ccf26004a1efe6d0720c8"
+    },
+    {
+      "table": "weekly_source_final_snapshot_lines",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_file_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "saved_file": "input/weekly_source_final_snapshot_lines.sqlinc",
+      "definition_sha256": "8f60eecf47b51e0e6928e22003fdf24e277610ccea03a6f76f22feda14684a89"
+    }
+  ]
+}

@@ -1,0 +1,311 @@
+{
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "P1_prior_process_helper_not_mountable": true,
+  "whole_helper_reversible_hunks": 3,
+  "predecessor_frozen_pin_checks": 168,
+  "complete_current_read_graph": 42,
+  "current_literal_source_root": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+  "current_literal_source_inputs": 1761,
+  "source_cases": 244,
+  "focused_cases": 8,
+  "compiled_effective_body_coverage": false,
+  "compiled_purity": false,
+  "native_financial_acceptance": false,
+  "whole_process_acceptance": false,
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/read-root-source-index.mjs",
+      "bytes": 3685,
+      "sha256": "10e559e5399cfadab2950fac289dfeba8b3426b6224be652c36ddbe605ba8b32"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/COMPLETE_FORWARD_AND_REVERSE.json",
+      "bytes": 6926,
+      "sha256": "d18ded9e8e5edf0ceb1d42c823f3231c08311ef5e93d30120ab6ccf4ed595084"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/CURRENT_READ_GRAPH.json",
+      "bytes": 417642,
+      "sha256": "43c756953751c5d668f72dd1c0a67a97721319d78ea5f18ba1908b586d846b42"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/FOCUSED_TEST_OUTPUT.txt",
+      "bytes": 2431,
+      "sha256": "76eab215287eb70e3750d31f39dde49208201c0030da15d80afce4201d400509"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/HANDOFF.md",
+      "bytes": 2580,
+      "sha256": "b51817ced020c49b861846330c098d99ff929abb2fe0845e56cc91e52fa28ed7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/INITIAL_SOURCE_HARNESS_REFUSAL.txt",
+      "bytes": 32233,
+      "sha256": "e22a9dce69ba889310e59ab7516494d928f26f206e1827b282324efe56ed8d92"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/SOURCE_TEST_OUTPUT.txt",
+      "bytes": 71606,
+      "sha256": "051efd2fa091f6a12252671ce0ba38521e7c808e067585911965be46165dd790"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/build-read-graph.mjs",
+      "bytes": 3120,
+      "sha256": "fa40a999759e020b121864e2cb6d6cf6c6b398e4a7c0e11174ace5a15bed1538"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/build-source.mjs",
+      "bytes": 7480,
+      "sha256": "a99db93d317bff551091cfc89d1011ca0b8bbbda8bfd6f75404c2709a6ab2fdb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/check-source.mjs",
+      "bytes": 4053,
+      "sha256": "b3ac237b0d4837a2392c2a047cc11b510c15a017ece89731445a50b2a2901f1f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/forward/wp_u3_process_publication.sqlinc",
+      "bytes": 13445,
+      "sha256": "b082605089a9a78011aaf7579908bbc1b69c48e1bccb773d3e3432ef597e657c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/input/weekly_source_final_snapshot_lines.sqlinc",
+      "bytes": 2336,
+      "sha256": "8f60eecf47b51e0e6928e22003fdf24e277610ccea03a6f76f22feda14684a89"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/input/weekly_source_row_resolutions.sqlinc",
+      "bytes": 2699,
+      "sha256": "443f40c6006f097e8bd4700870405eadf764a6e2c90ccf26004a1efe6d0720c8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/input/weekly_source_row_timesheet_lineages.sqlinc",
+      "bytes": 1788,
+      "sha256": "fd992df1a0c8dc2f1013ef5d0e2c1d70e4fafd8753f2f9aa14e591744f7ec020"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/input/wp_u3_process_publication.sqlinc",
+      "bytes": 10569,
+      "sha256": "eab026b187d0463beff0f93c5d8ca1a3888c028247310ceeca44713abeb7f258"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.bpay_next_protected_receipt_json_v1_uuid_boolean_.sqlinc",
+      "bytes": 916,
+      "sha256": "52f1a4329c768ccbf3a8722d0eb8ded90dee99b8e3914037ef32cee7a42a22e6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "bytes": 460,
+      "sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.bpay_next_source_origin_state_v1_uuid_uuid_.sqlinc",
+      "bytes": 11148,
+      "sha256": "3edf037f0b72fc55b17f7260e22cd5239c31509ef63f8ff6bc80de241d5ca293"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "bytes": 2406,
+      "sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_exceptional_hex_sha256_v1_text_.sqlinc",
+      "bytes": 390,
+      "sha256": "11f7f28fb29410e1c9510df8ecf0942f4c07f2fa3d9b15db7b5f62591e18dc12"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_exceptional_json_keys_exact_v1_jsonb_text___.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "bytes": 2456,
+      "sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_checklist_process_publication_v1_uuid_.sqlinc",
+      "bytes": 13067,
+      "sha256": "779063cc774c2248efd88fe08ef20c6a357013e299d3061e4ed9de6920ea3b5c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_checklist_process_v1_uuid_uuid_.sqlinc",
+      "bytes": 7828,
+      "sha256": "f44d30496303d8ba7d49330b83f39a79496367a7ed3d9c12290f3aff2b3fc737"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "bytes": 12756,
+      "sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "bytes": 586,
+      "sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5357,
+      "sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "bytes": 1007,
+      "sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "bytes": 4461,
+      "sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "bytes": 15704,
+      "sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_invoice_family_timesheet_ids_v1_uuid_.sqlinc",
+      "bytes": 1165,
+      "sha256": "0ccbb982c56873ebf53180b94f70311e607da10e4d6335d4af2dbd794b26daf9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_local_origin_canonical_v2_jsonb_.sqlinc",
+      "bytes": 6752,
+      "sha256": "1f2c44585647139f936496628f8b520d5017cab7f19d1b28f1b1e415cd53a4da"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_ordinary_projection_current_expenses_v1_uuid_uuid_.sqlinc",
+      "bytes": 4029,
+      "sha256": "8359dd8ec61c8bffc1934377324053203ee88604ee8115eb472667bd494a0897"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_ordinary_projection_source_units_v1_uuid_uuid_.sqlinc",
+      "bytes": 4995,
+      "sha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_c1_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 10786,
+      "sha256": "f8279ed2c436f2cf157eed927630a069448ddce0c6b8517dbbc63dd185f575e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_c1_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 373,
+      "sha256": "f3d43d66b4f67ec5931251556dff1a24f5f640c87ac9030739d51cbf05cea36b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_local_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 29463,
+      "sha256": "ea61636cb2708ff7a0cd0893a2870deb9fac1d814a9b5eaa6023e7d374557ed2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_local_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 379,
+      "sha256": "fdc84f55d3a1e2c169837d584653043d4786c79bd26ad5f9100a8c481bd8f79a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_next_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 8234,
+      "sha256": "85779fc6fc1d8184e985f03cb2cba5947be57fd7f5ea6d6463ef9c18ddbe6f29"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_next_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 377,
+      "sha256": "533f1fb62e135847c4c253559420a27b91c596d91dd7884dcd77bd9df3cdaffe"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "bytes": 1480,
+      "sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_protected_wait_receipt_v1_uuid_uuid_.sqlinc",
+      "bytes": 6163,
+      "sha256": "15e722fc9de0d587e3fa032f2d739f7cc06cafc3a1b8e620a3067d933161bf9e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_protected_wait_witness_v1_uuid_uuid_.sqlinc",
+      "bytes": 11878,
+      "sha256": "2bf6dedcdb4664da0079f63059c149c0ab844828409ec0d5124449aeeed14c2c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "bytes": 5138,
+      "sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "bytes": 285,
+      "sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_receipt_json_v1_uuid_.sqlinc",
+      "bytes": 1449,
+      "sha256": "493e840e94721ace5d87801150d5bc7f0a35df880c57d054a7395f23bf7f0e19"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_request_canonical_v1_jsonb_text_uuid_.sqlinc",
+      "bytes": 18560,
+      "sha256": "e6566b583e1d0040e512a021e4a44ee850ee8ffb6549de17332bd0bd32e64d45"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "bytes": 335,
+      "sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "bytes": 1749,
+      "sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "bytes": 7676,
+      "sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_report_projection_receipt_assert_v1_public.weekly_source_ordinary_pay_projection_receipts_.sqlinc",
+      "bytes": 2192,
+      "sha256": "9fe9bcec00264ca05271f92044d94eccaa3c6500b42091b7cadabf1d0679846c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-process-event-coverage-fix-20261015/read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5333,
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "file": "tests/healthroster-checklist-process-event-coverage.test.mjs",
+      "bytes": 6117,
+      "sha256": "d3def09f77333fc3337a3673c9307dc9e78172c0ea0e1fe75aedcf99fea5f32b"
+    }
+  ]
+}
