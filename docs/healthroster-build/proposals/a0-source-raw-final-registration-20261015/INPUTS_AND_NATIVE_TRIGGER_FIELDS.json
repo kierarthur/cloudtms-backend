@@ -1,0 +1,1317 @@
+{
+  "source_only": true,
+  "native": false,
+  "root_pin": "d48f05205ae9ce066762be8a307d87b304ce71da",
+  "root_input": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/05_raw_selector_helpers.sqlinc",
+  "root_bytes": 15713,
+  "root_sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de",
+  "native_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "native_contract_path": "supabase/release/current-contract.json",
+  "native_contract_bytes": 7865503,
+  "native_contract_sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "raw_evidence_path": "docs/healthroster-build/proposals/a0-source-raw-selector-guard-construction-20261015/RAW_COLUMN_SOURCE_EVIDENCE.json",
+  "raw_evidence_sha256": "e77212aadfe5e7a8a954d7c2279574161ad4de8b19b2e304eb10c0042635c304",
+  "relations": [
+    "public.client_settings",
+    "public.clients",
+    "public.contracts",
+    "public.timesheets",
+    "public.timesheets_financials",
+    "public.weekly_discrepancy_incidents",
+    "public.weekly_expense_authority_generations",
+    "public.weekly_issue_comparison_revisions",
+    "public.weekly_source_billing_movements",
+    "public.weekly_source_charge_acceptances",
+    "public.weekly_source_charge_checks",
+    "public.weekly_source_client_policies",
+    "public.weekly_source_contract_policies",
+    "public.weekly_source_cycles",
+    "public.weekly_source_expense_cell_evidence",
+    "public.weekly_source_final_revisions",
+    "public.weekly_source_final_snapshot_lines",
+    "public.weekly_source_format_profiles",
+    "public.weekly_source_global_settings",
+    "public.weekly_source_group_clients",
+    "public.weekly_source_group_rule_assignments",
+    "public.weekly_source_groups",
+    "public.weekly_source_invoice_hold_releases",
+    "public.weekly_source_ordinary_pay_projection_receipts",
+    "public.weekly_source_projection_publications",
+    "public.weekly_source_report_scopes",
+    "public.weekly_source_row_economic_snapshots",
+    "public.weekly_source_row_expense_policy_snapshots",
+    "public.weekly_source_row_resolutions",
+    "public.weekly_source_row_timesheet_lineages",
+    "public.weekly_source_rule_set_versions",
+    "public.weekly_source_rule_sets",
+    "public.weekly_source_self_bill_report_line_bindings",
+    "public.weekly_source_self_bill_reports",
+    "public.weekly_source_state_transitions",
+    "public.weekly_source_upload_rows",
+    "public.weekly_source_uploads",
+    "public.weekly_work_events"
+  ],
+  "fields": [
+    {
+      "relation": "public.weekly_source_groups",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_cycles",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_uploads",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_upload_rows",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_upload_rows",
+      "column": "upload_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_projection_publications",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "upload_row_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "generation",
+      "type": "integer"
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "column": "row_resolution_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_expense_policy_snapshots",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_expense_policy_snapshots",
+      "column": "row_resolution_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_expense_authority_generations",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_expense_authority_generations",
+      "column": "final_revision_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_expense_authority_generations",
+      "column": "work_event_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_expense_cell_evidence",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_expense_cell_evidence",
+      "column": "upload_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_charge_checks",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_charge_checks",
+      "column": "row_resolution_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_charge_acceptances",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_charge_acceptances",
+      "column": "row_resolution_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_invoice_hold_releases",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_invoice_hold_releases",
+      "column": "upload_row_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "final_revision_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "work_event_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "source_group_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "self_bill_report_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "source_group_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "state",
+      "type": "text"
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "self_bill_report_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_work_events",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "final_revision_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "column": "final_revision_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "column": "source_cycle_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_issue_comparison_revisions",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_billing_movements",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "source_group_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "column": "source_group_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_contract_policies",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_contract_policies",
+      "column": "contract_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "column": "source_group_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_rule_set_versions",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_rule_sets",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_format_profiles",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.clients",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.client_settings",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.client_settings",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.contracts",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.contracts",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.contracts",
+      "column": "start_date",
+      "type": "date"
+    },
+    {
+      "relation": "public.contracts",
+      "column": "end_date",
+      "type": "date"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.weekly_source_global_settings",
+      "column": "singleton",
+      "type": "boolean"
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "valid_from",
+      "type": "date"
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "column": "valid_to",
+      "type": "date"
+    },
+    {
+      "relation": "public.weekly_source_groups",
+      "column": "active",
+      "type": "boolean"
+    }
+  ],
+  "declared_only_pending_current_compiled_contract": [
+    {
+      "relation": "public.weekly_source_invoice_hold_releases",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "source_line": 64,
+          "statement_raw_sha256": "f52d3292999fefd151444e5424ed29ca408728b45c97cdb16423da777b536945"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_invoice_hold_releases",
+      "column": "upload_row_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "source_line": 64,
+          "statement_raw_sha256": "f52d3292999fefd151444e5424ed29ca408728b45c97cdb16423da777b536945"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_report_scopes",
+      "column": "self_bill_report_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 65,
+          "statement_raw_sha256": "3c396f81a0c242fb78c42ccbfc46caee9d4e7cc35736e6de65cf31ac1e314747"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 9,
+          "statement_raw_sha256": "1724da965628def2621d2ff39d9effd4423cd7e6eda527b4fac721b25484db1f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 9,
+          "statement_raw_sha256": "1724da965628def2621d2ff39d9effd4423cd7e6eda527b4fac721b25484db1f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "column": "client_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 9,
+          "statement_raw_sha256": "1724da965628def2621d2ff39d9effd4423cd7e6eda527b4fac721b25484db1f"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 31,
+          "statement_raw_sha256": "c9ab3ba2e2a85d4f4a19e08f7ca1203736e468b2b34f07d2994d50b8a99bacf9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "state",
+      "type": "text",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 31,
+          "statement_raw_sha256": "c9ab3ba2e2a85d4f4a19e08f7ca1203736e468b2b34f07d2994d50b8a99bacf9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_self_bill_report_line_bindings",
+      "column": "self_bill_report_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "source_line": 31,
+          "statement_raw_sha256": "c9ab3ba2e2a85d4f4a19e08f7ca1203736e468b2b34f07d2994d50b8a99bacf9"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 85,
+          "statement_raw_sha256": "dc5f4dac64696ac9e9b7cdcccdc9ff26f2bc28f18b79000c4cfa1b8f249c587b"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "column": "source_group_id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 85,
+          "statement_raw_sha256": "dc5f4dac64696ac9e9b7cdcccdc9ff26f2bc28f18b79000c4cfa1b8f249c587b"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_rule_set_versions",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 24,
+          "statement_raw_sha256": "dec2220922f614d2a34a061837cc316306bce4d40e5c0abc964875cb86d74c94"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_rule_sets",
+      "column": "id",
+      "type": "uuid",
+      "declarations": [
+        {
+          "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "source_line": 7,
+          "statement_raw_sha256": "318a2c1c102c798e7443b588a14a7779115d128f635724d28a733197c12d4539"
+        }
+      ]
+    }
+  ],
+  "pre_freeze_note": "Initial installed-contract-only assertions refused before writing for candidate CREATE/ALTER fields absent from that older contract. Every field remains mandatory from the independently reviewed raw declaration evidence; no relation or column was skipped.",
+  "native_triggers": [
+    {
+      "name": "contract_settings_authority_after_client_v1",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_client_v1 AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_client_v1()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_client_settings_d",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_d AFTER DELETE ON client_settings REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_client_settings_i",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_i AFTER INSERT ON client_settings REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_client_settings_u",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_u AFTER UPDATE ON client_settings REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_contract_client_dirty__client_settings",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_contract_client_dirty__client_settings AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_contract_client_dirty()"
+    },
+    {
+      "name": "trg_touch_client_from_client_settings",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_touch_client_from_client_settings AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION _trg_touch_client_from_client_settings()"
+    },
+    {
+      "name": "candidate_expense_client_identity_summary_refresh",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_client_identity_summary_refresh AFTER UPDATE OF name, cli_ref ON clients FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "set_cli_ref",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER set_cli_ref BEFORE INSERT OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION trg_set_cli_ref()"
+    },
+    {
+      "name": "trg_cc_clients",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_clients AFTER INSERT OR DELETE OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('clients')"
+    },
+    {
+      "name": "trg_clients_set_rev",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_set_rev BEFORE INSERT OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION trg_set_rev()"
+    },
+    {
+      "name": "trg_clients_set_updated_at",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_set_updated_at BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_clients_tombstone_ad",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_tombstone_ad AFTER DELETE ON clients FOR EACH ROW EXECUTE FUNCTION trg_clients_tombstone()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_d",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_d AFTER DELETE ON clients REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_i",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_i AFTER INSERT ON clients REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_u",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_u AFTER UPDATE ON clients REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "candidate_expense_contract_identity_summary_refresh",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_contract_identity_summary_refresh AFTER UPDATE OF role, display_site ON contracts FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_insert_v1",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_insert_v1 AFTER INSERT ON contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_update_v1",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_update_v1 AFTER UPDATE OF client_id, start_date, overrideclientsettings, no_timesheet_required, daily_calc_of_invoices, group_nightsat_sunbh, is_nhsp, autoprocess_hr, requires_hr, hr_attach_to_invoice, ts_attach_to_invoice, reference_number_required_to_issue_invoice, send_manual_invoices_to_different_email, manual_invoices_alt_email_address, default_submission_mode, timesheet_break_entry_mode, auto_invoice, require_reference_to_pay, require_reference_to_invoice, self_bill, healthroster_import_auto_authorise_override, nhsp_import_auto_authorise_override, candidate_electronic_auto_authorise_override, candidate_expenses_require_separate_timesheet_override, candidate_paper_submission_enabled_override, candidate_expense_invoice_email_override, candidate_manager_approval_policy_json, rates_json, additional_rates_json, mileage_pay_rate, mileage_charge_rate ON contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "trg_cc_contracts",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_contracts AFTER INSERT OR DELETE OR UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('contracts')"
+    },
+    {
+      "name": "trg_contracts_enforce_overrideclientsettings",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_contracts_enforce_overrideclientsettings BEFORE INSERT OR UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION contracts_enforce_overrideclientsettings()"
+    },
+    {
+      "name": "trg_contracts_set_updated_at",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_contracts_set_updated_at BEFORE UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_d",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_d AFTER DELETE ON contracts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_i",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_i AFTER INSERT ON contracts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_u",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_u AFTER UPDATE ON contracts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_contract_client_dirty__contracts",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_contract_client_dirty__contracts AFTER INSERT OR DELETE OR UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_contract_client_dirty()"
+    },
+    {
+      "name": "bpay_clock_timesheet_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_timesheet_v1 AFTER INSERT OR UPDATE OF booking_id, authorised_at_server, revoked_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_changed_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_ts_after_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_after_v1 AFTER INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_ts_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()"
+    },
+    {
+      "name": "bpay_next_pay_hold_timesheet_control_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_pay_hold_timesheet_control_v1 AFTER INSERT OR UPDATE OF is_current, booking_id, timesheet_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_next_pay_hold_control_trigger_v1()"
+    },
+    {
+      "name": "bpay_source_timesheet_family_gate_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()"
+    },
+    {
+      "name": "bpay_timesheet_work_revision_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()"
+    },
+    {
+      "name": "candidate_expense_timesheet_component_sync",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_timesheet_component_sync AFTER INSERT OR UPDATE OF status, authorised_at_server, is_current, archived_at_utc, booking_id, contract_id, week_ending_date ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_timesheet_sync_trigger_v1()"
+    },
+    {
+      "name": "timesheet_settings_authority_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()"
+    },
+    {
+      "name": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()"
+    },
+    {
+      "name": "timesheets_expense_anchor_follow_current_trg",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheets_expense_anchor_follow_current_trg AFTER INSERT OR UPDATE OF is_current, archived_at_utc ON timesheets FOR EACH ROW WHEN (new.is_current = true AND new.archived_at_utc IS NULL) EXECUTE FUNCTION private._timesheet_expense_anchor_follow_current_v1()"
+    },
+    {
+      "name": "trg_cc_timesheets",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_timesheets AFTER INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('timesheets')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_timesheets_d",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_d AFTER DELETE ON timesheets REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_timesheets_i",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_i AFTER INSERT ON timesheets REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_timesheets_u",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_u AFTER UPDATE ON timesheets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_candidate_dirty__timesheets",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_candidate_dirty__timesheets AFTER INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_candidate_dirty()"
+    },
+    {
+      "name": "trg_timesheet_archive_row_guard_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()"
+    },
+    {
+      "name": "trg_timesheet_authorisation_overlap_biu",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()"
+    },
+    {
+      "name": "trg_timesheets_document_invalidate_u",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheets_document_invalidate_u AFTER UPDATE ON timesheets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION trg_timesheet_document_invalidate()"
+    },
+    {
+      "name": "trg_timesheets_invalidate_prevalidation_on_change",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheets_invalidate_prevalidation_on_change AFTER UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheets_invalidate_prevalidation_on_change()"
+    },
+    {
+      "name": "trg_timesheets_updated_at",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_ts_summary_pay_cache_timesheets_au",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_timesheets_au AFTER UPDATE ON timesheets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
+    },
+    {
+      "name": "trg_tsfin_ai",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_tsfin_ai AFTER INSERT ON timesheets FOR EACH ROW EXECUTE FUNCTION trg_tsfin_after_insert()"
+    },
+    {
+      "name": "trg_tsfin_au",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_tsfin_au AFTER UPDATE OF is_current, authorised_at_server, revoked_at ON timesheets FOR EACH ROW EXECUTE FUNCTION trg_tsfin_after_update()"
+    },
+    {
+      "name": "weekly_source_managed_root_authorisation_guard_bu",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON timesheets FOR EACH ROW WHEN (old.authorised_at_server IS DISTINCT FROM new.authorised_at_server) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()"
+    },
+    {
+      "name": "zz_bpay_timesheet_work_key_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "A",
+      "definition": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()"
+    },
+    {
+      "name": "bpay_clock_financial_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_financial_v1 AFTER INSERT OR DELETE OR UPDATE OF timesheet_id, authorised_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_changed_v1()"
+    },
+    {
+      "name": "bpay_next_ordinary_authorisation_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_ordinary_authorisation_v1 AFTER INSERT OR UPDATE OF authorised_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private.bpay_next_ordinary_authorisation_trigger_v1()"
+    },
+    {
+      "name": "bpay_next_pay_hold_financial_control_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_pay_hold_financial_control_v1 AFTER INSERT OR UPDATE OF is_current, timesheet_id, pay_on_hold, pay_on_hold_reason ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private.bpay_next_pay_hold_control_trigger_v1()"
+    },
+    {
+      "name": "candidate_expense_financial_component_sync",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_financial_component_sync AFTER INSERT OR UPDATE OF is_current, mileage_units, mileage_pay_ex_vat, travel_pay_ex_vat, accommodation_pay_ex_vat, other_pay_ex_vat, candidate_id, client_id, authorised_at_utc, locked_by_invoice_id, paid_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_financial_sync_trigger_v1()"
+    },
+    {
+      "name": "daily_timesheet_settings_authority_after_fin_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER daily_timesheet_settings_authority_after_fin_v1 AFTER INSERT OR UPDATE OF processed_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private._daily_timesheet_settings_authority_after_fin_v1()"
+    },
+    {
+      "name": "trg_cc_timesheets_financials",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_timesheets_financials AFTER INSERT OR DELETE OR UPDATE ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('timesheets')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_timesheets_financials_d",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_d AFTER DELETE ON timesheets_financials REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_timesheets_financials_i",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_i AFTER INSERT ON timesheets_financials REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_timesheets_financials_u",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_u AFTER UPDATE ON timesheets_financials REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_candidate_dirty__timesheets_financials",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_candidate_dirty__timesheets_financials AFTER INSERT OR DELETE OR UPDATE ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_candidate_dirty()"
+    },
+    {
+      "name": "trg_retention_capture_timesheets_financials_insert",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_retention_capture_timesheets_financials_insert AFTER INSERT ON timesheets_financials REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION timesheet_financial_retention_capture_trigger_v1()"
+    },
+    {
+      "name": "trg_retention_capture_timesheets_financials_update",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_retention_capture_timesheets_financials_update AFTER UPDATE ON timesheets_financials REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION timesheet_financial_retention_capture_trigger_v1()"
+    },
+    {
+      "name": "trg_set_updated_at_tsfin",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_set_updated_at_tsfin BEFORE UPDATE ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION set_updated_at_tsfin()"
+    },
+    {
+      "name": "trg_ts_summary_pay_cache_tsfin_ad",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_tsfin_ad AFTER DELETE ON timesheets_financials REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
+    },
+    {
+      "name": "trg_ts_summary_pay_cache_tsfin_ai",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_tsfin_ai AFTER INSERT ON timesheets_financials REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
+    },
+    {
+      "name": "trg_ts_summary_pay_cache_tsfin_au",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_tsfin_au AFTER UPDATE ON timesheets_financials REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
+    },
+    {
+      "name": "trg_tsfin_document_invalidate_d",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_tsfin_document_invalidate_d AFTER DELETE ON timesheets_financials REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION trg_timesheet_document_invalidate()"
+    },
+    {
+      "name": "trg_tsfin_document_invalidate_i",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_tsfin_document_invalidate_i AFTER INSERT ON timesheets_financials REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION trg_timesheet_document_invalidate()"
+    },
+    {
+      "name": "trg_tsfin_document_invalidate_u",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_tsfin_document_invalidate_u AFTER UPDATE ON timesheets_financials REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION trg_timesheet_document_invalidate()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_issue_comparison_revisions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_issue_comparison_revisions FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_issue_comparison_revisions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_issue_comparison_revisions FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_fact_guard",
+      "table": "weekly_source_billing_movements",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_fact_guard BEFORE DELETE OR UPDATE ON weekly_source_billing_movements FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_fact_guard_v1('placement_state')"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_billing_movements",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_billing_movements FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_charge_acceptances",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_charge_acceptances FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_charge_acceptances",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_charge_acceptances FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_charge_checks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_charge_checks FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_charge_checks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_charge_checks FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_expense_cell_evidence",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_expense_cell_evidence FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_expense_cell_evidence",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_expense_cell_evidence FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_final_snapshot_lines",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_final_snapshot_lines FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_final_snapshot_lines",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_final_snapshot_lines FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_ordinary_pay_projection_receipts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_ordinary_pay_projection_receipts FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_ordinary_pay_projection_receipts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_ordinary_pay_projection_receipts FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_row_economic_snapshots",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_row_economic_snapshots FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_row_economic_snapshots",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_row_economic_snapshots FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_row_expense_policy_snapshots",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_row_expense_policy_snapshots FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_row_expense_policy_snapshots",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_row_expense_policy_snapshots FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_row_resolutions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_row_resolutions FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_row_resolutions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_row_resolutions FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_lineage_after_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_lineage_after_v1 AFTER INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_lineage_before_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_lineage_before_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()"
+    },
+    {
+      "name": "bpay_lineage_work_binding_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_lineage_work_binding_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_lineage_work_binding_v1()"
+    },
+    {
+      "name": "bpay_source_lineage_family_gate_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_lineage_family_gate_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_source_lineage_family_gate_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_row_timesheet_lineages FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_fact_guard",
+      "table": "weekly_source_state_transitions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_fact_guard BEFORE DELETE OR UPDATE ON weekly_source_state_transitions FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_fact_guard_v1('ordinary_source_entitlement_projection_state')"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_state_transitions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_state_transitions FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_upload_rows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_upload_rows FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_upload_rows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_upload_rows FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_work_events",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_work_events FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_work_events",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_work_events FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    }
+  ],
+  "first": "000_healthroster_source_a0_before_v1",
+  "last": "zzz_healthroster_source_a0_before_v1",
+  "hosted_catalogue_observed": false
+}

@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "new_source_cases": 7,
+  "earlier_source_cases_already_passed": 60,
+  "raw_relations": 38,
+  "raw_fields": 78,
+  "pending_declared_only_fields": 13,
+  "native_before_row_source_positions": 33,
+  "closed_registrations": 76,
+  "lexical_statements": 83,
+  "new_private_signatures": [
+    "private.timesheet_correction_a0_source_reference_final_before_v1()"
+  ],
+  "new_tables": 0,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "first_last_native_frame_admission": true,
+  "pre_freeze_notes": [
+    "installed-contract-only metadata assertions refused before writing; candidate CREATE/ALTER fields explicitly retained as declared-only",
+    "one read-only routine metadata probe corrected identity rather than name key; pinned baseline transformation is not final installed definition proof"
+  ],
+  "unrun": [
+    "actual PostgreSQL compilation/current roles/body hashes/registries/current mandatory verification",
+    "real trigger transformation/normal native writers/Source policy-claim-current scope/concurrency/hidden-RR/performance",
+    "final canonical mount and all Agency/correction/financial/security/acceptance gates"
+  ]
+}

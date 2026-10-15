@@ -1,0 +1,12 @@
+{
+  "source_only": true,
+  "native": false,
+  "source_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "source_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+  "source_file_bytes": 1026129,
+  "source_file_sha256": "64a093996df1633cfe06c99d103316dc12b9f86e20c2d9ab614eed59e7e748d1",
+  "extracted_source_definition_sha256": "5b10bee4b291db8d924cf462638d8e553b2ba2598b42bc73a2e535b1d9b765ea",
+  "source_definition_is_baseline": true,
+  "installed_definition_or_native_execution_proved": false,
+  "reason": "The earlier native BEFORE chain may transform NEW after first raw admission. The final helper re-admits/checks the actual resulting NEW, regardless of caller no-op or earlier transformation."
+}

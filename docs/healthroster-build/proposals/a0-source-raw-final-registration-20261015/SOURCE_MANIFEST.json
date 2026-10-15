@@ -1,0 +1,47 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "artifacts": [
+    {
+      "file": "01_source_final_before.sqlinc",
+      "bytes": 2428,
+      "sha256": "ee0e19e1e381c260970e5a99e3495ce10fae13a2751ee6f202effb8eecf17828"
+    },
+    {
+      "file": "02_source_raw_final_registration.sqlinc",
+      "bytes": 31891,
+      "sha256": "11c8f1b4d7fd8c51add82740a9888d4f11d256085ec1f789022cf6d4bcd839c3"
+    },
+    {
+      "file": "03_source_raw_final_verifier.sqlinc",
+      "bytes": 14075,
+      "sha256": "20e168b6358692b552ff657dd6b4304a731f37b1c4a2d53ebea3cc66b3955d5b"
+    },
+    {
+      "file": "INPUTS_AND_NATIVE_TRIGGER_FIELDS.json",
+      "bytes": 68619,
+      "sha256": "4e26b7bf1e5c30f1a9358b04104a16061ca5e53034efcf6638c688f5305eb737"
+    },
+    {
+      "file": "NATIVE_UPDATED_AT_SOURCE_EVIDENCE.json",
+      "bytes": 726,
+      "sha256": "3072b29c9c1dc6e5c55bf338ca5ae206228e2984585cbebd9ff3348163d19b87"
+    },
+    {
+      "file": "SOURCE_BOUNDARY.md",
+      "bytes": 2425,
+      "sha256": "43c3f0e4bea1faf49fb630d1fce5a03f37bd342beef64bde89bf2460f64f61f1"
+    },
+    {
+      "file": "reference/05_raw_selector_helpers.sqlinc.txt",
+      "bytes": 15713,
+      "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+    },
+    {
+      "file": "reference/native_updated_at_source.sql.txt",
+      "bytes": 235,
+      "sha256": "5b10bee4b291db8d924cf462638d8e553b2ba2598b42bc73a2e535b1d9b765ea"
+    }
+  ]
+}
