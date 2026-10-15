@@ -1,0 +1,18 @@
+# Checklist native decision and ordinary NEXT source review
+
+Verdict: ACCEPT the two finite source increments below; no new P0/P1/P2 was confirmed within them. Neither is mounted or native-qualified. This is not final financial, release, acceptance or Part B sign-off.
+
+| Increment | Exact commit | Manifest SHA-256 |
+|---|---|---|
+| Invoice-decision public transport | `9b44412d7fdda7f8e099036e7c8a7297a8eeb795` | `c8100905b56cac68460a278dde0bfd2c2ec180beb8e69822c876cddb16c80ccb` |
+| Ordinary NEXT available pay hold | `b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4` | `ea8de4a48262c9b08cacec3c241562d7d778b9479251166c7dde9bbf2f2520cf` |
+
+All 155 files, including both manifests, match immutable Git and saved bytes before and after review. Seven whole owners reverse 24 unique hunks to their actual predecessors. All 170 current assertions across 15 files pass. The unchanged predecessor assertion bodies also pass against each complete successor transport: 64 and 81 cases. The first reviewer adaptation changed an embedded URL-rewrite needle and stopped after 42 passing assertions with Invalid URL; its output is retained. Restricting the adaptation to the outer script location and receipt destination corrected the review harness. No frozen script, assertion or module was changed.
+
+The invoice decision uses the existing actual VAT_FIT invoice blocker and release qualification/first-invoice predicates in private read mode. A qualified decision binds real actor, scope, billing movement, client manifest, upload row/hash/version and blocker proof. It has invoice=true, pending=true, pay/amount/action unknown. Unsupported qualification preserves the base invoice item and its truthful unknown decision. Reduced pay readers do not execute this admin-only invoice population reader. Two complete scope censuses surround row qualifications, without re-censusing the whole scope per movement.
+
+The ordinary arm requires a genuinely submitted authorised WEEKLY Contract HOURS Timesheet, real Contract Client/Candidate, the complete current booking and financial census, current physical/financial/Work/revision, sealed/applied native approval and real pay-hold control. It reuses the existing native member owner and checks complete membership and A/C/H/residual conservation. Only positive unselected AVAILABLE source EX-VAT already classified PAY_ON_HOLD contributes; accepted, snoozed, reserved, recovery, unknown and unsupported observations do not become withheld money. The amount converts to bounded integer pence without rounding; the financial snapshot total is not used as a shortcut.
+
+The distinct native financial item contributes no Timesheet admission count. It is collected before older signed-week retention and before the public revision/page. Existing R-245 invoice-query reasons/status remain intact, and a real separate pay hold prevents false Completed/Pay completed. Admin navigation names the existing Timesheet; reduced pay output remains action-free. No mutation command is added to the GET transport.
+
+The 46-routine source graph retains five conditional TRUE lock sites and one fixed native dynamic SELECT. Its opaque crypto boundary, real TRUE parity/FALSE purity, current control/dirtying/member/role/cut/calendar/error/refresh behavior and whole-caller performance remain unqualified. Required implementation also remains for ordinary Legacy, Daily/null-Contract/other calendars/treatment, whole-row monetary/process completion and actual invoice-decision action descriptors. Complete current root/Office/contract/ACL/registry/native/security/financial/acceptance composition remains required. No SQL, database lock, rollback trial, release or external effect occurred in this review.

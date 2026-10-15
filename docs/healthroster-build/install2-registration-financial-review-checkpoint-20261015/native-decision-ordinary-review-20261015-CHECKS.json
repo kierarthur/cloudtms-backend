@@ -1,0 +1,67 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "before": [
+    {
+      "dir": "checklist-native-invoice-decision-transport-20261015",
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "manifest_artifacts": 71,
+      "files_with_manifest": 72,
+      "manifest_sha256": "c8100905b56cac68460a278dde0bfd2c2ec180beb8e69822c876cddb16c80ccb"
+    },
+    {
+      "dir": "checklist-native-ordinary-next-hold-20261015",
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "manifest_artifacts": 82,
+      "files_with_manifest": 83,
+      "manifest_sha256": "ea8de4a48262c9b08cacec3c241562d7d778b9479251166c7dde9bbf2f2520cf"
+    }
+  ],
+  "after": [
+    {
+      "dir": "checklist-native-invoice-decision-transport-20261015",
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "manifest_artifacts": 71,
+      "files_with_manifest": 72,
+      "manifest_sha256": "c8100905b56cac68460a278dde0bfd2c2ec180beb8e69822c876cddb16c80ccb"
+    },
+    {
+      "dir": "checklist-native-ordinary-next-hold-20261015",
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "manifest_artifacts": 82,
+      "files_with_manifest": 83,
+      "manifest_sha256": "ea8de4a48262c9b08cacec3c241562d7d778b9479251166c7dde9bbf2f2520cf"
+    }
+  ],
+  "whole_owner_reverses": 7,
+  "unique_hunks": 24,
+  "source_tests": 170,
+  "test_files": 15,
+  "source_output_sha256": "d672b8aa383e730ce3cca48d96bd80c5d8790b74fec58c955198b9d38a3f42bf",
+  "regressions": [
+    {
+      "cases": 64,
+      "source_sha256": "3f44c90f9b8a364eba425fddef1ca0c4077bb6c1127b00ed857934efe2b19b84",
+      "adapted_sha256": "2bfb7f2d4822f4ca83acbacc7b23affae9de0886660cd471d10614b85e5d91e9",
+      "output_sha256": "054ff8503bbbf44a5e58e77f2dbb34952171804782cd3f07a8dacaa8f09ed2bf",
+      "changes": "Only outer script fileURLToPath source URL and output path; embedded import.meta rewrite and assertion bodies unchanged; no frozen write"
+    },
+    {
+      "cases": 81,
+      "source_sha256": "047bf1b5aefed57fc7195b9843bfdf21b75bdce14942b2f86b5f0025b7b87691",
+      "adapted_sha256": "3114ff8fd5801ccf1413231b184611d74c66d5d701c7420c290a63dbb7fac283",
+      "output_sha256": "7b13fcba5b9b37767fa9f802acd851417666f28437c5a2aba6c3feeab4ec6f6f",
+      "changes": "Only outer script fileURLToPath source URL and output path; embedded import.meta rewrite and assertion bodies unchanged; no frozen write"
+    }
+  ],
+  "read_graph_routines": 46,
+  "conditional_true_lock_sites": 5,
+  "fixed_native_dynamic_select_and_opaque_crypto_unqualified": true,
+  "review_harness_note": "First outer script adaptation also changed the embedded import.meta rewrite needle, causing Invalid URL after42 passing assertions; preserved failed output, corrected only exact outer fileURLToPath replacement. Frozen scripts/assertions/modules unchanged.",
+  "remaining": [
+    "complete current owner/native/contract/ACL/caller/performance/financial/acceptance union",
+    "ordinary Legacy/Daily/null Contract/own-calendar/treatment/whole-row and process producers",
+    "actual invoice decision action descriptors"
+  ]
+}

@@ -1,0 +1,52 @@
+TAP version 13
+# Subtest: all 38 actual raw contexts and 78 mandatory fields retain candidate declarations instead of silently omitting missing compiled fields
+ok 1 - all 38 actual raw contexts and 78 mandatory fields retain candidate declarations instead of silently omitting missing compiled fields
+  ---
+  duration_ms: 154.3147
+  type: 'test'
+  ...
+# Subtest: first and last raw/native admissions bind exactly two closed row triggers per actual relation with no WHEN or UPDATE-column omission
+ok 2 - first and last raw/native admissions bind exactly two closed row triggers per actual relation with no WHEN or UPDATE-column omission
+  ---
+  duration_ms: 2.9007
+  type: 'test'
+  ...
+# Subtest: native 33 BEFORE row trigger positions are checked by byte ordering and unrelated/native definitions are untouched
+ok 3 - native 33 BEFORE row trigger positions are checked by byte ordering and unrelated/native definitions are untouched
+  ---
+  duration_ms: 0.6127
+  type: 'test'
+  ...
+# Subtest: final complete helper reverses only name and ACTIVE insertion to literal d48 raw/native wrapper
+ok 4 - final complete helper reverses only name and ACTIVE insertion to literal d48 raw/native wrapper
+  ---
+  duration_ms: 52.9563
+  type: 'test'
+  ...
+# Subtest: final actual OLD and transformed NEW are readmitted RAW then revision/policy NESTED before the same private ACTIVE owner
+ok 5 - final actual OLD and transformed NEW are readmitted RAW then revision/policy NESTED before the same private ACTIVE owner
+  ---
+  duration_ms: 0.4431
+  type: 'test'
+  ...
+# Subtest: baseline NEW updated_at transformation is real pinned source; no same-command snapshot or installed definition equivalence is claimed
+ok 6 - baseline NEW updated_at transformation is real pinned source; no same-command snapshot or installed definition equivalence is claimed
+  ---
+  duration_ms: 55.5713
+  type: 'test'
+  ...
+# Subtest: exact catalogue verifier refuses missing extra wrong-mode WHEN-guarded or foreign-owned guards; seals and all83 packaging statements pass without claiming native proof
+ok 7 - exact catalogue verifier refuses missing extra wrong-mode WHEN-guarded or foreign-owned guards; seals and all83 packaging statements pass without claiming native proof
+  ---
+  duration_ms: 4.7849
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 406.9057

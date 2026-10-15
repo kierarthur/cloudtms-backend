@@ -1,0 +1,51 @@
+✔ withheld unknown stays null, and false requires exact actual known zero evidence (2.198ms)
+✔ unknown item is amber Decision needed without invented zero or pay-hold false (0.7849ms)
+✔ pay authoriser sees permitted alignment/paired/return subjects as text despite invoice hold, hides invoice-only subject independently of badge (3.4745ms)
+✔ No one worked/Undo are admin-only native descriptors; reduced Checklist has no action links (55.0915ms)
+✔ native admin command payload cannot smuggle neighbouring scope or financial/origin fields (0.5302ms)
+✔ signed latest ended row stays complete, older done week drops, earlier open stays, no-Timesheet row never appears (0.3677ms)
+✔ native source-only advisory is information inside an existing row, without Timesheet target or admission count (2.7961ms)
+✔ source-only information cannot acquire a fake Timesheet, correction, pay subject, action or neighbouring native witness (0.2841ms)
+✔ signed issue itself cannot receive a Finalise action from an otherwise valid native scope (0.163ms)
+✔ actual submitted Daily stays visible while native materialisation is pending, with complete immutable identity and no action (0.4491ms)
+✔ agency Completed may be true before invoicing; consumer draws native status rather than deriving invoice readiness (0.1162ms)
+✔ Acacium pay-process caption is preserved without becoming paid quantity or Completed true (0.0915ms)
+✔ waiting correction counts T0 and permits exact P0 workspace action; after apply only P0 counts and R0 never does (0.3291ms)
+✔ Daily is an item fact; client/group row stays same route and Source-declared own week (0.1194ms)
+✔ signed row cannot acquire Finalise, and exact action target/scope must stay in its one workspace (0.1956ms)
+✔ closed user read payload rejects actor/origin/financial facts before any native callbacks (0.5216ms)
+✔ read authenticates, calls native page, then authoritative Source evidence in sequence (0.3608ms)
+✔ native pay/retention selection must precede cursor slicing; consumer refuses a hidden row rather than false end (0.1753ms)
+✔ wrong actor, duplicate identity, stale refresh or missing more cursor never publishes a valid page (0.3824ms)
+✔ item expansion scope is exact and batch bound is internal 100, independent of main list (0.4917ms)
+✔ main-list explicit filters stay scope-bound, and one page cannot mix main and expansion traversals (0.2453ms)
+✔ NHSP/nonpreset native preservation is exact pass-through and never relabelled by Source consumer (0.0831ms)
+✔ Timesheet information uses existing NEXT decoder; COMPLETE processing cannot fabricate paid hours (0.1656ms)
+✔ 500 client-week cache rows, insertions before and after consumed cursor, 20 closures, anchor return and duplicate-free merge (3.0315ms)
+✔ main and each expansion retain independent observers/cursors, collapse disconnects only its child, disposal blocks late activity (0.1712ms)
+✔ changed permission/filter binding cannot reuse cache and changed revision requires explicit anchored refresh, never false end (0.1341ms)
+✔ actual Checklist dispatcher invokes only one planned native reader with the fresh authenticated actor (16.7337ms)
+✔ issue expansion uses the same reader with all four exact scope keys and bounded ascending worker traversal (2.1134ms)
+✔ actor, view, financial/private facts and duplicate query fields are rejected before any native call (1.6843ms)
+✔ invalid identities, civil dates, bounds and incomplete expansions refuse before RPC (2.093ms)
+✔ all five main sorts and both directions pass unchanged; issue order has its own bounded native sort (0.4976ms)
+✔ inactive, unapproved and absent current actors cannot call the native reader (0.2918ms)
+✔ approved non-admin payment actor receives only the exact native PAY_READONLY row view (0.3966ms)
+✔ non-admin admin view, leaked row links and issue actions fail instead of postfiltering a native page (0.7111ms)
+✔ unknown withholding and pending decision remain NULL without invented zero or genuine decision (0.3927ms)
+✔ private raw DTOs, extra payload fields, foreign actor/scope and unknown cursor state are rejected (1.4222ms)
+✔ changed revision explicitly requests anchored refresh rather than false end-of-list (0.206ms)
+✔ duplicates, wrong main/expansion arm and nullable admin binary cells fail closed (0.6428ms)
+✔ pre-keyset retention and pay subject omissions cannot be disguised by transport filtering (0.4068ms)
+✔ a response-size failure is a contained read failure and never retries or calls a mutator (1.9751ms)
+✔ Checklist is GET-only; no No one worked or Undo is dispatched through the read route (0.5688ms)
+✔ native date and source-information fingerprint arrays cannot cross the closed read boundary (0.6147ms)
+ℹ Error: A resource generated asynchronous activity after the test ended. This activity created the error "TypeError: Invalid URL" which triggered an uncaughtException event, caught by the test runner.
+ℹ tests 42
+ℹ suites 0
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 211.9544

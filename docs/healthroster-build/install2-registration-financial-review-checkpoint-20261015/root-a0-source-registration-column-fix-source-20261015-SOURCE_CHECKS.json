@@ -1,0 +1,24 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "finding": "P2-A0-SOURCE-REGISTRATION-TGATTR1",
+  "critic_commit": "4c7edd046a68e84a0c89f31ce76ed0fcb83e9199",
+  "critic_review_sha256": "5f58f9b2731df01ab4290c6f6a04cc5be00c999b0a85c507597f2df700d65011",
+  "rejected_root": "f8c7830b22805339b205afe74fe3fc163f96381c",
+  "source_fix_applied": 1,
+  "fixes_rejected": 0,
+  "source_cases": 5,
+  "whole_owners": 2,
+  "unique_hunks": 4,
+  "lexical_statements": 80,
+  "literal76registrations_unchanged": true,
+  "new_signatures": 0,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "independent_fix_review": "PENDING",
+  "unrun": [
+    "real compiled pg_trigger properties/native execution/current role/body/contract/security",
+    "all current mandatory verifier safety refresh/final integration/performance/financial/acceptance"
+  ]
+}

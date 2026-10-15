@@ -1,0 +1,14 @@
+{
+  "source_only": true,
+  "native": false,
+  "root_registration": "f8c7830b22805339b205afe74fe3fc163f96381c",
+  "registration_critic": "4c7edd046a68e84a0c89f31ce76ed0fcb83e9199",
+  "registration_fix": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+  "fix_independent_closure": "PENDING",
+  "revision_policy_critic": "21c8a4ba6110b3627a1d875a69f891782056c550",
+  "native_decision": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+  "native_ordinary": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+  "verifier_safety_audit": "173 UPGRADE / 174 NEW: source review in progress, no execution",
+  "rollback_native_tool_available": false,
+  "no_db_or_release": true
+}

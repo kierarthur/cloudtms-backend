@@ -1,0 +1,496 @@
+TAP version 13
+# Subtest: withheld unknown stays null, and false requires exact actual known zero evidence
+ok 1 - withheld unknown stays null, and false requires exact actual known zero evidence
+  ---
+  duration_ms: 2.2164
+  type: 'test'
+  ...
+# Subtest: unknown item is amber Decision needed without invented zero or pay-hold false
+ok 2 - unknown item is amber Decision needed without invented zero or pay-hold false
+  ---
+  duration_ms: 0.8568
+  type: 'test'
+  ...
+# Subtest: pay authoriser sees permitted alignment/paired/return subjects as text despite invoice hold, hides invoice-only subject independently of badge
+ok 3 - pay authoriser sees permitted alignment/paired/return subjects as text despite invoice hold, hides invoice-only subject independently of badge
+  ---
+  duration_ms: 3.6845
+  type: 'test'
+  ...
+# Subtest: No one worked/Undo are admin-only native descriptors; reduced Checklist has no action links
+ok 4 - No one worked/Undo are admin-only native descriptors; reduced Checklist has no action links
+  ---
+  duration_ms: 55.5296
+  type: 'test'
+  ...
+# Subtest: native admin command payload cannot smuggle neighbouring scope or financial/origin fields
+ok 5 - native admin command payload cannot smuggle neighbouring scope or financial/origin fields
+  ---
+  duration_ms: 0.5676
+  type: 'test'
+  ...
+# Subtest: signed latest ended row stays complete, older done week drops, earlier open stays, no-Timesheet row never appears
+ok 6 - signed latest ended row stays complete, older done week drops, earlier open stays, no-Timesheet row never appears
+  ---
+  duration_ms: 1.0752
+  type: 'test'
+  ...
+# Subtest: native source-only advisory is information inside an existing row, without Timesheet target or admission count
+ok 7 - native source-only advisory is information inside an existing row, without Timesheet target or admission count
+  ---
+  duration_ms: 55.4172
+  type: 'test'
+  ...
+# Subtest: source-only information cannot acquire a fake Timesheet, correction, pay subject, action or neighbouring native witness
+ok 8 - source-only information cannot acquire a fake Timesheet, correction, pay subject, action or neighbouring native witness
+  ---
+  duration_ms: 0.587
+  type: 'test'
+  ...
+# Subtest: signed issue itself cannot receive a Finalise action from an otherwise valid native scope
+ok 9 - signed issue itself cannot receive a Finalise action from an otherwise valid native scope
+  ---
+  duration_ms: 56.0197
+  type: 'test'
+  ...
+# Subtest: actual submitted Daily stays visible while native materialisation is pending, with complete immutable identity and no action
+ok 10 - actual submitted Daily stays visible while native materialisation is pending, with complete immutable identity and no action
+  ---
+  duration_ms: 0.7525
+  type: 'test'
+  ...
+# Subtest: agency Completed may be true before invoicing; consumer draws native status rather than deriving invoice readiness
+ok 11 - agency Completed may be true before invoicing; consumer draws native status rather than deriving invoice readiness
+  ---
+  duration_ms: 0.3808
+  type: 'test'
+  ...
+# Subtest: Acacium pay-process caption is preserved without becoming paid quantity or Completed true
+ok 12 - Acacium pay-process caption is preserved without becoming paid quantity or Completed true
+  ---
+  duration_ms: 3.6572
+  type: 'test'
+  ...
+# Subtest: waiting correction counts T0 and permits exact P0 workspace action; after apply only P0 counts and R0 never does
+ok 13 - waiting correction counts T0 and permits exact P0 workspace action; after apply only P0 counts and R0 never does
+  ---
+  duration_ms: 0.4294
+  type: 'test'
+  ...
+# Subtest: Daily is an item fact; client/group row stays same route and Source-declared own week
+ok 14 - Daily is an item fact; client/group row stays same route and Source-declared own week
+  ---
+  duration_ms: 0.139
+  type: 'test'
+  ...
+# Subtest: signed row cannot acquire Finalise, and exact action target/scope must stay in its one workspace
+ok 15 - signed row cannot acquire Finalise, and exact action target/scope must stay in its one workspace
+  ---
+  duration_ms: 0.2556
+  type: 'test'
+  ...
+# Subtest: closed user read payload rejects actor/origin/financial facts before any native callbacks
+ok 16 - closed user read payload rejects actor/origin/financial facts before any native callbacks
+  ---
+  duration_ms: 0.5634
+  type: 'test'
+  ...
+# Subtest: read authenticates, calls native page, then authoritative Source evidence in sequence
+ok 17 - read authenticates, calls native page, then authoritative Source evidence in sequence
+  ---
+  duration_ms: 0.3878
+  type: 'test'
+  ...
+# Subtest: native pay/retention selection must precede cursor slicing; consumer refuses a hidden row rather than false end
+ok 18 - native pay/retention selection must precede cursor slicing; consumer refuses a hidden row rather than false end
+  ---
+  duration_ms: 0.1858
+  type: 'test'
+  ...
+# Subtest: wrong actor, duplicate identity, stale refresh or missing more cursor never publishes a valid page
+ok 19 - wrong actor, duplicate identity, stale refresh or missing more cursor never publishes a valid page
+  ---
+  duration_ms: 0.3108
+  type: 'test'
+  ...
+# Subtest: item expansion scope is exact and batch bound is internal 100, independent of main list
+ok 20 - item expansion scope is exact and batch bound is internal 100, independent of main list
+  ---
+  duration_ms: 0.4233
+  type: 'test'
+  ...
+# Subtest: main-list explicit filters stay scope-bound, and one page cannot mix main and expansion traversals
+ok 21 - main-list explicit filters stay scope-bound, and one page cannot mix main and expansion traversals
+  ---
+  duration_ms: 0.2689
+  type: 'test'
+  ...
+# Subtest: NHSP/nonpreset native preservation is exact pass-through and never relabelled by Source consumer
+ok 22 - NHSP/nonpreset native preservation is exact pass-through and never relabelled by Source consumer
+  ---
+  duration_ms: 0.1153
+  type: 'test'
+  ...
+# Subtest: Timesheet information uses existing NEXT decoder; COMPLETE processing cannot fabricate paid hours
+ok 23 - Timesheet information uses existing NEXT decoder; COMPLETE processing cannot fabricate paid hours
+  ---
+  duration_ms: 0.2046
+  type: 'test'
+  ...
+# Subtest: 500 client-week cache rows, insertions before and after consumed cursor, 20 closures, anchor return and duplicate-free merge
+ok 24 - 500 client-week cache rows, insertions before and after consumed cursor, 20 closures, anchor return and duplicate-free merge
+  ---
+  duration_ms: 2.7692
+  type: 'test'
+  ...
+# Subtest: main and each expansion retain independent observers/cursors, collapse disconnects only its child, disposal blocks late activity
+ok 25 - main and each expansion retain independent observers/cursors, collapse disconnects only its child, disposal blocks late activity
+  ---
+  duration_ms: 0.1758
+  type: 'test'
+  ...
+# Subtest: changed permission/filter binding cannot reuse cache and changed revision requires explicit anchored refresh, never false end
+ok 26 - changed permission/filter binding cannot reuse cache and changed revision requires explicit anchored refresh, never false end
+  ---
+  duration_ms: 0.1151
+  type: 'test'
+  ...
+# Subtest: actual Checklist dispatcher invokes only one planned native reader with the fresh authenticated actor
+ok 27 - actual Checklist dispatcher invokes only one planned native reader with the fresh authenticated actor
+  ---
+  duration_ms: 17.8273
+  type: 'test'
+  ...
+# Subtest: issue expansion uses the same reader with all four exact scope keys and bounded ascending worker traversal
+ok 28 - issue expansion uses the same reader with all four exact scope keys and bounded ascending worker traversal
+  ---
+  duration_ms: 2.3758
+  type: 'test'
+  ...
+# Subtest: actor, view, financial/private facts and duplicate query fields are rejected before any native call
+ok 29 - actor, view, financial/private facts and duplicate query fields are rejected before any native call
+  ---
+  duration_ms: 1.6857
+  type: 'test'
+  ...
+# Subtest: invalid identities, civil dates, bounds and incomplete expansions refuse before RPC
+ok 30 - invalid identities, civil dates, bounds and incomplete expansions refuse before RPC
+  ---
+  duration_ms: 1.8503
+  type: 'test'
+  ...
+# Subtest: all five main sorts and both directions pass unchanged; issue order has its own bounded native sort
+ok 31 - all five main sorts and both directions pass unchanged; issue order has its own bounded native sort
+  ---
+  duration_ms: 0.4864
+  type: 'test'
+  ...
+# Subtest: inactive, unapproved and absent current actors cannot call the native reader
+ok 32 - inactive, unapproved and absent current actors cannot call the native reader
+  ---
+  duration_ms: 0.2988
+  type: 'test'
+  ...
+# Subtest: approved non-admin payment actor receives only the exact native PAY_READONLY row view
+ok 33 - approved non-admin payment actor receives only the exact native PAY_READONLY row view
+  ---
+  duration_ms: 0.3923
+  type: 'test'
+  ...
+# Subtest: non-admin admin view, leaked row links and issue actions fail instead of postfiltering a native page
+ok 34 - non-admin admin view, leaked row links and issue actions fail instead of postfiltering a native page
+  ---
+  duration_ms: 0.768
+  type: 'test'
+  ...
+# Subtest: unknown withholding and pending decision remain NULL without invented zero or genuine decision
+ok 35 - unknown withholding and pending decision remain NULL without invented zero or genuine decision
+  ---
+  duration_ms: 0.4633
+  type: 'test'
+  ...
+# Subtest: private raw DTOs, extra payload fields, foreign actor/scope and unknown cursor state are rejected
+ok 36 - private raw DTOs, extra payload fields, foreign actor/scope and unknown cursor state are rejected
+  ---
+  duration_ms: 1
+  type: 'test'
+  ...
+# Subtest: changed revision explicitly requests anchored refresh rather than false end-of-list
+ok 37 - changed revision explicitly requests anchored refresh rather than false end-of-list
+  ---
+  duration_ms: 0.265
+  type: 'test'
+  ...
+# Subtest: duplicates, wrong main/expansion arm and nullable admin binary cells fail closed
+ok 38 - duplicates, wrong main/expansion arm and nullable admin binary cells fail closed
+  ---
+  duration_ms: 0.8241
+  type: 'test'
+  ...
+# Subtest: pre-keyset retention and pay subject omissions cannot be disguised by transport filtering
+ok 39 - pre-keyset retention and pay subject omissions cannot be disguised by transport filtering
+  ---
+  duration_ms: 0.444
+  type: 'test'
+  ...
+# Subtest: a response-size failure is a contained read failure and never retries or calls a mutator
+ok 40 - a response-size failure is a contained read failure and never retries or calls a mutator
+  ---
+  duration_ms: 2.2031
+  type: 'test'
+  ...
+# Subtest: Checklist is GET-only; no No one worked or Undo is dispatched through the read route
+ok 41 - Checklist is GET-only; no No one worked or Undo is dispatched through the read route
+  ---
+  duration_ms: 0.5383
+  type: 'test'
+  ...
+# Subtest: native date and source-information fingerprint arrays cannot cross the closed read boundary
+ok 42 - native date and source-information fingerprint arrays cannot cross the closed read boundary
+  ---
+  duration_ms: 0.681
+  type: 'test'
+  ...
+# Subtest: single native qualification kernel has exact mechanical full reverses and preserves scalar/table/void native ABI
+ok 43 - single native qualification kernel has exact mechanical full reverses and preserves scalar/table/void native ABI
+  ---
+  duration_ms: 424.6308
+  type: 'test'
+  ...
+# Subtest: complete conservative source read graph retains all native qualifications and admits only literal read-mode lock seams
+ok 44 - complete conservative source read graph retains all native qualifications and admits only literal read-mode lock seams
+  ---
+  duration_ms: 11.5419
+  type: 'test'
+  ...
+# Subtest: finite Source adapter reads original positive money, full membership/current proof and exact accepted-cut exclusion owner
+ok 45 - finite Source adapter reads original positive money, full membership/current proof and exact accepted-cut exclusion owner
+  ---
+  duration_ms: 2.7696
+  type: 'test'
+  ...
+# Subtest: real whole Checklist decoder preserves explicit SOURCE EX-VAT shift pence for Admin and text-only PAY without fake counted Timesheet
+ok 46 - real whole Checklist decoder preserves explicit SOURCE EX-VAT shift pence for Admin and text-only PAY without fake counted Timesheet
+  ---
+  duration_ms: 1.0236
+  type: 'test'
+  ...
+# Subtest: new money discriminant refuses arrays, rounding/overflow/zero, whole-TS, invented invoice/decision and non-Source subject
+ok 47 - new money discriminant refuses arrays, rounding/overflow/zero, whole-TS, invented invoice/decision and non-Source subject
+  ---
+  duration_ms: 1.8952
+  type: 'test'
+  ...
+# Subtest: producer integrates through genuine existing native lineage before PAY filtering while row aggregate remains unknown
+ok 48 - producer integrates through genuine existing native lineage before PAY filtering while row aggregate remains unknown
+  ---
+  duration_ms: 0.6236
+  type: 'test'
+  ...
+# Subtest: native vectors cannot qualify a missing case or a fake DTO financial frame
+ok 49 - native vectors cannot qualify a missing case or a fake DTO financial frame
+  ---
+  duration_ms: 0.4574
+  type: 'test'
+  ...
+# Subtest: actual NEXT dirtying/refresh hooks are pinned as writer dependencies and never enter the GET graph
+ok 50 - actual NEXT dirtying/refresh hooks are pinned as writer dependencies and never enter the GET graph
+  ---
+  duration_ms: 0.8487
+  type: 'test'
+  ...
+# Subtest: same native VAT_FIT admission predicate is extracted once with complete exact wrapper and reverse
+ok 51 - same native VAT_FIT admission predicate is extracted once with complete exact wrapper and reverse
+  ---
+  duration_ms: 52.9938
+  type: 'test'
+  ...
+# Subtest: positive block reader is pure and delegates native predicate, with no amount or decision classifier
+ok 52 - positive block reader is pure and delegates native predicate, with no amount or decision classifier
+  ---
+  duration_ms: 1.2394
+  type: 'test'
+  ...
+# Subtest: actor, dated scope and financial permission precede native invoice census
+ok 53 - actor, dated scope and financial permission precede native invoice census
+  ---
+  duration_ms: 0.3405
+  type: 'test'
+  ...
+# Subtest: actual export ledger persists without CURRENT publication and unproved native identity refuses rather than suppresses
+ok 54 - actual export ledger persists without CURRENT publication and unproved native identity refuses rather than suppresses
+  ---
+  duration_ms: 0.3437
+  type: 'test'
+  ...
+# Subtest: whole producer joins same invoice facts before paging, without pay exposure, fake row admission or process shortcut
+ok 55 - whole producer joins same invoice facts before paging, without pay exposure, fake row admission or process shortcut
+  ---
+  duration_ms: 0.4144
+  type: 'test'
+  ...
+# Subtest: whole native item transport preserves real invoice block and unknown pay/decision without a fabricated action
+ok 56 - whole native item transport preserves real invoice block and unknown pay/decision without a fabricated action
+  ---
+  duration_ms: 0.306
+  type: 'test'
+  ...
+# Subtest: reduced pay boundary requires invoice population filtered before page
+ok 57 - reduced pay boundary requires invoice population filtered before page
+  ---
+  duration_ms: 0.1909
+  type: 'test'
+  ...
+# Subtest: invoice block cannot be reused as a pay amount, known zero, cleared invoice or pending Office decision
+ok 58 - invoice block cannot be reused as a pay amount, known zero, cleared invoice or pending Office decision
+  ---
+  duration_ms: 0.1495
+  type: 'test'
+  ...
+# Subtest: all new witness hashes reject arrays and nonstrings at the whole item boundary
+ok 59 - all new witness hashes reject arrays and nonstrings at the whole item boundary
+  ---
+  duration_ms: 0.5074
+  type: 'test'
+  ...
+# Subtest: exact actor/scope/movement evidence and required real upload identity are bound
+ok 60 - exact actor/scope/movement evidence and required real upload identity are bound
+  ---
+  duration_ms: 0.3804
+  type: 'test'
+  ...
+# Subtest: invoice item cannot acquire a Timesheet, Queries or unproved Finalise action
+ok 61 - invoice item cannot acquire a Timesheet, Queries or unproved Finalise action
+  ---
+  duration_ms: 0.2127
+  type: 'test'
+  ...
+# Subtest: closed invoice item rejects role/route/subject relabel and foreign native witness
+ok 62 - closed invoice item rejects role/route/subject relabel and foreign native witness
+  ---
+  duration_ms: 0.2446
+  type: 'test'
+  ...
+# Subtest: finite invoice block authority cannot certify a whole main row or leak raw private frames
+ok 63 - finite invoice block authority cannot certify a whole main row or leak raw private frames
+  ---
+  duration_ms: 0.1688
+  type: 'test'
+  ...
+# Subtest: proved invoice block cannot render a cleared/paid/decision badge from an inconsistent native status
+ok 64 - proved invoice block cannot render a cleared/paid/decision badge from an inconsistent native status
+  ---
+  duration_ms: 0.1711
+  type: 'test'
+  ...
+# Subtest: whole native transport preserves a qualified current invoice decision with independent unknown pay amount and no action
+ok 65 - whole native transport preserves a qualified current invoice decision with independent unknown pay amount and no action
+  ---
+  duration_ms: 0.2688
+  type: 'test'
+  ...
+# Subtest: unknown qualification preserves the complete base invoice item rather than suppressing the catalogue
+ok 66 - unknown qualification preserves the complete base invoice item rather than suppressing the catalogue
+  ---
+  duration_ms: 0.1974
+  type: 'test'
+  ...
+# Subtest: decision authority is finite positive invoice-only truth and cannot manufacture pay, known zero or cleared decision
+ok 67 - decision authority is finite positive invoice-only truth and cannot manufacture pay, known zero or cleared decision
+  ---
+  duration_ms: 0.2014
+  type: 'test'
+  ...
+# Subtest: all new scalar witness hashes reject arrays, objects, null, number and boolean through the whole transport
+ok 68 - all new scalar witness hashes reject arrays, objects, null, number and boolean through the whole transport
+  ---
+  duration_ms: 0.97
+  type: 'test'
+  ...
+# Subtest: actual decision actor scope upload movement and manifest must match the existing native block witness
+ok 69 - actual decision actor scope upload movement and manifest must match the existing native block witness
+  ---
+  duration_ms: 0.4187
+  type: 'test'
+  ...
+# Subtest: native block proof and decision authority proof are separately bound and cannot be swapped
+ok 70 - native block proof and decision authority proof are separately bound and cannot be swapped
+  ---
+  duration_ms: 0.3369
+  type: 'test'
+  ...
+# Subtest: only the exact native qualification purpose and safe actual authority version are admissible
+ok 71 - only the exact native qualification purpose and safe actual authority version are admissible
+  ---
+  duration_ms: 0.3655
+  type: 'test'
+  ...
+# Subtest: decision cannot provide an unproved Finalise Timesheet or Queries action or row admission
+ok 72 - decision cannot provide an unproved Finalise Timesheet or Queries action or row admission
+  ---
+  duration_ms: 0.2707
+  type: 'test'
+  ...
+# Subtest: noninvoice relabel, foreign subject route or raw frame leakage is refused
+ok 73 - noninvoice relabel, foreign subject route or raw frame leakage is refused
+  ---
+  duration_ms: 0.4869
+  type: 'test'
+  ...
+# Subtest: reduced pay readers require the decision population filtered before paging
+ok 74 - reduced pay readers require the decision population filtered before paging
+  ---
+  duration_ms: 0.1393
+  type: 'test'
+  ...
+# Subtest: finite decision authority cannot certify a whole main row or a paid/completed status
+ok 75 - finite decision authority cannot certify a whole main row or a paid/completed status
+  ---
+  duration_ms: 0.2448
+  type: 'test'
+  ...
+# Subtest: three complete transport producer owners reverse through nine literal hunks to exact frozen aea bytes
+ok 76 - three complete transport producer owners reverse through nine literal hunks to exact frozen aea bytes
+  ---
+  duration_ms: 154.3721
+  type: 'test'
+  ...
+# Subtest: scope-local reader delegates sole native owners in literal read mode, preserving role and unknown exception boundaries
+ok 77 - scope-local reader delegates sole native owners in literal read mode, preserving role and unknown exception boundaries
+  ---
+  duration_ms: 0.9938
+  type: 'test'
+  ...
+# Subtest: one census before all items and one after all items remove per-item whole-scope re-census
+ok 78 - one census before all items and one after all items remove per-item whole-scope re-census
+  ---
+  duration_ms: 0.4313
+  type: 'test'
+  ...
+# Subtest: whole producer consumes same decision frames before its actor-wide revision and page without changing pay process or admission
+ok 79 - whole producer consumes same decision frames before its actor-wide revision and page without changing pay process or admission
+  ---
+  duration_ms: 0.4088
+  type: 'test'
+  ...
+# Subtest: complete successor source graph preserves every immutable native callee and exposes its conditional lock seam as unqualified
+ok 80 - complete successor source graph preserves every immutable native callee and exposes its conditional lock seam as unqualified
+  ---
+  duration_ms: 7.0176
+  type: 'test'
+  ...
+# Subtest: native positive decision needs exact request hash version rules client group cycle and no release receipt; unavailable version preserves the base
+ok 81 - native positive decision needs exact request hash version rules client group cycle and no release receipt; unavailable version preserves the base
+  ---
+  duration_ms: 0.3446
+  type: 'test'
+  ...
+1..81
+# tests 81
+# suites 0
+# pass 81
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1001.1465

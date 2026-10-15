@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "SOURCE_CHECKS.json",
+      "bytes": 867,
+      "sha256": "b0e6134d7a3ea3c0079bf27624e8d3416cfdc56ef0662193607b2184025ef816"
+    },
+    {
+      "file": "SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "SOURCE_TEST_OUTPUT.txt",
+      "bytes": 1489,
+      "sha256": "0af160e8a2dcffdbca33428066f21a589b2a4ab8bbf8d6f0d1b912be7f1f6b58"
+    },
+    {
+      "file": "build-fix.mjs",
+      "bytes": 3728,
+      "sha256": "fa41cb0176ef02ee48df581973563456afa0ced0d9db3c47c4312fc407f0c81e"
+    }
+  ]
+}
