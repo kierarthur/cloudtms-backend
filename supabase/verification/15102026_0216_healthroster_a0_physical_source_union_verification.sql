@@ -1,0 +1,229 @@
+-- Retains all physical-owner catalogue checks against the Source arbiter schema.
+-- The separate mandatory Source kernel verifier also proves its five helpers and coverage exclusion.
+begin;
+-- Catalogue/SELECT-only prospective mandatory verifier; genuine outer RR compatible.
+-- No native business owner, token acquire, DML or fixture is invoked here.
+-- Complete canonical compiled CHECK/policy/index expressions and native schedules remain separate gates.
+do $a0_source_contract$
+declare v_oid oid;r record;v_count integer;
+begin
+  v_oid:=to_regclass('private.timesheet_correction_a0_transaction_fences');
+  if v_oid is null or not exists(select 1 from pg_catalog.pg_class c where c.oid=v_oid and c.relkind='r'
+      and c.relrowsecurity and c.relowner=(current_user::regrole)::oid and c.relchecks=2)
+    or exists(select 1 from pg_catalog.pg_class c cross join lateral pg_catalog.aclexplode(
+      coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) a where c.oid=v_oid and a.grantee<>c.relowner)
+    or exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid=v_oid)
+    or exists(select 1 from pg_catalog.pg_constraint c where c.conrelid=v_oid and c.contype not in('c','x')) then
+    raise exception 'CORRECTION_A0_PRIVATE_ARBITER_CONTRACT_INVALID' using errcode='55000';end if;
+  if (select count(*) from pg_catalog.pg_attribute a where a.attrelid=v_oid and a.attnum>0 and not a.attisdropped)<>7
+    or exists(select 1 from(values(1,'token_kind','text',true),(2,'uuid_identity','uuid',false),
+      (3,'text_identity','text',false),(4,'retained','boolean',true),(5,'intent_span','numrange',true),
+      (6,'coverage_span','daterange',false),(7,'touch_bit','boolean',true)) e(num,name,typ,nn) where not exists(select 1 from pg_catalog.pg_attribute a
+        where a.attrelid=v_oid and a.attnum=e.num and a.attname=e.name and a.atttypid=to_regtype(e.typ)
+        and a.attnotnull=e.nn and not a.attisdropped and a.attidentity='' and a.attgenerated=''
+        and (e.typ<>'text' or a.attcollation='pg_catalog."C"'::regcollation))) then
+    raise exception 'CORRECTION_A0_ARBITER_COLUMNS_CHANGED' using errcode='55000';end if;
+  if current_setting('block_size')::integer<>8192 or not exists(select 1 from pg_catalog.pg_extension e
+      join pg_catalog.pg_namespace n on n.oid=e.extnamespace where e.extname='btree_gist' and n.nspname='public')
+    or not exists(select 1 from pg_catalog.pg_collation c where c.oid='pg_catalog.default'::regcollation and c.collisdeterministic) then
+    raise exception 'CORRECTION_A0_NATIVE_EXCLUSION_PROFILE_UNPROVED' using errcode='55000';end if;
+  if (select count(*) from pg_catalog.pg_constraint c where c.conrelid=v_oid)<>5
+    or (select count(*) from pg_catalog.pg_constraint c where c.conrelid=v_oid and c.contype='c' and c.convalidated
+      and c.conname in('timesheet_correction_a0_fences_identity_shape','timesheet_correction_a0_fences_span_shape'))<>2
+    or (select count(*) from pg_catalog.pg_policy p where p.polrelid=v_oid)<>1
+    or not exists(select 1 from pg_catalog.pg_policy p where p.polrelid=v_oid
+      and p.polname='cloudtms_miget_service_owner_all' and p.polcmd='*' and p.polpermissive
+      and pg_catalog.pg_get_expr(p.polqual,p.polrelid,false)='true'
+      and pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid,false)='true'
+      and (current_user::regrole)::oid=any(p.polroles) and 'service_role'::regrole::oid=any(p.polroles)
+      and not exists(select 1 from unnest(p.polroles) x(roleid)
+        where x.roleid not in((current_user::regrole)::oid,'service_role'::regrole::oid))) then
+    raise exception 'CORRECTION_A0_ARBITER_CONSTRAINTS_CHANGED' using errcode='55000';end if;
+  for r in select * from(values
+    ('candidate_submission_workflows','id','uuid'),
+    ('candidate_submission_workflows','target_timesheet_id','uuid'),
+    ('candidate_submission_workflows','anchor_timesheet_id','uuid'),
+    ('candidate_submission_workflows','contract_week_id','uuid'),
+    ('candidate_submission_workflows','replacement_of_workflow_id','uuid'),
+    ('candidate_approval_requests','workflow_id','uuid'),
+    ('candidate_submission_components','workflow_id','uuid'),
+    ('candidate_submission_components','timesheet_id','uuid'),
+    ('candidate_expense_components','workflow_id','uuid'),
+    ('candidate_expense_components','owning_timesheet_id','uuid'),
+    ('timesheet_evidence','timesheet_id','uuid'),
+    ('nhsp_shifts','timesheet_id','uuid'),
+    ('weekly_source_row_timesheet_lineages','timesheet_id','uuid'),
+    ('weekly_source_row_timesheet_lineages','contract_week_id','uuid'),
+    ('weekly_source_row_timesheet_lineages','source_cycle_id','uuid'),
+    ('weekly_source_row_timesheet_lineages','family_booking_id','text'),
+    ('contract_weeks','id','uuid'),
+    ('contract_weeks','timesheet_id','uuid'),
+    ('weekly_source_cycles','id','uuid'),
+    ('timesheets','booking_id','text'),
+    ('invoice_lines','booking_id','text'),
+    ('timesheets','occupant_key_norm','text'),
+    ('candidates','key_norm','text'),
+    ('candidates','nhsp_hr_name_aliases','jsonb')
+  ) e(table_name,column_name,type_name) loop
+    if not exists(select 1 from pg_catalog.pg_attribute a where a.attrelid=to_regclass('public.'||r.table_name)
+      and a.attnum>0 and not a.attisdropped and a.attname=r.column_name and a.atttypid=to_regtype(r.type_name)
+      and(r.type_name<>'text' or exists(select 1 from pg_catalog.pg_collation c
+        where c.oid=a.attcollation and c.collisdeterministic))) then
+      raise exception 'CORRECTION_A0_RAW_NATIVE_FIELD_CHANGED' using errcode='55000';end if;
+  end loop;
+  for r in select * from(values('timesheet_correction_a0_fences_uuid_excl',2,'uuid','gist_uuid_ops','uuid_identity'),
+      ('timesheet_correction_a0_fences_text_excl',3,'text','gist_text_ops','text_identity')) e(name,num,typ,opclass,column_name) loop
+    if not exists(select 1 from pg_catalog.pg_constraint c join pg_catalog.pg_index i on i.indexrelid=c.conindid
+      join pg_catalog.pg_class x on x.oid=i.indexrelid join pg_catalog.pg_am am on am.oid=x.relam
+      where c.conrelid=v_oid and c.conname=r.name and c.contype='x' and c.convalidated and not c.condeferrable
+        and not c.condeferred and c.conkey=array[1,r.num,5]::smallint[]
+        and c.conexclop=array['pg_catalog.=(text,text)'::regoperator::oid,
+          to_regoperator('pg_catalog.=('||r.typ||','||r.typ||')')::oid,'pg_catalog.&&(anyrange,anyrange)'::regoperator::oid]
+        and am.amname='gist' and i.indisexclusion and i.indisvalid and i.indisready and i.indislive
+        and i.indnatts=3 and i.indnkeyatts=3 and i.indexprs is null
+        and i.indclass[0]=(select o.oid from pg_catalog.pg_opclass o join pg_catalog.pg_namespace n on n.oid=o.opcnamespace
+          where n.nspname='public' and o.opcname='gist_text_ops' and o.opcmethod=x.relam)
+        and i.indclass[1]=(select o.oid from pg_catalog.pg_opclass o join pg_catalog.pg_namespace n on n.oid=o.opcnamespace
+          where n.nspname='public' and o.opcname=r.opclass and o.opcmethod=x.relam)
+        and i.indclass[2]=(select o.oid from pg_catalog.pg_opclass o join pg_catalog.pg_namespace n on n.oid=o.opcnamespace
+          where n.nspname='pg_catalog' and o.opcname='range_ops' and o.opcmethod=x.relam)
+        and i.indcollation[0]='pg_catalog."C"'::regcollation
+        and i.indcollation[1]=case when r.typ='text' then 'pg_catalog."C"'::regcollation::oid else 0::oid end
+        and pg_catalog.pg_get_expr(i.indpred,i.indrelid,false)=case when r.typ='uuid' then '((uuid_identity IS NOT NULL) AND (coverage_span IS NULL))' else '(text_identity IS NOT NULL)' end) then
+      raise exception 'CORRECTION_A0_EXCLUSION_ARBITER_CHANGED' using errcode='55000';end if;
+  end loop;
+  for r in select * from(values
+    ('private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])','sql','i','search_path=pg_catalog, pg_temp'),
+    ('private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])','sql','i','search_path=pg_catalog, pg_temp'),
+    ('private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)','plpgsql','v','search_path=pg_catalog, pg_temp'),
+    ('private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])','plpgsql','v','search_path=pg_catalog, pg_temp'),
+    ('private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)','plpgsql','v','search_path=pg_catalog, public, private, extensions, pg_temp'),
+    ('private.timesheet_correction_a0_child_reference_before_v1()','plpgsql','v','search_path=pg_catalog, pg_temp')
+  ) e(signature,language,volatility,configuration) loop
+    if to_regprocedure(r.signature) is null or not exists(select 1 from pg_catalog.pg_proc p
+      join pg_catalog.pg_language l on l.oid=p.prolang where p.oid=to_regprocedure(r.signature)
+      and p.prosecdef and p.proowner=(current_user::regrole)::oid and l.lanname=r.language
+      and p.provolatile::text=r.volatility and p.proconfig=array[r.configuration] and not p.proleakproof)
+      or exists(select 1 from pg_catalog.pg_proc p cross join lateral pg_catalog.aclexplode(
+        coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a where p.oid=to_regprocedure(r.signature) and a.grantee<>p.proowner)
+      or has_function_privilege('anon',to_regprocedure(r.signature),'EXECUTE')
+      or has_function_privilege('authenticated',to_regprocedure(r.signature),'EXECUTE')
+      or has_function_privilege('service_role',to_regprocedure(r.signature),'EXECUTE') then
+      raise exception 'CORRECTION_A0_PRIVATE_HELPER_CONTRACT_CHANGED' using errcode='55000';end if;
+  end loop;
+  for r in select * from(values
+    ('timesheet_validations','zzzz_healthroster_a0_reference_before_v1','private.timesheet_correction_a0_reference_before_v1()'),
+    ('invoice_lines','aaa_healthroster_a0_reference_before_v1','private.timesheet_correction_a0_reference_before_v1()'),
+    ('timesheets_financials','aaa_healthroster_a0_financial_before_v1','private.timesheet_correction_a0_reference_before_v1()'),
+    ('timesheets','aaa_healthroster_a0_booking_before_v1','private.timesheet_correction_a0_booking_before_v1()'),
+    ('candidates','zzzz_healthroster_a0_candidate_before_v1','private.timesheet_correction_a0_candidate_before_v1()'),
+    ('candidate_submission_workflows','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('candidate_approval_requests','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('candidate_submission_components','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('candidate_expense_components','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('timesheet_evidence','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('nhsp_shifts','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('weekly_source_row_timesheet_lineages','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('contract_weeks','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()'),
+    ('weekly_source_cycles','aaa_healthroster_a0_child_before_v1','private.timesheet_correction_a0_child_reference_before_v1()')
+  ) e(table_name,trigger_name,signature) loop
+    if not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid=to_regclass('public.'||r.table_name)
+      and t.tgname=r.trigger_name and t.tgfoid=to_regprocedure(r.signature) and t.tgenabled='O'
+      and t.tgtype=31 and t.tgqual is null and t.tgnargs=0 and t.tgattr=''::int2vector and t.tgconstraint=0) then
+      raise exception 'CORRECTION_A0_RAW_ALL_MUTATION_GUARD_CHANGED' using errcode='55000';end if;
+  end loop;
+  for r in select * from(values
+    ('candidate_approval_requests','candidate_manager_request_mail_guard_v1','private._candidate_manager_request_mail_guard_v1()','CREATE TRIGGER candidate_manager_request_mail_guard_v1 BEFORE UPDATE OF state ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_manager_request_mail_guard_v1()'),
+    ('candidate_expense_components','candidate_expense_source_root_guard_v1','private._candidate_expense_source_root_guard_v1()','CREATE TRIGGER candidate_expense_source_root_guard_v1 BEFORE INSERT OR UPDATE OF owning_timesheet_id, lifecycle_state ON candidate_expense_components FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_source_root_guard_v1()'),
+    ('candidate_submission_components','candidate_submission_components_immutability_guard','private._candidate_component_immutability_guard_v1()','CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON candidate_submission_components FOR EACH ROW EXECUTE FUNCTION private._candidate_component_immutability_guard_v1()'),
+    ('candidate_submission_workflows','candidate_workflow_creation_identity_guard_v1','private._candidate_workflow_creation_identity_guard_v1()','CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_workflow_creation_identity_guard_v1()'),
+    ('candidate_submission_workflows','trg_timesheet_submission_workflow_overlap_biu','private._timesheet_submission_workflow_overlap_trg_v1()','CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()'),
+    ('candidates','set_tms_ref','public.trg_set_tms_ref()','CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()'),
+    ('candidates','trg_candidates_set_bank_hash','public._trg_candidates_set_bank_hash()','CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()'),
+    ('candidates','trg_candidates_set_rev','public.trg_set_rev()','CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()'),
+    ('candidates','trg_candidates_set_updated_at','public.set_updated_at()','CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()'),
+    ('contract_weeks','bpay_expense_classification_week_before_v1','private.bpay_expense_classification_week_v1()','CREATE TRIGGER bpay_expense_classification_week_before_v1 BEFORE INSERT OR DELETE OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()'),
+    ('contract_weeks','contract_week_settings_authority_before_v1','private._contract_week_settings_authority_before_v1()','CREATE TRIGGER contract_week_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, timesheet_id, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private._contract_week_settings_authority_before_v1()'),
+    ('contract_weeks','trg_contract_weeks_set_updated_at','public.set_updated_at()','CREATE TRIGGER trg_contract_weeks_set_updated_at BEFORE UPDATE ON contract_weeks FOR EACH ROW EXECUTE FUNCTION set_updated_at()'),
+    ('invoice_lines','trg_invoice_line_archived_timesheet_guard_v1','public.invoice_line_archived_timesheet_guard_v1()','CREATE TRIGGER trg_invoice_line_archived_timesheet_guard_v1 BEFORE INSERT OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION invoice_line_archived_timesheet_guard_v1()'),
+    ('invoice_lines','weekly_source_invoice_line_owner_guard','private.weekly_source_invoice_line_owner_guard_v1()','CREATE TRIGGER weekly_source_invoice_line_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION private.weekly_source_invoice_line_owner_guard_v1()'),
+    ('timesheet_evidence','timesheet_evidence_candidate_lineage_guard','private._candidate_evidence_lineage_guard_v1()','CREATE TRIGGER timesheet_evidence_candidate_lineage_guard BEFORE INSERT OR UPDATE OF candidate_component_id, document_role, timesheet_id, storage_key ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION private._candidate_evidence_lineage_guard_v1()'),
+    ('timesheet_evidence','trg_timesheet_archived_evidence_guard_v1','public.timesheet_archived_evidence_guard_v1()','CREATE TRIGGER trg_timesheet_archived_evidence_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION timesheet_archived_evidence_guard_v1()'),
+    ('timesheets','bpay_expense_classification_ts_before_v1','private.bpay_expense_classification_ts_v1()','CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()'),
+    ('timesheets','bpay_source_timesheet_family_gate_v1','private.bpay_source_timesheet_family_gate_v1()','CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()'),
+    ('timesheets','bpay_timesheet_work_revision_v1','private.bpay_timesheet_work_revision_v1()','CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()'),
+    ('timesheets','timesheet_settings_authority_before_v1','private._timesheet_settings_authority_before_v1()','CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()'),
+    ('timesheets','timesheets_candidate_qr_pack_ready_notification_trg','private._candidate_qr_pack_ready_notification_v1()','CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()'),
+    ('timesheets','trg_timesheet_archive_row_guard_v1','public.timesheet_archive_row_guard_v1()','CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()'),
+    ('timesheets','trg_timesheet_authorisation_overlap_biu','private._timesheet_authorisation_overlap_trg_v1()','CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()'),
+    ('timesheets','trg_timesheets_updated_at','public.set_updated_at()','CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at()'),
+    ('timesheets','weekly_source_managed_root_authorisation_guard_bu','private.weekly_source_ordinary_authorisation_guard_tg_v1()','CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON timesheets FOR EACH ROW WHEN ((old.authorised_at_server IS DISTINCT FROM new.authorised_at_server)) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()'),
+    ('timesheets','zz_bpay_timesheet_work_key_v1','private.bpay_timesheet_work_key_v1()','CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()'),
+    ('timesheets_financials','trg_set_updated_at_tsfin','public.set_updated_at_tsfin()','CREATE TRIGGER trg_set_updated_at_tsfin BEFORE UPDATE ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION set_updated_at_tsfin()'),
+    ('weekly_source_row_timesheet_lineages','bpay_expense_classification_lineage_before_v1','private.bpay_expense_classification_lineage_v1()','CREATE TRIGGER bpay_expense_classification_lineage_before_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()'),
+    ('weekly_source_row_timesheet_lineages','bpay_lineage_work_binding_v1','private.bpay_lineage_work_binding_v1()','CREATE TRIGGER bpay_lineage_work_binding_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_lineage_work_binding_v1()'),
+    ('weekly_source_row_timesheet_lineages','bpay_source_lineage_family_gate_v1','private.bpay_source_lineage_family_gate_v1()','CREATE TRIGGER bpay_source_lineage_family_gate_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_source_lineage_family_gate_v1()'),
+    ('weekly_source_row_timesheet_lineages','weekly_source_immutable_record_guard','private._weekly_source_immutable_record_guard_v1()','CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()')
+  ) e(table_name,trigger_name,signature,definition) loop
+    if not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid=to_regclass('public.'||r.table_name)
+      and t.tgname=r.trigger_name and t.tgfoid=to_regprocedure(r.signature)
+      and t.tgenabled=case when r.table_name='timesheets' and r.trigger_name='zz_bpay_timesheet_work_key_v1' then 'A'::"char" else 'O'::"char" end
+      and pg_catalog.pg_get_triggerdef(t.oid,false)=replace(r.definition,' ON '||quote_ident(r.table_name)||' ',' ON public.'||quote_ident(r.table_name)||' ')) then
+      raise exception 'CORRECTION_A0_NATIVE_BEFORE_OWNER_CHANGED' using errcode='55000';end if;
+  end loop;
+  if exists(select 1 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid=t.tgrelid
+    join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in('timesheets','candidates','invoice_lines','timesheet_validations','timesheets_financials','candidate_submission_workflows','candidate_approval_requests','candidate_submission_components','candidate_expense_components','timesheet_evidence','nhsp_shifts','weekly_source_row_timesheet_lineages','contract_weeks','weekly_source_cycles')
+      and not t.tgisinternal and(t.tgtype&1)=1 and(t.tgtype&2)=2 and not exists(select 1 from(values
+    ('candidate_approval_requests','candidate_manager_request_mail_guard_v1'),
+    ('candidate_expense_components','candidate_expense_source_root_guard_v1'),
+    ('candidate_submission_components','candidate_submission_components_immutability_guard'),
+    ('candidate_submission_workflows','candidate_workflow_creation_identity_guard_v1'),
+    ('candidate_submission_workflows','trg_timesheet_submission_workflow_overlap_biu'),
+    ('candidates','set_tms_ref'),
+    ('candidates','trg_candidates_set_bank_hash'),
+    ('candidates','trg_candidates_set_rev'),
+    ('candidates','trg_candidates_set_updated_at'),
+    ('contract_weeks','bpay_expense_classification_week_before_v1'),
+    ('contract_weeks','contract_week_settings_authority_before_v1'),
+    ('contract_weeks','trg_contract_weeks_set_updated_at'),
+    ('invoice_lines','trg_invoice_line_archived_timesheet_guard_v1'),
+    ('invoice_lines','weekly_source_invoice_line_owner_guard'),
+    ('timesheet_evidence','timesheet_evidence_candidate_lineage_guard'),
+    ('timesheet_evidence','trg_timesheet_archived_evidence_guard_v1'),
+    ('timesheets','bpay_expense_classification_ts_before_v1'),
+    ('timesheets','bpay_source_timesheet_family_gate_v1'),
+    ('timesheets','bpay_timesheet_work_revision_v1'),
+    ('timesheets','timesheet_settings_authority_before_v1'),
+    ('timesheets','timesheets_candidate_qr_pack_ready_notification_trg'),
+    ('timesheets','trg_timesheet_archive_row_guard_v1'),
+    ('timesheets','trg_timesheet_authorisation_overlap_biu'),
+    ('timesheets','trg_timesheets_updated_at'),
+    ('timesheets','weekly_source_managed_root_authorisation_guard_bu'),
+    ('timesheets','zz_bpay_timesheet_work_key_v1'),
+    ('timesheets_financials','trg_set_updated_at_tsfin'),
+    ('weekly_source_row_timesheet_lineages','bpay_expense_classification_lineage_before_v1'),
+    ('weekly_source_row_timesheet_lineages','bpay_lineage_work_binding_v1'),
+    ('weekly_source_row_timesheet_lineages','bpay_source_lineage_family_gate_v1'),
+    ('weekly_source_row_timesheet_lineages','weekly_source_immutable_record_guard'),
+    ('timesheet_validations','zzzz_healthroster_a0_reference_before_v1'),
+    ('invoice_lines','aaa_healthroster_a0_reference_before_v1'),
+    ('timesheets_financials','aaa_healthroster_a0_financial_before_v1'),
+    ('timesheets','aaa_healthroster_a0_booking_before_v1'),
+    ('candidates','zzzz_healthroster_a0_candidate_before_v1'),
+    ('candidate_submission_workflows','aaa_healthroster_a0_child_before_v1'),
+    ('candidate_approval_requests','aaa_healthroster_a0_child_before_v1'),
+    ('candidate_submission_components','aaa_healthroster_a0_child_before_v1'),
+    ('candidate_expense_components','aaa_healthroster_a0_child_before_v1'),
+    ('timesheet_evidence','aaa_healthroster_a0_child_before_v1'),
+    ('nhsp_shifts','aaa_healthroster_a0_child_before_v1'),
+    ('weekly_source_row_timesheet_lineages','aaa_healthroster_a0_child_before_v1'),
+    ('contract_weeks','aaa_healthroster_a0_child_before_v1'),
+    ('weekly_source_cycles','aaa_healthroster_a0_child_before_v1')
+      ) e(table_name,trigger_name) where e.table_name=c.relname and e.trigger_name=t.tgname)) then
+    raise exception 'CORRECTION_A0_UNKNOWN_NATIVE_BEFORE_OWNER' using errcode='55000';end if;
+  -- No positive SEND/atomic or isolation change: preserve all nine RR roots and snapshot assertions.
+end;
+$a0_source_contract$;
+\ir 15102026_0216_healthroster_a0_physical_source_union/02_reviewed_bodies.sqlinc
+
+rollback;

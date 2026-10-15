@@ -1,0 +1,231 @@
+{
+  "source_only": true,
+  "deployable": false,
+  "input_head": "0e48346a5bc71ee08de8fa68f4f6f915fe32a240",
+  "physical_pin": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+  "inputs": [
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/COMPLETE_CURRENT_FORWARD_AND_REVERSE.json",
+      "bytes": 25751,
+      "sha256": "bc250abfaa9a0f4208549ffbdff6bf174149f552e35fd30201ad7eda0d489426"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_05_native_creator_intents_and_triggers.complete-proposed.sqlinc",
+      "bytes": 21519,
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_06_send_family_fence.complete-proposed.sqlinc",
+      "bytes": 7165,
+      "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_08_complete_current_request.complete-proposed.sqlinc",
+      "bytes": 24480,
+      "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_04_complete_native_lock_fence.complete-proposed.sqlinc",
+      "bytes": 12634,
+      "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_helpers.sqlinc",
+      "bytes": 22486,
+      "sha256": "e2c00e0d87bd7e9e52d98c9a45441101ce6495831c93d0d55909482c00660c8e"
+    },
+    {
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "bytes": 23386,
+      "sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_native_child_raw_intents.sqlinc",
+      "bytes": 6123,
+      "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_source_contract.sql",
+      "bytes": 25895,
+      "sha256": "c6b2ad962c62cbfe24b6c25bc2cfa9d2a1af79cadc30712fd6b50af573112783"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_reviewed_bodies.sqlinc",
+      "bytes": 5867,
+      "sha256": "b4de17478597aa4dee40e847fe1de8a54236a40441e50c45f20acdf8d032db22"
+    }
+  ],
+  "outputs": [
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc",
+      "bytes": 14965,
+      "sha256": "5ff8eea6905813e1b2964d47497f23e46d2ba0eccdd8669ada202e0bc2a1d3c8"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/05_native_creator_intents_and_triggers.sqlinc",
+      "bytes": 21519,
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/06_send_family_fence.sqlinc",
+      "bytes": 7165,
+      "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/08_complete_current_request.sqlinc",
+      "bytes": 24480,
+      "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/04_complete_native_lock_fence.sqlinc",
+      "bytes": 12634,
+      "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/09_native_child_raw_intents.sqlinc",
+      "bytes": 6123,
+      "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+      "bytes": 7143,
+      "sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6"
+    },
+    {
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "bytes": 26469,
+      "sha256": "ab9888f7a593039183162ceec4b5bd41d398b9fc469d9354f11d522052b30f0b"
+    },
+    {
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union/02_reviewed_bodies.sqlinc",
+      "bytes": 5867,
+      "sha256": "4439a9df0239a538ae075cdf4b048af42d43c0ac796fe41c1ac192894d649a9c"
+    }
+  ],
+  "whole_current_reversals": [
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "before_sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "after_sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75",
+      "hunks": 7,
+      "entire_reverse_equal": true
+    },
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "before_sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "after_sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022",
+      "hunks": 2,
+      "entire_reverse_equal": true
+    },
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "before_sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "after_sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce",
+      "hunks": 4,
+      "entire_reverse_equal": true
+    },
+    {
+      "input": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "before_sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "after_sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c",
+      "hunks": 3,
+      "entire_reverse_equal": true
+    }
+  ],
+  "physical_private_helpers": [
+    "private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])",
+    "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])",
+    "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])",
+    "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)"
+  ],
+  "new_child_trigger_function": "private.timesheet_correction_a0_child_reference_before_v1()",
+  "new_dispatcher_selected_from": "15102026_0205_healthroster_source_arbiter_kernel",
+  "old_dispatcher_not_reintroduced": true,
+  "original_0519_pages_and_acl_tail_preserved": true,
+  "contract_successor_changes": [
+    {
+      "label": "seven exact Source arbiter columns",
+      "before": "a.attnum>0 and not a.attisdropped)<>6",
+      "after": "a.attnum>0 and not a.attisdropped)<>7"
+    },
+    {
+      "label": "preserve actual coverage/touch positions",
+      "before": "(6,'touch_bit','boolean',true)",
+      "after": "(6,'coverage_span','daterange',false),(7,'touch_bit','boolean',true)"
+    },
+    {
+      "label": "two checks plus three exclusions",
+      "before": "where c.conrelid=v_oid)<>4",
+      "after": "where c.conrelid=v_oid)<>5"
+    },
+    {
+      "label": "exact Source scalar UUID predicate",
+      "before": "pg_catalog.pg_get_expr(i.indpred,i.indrelid,false)='('||r.column_name||' IS NOT NULL)'",
+      "after": "pg_catalog.pg_get_expr(i.indpred,i.indrelid,false)=case when r.typ='uuid' then '((uuid_identity IS NOT NULL) AND (coverage_span IS NULL))' else '(text_identity IS NOT NULL)' end"
+    },
+    {
+      "label": "use current Source dispatcher body, preserve all other forty expectations",
+      "before": "a35682589490cfd25c6557ea3cf419fbadc4d90cb31c26868f3a2a64b738d008",
+      "after": "37eeb5ac3857fb815126e71b725eb264d20ec958ae7a4473248d1425c18abb1b"
+    },
+    {
+      "label": "new verifier include",
+      "before": "\\ir 14102026_1216_a0_transaction_fence_reviewed_bodies.sqlinc",
+      "after": "\\ir 15102026_0216_healthroster_a0_physical_source_union/02_reviewed_bodies.sqlinc"
+    }
+  ],
+  "source_constructor_and_physical_verifiers_both_mandatory": true,
+  "repeatable_closure_sha256": "df2dac127edb8dd35808328b3c9d88a412122141ab211947f71757daa9ee61bd",
+  "release": {
+    "before_upgrade": 174,
+    "after_upgrade": 175,
+    "before_new": 175,
+    "after_new": 176,
+    "appended_verifier": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+    "existing_prefix_preserved": true,
+    "before_sha256": "def592ae7624b8e9a7bce5e7f0f4f1d2011e0c942c35d5fdb0d61a66f433e5cd",
+    "after_sha256": "5dfdd37d9cd9d8075d7295e5621658028a6a61699339d58cf80899bc1e84f167"
+  },
+  "remaining": [
+    "independent mechanical union review",
+    "actual full Source/Agency RAW/ACTIVE and caller union",
+    "native hidden-RR/concurrent phased and ordinary caller schedules",
+    "final contract/registry/ACL/compiled verifier qualification",
+    "full release rehearsal, Install2 and genuine acceptance"
+  ],
+  "native_verifier_fix": "NATIVE_BINDING_VERIFIER_FIX.json",
+  "canonical_sql_line_endings": [
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+      "before_sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6",
+      "after_sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6",
+      "only_CRLF_to_LF": true
+    },
+    {
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "before_sha256": "ab9888f7a593039183162ceec4b5bd41d398b9fc469d9354f11d522052b30f0b",
+      "after_sha256": "ab9888f7a593039183162ceec4b5bd41d398b9fc469d9354f11d522052b30f0b",
+      "only_CRLF_to_LF": true
+    }
+  ],
+  "native_observation": {
+    "initial": "INITIAL_NATIVE_RESULT.json",
+    "readonly_diagnosis": "READONLY_BINDING_DIAG_RESULT.json",
+    "retry": "RETRY01_NATIVE_RESULT.json",
+    "all_177_completed": true,
+    "both_full_mandatory_constructor_bodies_pass": true,
+    "reviewed_body_expectations": 41,
+    "full_rehearsal": false,
+    "independent_mechanical_review": "PENDING"
+  }
+}

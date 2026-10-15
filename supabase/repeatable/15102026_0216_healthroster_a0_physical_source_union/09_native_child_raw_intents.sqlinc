@@ -1,0 +1,73 @@
+-- One native arbiter, raw actual OLD/NEW fields only. No child-state resolver,
+-- new entitlement, FK, actor flag or replacement financial authority.
+create or replace function private.timesheet_correction_a0_child_reference_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r jsonb;v_rows jsonb[];v_ids uuid[]:=array[]::uuid[];v_workflows uuid[]:=array[]::uuid[];
+  v_weeks uuid[]:=array[]::uuid[];v_cycles uuid[]:=array[]::uuid[];v_bookings text[]:=array[]::text[];
+begin
+  if tg_table_schema<>'public' or tg_op not in('INSERT','UPDATE','DELETE') or tg_table_name not in(
+    'candidate_submission_workflows','candidate_approval_requests','candidate_submission_components','candidate_expense_components',
+    'timesheet_evidence','nhsp_shifts','weekly_source_row_timesheet_lineages','contract_weeks','weekly_source_cycles') then
+    raise exception 'CORRECTION_A0_CHILD_TRIGGER_CONTEXT_INVALID' using errcode='55000';end if;
+  if tg_op='INSERT' then v_rows:=array[to_jsonb(new)];elsif tg_op='DELETE' then v_rows:=array[to_jsonb(old)];
+    else v_rows:=array[to_jsonb(old),to_jsonb(new)];end if;
+  foreach r in array v_rows loop
+    -- Every field below is pinned to an actual native UUID/text column. There
+    -- is no snapshot-visible lookup before raw physical/workflow/week intent.
+    if tg_table_name='candidate_submission_workflows' then
+      v_ids:=v_ids||array[(r->>'target_timesheet_id')::uuid,(r->>'anchor_timesheet_id')::uuid];
+      v_workflows:=v_workflows||array[(r->>'id')::uuid,(r->>'replacement_of_workflow_id')::uuid];
+      v_weeks:=v_weeks||array[(r->>'contract_week_id')::uuid];
+    elsif tg_table_name='candidate_approval_requests' then
+      v_workflows:=v_workflows||array[(r->>'workflow_id')::uuid];
+    elsif tg_table_name='candidate_submission_components' then
+      v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];v_workflows:=v_workflows||array[(r->>'workflow_id')::uuid];
+    elsif tg_table_name='candidate_expense_components' then
+      v_ids:=v_ids||array[(r->>'owning_timesheet_id')::uuid];v_workflows:=v_workflows||array[(r->>'workflow_id')::uuid];
+    elsif tg_table_name='weekly_source_row_timesheet_lineages' then
+      v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];v_weeks:=v_weeks||array[(r->>'contract_week_id')::uuid];
+      v_cycles:=v_cycles||array[(r->>'source_cycle_id')::uuid];v_bookings:=v_bookings||array[r->>'family_booking_id'];
+    elsif tg_table_name='weekly_source_cycles' then
+      v_cycles:=v_cycles||array[(r->>'id')::uuid];
+    elsif tg_table_name='contract_weeks' then
+      v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];v_weeks:=v_weeks||array[(r->>'id')::uuid];
+    else v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];end if;
+  end loop;
+  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v2(
+    null,v_ids,v_bookings,null,null,v_workflows,v_weeks,v_cycles),false);
+  -- Native immutable/lineage/financial/state/actor owners retain all decisions.
+  if tg_op='DELETE' then return old;end if;return new;
+end;
+$function$;
+alter function private.timesheet_correction_a0_child_reference_before_v1() owner to postgres;
+revoke all on function private.timesheet_correction_a0_child_reference_before_v1() from public,anon,authenticated,service_role;
+
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.candidate_submission_workflows;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.candidate_submission_workflows
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.candidate_approval_requests;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.candidate_approval_requests
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.candidate_submission_components;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.candidate_submission_components
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.candidate_expense_components;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.candidate_expense_components
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.timesheet_evidence;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.timesheet_evidence
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.nhsp_shifts;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.nhsp_shifts
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.weekly_source_row_timesheet_lineages;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.weekly_source_row_timesheet_lineages
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.contract_weeks;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.contract_weeks
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();
+
+drop trigger if exists aaa_healthroster_a0_child_before_v1 on public.weekly_source_cycles;
+create trigger aaa_healthroster_a0_child_before_v1 before insert or update or delete on public.weekly_source_cycles
+  for each row execute function private.timesheet_correction_a0_child_reference_before_v1();

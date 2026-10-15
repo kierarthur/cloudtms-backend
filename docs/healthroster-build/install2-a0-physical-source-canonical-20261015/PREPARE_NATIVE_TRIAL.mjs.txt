@@ -1,0 +1,38 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import {createHash}from'node:crypto';
+import {readManagedClosure,scanManagedSql,exactAtomicBody}from'../scripts/cloudtms-managed-release-sql.mjs';
+import {mapExecutableSqlSource}from'../scripts/cloudtms-db-release-lib.mjs';
+import {functionEvents}from'../docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs';
+const sha=b=>createHash('sha256').update(b).digest('hex'),dir=process.argv[2]??'.codex-tmp/a0-physical-source-native-prerequisites-20261015';assert(dir.startsWith('.codex-tmp/a0-physical-source-native-'));assert(!fs.existsSync(dir));
+const composition=JSON.parse(fs.readFileSync('docs/healthroster-build/install2-a0-physical-source-canonical-20261015/COMPOSITION.json'));
+for(const x of composition.outputs){const b=fs.readFileSync(x.file);assert.equal(sha(b),x.sha256);assert.equal(b.length,x.bytes);}
+const physical=composition.outputs.find(x=>/_v1\.sql$/.test(x.file)).file;
+const files=['supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql','supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql','supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql',physical];
+const closures=files.map(file=>({file,...readManagedClosure(file,process.cwd())}));
+const events=closures.flatMap(c=>functionEvents(c.expanded.replaceAll('\r\n','\n')).events.filter(e=>e.kind==='CREATE'));
+const priorFile='supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql',prior=readManagedClosure(priorFile,process.cwd());
+const existingIds=new Set(events.map(e=>e.id));
+const prerequisites=functionEvents(prior.expanded.replaceAll('\r\n','\n')).events.filter(e=>e.kind==='CREATE'&&!existingIds.has(e.id));assert.equal(prerequisites.length,10);
+events.push(...prerequisites);
+const signatures=[...new Set(events.map(e=>e.id))].sort();
+const names=[...new Set(signatures.map(s=>s.slice(0,s.indexOf('('))))].sort();
+const relationNames=['private.timesheet_correction_requests','private.timesheet_correction_a0_transaction_fences'];
+const relations=['public.timesheets','public.candidates','public.timesheet_validations','public.invoice_lines','public.timesheets_financials','public.candidate_submission_workflows','public.candidate_approval_requests','public.candidate_submission_components','public.candidate_expense_components','public.timesheet_evidence','public.nhsp_shifts','public.weekly_source_row_timesheet_lineages','public.contract_weeks','public.weekly_source_cycles',...relationNames];
+const literals=a=>a.map(x=>"'"+x.replaceAll("'","''")+"'").join(',');
+const fingerprint=`select current_database() as database,
+ encode(sha256(convert_to(coalesce((select jsonb_agg(jsonb_build_object('oid',p.oid,'definition',pg_get_functiondef(p.oid),'owner',p.proowner,'acl',p.proacl) order by p.oid)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname||'.'||p.proname in(${literals(names)})),'[]'),'UTF8')),'hex') as routine_fingerprint,
+ encode(sha256(convert_to(coalesce((select jsonb_agg(to_jsonb(t) order by t.oid)::text from pg_trigger t where t.tgrelid=any(array[${literals(relations)}]::text[]::regclass[])),'[]'),'UTF8')),'hex') as trigger_fingerprint,
+ to_regclass('private.timesheet_correction_requests') is null as request_absent,
+ to_regclass('private.timesheet_correction_a0_transaction_fences') is null as arbiter_absent;
+`;
+// regclass input must tolerate the two deliberately absent new relations.
+const probe=fingerprint.replace("t.tgrelid=any(array["+literals(relations)+"]::text[]::regclass[])","t.tgrelid in(select to_regclass(x) from unnest(array["+literals(relations)+"]::text[]) x)");
+const vacancy=`do $vacancy$ begin if to_regclass('private.timesheet_correction_requests') is not null or to_regclass('private.timesheet_correction_a0_transaction_fences') is not null then raise exception 'EXPECTED_NEW_A0_SCHEMA_NOT_VACANT';end if;end $vacancy$;\n`;
+const verifierFiles=['supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql',composition.release.appended_verifier];
+function withoutOuter(sql){return scanManagedSql(sql).statements.filter(s=>!['BEGIN','COMMIT','ROLLBACK'].includes(s.tokens[0])).map(s=>sql.slice(s.start,s.end)).join('\n');}
+const ownerBefore=process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;let mapped;
+try{process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';mapped=closures.map(c=>mapExecutableSqlSource(exactAtomicBody(c.expanded),c.file));}finally{if(ownerBefore===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=ownerBefore;}
+const verifiers=verifierFiles.map(file=>({file,...readManagedClosure(file,process.cwd())}));
+const sql='set local jit=off;\nset local pg_show_plans.is_enabled=off;\n'+probe+vacancy+mapped[0]+'\n'+prerequisites.map(e=>e.definition).join('\n')+'\n'+mapped.slice(1).join('\n')+'\n'+verifiers.map(c=>withoutOuter(c.expanded)).join('\n')+"\nselect true as canonical_physical_module_and_complete_verifiers_passed;\n";
+const manifest={source_only_compile_trial:true,unexecuted_initial_prepare:'../a0-physical-source-native-20261015 (missing prior ten complete declarations; no native call)',prior_source:{file:priorFile,closure_sha256:prior.closureHash,exact_complete_prerequisite_declarations:prerequisites.map(e=>({signature:e.id,definition_sha256:sha(e.definition)})),all_original_module_acl_reassertions_preserved:true},files:closures.map(c=>({file:c.file,closure_sha256:c.closureHash})),verifiers:verifiers.map(c=>({file:c.file,closure_sha256:c.closureHash})),routine_signatures:signatures,sql_bytes:Buffer.byteLength(sql),sql_sha256:sha(sql),packaging_statements:scanManagedSql(sql).statements.length,verification_sha256:sha(probe),native:'PENDING',scope:'Exact request schema, ten full actual prior declarations, kernel and physical module declaration plus both complete mandatory catalogue verifiers. No application writer or business fixture executed; no concurrency/RR/financial/full rehearsal proof.'};
+assert(manifest.sql_bytes<=2000000);assert(manifest.packaging_statements<=250);
+fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(dir+'/TRIAL.sql',sql);fs.writeFileSync(dir+'/ABSENCE.sql',probe);fs.writeFileSync(dir+'/MANIFEST.json',JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify(manifest));

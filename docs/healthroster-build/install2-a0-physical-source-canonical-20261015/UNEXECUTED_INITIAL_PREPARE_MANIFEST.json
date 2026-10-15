@@ -1,0 +1,63 @@
+{
+  "source_only_compile_trial": true,
+  "files": [
+    {
+      "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "closure_sha256": "5f58b5a1748d86c26cd0bc8cdb0c1bf91ced5056cb0b053b2ca94e4c63b11084"
+    },
+    {
+      "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+      "closure_sha256": "0cef23c83f9a698bdcb0734d269da9e23fd8e879ffaa31402aa67825f3067311"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+      "closure_sha256": "6d66e7ac0c37f15cbf36ebc5955bcb51a10633247eea448718cdea4b11848853"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+      "closure_sha256": "df2dac127edb8dd35808328b3c9d88a412122141ab211947f71757daa9ee61bd"
+    }
+  ],
+  "verifiers": [
+    {
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "closure_sha256": "ad519a5d9010d82513fb726c34a27b294b8596eb7f53d4af3e5e2af2b333487f"
+    },
+    {
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "closure_sha256": "341ce4c9b77694846322206ccf50c94e05ce5a052590bbf3029da01e210baeff"
+    }
+  ],
+  "routine_signatures": [
+    "private.timesheet_correction_a0_booking_before_v1()",
+    "private.timesheet_correction_a0_candidate_before_v1()",
+    "private.timesheet_correction_a0_child_reference_before_v1()",
+    "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])",
+    "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)",
+    "private.timesheet_correction_a0_fence_scalar_acquire_core_v1(jsonb,boolean)",
+    "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])",
+    "private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])",
+    "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+    "private.timesheet_correction_a0_reference_before_v1()",
+    "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)",
+    "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+    "private.timesheet_correction_a0_signed_precursor_v1(uuid)",
+    "private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean)",
+    "private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean)",
+    "private.timesheet_correction_a0_source_token_assert_v1(jsonb)",
+    "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+    "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+    "private.timesheet_correction_projection_by_request_v1(uuid,uuid)",
+    "private.timesheet_correction_week_allocate_v1(uuid,date,public.submission_mode_enum,uuid,timestamp with time zone)",
+    "public.timesheet_correction_create_projection_v1(uuid,uuid,uuid,uuid)",
+    "public.timesheet_correction_request_projection_v1(uuid,uuid)",
+    "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+    "public.timesheet_correction_workflow_projection_v1(uuid,uuid)"
+  ],
+  "sql_bytes": 164305,
+  "sql_sha256": "42429eea18aa0d419aeafcc9fc2ffc97746d9a91c408fe4fcddc97103ce7c4ea",
+  "packaging_statements": 167,
+  "verification_sha256": "07d6fdbb350304ecbfad868ec33fa50c067742385a2b11468a69b2f7d9440ddd",
+  "native": "PENDING",
+  "scope": "Exact request schema, kernel and physical module declaration plus both complete mandatory catalogue verifiers. No application writer or business fixture executed; no concurrency/RR/financial/full rehearsal proof."
+}

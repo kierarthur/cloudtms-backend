@@ -1,0 +1,324 @@
+create or replace function private.timesheet_correction_week_allocate_v1(
+  p_contract_id uuid,p_week_ending date,p_submission public.submission_mode_enum,p_planned_id uuid,p_now timestamptz
+) returns uuid language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_seq integer; v_id uuid:=coalesce(p_planned_id,gen_random_uuid());
+begin
+  perform pg_advisory_xact_lock(hashtextextended('CORRECTION_ADJUSTMENT_WEEK|'||p_contract_id||'|'||p_week_ending,0));
+  perform 1 from public.contract_weeks w where w.contract_id=p_contract_id and w.week_ending_date=p_week_ending
+    order by w.id for update;
+  select coalesce(max(w.additional_seq),0)+1 into v_seq from public.contract_weeks w
+    where w.contract_id=p_contract_id and w.week_ending_date=p_week_ending;
+  insert into public.contract_weeks(id,contract_id,week_ending_date,additional_seq,is_adjustment,submission_mode_snapshot,status,created_at,updated_at)
+    values(v_id,p_contract_id,p_week_ending,v_seq,true,p_submission,'SUBMITTED',p_now,p_now);
+  return v_id;
+end;
+$function$;
+
+create or replace function public.timesheet_correction_workflow_projection_v1(p_workflow_id uuid,p_candidate_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_workflow public.candidate_submission_workflows%rowtype; v_request private.timesheet_correction_requests%rowtype;
+begin
+  select w.* into v_workflow from public.candidate_submission_workflows w
+    where w.id=p_workflow_id and w.candidate_id=p_candidate_id;
+  if not found then return null; end if;
+  select request.* into v_request from private.timesheet_correction_requests request
+    where request.candidate_id=p_candidate_id
+      and request.replacement_timesheet_id in(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+    order by request.created_at_utc desc,request.id desc limit 1;
+  if not found then return null; end if;
+  return private.timesheet_correction_projection_by_request_v1(v_request.id,p_candidate_id);
+end;
+$function$;
+
+-- Physical family allocation follows the existing adjustment-week owner shape.
+-- The booking below is physical identity only; original_booking_id remains
+-- immutable business authority and no economic-key derivation is introduced.
+create or replace function private.timesheet_correction_leg_create_v1(
+  p_request private.timesheet_correction_requests,p_kind text,p_schedule jsonb,p_now timestamptz
+) returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare v_original public.timesheets%rowtype; v_id uuid; v_booking text; v_week uuid; v_seq integer; v_json jsonb;
+begin
+  if p_kind not in('WHOLE_TIMESHEET_REVERSAL','WHOLE_TIMESHEET_REPLACEMENT') or jsonb_typeof(p_schedule)<>'array' then
+    raise exception 'CORRECTION_LEG_SHAPE_INVALID' using errcode='22023';
+  end if;
+  select t.* into strict v_original from public.timesheets t where t.timesheet_id=p_request.reversed_timesheet_id;
+  v_id:=case when p_kind='WHOLE_TIMESHEET_REPLACEMENT' then p_request.replacement_timesheet_id
+    else(p_request.frozen_original_json->>'planned_reversal_timesheet_id')::uuid end;
+  v_booking:=case when p_kind='WHOLE_TIMESHEET_REPLACEMENT' then p_request.replacement_booking_id
+    else 'bk_awc_'||substr(encode(digest(p_request.id::text||'|R0','sha256'),'hex'),1,24) end;
+  if v_original.sheet_scope::text='WEEKLY' then
+    if p_request.contract_id is null then raise exception 'CORRECTION_WEEKLY_CONTRACT_REQUIRED' using errcode='55000'; end if;
+    if p_kind='WHOLE_TIMESHEET_REPLACEMENT' then
+      v_week:=p_request.replacement_week_id;
+      if not exists(select 1 from public.contract_weeks w where w.id=v_week and w.contract_id=p_request.contract_id
+        and w.week_ending_date=p_request.week_ending_date and w.is_adjustment and w.timesheet_id is null) then
+        raise exception 'CORRECTION_P0_WEEK_AUTHORITY_INVALID' using errcode='55000';
+      end if;
+    else
+      v_week:=private.timesheet_correction_week_allocate_v1(p_request.contract_id,p_request.week_ending_date,
+        v_original.submission_mode,(p_request.frozen_original_json->>'planned_reversal_week_id')::uuid,p_now);
+    end if;
+  end if;
+  v_json:=to_jsonb(v_original)||jsonb_build_object(
+    'timesheet_id',v_id,'booking_id',v_booking,'version',1,'is_current',true,'status','RECEIVED',
+    'is_adjustment',true,'parent_timesheet_id',p_request.root_timesheet_id,'correction_id',p_request.correction_id,
+    'correction_kind',p_kind,'adjustment_origin',p_request.origin,'actual_schedule_json',p_schedule,
+    'additional_units_week','{}'::jsonb,'additional_units_per_day','{}'::jsonb,
+    'authorised_at_server',null,'auth_name',null,'auth_job_title',null,'r2_nurse_key',null,'r2_auth_key',null,
+    'img_sha256_nurse',null,'img_sha256_auth',null,'manual_pdf_r2_key',null,'manual_document_asset_id',null,
+    'qr_status',null,'qr_token',null,'qr_payload_json','{}'::jsonb,'qr_signed_hash',null,'qr_signed_at_utc',null,
+    'qr_generated_at',null,'qr_scanned_at',null,'qr_scan_info_json',null,'qr_r2_key',null,
+    'qr_last_sent_hash',null,'qr_last_sent_at_utc',null,'qr_sent_refs_sig',null,'qr_sent_refs_snapshot_json',null,
+    'qr_sent_refs_captured_at_utc',null,'generated_pdf_at_utc',null,'generated_pdf_refs_sig',null,
+    'generated_pdf_refs_snapshot_json',null,'generated_pdf_refs_captured_at_utc',null)
+    ||jsonb_build_object(
+    'revoked_at',null,'revoked_reason',null,'revoked_by',null,'archived_at_utc',null,'archived_by_user_id',null,
+    'archived_reason_code',null,'idempotency_key',null,'client_hash',null,'client_ua',null,
+    'worked_start_iso',null,'worked_end_iso',null,'break_start_iso',null,'break_end_iso',null,'break_minutes',null,'worked_minutes',null,
+    'document_revision',1,'document_state','STALE','current_document_version_id',null,'active_document_operation_id',null,
+    'last_document_error_json',null,'candidate_workflow_id',null,'candidate_workflow_generation',null,
+    'candidate_manager_approved_at_utc',null,'candidate_submission_route_intent',null,
+    'reference_number',null,'reference_set_at',null,'day_references_json',null,'created_at',p_now,'updated_at',p_now,
+    'candidate_hint_text',jsonb_build_object('timesheet_correction_request',jsonb_build_object(
+      'request_id',p_request.id,'root_timesheet_id',p_request.root_timesheet_id,'original_booking_id',p_request.original_booking_id,
+      'reversed_timesheet_id',p_request.reversed_timesheet_id,'target_revision',p_request.target_revision,
+      'candidate_id',p_request.candidate_id,'client_id',p_request.client_id,'work_date',p_request.work_date),
+      'daily_receipt',p_request.frozen_original_json->'daily_receipt'));
+  insert into public.timesheets select (jsonb_populate_record(null::public.timesheets,v_json)).*;
+  if v_week is not null then update public.contract_weeks set timesheet_id=v_id where id=v_week; end if;
+  return jsonb_build_object('timesheet_id',v_id,'booking_id',v_booking,'contract_week_id',v_week);
+end;
+$function$;
+
+create or replace function public.timesheet_correction_send_v1(p_request jsonb,p_actor_user_id uuid,p_now_utc timestamptz default now())
+returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_now timestamptz:=coalesce(p_now_utc,now()); v_id uuid; v_root uuid; v_ts public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype; v_req private.timesheet_correction_requests%rowtype;
+  v_existing private.timesheet_correction_requests%rowtype; v_origin text; v_chain jsonb; v_witness jsonb;
+  v_invoice uuid; v_invoice_status text; v_key text; v_hash text; v_leg jsonb; v_candidate uuid; v_client uuid; v_date date;
+  v_a0_transaction_fence boolean:=false;
+begin
+  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);
+  if jsonb_typeof(p_request)<>'object' or not pg_input_is_valid(p_request->>'timesheet_id','uuid')
+    or not pg_input_is_valid(p_request->>'expected_version','integer')
+    or jsonb_typeof(p_request->'proposal') is distinct from 'object'
+    or jsonb_typeof(p_request#>'{proposal,schedule}') is distinct from 'array'
+    or length(btrim(coalesce(p_request->>'reason',''))) not between 1 and 1000 or nullif(btrim(p_request->>'request_key'),'') is null
+    or exists(select 1 from jsonb_object_keys(p_request) k where k not in('timesheet_id','expected_version','proposal','reason','request_key')) then
+    raise exception 'CORRECTION_SEND_SHAPE_INVALID' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_object_keys(p_request->'proposal') k where k not in('schedule','changed_dates'))
+    or exists(select 1 from jsonb_array_elements(p_request#>'{proposal,schedule}') s where jsonb_typeof(s) is distinct from 'object')
+    or (p_request#>'{proposal,changed_dates}' is not null and jsonb_typeof(p_request#>'{proposal,changed_dates}') is distinct from 'array') then
+    raise exception 'CORRECTION_SEND_SHAPE_INVALID' using errcode='22023';
+  end if;
+  v_id:=(p_request->>'timesheet_id')::uuid; v_key:=p_request->>'request_key';
+  v_hash:=encode(digest(jsonb_build_object('actor',p_actor_user_id,'request',p_request)::text,'sha256'),'hex');
+  -- Serialize exact command receipt before checking it. Concurrent same-key
+  -- Send never allocates a second P0 or loses replay to the unique index.
+  perform pg_advisory_xact_lock(hashtextextended('CORRECTION_SEND|'||v_key,13102026));
+  select request.* into v_existing from private.timesheet_correction_requests request where request.request_key=v_key;
+  if found then
+    if v_existing.request_fingerprint is distinct from v_hash or v_existing.created_by_user_id is distinct from p_actor_user_id then
+      raise exception 'CORRECTION_SEND_REPLAY_CONFLICT' using errcode='40001';
+    end if;
+    return jsonb_build_object('ok',true,'request_id',v_existing.id,'state',v_existing.state,
+      'replacement_timesheet_id',v_existing.replacement_timesheet_id,'state_revision',v_existing.state_revision,'replayed',true);
+  end if;
+  -- New missing-A0 purpose acquires canonical native Candidate/I-1 before
+  -- the existing invoice/chain/workflow/TS order. All other arms return unchanged.
+  perform private.timesheet_correction_a0_send_family_fence_v1(v_id);
+  v_a0_transaction_fence:=private.timesheet_correction_a0_signed_precursor_v1(v_id);
+  -- Lock every existing invoice first, using the same authority as all credit writers.
+  perform i.id from public.invoices i where i.id in(select distinct l.invoice_id from public.invoice_lines l
+    where l.timesheet_id=v_id) order by i.id for update;
+  v_chain:=public.timesheet_correction_chain_scope_v1(v_id,false,32,100);
+  if (v_chain->>'valid')::boolean is distinct from true or v_chain->>'latest_positive_timesheet_id' is distinct from v_id::text then
+    raise exception 'CORRECTION_LATEST_POSITIVE_REQUIRED' using errcode='55000';
+  end if;
+  v_root:=(v_chain->>'root_timesheet_id')::uuid;
+  perform pg_advisory_xact_lock(hashtextextended('CORRECTION_CHAIN|'||v_root::text,21072026));
+  v_chain:=public.timesheet_correction_chain_scope_v1(v_id,false,32,100);
+  if (v_chain->>'valid')::boolean is distinct from true or v_chain->>'latest_positive_timesheet_id' is distinct from v_id::text then
+    raise exception 'CORRECTION_LATEST_POSITIVE_REQUIRED' using errcode='40001';
+  end if;
+  select t.* into strict v_ts from public.timesheets t where t.timesheet_id=v_id;
+  -- The workflow lock precedes Timesheet/TSFIN locks, matching native Candidate owners.
+  if v_ts.candidate_workflow_id is not null then
+    perform 1 from public.candidate_submission_workflows w where w.id=v_ts.candidate_workflow_id for update;
+  end if;
+  select t.* into strict v_ts from public.timesheets t where t.timesheet_id=v_id for update;
+  if not v_ts.is_current or v_ts.archived_at_utc is not null or v_ts.version<>(p_request->>'expected_version')::integer then
+    raise exception 'CORRECTION_ORIGINAL_CHANGED' using errcode='40001';
+  end if;
+  v_origin:=private.timesheet_correction_origin_v1(v_id);
+  if v_origin is null then raise exception 'CORRECTION_ORIGIN_NOT_ALLOWED' using errcode='55000'; end if;
+  if v_origin='SIGNED_TIMESHEET_CORRECTION' then v_witness:=private.timesheet_correction_signed_witness_v1(v_id,true); end if;
+  select tf.* into v_fin from public.timesheets_financials tf where tf.timesheet_id=v_id and tf.is_current for update;
+  select summary.candidate_id,summary.client_id into v_candidate,v_client from public.v_timesheets_summary_base summary
+    where summary.timesheet_id=v_id;
+  if v_candidate is null or v_client is null then raise exception 'CORRECTION_BUSINESS_SCOPE_UNPROVED' using errcode='55000'; end if;
+  select l.invoice_id,i.status::text into v_invoice,v_invoice_status from public.invoice_lines l
+    join public.invoices i on i.id=l.invoice_id where l.timesheet_id=v_id and i.type='INVOICE'
+      and i.status in('DRAFT','ISSUED','PAID') group by l.invoice_id,i.status;
+  if (select count(distinct l.invoice_id) from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
+    where l.timesheet_id=v_id and i.type='INVOICE' and i.status in('DRAFT','ISSUED','PAID'))>1 then
+    raise exception 'CORRECTION_ORIGINAL_SPLIT_INVOICES' using errcode='55000';
+  end if;
+  if v_origin='AGENCY_INVOICE_CORRECTION' and coalesce(v_invoice_status,'') not in('ISSUED','PAID') then
+    raise exception 'AGENCY_WHOLE_CORRECTION_REQUIRES_ISSUED_PARENT' using errcode='55000';
+  end if;
+  v_date:=case when v_ts.sheet_scope::text='DAILY' then coalesce(
+    case when pg_input_is_valid(v_ts.candidate_hint_text#>>'{daily_receipt,work_date}','date')
+      then(v_ts.candidate_hint_text#>>'{daily_receipt,work_date}')::date end,
+    (v_ts.worked_start_iso at time zone 'Europe/London')::date) else v_ts.week_ending_date end;
+  if v_date is null then raise exception 'CORRECTION_WORK_DATE_UNPROVED' using errcode='55000'; end if;
+  v_req.id:=gen_random_uuid(); v_req.correction_id:='awc:'||v_root||':'||v_req.id;
+  v_req.origin:=v_origin; v_req.state:='WAITING'; v_req.state_revision:=1; v_req.proposal_revision:=1;
+  v_req.root_timesheet_id:=v_root;
+  select t.booking_id into v_req.original_booking_id from public.timesheets t where t.timesheet_id=v_root;
+  v_req.reversed_timesheet_id:=v_id; v_req.reversed_version:=v_ts.version; v_req.reversed_financial_id:=v_fin.id;
+  v_req.candidate_id:=v_candidate; v_req.client_id:=v_client; v_req.contract_id:=v_ts.contract_id;
+  v_req.work_date:=v_date; v_req.week_ending_date:=v_ts.week_ending_date;
+  v_req.replacement_timesheet_id:=gen_random_uuid();
+  v_req.replacement_booking_id:='bk_awc_'||substr(encode(digest(v_req.id::text||'|P0','sha256'),'hex'),1,24);
+  v_req.request_key:=v_key; v_req.request_fingerprint:=v_hash; v_req.reason:=btrim(p_request->>'reason');
+  v_req.frozen_original_json:=jsonb_build_object('timesheet',to_jsonb(v_ts),
+    'financial_snapshot',case when v_fin.id is not null then to_jsonb(v_fin) end,
+    'financial_authority_hash',case when v_fin.id is not null then private.timesheet_correction_financial_authority_hash_v1(to_jsonb(v_fin)) end,
+    'planned_reversal_timesheet_id',gen_random_uuid(),
+    'planned_reversal_week_id',case when v_ts.sheet_scope::text='WEEKLY' then gen_random_uuid() end,
+    'schedule',coalesce(v_ts.actual_schedule_json,'[]'::jsonb),'manager_signed_witness',v_witness,
+    'daily_receipt',v_ts.candidate_hint_text->'daily_receipt');
+  v_req.proposal_json:=p_request->'proposal';
+  v_req.target_revision:=encode(digest(jsonb_build_object('request',v_req.id,'root',v_root,'original_booking',v_req.original_booking_id,
+    'reversed',v_id,'version',v_ts.version,'candidate',v_candidate,'client',v_client,'date',v_date,
+    'original',v_req.frozen_original_json,'proposal',v_req.proposal_json)::text,'sha256'),'hex');
+  v_req.original_invoice_id:=case when v_invoice_status in('ISSUED','PAID') then v_invoice end;
+  v_req.return_invoice_id:=case when v_invoice_status='DRAFT' then v_invoice end;
+  v_req.created_by_user_id:=p_actor_user_id; v_req.created_at_utc:=v_now; v_req.updated_at_utc:=v_now;
+  -- Phase ALLOCATED uses the genuine owner-assigned P0/R0 UUIDs/bookings.
+  -- It precedes adjustment-week, WAITING and physical P0 publication.
+  if v_a0_transaction_fence then perform private.timesheet_correction_a0_request_tokens_retain_v1(v_req);end if;
+  if v_ts.sheet_scope::text='WEEKLY' then
+    v_req.replacement_week_id:=private.timesheet_correction_week_allocate_v1(v_req.contract_id,v_req.week_ending_date,
+      v_ts.submission_mode,null,v_now);
+  end if;
+  -- P0 week is now genuinely allocated by the unchanged native owner. Retain
+  -- its actual UUID before WAITING/P0 publication; no fabricated early UUID.
+  if v_a0_transaction_fence then
+    perform private.timesheet_correction_a0_request_tokens_retain_v1(v_req);
+    if private.timesheet_correction_signed_witness_v1(v_id,false) is distinct from v_witness
+      or public.timesheet_correction_chain_scope_v1(v_id,false,32,100) is distinct from v_chain
+      or exists(select 1 from public.timesheets_financials f where f.timesheet_id=v_id)
+      or exists(select 1 from public.timesheets t where t.timesheet_id=v_id
+        and private.timesheet_correction_timesheet_authority_hash_v1(to_jsonb(t)) is distinct from
+          private.timesheet_correction_timesheet_authority_hash_v1(v_req.frozen_original_json->'timesheet')) then
+      raise exception 'CORRECTION_A0_TOKEN_DEPENDENCY_CHANGED' using errcode='40001';end if;
+  end if;
+  -- The exact request exists before native overlap/derived triggers see P0.
+  insert into private.timesheet_correction_requests select (v_req).*;
+  v_leg:=private.timesheet_correction_leg_create_v1(v_req,'WHOLE_TIMESHEET_REPLACEMENT',
+    case when v_origin='SIGNED_TIMESHEET_CORRECTION' then '[]'::jsonb else v_req.proposal_json->'schedule' end,v_now);
+  insert into public.audit_events(ts_utc,actor_user_id,object_type,object_id_text,action,after_json,reason)
+    values(v_now,p_actor_user_id,'timesheets',v_id::text,'TIMESHEET_CORRECTION_SENT',
+      jsonb_build_object('request_id',v_req.id,'replacement_timesheet_id',v_req.replacement_timesheet_id),v_req.reason);
+  return jsonb_build_object('ok',true,'request_id',v_req.id,'state','WAITING','state_revision',1,
+    'replacement_timesheet_id',v_req.replacement_timesheet_id,'replacement_booking_id',v_req.replacement_booking_id,
+    'target_revision',v_req.target_revision,'proposal_revision',1);
+end;
+$function$;
+
+create or replace function private.timesheet_correction_projection_by_request_v1(p_request_id uuid,p_candidate_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','private','public','pg_temp'
+as $function$
+declare v_req private.timesheet_correction_requests%rowtype;
+begin
+  select request.* into v_req from private.timesheet_correction_requests request
+    where request.id=p_request_id and request.candidate_id=p_candidate_id;
+  if not found then return null; end if;
+  return jsonb_build_object('schema_version',1,'request_id',v_req.id,'correction_id',v_req.correction_id,
+    'origin',v_req.origin,'state',v_req.state,'state_revision',v_req.state_revision,'proposal_revision',1,
+    'target_revision',v_req.target_revision,'root_timesheet_id',v_req.root_timesheet_id,'reversed_timesheet_id',v_req.reversed_timesheet_id,
+    'original_booking_id',v_req.original_booking_id,'replacement_timesheet_id',v_req.replacement_timesheet_id,
+    'replacement_booking_id',v_req.replacement_booking_id,'replacement_week_id',v_req.replacement_week_id,
+    'candidate_id',v_req.candidate_id,'reason',v_req.reason,
+    'original_schedule',v_req.frozen_original_json->'schedule','proposed_schedule',v_req.proposal_json->'schedule',
+    'frozen_daily_receipt',v_req.frozen_original_json->'daily_receipt',
+    'frozen_daily_shift',case when v_req.frozen_original_json#>>'{timesheet,sheet_scope}'='DAILY' then jsonb_build_object(
+      'booking_id',v_req.original_booking_id,'work_date',v_req.work_date,'week_ending_date',v_req.week_ending_date,
+      'hospital',v_req.frozen_original_json#>'{timesheet,hospital_norm}',
+      'ward',v_req.frozen_original_json#>'{timesheet,ward_norm}',
+      'job_title',v_req.frozen_original_json#>'{timesheet,job_title_norm}',
+      'shift_type',v_req.frozen_original_json#>'{timesheet,shift_label_norm}',
+      'shift_starts_at',v_req.frozen_original_json#>'{timesheet,scheduled_start_iso}',
+      'shift_ends_at',v_req.frozen_original_json#>'{timesheet,scheduled_end_iso}') end,
+    'original_manager_approved_at_utc',v_req.frozen_original_json#>'{manager_signed_witness,manager_approved_at_utc}',
+    'changed_dates',coalesce(v_req.proposal_json->'changed_dates','[]'::jsonb),
+    'draft_scope',jsonb_build_object('kind','TIMESHEET_CORRECTION','request_id',v_req.id,
+      'replacement_timesheet_id',v_req.replacement_timesheet_id,
+      'allowed_timesheet_aliases',case when v_req.state='WAITING' then jsonb_build_array(v_req.replacement_timesheet_id) else '[]'::jsonb end,
+      'allowed_booking_aliases',case when v_req.state='WAITING' then jsonb_build_array(v_req.replacement_booking_id) else '[]'::jsonb end));
+end;
+$function$;
+
+create or replace function public.timesheet_correction_request_projection_v1(p_timesheet_id uuid,p_candidate_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','private','public','pg_temp'
+as $function$
+declare v_request_id uuid;
+begin
+  select request.id into v_request_id from private.timesheet_correction_requests request
+    where request.candidate_id=p_candidate_id
+      and p_timesheet_id in(request.root_timesheet_id,request.reversed_timesheet_id,request.replacement_timesheet_id,request.reversal_timesheet_id)
+    order by case when request.state='WAITING' then 0 else 1 end,request.created_at_utc desc,request.id desc limit 1;
+  if not found then return null; end if;
+  return private.timesheet_correction_projection_by_request_v1(v_request_id,p_candidate_id);
+end;
+$function$;
+
+-- CREATE has no workflow yet. An owned physical P0 selector proves only this
+-- purpose context; all ordinary validation and errors remain with CREATE.
+create or replace function public.timesheet_correction_create_projection_v1(
+  p_candidate_id uuid,p_contract_week_id uuid default null,p_target_timesheet_id uuid default null,p_anchor_timesheet_id uuid default null
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','private','public','pg_temp'
+as $function$
+declare v_request private.timesheet_correction_requests%rowtype; v_p public.timesheets%rowtype;
+begin
+  select request.* into v_request from private.timesheet_correction_requests request
+    where request.candidate_id=p_candidate_id
+      and ((p_contract_week_id is not null and request.replacement_week_id=p_contract_week_id)
+        or (p_target_timesheet_id is not null and request.replacement_timesheet_id=p_target_timesheet_id)
+        or (p_anchor_timesheet_id is not null and request.replacement_timesheet_id=p_anchor_timesheet_id))
+    order by request.created_at_utc desc,request.id desc limit 1;
+  if not found then return null; end if;
+  if (p_contract_week_id is not null and p_contract_week_id is distinct from v_request.replacement_week_id)
+    or (p_target_timesheet_id is not null and p_target_timesheet_id is distinct from v_request.replacement_timesheet_id)
+    or (p_anchor_timesheet_id is not null and p_anchor_timesheet_id is distinct from v_request.replacement_timesheet_id) then
+    raise exception 'CANDIDATE_CONTEXT_STALE' using errcode='40001';
+  end if;
+  if v_request.state<>'CANCELLED' then
+    select t.* into v_p from public.timesheets t where t.timesheet_id=v_request.replacement_timesheet_id;
+    if v_p.timesheet_id is null or not v_p.is_current or v_p.archived_at_utc is not null
+      or v_p.booking_id is distinct from v_request.replacement_booking_id
+      or v_p.contract_id is distinct from v_request.contract_id
+      or v_p.parent_timesheet_id is distinct from v_request.root_timesheet_id
+      or v_p.correction_id is distinct from v_request.correction_id
+      or v_p.correction_kind is distinct from 'WHOLE_TIMESHEET_REPLACEMENT' then
+      raise exception 'CANDIDATE_CONTEXT_STALE' using errcode='40001';
+    end if;
+  end if;
+  return private.timesheet_correction_projection_by_request_v1(v_request.id,p_candidate_id);
+end;
+$function$;

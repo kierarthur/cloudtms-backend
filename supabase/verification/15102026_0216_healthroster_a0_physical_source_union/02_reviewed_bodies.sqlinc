@@ -1,0 +1,54 @@
+-- Source-exact prosrc expectations, not an observed native/canonical seal.
+do $a0_source_bodies$
+declare r record;v_body text;
+begin
+  for r in select * from(values
+    ('private._candidate_component_immutability_guard_v1()','cc5121f35abb2b6a0c77760608e6a8b4e4bda59461a820d2dce24c7683127178'),
+    ('private._candidate_evidence_lineage_guard_v1()','65abbaadbe535324ba3bbb1be6cc232e998b10277750b18a74d67e63997de63a'),
+    ('private._candidate_expense_source_root_guard_v1()','94aefebb1adc587aed74740d10b3ad2bf158675d320601f5a506655071462c15'),
+    ('private._candidate_manager_request_mail_guard_v1()','1ac1928939c942f8fe77761c3e1c9dec7dacae5b59c797c8283943243023282d'),
+    ('private._candidate_qr_pack_ready_notification_v1()','803bdc79f42c28d76f0b3fb757658c26592a528803f4ed3bb306b5f4688eb0c8'),
+    ('private._candidate_workflow_creation_identity_guard_v1()','17418b0ac5b8679c482cdba3446a591015a5f4583fef6e94ee60582686f2e142'),
+    ('private._contract_week_settings_authority_before_v1()','f339020e6f918f93e6f16d104c45389af536fd0b21ce1b1cc2e7ccfa30ceeb07'),
+    ('private._timesheet_authorisation_overlap_trg_v1()','93b4dcadaf386ddee7d26a00467c2277e2b4178148f14c9a68a6e61ad37f65bd'),
+    ('private._timesheet_settings_authority_before_v1()','2867d1400328ed5056c804173355249a0063888620f581255f8dac0afede2a76'),
+    ('private._timesheet_submission_workflow_overlap_trg_v1()','7b0ce5d902c6cc19ace31bd633b680c8c10fe0912ebafede4ef0c46667563609'),
+    ('private._weekly_source_immutable_record_guard_v1()','34cfb47b73e45a5da42fe8c2484a5f46d2cd7bae6440eb5561a9d08b3e119d19'),
+    ('private.bpay_expense_classification_lineage_v1()','ff63712555516cf52649c78bf6dd6125b66de603b75feffcc3b16508918b9993'),
+    ('private.bpay_expense_classification_ts_v1()','677d92c62a6882a28ee55c72dab11d67986cc3758dee8100399e36ed6dbe9823'),
+    ('private.bpay_expense_classification_week_v1()','fc8312e105e3f6a03db88d63e102da13244231d4c4fc7902c1c8571cb41d7a51'),
+    ('private.bpay_lineage_work_binding_v1()','b902950c07e36f00dbb8b4b6b7de291d483af3f5ad08a7965d54489aa09a6132'),
+    ('private.bpay_source_lineage_family_gate_v1()','a0c4bff622ee55c38657fd6faa5bce238c750a4193899c8d720c6b184a186864'),
+    ('private.bpay_source_timesheet_family_gate_v1()','fcd331f7bd34c608d12fd4788e8701096d7bb377d4f318ba377d270955881a2d'),
+    ('private.bpay_timesheet_work_key_v1()','55afc5b66acf4a9643dd3bcf167352ca04c9ecd82bc4accaefd20a16d208f807'),
+    ('private.bpay_timesheet_work_revision_v1()','aa7fc506cd7aafb9543e18cfad07582c9cea23fac0805129ac1bcb7c17bebee1'),
+    ('private.timesheet_correction_a0_booking_before_v1()','0fe1736bd3a3a11e49c75dc2a10ed20fc0d11464b67ac3809dd2526bd58e67f2'),
+    ('private.timesheet_correction_a0_candidate_before_v1()','3a9445e369763184b205cdd291480fa35b884829e92546dc4d8e03db892a4ecf'),
+    ('private.timesheet_correction_a0_child_reference_before_v1()','6ce412481ccf50abcb5c38d1126dcfaff1ea6ff8ebdd5baf87eeb95152eaa38e'),
+    ('private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])','2fe2d485c7ba278a02e0fc99df03c4d174e718ccaf8d73748d4963ba8f44abad'),
+    ('private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)','37eeb5ac3857fb815126e71b725eb264d20ec958ae7a4473248d1425c18abb1b'),
+    ('private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])','2276441e9f9102d6600eb0dd602a16c752a88b85638dee1be460b1e000eb2e88'),
+    ('private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])','6b984c49bb9b9a16b919b3c216536ec792c02ddd907c59ea49171f9bcadefdd2'),
+    ('private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)','e30bdcde0b26b16c6ae204d5788970b80be81c2d237373d8fc8a2906bdd04ccc'),
+    ('private.timesheet_correction_a0_reference_before_v1()','a9171a266474afa69997ad36228a02ba8acd4b7b0ed8873b86ec72ed41aeeb9c'),
+    ('private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)','fdca019504cd29e0e36b45e90d041db7509d0129b8fb5c7c7b11ada0d3ffe1ff'),
+    ('private.timesheet_correction_a0_send_family_fence_v1(uuid)','d9378451a3990b86d6262fd521f324a486a2ef003a1fcda3fb1cb20f6106c726'),
+    ('private.weekly_source_invoice_line_owner_guard_v1()','bd502dd144ff22c0942fceb82dcf8788dd18383808789641812704178e46077c'),
+    ('private.weekly_source_ordinary_authorisation_guard_tg_v1()','c36aac0612610316ed238fed62b5052bd902db2b86a547d05964de73658750f0'),
+    ('public._trg_candidates_set_bank_hash()','48687f54964a0c0fb8f6dc0dfdb1985ff55f654903123755b8bdb6df9306a8c3'),
+    ('public.invoice_line_archived_timesheet_guard_v1()','8819c3ea60ae3c9332cf8596230b42f7e11091c65ceff75129090eac155e0982'),
+    ('public.set_updated_at_tsfin()','8095d4d16b4bea82cd80cc435829bc380cb8d6658bc66e64aefc75f187650be0'),
+    ('public.set_updated_at()','3c6d6c41d6262a20e7c102dbd49bb3383bd86a4138c8a3ab6b9b04a1ec2420a5'),
+    ('public.timesheet_archive_row_guard_v1()','2ed947ef7bdb0e23eaa8a068fa8304ce91db07db6adbd2ee6f87f0b7f31781b2'),
+    ('public.timesheet_archived_evidence_guard_v1()','014e41644de1a277705f3e3d90543bb611306d548327d80ce2b7970aec292ec8'),
+    ('public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)','511c13488a210181b978180d9fefca90f5493b92d91cba2b00a10009e70649d8'),
+    ('public.trg_set_rev()','be01dc3eeeadb2f096f463f79c9a72bbf10eeef7b77e2b5d6158972da96237d0'),
+    ('public.trg_set_tms_ref()','ddb16167a415d5fc4a5c1bf34340b80ad1b990e3938940612fe4de837f9d4741')
+  ) expected(signature,sha256) loop
+    select p.prosrc into v_body from pg_catalog.pg_proc p where p.oid=to_regprocedure(r.signature);
+    if not found or pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      pg_catalog.replace(v_body,E'\r\n',E'\n'),'UTF8'),'sha256'),'hex') is distinct from r.sha256 then
+      raise exception 'CORRECTION_A0_REVIEWED_BODY_CHANGED' using errcode='55000';end if;
+  end loop;
+end;
+$a0_source_bodies$;

@@ -1,0 +1,316 @@
+{
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "label": "Read-only actual A0 native binding mismatch 20261015",
+  "sqlSha256": "d8e13de1e7e90aba99a6423389acf43ca13536aae02223f8769c4ccf95da6a76",
+  "statementCount": 1,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SELECT",
+      "rowCount": 31,
+      "fields": [
+        "search_path",
+        "table_name",
+        "trigger_name",
+        "expected",
+        "observed",
+        "tgenabled",
+        "function_matches"
+      ],
+      "rows": [
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidate_approval_requests",
+          "trigger_name": "candidate_manager_request_mail_guard_v1",
+          "expected": "CREATE TRIGGER candidate_manager_request_mail_guard_v1 BEFORE UPDATE OF state ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_manager_request_mail_guard_v1()",
+          "observed": "CREATE TRIGGER candidate_manager_request_mail_guard_v1 BEFORE UPDATE OF state ON public.candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_manager_request_mail_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidate_expense_components",
+          "trigger_name": "candidate_expense_source_root_guard_v1",
+          "expected": "CREATE TRIGGER candidate_expense_source_root_guard_v1 BEFORE INSERT OR UPDATE OF owning_timesheet_id, lifecycle_state ON candidate_expense_components FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_source_root_guard_v1()",
+          "observed": "CREATE TRIGGER candidate_expense_source_root_guard_v1 BEFORE INSERT OR UPDATE OF owning_timesheet_id, lifecycle_state ON public.candidate_expense_components FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_source_root_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidate_submission_components",
+          "trigger_name": "candidate_submission_components_immutability_guard",
+          "expected": "CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON candidate_submission_components FOR EACH ROW EXECUTE FUNCTION private._candidate_component_immutability_guard_v1()",
+          "observed": "CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON public.candidate_submission_components FOR EACH ROW EXECUTE FUNCTION private._candidate_component_immutability_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidate_submission_workflows",
+          "trigger_name": "candidate_workflow_creation_identity_guard_v1",
+          "expected": "CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_workflow_creation_identity_guard_v1()",
+          "observed": "CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON public.candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_workflow_creation_identity_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidate_submission_workflows",
+          "trigger_name": "trg_timesheet_submission_workflow_overlap_biu",
+          "expected": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()",
+          "observed": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON public.candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidates",
+          "trigger_name": "set_tms_ref",
+          "expected": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()",
+          "observed": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidates",
+          "trigger_name": "trg_candidates_set_bank_hash",
+          "expected": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()",
+          "observed": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON public.candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidates",
+          "trigger_name": "trg_candidates_set_rev",
+          "expected": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()",
+          "observed": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "candidates",
+          "trigger_name": "trg_candidates_set_updated_at",
+          "expected": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+          "observed": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON public.candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "contract_weeks",
+          "trigger_name": "bpay_expense_classification_week_before_v1",
+          "expected": "CREATE TRIGGER bpay_expense_classification_week_before_v1 BEFORE INSERT OR DELETE OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()",
+          "observed": "CREATE TRIGGER bpay_expense_classification_week_before_v1 BEFORE INSERT OR DELETE OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON public.contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "contract_weeks",
+          "trigger_name": "contract_week_settings_authority_before_v1",
+          "expected": "CREATE TRIGGER contract_week_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, timesheet_id, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private._contract_week_settings_authority_before_v1()",
+          "observed": "CREATE TRIGGER contract_week_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, timesheet_id, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON public.contract_weeks FOR EACH ROW EXECUTE FUNCTION private._contract_week_settings_authority_before_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "contract_weeks",
+          "trigger_name": "trg_contract_weeks_set_updated_at",
+          "expected": "CREATE TRIGGER trg_contract_weeks_set_updated_at BEFORE UPDATE ON contract_weeks FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+          "observed": "CREATE TRIGGER trg_contract_weeks_set_updated_at BEFORE UPDATE ON public.contract_weeks FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "invoice_lines",
+          "trigger_name": "trg_invoice_line_archived_timesheet_guard_v1",
+          "expected": "CREATE TRIGGER trg_invoice_line_archived_timesheet_guard_v1 BEFORE INSERT OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION invoice_line_archived_timesheet_guard_v1()",
+          "observed": "CREATE TRIGGER trg_invoice_line_archived_timesheet_guard_v1 BEFORE INSERT OR UPDATE ON public.invoice_lines FOR EACH ROW EXECUTE FUNCTION invoice_line_archived_timesheet_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "invoice_lines",
+          "trigger_name": "weekly_source_invoice_line_owner_guard",
+          "expected": "CREATE TRIGGER weekly_source_invoice_line_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION private.weekly_source_invoice_line_owner_guard_v1()",
+          "observed": "CREATE TRIGGER weekly_source_invoice_line_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON public.invoice_lines FOR EACH ROW EXECUTE FUNCTION private.weekly_source_invoice_line_owner_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheet_evidence",
+          "trigger_name": "timesheet_evidence_candidate_lineage_guard",
+          "expected": "CREATE TRIGGER timesheet_evidence_candidate_lineage_guard BEFORE INSERT OR UPDATE OF candidate_component_id, document_role, timesheet_id, storage_key ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION private._candidate_evidence_lineage_guard_v1()",
+          "observed": "CREATE TRIGGER timesheet_evidence_candidate_lineage_guard BEFORE INSERT OR UPDATE OF candidate_component_id, document_role, timesheet_id, storage_key ON public.timesheet_evidence FOR EACH ROW EXECUTE FUNCTION private._candidate_evidence_lineage_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheet_evidence",
+          "trigger_name": "trg_timesheet_archived_evidence_guard_v1",
+          "expected": "CREATE TRIGGER trg_timesheet_archived_evidence_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION timesheet_archived_evidence_guard_v1()",
+          "observed": "CREATE TRIGGER trg_timesheet_archived_evidence_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON public.timesheet_evidence FOR EACH ROW EXECUTE FUNCTION timesheet_archived_evidence_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "bpay_expense_classification_ts_before_v1",
+          "expected": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()",
+          "observed": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "bpay_source_timesheet_family_gate_v1",
+          "expected": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()",
+          "observed": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "bpay_timesheet_work_revision_v1",
+          "expected": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()",
+          "observed": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "timesheet_settings_authority_before_v1",
+          "expected": "CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()",
+          "observed": "CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "timesheets_candidate_qr_pack_ready_notification_trg",
+          "expected": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()",
+          "observed": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "trg_timesheet_archive_row_guard_v1",
+          "expected": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()",
+          "observed": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON public.timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "trg_timesheet_authorisation_overlap_biu",
+          "expected": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()",
+          "observed": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "trg_timesheets_updated_at",
+          "expected": "CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+          "observed": "CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON public.timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "weekly_source_managed_root_authorisation_guard_bu",
+          "expected": "CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON timesheets FOR EACH ROW WHEN (old.authorised_at_server IS DISTINCT FROM new.authorised_at_server) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+          "observed": "CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON public.timesheets FOR EACH ROW WHEN ((old.authorised_at_server IS DISTINCT FROM new.authorised_at_server)) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets",
+          "trigger_name": "zz_bpay_timesheet_work_key_v1",
+          "expected": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()",
+          "observed": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()",
+          "tgenabled": "A",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "timesheets_financials",
+          "trigger_name": "trg_set_updated_at_tsfin",
+          "expected": "CREATE TRIGGER trg_set_updated_at_tsfin BEFORE UPDATE ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION set_updated_at_tsfin()",
+          "observed": "CREATE TRIGGER trg_set_updated_at_tsfin BEFORE UPDATE ON public.timesheets_financials FOR EACH ROW EXECUTE FUNCTION set_updated_at_tsfin()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "weekly_source_row_timesheet_lineages",
+          "trigger_name": "bpay_expense_classification_lineage_before_v1",
+          "expected": "CREATE TRIGGER bpay_expense_classification_lineage_before_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()",
+          "observed": "CREATE TRIGGER bpay_expense_classification_lineage_before_v1 BEFORE INSERT ON public.weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "weekly_source_row_timesheet_lineages",
+          "trigger_name": "bpay_lineage_work_binding_v1",
+          "expected": "CREATE TRIGGER bpay_lineage_work_binding_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_lineage_work_binding_v1()",
+          "observed": "CREATE TRIGGER bpay_lineage_work_binding_v1 BEFORE INSERT ON public.weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_lineage_work_binding_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "weekly_source_row_timesheet_lineages",
+          "trigger_name": "bpay_source_lineage_family_gate_v1",
+          "expected": "CREATE TRIGGER bpay_source_lineage_family_gate_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_source_lineage_family_gate_v1()",
+          "observed": "CREATE TRIGGER bpay_source_lineage_family_gate_v1 BEFORE INSERT ON public.weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_source_lineage_family_gate_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        },
+        {
+          "search_path": "\"$user\", public",
+          "table_name": "weekly_source_row_timesheet_lineages",
+          "trigger_name": "weekly_source_immutable_record_guard",
+          "expected": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()",
+          "observed": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON public.weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()",
+          "tgenabled": "O",
+          "function_matches": true
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": []
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ]
+}

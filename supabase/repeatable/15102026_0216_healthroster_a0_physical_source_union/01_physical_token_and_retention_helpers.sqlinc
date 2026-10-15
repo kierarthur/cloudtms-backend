@@ -1,0 +1,154 @@
+create or replace function private.timesheet_correction_a0_fence_tokens_v2(
+  p_family uuid[],p_physical uuid[],p_bookings text[],p_keys text[],p_aliases jsonb[],
+  p_workflows uuid[],p_weeks uuid[],p_cycles uuid[]
+) returns jsonb language sql immutable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+with tokens as(
+  select jsonb_build_object('kind',d.kind,'uuid',u.id::text) value
+    from(values('FAMILY_UUID',p_family),('PHYSICAL_UUID',p_physical),('WORKFLOW_UUID',p_workflows),
+      ('CONTRACT_WEEK_UUID',p_weeks),('SOURCE_CYCLE_UUID',p_cycles)) d(kind,ids)
+    cross join lateral unnest(d.ids) u(id) where u.id is not null
+  union all select jsonb_build_object('kind','BOOKING','json',to_jsonb(btrim(b.value)))
+    from unnest(p_bookings) b(value) where b.value is not null
+  union all select jsonb_build_object('kind','KEY_NORM','json',to_jsonb(k.value))
+    from unnest(p_keys) k(value) where k.value is not null
+  union all select jsonb_build_object('kind','ALIAS_JSON_STRING','json',a.value)
+    from unnest(p_aliases) j(value) cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(j.value)='array' then j.value else '[]'::jsonb end) a(value)
+    where jsonb_typeof(a.value)='string'
+)
+select coalesce(jsonb_agg(value order by value),'[]'::jsonb) from(select distinct value from tokens) d;
+$function$;
+alter function private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[]) owner to postgres;
+revoke all on function private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[]) from public,anon,authenticated,service_role;
+create or replace function private.timesheet_correction_a0_fence_tokens_v1(
+  p_family uuid[],p_physical uuid[],p_bookings text[],p_keys text[],p_aliases jsonb[]
+) returns jsonb language sql immutable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+select private.timesheet_correction_a0_fence_tokens_v2(p_family,p_physical,p_bookings,p_keys,p_aliases,null,null,null);
+$function$;
+alter function private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[]) owner to postgres;
+revoke all on function private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[]) from public,anon,authenticated,service_role;
+create or replace function private.timesheet_correction_a0_family_tokens_retain_v1(p_root uuid,p_members uuid[])
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_count integer;v_expected integer;v_ids uuid[];v_bookings text[];v_keys text[];v_aliases jsonb[];
+  v_workflows uuid[];v_weeks uuid[];v_cycles uuid[];v_before jsonb;v_after jsonb;
+begin
+  -- Exact native Candidate / whole I1 / family-CAS admission belongs to caller.
+  -- Phase PHYSICAL closes workflow birth/reparent and every raw reference first.
+  select count(distinct x.id) into v_expected from unnest(p_members) x(id) where x.id is not null;
+  select count(*),array_agg(t.timesheet_id order by t.timesheet_id),array_agg(t.booking_id order by t.timesheet_id),
+    array_agg(t.occupant_key_norm order by t.timesheet_id),array_agg(to_jsonb(array[t.occupant_key_norm]::text[]) order by t.timesheet_id)
+    into v_count,v_ids,v_bookings,v_keys,v_aliases from public.timesheets t where t.timesheet_id=any(p_members);
+  if p_root is null or v_expected=0 or v_expected>256 or v_count<>v_expected or not p_root=any(v_ids) then
+    raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  perform private.timesheet_correction_a0_fence_acquire_v1(
+    private.timesheet_correction_a0_fence_tokens_v1(array[p_root],v_ids,v_bookings,v_keys,v_aliases),true);
+  -- Phase DEPENDENCIES is discovered AFTER PHYSICAL intent is retained. New
+  -- workflow/lineage births must carry raw OLD/NEW physical intent themselves.
+  select array_agg(w.id order by w.id) into v_workflows from public.candidate_submission_workflows w
+    where w.target_timesheet_id=any(v_ids) or w.anchor_timesheet_id=any(v_ids)
+      or w.id in(select t.candidate_workflow_id from public.timesheets t where t.timesheet_id=any(v_ids));
+  select array_agg(w.id order by w.id) into v_weeks from public.contract_weeks w
+    where w.timesheet_id=any(v_ids) or w.id in(select f.contract_week_id from public.candidate_submission_workflows f where f.id=any(v_workflows));
+  select array_agg(distinct l.source_cycle_id order by l.source_cycle_id) into v_cycles
+    from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids);
+  v_before:=jsonb_build_object(
+    'workflows',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.candidate_submission_workflows w where w.id=any(v_workflows)),'[]'::jsonb),
+    'weeks',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.contract_weeks w where w.id=any(v_weeks)),'[]'::jsonb),
+    'cycles',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.weekly_source_cycles c where c.id=any(v_cycles)),'[]'::jsonb),
+    'approvals',coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from public.candidate_approval_requests a where a.workflow_id=any(v_workflows)),'[]'::jsonb),
+    'components',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c
+      where c.workflow_id=any(v_workflows) or c.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'expenses',coalesce((select jsonb_agg(to_jsonb(e) order by e.expense_component_id) from public.candidate_expense_components e
+      where e.workflow_id=any(v_workflows) or e.owning_timesheet_id=any(v_ids)),'[]'::jsonb),
+    'evidence',coalesce((select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'shifts',coalesce((select jsonb_agg(to_jsonb(s) order by s.id) from public.nhsp_shifts s where s.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'lineages',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'validations',coalesce((select jsonb_agg(to_jsonb(v) order by v.id) from public.timesheet_validations v where v.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'invoices',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'financials',coalesce((select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id=any(v_ids)),'[]'::jsonb));
+  perform private.timesheet_correction_a0_fence_acquire_v1(
+    private.timesheet_correction_a0_fence_tokens_v2(null,null,null,null,null,v_workflows,v_weeks,v_cycles),true);
+  -- An ordinary dependency mutation that was already inside its probe can
+  -- finish before exclusion acquisition. Its actual changed row must refuse
+  -- this purpose; retaining a token cannot replace the native reread/CAS.
+  v_after:=jsonb_build_object(
+    'workflows',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.candidate_submission_workflows w
+      where w.target_timesheet_id=any(v_ids) or w.anchor_timesheet_id=any(v_ids)
+        or w.id in(select t.candidate_workflow_id from public.timesheets t where t.timesheet_id=any(v_ids))),'[]'::jsonb),
+    'weeks',coalesce((select jsonb_agg(to_jsonb(w) order by w.id) from public.contract_weeks w
+      where w.timesheet_id=any(v_ids) or w.id in(select f.contract_week_id from public.candidate_submission_workflows f where f.id=any(v_workflows))),'[]'::jsonb),
+    'cycles',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.weekly_source_cycles c
+      where c.id in(select l.source_cycle_id from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids))),'[]'::jsonb),
+    'approvals',coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from public.candidate_approval_requests a where a.workflow_id=any(v_workflows)),'[]'::jsonb),
+    'components',coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c
+      where c.workflow_id=any(v_workflows) or c.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'expenses',coalesce((select jsonb_agg(to_jsonb(e) order by e.expense_component_id) from public.candidate_expense_components e
+      where e.workflow_id=any(v_workflows) or e.owning_timesheet_id=any(v_ids)),'[]'::jsonb),
+    'evidence',coalesce((select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'shifts',coalesce((select jsonb_agg(to_jsonb(s) order by s.id) from public.nhsp_shifts s where s.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'lineages',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'validations',coalesce((select jsonb_agg(to_jsonb(v) order by v.id) from public.timesheet_validations v where v.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'invoices',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.timesheet_id=any(v_ids)),'[]'::jsonb),
+    'financials',coalesce((select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id=any(v_ids)),'[]'::jsonb));
+  if v_after is distinct from v_before then
+    raise exception 'CORRECTION_A0_TOKEN_DEPENDENCY_CHANGED' using errcode='40001';end if;
+end;
+$function$;
+alter function private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[]) owner to postgres;
+revoke all on function private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[]) from public,anon,authenticated,service_role;
+create or replace function private.timesheet_correction_a0_request_tokens_retain_v1(p_request private.timesheet_correction_requests)
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare t public.timesheets%rowtype;q private.timesheet_correction_requests%rowtype;v_r uuid;v_r_booking text;
+  v_keys text[];v_aliases jsonb[];v_allocated uuid[];v_weeks uuid[];v_saved boolean;
+begin
+  if p_request.id is null or p_request.root_timesheet_id is null or p_request.reversed_timesheet_id is null
+    or p_request.replacement_timesheet_id is null or p_request.origin is distinct from 'SIGNED_TIMESHEET_CORRECTION'
+    or p_request.reversed_financial_id is not null or p_request.frozen_original_json#>>'{timesheet,sheet_scope}' is distinct from 'WEEKLY'
+    or pg_input_is_valid(p_request.frozen_original_json->>'planned_reversal_timesheet_id','uuid') is distinct from true then
+    raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  select s.* into strict t from public.timesheets s where s.timesheet_id=p_request.reversed_timesheet_id;
+  if t.contract_id is distinct from p_request.contract_id or t.version is distinct from p_request.reversed_version
+    or private.timesheet_correction_a0_signed_precursor_v1(t.timesheet_id) is distinct from true then
+    raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  v_r:=(p_request.frozen_original_json->>'planned_reversal_timesheet_id')::uuid;
+  v_r_booking:='bk_awc_'||substr(encode(digest(p_request.id::text||'|R0','sha256'),'hex'),1,24);
+  select s.* into q from private.timesheet_correction_requests s where s.id=p_request.id;v_saved:=found;
+  if v_saved and (q.state is distinct from 'WAITING' or q.origin is distinct from p_request.origin
+    or q.root_timesheet_id is distinct from p_request.root_timesheet_id or q.reversed_timesheet_id is distinct from t.timesheet_id
+    or q.replacement_timesheet_id is distinct from p_request.replacement_timesheet_id
+    or q.replacement_booking_id is distinct from p_request.replacement_booking_id
+    or q.frozen_original_json is distinct from p_request.frozen_original_json) then
+    raise exception 'CORRECTION_A0_TOKEN_SCOPE_UNPROVED' using errcode='55000';end if;
+  select array_agg(s.occupant_key_norm order by s.timesheet_id),array_agg(to_jsonb(array[s.occupant_key_norm]::text[]) order by s.timesheet_id)
+    into v_keys,v_aliases from public.timesheets s where s.timesheet_id in(p_request.root_timesheet_id,t.timesheet_id);
+  -- Genuine owner-assigned planned weeks use the same physical week domain.
+  select array_agg(x.id order by x.id) into v_weeks from unnest(array[p_request.replacement_week_id,
+    case when pg_input_is_valid(p_request.frozen_original_json->>'planned_reversal_week_id','uuid')
+      then(p_request.frozen_original_json->>'planned_reversal_week_id')::uuid end]) x(id) where x.id is not null;
+  perform private.timesheet_correction_a0_fence_acquire_v1(private.timesheet_correction_a0_fence_tokens_v2(
+    array[p_request.root_timesheet_id],array[p_request.root_timesheet_id,t.timesheet_id,p_request.replacement_timesheet_id,v_r],
+    array[p_request.original_booking_id,t.booking_id,p_request.replacement_booking_id,v_r_booking],v_keys,v_aliases,null,v_weeks,null),true);
+  -- An ordinary no-FK reference that committed before the ALLOCATED exclusion
+  -- phase must not be silently carried into a new physical leg. This is only
+  -- a genuine newly allocated UUID check, never an ordinary dangling/NULL ban.
+  v_allocated:=case when v_saved then array[v_r] else array[p_request.replacement_timesheet_id,v_r] end;
+  if exists(select 1 from public.timesheets s where s.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.timesheets_financials f where f.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.timesheet_validations v where v.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.invoice_lines l where l.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.nhsp_shifts s where s.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.timesheet_evidence e where e.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.candidate_expense_components e where e.owning_timesheet_id=any(v_allocated))
+    or exists(select 1 from public.candidate_submission_components c where c.timesheet_id=any(v_allocated))
+    or exists(select 1 from public.candidate_submission_workflows w where w.target_timesheet_id=any(v_allocated) or w.anchor_timesheet_id=any(v_allocated))
+    or exists(select 1 from public.contract_weeks w where w.timesheet_id=any(v_allocated)) then
+    raise exception 'CORRECTION_A0_ALLOCATED_REFERENCE_EXISTS' using errcode='40001';end if;
+end;
+$function$;
+alter function private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests) owner to postgres;
+revoke all on function private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests) from public,anon,authenticated,service_role;

@@ -1,0 +1,28 @@
+{
+  "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+  "before_sha256": "43fcec056ef19bc29317ce01b438e7f678f9008fd3861abb850b60baa7f3313f",
+  "after_sha256": "ab9888f7a593039183162ceec4b5bd41d398b9fc469d9354f11d522052b30f0b",
+  "whole_reverse_exact": true,
+  "hunks": [
+    {
+      "label": "exact schema-qualified definition and exact inherited ALWAYS state",
+      "before": "and t.tgname=r.trigger_name and t.tgfoid=to_regprocedure(r.signature) and t.tgenabled='O'\n      and pg_catalog.pg_get_triggerdef(t.oid,false)=r.definition)",
+      "after": "and t.tgname=r.trigger_name and t.tgfoid=to_regprocedure(r.signature)\n      and t.tgenabled=case when r.table_name='timesheets' and r.trigger_name='zz_bpay_timesheet_work_key_v1' then 'A'::\"char\" else 'O'::\"char\" end\n      and pg_catalog.pg_get_triggerdef(t.oid,false)=replace(r.definition,' ON '||quote_ident(r.table_name)||' ',' ON public.'||quote_ident(r.table_name)||' '))"
+    },
+    {
+      "label": "actual canonical native WHEN expression parentheses",
+      "before": "WHEN (old.authorised_at_server IS DISTINCT FROM new.authorised_at_server) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+      "after": "WHEN ((old.authorised_at_server IS DISTINCT FROM new.authorised_at_server)) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()"
+    }
+  ],
+  "actual_readonly_bindings": 31,
+  "all_function_identities_match": true,
+  "exact_runtime_enabled_states": {
+    "O": 30,
+    "A": 1
+  },
+  "authoritative_ALWAYS_source": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql:173",
+  "source_or_runtime_trigger_changed": false,
+  "all_other_assertions_preserved": true,
+  "independent_review": "PENDING"
+}

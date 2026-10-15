@@ -1,0 +1,79 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import cp from 'node:child_process';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {scanManagedSql,readManagedClosure} from '../scripts/cloudtms-managed-release-sql.mjs';
+import {functionEvents} from '../docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs';
+
+const sha=b=>createHash('sha256').update(b).digest('hex');
+const head=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+assert.equal(head,'0e48346a5bc71ee08de8fa68f4f6f915fe32a240');
+const a0=path.resolve('../healthroster-v2-protection-build-13102026');
+const pin='9755f656daa297a7e156111ae981bddb1f0e10aa';
+const base='docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/';
+const inputs=[];
+function readPinned(file,commit=pin,repo=a0){
+ const b=cp.execFileSync('git',['-C',repo,'cat-file','blob',commit+':'+file]);
+ assert.deepEqual(b,fs.readFileSync(path.join(repo,file)),file);
+ inputs.push({commit,file,bytes:b.length,sha256:sha(b)});return b;
+}
+const reverse=JSON.parse(readPinned(base+'COMPLETE_CURRENT_FORWARD_AND_REVERSE.json'));
+const existingStage='supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql';
+const existing=fs.readFileSync(existingStage,'utf8');
+const stageBefore=Buffer.from(existing);
+const pages=[];
+for(const r of reverse.reversals){
+ const before=fs.readFileSync(r.input),after=readPinned(base+r.output);
+ assert.equal(sha(before),r.beforeSha256,r.input);assert.equal(sha(after),r.afterSha256,r.output);
+ let restored=after.toString();
+ for(const h of [...r.hunks].reverse()){
+  assert.equal(restored.split(h.after).length,2,'unique reverse '+h.label);restored=restored.replace(h.after,h.before);
+ }
+ assert.deepEqual(Buffer.from(restored),before,'entire current page reverse');
+ pages.push({before:before.toString(),after:after.toString(),r});
+}
+const physical=readPinned(base+'sql/14102026_1216_a0_transaction_fence_helpers.sqlinc').toString().replaceAll('\r\n','\n');
+const scalar=readPinned('docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc','d48f05205ae9ce066762be8a307d87b304ce71da',process.cwd()).toString().replaceAll('\r\n','\n');
+const core='private.timesheet_correction_a0_fence_scalar_acquire_core_v1';
+const dispatcher='private.timesheet_correction_a0_fence_acquire_v1';
+const oldEvents=functionEvents(physical).events.filter(e=>e.kind==='CREATE');
+const nextEvents=functionEvents(scalar).events.filter(e=>e.kind==='CREATE');
+const selected=nextEvents.filter(e=>!e.id.startsWith(core+'('));assert.equal(selected.length,4);
+for(const e of selected)assert.equal(e.definition,oldEvents.find(x=>x.id===e.id)?.definition,'unchanged physical helper '+e.id);
+const helpers=scanManagedSql(scalar).statements.map(x=>scalar.slice(x.start,x.end)).filter(s=>!s.includes(core+'(')).join('\n')+'\n';
+assert.equal(functionEvents(helpers).events.filter(e=>e.kind==='CREATE').length,4);
+assert(!functionEvents(helpers).events.some(e=>e.id?.startsWith(dispatcher+'(')));
+const child=readPinned(base+'sql/14102026_1216_a0_native_child_raw_intents.sqlinc');
+const originalContract=readPinned(base+'sql/14102026_1216_a0_transaction_fence_source_contract.sql').toString();
+const originalBodies=readPinned(base+'sql/14102026_1216_a0_transaction_fence_reviewed_bodies.sqlinc').toString();
+const changes=[];
+function replaceOne(text,before,after,label){assert.equal(text.split(before).length,2,label);changes.push({label,before,after});return text.replace(before,after);}
+let contract=originalContract;
+contract=replaceOne(contract,'a.attnum>0 and not a.attisdropped)<>6','a.attnum>0 and not a.attisdropped)<>7','seven exact Source arbiter columns');
+contract=replaceOne(contract,"(6,'touch_bit','boolean',true)","(6,'coverage_span','daterange',false),(7,'touch_bit','boolean',true)",'preserve actual coverage/touch positions');
+contract=replaceOne(contract,'where c.conrelid=v_oid)<>4','where c.conrelid=v_oid)<>5','two checks plus three exclusions');
+contract=replaceOne(contract,"pg_catalog.pg_get_expr(i.indpred,i.indrelid,false)='('||r.column_name||' IS NOT NULL)'", "pg_catalog.pg_get_expr(i.indpred,i.indrelid,false)=case when r.typ='uuid' then '((uuid_identity IS NOT NULL) AND (coverage_span IS NULL))' else '(text_identity IS NOT NULL)' end",'exact Source scalar UUID predicate');
+const newDispatcher=functionEvents(fs.readFileSync('supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc','utf8').replaceAll('\r\n','\n')).events.find(e=>e.kind==='CREATE'&&e.id===dispatcher+'(jsonb,boolean)');assert(newDispatcher);
+const oldDispatcher=oldEvents.find(e=>e.id===dispatcher+'(jsonb,boolean)');assert(oldDispatcher);
+let bodies=replaceOne(originalBodies,sha(oldDispatcher.body),sha(newDispatcher.body),'use current Source dispatcher body, preserve all other forty expectations');
+const time=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/London',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
+const stem=time.day+time.month+time.year+'_'+time.hour+time.minute+'_healthroster_a0_physical_source_union';assert(stem.startsWith('15102026_'));
+const leaf='supabase/repeatable/'+stem+'/',module='supabase/repeatable/'+stem+'_v1.sql',verifier='supabase/verification/'+stem+'_verification.sql',verifyLeaf='supabase/verification/'+stem+'/';
+const archive='docs/healthroster-build/install2-a0-physical-source-canonical-20261015';assert(!fs.existsSync(archive));
+const outputs=[[leaf+'01_physical_token_and_retention_helpers.sqlinc',Buffer.from(helpers)]];
+for(const p of pages)outputs.push([leaf+path.basename(p.r.input),Buffer.from(p.after)]);
+outputs.push([leaf+'09_native_child_raw_intents.sqlinc',child]);
+const aclStart=existing.indexOf('alter function private.timesheet_correction_canonical_input_assert_v1');assert(aclStart>0);
+const acl=existing.slice(aclStart).replace(/commit;\s*$/,'');
+const ordered=['01_physical_token_and_retention_helpers.sqlinc','05_native_creator_intents_and_triggers.sqlinc','06_send_family_fence.sqlinc','08_complete_current_request.sqlinc','04_complete_native_lock_fence.sqlinc','09_native_child_raw_intents.sqlinc'];
+outputs.push([module,Buffer.from('-- Canonical source union, not yet qualified for release.\nbegin;\n'+ordered.map(f=>'\\ir '+stem+'/'+f).join('\n')+'\n'+acl+'commit;\n')]);
+contract=replaceOne(contract,'\\ir 14102026_1216_a0_transaction_fence_reviewed_bodies.sqlinc','\\ir '+stem+'/02_reviewed_bodies.sqlinc','new verifier include');
+outputs.push([verifier,Buffer.from('-- Retains all physical-owner catalogue checks against the Source arbiter schema.\n-- The separate mandatory Source kernel verifier also proves its five helpers and coverage exclusion.\nbegin;\n'+contract+'\nrollback;\n')],[verifyLeaf+'02_reviewed_bodies.sqlinc',Buffer.from(bodies)]);
+const releaseFile='supabase/release/current-release.json',beforeRelease=fs.readFileSync(releaseFile),release=JSON.parse(beforeRelease);assert.equal(release.verificationFiles.length,174);assert.equal(release.newVerificationFiles.length,175);release.verificationFiles.push(verifier);release.newVerificationFiles.push(verifier);const afterRelease=Buffer.from(JSON.stringify(release,null,2)+'\n');
+for(const [file]of outputs)assert(!fs.existsSync(file),file);
+assert.deepEqual(fs.readFileSync(existingStage),stageBefore);assert.deepEqual(fs.readFileSync(releaseFile),beforeRelease);
+for(const [file,b]of outputs){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,b,{flag:'wx'});}fs.writeFileSync(releaseFile,afterRelease);
+const closure=readManagedClosure(module,process.cwd());
+const receipt={source_only:true,deployable:false,input_head:head,physical_pin:pin,inputs,outputs:outputs.map(([file,b])=>({file,bytes:b.length,sha256:sha(b)})),whole_current_reversals:pages.map(p=>({input:p.r.input,before_sha256:p.r.beforeSha256,after_sha256:p.r.afterSha256,hunks:p.r.hunks.length,entire_reverse_equal:true})),physical_private_helpers:selected.map(e=>e.id),new_child_trigger_function:'private.timesheet_correction_a0_child_reference_before_v1()',new_dispatcher_selected_from:'15102026_0205_healthroster_source_arbiter_kernel',old_dispatcher_not_reintroduced:true,original_0519_pages_and_acl_tail_preserved:true,contract_successor_changes:changes,source_constructor_and_physical_verifiers_both_mandatory:true,repeatable_closure_sha256:closure.closureHash,release:{before_upgrade:174,after_upgrade:175,before_new:175,after_new:176,appended_verifier:verifier,existing_prefix_preserved:true,before_sha256:sha(beforeRelease),after_sha256:sha(afterRelease)},remaining:['independent mechanical union review','actual full Source/Agency RAW/ACTIVE and caller union','native hidden-RR/concurrent phased and ordinary caller schedules','final contract/registry/ACL/compiled verifier qualification','full release rehearsal, Install2 and genuine acceptance']};
+fs.mkdirSync(archive,{recursive:true});fs.writeFileSync(archive+'/COMPOSITION.json',JSON.stringify(receipt,null,2)+'\n');fs.writeFileSync(archive+'/CURRENT_RELEASE_BEFORE.json',beforeRelease);fs.copyFileSync(import.meta.filename,archive+'/MOUNT_SOURCE_UNION.mjs.txt');console.log(JSON.stringify(receipt,null,2));
