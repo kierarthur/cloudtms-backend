@@ -1,0 +1,62 @@
+{
+  "source_only": true,
+  "native": false,
+  "pins": [
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "raw_sha256": "b93a73a6e76e3aeda2f53dc82f42e53e0d9e22068fcbb3e300cf691129898e74",
+      "adapted_sha256": "85b5ff74000f38e4415f159f336f3a430db259ec944b22766abe430ccbaca6f0",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    },
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "raw_sha256": "24a6335214cdaf26c0cc6e74121d9d2afaa88a0ff744e6745a183dadd394c55a",
+      "adapted_sha256": "c8752890da6074810c17bb00fc251215ba541357a80582d562c4a7fb37327b4a",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    },
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-source-query-money.test.mjs",
+      "raw_sha256": "0e2d0ffd65297edf3eb4d0a01aed269554d6345f17a36744668f8a08cab87e67",
+      "adapted_sha256": "1b037cae4a0652567e77487af5f50502fac770aa53f75fa33de48f87e4e002eb",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    },
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "raw_sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b",
+      "adapted_sha256": "baa6dcfb7bb1445f77100dda352980813b50a1476a4d4da095eedbf72eb7f288",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    },
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-invoice-decision-transport.test.mjs",
+      "raw_sha256": "3401197fd596a9fd109cb09a00348b8d8e2f15ce294de4d1ddc5b03f6919ac81",
+      "adapted_sha256": "0ba80d269ebc8b963ea04c6e426d0dfa0f5044f39041c78a0e96d617c97160d4",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    },
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-ordinary-next-hold.test.mjs",
+      "raw_sha256": "44505be98b5415e26e2cc8cb0d5fe0f461bafbfb3afcdd15b5f983420f6bd958",
+      "adapted_sha256": "dda59c6c94604be160aed17dc1450f485a975c24e4da718cca20eaa9753c0fce",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    },
+    {
+      "commit": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+      "file": "tests/healthroster-checklist-invoice-decision-action.test.mjs",
+      "raw_sha256": "08c7119eb3b41c81736b1699f0c95090c41dcf61310e219aff4247b2b00d8ad1",
+      "adapted_sha256": "4c68faf70bbc724e13fb3f316623a4177b02185f8e6dbe79836ddde003451b8e",
+      "loader_changes_only": true,
+      "all_original_assertions_unchanged": true
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "PREDECESSOR_118_TEST_OUTPUT.txt",
+      "bytes": 14227,
+      "sha256": "81fa0597f921f9e3095e4dd77e49563849a910a65f611e041c333cd42f270f0c"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1260,
+      "sha256": "ab279bdf1c300fffffad16bde4619e91029734cc08592bc89ff38857b5148b55"
+    },
+    {
+      "file": "REVIEW_SOURCE.mjs.txt",
+      "bytes": 3818,
+      "sha256": "2ea3f7a45ff4b865f74c93256fbad0bef67f0da5a9bb98881ba554a5095b56c1"
+    },
+    {
+      "file": "SOURCE_199_TEST_OUTPUT.txt",
+      "bytes": 57208,
+      "sha256": "060e5a5581937b3b3cedfb972c54249c6de70f8d91e3345e50ae41408636bf7e"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 727,
+      "sha256": "ba25680fbc256235d14c1e643d44c1432e6ebea43785fadd9ebe4d99bdcb303f"
+    },
+    {
+      "file": "WHOLE_PREDECESSOR_PINS.json",
+      "bytes": 2930,
+      "sha256": "bc00a327d0cb7f4df01c26abf9009fa969d34291e4f98c555cdf981ac05cb2a5"
+    }
+  ]
+}

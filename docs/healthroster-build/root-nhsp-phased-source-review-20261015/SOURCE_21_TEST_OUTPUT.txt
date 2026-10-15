@@ -1,0 +1,136 @@
+TAP version 13
+# Subtest: seven whole current owners reverse every unique hunk to exact selected Git bytes
+ok 1 - seven whole current owners reverse every unique hunk to exact selected Git bytes
+  ---
+  duration_ms: 275.3163
+  type: 'test'
+  ...
+# Subtest: all seventeen current schema/native/Office/workflow/calculator input snapshots equal their exact Git blobs
+ok 2 - all seventeen current schema/native/Office/workflow/calculator input snapshots equal their exact Git blobs
+  ---
+  duration_ms: 651.3968
+  type: 'test'
+  ...
+# Subtest: six full SQL successor pages retain every original signature and complete declaration header
+ok 3 - six full SQL successor pages retain every original signature and complete declaration header
+  ---
+  duration_ms: 8.5258
+  type: 'test'
+  ...
+# Subtest: three new owner-private declarations retain service gate, fixed search path and no browser/service execute
+ok 4 - three new owner-private declarations retain service gate, fixed search path and no browser/service execute
+  ---
+  duration_ms: 1.7253
+  type: 'test'
+  ...
+# Subtest: current Roster correction/Legacy/protection chains remain present; only NHSP ordinary source was added
+ok 5 - current Roster correction/Legacy/protection chains remain present; only NHSP ordinary source was added
+  ---
+  duration_ms: 0.1682
+  type: 'test'
+  ...
+# Subtest: NHSP candidate clocks/nullable break come from genuine native selected movement source; unknown is explicit
+ok 6 - NHSP candidate clocks/nullable break come from genuine native selected movement source; unknown is explicit
+  ---
+  duration_ms: 0.6546
+  type: 'test'
+  ...
+# Subtest: the actual NHSP no-reversal predicate is present in choice current, admission and Office question
+ok 7 - the actual NHSP no-reversal predicate is present in choice current, admission and Office question
+  ---
+  duration_ms: 0.1491
+  type: 'test'
+  ...
+# Subtest: discovery retains immutable historical full proof and freshly rederives real roots/cash before I1
+ok 8 - discovery retains immutable historical full proof and freshly rederives real roots/cash before I1
+  ---
+  duration_ms: 0.1018
+  type: 'test'
+  ...
+# Subtest: physical negative-first stable order processes complete native negatives before any positive current-choice recheck/write
+ok 9 - physical negative-first stable order processes complete native negatives before any positive current-choice recheck/write
+  ---
+  duration_ms: 0.1426
+  type: 'test'
+  ...
+# Subtest: native initial/recheck blocker uses current proof, respects protection and removes inapplicable economics/charge
+ok 10 - native initial/recheck blocker uses current proof, respects protection and removes inapplicable economics/charge
+  ---
+  duration_ms: 0.5161
+  type: 'test'
+  ...
+# Subtest: complete final fresh-choice census precedes the unchanged all-row completeness check
+ok 11 - complete final fresh-choice census precedes the unchanged all-row completeness check
+  ---
+  duration_ms: 0.1702
+  type: 'test'
+  ...
+# Subtest: NHSP context reads exact scope/version publication before use and preserves original correction/current queries
+ok 12 - NHSP context reads exact scope/version publication before use and preserves original correction/current queries
+  ---
+  duration_ms: 0.0919
+  type: 'test'
+  ...
+# Subtest: raw immutable confirmations/audits never update generation, admission or history
+ok 13 - raw immutable confirmations/audits never update generation, admission or history
+  ---
+  duration_ms: 0.1542
+  type: 'test'
+  ...
+# Subtest: actual Worker canonical owners produce NHSP qualified C1 proposal; no-choice overlap is left for native negative-first decision
+ok 14 - actual Worker canonical owners produce NHSP qualified C1 proposal; no-choice overlap is left for native negative-first decision
+  ---
+  duration_ms: 97.7984
+  type: 'test'
+  ...
+# Subtest: actual Worker accepts finite same-context Separate intent and still emits no paid/effect proof
+ok 15 - actual Worker accepts finite same-context Separate intent and still emits no paid/effect proof
+  ---
+  duration_ms: 41.7246
+  type: 'test'
+  ...
+# Subtest: actual Worker Same intent retains target identity and real C1 price proposal without authorising pay
+ok 16 - actual Worker Same intent retains target identity and real C1 price proposal without authorising pay
+  ---
+  duration_ms: 39.5228
+  type: 'test'
+  ...
+# Subtest: actual Worker refuses foreign upload/publication, wrong actor-scope fields or fake fresh/hash flags
+ok 17 - actual Worker refuses foreign upload/publication, wrong actor-scope fields or fake fresh/hash flags
+  ---
+  duration_ms: 319.2964
+  type: 'test'
+  ...
+# Subtest: actual Worker ignores caller attempt to substitute intent scope for the service context
+ok 18 - actual Worker ignores caller attempt to substitute intent scope for the service context
+  ---
+  duration_ms: 39.7363
+  type: 'test'
+  ...
+# Subtest: actual Worker keeps native intent confined to NHSP final and refuses it on a Roster profile
+ok 19 - actual Worker keeps native intent confined to NHSP final and refuses it on a Roster profile
+  ---
+  duration_ms: 39.946
+  type: 'test'
+  ...
+# Subtest: actual Worker preserves original fresh CURRENT choice admission for ordinary Roster
+ok 20 - actual Worker preserves original fresh CURRENT choice admission for ordinary Roster
+  ---
+  duration_ms: 36.6294
+  type: 'test'
+  ...
+# Subtest: actual Worker preserves genuine negative signed economics and never creates a pay-effect field
+ok 21 - actual Worker preserves genuine negative signed economics and never creates a pay-effect field
+  ---
+  duration_ms: 43.5145
+  type: 'test'
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1747.2411

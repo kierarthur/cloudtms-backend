@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "REVIEW.md",
+      "bytes": 1493,
+      "sha256": "eeeba830acd3cd3fa3772c25d0fab2b8d7d7bc43000497348c2933ae6a6d67d1"
+    },
+    {
+      "file": "REVIEW_SOURCE.mjs.txt",
+      "bytes": 4043,
+      "sha256": "249ab0dcb3c5f5c771c44851601e60df2d774deb9aeb8340d8375908d4f3431d"
+    },
+    {
+      "file": "SELECTED_FIX_CHECK.json",
+      "bytes": 311,
+      "sha256": "a5b946bff0826493d1d81c92763917f59ab0bbdfcdab9c4658d94d6cecf90487"
+    },
+    {
+      "file": "SOURCE_21_TEST_OUTPUT.txt",
+      "bytes": 5734,
+      "sha256": "436d46ed4cf731d862cce5c9d5530697e09dc1d0984125deb14a7f88031fd523"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 1018,
+      "sha256": "1472f1d522a5d8ad3f9a590f8b63bea611ae54e66bfd9698e3dab76d2a26d04d"
+    }
+  ]
+}

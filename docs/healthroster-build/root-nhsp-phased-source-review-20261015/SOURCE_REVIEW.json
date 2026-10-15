@@ -1,0 +1,25 @@
+{
+  "bounded_source_review": "ACCEPT_ONLY_WITH_REQUIRED_GRAMMAR_FIX",
+  "proposal_commit": "1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622",
+  "required_fix_commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+  "raw_saved_Git_before_after": true,
+  "raw_pins": 44,
+  "whole_owners": 7,
+  "whole_reverse_hunks": 31,
+  "current_input_snapshots": 17,
+  "source_tests": 21,
+  "actual_Worker_tests_included": 8,
+  "confirmed_defects": [
+    {
+      "id": "P1-NHSP-PHASED-IF-CASE-COMPILE",
+      "disposition": "fixed by three exact whole-owner successors; original freeze remains rejected for compilation"
+    }
+  ],
+  "SQL_executed_by_this_review": false,
+  "canonical_mounted": false,
+  "limits": [
+    "complete business-owner compilation and real native initial/negative/recheck/concurrency/financial tests",
+    "ordinary different-scope only; same-scope/correction/Legacy/NONE/Report/pay/prepared/current integration unfinished",
+    "private role/API/contract/current caller/full rehearsal/Install2 and acceptance"
+  ]
+}
