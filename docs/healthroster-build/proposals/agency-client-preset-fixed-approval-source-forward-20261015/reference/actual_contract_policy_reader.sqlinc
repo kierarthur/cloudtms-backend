@@ -1,0 +1,37 @@
+create or replace function public.contract_manager_authoriser_policy_get_v1(p_contract_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=''
+as $function$
+declare
+  v_contract public.contracts%rowtype;
+  v_client public.clients%rowtype;
+  v_client_settings public.client_settings%rowtype;
+  v_contract_policy jsonb;
+  v_client_policy jsonb;
+  v_effective jsonb;
+begin
+  select * into v_contract from public.contracts c where c.id=p_contract_id;
+  if not found then raise exception using errcode='P0002',message='CONTRACT_NOT_FOUND'; end if;
+  select * into v_client from public.clients c where c.id=v_contract.client_id;
+  select * into v_client_settings from public.client_settings cs where cs.client_id=v_contract.client_id
+    order by cs.effective_from desc nulls last,cs.updated_at desc,cs.id desc limit 1;
+  if not found then raise exception using errcode='55000',message='CLIENT_SETTINGS_NOT_FOUND'; end if;
+  v_client_policy:=private._candidate_manager_authoriser_policy_normalize_v2(v_client_settings.candidate_manager_approval_policy_json,'CLIENT');
+  if pg_catalog.upper(coalesce(v_contract.candidate_manager_approval_policy_json->>'mode','INHERIT')) in ('INHERIT','EXTEND','CONTRACT_ONLY') then
+    v_contract_policy:=private._candidate_manager_authoriser_policy_normalize_v2(v_contract.candidate_manager_approval_policy_json,'CONTRACT_WRITE');
+  else
+    v_contract_policy:=v_contract.candidate_manager_approval_policy_json;
+  end if;
+  v_effective:=private._candidate_manager_authoriser_effective_v2(v_client_settings.candidate_manager_approval_policy_json,v_contract.candidate_manager_approval_policy_json);
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'contract_updated_at',v_contract.updated_at,'client_name',v_client.name,
+    'contract_policy',v_contract_policy,'client_policy',v_client_policy,'effective_policy',v_effective,
+    'client_approved_count',pg_catalog.jsonb_array_length(v_client_policy->'approved_emails')+pg_catalog.jsonb_array_length(v_client_policy->'approved_domains'),
+    'contract_approved_count',pg_catalog.jsonb_array_length(v_contract_policy->'approved_emails')+pg_catalog.jsonb_array_length(v_contract_policy->'approved_domains'),
+    'effective_approved_count',pg_catalog.jsonb_array_length(v_effective->'approved_emails')+pg_catalog.jsonb_array_length(v_effective->'approved_domains')
+  );
+end;
+$function$;

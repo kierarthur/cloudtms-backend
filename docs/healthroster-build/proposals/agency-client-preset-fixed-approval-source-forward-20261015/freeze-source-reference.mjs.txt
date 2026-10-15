@@ -1,0 +1,61 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const target = path.resolve(here, '../../agency-client-preset-fixed-approval-source-forward-20261015');
+assert.ok(!fs.existsSync(target), 'Never overwrite a published source proposal');
+const inputs = JSON.parse(fs.readFileSync(path.join(here, 'COMPLETE_REVERSES.json'), 'utf8'));
+const dated = JSON.parse(fs.readFileSync(path.join(here, 'DATED_POLICY_COMPLETE_REVERSES.json'), 'utf8'));
+for (const dir of ['before', 'forward', 'reference']) fs.mkdirSync(path.join(target, dir), { recursive: true });
+for (const owner of [...inputs.owners, dated.owner]) {
+  for (const dir of ['before', 'forward']) fs.copyFileSync(path.join(here, dir, owner.file), path.join(target, dir, owner.file));
+}
+for (const input of [...inputs.inputs, dated.input]) fs.copyFileSync(path.join(here, input.reference), path.join(target, input.reference));
+fs.copyFileSync(path.join(here, '../fixed-approval-policy-construction-20261015/reference/pinned-source-parser.mjs'), path.join(target, 'reference/pinned-source-parser.mjs'));
+for (const name of ['COMPLETE_REVERSES.json', 'DATED_POLICY_COMPLETE_REVERSES.json']) fs.copyFileSync(path.join(here, name), path.join(target, name));
+fs.writeFileSync(path.join(target, 'preset-approval.test.mjs'), fs.readFileSync(path.join(here, 'preset-approval.test.mjs'), 'utf8')
+  .replace("'../fixed-approval-policy-construction-20261015/reference/pinned-source-parser.mjs'", "'./reference/pinned-source-parser.mjs'"));
+for (const name of ['prepare-dated-policy-forward.mjs', 'freeze-source-reference.mjs']) fs.copyFileSync(path.join(here, name), path.join(target, name + '.txt'));
+fs.writeFileSync(path.join(target, 'HANDBACK.md'), `# Actual Client preset approval lifecycle — source proposal
+
+This packet extends the real Client settings save and final feature-setup owner, plus the real Candidate policy resolver. It is unmounted source, independently unreviewed, and has no native qualification. It changes no canonical release root or manifest.
+
+105 applies/clears only the fixed approval key after the real dated membership/policy save, keeps all ordinary approved-email/domain bytes, uses the actual admin/version/group/Contract locks, and records every real change in the existing manager-policy receipts. No Office approval input or second store is added. 106 carries those actual receipts through the existing feature request receipt, including disable/restore.
+
+107 resolves the effective fixed key from the exact covered Contract-week dates and genuine dated ROSTER membership in the configured Candidate environment. It calls the existing configured AGENCY predicate, which rejects signed groups, NHSP, self-bill and legacy import authority. The core Contract settings reader does not call the Candidate resolver, so this dependency is not recursive. A raw unversioned Contract key cannot grant an exemption outside that dated scope. A future apply/clear can still invalidate an in-flight policy fingerprint through the existing Contract updated_at authority; resubmission keeps the correctly dated approval requirement. No stale fingerprint is bypassed or manufactured.
+
+Dependency: the already-published source-only agency-fixed-approval-policy-support-20261015 normaliser/resolver/public-writer forwards 93/94/95 (fee53465). They are not new functions or replacement approval authorities. Every original function byte outside the seven documented edits restores exactly: three complete owners, seven hunks, six committed input pins, no new table, column or signature.
+
+Verification: 15 source checks pass, including full reversals, exact Git inputs, actual admin/CAS/lock/receipt ordering, dated scope and preserved native policy-fingerprint owner. These checks inspect source; they do not compile PL/pgSQL or execute any settings, receipt, transition or financial action. Eight previous fixed-policy source checks were also rerun and passed. No database, rollback lab, HTTP, browser, Docker, Worker, LIVE, provider, email or payment action occurred.
+
+Required engineering remains: prospective Contract persistence/clear writer census; weekly HOURS worker-only submission, render, finalisation and official document; actual named Candidate security closure; OFF Candidate native fixture purpose; joint current-source/trigger composition and native date/normalisation/lifecycle/race/API/app proof. Combined/expense and DAILY never gain an unsigned-finalisation exemption from this packet. This is not a feature-ready, installed, release-ready or seal claim.
+`);
+const testOutput = execFileSync(process.execPath, ['--test', path.join(target, 'preset-approval.test.mjs')], { encoding: 'utf8' });
+assert.match(testOutput, /# pass 15|ℹ pass 15/);
+fs.writeFileSync(path.join(target, 'SOURCE_CHECKS.json'), JSON.stringify({
+  source_only: true, native: false, tests: 15, pass: 15, fail: 0,
+  complete_owners: 3, exact_hunks: 7, input_receipts: 6,
+  normaliser_dependency_source_tests: { pass: 8, fail: 0 },
+  independent_review: 'PENDING', canonical_mounted: false,
+  native_sql_compilation: false, actual_settings_invocation: false,
+  candidate_transition_implemented: false, candidate_finalise_implemented: false,
+  official_worker_only_document_implemented: false,
+  database_calls: 0, external_actions: 0
+}, null, 2) + '\n');
+const list = directory => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
+  entry.isDirectory() ? list(path.join(directory, entry.name)) : [path.join(directory, entry.name)]);
+const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+const files = list(target).sort().map(file => {
+  const raw = fs.readFileSync(file);
+  return { path: path.relative(target, file).replaceAll('\\', '/'), bytes: raw.length, sha256: sha(raw) };
+});
+fs.writeFileSync(path.join(target, 'REVIEW_MANIFEST.json'), JSON.stringify({
+  source_only: true, native: false, canonical_mounted: false,
+  independent_review: 'PENDING', files
+}, null, 2) + '\n');
+console.log(JSON.stringify({ target, files: files.length + 1, source_only: true, tests_passed: 15,
+  manifest_sha256: sha(fs.readFileSync(path.join(target, 'REVIEW_MANIFEST.json'))) }));

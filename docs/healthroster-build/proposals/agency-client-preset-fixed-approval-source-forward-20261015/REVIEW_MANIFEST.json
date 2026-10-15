@@ -1,0 +1,108 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "files": [
+    {
+      "path": "COMPLETE_REVERSES.json",
+      "bytes": 9180,
+      "sha256": "97e1905c28e558d7c162dbd9402f05c10015951b991b43e290d177ca4b8ffec5"
+    },
+    {
+      "path": "DATED_POLICY_COMPLETE_REVERSES.json",
+      "bytes": 5163,
+      "sha256": "3a63d3387a950a8c33deb8c35fdf370ef1828a5ea343a89d2bce74647ae76014"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 2841,
+      "sha256": "7b7e0142c78c7a32c97937fe1b4e2e8a748b9ec29f62014673dfd3d26f8958af"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 559,
+      "sha256": "18e653aebc9b6d8384dc47e8843e0bd15b4a58346a6a3c83201b215d5da98f88"
+    },
+    {
+      "path": "before/105_complete_client_preset_fixed_approval.sqlinc",
+      "bytes": 19164,
+      "sha256": "4f22a0b74df069c394fd119c86b9654abcd3d81b0a7b765aec921bbba0296fbd"
+    },
+    {
+      "path": "before/106_complete_feature_setup_fixed_approval_receipts.sqlinc",
+      "bytes": 24054,
+      "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667"
+    },
+    {
+      "path": "before/107_complete_dated_candidate_fixed_approval_policy.sqlinc",
+      "bytes": 3389,
+      "sha256": "10e4fc048992d2eef6a22ccdb2bead7b7e6a1f240fe6c1bc58f97c02661873d1"
+    },
+    {
+      "path": "forward/105_complete_client_preset_fixed_approval.sqlinc",
+      "bytes": 22951,
+      "sha256": "145cb1cf260cf53cbce60980a1e020154926952fab82e5fae111a6dd4ab58962"
+    },
+    {
+      "path": "forward/106_complete_feature_setup_fixed_approval_receipts.sqlinc",
+      "bytes": 24224,
+      "sha256": "caec60d101a9e6a5952375d099ef6cbd3f1710b707772e9722109371e06b7f72"
+    },
+    {
+      "path": "forward/107_complete_dated_candidate_fixed_approval_policy.sqlinc",
+      "bytes": 6084,
+      "sha256": "5a4a1f8370ded559850088545c8f2b23384c4e4cbe7d8899434e0692eb3379e0"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 6393,
+      "sha256": "5364ed83fa88e31c370b803a2186aa136fcc7f69273871088fb1c2029fe6f4c3"
+    },
+    {
+      "path": "prepare-dated-policy-forward.mjs.txt",
+      "bytes": 6327,
+      "sha256": "94214e00a5ce532561a821c10c40ea795538d9b58f2ff49c97a859a181c46b75"
+    },
+    {
+      "path": "preset-approval.test.mjs",
+      "bytes": 8300,
+      "sha256": "4d4dac374c8f17b5eabc799eda0f45f6f413b125d9d6f8ccfc06dd7e0c52bbab"
+    },
+    {
+      "path": "reference/actual_candidate_policy_resolver.sqlinc",
+      "bytes": 3389,
+      "sha256": "10e4fc048992d2eef6a22ccdb2bead7b7e6a1f240fe6c1bc58f97c02661873d1"
+    },
+    {
+      "path": "reference/actual_client_settings_owner.sqlinc",
+      "bytes": 19164,
+      "sha256": "4f22a0b74df069c394fd119c86b9654abcd3d81b0a7b765aec921bbba0296fbd"
+    },
+    {
+      "path": "reference/actual_configured_agency_scope.sqlinc",
+      "bytes": 3646,
+      "sha256": "b2b295823a2f3aeaf47522a8ad4b1831f1a9cb9200d8c04c7688ae199a260c89"
+    },
+    {
+      "path": "reference/actual_contract_policy_reader.sqlinc",
+      "bytes": 2390,
+      "sha256": "668687918dccebdad851ecbc17b53c712706ec72eb45f33eced4bcae66ccfb1c"
+    },
+    {
+      "path": "reference/actual_contract_policy_receipt_writer.sqlinc",
+      "bytes": 2563,
+      "sha256": "7fa5bb9b50a394ce92ccd45c76d1f6cf94446692be729b293118e1ecbdaa2bd5"
+    },
+    {
+      "path": "reference/actual_final_report_feature_setup.sqlinc",
+      "bytes": 24054,
+      "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667"
+    },
+    {
+      "path": "reference/pinned-source-parser.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    }
+  ]
+}

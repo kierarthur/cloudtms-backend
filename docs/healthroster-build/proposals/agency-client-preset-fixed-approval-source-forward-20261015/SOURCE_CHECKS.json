@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "native": false,
+  "tests": 15,
+  "pass": 15,
+  "fail": 0,
+  "complete_owners": 3,
+  "exact_hunks": 7,
+  "input_receipts": 6,
+  "normaliser_dependency_source_tests": {
+    "pass": 8,
+    "fail": 0
+  },
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_sql_compilation": false,
+  "actual_settings_invocation": false,
+  "candidate_transition_implemented": false,
+  "candidate_finalise_implemented": false,
+  "official_worker_only_document_implemented": false,
+  "database_calls": 0,
+  "external_actions": 0
+}

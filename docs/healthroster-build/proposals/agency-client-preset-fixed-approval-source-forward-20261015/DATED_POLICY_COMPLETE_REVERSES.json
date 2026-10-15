@@ -1,0 +1,47 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "input": {
+    "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+    "path": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+    "raw_sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+    "raw_bytes": 70450,
+    "reference": "reference/actual_candidate_policy_resolver.sqlinc",
+    "selected_definition_sha256": "10e4fc048992d2eef6a22ccdb2bead7b7e6a1f240fe6c1bc58f97c02661873d1"
+  },
+  "owner": {
+    "file": "107_complete_dated_candidate_fixed_approval_policy.sqlinc",
+    "id": "private._candidate_policy_resolve_v1(uuid,uuid,date)",
+    "before_sha256": "10e4fc048992d2eef6a22ccdb2bead7b7e6a1f240fe6c1bc58f97c02661873d1",
+    "after_sha256": "5a4a1f8370ded559850088545c8f2b23384c4e4cbe7d8899434e0692eb3379e0",
+    "hunks": [
+      {
+        "purpose": "The existing Candidate policy owner resolves the system key at its actual evaluation date",
+        "before": "  v_result jsonb;",
+        "after": "  v_result jsonb;\n  v_manager_policy jsonb;\n  v_agency_group record;\n  v_agency_group_count integer;\n  v_fixed_from date;\n  v_fixed_to date;"
+      },
+      {
+        "purpose": "Unversioned Contract preset bytes cannot grant or remove a dated Candidate approval exemption",
+        "before": "  v_email:=nullif(btrim(v_values->>'candidate_expense_invoice_email'),'');",
+        "after": "  -- R242 is a system-owned dated preset policy, never an Office choice.\n  -- The Contract JSON is unversioned: a future apply/clear must not change\n  -- approval for an earlier week, and a cloned/new Contract must resolve its\n  -- own genuine membership. Re-resolve only this key from the native dated\n  -- assignment. Preserve every ordinary manager-policy byte unchanged.\n  v_manager_policy:=coalesce(v_values->'candidate_manager_approval_policy_json','{}'::jsonb)-'approval';\n  select greatest(contract.start_date,v_date-6),least(contract.end_date,v_date)\n  into v_fixed_from,v_fixed_to from public.contracts contract\n  where contract.id=p_contract_id and contract.client_id=p_client_id\n    and contract.weekly_timesheet_source::text='HEALTHROSTER'\n    and contract.start_date<=v_date and contract.end_date>=v_date-6;\n  if found\n     and v_authority->>'configured_route'='HEALTHROSTER_WEEKLY_VALIDATION'\n     and coalesce((v_authority#>>'{applicability,configuration_valid}')::boolean,false)\n     and not coalesce((v_authority#>>'{applicability,import_authoritative}')::boolean,false) then\n    select count(*) into v_agency_group_count\n    from public.weekly_source_group_clients membership\n    join public.weekly_source_groups source_group on source_group.id=membership.source_group_id\n      and source_group.active and source_group.source_family='ROSTER'\n      and source_group.environment=v_global.candidate_app_environment\n    where membership.client_id=p_client_id\n      and v_fixed_from>=membership.valid_from\n      and v_fixed_to<=coalesce(membership.valid_to,'infinity'::date);\n    if v_agency_group_count>1 then\n      raise exception 'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID' using errcode='55000';\n    elsif v_agency_group_count=1 then\n      select source_group.id,source_group.agency_id,source_group.environment into strict v_agency_group\n      from public.weekly_source_group_clients membership\n      join public.weekly_source_groups source_group on source_group.id=membership.source_group_id\n        and source_group.active and source_group.source_family='ROSTER'\n        and source_group.environment=v_global.candidate_app_environment\n      where membership.client_id=p_client_id\n        and v_fixed_from>=membership.valid_from\n        and v_fixed_to<=coalesce(membership.valid_to,'infinity'::date);\n      if private.weekly_source_configured_agency_invoice_v1(\n        p_client_id,v_agency_group.id,v_agency_group.agency_id,v_agency_group.environment,v_fixed_to\n      ) is true then\n        v_manager_policy:=v_manager_policy||jsonb_build_object('approval','NOT_REQUIRED');\n      end if;\n    end if;\n  end if;\n  v_email:=nullif(btrim(v_values->>'candidate_expense_invoice_email'),'');"
+      },
+      {
+        "purpose": "The existing immutable Candidate policy fingerprint includes the dated resolved key",
+        "before": "    'manager_approval_policy',coalesce(v_values->'candidate_manager_approval_policy_json','{}'::jsonb),",
+        "after": "    'manager_approval_policy',v_manager_policy,"
+      }
+    ]
+  },
+  "new_signatures": [],
+  "new_tables": [],
+  "new_columns": [],
+  "dependency": "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date) from the reviewed current rule-set owner; that owner calls the core Contract reader, not this Candidate resolver",
+  "remaining_engineering": [
+    "Complete Candidate transition/finalisation/document consumers",
+    "Prospective Contract persistence/clear writer census",
+    "Native dated future apply/clear, normalisation and Candidate policy round-trip",
+    "Shared current-owner composition, named security and OFF invocation qualification"
+  ]
+}

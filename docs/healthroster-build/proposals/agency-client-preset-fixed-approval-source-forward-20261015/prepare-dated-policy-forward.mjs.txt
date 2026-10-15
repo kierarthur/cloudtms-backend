@@ -1,0 +1,104 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { functionEvents } from '../fixed-approval-policy-construction-20261015/reference/pinned-source-parser.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const pin = 'fa66183f01913e86651e82816f5e88f97e07123c';
+const sourcePath = 'supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql';
+const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+const raw = execFileSync('git', ['show', `${pin}:${sourcePath}`], { maxBuffer: 8_000_000 });
+const selected = functionEvents(raw.toString('utf8')).events.filter(event =>
+  event.kind === 'CREATE' && event.id === 'private._candidate_policy_resolve_v1(uuid,uuid,date)');
+assert.equal(selected.length, 1);
+const before = selected[0].definition;
+const nl = before.includes('\r\n') ? '\r\n' : '\n';
+const lines = value => value.replaceAll('\n', nl);
+const hunks = [
+  {
+    purpose: 'The existing Candidate policy owner resolves the system key at its actual evaluation date',
+    before: '  v_result jsonb;',
+    after: lines(`  v_result jsonb;
+  v_manager_policy jsonb;
+  v_agency_group record;
+  v_agency_group_count integer;
+  v_fixed_from date;
+  v_fixed_to date;`)
+  },
+  {
+    purpose: 'Unversioned Contract preset bytes cannot grant or remove a dated Candidate approval exemption',
+    before: "  v_email:=nullif(btrim(v_values->>'candidate_expense_invoice_email'),'');",
+    after: lines(`  -- R242 is a system-owned dated preset policy, never an Office choice.
+  -- The Contract JSON is unversioned: a future apply/clear must not change
+  -- approval for an earlier week, and a cloned/new Contract must resolve its
+  -- own genuine membership. Re-resolve only this key from the native dated
+  -- assignment. Preserve every ordinary manager-policy byte unchanged.
+  v_manager_policy:=coalesce(v_values->'candidate_manager_approval_policy_json','{}'::jsonb)-'approval';
+  select greatest(contract.start_date,v_date-6),least(contract.end_date,v_date)
+  into v_fixed_from,v_fixed_to from public.contracts contract
+  where contract.id=p_contract_id and contract.client_id=p_client_id
+    and contract.weekly_timesheet_source::text='HEALTHROSTER'
+    and contract.start_date<=v_date and contract.end_date>=v_date-6;
+  if found
+     and v_authority->>'configured_route'='HEALTHROSTER_WEEKLY_VALIDATION'
+     and coalesce((v_authority#>>'{applicability,configuration_valid}')::boolean,false)
+     and not coalesce((v_authority#>>'{applicability,import_authoritative}')::boolean,false) then
+    select count(*) into v_agency_group_count
+    from public.weekly_source_group_clients membership
+    join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+      and source_group.active and source_group.source_family='ROSTER'
+      and source_group.environment=v_global.candidate_app_environment
+    where membership.client_id=p_client_id
+      and v_fixed_from>=membership.valid_from
+      and v_fixed_to<=coalesce(membership.valid_to,'infinity'::date);
+    if v_agency_group_count>1 then
+      raise exception 'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID' using errcode='55000';
+    elsif v_agency_group_count=1 then
+      select source_group.id,source_group.agency_id,source_group.environment into strict v_agency_group
+      from public.weekly_source_group_clients membership
+      join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+        and source_group.active and source_group.source_family='ROSTER'
+        and source_group.environment=v_global.candidate_app_environment
+      where membership.client_id=p_client_id
+        and v_fixed_from>=membership.valid_from
+        and v_fixed_to<=coalesce(membership.valid_to,'infinity'::date);
+      if private.weekly_source_configured_agency_invoice_v1(
+        p_client_id,v_agency_group.id,v_agency_group.agency_id,v_agency_group.environment,v_fixed_to
+      ) is true then
+        v_manager_policy:=v_manager_policy||jsonb_build_object('approval','NOT_REQUIRED');
+      end if;
+    end if;
+  end if;
+  v_email:=nullif(btrim(v_values->>'candidate_expense_invoice_email'),'');`)
+  },
+  {
+    purpose: 'The existing immutable Candidate policy fingerprint includes the dated resolved key',
+    before: "    'manager_approval_policy',coalesce(v_values->'candidate_manager_approval_policy_json','{}'::jsonb),",
+    after: "    'manager_approval_policy',v_manager_policy,"
+  }
+];
+let after = before;
+for (const hunk of hunks) {
+  assert.equal(after.split(hunk.before).length, 2, hunk.purpose);
+  after = after.replace(hunk.before, () => hunk.after);
+}
+const owner = '107_complete_dated_candidate_fixed_approval_policy.sqlinc';
+fs.writeFileSync(path.join(here, 'reference/actual_candidate_policy_resolver.sqlinc'), before);
+fs.writeFileSync(path.join(here, 'before', owner), before);
+fs.writeFileSync(path.join(here, 'forward', owner), after);
+fs.writeFileSync(path.join(here, 'DATED_POLICY_COMPLETE_REVERSES.json'), JSON.stringify({
+  source_only: true, native: false, canonical_mounted: false, independent_review: 'PENDING',
+  input: { pin, path: sourcePath, raw_sha256: sha(raw), raw_bytes: raw.length,
+    reference: 'reference/actual_candidate_policy_resolver.sqlinc', selected_definition_sha256: sha(before) },
+  owner: { file: owner, id: selected[0].id, before_sha256: sha(before), after_sha256: sha(after), hunks },
+  new_signatures: [], new_tables: [], new_columns: [],
+  dependency: 'private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date) from the reviewed current rule-set owner; that owner calls the core Contract reader, not this Candidate resolver',
+  remaining_engineering: ['Complete Candidate transition/finalisation/document consumers',
+    'Prospective Contract persistence/clear writer census',
+    'Native dated future apply/clear, normalisation and Candidate policy round-trip',
+    'Shared current-owner composition, named security and OFF invocation qualification']
+}, null, 2) + '\n');
+console.log(JSON.stringify({ source_only: true, id: selected[0].id, before_sha256: sha(before), after_sha256: sha(after), hunks: hunks.length }));

@@ -1,0 +1,95 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "inputs": [
+    {
+      "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+      "raw_sha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b",
+      "raw_bytes": 19824,
+      "reference": "reference/actual_client_settings_owner.sqlinc",
+      "selected_definition_sha256": "4f22a0b74df069c394fd119c86b9654abcd3d81b0a7b765aec921bbba0296fbd"
+    },
+    {
+      "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "raw_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "raw_bytes": 101268,
+      "reference": "reference/actual_configured_agency_scope.sqlinc",
+      "selected_definition_sha256": "b2b295823a2f3aeaf47522a8ad4b1831f1a9cb9200d8c04c7688ae199a260c89"
+    },
+    {
+      "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "raw_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "raw_bytes": 28588,
+      "reference": "reference/actual_contract_policy_reader.sqlinc",
+      "selected_definition_sha256": "668687918dccebdad851ecbc17b53c712706ec72eb45f33eced4bcae66ccfb1c"
+    },
+    {
+      "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "raw_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "raw_bytes": 28588,
+      "reference": "reference/actual_contract_policy_receipt_writer.sqlinc",
+      "selected_definition_sha256": "7fa5bb9b50a394ce92ccd45c76d1f6cf94446692be729b293118e1ecbdaa2bd5"
+    },
+    {
+      "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/05_complete_current_feature_setup.sqlinc",
+      "raw_sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667",
+      "raw_bytes": 24054,
+      "reference": "reference/actual_final_report_feature_setup.sqlinc",
+      "selected_definition_sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667"
+    }
+  ],
+  "owners": [
+    {
+      "file": "105_complete_client_preset_fixed_approval.sqlinc",
+      "before_sha256": "4f22a0b74df069c394fd119c86b9654abcd3d81b0a7b765aec921bbba0296fbd",
+      "after_sha256": "145cb1cf260cf53cbce60980a1e020154926952fab82e5fae111a6dd4ab58962",
+      "hunks": [
+        {
+          "purpose": "Native existing settings actor owns exact Contract change receipts",
+          "before": "  v_policy_effective_from date;",
+          "after": "  v_policy_effective_from date;\n  v_approval_contract public.contracts%rowtype; v_approval_before jsonb; v_approval_after jsonb;\n  v_approval_capture jsonb; v_approval_key text; v_approval_response jsonb;\n  v_approval_changes jsonb:='[]'::jsonb;"
+        },
+        {
+          "purpose": "Apply/clear only after genuine membership/policy write and before final stale marking",
+          "before": "  if v_old_group_id is not null and v_old_group_id<>v_group_id then\n    perform private._weekly_source_settings_stale_open_v1(v_old_group_id,v_client);",
+          "after": "  -- R242: derive the fixed key inside the same actual settings owner.\n  -- No approval field is admitted from Office. The just-saved dated target\n  -- membership and native configured AGENCY scope own apply/clear together.\n  -- All ordinary manager email/domain policy bytes are preserved.\n  if private.weekly_source_configured_agency_invoice_v1(v_client,v_group_id,v_agency,v_environment,v_effective_from)\n    is distinct from v_client_agency_basis then\n    raise exception 'WEEKLY_SOURCE_AGENCY_FIXED_APPROVAL_SCOPE_STALE' using errcode='40001';end if;\n  for v_approval_contract in\n    select contract.* from public.contracts contract where contract.client_id=v_client\n      and ((v_client_agency_basis and contract.weekly_timesheet_source::text='HEALTHROSTER'\n        and contract.end_date>=v_effective_from)\n        or (not v_client_agency_basis and contract.candidate_manager_approval_policy_json->'approval'='\"NOT_REQUIRED\"'::jsonb))\n    order by contract.id for update\n  loop\n    v_approval_before:=v_approval_contract.candidate_manager_approval_policy_json;\n    v_approval_after:=case when v_client_agency_basis\n      then coalesce(v_approval_before,'{}'::jsonb)||jsonb_build_object('approval','NOT_REQUIRED')\n      else v_approval_before-'approval' end;\n    if v_approval_after is not distinct from v_approval_before then continue;end if;\n    v_approval_capture:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_FIXED_APPROVAL_CHANGE_V1',\n      'contract_id',v_approval_contract.id,'client_id',v_client,'source_group_id',v_group_id,\n      'previous_source_group_id',v_old_group_id,'effective_from',v_effective_from,\n      'expected_contract_updated_at',v_approval_contract.updated_at,\n      'before_policy',v_approval_before,'after_policy',v_approval_after,\n      'operation',case when v_client_agency_basis then 'APPLY' else 'CLEAR' end);\n    -- Every real change has a new native receipt, including A -> B -> A in\n    -- one transaction. An equal historical input hash is not a replay owner.\n    -- Feature request replay is already owned by its immutable feature receipt;\n    -- a repeated Client save with unchanged policy takes the no-op above.\n    v_approval_capture:=v_approval_capture||jsonb_build_object('input_sha256',encode(private.weekly_source_sha256_jsonb_v1(\n      'WEEKLY_SOURCE_AGENCY_FIXED_APPROVAL_CHANGE_V1',v_approval_capture),'hex'));\n    v_approval_key:='SOURCE_AGENCY_FIXED:'||gen_random_uuid()::text;\n    update public.contracts set candidate_manager_approval_policy_json=v_approval_after,\n      updated_at=transaction_timestamp() where id=v_approval_contract.id returning * into v_approval_contract;\n    v_approval_response:=public.contract_manager_authoriser_policy_get_v1(v_approval_contract.id)\n      ||jsonb_build_object('system_fixed_approval',v_approval_capture,'idempotent_replay',false);\n    insert into public.candidate_manager_authoriser_policy_receipts(\n      entity_kind,entity_id,idempotency_key,semantic_sha256,response_json,actor_user_id,recorded_at_utc)\n    values('CONTRACT',v_approval_contract.id,v_approval_key,\n      extensions.digest(convert_to(v_approval_after::text,'UTF8'),'sha256'),v_approval_response,v_actor,transaction_timestamp());\n    v_approval_changes:=v_approval_changes||jsonb_build_array(v_approval_capture||jsonb_build_object(\n      'contract_updated_at',v_approval_contract.updated_at,'receipt_idempotency_key',v_approval_key));\n  end loop;\n\n  if v_old_group_id is not null and v_old_group_id<>v_group_id then\n    perform private._weekly_source_settings_stale_open_v1(v_old_group_id,v_client);"
+        },
+        {
+          "purpose": "Expose actual system-owned changes only when they occurred",
+          "before": "  return private._weekly_source_settings_client_shape_v1(\n    v_agency,v_environment,v_client,v_effective_from\n  );",
+          "after": "  return private._weekly_source_settings_client_shape_v1(\n    v_agency,v_environment,v_client,v_effective_from\n  )||case when jsonb_array_length(v_approval_changes)=0 then '{}'::jsonb\n    else jsonb_build_object('contract_approval_changes',v_approval_changes) end;"
+        }
+      ]
+    },
+    {
+      "file": "106_complete_feature_setup_fixed_approval_receipts.sqlinc",
+      "before_sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667",
+      "after_sha256": "caec60d101a9e6a5952375d099ef6cbd3f1710b707772e9722109371e06b7f72",
+      "hunks": [
+        {
+          "purpose": "Exact feature receipt retains real native Contract apply/clear receipts",
+          "before": "      v_manifest:=v_manifest||jsonb_build_array(v_entry||jsonb_build_object(\n        case when v_enabled then 'after_values' else 'restored_values' end,v_shape->'settings',",
+          "after": "      v_manifest:=v_manifest||jsonb_build_array(v_entry||case when v_result ? 'contract_approval_changes'\n        then jsonb_build_object('contract_approval_changes',v_result->'contract_approval_changes') else '{}'::jsonb end||jsonb_build_object(\n        case when v_enabled then 'after_values' else 'restored_values' end,v_shape->'settings',"
+        }
+      ]
+    }
+  ],
+  "new_signatures": [],
+  "new_tables": [],
+  "new_columns": [],
+  "caller_approval_choice": false,
+  "ordinary_policy_bytes_retained": true,
+  "remaining_engineering": [
+    "Prospective new/duplicated Contract fixed-key lifecycle and complete actual writer census",
+    "Candidate weekly transition/finalise/document actual consumers and named security verification",
+    "OFF Candidate session native fixture purpose authority; no generic operation expansion",
+    "Actual complete current owner/Source late BEFORE/Bank hook union and native proof"
+  ]
+}

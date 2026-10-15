@@ -1,0 +1,46 @@
+create or replace function private.weekly_source_configured_agency_invoice_v1(
+  p_client_id uuid,p_group_id uuid,p_agency_id uuid,p_environment text,p_date date
+) returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_settings jsonb; v_group_id uuid:=p_group_id;
+begin
+  if p_client_id is null or p_date is null then return false; end if;
+  if v_group_id is null then
+    select gc.source_group_id into v_group_id from public.weekly_source_group_clients gc
+      join public.weekly_source_groups g on g.id=gc.source_group_id and g.active and g.source_family='ROSTER'
+        and g.agency_id=p_agency_id and g.environment=p_environment
+      where gc.client_id=p_client_id and p_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date);
+  end if;
+  if v_group_id is null or not exists(select 1 from public.weekly_source_groups g
+    join public.weekly_source_group_rule_assignments a on a.source_group_id=g.id
+    join public.weekly_source_rule_set_versions v on v.id=a.rule_set_version_id
+    join public.weekly_source_rule_sets r on r.id=v.rule_set_id and r.agency_id=g.agency_id and r.environment=g.environment
+    where g.id=v_group_id and g.active and g.source_family='ROSTER' and g.agency_id=p_agency_id and g.environment=p_environment
+      and a.feature_enabled and a.feature_purpose='RULE_SET'
+      and p_date between a.effective_from_week_ending-6 and coalesce(a.effective_to_week_ending,'infinity'::date)
+      and v.values_json->>'invoice_sender'='AGENCY_INVOICE') then return false; end if;
+  if exists(select 1 from public.weekly_source_group_clients gc join public.weekly_source_group_rule_assignments a on a.source_group_id=gc.source_group_id
+      where gc.client_id=p_client_id and a.feature_purpose='SIGNED_CHECK_ONLY'
+        and p_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+        and p_date between a.effective_from_week_ending-6 and coalesce(a.effective_to_week_ending,'infinity'::date)) then return false; end if;
+  if coalesce((select cs.self_bill_no_invoices_sent from public.client_settings cs
+      where cs.client_id=p_client_id and (cs.effective_from is null or cs.effective_from<=p_date)
+      order by cs.effective_from desc nulls last,cs.updated_at desc,cs.id desc limit 1),false) then return false; end if;
+  if not exists(select 1 from public.contracts c where c.client_id=p_client_id
+      and c.weekly_timesheet_source::text='HEALTHROSTER' and c.end_date>=p_date)
+    or exists(select 1 from public.contracts c where c.client_id=p_client_id
+      and c.weekly_timesheet_source::text<>'NONE' and c.end_date>=p_date
+      and (c.weekly_timesheet_source::text<>'HEALTHROSTER' or c.self_bill or coalesce(c.no_timesheet_required,false) or coalesce(c.is_nhsp,false))) then return false; end if;
+  for v_settings in select private._contract_settings_effective_core_v1(c.client_id,c.id,greatest(c.start_date,p_date),'WEEKLY',null)
+    from public.contracts c where c.client_id=p_client_id and c.weekly_timesheet_source::text='HEALTHROSTER' and c.end_date>=p_date
+  loop
+    if not coalesce((v_settings->'applicability'->>'configuration_valid')::boolean,false)
+      or not coalesce((v_settings->'values'->>'requires_hr')::boolean,false)
+      or not coalesce((v_settings->'values'->>'autoprocess_hr')::boolean,false)
+      or coalesce((v_settings->'values'->>'no_timesheet_required')::boolean,true)
+      or coalesce((v_settings->'values'->>'is_nhsp')::boolean,true)
+      or coalesce((v_settings->'values'->>'self_bill')::boolean,true) then return false; end if;
+  end loop;
+  return true;
+end;
+$function$;
