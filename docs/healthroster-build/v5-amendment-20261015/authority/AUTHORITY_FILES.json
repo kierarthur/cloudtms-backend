@@ -1,0 +1,596 @@
+[
+  {
+    "Role": "Owner current instructions",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\TASK_BRIEF.md",
+    "Bytes": 8273,
+    "SHA256": "7d05fbdd70e26aea890a0bcea3529eab394f48e42f6ae6c877af505d85f4699f"
+  },
+  {
+    "Role": "Owner15Octobercomments",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_14102026\\OWNER_COMMENTS_15102026_NEXT_REVISION.md",
+    "Bytes": 7202,
+    "SHA256": "9a768b7b7371cbd3cf992a9bbb2549fb37500579f2fc3e163a32abef32153e70"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\00_READ_ME_FIRST_SUMMARY.md",
+    "Bytes": 10877,
+    "SHA256": "666f65022eaf1737b8bb5355ac63480c1f3e933b72f0983669a23a18bfcc9308"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\01_BUILDER_RULES_AND_FOUNDATION.md",
+    "Bytes": 212245,
+    "SHA256": "edf724bb3e6fee87169d685bbc68284c5561172fa66ab97ac7be154b6d83d924"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\02_WORKBENCH.md",
+    "Bytes": 306753,
+    "SHA256": "ef974a5f7670ce1ffeb93952a9d2887c36d9b5380a14e99111c7d5bd12d5a409"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\03_DRAFT_PAYE_NET_BATCHES_FINANCE_CASES.md",
+    "Bytes": 322071,
+    "SHA256": "c3053a5e5bae73a933488d92a4e5e4098ba6046532852aed01d3d96fa38a18cb"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\04_EXECUTION_AND_OUTCOMES.md",
+    "Bytes": 349875,
+    "SHA256": "61a2a6d0b85f60d3efd450928c3200d4c94e17fc212109f23628d5beb9369f6a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\05_SOURCE_AND_PROTECTED_PAY.md",
+    "Bytes": 290423,
+    "SHA256": "b9fdbcb3908661bd6f40c0eb395e57cb6d9925d2b903afefecc50004f957f71e"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\06_CONTRACT_MOVES_DAILY_PAYMENT_SUMMARY_PERFORMANCE.md",
+    "Bytes": 380629,
+    "SHA256": "959d8e33a31142a3e54478d0521b81c2e64619e79e758b0a5d78640dddf6c18a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\07_OWNER_DECISIONS.md",
+    "Bytes": 33818,
+    "SHA256": "8d77c19e742a27521bdc0310b8673eb53affa3ce8d2156605c7de42e9337f0a7"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\08_BUILD_ORDER_AND_CODEX_INSTRUCTION.md",
+    "Bytes": 70383,
+    "SHA256": "64db4b6328c01336213f02da1caca0889db119c0fa06b803abbda0756c30fc14"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\09_OWNER_ANSWERS_BINDING.md",
+    "Bytes": 7037,
+    "SHA256": "7c3d132b5f2d9918cd8c42ce9c4ecda656fdc3e68d9ad0b237c65d68e75e9819"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\10_OWNER_COMMENTS_THIS_CONVERSATION.md",
+    "Bytes": 10809,
+    "SHA256": "1ba82b320169c871e346ac1c5b01c96cf99a19143e42e39aadda31aabe5b5c35"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\CHANGES_FROM_CLAUDE_V2.md",
+    "Bytes": 352560,
+    "SHA256": "7dba354ba6796b9a3859f923d8cd16cf243419863cc43922161fe2b71336beaf"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\CHANGES_FROM_CODEX_R1.md",
+    "Bytes": 136671,
+    "SHA256": "2f83c187c9f1e31f498f9930c0b7155fed3e6cec11a7d558dc5215a2822b6ce6"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\CHANGES_FROM_CODEX_R2.md",
+    "Bytes": 9816,
+    "SHA256": "1203a9457844a4bbe2322d737633e124b465be986d2ff16efd8a820fd309b2b0"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\FINAL_REPORT.md",
+    "Bytes": 1885,
+    "SHA256": "2f8b77c8a3794de57740d20835c47c8ddac9057af0523645ec86fb2218c36b6e"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\IMPLEMENTATION_CHECKLIST.csv",
+    "Bytes": 6002896,
+    "SHA256": "b93e9609af70d354c3dafc229f5f4bdd96d52449d719ede2c0f25a31694fbf2a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\IMPLEMENTATION_CHECKLIST.md",
+    "Bytes": 1909897,
+    "SHA256": "81be0f2d348fa5a9ad37c11d35e6e40a4bbb3731ff9e7c7abd7099d25c24722e"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\IMPLEMENTATION_SEQUENCE.md",
+    "Bytes": 4741,
+    "SHA256": "700e642790bac3e28a283fffebc68c3a9ee7291d43b8b68e3293e5f83f750b3c"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\LEGACY_PARITY_ACCEPTANCE.md",
+    "Bytes": 232369,
+    "SHA256": "1caff8607dd4d054f1d8dcc473d624b5e2e8b602f6af27d080e01e788f77eaa4"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\OWNER_QUESTIONS.md",
+    "Bytes": 5670,
+    "SHA256": "3f62d676621ed0b3dbe5f1ad432e42f55300c851b61ac947dfba149ea06b0729"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\README_R2.md",
+    "Bytes": 2438,
+    "SHA256": "aee9ca3e59aa927794bf7de2c891973b9a227534178de0cb9ba2c2673ccad8fb"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\BPAY_NEXT_BUILD_PLAN_20261009_codex_r3\\README_R3.md",
+    "Bytes": 1310,
+    "SHA256": "0b31035a5a36dbcca7410af5723a514019c85b21d5c8d65c84de7619d4aec710"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\00_DECISIONS_REGISTER.md",
+    "Bytes": 141213,
+    "SHA256": "f3cdc23cf909118a5f6e50fa8ca246529bda1c31c1680876ef910b967276386b"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\00_SOURCE_DATA.md",
+    "Bytes": 8660,
+    "SHA256": "d1aff5057122fdd7a0639764aba7cbd5e3c5b40de7f6597da31935cefb6273e6"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\00_SUMMARY.md",
+    "Bytes": 22172,
+    "SHA256": "b99bbf121d9b43b1977b1fcf636edf7231d8020c6ed073e32908644500144faf"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\01_VERIFIED_CURRENT_STATE.md",
+    "Bytes": 49723,
+    "SHA256": "fc234d904cd55a360d582a0f2b3d96475281c6d2db4f9986264f38ccb565f811"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\02_GAPS.md",
+    "Bytes": 32407,
+    "SHA256": "eb13389aacebe5a923095c6a1b72d16d07cf2e4bb6bcc72b524628688727f6f0"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\03_IMPLEMENTATION_PLAN.md",
+    "Bytes": 563296,
+    "SHA256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\04_WEEKLY_PROCEDURE.md",
+    "Bytes": 23772,
+    "SHA256": "624ea2c5385a7e8ee31b905ac4b25ab1c6581e2c87249c7f7a94e1e4c2905938"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\05_ACCEPTANCE.md",
+    "Bytes": 198236,
+    "SHA256": "fc633ee26af33fe364d9fad1a8e300be98802938c3107cdb0b21b11b3739e8c0"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\06_QUESTIONS.md",
+    "Bytes": 27234,
+    "SHA256": "07ed0d54688b224cc97b36a2d9f113dd14e82117f8dd578c3d18f1853edb623a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\07_RULES_FOR_CODEX.md",
+    "Bytes": 33091,
+    "SHA256": "d2a51996ff8f3df2c19e7788fbedd5840b6f588c8be478ce654ed50ed3cd8b40"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\08_WHERE_EVERYTHING_IS.md",
+    "Bytes": 20692,
+    "SHA256": "b9938f6e058149e922068d295caab189166ec110e267b44f0ed66832bcd03a1f"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CHANGES_ROUND2.md",
+    "Bytes": 7001,
+    "SHA256": "6a7a12f3e832c9efdde054556daf518eee90f1135ca59b1196b6fbc2b48aa02a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CHANGES_ROUND3.md",
+    "Bytes": 12290,
+    "SHA256": "1c85ca4599047a199e690acabf91aa169a472a6279399e1320f4cd84b03b31d3"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CHANGES_ROUND4.md",
+    "Bytes": 133600,
+    "SHA256": "212a039ef3be3fe170fda7c307d2238b7a834558dd9eabed415905614f792ef8"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CODEX_CORRECTIONS_DISPOSITION.md",
+    "Bytes": 62907,
+    "SHA256": "f88d506b44eeb1dd4cecfbc628a37089aad4120cb5ad04458a84e92a37336751"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CONFIRM_CRITIC_FIXES.md",
+    "Bytes": 9105,
+    "SHA256": "f38bf198321a354b774e40f04e68d8b147c433617c7d15c0073e6d39c9ed4362"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CONFIRM_CRITIC_HELPER_1_CODE.md",
+    "Bytes": 24401,
+    "SHA256": "d2df445970c6ada8fb356679ab8d45b5d27ddaa38b122d55cff3b7165b12b5b2"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CONFIRM_CRITIC_HELPER_2_TRACE.md",
+    "Bytes": 24268,
+    "SHA256": "3bff7047898ae613654979da85bf71a21f3ecfa406b524dd438db1ae48f258aa"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CONFIRM_CRITIC_REVIEW.md",
+    "Bytes": 16974,
+    "SHA256": "ee6152cd7b2a5cf48d31f433f8c9237eee8e9cd064965d8b5df8fd4e67f9e092"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_AGENCY_INVOICE_REVIEW.md",
+    "Bytes": 76303,
+    "SHA256": "01ca3910b788a1591fae0cc2ab58dcb84219055caa553b0ea6d85b0402a76a87"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_HELPER_1_CODE.md",
+    "Bytes": 41689,
+    "SHA256": "3cef79e32dde4a5ec631dc289c131fffa2eb51f08450bde3c5648316f36d1238"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_HELPER_2_DATA.md",
+    "Bytes": 19584,
+    "SHA256": "8c21fa9adf533603565d2eb99ecbb5fe52ff9c0c593bc2b5c76baa6560482957"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_HELPER_3_RELEASE_NEXT.md",
+    "Bytes": 33078,
+    "SHA256": "bf86de255e45032421bda29035ba73d8612ae353bd704f76cf8429b561285d5d"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_REVIEW.md",
+    "Bytes": 51262,
+    "SHA256": "05b3d2a8b0f8c6adde48d445872f708b6ac83f87a91c5d32ca03d3de4fc3efe0"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND21.md",
+    "Bytes": 23925,
+    "SHA256": "3f5d4c6f103b5df5aa0139d4c8d750adb923387a8e7a873ef8308a36f0952bfb"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND22.md",
+    "Bytes": 26618,
+    "SHA256": "88a05db60f4b1352b1c1e40387527841f6e58cc639589dc4aa965c83312b132b"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND4_FIXES.md",
+    "Bytes": 15587,
+    "SHA256": "a760a63566f9575242024b6ca73d63ce28bcd3de2b8520c5b95807c9160e57d9"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND4_REVIEW.md",
+    "Bytes": 24445,
+    "SHA256": "8a6545c8566a1e3cca34b6727df15cc6f7e79691e5078671bb37545ed3bc1a35"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND5_FIXES.md",
+    "Bytes": 21072,
+    "SHA256": "3afc43f56eea10176d2d5af33750a072afc22e5f62bcba27a184f03ba37b0f3a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND5_REVIEW.md",
+    "Bytes": 30752,
+    "SHA256": "59dfa38617da06428caf3f517a208b317b8a0d6ae8806d4d63caa97fe3107158"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND6_FIXES.md",
+    "Bytes": 11584,
+    "SHA256": "259df4250ce21580749159859202bdba439848e2c04bd29e6e62a87725ca8f76"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND6_REVIEW.md",
+    "Bytes": 20025,
+    "SHA256": "1d3a5ec8e5bdc3cae943aeccd1ae1edf06959d6e6cf3e017039555674cc87f1e"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND7_DISPLAY_REVIEW.md",
+    "Bytes": 36189,
+    "SHA256": "d57812c0f872a2e1d8fb2006af8f850e255b5f041cfe8f417b73ed97bf72bc82"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND8_CONTRADICTION_AUDIT.md",
+    "Bytes": 29292,
+    "SHA256": "cf5989c6ea0b4a07c99518e6b3546e0c65ae0aa2eba1b55890e719a0761b9064"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_ROUND8_FIXES.md",
+    "Bytes": 36010,
+    "SHA256": "15a9628bd17d68dc57f9e6fc6f3329ccbd20b1cdcf35f629eb24091295d0dcad"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\CRITIC_UI_CHECKONLY.md",
+    "Bytes": 64472,
+    "SHA256": "402618de7b24b38174e1b3a1aba4842e6dce67f1e2da2e2f155688f26ef39344"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CONSISTENCY_CRITIC.md",
+    "Bytes": 13422,
+    "SHA256": "f3db338fab1bce9e0bdb976586f064b898ca195cad3aaee78311e7aebc72922a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CRITIC_FIXES.md",
+    "Bytes": 16324,
+    "SHA256": "791416a726440c0ffdcd56ea610dc5ddd5a61578c85fa96e9fa02ec73fc4e905"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CRITIC_HELPER_1_CODE.md",
+    "Bytes": 37240,
+    "SHA256": "97d72dc1db9a7c23e677ea9b3499a920d40e080db72d5a89261388c7286ac0f2"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CRITIC_HELPER_2_DATA.md",
+    "Bytes": 18637,
+    "SHA256": "fa5b86a90ca2d46d3aeb7977a6583794cc98404a9ecc8ad4ca35a604f41e40a3"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CRITIC_HELPER_3_SCHEMA_RELEASE.md",
+    "Bytes": 32511,
+    "SHA256": "2749dea8e9b11ad04f131c9a3add8218dc21fe46f36c3a96beccc1aa91917b4d"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CRITIC_R8.md",
+    "Bytes": 39308,
+    "SHA256": "6f08ac14be0153ff4747dcc4512c6f15d8bc25725fb802566305d4f54f0121e9"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\FINAL_CRITIC_REVIEW.md",
+    "Bytes": 26210,
+    "SHA256": "74587cf8b6c19db566cde30f397007957616a7f6cd249eb58f78f506d3b299ca"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_A_PROFILES_FINALISATION_AMOUNTS.md",
+    "Bytes": 45026,
+    "SHA256": "568cefe7aa5836ae16901c0626e32345698a0ce17920c1ed4baf28988896c7ea"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_A2_MAGNIT_CHARGE_UNFINALISED.md",
+    "Bytes": 30260,
+    "SHA256": "11d40db77bb9ce0e53a78c185f001b694fbd1aa941325ce73a755212c2da2320"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_A3_CHECKLIST_REUSE.md",
+    "Bytes": 19519,
+    "SHA256": "c74baf6e176c53dbf6f78958636c89536dc9c10cce78a12cbd46c270d10eaca3"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_B_INVOICES_VAT_MOVE_ADJUST.md",
+    "Bytes": 52010,
+    "SHA256": "2638ea1b512520d0736f4cf46a7c6e4f46d330608a5f72ffa41e8537df0fae5a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_B2_NEXT_INTERFACE.md",
+    "Bytes": 24095,
+    "SHA256": "718038f3ab80edf9732a9e6e25316dbbaa4beb194f2dfba0ba0f163c8b793a58"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_C_DATA_AMOUNTS_VAT.md",
+    "Bytes": 26243,
+    "SHA256": "4f284893501139c1a558955ac2ea2172f607caef811bc7f92d62f117b569a9a7"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_C2_SOURCE_DATA.md",
+    "Bytes": 17049,
+    "SHA256": "53897d619c02ef7ac61ed36a081b8e0604c2910321cb05ff6488509e212d9da8"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\HELPER_C3_PARITY_REVERIFY.md",
+    "Bytes": 31334,
+    "SHA256": "a07de8cb30d2898d9a1cb317d74635efb43dc284d2eb4f7b3e2910d03d8aa3b6"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND1_20261011.md",
+    "Bytes": 2936,
+    "SHA256": "259eb46b5a63e215f5fa95e48b0381b23c4eca7aefc617121cc032895e70647a"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND10_20261012.md",
+    "Bytes": 1722,
+    "SHA256": "2b2e7da8c0a42047f4c3587c61aef0775e75cfdd896a8019ee3dd87548ce2898"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND11_20261012.md",
+    "Bytes": 2654,
+    "SHA256": "23a76af7f8edaa90da2153644f1e8fdba5d32ed34ed7bfcec390e07c728ee9ee"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND12_20261012.md",
+    "Bytes": 5718,
+    "SHA256": "f6fb02023aaa0af1a344c929d035385a62377a0ccc2719f321023f16b43b1b0f"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND13_20261012.md",
+    "Bytes": 2069,
+    "SHA256": "4aaac136215cda64c280ee5045f6f1658f817a05e3b8f0b8db58750c49bc0ea8"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND14_20261012.md",
+    "Bytes": 2051,
+    "SHA256": "bcd1117c48f5959acc916671c4a67f8e5a26fe63547ab372d37bf700e8800f9e"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND15_20261012.md",
+    "Bytes": 4842,
+    "SHA256": "c040044a14d0d6bd81a55db677a2be96719c7f64a7e92cab7c9bac7390ad67ad"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND16_20261012.md",
+    "Bytes": 1063,
+    "SHA256": "9497d4a9715411ed1503fc71b3f43246b51b4a8332897cb00836020197694001"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND17_20261012.md",
+    "Bytes": 3345,
+    "SHA256": "4e17ae327b7899abcb1206fe2583c06a4fcfbaeeced12ef14b9142ba9d84cdd2"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND18_20261012.md",
+    "Bytes": 2624,
+    "SHA256": "1418de96f109de27a93d3c6af6b0b9c8254bed34637785c82841d88edff43de2"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND19_20261012.md",
+    "Bytes": 2469,
+    "SHA256": "d5f86f5a3ce62234d9c566915abc15695a43faa89bcfd4000cfed363beaa71be"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND2_20261011.md",
+    "Bytes": 2059,
+    "SHA256": "364a79b4869e87429c0f59307930af6ffaeb8523f1d43ecfe4f24c32c922e902"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND20_20261012.md",
+    "Bytes": 3040,
+    "SHA256": "c4381f18ba9fe3bd542ac4dd451cf2d1d837e514de98863efbd0510b929ef4b1"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND21_20261012.md",
+    "Bytes": 5016,
+    "SHA256": "08a2c6518c1add8584fb302b10a6819b04b0e3b1d888f1785eb91b0517095123"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND22_20261012.md",
+    "Bytes": 16505,
+    "SHA256": "49522163b041e32cbe303f7d5d347d76c2701925077dc5a60fd5a0695c34de01"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND3_20261011.md",
+    "Bytes": 2476,
+    "SHA256": "c3dabef9b77cf79662c9a8c75d3dd67d0235d52befd046a25fc1b4d6e721f529"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND4_20261011.md",
+    "Bytes": 1721,
+    "SHA256": "c3f94b7efd1b72cca066961cb1ab86805ac61a825c9cf20683d2fcc78f2b9a19"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND5_20261011.md",
+    "Bytes": 1460,
+    "SHA256": "bcb5abd836f7de00f237dec8feaf86e46cab224cb0485c3ce0f8b1664874d0b4"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND6_20261012.md",
+    "Bytes": 2095,
+    "SHA256": "63d1946655e6ad05748c40ac7c42e9f2b482a50893b2cd64db810449a864e8c3"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND7_20261012.md",
+    "Bytes": 1756,
+    "SHA256": "fc187a0d7c2cde65dcbbc8d22065393923c1869eb57f49b15c3270abe36a1061"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND8_20261012.md",
+    "Bytes": 1889,
+    "SHA256": "cfd1198ba265e4ea6a4febe1ce3256f8adc9c22d447a131f8a2c2a4559f9e540"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND9_20261012.md",
+    "Bytes": 2640,
+    "SHA256": "b7161104acc864f8a58fea42d605ce5276c29f05cb523218ee648f1e1e74ee28"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\PROTECTED_PAY_IDENTITY_REVIEW.md",
+    "Bytes": 37145,
+    "SHA256": "daf4cb121b37ac3c2351b88ea9d26047972cfe036eea493ec32c3ee1a2a28f56"
+  },
+  {
+    "Role": "Approved-plan package file; current binding rules and historical evidence retain their documented precedence",
+    "Path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\R0_ADD_ADJUSTMENT_REHEARSAL.md",
+    "Bytes": 13316,
+    "SHA256": "1c1a9527a23af86115622817f5346718bdd110fe8046850f6376a0175d1d5199"
+  }
+]

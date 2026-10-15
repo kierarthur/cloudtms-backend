@@ -1,0 +1,155 @@
+{
+  "version": "HEALTHROSTER_V5_RECONCILIATION_V1",
+  "authority_folder": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION",
+  "content_manifest_sha256": "26b55c122ff8b06ace25890e09df6eb4fc4ad3f7f95f9304ba14c73befb3db62",
+  "reviewed_content_set_sha256": "74b8ab9d8c302be9152334d0191b6b5b0dd7dc1b5c067dfa7ff701cfc1f40827",
+  "capture_commits": {
+    "backend": "748a5d6b910313a5a7e43ca8c4bc9d473ae7c654",
+    "office": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+    "mytms": "33412161bb5fb1479797f8517f3c7f614bf3fbb7"
+  },
+  "authority_files_verified": 99,
+  "health_map_rows": 326,
+  "banking_map_rows": 100,
+  "health_classification_counts": {
+    "MODIFY": 157,
+    "REUSE_WITH_CERTIFIED_COVERAGE": 4,
+    "REUSE_ORDINARY_ONLY_SOURCE_CALL_FORBIDDEN": 1,
+    "UNCHANGED_BUSINESS_OWNER_CALL_FORBIDDEN": 2,
+    "MODIFY_WITH_INVOICE_ONLY_MOVE_SCOPE": 5,
+    "UNCHANGED_CALL_FORBIDDEN": 4,
+    "NEW_REQUIRED": 79,
+    "REUSE_GENERATED_TRANSPORT": 1,
+    "UNCHANGED_VERIFY": 1,
+    "UNCHANGED_GENUINE_RESUBMISSION_ONLY": 1,
+    "REUSE_WITH_CURRENT_TARGET": 2,
+    "NEW_REQUIRED_IN_EXISTING_MODULE": 1,
+    "REUSE_WITH_POLICY_COPY_AND_CONTEXT": 9,
+    "REUSE_SCOPED_ORDINARY_ONLY": 5,
+    "REUSE_ORDINARY_LOCK_BOOKKEEPING_ONLY": 3,
+    "MODIFY_CERTIFIED_CURRENT_PLACEMENT": 2,
+    "REUSE_EXISTING_ADMIN_GUARD": 1,
+    "UNCHANGED_CONTEXT_NO_QT_STORAGE": 13,
+    "MODIFY_EXISTING_AGENCY_GLOBAL_OWNER": 3,
+    "MODIFY_ADJACENT_AGENCY_QT_UI": 3,
+    "REUSE_EXISTING_NATIVE_ADMIN_PREDICATE": 1,
+    "REFERENCE_ONLY_SYNTAX_HELPER": 1,
+    "MODIFY_AGENCY_LOCAL_QT_BOUNDARY": 8,
+    "REUSE_EXISTING_CALENDAR_AUTHORITY": 1,
+    "REUSE_EXISTING_SCREEN_AND_GUARDS": 5,
+    "MODIFY_NARROW_SOURCE_COMPOSED_BRANCH": 12,
+    "REUSE_EXACT_HASH_PRIMITIVE": 1
+  },
+  "historical_status_preserved": true,
+  "v5_native_acceptance": "REQUIRED_NOT_RUN",
+  "files": [
+    {
+      "path": "HEALTHROSTER_BUILDER_INSTRUCTIONS.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\HEALTHROSTER_BUILDER_INSTRUCTIONS.md",
+      "bytes": 28766,
+      "sha256": "5b0f7526e244637131f75f494b12d312b2206927a97c5934ff91b88dbdfd3053"
+    },
+    {
+      "path": "TASK_BRIEF.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\TASK_BRIEF.md",
+      "bytes": 8273,
+      "sha256": "7d05fbdd70e26aea890a0bcea3529eab394f48e42f6ae6c877af505d85f4699f"
+    },
+    {
+      "path": "INVARIANTS.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\INVARIANTS.md",
+      "bytes": 12744,
+      "sha256": "1ab48204e136938eb128331ab2c48c75988450c8b1ac51c53c1eda160799bfee"
+    },
+    {
+      "path": "Health_CODE_AUDIT.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\Health_CODE_AUDIT.md",
+      "bytes": 231505,
+      "sha256": "f0984fa9eb1ede29baaf72df20b51849e1df89c8629e17dcda62a8ca6a06d1af"
+    },
+    {
+      "path": "HEALTHROSTER_CHANGE_MAP.csv",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\HEALTHROSTER_CHANGE_MAP.csv",
+      "bytes": 254991,
+      "sha256": "9b31c01183a48470284a960a9cc0896a4d42e35fd0320ddc0bd9fb5a30e95ef4"
+    },
+    {
+      "path": "HEALTHROSTER_ACCEPTANCE_SPEC.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\HEALTHROSTER_ACCEPTANCE_SPEC.md",
+      "bytes": 43209,
+      "sha256": "b69db05e3f3c09b95c1a3cd8c139f4bcbc27d3186005d9ab3d34580131e28883"
+    },
+    {
+      "path": "SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md",
+      "bytes": 70328,
+      "sha256": "274d2e7d40cb22796df12e397affff3f8e852dbd74db2c0aee4675a21a201cc0"
+    },
+    {
+      "path": "CONTACT_PAUSE_SPEC.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\CONTACT_PAUSE_SPEC.md",
+      "bytes": 66810,
+      "sha256": "c49bfb3539f381c263c69e8f12e098760d366b1528eaa38435ba88186310c12b"
+    },
+    {
+      "path": "UI_POLICY_AND_COPY.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\UI_POLICY_AND_COPY.md",
+      "bytes": 67928,
+      "sha256": "d82fa178a9f987f4de7f5b4aabc4ba759eea214454c6a6ed521a5030f87ce078"
+    },
+    {
+      "path": "HISTORY_RECONCILIATION_CONTRACT.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\HISTORY_RECONCILIATION_CONTRACT.md",
+      "bytes": 32127,
+      "sha256": "33e57748194531caa97796e4a6b9b02f73dbae7aa17f43a176f1ae29e356d6ee"
+    },
+    {
+      "path": "BANKING_BUILDER_INSTRUCTIONS.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\BANKING_BUILDER_INSTRUCTIONS.md",
+      "bytes": 78511,
+      "sha256": "564b08152602178d0e7b27b2e2133552a0d8c9f6cda6f39a4ee375e29e8c39d8"
+    },
+    {
+      "path": "BANKING_CODE_AUDIT.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\BANKING_CODE_AUDIT.md",
+      "bytes": 45991,
+      "sha256": "9c0dc74531febb19ad0cf531dc8738571a89aac715461794d45dd754eab82b0a"
+    },
+    {
+      "path": "BANKING_CHANGE_MAP.csv",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\BANKING_CHANGE_MAP.csv",
+      "bytes": 64453,
+      "sha256": "756bd2517af05999f6c3f6635d40cc40b689d226150ff4734721455c8cf5479b"
+    },
+    {
+      "path": "FINANCE_ACCEPTANCE_SPEC.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\FINANCE_ACCEPTANCE_SPEC.md",
+      "bytes": 33308,
+      "sha256": "80e7e5a942962c3810922b9afeb4582d40ce0d5921b95d35595e72c03e3e5244"
+    },
+    {
+      "path": "AUTHORITY_FILES.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\AUTHORITY_FILES.json",
+      "bytes": 48999,
+      "sha256": "23c698d0580c2b418a697eab5eb30445867b8105fa98f7a652acdc0e275e52e5"
+    },
+    {
+      "path": "CONTENT_MANIFEST.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\CONTENT_MANIFEST.json",
+      "bytes": 376384,
+      "sha256": "26b55c122ff8b06ace25890e09df6eb4fc4ad3f7f95f9304ba14c73befb3db62"
+    },
+    {
+      "path": "REVIEWS/SOL_FINAL_ACCEPTANCE_V5.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\REVIEWS\\SOL_FINAL_ACCEPTANCE_V5.md",
+      "bytes": 8945,
+      "sha256": "10f75fd72f7ae164f7b9f207ff8839f6866a7fb300afdf9caf85d1d7b5374918"
+    },
+    {
+      "path": "REVIEWS/ASTRA_FINAL_ACCEPTANCE_V5.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION\\REVIEWS\\ASTRA_FINAL_ACCEPTANCE_V5.md",
+      "bytes": 13243,
+      "sha256": "2cc231e5f5c1e110e56991b08c3b8ad8d4e39467d49523aae764466b85ed9c8c"
+    }
+  ]
+}

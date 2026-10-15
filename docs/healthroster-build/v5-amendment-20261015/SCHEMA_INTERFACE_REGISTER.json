@@ -1,0 +1,967 @@
+{
+  "version": "HEALTHROSTER_V5_RECONCILIATION_V1",
+  "authority_folder": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION",
+  "content_manifest_sha256": "26b55c122ff8b06ace25890e09df6eb4fc4ad3f7f95f9304ba14c73befb3db62",
+  "reviewed_content_set_sha256": "74b8ab9d8c302be9152334d0191b6b5b0dd7dc1b5c067dfa7ff701cfc1f40827",
+  "capture_commits": {
+    "backend": "748a5d6b910313a5a7e43ca8c4bc9d473ae7c654",
+    "office": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+    "mytms": "33412161bb5fb1479797f8517f3c7f614bf3fbb7"
+  },
+  "authority_files_verified": 99,
+  "health_map_rows": 326,
+  "banking_map_rows": 100,
+  "health_classification_counts": {
+    "MODIFY": 157,
+    "REUSE_WITH_CERTIFIED_COVERAGE": 4,
+    "REUSE_ORDINARY_ONLY_SOURCE_CALL_FORBIDDEN": 1,
+    "UNCHANGED_BUSINESS_OWNER_CALL_FORBIDDEN": 2,
+    "MODIFY_WITH_INVOICE_ONLY_MOVE_SCOPE": 5,
+    "UNCHANGED_CALL_FORBIDDEN": 4,
+    "NEW_REQUIRED": 79,
+    "REUSE_GENERATED_TRANSPORT": 1,
+    "UNCHANGED_VERIFY": 1,
+    "UNCHANGED_GENUINE_RESUBMISSION_ONLY": 1,
+    "REUSE_WITH_CURRENT_TARGET": 2,
+    "NEW_REQUIRED_IN_EXISTING_MODULE": 1,
+    "REUSE_WITH_POLICY_COPY_AND_CONTEXT": 9,
+    "REUSE_SCOPED_ORDINARY_ONLY": 5,
+    "REUSE_ORDINARY_LOCK_BOOKKEEPING_ONLY": 3,
+    "MODIFY_CERTIFIED_CURRENT_PLACEMENT": 2,
+    "REUSE_EXISTING_ADMIN_GUARD": 1,
+    "UNCHANGED_CONTEXT_NO_QT_STORAGE": 13,
+    "MODIFY_EXISTING_AGENCY_GLOBAL_OWNER": 3,
+    "MODIFY_ADJACENT_AGENCY_QT_UI": 3,
+    "REUSE_EXISTING_NATIVE_ADMIN_PREDICATE": 1,
+    "REFERENCE_ONLY_SYNTAX_HELPER": 1,
+    "MODIFY_AGENCY_LOCAL_QT_BOUNDARY": 8,
+    "REUSE_EXISTING_CALENDAR_AUTHORITY": 1,
+    "REUSE_EXISTING_SCREEN_AND_GUARDS": 5,
+    "MODIFY_NARROW_SOURCE_COMPOSED_BRANCH": 12,
+    "REUSE_EXACT_HASH_PRIMITIVE": 1
+  },
+  "historical_status_preserved": true,
+  "v5_native_acceptance": "REQUIRED_NOT_RUN",
+  "objects": [
+    {
+      "object": "public.timesheet_contract_move_preview_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 97",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.timesheet_contract_move_accept_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 98",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_operations",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 99",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_reviews",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 100",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_members",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 101",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_current_placements",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 102",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_current_placement_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 103",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_source_coverage_v1",
+      "work_package": "HRV5-SI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 104",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_invoice_certificate_v1",
+      "work_package": "HRV5-SI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 105",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_preview_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 106",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_accept_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 107",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decisions",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 108",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_members",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 109",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "MyTMS::apps/candidate-app/src/features/workflows/submit.ts::reconcileContractMoveProgress",
+      "work_package": "HRV5-CE",
+      "classification": "NEW_REQUIRED_IN_EXISTING_MODULE",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 146",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_family_aliases",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 198",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_scope_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 199",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_stage_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 200",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_assert_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 201",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "NHSP_AWAITING_AUTHORISATION_V1",
+      "work_package": "HRV5-RC",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 202",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "SOURCE_PAY_DECISION_PREFINAL_BINDING_V1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 203",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "CONTACT_MANUAL_ENQUIRY_V1",
+      "work_package": "HRV5-RC",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 204",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_unprotect_review_context_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 205",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_unprotect_preparations",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 206",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_unprotect_prepare_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 207",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_unprotect_apply_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 208",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_requests",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 209",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_daily_booking_origins",
+      "work_package": "HRV5-CE",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 210",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_daily_current_v1",
+      "work_package": "HRV5-CE",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 211",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_requests",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 212",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_reviews",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 213",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capabilities",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 214",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_execution_contexts",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 215",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capability_consumptions",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 216",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capability_issue_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 217",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capability_resolve_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 218",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capability_assert_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 219",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capability_consume_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 220",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_capability_cleanup_v1",
+      "work_package": "HRV5-MV",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 221",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_bindings",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 222",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_invoice_scopes",
+      "work_package": "HRV5-OI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 223",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_invoice_reviews",
+      "work_package": "HRV5-OI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 224",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_invoice_requests",
+      "work_package": "HRV5-OI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 225",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.timesheet_contract_move_invoice_scope_lines",
+      "work_package": "HRV5-OI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 226",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.timesheet_contract_move_invoice_review_v1",
+      "work_package": "HRV5-OI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 227",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.invoice_credit_contract_move_scope_context_v1",
+      "work_package": "HRV5-OI",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 228",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_preview_begin_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 241",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_preview_quote_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 242",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_preview_ready_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 243",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_preview_abandon_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 244",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_preview_assemblies",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 245",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_preview_quotes",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 246",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_protected_current_placement_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 247",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_exceptional_pay_publish_next_impl_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 248",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_exceptional_pay_stage_c1_request_impl_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 249",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_exceptional_pay_complete_local_impl_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 250",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.candidate_push_timing_policy",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 283",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.candidate_push_timing_commands",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 284",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.candidate_push_timing_get_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 285",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.candidate_push_timing_save_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 286",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.candidate_push_timing_for_dispatch_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 287",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_submission_prepare_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 288",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_submission_start_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 289",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_submission_consume_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 290",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_submission_result_v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 291",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_submission_permits",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 292",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "MyTMSAgencyQT::GET_PUT_/api/mytms/push-timing",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 293",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "AgencyQT::POST_/internal/weekly-source/push-timing/v1",
+      "work_package": "HRV5-QT",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 294",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_pay_decision_cut_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 296",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_pay_decision_stage_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 297",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_pay_decision_cut",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 298",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "OfficeTimesheet::OpenBankingPayNavigation",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 299",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_pay_decision_acceptance_begin_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 305",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_acceptance_applications",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 306",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_native_adoptions",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 307",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_source_pay_decision_publication_adoptions",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 308",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_pay_decision_unprotect_run_prepare_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 309",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_decision_native_status_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 310",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_decision_origin_state_v1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 311",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "SourceNativeComposedResultV1",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 312",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.bpay_next_source_pay_decision_publication_member",
+      "work_package": "HRV5-NP",
+      "classification": "NEW_REQUIRED",
+      "kind": "REQUIRES_EXACT_CONTRACT_CLASSIFICATION",
+      "authority": "HEALTHROSTER_CHANGE_MAP.csv row 313",
+      "owner": "BANKING_DEPENDENCY",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_pause_scopes",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "TABLE",
+      "authority": "CONTACT_PAUSE_SPEC.md:17",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_pause_commands",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "TABLE",
+      "authority": "CONTACT_PAUSE_SPEC.md:18",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_pause_events",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "TABLE",
+      "authority": "CONTACT_PAUSE_SPEC.md:19",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_contact_delivery_memberships",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "TABLE",
+      "authority": "CONTACT_PAUSE_SPEC.md:21",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_contact_pause_get_v1(jsonb)",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "SERVICE_RPC",
+      "authority": "CONTACT_PAUSE_SPEC.md:35",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_contact_pause_atomic_v1(jsonb)",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "SERVICE_RPC",
+      "authority": "CONTACT_PAUSE_SPEC.md:36",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_contact_resume_atomic_v1(jsonb)",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "SERVICE_RPC",
+      "authority": "CONTACT_PAUSE_SPEC.md:37",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_contact_preview_v1(jsonb)",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "SERVICE_RPC",
+      "authority": "CONTACT_PAUSE_SPEC.md:38",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "private.weekly_contact_scope_guard_v1(uuid,uuid,text,timestamptz)",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "PRIVATE_HELPER",
+      "authority": "CONTACT_PAUSE_SPEC.md:42",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "weekly_source_global_settings timing columns and exact request journal",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "EXISTING_OWNER_EXTENSION",
+      "authority": "CONTACT_PAUSE_SPEC.md:104-112",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "public.weekly_source_push_calendar_decision_v1(jsonb)",
+      "work_package": "HRV5-RC/QT",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "SERVICE_CALENDAR_ADAPTER",
+      "authority": "CONTACT_PAUSE_SPEC.md:118",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    },
+    {
+      "object": "SOURCE_NATIVE_COMPOSED_RESULT_V1 / WEEKLY_PROTECTED_LOCAL_RESULT_V1 / SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1",
+      "work_package": "HRV5-NP",
+      "classification": "COMPANION_REQUIRED",
+      "kind": "DISTINCT_HASH_DOMAINS",
+      "authority": "SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md:17-19",
+      "owner": "HEALTH_IMPLEMENTATION",
+      "ddl_status": "REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER",
+      "native_status": "REQUIRED_NOT_RUN"
+    }
+  ]
+}
