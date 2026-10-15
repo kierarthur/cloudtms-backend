@@ -1,0 +1,77 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "files": [
+    {
+      "path": "00_current_agency_runtime.sql",
+      "bytes": 182,
+      "sha256": "f2b3298bbbe83c7841ea8a9f015bf01ee97fc5f8f183755bc9b968e36481224e"
+    },
+    {
+      "path": "01_complete_current_agency_runtime.sqlinc",
+      "bytes": 1406179,
+      "sha256": "0b5b4ba84a64d868b68f53b64e4b17eca3d8034bf67b045d67acf9d12a1e5fd1"
+    },
+    {
+      "path": "02_complete_current_agency_verifiers.sqlinc",
+      "bytes": 25009,
+      "sha256": "4935affe9030808d8e41b618ef0c64484c42d207a37c14d7525d1e04e1330122"
+    },
+    {
+      "path": "03_complete_once_only_agency_schemas.sqlinc",
+      "bytes": 9512,
+      "sha256": "b015fa623bc51f4f751dfd2cf1d0c852506e31398a8b377d4a7b5ae1f49c6283"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 10126,
+      "sha256": "351822ea4479d3222bd4892ef5f07644a75795846ddd31c632f0ca55e1ceda8c"
+    },
+    {
+      "path": "COMPONENT_INPUTS.json",
+      "bytes": 41905,
+      "sha256": "ee74f6c668e69ed629ab2ea8e29c1725b8a5a8d7cbac4f48a4633b6f9d4ba796"
+    },
+    {
+      "path": "final-current-module.test.mjs",
+      "bytes": 6555,
+      "sha256": "c74fdd4fc7d6296cf201cacbb47575e8e39d14ab71f90109b08a05709d2cb2e0"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 6575,
+      "sha256": "4956d255663cd2da9dc5f8981428ae3596293a361d910a021c4fc9c2d0305734"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 3616,
+      "sha256": "196bcd07b535e4a29f4dbcff8328bea5a0c2761ae66517ded8e96981d2299573"
+    },
+    {
+      "path": "MOUNT_PLAN.json",
+      "bytes": 3841,
+      "sha256": "86e471f7e5b68a279d6f55ad5eedf8bdb1678d16cefd1429bd94ad90f114a069"
+    },
+    {
+      "path": "MOUNTED_CANDIDATE_RUNTIME_PRESERVE.json",
+      "bytes": 976,
+      "sha256": "1a3b2d3ae159505b6d4fdd7460390eed822fe6119569cc57281f568a0be81c26"
+    },
+    {
+      "path": "reference/pinned-source-parser.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "SELECTED_OWNER_CENSUS.json",
+      "bytes": 20286,
+      "sha256": "fc14446064e09ecbf724c0415a6dfaec2d6f05fc9f0e787bcb673f5b2ca93b04"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 38501,
+      "sha256": "d779b4418e338e35f11933c69d590f5f94b5feef6116ce5bab226a086e05ba15"
+    }
+  ]
+}

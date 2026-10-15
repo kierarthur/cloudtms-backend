@@ -1,0 +1,60 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "independent_review": "PENDING",
+  "current_root_sql_reference": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "mandatory_once_only_schemas": "03_complete_once_only_agency_schemas.sqlinc",
+  "complete_runtime": "01_complete_current_agency_runtime.sqlinc",
+  "runtime_wrapper": "00_current_agency_runtime.sql",
+  "complete_final_agency_verifiers": "02_complete_current_agency_verifiers.sqlinc",
+  "function_names_once_only": 94,
+  "new_from_prospective": 3,
+  "existing_native_contract_owners_amended": 3,
+  "prospective_policy_owner_replaces_old95": true,
+  "selected_source_corrections": [
+    "115 actual original claim recheck in the advancing request owner",
+    "116 only actual ACTIVE BEFORE delta on current0344 raw05",
+    "Current final BEFORE and actual76 registrations with tgattr-aware119",
+    "All17 actual current shared unions including Money OFF18/physical Contract fields",
+    "Prospective123/124/127–130 with131 exact new owner closure"
+  ],
+  "keep_existing_canonical_mounts": [
+    "Current A7 Source arbiter kernel15102026_0205",
+    "Current physical A0 union15102026_0216",
+    "Current selector/kernel grammar; selected116 is exact current raw05 plus one ACTIVE BEFORE delta",
+    "Three current f500 Candidate/presentation/PDF runtime files exact per preservation manifest"
+  ],
+  "required_runtime_addition": {
+    "source_pin": "41b9004e1290b6c5a46a92cb972427d3b31dfb4d",
+    "source": "docs/healthroster-build/proposals/agency-prospective-contract-fixed-approval-native-forward-20261015/contract-preset-write.mjs",
+    "target": "broker/src/weekly-source/contract-preset-write.mjs"
+  },
+  "current_full_index_union": {
+    "source_pin": "41b9004e1290b6c5a46a92cb972427d3b31dfb4d",
+    "source": "docs/healthroster-build/proposals/agency-prospective-contract-fixed-approval-native-forward-20261015/forward/126_complete_agency_off_one_click_index_with_contract_persistence.js",
+    "deltas": "docs/healthroster-build/proposals/agency-prospective-contract-fixed-approval-native-forward-20261015/WORKER_COMPLETE_REVERSES.json",
+    "mutually_exclusive_with125": true,
+    "root_owns_later_office_union": true
+  },
+  "final_shared_owner_composition": "Root must compose Money/Native deltas against these complete existing shared owners once. Never replay older whole owners afterward.",
+  "dependent_other_lanes": [
+    "Money current C1/NHSP/NONE admission/projection/negative-first/prepared/nativeVAT source",
+    "Native current Checklist process publication coverage successorf883 and current Legacy/treatment authority",
+    "Root final Office producer/consumer/current-index and Source correction union"
+  ],
+  "required_native_gates": [
+    "All mandatory13 older fields from actual pending1133/1344/1430 and both selected Agency schema parts",
+    "Whole pending NEW/UPGRADE chronological compile and actual current94 function/signature/owner/search_path/ACL contracts",
+    "Actual fixture-local first-use original capture/claim recheck/ACTIVE Source caller mutations",
+    "Full actual Candidate weekly HOURS PHONE/EMAIL transition/finaliser/official PDF lifecycle and recovery",
+    "Prospective Contract INSERT/PATCH/duplicate/clone/delete/ordinary manager policy, real receipts, all manager bytes and date scopes",
+    "Real OFF adapter/setup/command/phase and foreign-writer Source frame proof",
+    "RC/old-RR/CAS/group/date/route/race/security/API/phone/application evidence"
+  ],
+  "actual_remaining_engineering": [
+    "Root composition with current Money/Native/Office modules and canonical registration",
+    "True primary Original/protection/NX-AI-6/full NONE financial path and end-to-end required behavior",
+    "Any concrete defects exposed by independent critique/whole native compilation and actual first-use gates"
+  ]
+}

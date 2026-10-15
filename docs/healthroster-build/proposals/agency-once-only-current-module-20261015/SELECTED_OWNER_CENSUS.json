@@ -1,0 +1,505 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "unique_function_names": 94,
+  "owners": [
+    {
+      "name": "private.weekly_source_contract_fixed_approval_locks_v1",
+      "definition_sha256": "f6d4ba82a94f5892f126b7c141cb48d0a0de0d34ed3b1a17017b55644fdd78d7",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_contract_fixed_approval_sync_v1",
+      "definition_sha256": "8b4cefab67fb4e04089bf3f739602b8197397ada5c691ac545f7e27ce8e41cb0",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_contract_write_atomic_v1",
+      "definition_sha256": "5b0ed3d0567b4e26f200261b5f9b244aba4bc97d5e31e7bbb8ca783a022382b2",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_submitted_claim_v1",
+      "definition_sha256": "db5c6563bb765afd8fbecbdffa46715fcc005a31a106c8c312b47af0ea6ca9a9",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_native_pay_scope_v1",
+      "definition_sha256": "e7202b10ca885fc74403a15b84b94e6dde9b739d999e5b4c137ae30f51616b08",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_legacy_original_document_v1",
+      "definition_sha256": "e39840c8aee511328e13797b9063386a84145bf04ab303b4ff3694e514c4321d",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_original_pay_identity_v1",
+      "definition_sha256": "0c0f7012cdf7183bc2aaa4cd1959d010778e1981e3c8bd0ceba926bf64cc09ff",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_paid_write_purpose_v1",
+      "definition_sha256": "27ef624eb4cc991925ccad4253a2bc8443757003ab31426a88080af0e2b44724",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_ordinary_collection_inputs_v1",
+      "definition_sha256": "2bdbe4650565f7f00b3d2a59afa23aa2181e39bdfc71eb1c40b6857b44c72ee6",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_before_collection_inputs_v1",
+      "definition_sha256": "38d0a9cfaf55835600f91d36fc2e63dc6b5f375ce8f3cfe727830e26ac8186a2",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_candidate_admit_v1",
+      "definition_sha256": "e56831005188094b57553defe1bc31640a7db9822d77e7088923c3dbc662dff4",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_physical_pay_inputs_v1",
+      "definition_sha256": "ba17cd011fe298297f3545fe2f37e8930bfd0b397eb208858887ee6d77a61971",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_segment_flags_apply_v1",
+      "definition_sha256": "e43f8bf6aac7f171b5a654f381629166acc304ff0fdb819d91246652ca8ceebc",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_native_query_facts_v1",
+      "definition_sha256": "bd2e1b942dc7e44adec733d782ff0f2df72c4837388ff5d24af388ed60ddaf32",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_invoice_segment_selection_v1",
+      "definition_sha256": "32f8fae2e3e8e85869e243b672e96857241aba022a9ca77a740bdf0c14b6aeb3",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_draft_round_trip_v1",
+      "definition_sha256": "77d5540adfd87813b5243fb989dd04a8d9ee9144457ddf943560c60900600aa0",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_week_facts_v1",
+      "definition_sha256": "748b09a56c5778eb8ec86ec59ac23d7865fdb96384714bfa5b0a6fec6cf37f72",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_week_complete_v1",
+      "definition_sha256": "ae4cfdf57d6c537aa2e622caf8ac8a54f10ce314b7b6f769ed9040d08a37a0e2",
+      "sql_language": true
+    },
+    {
+      "name": "public.weekly_source_agency_week_validation_refresh_v1",
+      "definition_sha256": "703cedb28d48f937c3875040c67d77cb251fd006b7df05aa23852753e78fb3e8",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_validation_source_guard_v1",
+      "definition_sha256": "1f14f44d36d9a0a8f7cebecf45b9af580601fb5db8e654888e6e699a59349d42",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_validation_context_v1",
+      "definition_sha256": "62139fdd38092bf06802167fcf418da24c78673ce8f63114954dece1faefdf53",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_validation_context_v1",
+      "definition_sha256": "37178fd92c03089d27bfa3e4adb60de8fd6284c5f87a9aa8d6b95edff2d76ca3",
+      "sql_language": true
+    },
+    {
+      "name": "private.weekly_source_agency_validation_frame_open_v1",
+      "definition_sha256": "bad2f19dfa22ae06e759dc57b2a175743df73bf1b0fe4d788bd4c771825b7804",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_validation_write_assert_v1",
+      "definition_sha256": "109795daff1a8de22781a5573f645a64bcfdf2954600b72d7c3ab10a421bde83",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_validation_write_observe_v1",
+      "definition_sha256": "40433d95e01cc1f64a9dc6c901c614636fc5e480c7e23e10cafd9dae56d21223",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_validation_apply_v1",
+      "definition_sha256": "9e8168f035a8030d7baa9d7c4cab622e0bbb9f22e3afd67dee0c3e439ca059b5",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_financial_frame_open_v1",
+      "definition_sha256": "f53b288283e42788b103b160785cb5a7be33af661a5831949c1eccaca6ac0532",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_financial_write_assert_v1",
+      "definition_sha256": "00c14e61c87a42e108effd04b10ea86cf7155662e3d4c43954ef8f99130caf1e",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_financial_write_observe_v1",
+      "definition_sha256": "1160690126b8a6dd193db8212d0e0f32afdf8a1b64a1502dcbe417e690f5090b",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_segment_flags_v1",
+      "definition_sha256": "11ab845ca48485defcd0fcf29434acbf41519974f211a369278a4610070b70fb",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_authorise_step_v1",
+      "definition_sha256": "03ee729ab29fceed1252ab21db87da886a7631a22f661649f426918ebcff8ce2",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_change_authorise_step_v1",
+      "definition_sha256": "4b4dab611c9bd295a1d3506420a78852838253e778244771a01e53fd128f15cb",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_publication_validation_v1",
+      "definition_sha256": "7e549bff47bfa39712edf833ee316c138b7b314908c4378ce2c6d2a30008bd6a",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_authorise_validation_after_v1",
+      "definition_sha256": "32f24e20fa7ddc99efda95a84ee8b3d9bcd6a22b4290977719fbb4d20f4c37d9",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_legacy_import_validation_admit_v1",
+      "definition_sha256": "e3594ac46cb341afc9534aad8442aa988c6c2b6f854ca73db42847412f95f4e4",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_legacy_import_validation_admit_v1",
+      "definition_sha256": "3b9821650c6e2d9d2ca0aa27762556545a3ed8834bfed8c083103a2424770be6",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_return_step_v1",
+      "definition_sha256": "7415467534934de3b63daede9f4658451771470dc368c8ebfb69ea00f80fa8d9",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_change_return_step_v1",
+      "definition_sha256": "331c565c0e1265876c4460d5ed95f99467741337a765a60937d067466463b4d7",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_snapshot_provenance_assert_v1",
+      "definition_sha256": "c2e2c7607bbe799f5ccbb336390d8ccc0ba2a7b280dee273a656f03d33db4264",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_change_worker_apply_v1",
+      "definition_sha256": "6509e4aee11ee3f2c24d6de811dfda19af6137791d5d0f578f1f54278afa6781",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_change_worker_targets_v1",
+      "definition_sha256": "421c369256c6734340dc28cffda30fe7e01244bc6331bd9e62d836340fef3561",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_worker_context_v1",
+      "definition_sha256": "39fc6b1a430e390f6e83f8b844091615ac1aa0d70cb66390e3270af6ce914f21",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_change_worker_context_v1",
+      "definition_sha256": "d58abbaaa701618e47e349714928a74bd4aa4fea868ef50036dab9175db74d3e",
+      "sql_language": true
+    },
+    {
+      "name": "public.weekly_source_agency_timesheet_change_v1",
+      "definition_sha256": "a7a62b5f9e1e5ff2260e378fbf247e1f9cdf178648189c13c700d271902c0121",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_crosscheck_context_v1",
+      "definition_sha256": "796873055867dd3fcae3c398e36757f0531e58ed48fcffcd35fded25565baab6",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_agency_crosscheck_context_v1",
+      "definition_sha256": "d96795c69cdbcded035b2d40ef65b1556a38975a1b2d86f6f8f97bdb6ce397ad",
+      "sql_language": true
+    },
+    {
+      "name": "private.weekly_source_agency_issue_requirements_v1",
+      "definition_sha256": "f07f7095753ceaf9d0ed6e24c1b8521b78b3a1422fba1f6358775a022e9dbe3f",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_issue_close_v1",
+      "definition_sha256": "7f5a807292a3b75a6eff4cae313d98a2353d02f14763e84d28c39beb831728e2",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_mode_a_units_v1",
+      "definition_sha256": "ab482d37ebd0f8f3db167721662bad464e8620f7019ebd5f8c5c2c416700c678",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_identity_guard_v1",
+      "definition_sha256": "d28b7da95baf0d3c428d5c1dda0fd6e51f056bed59cd110dc58752c14bf347af",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_source_phase_admit_v1",
+      "definition_sha256": "6a53e2a67bb29ae2e70e05e95a8e050b50b3da1d7b4560663feaae76e5a30b33",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_source_mutation_basis_v1",
+      "definition_sha256": "1ad938339981094904e201ffe19ec57c0da7d52e1df7f1917c2367333db0fd70",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_active_source_mutation_assert_v1",
+      "definition_sha256": "d3018fd9ae759e4a279ebd2aaca7f7a9dafdc95e88a80c203953df7a1f5a3eac",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_capture_v1",
+      "definition_sha256": "5cd82d569b8fbdf45ddc1afd046c29d002ace3fe863d88e8cc60af388a59d908",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_request_sha256_v1",
+      "definition_sha256": "0accee8765a3ceb495385516b80a773770b0ad6e621bd4dcef82d869bed4b59f",
+      "sql_language": true
+    },
+    {
+      "name": "private.weekly_source_agency_original_claim_recheck_v1",
+      "definition_sha256": "d78eb847dc57bf77886c9591628119b37619eabd12e620609cbe28ae51414cc3",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_request_assert_v1",
+      "definition_sha256": "6b1dea19f1f53516ce56608c375edef916bccfc8d3774a4b31383436f9d0b83d",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_agency_change_begin_v1",
+      "definition_sha256": "9ff23d00ac03e34e4a33a2c4a347036fbd9aedae5490ebf1b4404febc24f3b7b",
+      "sql_language": false
+    },
+    {
+      "name": "private.timesheet_correction_a0_source_raw_tokens_v1",
+      "definition_sha256": "183075f2818043f1c469da1f5fa5bef76ad27142ed2aa51e28a611c99b4a2551",
+      "sql_language": false
+    },
+    {
+      "name": "private.timesheet_correction_a0_source_revision_tokens_v1",
+      "definition_sha256": "dd299d75379f06b36a9a2f402357e10a8c79226c369e8d807255d903870dde7e",
+      "sql_language": false
+    },
+    {
+      "name": "private.timesheet_correction_a0_source_policy_tokens_v1",
+      "definition_sha256": "321400d802d28cd8d4053663413e281f5e7047a66724d03b041a4b7984ab6450",
+      "sql_language": false
+    },
+    {
+      "name": "private.timesheet_correction_a0_source_reference_before_v1",
+      "definition_sha256": "206573a6a1f9d7fa26cb983b06335709a6d78941dc6be26a694ead93affb0c98",
+      "sql_language": false
+    },
+    {
+      "name": "private.timesheet_correction_a0_source_reference_final_before_v1",
+      "definition_sha256": "949ed51d167562e3fe594b5c95775e4a9da0058cad91424aeeffe2b5d1ff2d0e",
+      "sql_language": false
+    },
+    {
+      "name": "private._candidate_manager_authoriser_policy_normalize_v2",
+      "definition_sha256": "fd2a54af3d95c0a7bf1c014fc0baa91e76c38aca0ec27fb5c919a4b7750e0677",
+      "sql_language": false
+    },
+    {
+      "name": "private._candidate_manager_authoriser_effective_v2",
+      "definition_sha256": "e7d304e85999744cd41e0e1cf21f8bcd98f34714916e94a5fb9831262414cb84",
+      "sql_language": false
+    },
+    {
+      "name": "public.contract_manager_authoriser_policy_update_v1",
+      "definition_sha256": "92342e6801dd6878034f8d477b7d87ae5aea70995f250635e67bb733efb89cb2",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_off_rule_agency_parent_v1",
+      "definition_sha256": "9841731cedbe7d3290a05b6d3e4939c1cad7e1094affc1c88643f075c7e33b13",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_client_settings_save_atomic_v1",
+      "definition_sha256": "145cb1cf260cf53cbce60980a1e020154926952fab82e5fae111a6dd4ab58962",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_group_rule_feature_set_atomic_v1",
+      "definition_sha256": "1e049db74bd9916bc8d73518ae0eed3ef598decd1bbd143e5b24121e9a44671c",
+      "sql_language": false
+    },
+    {
+      "name": "private._candidate_policy_resolve_v1",
+      "definition_sha256": "5a4a1f8370ded559850088545c8f2b23384c4e4cbe7d8899434e0692eb3379e0",
+      "sql_language": false
+    },
+    {
+      "name": "public.candidate_workflow_transition_atomic_v1",
+      "definition_sha256": "f5f3c2a1c46820900783cfc8e09eb592193a5541acc24ef146793ff48214bb66",
+      "sql_language": false
+    },
+    {
+      "name": "private._candidate_component_render_contract_v1",
+      "definition_sha256": "509c9b8e4a1ff728c9b7ffd8985f0fb2d905f7eb8623510a53938e7d05a1fd41",
+      "sql_language": false
+    },
+    {
+      "name": "public.candidate_submission_finalize_atomic_v1",
+      "definition_sha256": "e3447132f8128926699f31c01751270826554ae8f09ac11637af71ba44ca39ee",
+      "sql_language": false
+    },
+    {
+      "name": "public.tsfin_prepare_write",
+      "definition_sha256": "6c8c14d38a260608d37071225a76ce0b0b244cd46c0f5fd67f6d58bd302ab7ad",
+      "sql_language": false
+    },
+    {
+      "name": "public.tsfin_write_current_snapshot_single_bounded",
+      "definition_sha256": "cc24785572fd1ae8e61a290f370b179498b4019bdef1c108638e245f122b2a16",
+      "sql_language": false
+    },
+    {
+      "name": "public.tsfin_write_snapshots_and_complete",
+      "definition_sha256": "cba99033db1752348fe6c1bc268280abb10c1673b622eee7ed4b33ecbfe460e7",
+      "sql_language": false
+    },
+    {
+      "name": "public.timesheets_invalidate_prevalidation_on_change",
+      "definition_sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_projection_publish_atomic_v1",
+      "definition_sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23",
+      "sql_language": false
+    },
+    {
+      "name": "private._invoice_issue_validate_batch",
+      "definition_sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3",
+      "sql_language": true
+    },
+    {
+      "name": "public.invoice_issue_one",
+      "definition_sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09",
+      "sql_language": false
+    },
+    {
+      "name": "private._invoice_issue_advance_core_v8",
+      "definition_sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703",
+      "sql_language": false
+    },
+    {
+      "name": "public._import_review_ready_action_ids_core_v1",
+      "definition_sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd",
+      "sql_language": false
+    },
+    {
+      "name": "public.hr_weekly_apply_transactional",
+      "definition_sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_mode_a_reference_apply_atomic_v1",
+      "definition_sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f",
+      "sql_language": false
+    },
+    {
+      "name": "public.weekly_source_mode_a_dispatch_atomic_v1",
+      "definition_sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_scope_assert_v1",
+      "definition_sha256": "b14ef129a2f06168eccf227b15bdb9ab3de1967e7a461fa223e7baec40c8a7cc",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "definition_sha256": "20d9dab05d326a76136fb35361f3c3e1dbe0d5f2de2bab5055e49decf76d4748",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_setup_atomic_v1",
+      "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_execute_v1",
+      "definition_sha256": "eb195c08dafb3c460b7467c3b743b52fbc2922e2caa9fd7755a8d9c2797a1dc1",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_rule_qualification_transport_status_v1",
+      "definition_sha256": "b000a53cdc7b6e5e7cdc243bcd8ab888eebd21c1dbb4767195f3b67a2fe981fc",
+      "sql_language": false
+    },
+    {
+      "name": "private.weekly_source_off_rule_setup_shape_assert_v1",
+      "definition_sha256": "ce5df0ccb6d5aecf67176ce14cc9a349cb100b0d3e22b3854f41594f86682403",
+      "sql_language": false
+    },
+    {
+      "name": "public.contracts_clone_and_extend_atomic",
+      "definition_sha256": "025b8f92598ba77242b6dd54778ef8e280f0556026878f34e239792d49d00caf",
+      "sql_language": false
+    },
+    {
+      "name": "public.contract_week_delete_planned",
+      "definition_sha256": "06fdf4da4469c3480f69b7d32b6fbf0aa98b0d7cfd29361166c47e7479484870",
+      "sql_language": false
+    },
+    {
+      "name": "public.timesheet_weekly_chain_delete_apply",
+      "definition_sha256": "5252b8f23d092f055a9d6728dfb46584b1e3920e3a95e7e319e07aad9bc5a527",
+      "sql_language": false
+    }
+  ],
+  "sql_language_forward_call_source_scan": [
+    {
+      "name": "private.weekly_source_agency_week_complete_v1",
+      "later_selected_literal_calls": []
+    },
+    {
+      "name": "public.weekly_source_agency_validation_context_v1",
+      "later_selected_literal_calls": []
+    },
+    {
+      "name": "public.weekly_source_agency_change_worker_context_v1",
+      "later_selected_literal_calls": []
+    },
+    {
+      "name": "public.weekly_source_agency_crosscheck_context_v1",
+      "later_selected_literal_calls": []
+    },
+    {
+      "name": "private.weekly_source_agency_change_request_sha256_v1",
+      "later_selected_literal_calls": []
+    },
+    {
+      "name": "private._invoice_issue_validate_batch",
+      "later_selected_literal_calls": []
+    }
+  ],
+  "limitation": "Function names are unique in this selection. PostgreSQL signatures, SQL-body validation, real ACL/owner/schema contracts and current final catalog fingerprints must still execute against the whole pending release."
+}

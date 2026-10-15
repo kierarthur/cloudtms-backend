@@ -1,0 +1,287 @@
+-- Exact selected final_verifier component 1: 38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/verification/114_candidate_native_security_verifier.sql
+-- Source-only proposed verifier. Not executed and not canonically registered.
+-- Existing named Candidate v3 inventory remains required after the final
+-- closure. These are replacements of three existing identities; no public
+-- signature, owner, grant, route enum, table or column is added here.
+do $worker_only_candidate_security_verification$
+declare
+  v_target record;
+  v_oid oid;
+  v_seen integer:=0;
+begin
+  for v_target in select * from (values
+    ('public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)',true),
+    ('public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)',true),
+    ('public.candidate_submission_finalize_single_flight_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)',true),
+    ('private._candidate_component_render_contract_v1(uuid,integer,uuid,text)',false)
+  ) targets(signature,service_executable)
+  loop
+    v_oid:=pg_catalog.to_regprocedure(v_target.signature);
+    if v_oid is null then
+      raise exception 'CANDIDATE_WORKER_ONLY_SECURITY_OWNER_MISSING:%',v_target.signature;
+    end if;
+    if not exists(select 1 from pg_catalog.pg_proc routine where routine.oid=v_oid
+      and routine.prosecdef
+      and exists(select 1 from pg_catalog.unnest(routine.proconfig) setting where setting like 'search_path=%'))
+      or pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') is distinct from v_target.service_executable
+      or pg_catalog.has_function_privilege('anon',v_oid,'EXECUTE')
+      or pg_catalog.has_function_privilege('authenticated',v_oid,'EXECUTE')
+      or exists(select 1 from pg_catalog.pg_proc routine
+        cross join lateral pg_catalog.aclexplode(coalesce(routine.proacl,pg_catalog.acldefault('f',routine.proowner))) acl
+        where routine.oid=v_oid and acl.grantee=0 and acl.privilege_type='EXECUTE') then
+      raise exception 'CANDIDATE_WORKER_ONLY_SECURITY_BOUNDARY_INVALID:%',v_target.signature;
+    end if;
+    v_seen:=v_seen+1;
+  end loop;
+  if v_seen<>4 then raise exception 'CANDIDATE_WORKER_ONLY_SECURITY_INVENTORY_INVALID';end if;
+end;
+$worker_only_candidate_security_verification$;
+
+
+-- Exact selected final_verifier component 2: 38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/verification/119_current_source_raw_and_final_76_verifier.sqlinc
+-- Fail closed for missing raw fields, unreviewed name collisions or ordering.
+do $source_registration_profile$
+declare r record;
+begin
+ for r in select * from(values
+   ('public.weekly_source_groups','id','uuid'),
+   ('public.weekly_source_cycles','id','uuid'),
+   ('public.weekly_source_uploads','id','uuid'),
+   ('public.weekly_source_upload_rows','id','uuid'),
+   ('public.weekly_source_upload_rows','upload_id','uuid'),
+   ('public.weekly_source_projection_publications','id','uuid'),
+   ('public.weekly_source_row_resolutions','id','uuid'),
+   ('public.weekly_source_row_resolutions','upload_row_id','uuid'),
+   ('public.weekly_source_row_resolutions','generation','integer'),
+   ('public.weekly_source_row_resolutions','client_id','uuid'),
+   ('public.weekly_source_row_economic_snapshots','id','uuid'),
+   ('public.weekly_source_row_economic_snapshots','row_resolution_id','uuid'),
+   ('public.weekly_source_row_expense_policy_snapshots','id','uuid'),
+   ('public.weekly_source_row_expense_policy_snapshots','row_resolution_id','uuid'),
+   ('public.weekly_expense_authority_generations','id','uuid'),
+   ('public.weekly_expense_authority_generations','final_revision_id','uuid'),
+   ('public.weekly_expense_authority_generations','work_event_id','uuid'),
+   ('public.weekly_source_expense_cell_evidence','id','uuid'),
+   ('public.weekly_source_expense_cell_evidence','upload_id','uuid'),
+   ('public.weekly_source_charge_checks','id','uuid'),
+   ('public.weekly_source_charge_checks','row_resolution_id','uuid'),
+   ('public.weekly_source_charge_acceptances','id','uuid'),
+   ('public.weekly_source_charge_acceptances','row_resolution_id','uuid'),
+   ('public.weekly_source_invoice_hold_releases','id','uuid'),
+   ('public.weekly_source_invoice_hold_releases','upload_row_id','uuid'),
+   ('public.weekly_source_state_transitions','id','uuid'),
+   ('public.weekly_source_state_transitions','final_revision_id','uuid'),
+   ('public.weekly_source_state_transitions','work_event_id','uuid'),
+   ('public.weekly_source_report_scopes','id','uuid'),
+   ('public.weekly_source_report_scopes','source_group_id','uuid'),
+   ('public.weekly_source_report_scopes','client_id','uuid'),
+   ('public.weekly_source_report_scopes','self_bill_report_id','uuid'),
+   ('public.weekly_source_self_bill_reports','id','uuid'),
+   ('public.weekly_source_self_bill_reports','source_group_id','uuid'),
+   ('public.weekly_source_self_bill_reports','client_id','uuid'),
+   ('public.weekly_source_self_bill_report_line_bindings','id','uuid'),
+   ('public.weekly_source_self_bill_report_line_bindings','state','text'),
+   ('public.weekly_source_self_bill_report_line_bindings','self_bill_report_id','uuid'),
+   ('public.weekly_work_events','id','uuid'),
+   ('public.weekly_source_final_revisions','id','uuid'),
+   ('public.weekly_source_final_snapshot_lines','id','uuid'),
+   ('public.weekly_source_final_snapshot_lines','final_revision_id','uuid'),
+   ('public.weekly_source_final_snapshot_lines','client_id','uuid'),
+   ('public.weekly_source_row_timesheet_lineages','id','uuid'),
+   ('public.weekly_source_ordinary_pay_projection_receipts','id','uuid'),
+   ('public.weekly_source_ordinary_pay_projection_receipts','final_revision_id','uuid'),
+   ('public.weekly_source_ordinary_pay_projection_receipts','client_id','uuid'),
+   ('public.weekly_discrepancy_incidents','id','uuid'),
+   ('public.weekly_discrepancy_incidents','source_cycle_id','uuid'),
+   ('public.weekly_discrepancy_incidents','client_id','uuid'),
+   ('public.weekly_issue_comparison_revisions','id','uuid'),
+   ('public.weekly_source_billing_movements','id','uuid'),
+   ('public.weekly_source_group_clients','id','uuid'),
+   ('public.weekly_source_group_clients','source_group_id','uuid'),
+   ('public.weekly_source_group_clients','client_id','uuid'),
+   ('public.weekly_source_client_policies','id','uuid'),
+   ('public.weekly_source_client_policies','source_group_id','uuid'),
+   ('public.weekly_source_client_policies','client_id','uuid'),
+   ('public.weekly_source_contract_policies','id','uuid'),
+   ('public.weekly_source_contract_policies','contract_id','uuid'),
+   ('public.weekly_source_group_rule_assignments','id','uuid'),
+   ('public.weekly_source_group_rule_assignments','source_group_id','uuid'),
+   ('public.weekly_source_rule_set_versions','id','uuid'),
+   ('public.weekly_source_rule_sets','id','uuid'),
+   ('public.weekly_source_format_profiles','id','uuid'),
+   ('public.clients','id','uuid'),
+   ('public.client_settings','id','uuid'),
+   ('public.client_settings','client_id','uuid'),
+   ('public.contracts','id','uuid'),
+   ('public.contracts','client_id','uuid'),
+   ('public.contracts','start_date','date'),
+   ('public.contracts','end_date','date'),
+   ('public.timesheets','timesheet_id','uuid'),
+   ('public.timesheets_financials','id','uuid'),
+   ('public.weekly_source_global_settings','singleton','boolean'),
+   ('public.weekly_source_group_clients','valid_from','date'),
+   ('public.weekly_source_group_clients','valid_to','date'),
+   ('public.weekly_source_groups','active','boolean')
+ ) required(relation_name,column_name,type_name) loop
+  if not exists(select 1 from pg_catalog.pg_attribute a join pg_catalog.pg_class t on t.oid=a.attrelid
+   join pg_catalog.pg_namespace n on n.oid=t.relnamespace where n.nspname||'.'||t.relname=r.relation_name
+    and t.relkind='r' and a.attname=r.column_name and a.attnum>0 and not a.attisdropped
+    and pg_catalog.format_type(a.atttypid,a.atttypmod)=r.type_name) then
+   raise exception 'CORRECTION_A0_SOURCE_RAW_FIELD_PROFILE_UNPROVED' using errcode='55000',detail=r.relation_name||'.'||r.column_name;end if;
+ end loop;
+ if exists(select 1 from pg_catalog.pg_trigger trigger join pg_catalog.pg_class relation on relation.oid=trigger.tgrelid
+  join pg_catalog.pg_namespace schema on schema.oid=relation.relnamespace
+  where schema.nspname||'.'||relation.relname in('public.client_settings','public.clients','public.contracts','public.timesheets','public.timesheets_financials','public.weekly_discrepancy_incidents','public.weekly_expense_authority_generations','public.weekly_issue_comparison_revisions','public.weekly_source_billing_movements','public.weekly_source_charge_acceptances','public.weekly_source_charge_checks','public.weekly_source_client_policies','public.weekly_source_contract_policies','public.weekly_source_cycles','public.weekly_source_expense_cell_evidence','public.weekly_source_final_revisions','public.weekly_source_final_snapshot_lines','public.weekly_source_format_profiles','public.weekly_source_global_settings','public.weekly_source_group_clients','public.weekly_source_group_rule_assignments','public.weekly_source_groups','public.weekly_source_invoice_hold_releases','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_projection_publications','public.weekly_source_report_scopes','public.weekly_source_row_economic_snapshots','public.weekly_source_row_expense_policy_snapshots','public.weekly_source_row_resolutions','public.weekly_source_row_timesheet_lineages','public.weekly_source_rule_set_versions','public.weekly_source_rule_sets','public.weekly_source_self_bill_report_line_bindings','public.weekly_source_self_bill_reports','public.weekly_source_state_transitions','public.weekly_source_upload_rows','public.weekly_source_uploads','public.weekly_work_events') and not trigger.tgisinternal
+   and (trigger.tgtype::integer&3)=3 and (trigger.tgtype::integer&28)<>0
+   and trigger.tgname not in('000_healthroster_source_a0_before_v1','zzz_healthroster_source_a0_before_v1')
+   and(trigger.tgname::text collate "C"<'000_healthroster_source_a0_before_v1' or trigger.tgname::text collate "C">'zzz_healthroster_source_a0_before_v1')) then
+  raise exception 'CORRECTION_A0_SOURCE_NATIVE_TRIGGER_ORDER_UNPROVED' using errcode='55000';end if;
+ if exists(select 1 from pg_catalog.pg_trigger trigger join pg_catalog.pg_class relation on relation.oid=trigger.tgrelid
+  join pg_catalog.pg_namespace schema on schema.oid=relation.relnamespace join pg_catalog.pg_proc fn on fn.oid=trigger.tgfoid
+  join pg_catalog.pg_namespace ns on ns.oid=fn.pronamespace
+  where schema.nspname||'.'||relation.relname in('public.client_settings','public.clients','public.contracts','public.timesheets','public.timesheets_financials','public.weekly_discrepancy_incidents','public.weekly_expense_authority_generations','public.weekly_issue_comparison_revisions','public.weekly_source_billing_movements','public.weekly_source_charge_acceptances','public.weekly_source_charge_checks','public.weekly_source_client_policies','public.weekly_source_contract_policies','public.weekly_source_cycles','public.weekly_source_expense_cell_evidence','public.weekly_source_final_revisions','public.weekly_source_final_snapshot_lines','public.weekly_source_format_profiles','public.weekly_source_global_settings','public.weekly_source_group_clients','public.weekly_source_group_rule_assignments','public.weekly_source_groups','public.weekly_source_invoice_hold_releases','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_projection_publications','public.weekly_source_report_scopes','public.weekly_source_row_economic_snapshots','public.weekly_source_row_expense_policy_snapshots','public.weekly_source_row_resolutions','public.weekly_source_row_timesheet_lineages','public.weekly_source_rule_set_versions','public.weekly_source_rule_sets','public.weekly_source_self_bill_report_line_bindings','public.weekly_source_self_bill_reports','public.weekly_source_state_transitions','public.weekly_source_upload_rows','public.weekly_source_uploads','public.weekly_work_events') and trigger.tgname in('000_healthroster_source_a0_before_v1','zzz_healthroster_source_a0_before_v1')
+   and(ns.nspname<>'private' or fn.proname<>case when trigger.tgname='000_healthroster_source_a0_before_v1' then
+    'timesheet_correction_a0_source_reference_before_v1' else 'timesheet_correction_a0_source_reference_final_before_v1' end
+    or trigger.tgtype::integer<>31 or trigger.tgnargs<>0 or trigger.tgattr::text<>'' or trigger.tgqual is not null or trigger.tgenabled<>'O')) then
+  raise exception 'CORRECTION_A0_SOURCE_GUARD_NAME_COLLISION' using errcode='55000';end if;
+ if to_regprocedure('private.timesheet_correction_a0_source_reference_before_v1()') is null
+  or to_regprocedure('private.timesheet_correction_a0_source_reference_final_before_v1()') is null
+  or to_regprocedure('private.weekly_source_agency_active_source_mutation_assert_v1(text,jsonb,jsonb,jsonb)') is null then
+  raise exception 'CORRECTION_A0_SOURCE_GUARD_OWNER_UNAVAILABLE' using errcode='55000';end if;
+end;
+$source_registration_profile$;
+
+-- Exact complete native guard inventory after the final composition.
+do $source_registration_verified$
+declare expected text[]:=array['public.client_settings','public.clients','public.contracts','public.timesheets','public.timesheets_financials','public.weekly_discrepancy_incidents','public.weekly_expense_authority_generations','public.weekly_issue_comparison_revisions','public.weekly_source_billing_movements','public.weekly_source_charge_acceptances','public.weekly_source_charge_checks','public.weekly_source_client_policies','public.weekly_source_contract_policies','public.weekly_source_cycles','public.weekly_source_expense_cell_evidence','public.weekly_source_final_revisions','public.weekly_source_final_snapshot_lines','public.weekly_source_format_profiles','public.weekly_source_global_settings','public.weekly_source_group_clients','public.weekly_source_group_rule_assignments','public.weekly_source_groups','public.weekly_source_invoice_hold_releases','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_projection_publications','public.weekly_source_report_scopes','public.weekly_source_row_economic_snapshots','public.weekly_source_row_expense_policy_snapshots','public.weekly_source_row_resolutions','public.weekly_source_row_timesheet_lineages','public.weekly_source_rule_set_versions','public.weekly_source_rule_sets','public.weekly_source_self_bill_report_line_bindings','public.weekly_source_self_bill_reports','public.weekly_source_state_transitions','public.weekly_source_upload_rows','public.weekly_source_uploads','public.weekly_work_events'];r text;guard_name text;fn_name text;matched integer;
+begin
+ foreach r in array expected loop
+  foreach guard_name in array array['000_healthroster_source_a0_before_v1','zzz_healthroster_source_a0_before_v1'] loop
+   fn_name:=case when guard_name='000_healthroster_source_a0_before_v1' then 'timesheet_correction_a0_source_reference_before_v1' else 'timesheet_correction_a0_source_reference_final_before_v1' end;
+   select count(*) into matched from pg_catalog.pg_trigger trigger join pg_catalog.pg_class relation on relation.oid=trigger.tgrelid
+    join pg_catalog.pg_namespace schema on schema.oid=relation.relnamespace join pg_catalog.pg_proc fn on fn.oid=trigger.tgfoid
+    join pg_catalog.pg_namespace ns on ns.oid=fn.pronamespace
+    where schema.nspname||'.'||relation.relname=r and trigger.tgname=guard_name and not trigger.tgisinternal
+     and trigger.tgtype::integer=31 and trigger.tgnargs=0 and trigger.tgattr::text='' and trigger.tgqual is null and trigger.tgenabled='O'
+     and ns.nspname='private' and fn.proname=fn_name and fn.provolatile='v' and fn.prosecdef
+     and fn.proowner=(select oid from pg_catalog.pg_roles where rolname=current_user);
+   if matched<>1 then raise exception 'CORRECTION_A0_SOURCE_RAW_FINAL_GUARD_INVENTORY_UNPROVED' using errcode='55000',detail=r||':'||guard_name;end if;
+  end loop;
+ end loop;
+ if exists(select 1 from pg_catalog.pg_trigger trigger join pg_catalog.pg_class relation on relation.oid=trigger.tgrelid
+  join pg_catalog.pg_namespace schema on schema.oid=relation.relnamespace
+  where not trigger.tgisinternal and trigger.tgname in('000_healthroster_source_a0_before_v1','zzz_healthroster_source_a0_before_v1')
+   and not(schema.nspname||'.'||relation.relname=any(expected))) then
+  raise exception 'CORRECTION_A0_SOURCE_RAW_FINAL_GUARD_SCOPE_UNPROVED' using errcode='55000';end if;
+end;
+$source_registration_verified$;
+
+
+-- Exact selected final_verifier component 3: 7afa77836974e011516d146be6778a5db32fc9e6:docs/healthroster-build/proposals/agency-current-shared-owner-union-forward-20261015/verification/122_complete_current_agency_security_with_actual_invoker_helper_grant.sql
+-- Proposed final current Agency-specific signature closure. Not executed.
+do $agency_owner_security$
+declare entry record; oid_value oid; p record; config text;
+begin
+ for entry in select * from(values
+   ('private.weekly_source_agency_submitted_claim_v1(uuid)',false),
+   ('private.weekly_source_agency_native_pay_scope_v1(uuid)',false),
+   ('private.weekly_source_agency_legacy_original_document_v1(uuid,uuid,uuid)',false),
+   ('private.weekly_source_agency_original_pay_identity_v1(uuid,uuid,uuid,uuid)',false),
+   ('private.weekly_source_agency_paid_write_purpose_v1(uuid)',false),
+   ('private.weekly_source_agency_ordinary_collection_inputs_v1(uuid)',false),
+   ('private.weekly_source_agency_before_collection_inputs_v1(uuid,uuid)',false),
+   ('private.weekly_source_agency_candidate_admit_v1(uuid,uuid)',false),
+   ('private.weekly_source_agency_physical_pay_inputs_v1(uuid,uuid)',false),
+   ('private.weekly_source_agency_segment_flags_apply_v1(uuid)',false),
+   ('private.weekly_source_agency_native_query_facts_v1(uuid)',false),
+   ('private.weekly_source_agency_invoice_segment_selection_v1(uuid,uuid,uuid)',false),
+   ('private.weekly_source_agency_draft_round_trip_v1(text,text,uuid)',false),
+   ('private.weekly_source_agency_week_facts_v1(uuid)',false),
+   ('private.weekly_source_agency_week_complete_v1(uuid)',false),
+   ('public.weekly_source_agency_week_validation_refresh_v1(uuid,uuid)',true),
+   ('private.weekly_source_agency_validation_source_guard_v1()',false),
+   ('private.weekly_source_agency_validation_context_v1(uuid)',false),
+   ('public.weekly_source_agency_validation_context_v1(uuid)',true),
+   ('private.weekly_source_agency_validation_frame_open_v1(uuid,jsonb,uuid)',false),
+   ('private.weekly_source_agency_validation_write_assert_v1(uuid,jsonb,uuid,uuid)',false),
+   ('private.weekly_source_agency_validation_write_observe_v1(uuid,jsonb,uuid)',false),
+   ('public.weekly_source_agency_validation_apply_v1(uuid,bigint,text,jsonb)',true),
+   ('private.weekly_source_agency_financial_frame_open_v1(uuid,text,jsonb,uuid)',false),
+   ('private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)',true),
+   ('private.weekly_source_agency_financial_write_observe_v1(uuid,jsonb,uuid)',false),
+   ('private.weekly_source_agency_segment_flags_v1(uuid)',false),
+   ('private.weekly_source_agency_change_authorise_step_v1(uuid,uuid)',false),
+   ('public.weekly_source_agency_change_authorise_step_v1(uuid,uuid)',true),
+   ('private.weekly_source_agency_publication_validation_v1(uuid)',false),
+   ('private.weekly_source_agency_authorise_validation_after_v1()',false),
+   ('private.weekly_source_agency_legacy_import_validation_admit_v1(uuid)',false),
+   ('public.weekly_source_agency_legacy_import_validation_admit_v1(uuid,uuid)',true),
+   ('private.weekly_source_agency_change_return_step_v1(uuid,uuid)',false),
+   ('public.weekly_source_agency_change_return_step_v1(uuid,uuid)',true),
+   ('private.weekly_source_agency_snapshot_provenance_assert_v1(uuid,jsonb)',false),
+   ('public.weekly_source_agency_change_worker_apply_v1(uuid,bigint,text,jsonb)',true),
+   ('public.weekly_source_agency_change_worker_targets_v1(uuid[])',true),
+   ('private.weekly_source_agency_change_worker_context_v1(uuid)',false),
+   ('public.weekly_source_agency_change_worker_context_v1(uuid)',true),
+   ('public.weekly_source_agency_timesheet_change_v1(uuid,text,text,text,uuid)',true),
+   ('private.weekly_source_agency_crosscheck_context_v1(uuid)',false),
+   ('public.weekly_source_agency_crosscheck_context_v1(uuid)',true),
+   ('private.weekly_source_agency_issue_requirements_v1(uuid)',false),
+   ('private.weekly_source_agency_issue_close_v1(uuid)',false),
+   ('private.weekly_source_agency_mode_a_units_v1(uuid)',false),
+   ('private.weekly_source_agency_change_identity_guard_v1()',false),
+   ('private.weekly_source_agency_source_phase_admit_v1(uuid,uuid,uuid,uuid,uuid,jsonb,jsonb)',false),
+   ('private.weekly_source_agency_source_mutation_basis_v1(text,jsonb)',false),
+   ('private.weekly_source_agency_active_source_mutation_assert_v1(text,jsonb,jsonb,jsonb)',false),
+   ('private.weekly_source_agency_change_capture_v1(uuid,uuid)',false),
+   ('private.weekly_source_agency_change_request_sha256_v1(uuid,text,text,text,uuid,jsonb)',false),
+   ('private.weekly_source_agency_original_claim_recheck_v1(uuid)',false),
+   ('private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)',false),
+   ('private.weekly_source_agency_change_begin_v1(uuid,text,text,text,uuid)',false),
+   ('private.timesheet_correction_a0_source_raw_tokens_v1(text,jsonb)',false),
+   ('private.timesheet_correction_a0_source_revision_tokens_v1(text,jsonb)',false),
+   ('private.timesheet_correction_a0_source_policy_tokens_v1(text,jsonb)',false),
+   ('private.timesheet_correction_a0_source_reference_before_v1()',false),
+   ('private.timesheet_correction_a0_source_reference_final_before_v1()',false)
+ ) selected(signature,service_execute) loop
+  oid_value:=to_regprocedure(entry.signature);
+  if oid_value is null then raise exception 'AGENCY_SOURCE_OWNER_MISSING: %',entry.signature;end if;
+  select * into strict p from pg_proc where oid=oid_value;
+  if not p.prosecdef or p.proowner<>(select oid from pg_roles where rolname=current_user)
+   or not exists(select 1 from unnest(p.proconfig) setting where setting in(
+    'search_path=pg_catalog, public, private, pg_temp','search_path=pg_catalog, pg_temp','search_path=pg_catalog, private, pg_temp'))
+   or exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl where acl.grantee=0 and acl.privilege_type='EXECUTE')
+   or has_function_privilege('anon',oid_value,'EXECUTE') or has_function_privilege('authenticated',oid_value,'EXECUTE')
+   or has_function_privilege('service_role',oid_value,'EXECUTE') is distinct from entry.service_execute then
+   raise exception 'AGENCY_SOURCE_OWNER_SECURITY_INVALID: %',entry.signature;
+  end if;
+ end loop;
+end;
+$agency_owner_security$;
+
+
+-- Exact selected final_verifier component 4: 41b9004e1290b6c5a46a92cb972427d3b31dfb4d:docs/healthroster-build/proposals/agency-prospective-contract-fixed-approval-native-forward-20261015/131_contract_fixed_approval_owner_security.sqlinc
+-- Proposed exact new owner closure. Native execution remains a release gate.
+do $contract_fixed_security$
+declare entry record;oid_value oid;p record;
+begin
+ for entry in select * from(values
+  ('private.weekly_source_contract_fixed_approval_locks_v1(uuid[])',false,'search_path=pg_catalog, pg_temp','void'),
+  ('private.weekly_source_contract_fixed_approval_sync_v1(uuid,uuid)',false,'search_path=pg_catalog, public, private, extensions, pg_temp','public.contracts'),
+  ('public.weekly_source_contract_write_atomic_v1(jsonb)',true,'search_path=pg_catalog, public, private, pg_temp','jsonb')
+ ) selected(signature,service_execute,expected_search_path,result_type) loop
+  oid_value:=to_regprocedure(entry.signature);
+  if oid_value is null then raise exception 'CONTRACT_FIXED_APPROVAL_OWNER_MISSING: %',entry.signature;end if;
+  select proc.* into strict p from pg_proc proc where proc.oid=oid_value;
+  if not p.prosecdef or p.provolatile<>'v' or p.proowner<>(select r.oid from pg_roles r where r.rolname=current_user)
+   or p.prorettype<>to_regtype(entry.result_type) or not entry.expected_search_path=any(coalesce(p.proconfig,'{}'::text[]))
+   or exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl where acl.grantee=0 and acl.privilege_type='EXECUTE')
+   or has_function_privilege('anon',oid_value,'EXECUTE') or has_function_privilege('authenticated',oid_value,'EXECUTE')
+   or has_function_privilege('service_role',oid_value,'EXECUTE') is distinct from entry.service_execute then
+   raise exception 'CONTRACT_FIXED_APPROVAL_OWNER_SECURITY_INVALID: %',entry.signature;
+  end if;
+ end loop;
+end;
+$contract_fixed_security$;
+
+-- End exact selected final_verifier components.
