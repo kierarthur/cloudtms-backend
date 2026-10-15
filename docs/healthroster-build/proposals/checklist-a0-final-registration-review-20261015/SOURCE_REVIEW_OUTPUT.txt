@@ -1,0 +1,17 @@
+✔ all 38 actual raw contexts and 78 mandatory fields retain candidate declarations instead of silently omitting missing compiled fields (8.4171ms)
+✔ first and last raw/native admissions bind exactly two closed row triggers per actual relation with no WHEN or UPDATE-column omission (1.5341ms)
+✔ native 33 BEFORE row trigger positions are checked by byte ordering and unrelated/native definitions are untouched (0.4344ms)
+✔ final complete helper reverses only name and ACTIVE insertion to literal d48 raw/native wrapper (0.6511ms)
+✔ final actual OLD and transformed NEW are readmitted RAW then revision/policy NESTED before the same private ACTIVE owner (0.1955ms)
+✔ baseline NEW updated_at transformation is real pinned source; no same-command snapshot or installed definition equivalence is claimed (2.4081ms)
+✔ exact catalogue verifier refuses missing extra wrong-mode WHEN-guarded or foreign-owned guards; seals and all83 packaging statements pass without claiming native proof (0.8819ms)
+✔ independent f8 catalogue counterexample: UPDATE OF keeps every checked field and is accepted by the literal final predicate (0.3267ms)
+✔ independent documented column-event vector: nonlisted SET columns skip final UPDATE admission although f8 accepts its catalogue shape (0.1419ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27.7052

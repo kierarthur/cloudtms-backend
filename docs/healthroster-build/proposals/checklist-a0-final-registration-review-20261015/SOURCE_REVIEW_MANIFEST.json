@@ -1,0 +1,33 @@
+{
+  "status": "BOUNDED_SOURCE_HOLD_CONFIRMED_P2",
+  "reviewed_commit": "f8c7830b22805339b205afe74fe3fc163f96381c",
+  "finding": "P2-A0-SOURCE-REGISTRATION-TGATTR1",
+  "original_cases": 7,
+  "independent_counterexample_cases": 2,
+  "cases_passed": 9,
+  "native_executed": false,
+  "SQL_executed": false,
+  "root_mutated": false,
+  "artifacts": [
+    {
+      "file": "review-frozen-source.mjs",
+      "bytes": 7372,
+      "sha256": "3cb494342dbd6ce1bcb9b45538645f046adc91c6dedf50cde77b8e790981598d"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3921,
+      "sha256": "5f58f9b2731df01ab4290c6f6a04cc5be00c999b0a85c507597f2df700d65011"
+    },
+    {
+      "file": "FROZEN_REVIEW_INPUT_PINS.json",
+      "bytes": 24320,
+      "sha256": "0058e3251c307ff5502084b3645058ff69287a347c34788221b7eea7d6e2115f"
+    },
+    {
+      "file": "SOURCE_REVIEW_OUTPUT.txt",
+      "bytes": 1423,
+      "sha256": "85996e406719ac2488291acf9498136a65099a68429bbaa67ad797ded63e2bca"
+    }
+  ]
+}
