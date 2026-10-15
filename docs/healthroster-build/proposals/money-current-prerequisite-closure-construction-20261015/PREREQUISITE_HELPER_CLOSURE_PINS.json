@@ -1,0 +1,216 @@
+{
+  "source_only": true,
+  "rootCommit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "moduleCommit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+  "ordered_candidate_packages": [
+    "kept-pay-identical-rekey-current-root-forward-20261014",
+    "kept-credit-batch-repeatable-successor-20261014",
+    "kept-applied-correction-context-successor-20261014",
+    "missing-default-current-native-proposal-20261014",
+    "missing-retained-snapshot-mapping-successor-20261014",
+    "missing-correction-baseline-successor-20261014",
+    "missing-correction-expanded-native-scope-successor-20261014",
+    "missing-revision-census-guard-successor-20261014",
+    "missing-accept-current-native-construction-20261014",
+    "missing-accept-head-continuity-construction-20261014",
+    "missing-accept-deferred-anchor-successor-20261014",
+    "rekey-source-alias-current-native-successor-20261014",
+    "rekey-source-alias-all-owner-successor-20261014"
+  ],
+  "selection_is_required_literal_HELPER_closure_only_NOT_complete_prerequisite_mount": true,
+  "required_full_definition_pins": [
+    {
+      "commit": "61a1c64ac14d0f8fe60b721983fadf21f5459429",
+      "file": "docs/healthroster-build/proposals/ppv2-report-d10-query-population-source-forward-20261014/native5804/wp_u3_check_only_query_groups.sqlinc",
+      "source_sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc",
+      "id": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "name": "private.weekly_source_check_only_query_groups_v1",
+      "definition_sha256": "9e7eb49dda658bc672b1efa4eeffed61259a35fb95947327449ba6e4dfeeeb43"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/rekey-source-alias-current-native-successor-20261014/forward/01_complete_identical_rekey_prior.sqlinc",
+      "source_sha256": "7243e1b99f016f22efcf5b1bbaa1a061bb2fc6f2e621c4ca24bbe0368f397eaf",
+      "id": "private.weekly_source_identical_rekey_prior_v1(uuid)",
+      "name": "private.weekly_source_identical_rekey_prior_v1",
+      "definition_sha256": "859a6d3057f0becf6651e73475f3ec79a8a822ac14d393c3b7d47e5dc6b20f15"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/00_target_publication_facts.sqlinc",
+      "source_sha256": "3bb894d44140dc63f43947f5744ab9eeea55efba20ad62e3c728e2bf501c972e",
+      "id": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+      "name": "private.weekly_source_kept_as_paid_facts_for_publication_v1",
+      "definition_sha256": "4543671e94d7fd1279a5aaf549caa20397f30e8c8fc8f9201622bafd285c264a"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/rekey-source-alias-all-owner-successor-20261014/forward/00_known_source_key.sqlinc",
+      "source_sha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d",
+      "id": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_known_source_key_v1",
+      "definition_sha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-deferred-anchor-successor-20261014/forward/01_complete_current_removal.sqlinc",
+      "source_sha256": "533f3371b90eeb46fa78385c87e9d0661fe07cdf061c1c986d7ae270ed898a34",
+      "id": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_accept_current_removal_v1",
+      "definition_sha256": "ea094db787ddc67a30368c45e9b3cd58c1781ae4b6908c43b4296080e4250a40"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/06_complete_missing_cancel_basis.sqlinc",
+      "source_sha256": "f14cf68581e29a2e600dc9f174810fdfaae59d5248ba17664fcd64c46ab0f370",
+      "id": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_cancel_basis_v1",
+      "definition_sha256": "cfb5f905742701cda1e14cb4a538080ef1f277210d22484c34a4aeecdf226098"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/07_missing_cancel_transition_assert.sqlinc",
+      "source_sha256": "efd68aac8729c17eff6b074a692d2b0c39f01e4ee99d850e5ec79c0c1598518e",
+      "id": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "name": "private.weekly_source_missing_cancel_transition_assert_v1",
+      "definition_sha256": "b0f1939da34fc99da209535e605893f73734777b73839fa47acc33ba962624c6"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/05_missing_finalisation_root_inventory.sqlinc",
+      "source_sha256": "57644729f257a17a363cccd1e6bcb0273d6d7dfbf53c926353ef34819db7d1cb",
+      "id": "private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "name": "private.weekly_source_missing_finalisation_roots_v1",
+      "definition_sha256": "847a0dd09838e33fd7ce829c09c1380d35ae243098d4f44aaedbba55786a25bc"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/07_complete_missing_prepared_census.sqlinc",
+      "source_sha256": "bd27d25a3bbcfb24355bfa42a22257bc898fdc266664c9f757bfab40d18776d7",
+      "id": "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+      "name": "private.weekly_source_missing_prepared_census_recheck_v1",
+      "definition_sha256": "f3df0daa23aaa68fd20fa1ed09423eddca38531cac8643cac9c43afaa107e826"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/10_missing_accept_context_public_entry.sqlinc",
+      "source_sha256": "94007a04a43d762aab6c42fe2759795075132fb5314bde0db4266865c59c018f",
+      "id": "public.weekly_source_missing_accept_context_v1(jsonb)",
+      "name": "public.weekly_source_missing_accept_context_v1",
+      "definition_sha256": "9e0969a2806ef02a8559ca8fd72a23e6f024f8e1a5a3d2b7c1c8682a0c4be1de"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/09_missing_accept_prepare_public_entry.sqlinc",
+      "source_sha256": "095e3467c28304e86b2dd52123a533a8e79b0678069383215f01e694da94ebd2",
+      "id": "public.weekly_source_missing_accept_prepare_atomic_v1(jsonb)",
+      "name": "public.weekly_source_missing_accept_prepare_atomic_v1",
+      "definition_sha256": "db851b2b3e1dc05c28c84924f628be1f57e3d25aee87b56f9908eea50a603b05"
+    },
+    {
+      "commit": "61a1c64ac14d0f8fe60b721983fadf21f5459429",
+      "file": "docs/healthroster-build/proposals/ppv2-report-d10-query-population-source-forward-20261014/native5804/wp_u3_check_only_query_groups.sqlinc",
+      "source_sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc",
+      "id": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "name": "private.weekly_source_check_only_issue_filter_keys_v1",
+      "definition_sha256": "d762b216e1a0aefbc1fc3d6ab86ec4f28622d73eecb42bc06f960ee50575defc"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-head-continuity-construction-20261014/forward/00_missing_accept_head_chain.sqlinc",
+      "source_sha256": "4b3ee3f211698b5d9787a4057eaf5fa76efdff267ffb8376e27c99605d06979b",
+      "id": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "name": "private.weekly_source_missing_accept_head_chain_v1",
+      "definition_sha256": "74d14b510e661e84dde17d91a9ae9ca0afbf122e307447cafe5c73e7ca3b282a"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-default-current-native-proposal-20261014/forward/02_missing_snapshot_movement.sqlinc",
+      "source_sha256": "fc2c59f744c650dba64998b1c4130beea73716cac9e1cbd76b941b04b1e18d12",
+      "id": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "name": "private.weekly_source_missing_snapshot_movement_v1",
+      "definition_sha256": "18a5cac5a29e5e18d913a70a870d7f5ad1de03f6300e390744e802316145fc5d"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-correction-expanded-native-scope-successor-20261014/forward/02_complete_missing_correction_baseline.sqlinc",
+      "source_sha256": "2cb220bb04ea9802bc034f8c62b37f0511166c69dcd1f099d22d4942e219a0a7",
+      "id": "private.weekly_source_missing_correction_baseline_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_correction_baseline_v1",
+      "definition_sha256": "20417e4400e38b6715a16f096f5372620ae34ab1eca66c5cdbcb9c6852c325a7"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/00_missing_accept_inventory_inputs.sqlinc",
+      "source_sha256": "32082b0db4d061cc0f54fc1af40f1ac3953642a4032bb20f40eaa267d9a2d39d",
+      "id": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_missing_accept_inventory_inputs_v1",
+      "definition_sha256": "bdf0f3c18477dfbc1176e7bbbf9de37df92d1a868a5bf7c62d333d09a9c07e69"
+    },
+    {
+      "commit": "73488a9f0178ca4d7a3510529cc4570c1739534d",
+      "file": "docs/healthroster-build/proposals/missing-accept-current-native-construction-20261014/forward/01_missing_accept_prepare.sqlinc",
+      "source_sha256": "ea7e8774ad3d27c19cef8158ceea91635eb1a1769ba2b32be49fd42f65c902aa",
+      "id": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "name": "private.weekly_source_missing_accept_prepare_v1",
+      "definition_sha256": "50600262cd5a7fab72b5d6867657ef1c4ff3d383242f4fc14a5ab9dbf2ce3612"
+    }
+  ],
+  "unresolved_expected_external_module_callees": [
+    {
+      "name": "private.weekly_source_off_rule_agency_parent_v1",
+      "from": [
+        "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+        "private.weekly_source_rule_qualification_transport_status_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_change_authorise_step_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_change_return_step_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_change_worker_apply_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_change_worker_context_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_timesheet_change_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_validation_apply_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    },
+    {
+      "name": "public.weekly_source_agency_validation_context_v1",
+      "from": [
+        "private.weekly_source_rule_qualification_execute_v1(jsonb)"
+      ]
+    }
+  ],
+  "full_existing_writer_and_schema_dependency_mount_still_required": true,
+  "complete_predecessor_instruction": "Writer58 SELECTED_SOURCE_RECIPE requires whole accepted Keep/KC14+Missing56/M1/M2/expanded/M3+Accept30/continuity/deferred+rekey foundations. These helper pins are not authority to omit their actual changed approval/capture/baseline/schema/trigger/caller owners. Root must reconcile the complete foundations against current I2 before mounting final Money.",
+  "native_calls": 0,
+  "SQL_compiled": false,
+  "canonical_mounted": false
+}

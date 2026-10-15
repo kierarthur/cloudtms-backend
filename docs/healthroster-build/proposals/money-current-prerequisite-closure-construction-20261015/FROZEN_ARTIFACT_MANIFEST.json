@@ -1,0 +1,45 @@
+{
+  "schema_version": "MONEY_CURRENT_PREREQUISITE_LITERAL_CLOSURE_SOURCE_CHECK_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native": false,
+  "canonical_mounted": false,
+  "artifact_count": 7,
+  "artifacts": [
+    {
+      "file": "CURRENT_PREREQUISITE_LITERAL_INVENTORY.json",
+      "bytes": 1169314,
+      "sha256": "dae57d79dc6fc593ecd399b46b6ae0940891fc3a384e6e07f99db3ff8c44e862"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 3326,
+      "sha256": "686474fa0c28371099035414a336ec41326a1a96ffd360cdbdd4c855e003373f"
+    },
+    {
+      "file": "PREREQUISITE_HELPER_CLOSURE_PINS.json",
+      "bytes": 12723,
+      "sha256": "b4136abc471acccdfe91472e38d497a0463e34213a674f8d5dbd60118555e0a6"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 887,
+      "sha256": "a08f763248db8c82fa495ce487bb05520ae5a297e3be36383ab686694560a098"
+    },
+    {
+      "file": "build-inventory.mjs",
+      "bytes": 9595,
+      "sha256": "30172b32fc60be83d0a3b6792146d31b7b0b1187bc046448fcef20c67cd2b547"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2929,
+      "sha256": "538b476c007632f83c34edf9443a59b29e690ff166470d32278b55a5d7fa4904"
+    },
+    {
+      "file": "inventory-source.test.mjs",
+      "bytes": 3985,
+      "sha256": "61d711c4f6e9d79f6ae4b3c2c753f3231bbba62e711ebd7cc907d88041ae2c6e"
+    }
+  ]
+}
