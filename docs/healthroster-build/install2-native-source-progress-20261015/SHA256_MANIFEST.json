@@ -1,0 +1,20 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "BUILD_NATIVE_A0_INVOICE_CONTINUATION_15102026.md",
+      "bytes": 6261,
+      "sha256": "b8bca99cfacaca15bd67d04ef8f47884a209ca6763ebc66f506d46899ee69c14"
+    },
+    {
+      "file": "CHECKPOINT.json",
+      "bytes": 2509,
+      "sha256": "9e2f296cf3b3f1bd1ce93982b71bd7ee5bf60602f9efe1f79e10fc61d30c1fd3"
+    },
+    {
+      "file": "CHECKPOINT_SOURCE.mjs.txt",
+      "bytes": 10747,
+      "sha256": "a896ac257be2c91e239a24a91e7e8c6fbf0d94a168378277ae03c6a47642c788"
+    }
+  ]
+}

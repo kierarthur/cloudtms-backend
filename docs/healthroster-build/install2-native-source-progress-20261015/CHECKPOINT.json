@@ -1,0 +1,63 @@
+{
+  "source_only": true,
+  "full_implementation_complete": false,
+  "root_i2_commit": "6acf196abef24bb4ee7a9b52be35d2c2cfc3ea95",
+  "physical_commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+  "physical_independent_critic": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+  "case_independent_critic": "bbcd4d1c878271601954d4405a5152b78fb98e89",
+  "invoice_action_source_commit": "ea72c1a0e3ae47d17778617753864e43fb493ea3",
+  "invoice_source_cases": 185,
+  "unchanged_predecessor_cases": 110,
+  "physical_native_statements": 177,
+  "selector_native_statements": 28,
+  "current_source": {
+    "migrations": 400,
+    "repeatables": 1063,
+    "upgrade_verifiers": 176,
+    "new_verifiers": 177
+  },
+  "source_summaries": [
+    {
+      "commit": "6acf196abef24bb4ee7a9b52be35d2c2cfc3ea95",
+      "file": "docs/healthroster-build/install2-source-kernel-canonical-20261015/COMPOSITION.json",
+      "bytes": 4986,
+      "sha256": "9177b182beec91b1eb7baf886cb04b28d8031c5798ea636ce60b20ace7f04e0d"
+    },
+    {
+      "commit": "6acf196abef24bb4ee7a9b52be35d2c2cfc3ea95",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/COMPOSITION.json",
+      "bytes": 11484,
+      "sha256": "b4e370b92f94a6fb5c3eeac3e6d3747d48d4ecd25bd33de6e20f93bc41c4c54c"
+    },
+    {
+      "commit": "6acf196abef24bb4ee7a9b52be35d2c2cfc3ea95",
+      "file": "docs/healthroster-build/install2-source-selectors-canonical-20261015/COMPOSITION.json",
+      "bytes": 5904,
+      "sha256": "b27e1203475ec5ed0a891d4253be561a0225dbcad6e1a66a7f9b4f5938ee932e"
+    },
+    {
+      "commit": "6acf196abef24bb4ee7a9b52be35d2c2cfc3ea95",
+      "file": "docs/healthroster-build/root-native-invoice-action-source-review-20261015/SOURCE_REVIEW.json",
+      "bytes": 887,
+      "sha256": "4c8ac46cd01de1e162b69eb08b9d023980507fad4e0d3822a944f8e776a9889d"
+    }
+  ],
+  "permanent_sql_and_native_receipts_backed_in_i2": true,
+  "install1_complete": true,
+  "install2_installed": false,
+  "full_rollback_rehearsal": false,
+  "feature_ON": false,
+  "TestFlight": false,
+  "phone_acceptance": false,
+  "final_PartB_verdicts": [],
+  "latest_fresh_remote_test": "912297ab79b48633b66d806d128ff00a9a9cd83d",
+  "connector_working": true,
+  "connector_or_credential_repair_needed": false,
+  "private_business_data_created": false,
+  "other_account_route_used": false,
+  "background_jobs_paused": false,
+  "banking_chat_messaged": false,
+  "new_Docker": false,
+  "cleanup_attempted": false,
+  "source_temporary_folders_preserved": true
+}
