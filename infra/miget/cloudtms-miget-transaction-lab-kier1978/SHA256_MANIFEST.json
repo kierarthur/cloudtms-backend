@@ -36,7 +36,7 @@
     "file": "ACCEPTANCE.json"
   },
   {
-    "sha256": "9e276a10508f95383a2a896f38b0e9d991bed28f497f31bb8c994c1e3c92e827",
+    "sha256": "92b826f93257ef9f82827c5cf6d0ea5c5feb88237ba7b17f1eab7689474d8c92",
     "file": "ACCOUNT_AGENTS_SECTION.md"
   },
   {
@@ -52,11 +52,15 @@
     "file": "plugin-source/.codex-plugin/plugin.json"
   },
   {
-    "sha256": "00464f1e85bd569a31fd641a83c5fe12d6911000eaabf3872ea783a4f1af1f1f",
+    "sha256": "18912810276551818b79cfcd58ec03986018b45edd5797a4e61b54faa6290fab",
     "file": "SETUP_PROGRESS.md"
   },
   {
     "sha256": "d21b9221207f9c905cc441032527d173261b5e416b913918955c1f7d46bcde92",
     "file": "README.md"
+  },
+  {
+    "file": "NATIVE_TOOL_ACCEPTANCE_20261015.json",
+    "sha256": "743e10e6d2f6445dc000d1a47c3a37f0e6ddf3fb63835922203bf7c3a4149214"
   }
 ]

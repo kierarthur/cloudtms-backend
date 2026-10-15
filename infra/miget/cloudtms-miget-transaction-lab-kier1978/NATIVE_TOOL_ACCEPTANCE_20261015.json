@@ -1,0 +1,158 @@
+{
+  "checked_at_utc": "2026-10-15T00:50:43.765Z",
+  "account": "kierarthur1978@gmail.com",
+  "exact_native_tool": "mcp__cloudtms_miget_transaction_lab_kier1978__miget_db_transaction_rollback",
+  "manifest": {
+    "created_at_utc": "2026-10-15T00:50:11.534Z",
+    "account": "kierarthur1978@gmail.com",
+    "exact_native_tool": "cloudtms-miget-transaction-lab-kier1978/miget_db_transaction_rollback",
+    "agency_test_only": true,
+    "shared_key": [
+      20261013,
+      1
+    ],
+    "table": "private.hr_k1978_native_20261015_450040bab9a9518c",
+    "function": "private.hr_k1978_native_20261015_450040bab9a9518c_fn()",
+    "trial_bytes": 1086,
+    "verification_bytes": 509,
+    "trial_sha256": "b3f90eeb22728bd8781a666970bbcfd6e566fcad5798493dc74d85874a17300a",
+    "verification_sha256": "03c6699ff802c0d521e5673423be3cd2e2a2e2060519f6e39b8559159fcc4047",
+    "native_result": "PENDING",
+    "application_fixture_or_external_effect": false
+  },
+  "result": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "Kier1978 native tool pickup 20261015",
+    "sqlSha256": "b3f90eeb22728bd8781a666970bbcfd6e566fcad5798493dc74d85874a17300a",
+    "statementCount": 7,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "INSERT",
+        "rowCount": 1,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "temporary_table_and_function_exercised"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "temporary_table_and_function_exercised": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "DO",
+          "rowCount": null,
+          "fields": [],
+          "rows": [],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 2,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "table_absent",
+            "function_absent"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "table_absent": true,
+              "function_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  },
+  "shared_turn": {
+    "key": [
+      20261013,
+      1
+    ],
+    "database_oid": 324139,
+    "turn_backend_pid": 54167,
+    "taken_at_utc": "2026-10-15T00:50:26.295Z",
+    "released_at_utc": "2026-10-15T00:50:43.765Z",
+    "explicit_unlock_confirmed": true,
+    "connection_closed": true,
+    "turn_proved": true
+  },
+  "initial_noninteractive_lock_handle": {
+    "taken_at_utc": "2026-10-15T00:50:18.375Z",
+    "released_at_utc": "2026-10-15T00:50:18.534Z",
+    "no_sql_trial": true,
+    "reason": "stdin EOF closed a noninteractive holder; reopened using PTY before native trial",
+    "explicit_unlock_confirmed": true,
+    "connection_closed": true
+  },
+  "diagnosis_correction": "The earlier missing bearer observation was confined to an exec child. It was not direct evidence about the native MCP process environment. Native tool availability is now proved by the successful exact-account tool call.",
+  "scope": "Native tool pickup acceptance only; no full Install2 rehearsal, release or feature qualification.",
+  "no_credential_rotation_or_alternate_route": true
+}
