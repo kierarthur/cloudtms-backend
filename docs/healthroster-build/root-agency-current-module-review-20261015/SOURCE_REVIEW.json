@@ -1,0 +1,20 @@
+{
+  "bounded_source_review": "ACCEPT_TWO_CURRENT_DELTAS_AND_ONCE_ONLY_MODULE_PACKAGING",
+  "commit": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+  "raw_saved_Git_before_after": true,
+  "raw_pins": 151,
+  "current_input_receipts": 76,
+  "complete_owner_reversals": 2,
+  "selected_unique_signatures": 70,
+  "source_cases": 96,
+  "mandatory_shared_unions_remaining": 17,
+  "confirmed_new_P0_P1_P2": [],
+  "inherited_EOF_blank_line": "Recorded by builder; normalize only selected migration packaging with raw input/reversal receipts",
+  "canonical_mount": false,
+  "SQL_or_native_execution": false,
+  "limits": [
+    "17 actual current shared writer/issue/ModeA/OFF unions; prospective Contract persistence",
+    "whole SQL/native claim/SourceCAS/race/security/Candidate/OFF/financial/current-caller qualification",
+    "final canonical registry/contract/full rehearsal/Install2/Office/API/device acceptance"
+  ]
+}

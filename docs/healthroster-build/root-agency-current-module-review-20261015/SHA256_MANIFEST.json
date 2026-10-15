@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "REVIEW.md",
+      "bytes": 1668,
+      "sha256": "446071bdf499376ceb3c1689b60ab18d32da086be036a0cff763698d6dd7ef59"
+    },
+    {
+      "file": "REVIEW_SOURCE.mjs.txt",
+      "bytes": 3821,
+      "sha256": "41ca92efd6152a6fe71f266b2bb6361fb6646965f8a98342ccc19e11094623ea"
+    },
+    {
+      "file": "SOURCE_96_TEST_OUTPUT.txt",
+      "bytes": 24898,
+      "sha256": "51f562a79fe9dce341dbf38b13c5f2f9e2c683ec47565b62c46980b80ce5c49a"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 911,
+      "sha256": "d961be055c121bb91b63ae7ae206c37a6d44e0d1f29ec37920796b02c5212a86"
+    }
+  ]
+}

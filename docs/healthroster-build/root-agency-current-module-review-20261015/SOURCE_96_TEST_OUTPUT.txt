@@ -1,0 +1,586 @@
+TAP version 13
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 88_same_request_schema_and_guard.sqlinc
+ok 1 - SAVED_SOURCE_INPUT exact raw receipt 88_same_request_schema_and_guard.sqlinc
+  ---
+  duration_ms: 1.823
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 91_current_request_assert.sqlinc
+ok 2 - SAVED_SOURCE_INPUT exact raw receipt 91_current_request_assert.sqlinc
+  ---
+  duration_ms: 0.3953
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt root_current_raw05.sqlinc
+ok 3 - SAVED_SOURCE_INPUT exact raw receipt root_current_raw05.sqlinc
+  ---
+  duration_ms: 0.3483
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 104_before_union_delta_source.sqlinc
+ok 4 - SAVED_SOURCE_INPUT exact raw receipt 104_before_union_delta_source.sqlinc
+  ---
+  duration_ms: 0.3369
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 86_agency_source_phase_admission.sqlinc
+ok 5 - SAVED_SOURCE_INPUT exact raw receipt 86_agency_source_phase_admission.sqlinc
+  ---
+  duration_ms: 0.5798
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 103_complete_active_source_guard_with_native_policy_union.sqlinc
+ok 6 - SAVED_SOURCE_INPUT exact raw receipt 103_complete_active_source_guard_with_native_policy_union.sqlinc
+  ---
+  duration_ms: 0.3498
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 89_complete_native_capture_source_phase_admission.sqlinc
+ok 7 - SAVED_SOURCE_INPUT exact raw receipt 89_complete_native_capture_source_phase_admission.sqlinc
+  ---
+  duration_ms: 0.3615
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 15_agency_original_claim_recheck.sqlinc
+ok 8 - SAVED_SOURCE_INPUT exact raw receipt 15_agency_original_claim_recheck.sqlinc
+  ---
+  duration_ms: 0.3105
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 90_complete_native_begin_immutable_source_tokens.sqlinc
+ok 9 - SAVED_SOURCE_INPUT exact raw receipt 90_complete_native_begin_immutable_source_tokens.sqlinc
+  ---
+  duration_ms: 0.3935
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_01_06_agency_immutable_submitted_claim.sqlinc
+ok 10 - SAVED_SOURCE_INPUT exact raw receipt caller_01_06_agency_immutable_submitted_claim.sqlinc
+  ---
+  duration_ms: 0.4346
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_02_20_agency_native_pay_scope.sqlinc
+ok 11 - SAVED_SOURCE_INPUT exact raw receipt caller_02_20_agency_native_pay_scope.sqlinc
+  ---
+  duration_ms: 0.3718
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_03_21_agency_legacy_original_document.sqlinc
+ok 12 - SAVED_SOURCE_INPUT exact raw receipt caller_03_21_agency_legacy_original_document.sqlinc
+  ---
+  duration_ms: 0.3711
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_04_28_agency_original_pay_identity.sqlinc
+ok 13 - SAVED_SOURCE_INPUT exact raw receipt caller_04_28_agency_original_pay_identity.sqlinc
+  ---
+  duration_ms: 0.2785
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_05_29_agency_paid_write_purpose.sqlinc
+ok 14 - SAVED_SOURCE_INPUT exact raw receipt caller_05_29_agency_paid_write_purpose.sqlinc
+  ---
+  duration_ms: 0.2742
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_06_34_complete_ordinary_collection_native_json_codec.sqlinc
+ok 15 - SAVED_SOURCE_INPUT exact raw receipt caller_06_34_complete_ordinary_collection_native_json_codec.sqlinc
+  ---
+  duration_ms: 0.2595
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_07_35_complete_before_collection_native_json_codec.sqlinc
+ok 16 - SAVED_SOURCE_INPUT exact raw receipt caller_07_35_complete_before_collection_native_json_codec.sqlinc
+  ---
+  duration_ms: 0.2452
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_08_38_agency_candidate_native_admission.sqlinc
+ok 17 - SAVED_SOURCE_INPUT exact raw receipt caller_08_38_agency_candidate_native_admission.sqlinc
+  ---
+  duration_ms: 0.2451
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_09_40_complete_physical_pay_scope_client_cycle.sqlinc
+ok 18 - SAVED_SOURCE_INPUT exact raw receipt caller_09_40_complete_physical_pay_scope_client_cycle.sqlinc
+  ---
+  duration_ms: 0.2628
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_10_44_agency_native_segment_flag_apply.sqlinc
+ok 19 - SAVED_SOURCE_INPUT exact raw receipt caller_10_44_agency_native_segment_flag_apply.sqlinc
+  ---
+  duration_ms: 0.2451
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_11_51_agency_owned_native_query_facts.sqlinc
+ok 20 - SAVED_SOURCE_INPUT exact raw receipt caller_11_51_agency_owned_native_query_facts.sqlinc
+  ---
+  duration_ms: 0.2699
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_12_56_native_invoice_segment_selection.sqlinc
+ok 21 - SAVED_SOURCE_INPUT exact raw receipt caller_12_56_native_invoice_segment_selection.sqlinc
+  ---
+  duration_ms: 0.2592
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_13_57_complete_same_draft_with_unchanged_editor.sqlinc
+ok 22 - SAVED_SOURCE_INPUT exact raw receipt caller_13_57_complete_same_draft_with_unchanged_editor.sqlinc
+  ---
+  duration_ms: 0.2674
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_14_58_agency_native_week_facts.sqlinc
+ok 23 - SAVED_SOURCE_INPUT exact raw receipt caller_14_58_agency_native_week_facts.sqlinc
+  ---
+  duration_ms: 0.2995
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_15_73_complete_sole_writer_with_superseded_override_retirement.sqlinc
+ok 24 - SAVED_SOURCE_INPUT exact raw receipt caller_15_73_complete_sole_writer_with_superseded_override_retirement.sqlinc
+  ---
+  duration_ms: 0.2705
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_16_60_agency_authorised_validation_context.sqlinc
+ok 25 - SAVED_SOURCE_INPUT exact raw receipt caller_16_60_agency_authorised_validation_context.sqlinc
+  ---
+  duration_ms: 0.262
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_17_61_agency_authorised_native_observation.sqlinc
+ok 26 - SAVED_SOURCE_INPUT exact raw receipt caller_17_61_agency_authorised_native_observation.sqlinc
+  ---
+  duration_ms: 0.2827
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_18_62_complete_native_financial_observation_with_validation.sqlinc
+ok 27 - SAVED_SOURCE_INPUT exact raw receipt caller_18_62_complete_native_financial_observation_with_validation.sqlinc
+  ---
+  duration_ms: 0.247
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_19_63_complete_native_flags_with_validation_observation.sqlinc
+ok 28 - SAVED_SOURCE_INPUT exact raw receipt caller_19_63_complete_native_flags_with_validation_observation.sqlinc
+  ---
+  duration_ms: 0.3483
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_20_64_complete_authorise_with_native_validation_writer.sqlinc
+ok 29 - SAVED_SOURCE_INPUT exact raw receipt caller_20_64_complete_authorise_with_native_validation_writer.sqlinc
+  ---
+  duration_ms: 0.298
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_21_66_agency_actual_validation_hooks.sqlinc
+ok 30 - SAVED_SOURCE_INPUT exact raw receipt caller_21_66_agency_actual_validation_hooks.sqlinc
+  ---
+  duration_ms: 0.2657
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_22_53_agency_same_draft_return_step.sqlinc
+ok 31 - SAVED_SOURCE_INPUT exact raw receipt caller_22_53_agency_same_draft_return_step.sqlinc
+  ---
+  duration_ms: 0.2502
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_23_54_return_step_service_reply.sqlinc
+ok 32 - SAVED_SOURCE_INPUT exact raw receipt caller_23_54_return_step_service_reply.sqlinc
+  ---
+  duration_ms: 0.257
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_24_19_agency_native_worker_apply.sqlinc
+ok 33 - SAVED_SOURCE_INPUT exact raw receipt caller_24_19_agency_native_worker_apply.sqlinc
+  ---
+  duration_ms: 0.2812
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc
+ok 34 - SAVED_SOURCE_INPUT exact raw receipt caller_25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc
+  ---
+  duration_ms: 0.331
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_26_80_native_agency_business_entry.sqlinc
+ok 35 - SAVED_SOURCE_INPUT exact raw receipt caller_26_80_native_agency_business_entry.sqlinc
+  ---
+  duration_ms: 0.2992
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_27_08_native_agency_crosscheck_context.sqlinc
+ok 36 - SAVED_SOURCE_INPUT exact raw receipt caller_27_08_native_agency_crosscheck_context.sqlinc
+  ---
+  duration_ms: 0.2748
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_28_18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc
+ok 37 - SAVED_SOURCE_INPUT exact raw receipt caller_28_18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc
+  ---
+  duration_ms: 0.3318
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_29_15_native_agency_issue_close.sqlinc
+ok 38 - SAVED_SOURCE_INPUT exact raw receipt caller_29_15_native_agency_issue_close.sqlinc
+  ---
+  duration_ms: 0.2495
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt caller_30_20_native_mode_a_unit_census.sqlinc
+ok 39 - SAVED_SOURCE_INPUT exact raw receipt caller_30_20_native_mode_a_unit_census.sqlinc
+  ---
+  duration_ms: 0.2466
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 52_typed_existing_validation_columns.sqlinc
+ok 40 - SAVED_SOURCE_INPUT exact raw receipt 52_typed_existing_validation_columns.sqlinc
+  ---
+  duration_ms: 0.2203
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt root_final_source_before.sqlinc
+ok 41 - SAVED_SOURCE_INPUT exact raw receipt root_final_source_before.sqlinc
+  ---
+  duration_ms: 0.2337
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt root_corrected_76_registrations.sqlinc
+ok 42 - SAVED_SOURCE_INPUT exact raw receipt root_corrected_76_registrations.sqlinc
+  ---
+  duration_ms: 0.3645
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt root_corrected_76_verifier.sqlinc
+ok 43 - SAVED_SOURCE_INPUT exact raw receipt root_corrected_76_verifier.sqlinc
+  ---
+  duration_ms: 0.2842
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_11_complete_tsfin_prepare_write.sqlinc
+ok 44 - SAVED_SOURCE_INPUT exact raw receipt shared_11_complete_tsfin_prepare_write.sqlinc
+  ---
+  duration_ms: 0.2284
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc
+ok 45 - SAVED_SOURCE_INPUT exact raw receipt shared_12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc
+  ---
+  duration_ms: 0.2502
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_13_complete_tsfin_write_snapshots_and_complete.sqlinc
+ok 46 - SAVED_SOURCE_INPUT exact raw receipt shared_13_complete_tsfin_write_snapshots_and_complete.sqlinc
+  ---
+  duration_ms: 0.2776
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_65_complete_native_invalidation_with_single_writer.sqlinc
+ok 47 - SAVED_SOURCE_INPUT exact raw receipt shared_65_complete_native_invalidation_with_single_writer.sqlinc
+  ---
+  duration_ms: 0.2477
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_70_complete_current_publication_with_agency_validation.sqlinc
+ok 48 - SAVED_SOURCE_INPUT exact raw receipt shared_70_complete_current_publication_with_agency_validation.sqlinc
+  ---
+  duration_ms: 0.2418
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_14_complete_native_issue_validator_with_agency_requirements.sqlinc
+ok 49 - SAVED_SOURCE_INPUT exact raw receipt shared_14_complete_native_issue_validator_with_agency_requirements.sqlinc
+  ---
+  duration_ms: 0.5067
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_16_complete_actual_direct_issue_with_agency_callbacks.sqlinc
+ok 50 - SAVED_SOURCE_INPUT exact raw receipt shared_16_complete_actual_direct_issue_with_agency_callbacks.sqlinc
+  ---
+  duration_ms: 0.3504
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_17_complete_actual_async_issue_with_agency_callbacks.sqlinc
+ok 51 - SAVED_SOURCE_INPUT exact raw receipt shared_17_complete_actual_async_issue_with_agency_callbacks.sqlinc
+  ---
+  duration_ms: 0.2861
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_21_complete_native_ready_units_with_preset_exclusion.sqlinc
+ok 52 - SAVED_SOURCE_INPUT exact raw receipt shared_21_complete_native_ready_units_with_preset_exclusion.sqlinc
+  ---
+  duration_ms: 0.2463
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_22_complete_native_mode_a_with_selected_preset_refusal.sqlinc
+ok 53 - SAVED_SOURCE_INPUT exact raw receipt shared_22_complete_native_mode_a_with_selected_preset_refusal.sqlinc
+  ---
+  duration_ms: 0.3604
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_23_complete_native_reference_apply_with_preset_row_refusal.sqlinc
+ok 54 - SAVED_SOURCE_INPUT exact raw receipt shared_23_complete_native_reference_apply_with_preset_row_refusal.sqlinc
+  ---
+  duration_ms: 0.315
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc
+ok 55 - SAVED_SOURCE_INPUT exact raw receipt shared_24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc
+  ---
+  duration_ms: 0.4155
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_97_complete_off_scope_assert_with_finite_agency.sqlinc
+ok 56 - SAVED_SOURCE_INPUT exact raw receipt shared_97_complete_off_scope_assert_with_finite_agency.sqlinc
+  ---
+  duration_ms: 0.3379
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_98_complete_off_parent_with_actual_agency.sqlinc
+ok 57 - SAVED_SOURCE_INPUT exact raw receipt shared_98_complete_off_parent_with_actual_agency.sqlinc
+  ---
+  duration_ms: 0.3703
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_99_complete_off_command_with_literal_agency.sqlinc
+ok 58 - SAVED_SOURCE_INPUT exact raw receipt shared_99_complete_off_command_with_literal_agency.sqlinc
+  ---
+  duration_ms: 0.3146
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_100_complete_off_transport_with_native_phase_actor.sqlinc
+ok 59 - SAVED_SOURCE_INPUT exact raw receipt shared_100_complete_off_transport_with_native_phase_actor.sqlinc
+  ---
+  duration_ms: 0.2618
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt shared_101_complete_off_setup_shape_with_finite_agency.sqlinc
+ok 60 - SAVED_SOURCE_INPUT exact raw receipt shared_101_complete_off_setup_shape_with_finite_agency.sqlinc
+  ---
+  duration_ms: 0.3038
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_93_complete_fixed_contract_approval_normaliser.sqlinc
+ok 61 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_93_complete_fixed_contract_approval_normaliser.sqlinc
+  ---
+  duration_ms: 0.4624
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_94_complete_effective_contract_fixed_approval.sqlinc
+ok 62 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_94_complete_effective_contract_fixed_approval.sqlinc
+  ---
+  duration_ms: 0.2984
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_95_complete_public_manager_writer_fixed_policy_guard.sqlinc
+ok 63 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_95_complete_public_manager_writer_fixed_policy_guard.sqlinc
+  ---
+  duration_ms: 0.2578
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_96_off_agency_native_parent.sqlinc
+ok 64 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_96_off_agency_native_parent.sqlinc
+  ---
+  duration_ms: 0.3496
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_105_complete_client_preset_fixed_approval.sqlinc
+ok 65 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_105_complete_client_preset_fixed_approval.sqlinc
+  ---
+  duration_ms: 0.3446
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_106_complete_feature_setup_fixed_approval_receipts.sqlinc
+ok 66 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_106_complete_feature_setup_fixed_approval_receipts.sqlinc
+  ---
+  duration_ms: 0.3301
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_107_complete_dated_candidate_fixed_approval_policy.sqlinc
+ok 67 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_107_complete_dated_candidate_fixed_approval_policy.sqlinc
+  ---
+  duration_ms: 0.2698
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_108_complete_worker_only_candidate_transition.sqlinc
+ok 68 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_108_complete_worker_only_candidate_transition.sqlinc
+  ---
+  duration_ms: 0.4686
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_109_complete_worker_only_component_render_contract.sqlinc
+ok 69 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_109_complete_worker_only_component_render_contract.sqlinc
+  ---
+  duration_ms: 0.2788
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt lifecycle_110_complete_worker_only_candidate_finaliser.sqlinc
+ok 70 - SAVED_SOURCE_INPUT exact raw receipt lifecycle_110_complete_worker_only_candidate_finaliser.sqlinc
+  ---
+  duration_ms: 0.3074
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt 114_candidate_native_security_verifier.sql
+ok 71 - SAVED_SOURCE_INPUT exact raw receipt 114_candidate_native_security_verifier.sql
+  ---
+  duration_ms: 0.2712
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt canonical_claim_1_13102026_1127_healthroster_timesheet_correction_requests_v1.sql
+ok 72 - SAVED_SOURCE_INPUT exact raw receipt canonical_claim_1_13102026_1127_healthroster_timesheet_correction_requests_v1.sql
+  ---
+  duration_ms: 0.3013
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt canonical_claim_2_13102026_1127_invariants.sqlinc
+ok 73 - SAVED_SOURCE_INPUT exact raw receipt canonical_claim_2_13102026_1127_invariants.sqlinc
+  ---
+  duration_ms: 0.2901
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt canonical_claim_3_01_physical_token_and_retention_helpers.sqlinc
+ok 74 - SAVED_SOURCE_INPUT exact raw receipt canonical_claim_3_01_physical_token_and_retention_helpers.sqlinc
+  ---
+  duration_ms: 0.2633
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt canonical_claim_4_00_source_token_grammar.sqlinc
+ok 75 - SAVED_SOURCE_INPUT exact raw receipt canonical_claim_4_00_source_token_grammar.sqlinc
+  ---
+  duration_ms: 0.3148
+  type: 'test'
+  ...
+# Subtest: SAVED_SOURCE_INPUT exact raw receipt pinned-source-parser.mjs
+ok 76 - SAVED_SOURCE_INPUT exact raw receipt pinned-source-parser.mjs
+  ---
+  duration_ms: 0.2422
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY all 76 saved input receipts reproduce the exact committed Git objects
+ok 77 - SOURCE_ONLY all 76 saved input receipts reproduce the exact committed Git objects
+  ---
+  duration_ms: 3376.6943
+  type: 'test'
+  ...
+# Subtest: FULL_REVERSE exact complete owner repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc
+ok 78 - FULL_REVERSE exact complete owner repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc
+  ---
+  duration_ms: 0.8143
+  type: 'test'
+  ...
+# Subtest: FULL_REVERSE exact complete owner repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc
+ok 79 - FULL_REVERSE exact complete owner repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc
+  ---
+  duration_ms: 0.5664
+  type: 'test'
+  ...
+# Subtest: PACKAGING_ONLY lexical atomic include closure 00_agency_schema_once_only.sql
+ok 80 - PACKAGING_ONLY lexical atomic include closure 00_agency_schema_once_only.sql
+  ---
+  duration_ms: 3.1769
+  type: 'test'
+  ...
+# Subtest: PACKAGING_ONLY lexical atomic include closure 01_agency_source_core.sql
+ok 81 - PACKAGING_ONLY lexical atomic include closure 01_agency_source_core.sql
+  ---
+  duration_ms: 6.5521
+  type: 'test'
+  ...
+# Subtest: PACKAGING_ONLY lexical atomic include closure 02_agency_current_callers.sql
+ok 82 - PACKAGING_ONLY lexical atomic include closure 02_agency_current_callers.sql
+  ---
+  duration_ms: 9.1944
+  type: 'test'
+  ...
+# Subtest: PACKAGING_ONLY lexical atomic include closure 03_agency_source_and_current_callers.sql
+ok 83 - PACKAGING_ONLY lexical atomic include closure 03_agency_source_and_current_callers.sql
+  ---
+  duration_ms: 13.7649
+  type: 'test'
+  ...
+# Subtest: PACKAGING_ONLY lexical atomic include closure 04_agency_fixed_approval_candidate_lifecycle.sql
+ok 84 - PACKAGING_ONLY lexical atomic include closure 04_agency_fixed_approval_candidate_lifecycle.sql
+  ---
+  duration_ms: 3.4338
+  type: 'test'
+  ...
+# Subtest: PACKAGING_ONLY lexical atomic include closure 05_agency_source_callers_and_lifecycle.sql
+ok 85 - PACKAGING_ONLY lexical atomic include closure 05_agency_source_callers_and_lifecycle.sql
+  ---
+  duration_ms: 17.7997
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY table/typed provenance DDL is only in once-only migrations
+ok 86 - SOURCE_ONLY table/typed provenance DDL is only in once-only migrations
+  ---
+  duration_ms: 18.9548
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY one current Agency owner per name; all Agency callees close over selected bodies/current configured predicate
+ok 87 - SOURCE_ONLY one current Agency owner per name; all Agency callees close over selected bodies/current configured predicate
+  ---
+  duration_ms: 0.6765
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY every request rowtype field referenced by actual selected bodies is declared on the one request store
+ok 88 - SOURCE_ONLY every request rowtype field referenced by actual selected bodies is declared on the one request store
+  ---
+  duration_ms: 0.7432
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY actual common advancing-phase guard rechecks native original claim after UNA scope and before Source CAS
+ok 89 - SOURCE_ONLY actual common advancing-phase guard rechecks native original claim after UNA scope and before Source CAS
+  ---
+  duration_ms: 0.4558
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY native original claim recheck retains genuine absence/unavailability and immutable Candidate witness checks
+ok 90 - SOURCE_ONLY native original claim recheck retains genuine absence/unavailability and immutable Candidate witness checks
+  ---
+  duration_ms: 0.5737
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY both immutable claim owners and native transitive retention fields remain present
+ok 91 - SOURCE_ONLY both immutable claim owners and native transitive retention fields remain present
+  ---
+  duration_ms: 0.8179
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact current raw05 is unchanged except accepted BEFORE delta and final guard follows both raw/nested phases
+ok 92 - SOURCE_ONLY exact current raw05 is unchanged except accepted BEFORE delta and final guard follows both raw/nested phases
+  ---
+  duration_ms: 0.7661
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY corrected 76 early/final trigger verifier rejects column filtered UPDATE and no whole old104 file is mounted
+ok 93 - SOURCE_ONLY corrected 76 early/final trigger verifier rejects column filtered UPDATE and no whole old104 file is mounted
+  ---
+  duration_ms: 1.2627
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY new-owner verifier enumerates the exact selected function ACL closure
+ok 94 - SOURCE_ONLY new-owner verifier enumerates the exact selected function ACL closure
+  ---
+  duration_ms: 0.4919
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY selected fixed-policy lifecycle uses exact accepted bodies and proposed Candidate native verifier
+ok 95 - SOURCE_ONLY selected fixed-policy lifecycle uses exact accepted bodies and proposed Candidate native verifier
+  ---
+  duration_ms: 5.6982
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY final module preserves root mounted Candidate runtime files and does not widen the finite OFF Agency operations
+ok 96 - SOURCE_ONLY final module preserves root mounted Candidate runtime files and does not widen the finite OFF Agency operations
+  ---
+  duration_ms: 1.4585
+  type: 'test'
+  ...
+1..96
+# tests 96
+# suites 0
+# pass 96
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3651.533

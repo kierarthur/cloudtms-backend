@@ -524,3 +524,10 @@ Calendar 696bf40c passed bounded root review: 93 exact raw pins, five whole owne
 A complete literal owner scan exposed the fixed native-type parser omission for daterange in the new Source coverage signatures. Added only that known built-in type. Three targeted native named/unnamed/qualified/array and fail-closed unknown-type tests pass; db:check passes 400 migrations / 1063 repeatables; complete literal inventory now runs. Final registry and compiled contract gates remain separate and pending. No SQL or native call was needed.
 
 Current Money selectors still have their sole literal definitions in original 0475/0505; fresh path/hash receipts were supplied to Money. Native confirmed no additional late invoice-admission VAT blocker: retain the existing VAT_FIT_HELD guard, and exclude stale predecessor admission bodies from its reader recipe. Source/Agency delivered its current module; the 17 shared writer/issue/ModeA/OFF unions, prospective Contract persistence and complete Money/Checklist composition continue. No install, feature activation, app upload, external action, Banking message or cleanup occurred.
+
+
+## Current Source/Agency module review — 15 October 2026
+
+Root accepted only the two new current owner deltas and once-only packaging at 38964e6a: 151 exact saved/Git pins, 76 inputs, two whole reversals, 70 unique selected routine signatures and 96 source checks. The genuine original-claim recheck is in the common advancing request guard after T0/UNA scope and before Source CAS; only the ACTIVE BEFORE delta is added to current raw05. Corrected kernel, helper bodies and 76 registrations are retained.
+
+The 17 mandatory shared financial/invalidation/publication/issue/ModeA/OFF owners still require actual current unions. Prospective Contract persistence remains actual writer work. No canonical mount or SQL/native acceptance is inferred from this review; inherited EOF whitespace is recorded for selected packaging correction. The complete native, role/registry/contract/current verifier/full rehearsal/Install 2/real acceptance and both final critics remain pending.
