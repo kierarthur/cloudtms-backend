@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "ACTIVE_PLAN.md",
-      "bytes": 15899,
-      "sha256": "1fe4aa9ec47aa9695c2fe9303b67a201f3b51828cd6024a8dc616e37fa25dbc5"
+      "bytes": 41362,
+      "sha256": "277850a27ebfa7de7a84367d342f36416b1fe2d3df1e175e02d97396a7051b0f"
     },
     {
       "path": "authority/AUTHORITY_FILES.json",
@@ -103,13 +103,18 @@
     },
     {
       "path": "CHANGE_TRACEABILITY.json",
-      "bytes": 639463,
-      "sha256": "0df16e089cd3f17ca9bd8cf7831f7ae9f7ed4065de18bf1e95935f117979033a"
+      "bytes": 19430807,
+      "sha256": "4483432db9e212fd7fb11e26187ce1f8b40d34eb1637a29231fc707bc3c374ad"
     },
     {
       "path": "SCHEMA_INTERFACE_REGISTER.json",
-      "bytes": 39806,
-      "sha256": "083abbbf7eae01c5471a87907911aa413fa6dd6410fbb50c607e44dde51cc85f"
+      "bytes": 464049,
+      "sha256": "4ff0c7a9b94c033eda0abba411204fbe8cf35570d7a254262d4c6e072348d506"
     }
-  ]
+  ],
+  "current_record_amendment": {
+    "content_sha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+    "receipt": "../v6-owner-delivery-20261016/ADOPTION_RECEIPT.json",
+    "historical_v5_authority_files_preserved": true
+  }
 }
