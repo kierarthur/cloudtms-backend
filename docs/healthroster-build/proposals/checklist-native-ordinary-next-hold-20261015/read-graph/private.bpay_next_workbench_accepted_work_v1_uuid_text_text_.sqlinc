@@ -1,0 +1,45 @@
+create or replace function private.bpay_next_workbench_accepted_work_v1(
+  p_work_id uuid,p_component_key text,p_segment_key text)
+returns table(run_id uuid,command_id uuid,module_epoch bigint,selected_source_ex_vat numeric)
+language plpgsql stable security definer set search_path=pg_catalog,private
+as $function$
+declare v_count integer:=0;v record;
+begin
+  perform private.bpay_next_workbench_require_next_v1();
+  for v in
+    select r.id run_id,c.id command_id,c.module_epoch,
+      case when p_segment_key is not null then
+        (select p.included_positive_source_ex_vat from private.bpay_next_run_work_segment_parent p
+          where p.run_work_id=rw.id and p.component_key=p_component_key and p.segment_key=p_segment_key)
+      else (select l.source_consumed_ex_vat from private.bpay_next_run_line l
+          where l.run_work_id=rw.id and l.component_key=p_component_key) end selected_source_ex_vat
+    from private.bpay_next_work_choice w
+    join private.bpay_next_run_selection rs on rs.run_id=w.run_id and rs.work_id=w.work_id
+    join private.bpay_next_pay_run r on r.id=w.run_id and r.selection_state='SEALED'
+      and r.status in ('PREPARING','REVIEW','DRAFT','EXECUTING')
+    join private.bpay_next_selection_candidate sc on sc.run_id=r.id and sc.candidate_id=rs.candidate_id
+    join private.bpay_next_run_command rc on rc.run_id=r.id
+    join private.bpay_next_command c on c.id=rc.command_id and c.command_kind='PREPARE'
+    left join private.bpay_next_run_worker worker on worker.run_id=r.id and worker.candidate_id=rs.candidate_id
+    left join private.bpay_next_run_work rw on rw.run_worker_id=worker.id and rw.work_id=w.work_id
+    where w.work_id=p_work_id and w.selection_state='SEALED'
+      and (worker.id is null or worker.status in ('PREPARING','REVIEW','READY','DRAFT','CANCELLING','ISSUED'))
+      and ((p_segment_key is not null and exists(select 1 from private.bpay_next_selected_segment s
+        where s.run_id=r.id and s.work_id=w.work_id and s.component_key=p_component_key
+          and s.segment_key=p_segment_key and s.disposition='INCLUDED'))
+        or (p_segment_key is null and exists(select 1 from private.bpay_next_approved_line a
+          where a.revision_id=w.expected_revision_id and a.component_key=p_component_key
+            and not exists(select 1 from private.bpay_next_approved_segment s
+              where s.revision_id=a.revision_id and s.component_key=a.component_key))
+          and (w.selection_mode='ALL' or exists(select 1 from private.bpay_next_selected_component s
+            where s.run_id=r.id and s.work_id=w.work_id and s.component_key=p_component_key))
+          and private.bpay_next_snooze_at_cut_v1(w.work_id,w.expected_revision_id,null,p_component_key,
+            r.snooze_control_sequence,r.snooze_business_date) is null))
+  loop
+    v_count:=v_count+1;
+    if v_count>1 then raise exception using errcode='23514',message='BPAY_NEXT_WORKBENCH_ACCEPTED_MEMBER_COLLISION';end if;
+    run_id:=v.run_id;command_id:=v.command_id;module_epoch:=v.module_epoch;
+    selected_source_ex_vat:=v.selected_source_ex_vat;return next;
+  end loop;
+end
+$function$;

@@ -1,0 +1,21 @@
+create or replace function private.bpay_next_snooze_at_cut_v1(
+  p_work_id uuid,p_revision_id uuid,p_segment_key text,p_component_key text,p_sequence bigint,p_business_date date)
+returns jsonb language sql stable security invoker set search_path=pg_catalog,private
+as $function$
+  select e.after_state from private.bpay_next_snooze s
+  join lateral(select ev.after_state from private.bpay_next_snooze_event ev
+    where ev.snooze_id=s.id and ev.control_sequence<=p_sequence order by ev.control_sequence desc limit 1) e on true
+  join private.bpay_next_approved_line a on a.revision_id=p_revision_id and a.component_key=p_component_key
+  left join private.bpay_next_approved_segment seg on seg.revision_id=p_revision_id and seg.segment_key=p_segment_key and seg.component_key=a.component_key
+  join private.bpay_next_revision_worker_basis b on b.revision_id=p_revision_id
+  where s.work_id=p_work_id and (e.after_state->>'active')::boolean
+    and ((e.after_state->>'until_date') is null or (e.after_state->>'until_date')::date>=p_business_date)
+    and ((s.scope_kind='WHOLE_TIMESHEET' and (e.after_state->>'worker_pay_basis')::bytea=b.whole_basis)
+      or (s.scope_kind='SEGMENT' and s.segment_key=p_segment_key
+        and (e.after_state->>'worker_pay_basis')::bytea=private.bpay_next_segment_pay_basis_v1(seg.id))
+      or (s.scope_kind='EXPENSES_ALL' and a.component_kind in ('EXPENSE','MILEAGE')
+        and (e.after_state->>'worker_pay_basis')::bytea=b.expense_basis)
+      or (s.scope_kind='EXPENSE_LINE' and s.component_key=p_component_key
+        and (e.after_state->>'worker_pay_basis')::bytea=private.bpay_next_line_pay_basis_v1(a.id)))
+  order by (e.after_state->>'until_date') is null desc,s.scope_kind,s.id limit 1
+$function$;

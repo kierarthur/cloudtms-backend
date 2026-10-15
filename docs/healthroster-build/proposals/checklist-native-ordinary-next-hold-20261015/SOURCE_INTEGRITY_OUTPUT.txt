@@ -1,0 +1,5 @@
+
+> cloudtms-backend@1.0.0 db:check
+> node scripts/cloudtms-db-release.mjs check
+
+Database source integrity passed: 399 migrations, 1060 repeatables.

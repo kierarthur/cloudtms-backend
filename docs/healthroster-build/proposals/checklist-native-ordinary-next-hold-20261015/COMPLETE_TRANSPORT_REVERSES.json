@@ -1,0 +1,65 @@
+{
+  "status": "UNMOUNTED_FINITE_ORDINARY_NEXT_FINANCIAL_DTO_SOURCE_SUCCESSOR",
+  "native": false,
+  "records": [
+    {
+      "source_commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "source_path": "docs/healthroster-build/proposals/checklist-native-invoice-decision-transport-20261015/forward/healthroster-checklist-source.mjs",
+      "saved": "input/before_healthroster-checklist-source.mjs",
+      "output": "forward/healthroster-checklist-source.mjs",
+      "before_sha256": "9b89ea8ee0e1dd8b9ec738eededb7be339cd297f9acbe839e7ceae8524648596",
+      "after_sha256": "6d972dea797a1c559312c55fa11b8025ee714392e9b4374793ab24435080eb0a",
+      "hunks": [
+        {
+          "label": "closed ordinary available EX-VAT authority",
+          "before": "'SOURCE_INVOICE_DECISION', 'NEXT'",
+          "after": "'SOURCE_INVOICE_DECISION', 'ORDINARY_NEXT_AVAILABLE_EX_VAT', 'NEXT'"
+        },
+        {
+          "label": "ordinary amount certifies only positive current native available whole-TS hold",
+          "before": "  return copy(value);\n}\n\nexport function unavailableChecklistHold()",
+          "after": "  if (value.authority.owner === 'ORDINARY_NEXT_AVAILABLE_EX_VAT' && (value.holds_pay !== true || value.holds_pay_scope !== 'TIMESHEET' ||\n      value.holds_invoice !== null || value.pending_decision !== null || value.authority.withholding_known !== true)) {\n    fail('CHECKLIST_ORDINARY_NEXT_MONEY_GRAIN_INVALID');\n  }\n  return copy(value);\n}\n\nexport function unavailableChecklistHold()"
+        },
+        {
+          "label": "closed optional native financial witness",
+          "before": "'native_invoice_decision_witness']);",
+          "after": "'native_invoice_decision_witness', 'native_ordinary_money_witness']);"
+        },
+        {
+          "label": "finite independently native financial item kind",
+          "before": "'NATIVE_SOURCE', 'NATIVE_INVOICE'].includes(item.item_kind)",
+          "after": "'NATIVE_SOURCE', 'NATIVE_INVOICE', 'NATIVE_ORDINARY_FINANCIAL'].includes(item.item_kind)"
+        },
+        {
+          "label": "exact genuine current financial Timesheet identity and admission refusal",
+          "before": "  } else {\n    uuid(item.counted_timesheet_id);\n    if (item.source_information_witness != null)",
+          "after": "  } else if (item.item_kind === 'NATIVE_ORDINARY_FINANCIAL') {\n    const witness=item.native_ordinary_money_witness;\n    closed(witness,['owner','actor_user_id','scope','timesheet_id','financial_id','work_id','revision_id',\n      'amount_basis','grain','counts_for_row_admission','read_proof_hash']);\n    uuid(witness.actor_user_id);bindScope(witness.scope);\n    for(const key of ['timesheet_id','financial_id','work_id','revision_id'])uuid(witness[key]);uuid(item.counted_timesheet_id);\n    if(witness.owner!=='private.bpay_next_workbench_refresh_work_core_v1'||!same(witness.actor_user_id,actor.actor_user_id)||\n      !sameScope(witness.scope,item.scope)||!same(witness.timesheet_id,item.counted_timesheet_id)||\n      item.item_id!=='native-financial:'+witness.work_id||witness.amount_basis!=='SOURCE_EX_VAT'||\n      witness.grain!=='CURRENT_ORDINARY_WORK_AVAILABLE'||witness.counts_for_row_admission!==false||\n      typeof witness.read_proof_hash!=='string'||!HASH.test(witness.read_proof_hash)||\n      !['SIGNED_TIMESHEETS','AGENCY_INVOICE'].includes(item.route)||item.sheet_scope!=='WEEKLY'||\n      item.subject!=='PAY'||item.permitted_pay_subject!==true||item.reason_code!=='PAY_ON_HOLD'||\n      item.status?.text!=='Holds pay'||item.status?.tone!=='danger'||item.correction_binding!==null||item.submission_read!==null||\n      item.source_information_witness!==null||item.native_source_witness!=null||item.native_invoice_witness!=null||\n      item.native_invoice_decision_witness!=null||item.queries_parent_witness!=null||item.action===undefined||\n      (item.action!==null&&(item.action.kind!=='TIMESHEET'||!same(item.action.target?.timesheet_id,witness.timesheet_id)))) {\n      fail('CHECKLIST_NATIVE_ORDINARY_MONEY_INVALID');\n    }\n  } else {\n    uuid(item.counted_timesheet_id);\n    if (item.source_information_witness != null)"
+        },
+        {
+          "label": "financial witness cannot be borrowed by a query or information item",
+          "before": "  const action = link(item.action ?? null, item.scope);",
+          "after": "  if (item.item_kind !== 'NATIVE_ORDINARY_FINANCIAL' && item.native_ordinary_money_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');\n  const action = link(item.action ?? null, item.scope);"
+        },
+        {
+          "label": "native quantity binds only independently classified financial subject",
+          "before": "  if (correction != null) {",
+          "after": "  if ((hold.authority.owner === 'ORDINARY_NEXT_AVAILABLE_EX_VAT') !== (item.item_kind === 'NATIVE_ORDINARY_FINANCIAL') ||\n      (item.item_kind === 'NATIVE_ORDINARY_FINANCIAL' && hold.authority.hash !== item.native_ordinary_money_witness.read_proof_hash)) {\n    fail('CHECKLIST_ORDINARY_NEXT_MONEY_GRAIN_INVALID');\n  }\n  if (correction != null) {"
+        },
+        {
+          "label": "whole row cannot claim finite available member sum",
+          "before": "  if (hold.authority.owner === 'SOURCE_QUERY_EX_VAT') fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');",
+          "after": "  if (['SOURCE_QUERY_EX_VAT','ORDINARY_NEXT_AVAILABLE_EX_VAT'].includes(hold.authority.owner)) fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');"
+        }
+      ]
+    },
+    {
+      "source_commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "source_path": "docs/healthroster-build/proposals/checklist-native-invoice-decision-transport-20261015/forward/checklist-read.mjs",
+      "saved": "input/before_checklist-read.mjs",
+      "output": "forward/checklist-read.mjs",
+      "before_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "after_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "hunks": []
+    }
+  ]
+}

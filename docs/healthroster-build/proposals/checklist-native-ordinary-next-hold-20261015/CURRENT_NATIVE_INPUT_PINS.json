@@ -1,0 +1,111 @@
+{
+  "status": "UNMOUNTED_ORDINARY_NEXT_AVAILABLE_HOLD_LITERAL_ABI_SOURCE_INPUTS",
+  "native": false,
+  "SQL_executed": false,
+  "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "census_sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+  "census": {
+    "roots": 1484,
+    "unique_inputs": 1745,
+    "occurrences": 2160
+  },
+  "selected": [
+    {
+      "id": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "source_file_sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522",
+      "definition_sha256": "39596ef09ff413e81292f7f0bbea02df551730f343a2687c69ff8ae39b8a2769",
+      "saved": "input/private_bpay_next_workbench_refresh_work_core_v1.sqlinc",
+      "bytes": 41403,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "source_file_sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17",
+      "definition_sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6",
+      "saved": "input/private_bpay_next_workbench_work_members_v1.sqlinc",
+      "bytes": 8746,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "source_file_sha256": "16e437bb839cc8a91cd499303cd0d6d574797e3fb0da6570ab24858d42b6ce87",
+      "definition_sha256": "8aa1452a8038f833613f86a71107c01b30c7064e3496830ab036c3155844dd9b",
+      "saved": "input/private_bpay_next_publish_ordinary_from_financial_v1.sqlinc",
+      "bytes": 40803,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_pay_hold_control_trigger_v1()",
+      "file": "supabase/repeatable/12102026_0611_banking_pay_next_pay_hold_missing_control_guard_v1.sql",
+      "source_file_sha256": "70b3ac78a246bee6ce440fe838d30c9b8d94e1904b44c2214ac5ecdfd47741f1",
+      "definition_sha256": "ea07e47e44c988b90fa8606fc95961c4c2b560d119e21e00cfb14a7f77b106e6",
+      "saved": "input/private_bpay_next_pay_hold_control_trigger_v1.sqlinc",
+      "bytes": 3960,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_approval_route_v1(uuid)",
+      "file": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
+      "source_file_sha256": "3eee328de610d01b1890bf4fd039001fb01ccf8dc9cb51c8a233e6f4d1406b87",
+      "definition_sha256": "8dd97a2a7c46ff95530f191346d03bf4f48867076e9556e58b235225668faa48",
+      "saved": "input/private_bpay_next_approval_route_v1.sqlinc",
+      "bytes": 5777,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_daily_approval_evidence_v1(uuid)",
+      "file": "supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql",
+      "source_file_sha256": "8d9dfa131740391903d8aa68c6ce8a478f9a646b0f431ad43d30987a37b65911",
+      "definition_sha256": "d2f2b6e71fca4f7b23c54122ee6d3e1d6f3f962ce90c960e9c2f30fb18b0f7a7",
+      "saved": "input/private_bpay_next_daily_approval_evidence_v1.sqlinc",
+      "bytes": 8688,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_workbench_accepted_work_v1(uuid,text,text)",
+      "file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "source_file_sha256": "2fe6c4c816613aaa554d012289124c47219fd228a2af229c2ceabdb8f0cc305b",
+      "definition_sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874",
+      "saved": "input/private_bpay_next_workbench_accepted_work_v1.sqlinc",
+      "bytes": 3129,
+      "native_executed": false
+    },
+    {
+      "id": "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+      "file": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
+      "source_file_sha256": "9b6ceda100c313e6ee879f73102740f38d20cd7e9e6c49bf7bd9affc7117fdf2",
+      "definition_sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40",
+      "saved": "input/private_bpay_next_snooze_at_cut_v1.sqlinc",
+      "bytes": 1741,
+      "native_executed": false
+    }
+  ],
+  "raw": [
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
+      "saved": "input/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
+      "bytes": 5467,
+      "sha256": "aeedd544d3e1a89d4cc5802e8304e0826b4d0044d1ea43bcfb52b5b3b6ae2de9"
+    },
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/release/current-contract.json",
+      "saved": "input/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    }
+  ],
+  "kernel": {
+    "commit": "77eb654a72d32d88cd250e63535478495f7f5429",
+    "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_financial_native_kernel.forward.sqlinc",
+    "saved": "input/Native77_shared_financial_kernel.sqlinc",
+    "bytes": 37379,
+    "sha256": "884a92f62d998fa62dff3c0545abe91b82a28aa6a55685d6d818e84b90b064ba"
+  },
+  "unresolved_amendments": 15,
+  "conditional_compiled_catalogue": false
+}

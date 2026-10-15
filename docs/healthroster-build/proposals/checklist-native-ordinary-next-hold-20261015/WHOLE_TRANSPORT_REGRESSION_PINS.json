@@ -1,0 +1,41 @@
+{
+  "source_only": true,
+  "native": false,
+  "pins": [
+    {
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "original_sha256": "b93a73a6e76e3aeda2f53dc82f42e53e0d9e22068fcbb3e300cf691129898e74",
+      "adapted_sha256": "13f0bbc7db504dc943f1da60b954c4f136249743c31808f983e1be6492529726",
+      "changes": "Only imports/import.meta redirect to pinned predecessor sources and complete successor DTO/transport. Test bodies/assertions unchanged."
+    },
+    {
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "original_sha256": "24a6335214cdaf26c0cc6e74121d9d2afaa88a0ff744e6745a183dadd394c55a",
+      "adapted_sha256": "7fa863ed76b6d354b41efb792b711283cdf1e1891a982f2bf24436fbeab8f61e",
+      "changes": "Only imports/import.meta redirect to pinned predecessor sources and complete successor DTO/transport. Test bodies/assertions unchanged."
+    },
+    {
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "file": "tests/healthroster-checklist-source-query-money.test.mjs",
+      "original_sha256": "0e2d0ffd65297edf3eb4d0a01aed269554d6345f17a36744668f8a08cab87e67",
+      "adapted_sha256": "47ccb43a1e471c018050eb8cd6e87a1e673443cc74eae28451594d5778a96179",
+      "changes": "Only imports/import.meta redirect to pinned predecessor sources and complete successor DTO/transport. Test bodies/assertions unchanged."
+    },
+    {
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "file": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "original_sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b",
+      "adapted_sha256": "c07876247253f81df51253a202dd81cccde39c06eebf19e354175e74ebf44030",
+      "changes": "Only imports/import.meta redirect to pinned predecessor sources and complete successor DTO/transport. Test bodies/assertions unchanged."
+    },
+    {
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "file": "tests/healthroster-checklist-invoice-decision-transport.test.mjs",
+      "original_sha256": "3401197fd596a9fd109cb09a00348b8d8e2f15ce294de4d1ddc5b03f6919ac81",
+      "adapted_sha256": "e33ceba7fcfcc53edc80fbd3ed7bf548d25f05a6e862d0ac49c5fca499d98b66",
+      "changes": "Only imports/import.meta redirect to pinned predecessor sources and complete successor DTO/transport. Test bodies/assertions unchanged."
+    }
+  ]
+}

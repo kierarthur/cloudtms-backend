@@ -1,0 +1,28 @@
+create or replace function private.weekly_source_protected_component_event_v1(
+  p_segment jsonb
+) returns text language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_identity jsonb;
+  v_event text;
+begin
+  if not (p_segment ? 'weekly_protected_component_identity') then return null; end if;
+  v_identity:=p_segment->'weekly_protected_component_identity';
+  if jsonb_typeof(v_identity) is distinct from 'object'
+     or not (v_identity ?& array['schema_version','work_event_id']) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_INVALID' using errcode='22023'; end if;
+  if exists(select 1 from jsonb_object_keys(v_identity) k(key)
+      where k.key not in ('schema_version','work_event_id'))
+     or v_identity->>'schema_version' is distinct from 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_V1'
+     or jsonb_typeof(v_identity->'work_event_id') is distinct from 'string' then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_INVALID' using errcode='22023'; end if;
+  v_event:=v_identity->>'work_event_id';
+  if v_event !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     or p_segment->>'segment_id' is distinct from ('weekly-source-event:'||v_event)
+     or (p_segment ? 'weekly_source' and
+       p_segment#>>'{weekly_source,work_event_id}' is distinct from v_event) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_INVALID' using errcode='22023'; end if;
+  return v_event;
+end;
+$function$;

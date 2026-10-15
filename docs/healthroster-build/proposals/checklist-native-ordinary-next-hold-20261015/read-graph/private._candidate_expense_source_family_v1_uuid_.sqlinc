@@ -1,0 +1,49 @@
+CREATE OR REPLACE FUNCTION private._candidate_expense_source_family_v1(p_timesheet_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+DECLARE
+  v_source boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM public.timesheets t
+    WHERE t.timesheet_id=p_timesheet_id
+      AND t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+      AND t.line_type='HOURS'::public.timesheet_line_type_enum
+      AND NOT t.is_adjustment
+      -- Ownership is not payment eligibility. Withdrawal/archive does not
+      -- turn an imported Timesheet into an ordinary expense-claim carrier.
+      AND t.settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1'
+      AND t.settings_authority_resolved_at IS NOT NULL
+      AND (
+        t.settings_authority_json#>'{applicability,import_authoritative}'='true'::jsonb
+        -- User-confirmed domain: self_bill IS import-authoritative. An import
+        -- label or separate-expense preference alone is not sufficient.
+        OR t.settings_authority_json#>'{values,self_bill}'='true'::jsonb
+        OR EXISTS (
+          SELECT 1 FROM public.weekly_source_row_timesheet_lineages l
+          WHERE l.family_booking_id=t.booking_id
+            AND t.booking_id IS NOT NULL AND t.booking_id<>''
+        )
+      )
+      AND EXISTS (
+        SELECT 1 FROM public.contract_weeks cw
+        WHERE cw.contract_id=t.contract_id AND cw.week_ending_date=t.week_ending_date
+          AND cw.additional_seq=0 AND NOT cw.is_adjustment
+          AND cw.timesheet_id=t.timesheet_id
+      )
+  ) INTO v_source;
+  IF v_source AND EXISTS (
+    SELECT 1 FROM public.candidate_expense_components c
+    WHERE c.owning_timesheet_id=p_timesheet_id
+      AND c.lifecycle_state NOT IN
+        ('MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED')
+  ) THEN
+    RAISE EXCEPTION 'SOURCE_ROOT_HAS_SEPARATE_CLAIM_COMPONENT'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN v_source;
+END;
+$function$;

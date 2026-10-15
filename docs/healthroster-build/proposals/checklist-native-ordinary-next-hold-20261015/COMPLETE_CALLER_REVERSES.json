@@ -1,0 +1,61 @@
+{
+  "status": "UNMOUNTED_SAME_NATIVE_FINANCIAL_OWNER_RETENTION_AND_PUBLIC_ITEM_COMPOSITION",
+  "native": false,
+  "records": [
+    {
+      "source_commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "source_path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "saved": "input/before_wp_u3_client_week_context.sqlinc",
+      "output": "forward/wp_u3_client_week_context.sqlinc",
+      "before_sha256": "eaedf37a1a206d79a1130e463c9673bd7404573a05024a880da5534ae9f5cbcb",
+      "after_sha256": "60e50f2eb736e6c3da60d3dc704e430a7e4788e7647700e113c9329173d99237",
+      "hunks": [
+        {
+          "label": "read-local native financial frames",
+          "before": "  v_scope_count integer; v_scope_open integer; v_retention_reads jsonb:='[]'::jsonb;",
+          "after": "  v_scope_count integer; v_scope_open integer; v_retention_reads jsonb:='[]'::jsonb;\n  v_money jsonb;v_money_row jsonb;v_money_scope jsonb;v_scope_money jsonb;v_scope_money_facts jsonb;\n  v_financial_items jsonb:='[]'::jsonb;v_financial_facts jsonb:='[]'::jsonb;"
+        },
+        {
+          "label": "same finance owner before signed old-week admission",
+          "before": "      if v_scope_count>0 then v_latest_timesheet_week:=v_read_scope.week_ending_date; end if;",
+          "after": "      v_money_scope:=jsonb_build_object('source_group_id',g.id,'source_cycle_id',v_read_scope.cycle_id,\n        'client_id',v_client,'week_ending',v_read_scope.week_ending_date);\n      v_scope_money:='[]'::jsonb;v_scope_money_facts:='[]'::jsonb;\n      for v_money_row in select r from jsonb_array_elements(v_rows) r\n        where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'{submission_witness,actual_submitted}'='true'::jsonb loop\n        v_money:=private.weekly_source_checklist_ordinary_next_hold_money_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);\n        v_scope_money_facts:=v_scope_money_facts||jsonb_build_array(v_money->'native_facts');\n        if v_money->'known'='true'::jsonb then\n          v_scope_money:=v_scope_money||jsonb_build_array(v_money-'native_facts');\n          -- Retain the week using the SAME native financial truth. No R254\n          -- information row can enter this authentic counted-Timesheet arm.\n          v_scope_open:=v_scope_open+1;\n        end if;\n      end loop;\n      if v_read_scope.week_ending_date=v_week then\n        v_financial_items:=v_scope_money;v_financial_facts:=v_scope_money_facts;\n      end if;\n      if v_scope_count>0 then v_latest_timesheet_week:=v_read_scope.week_ending_date; end if;"
+        },
+        {
+          "label": "every signed retention frame binds native finance observations",
+          "before": "'source_cycle_id',v_read_scope.cycle_id,'read_revision',v_revision,'actual_timesheet_count',v_scope_count,'open_read_items',v_scope_open));",
+          "after": "'source_cycle_id',v_read_scope.cycle_id,'read_revision',v_revision,'actual_timesheet_count',v_scope_count,'open_read_items',v_scope_open,\n        'native_financial_facts',v_scope_money_facts));"
+        },
+        {
+          "label": "agency actual Timesheet arm shares one native finance read",
+          "before": "  if v_route='SIGNED_TIMESHEETS' and (v_count=0 or (v_week<>v_latest_week and v_open=0)) then",
+          "after": "  if v_route='AGENCY_INVOICE' then\n    v_money_scope:=jsonb_build_object('source_group_id',g.id,'source_cycle_id',c.id,'client_id',v_client,'week_ending',v_week);\n    for v_money_row in select value from jsonb_array_elements(v_actual) loop\n      v_money:=private.weekly_source_checklist_ordinary_next_hold_money_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);\n      v_financial_facts:=v_financial_facts||jsonb_build_array(v_money->'native_facts');\n      if v_money->'known'='true'::jsonb then v_financial_items:=v_financial_items||jsonb_build_array(v_money-'native_facts'); end if;\n    end loop;\n  end if;\n  if v_route='SIGNED_TIMESHEETS' and (v_count=0 or (v_week<>v_latest_week and v_open=0)) then"
+        },
+        {
+          "label": "private leaf returns current-week fact subject, not money classifications or new raw query states",
+          "before": "    'qualified_waiting_count',v_wait,'engineering_gates',v_gate,",
+          "after": "    'qualified_waiting_count',v_wait,'engineering_gates',v_gate,\n    'native_financial_items',v_financial_items,'native_financial_facts',v_financial_facts,"
+        },
+        {
+          "label": "same actor-wide leaf revision includes all financial frames",
+          "before": "'wait_count',v_wait,'gates',v_gate)),'hex'));",
+          "after": "'wait_count',v_wait,'gates',v_gate,'native_financial_items',v_financial_items,'native_financial_facts',v_financial_facts)),'hex'));"
+        }
+      ]
+    },
+    {
+      "source_commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "source_path": "docs/healthroster-build/proposals/checklist-native-invoice-decision-transport-20261015/forward/wp_u3_native_checklist.sqlinc",
+      "saved": "input/before_wp_u3_native_checklist.sqlinc",
+      "output": "forward/wp_u3_native_checklist.sqlinc",
+      "before_sha256": "699b4dac2f2e30ad77e689e22a34b01ab129f4d74a73ac9cfaf953c09e2de3b2",
+      "after_sha256": "9a1feefc6c31f577267f83c4165ff2bd015aabafcdac2670298721b37b6f8aa6",
+      "hunks": [
+        {
+          "label": "append the SAME already read native financial subjects before page/revision, no reclassification of invoice queries",
+          "before": "    fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_financial_facts',financial_facts));",
+          "after": "    if route in('SIGNED_TIMESHEETS','AGENCY_INVOICE') then\n      if jsonb_typeof(leaf->'native_financial_items') is distinct from 'array' or jsonb_typeof(leaf->'native_financial_facts') is distinct from 'array' then\n        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_FINANCIAL_FRAME_UNAVAILABLE' using errcode='55000'; end if;\n      financial_facts:=financial_facts||leaf->'native_financial_facts';\n      for raw in select value from jsonb_array_elements(leaf->'native_financial_items') loop\n        if raw->'known' is distinct from 'true'::jsonb or raw#>>'{native_ordinary_money_witness,scope,source_group_id}' is distinct from row_scope->>'source_group_id'\n          or raw#>>'{native_ordinary_money_witness,scope,source_cycle_id}' is distinct from row_scope->>'source_cycle_id'\n          or raw#>>'{native_ordinary_money_witness,scope,client_id}' is distinct from row_scope->>'client_id'\n          or raw#>>'{native_ordinary_money_witness,scope,week_ending}' is distinct from row_scope->>'week_ending' then\n          raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_FINANCIAL_FRAME_UNAVAILABLE' using errcode='55000'; end if;\n        -- A separate native TSFIN hold is not a HealthRoster invoice query.\n        -- The genuine Timesheet was already counted by its submission owner.\n        row_items:=row_items||jsonb_build_array(jsonb_build_object('item_id','native-financial:'||(raw#>>'{native_ordinary_money_witness,work_id}'),\n          'item_kind','NATIVE_ORDINARY_FINANCIAL','scope',row_scope,'route',route,'worker',raw->'worker','work_date',raw->'work_date',\n          'sheet_scope','WEEKLY','reason_code','PAY_ON_HOLD','status',raw->'status','hold',raw->'hold','subject','PAY','permitted_pay_subject',true,\n          'action',case when view='ADMIN' then jsonb_build_object('kind','TIMESHEET','label','View pay hold in Timesheet ›','native_allowed',true,\n            'target',jsonb_build_object('timesheet_id',raw#>>'{native_ordinary_money_witness,timesheet_id}')) end,\n          'counted_timesheet_id',raw#>>'{native_ordinary_money_witness,timesheet_id}','correction_binding',null,'submission_read',null,\n          'source_information_witness',null,'native_source_witness',null,'native_invoice_witness',null,'native_invoice_decision_witness',null,\n          'queries_parent_witness',null,'native_ordinary_money_witness',raw->'native_ordinary_money_witness','_rank',35));\n        open_count:=open_count+1;pay_count:=pay_count+1;completed:=false;pay_complete:=false;complete_text:=open_count::text||' items';\n      end loop;\n    end if;\n    fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_financial_facts',financial_facts));"
+        }
+      ]
+    }
+  ]
+}
