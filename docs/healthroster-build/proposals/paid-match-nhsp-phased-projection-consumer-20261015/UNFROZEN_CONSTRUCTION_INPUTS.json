@@ -1,0 +1,107 @@
+{
+  "source_only": true,
+  "construction": "UNFINISHED; DO NOT SELECT/MOUNT",
+  "commit": "cc90a82c01e46f74e5ce9a4250cc6f64a61a5814",
+  "native": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "choiceFile": "docs/healthroster-build/proposals/paid-match-nhsp-choice-comparison-consumer-20261015/forward/02_complete_choice_current.sqlinc",
+  "before_sha256": "9759f6f283da73c72bdbfefc6d9a4324abf8b58a23eee4d3a431f2f2fce1cdae",
+  "initial_after_sha256": "941b14386356fe8334ca70778017905cb057766caa8346f27c1a2abb1f066f8a",
+  "initial_hunks": [
+    {
+      "name": "local immutable owner result only",
+      "before": "  v_saved jsonb;v_observed jsonb;v_match jsonb;v_result jsonb;v_recorded jsonb;",
+      "after": "  v_saved jsonb;v_observed jsonb;v_match jsonb;v_result jsonb;v_recorded jsonb;v_immutable jsonb;"
+    },
+    {
+      "name": "single exact immutable choice/journal/audit producer after unchanged service/current actor admission",
+      "before": "  select * into v_choice from private.weekly_source_office_row_choices\n    where upload_row_id=p_upload_row_id order by id desc limit 1;\n  if v_choice.paid_overlap_target_work_event_id is null then return null;end if;\n  v_saved:=v_choice.paid_overlap_inputs_json;\n  if v_saved->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_ADMISSION_V1'\n    or v_saved->>'upload_row_id' is distinct from v_choice.upload_row_id::text\n    or v_saved->>'candidate_id' is distinct from v_choice.candidate_id::text\n    or v_saved->>'client_id' is distinct from v_choice.client_id::text\n    or v_saved->>'contract_id' is distinct from v_choice.contract_id::text\n    or v_saved->>'actor_user_id' is distinct from v_choice.actor_user_id::text\n    or v_saved->>'paid_overlap_target_work_event_id' is distinct from v_choice.paid_overlap_target_work_event_id::text\n    or v_saved->>'pay_effect' is distinct from v_choice.pay_effect\n    or v_saved->>'reason' is distinct from v_choice.match_reason\n    or v_saved->>'inputs_sha256' is distinct from encode(v_choice.paid_overlap_inputs_sha256,'hex') then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;\n  select * into strict v_journal from private.weekly_source_office_rechecks\n    where request_id=(v_saved->>'request_id')::uuid;\n  if v_journal.actor_user_id is distinct from v_choice.actor_user_id\n    or v_journal.upload_id::text is distinct from v_saved->>'upload_id'\n    or encode(v_journal.request_hash,'hex') is distinct from v_saved->>'request_sha256'\n    or v_journal.request_hash is distinct from private.weekly_source_sha256_jsonb_v1(\n      'WEEKLY_SOURCE_OFFICE_RECHECK_V1',v_journal.request_json) then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;\n  select count(*) into v_count from public.audit_events a\n    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text\n      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';\n  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;\n  select * into strict v_audit from public.audit_events a\n    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text\n      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';\n  if v_audit.actor_user_id is distinct from v_choice.actor_user_id\n    or v_audit.after_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMATION_V1'\n    or v_audit.after_json->'choice' is distinct from to_jsonb(v_choice)\n    or v_audit.after_json->'admission' is distinct from v_saved\n    or v_audit.after_json->'request' is distinct from v_journal.request_json\n    or v_audit.after_json->>'request_sha256' is distinct from encode(v_journal.request_hash,'hex') then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;\n",
+      "after": "  v_immutable:=private.weekly_source_paid_choice_immutable_v1(p_upload_row_id);\n  if v_immutable is null then return null;end if;\n  v_choice:=pg_catalog.jsonb_populate_record(null::private.weekly_source_office_row_choices,v_immutable->'choice');\n  v_journal:=pg_catalog.jsonb_populate_record(null::private.weekly_source_office_rechecks,v_immutable->'journal');\n  v_saved:=v_immutable->'admission';\n"
+    },
+    {
+      "name": "finite NHSP BUILDING context uses immutable intent/current cash for pre-I1 only",
+      "before": "    v_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_row,p_actor_user_id);",
+      "after": "    if exists(select 1 from public.weekly_source_uploads u join public.weekly_source_format_profiles p on p.id=u.source_format_profile_id\n      where u.id=p_upload_id and u.report_scope_id is not null and p.profile_code='NHSP_FINAL_BACKING_V1') then\n      v_choice:=private.weekly_source_nhsp_projection_lock_input_v1(v_row,p_actor_user_id,p_publication_id);\n    else\n    v_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_row,p_actor_user_id);\n    end if;"
+    },
+    {
+      "name": "internal finite lock-input schema is never relabelled fresh CURRENT admission",
+      "before": "    if v_choice is null or v_choice->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1' then",
+      "after": "    if v_choice is null or coalesce(v_choice->>'schema_version','') not in\n      ('WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1','WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1') then"
+    }
+  ],
+  "exact_immutable_prefix": "  select * into v_choice from private.weekly_source_office_row_choices\n    where upload_row_id=p_upload_row_id order by id desc limit 1;\n  if v_choice.paid_overlap_target_work_event_id is null then return null;end if;\n  v_saved:=v_choice.paid_overlap_inputs_json;\n  if v_saved->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_ADMISSION_V1'\n    or v_saved->>'upload_row_id' is distinct from v_choice.upload_row_id::text\n    or v_saved->>'candidate_id' is distinct from v_choice.candidate_id::text\n    or v_saved->>'client_id' is distinct from v_choice.client_id::text\n    or v_saved->>'contract_id' is distinct from v_choice.contract_id::text\n    or v_saved->>'actor_user_id' is distinct from v_choice.actor_user_id::text\n    or v_saved->>'paid_overlap_target_work_event_id' is distinct from v_choice.paid_overlap_target_work_event_id::text\n    or v_saved->>'pay_effect' is distinct from v_choice.pay_effect\n    or v_saved->>'reason' is distinct from v_choice.match_reason\n    or v_saved->>'inputs_sha256' is distinct from encode(v_choice.paid_overlap_inputs_sha256,'hex') then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;\n  select * into strict v_journal from private.weekly_source_office_rechecks\n    where request_id=(v_saved->>'request_id')::uuid;\n  if v_journal.actor_user_id is distinct from v_choice.actor_user_id\n    or v_journal.upload_id::text is distinct from v_saved->>'upload_id'\n    or encode(v_journal.request_hash,'hex') is distinct from v_saved->>'request_sha256'\n    or v_journal.request_hash is distinct from private.weekly_source_sha256_jsonb_v1(\n      'WEEKLY_SOURCE_OFFICE_RECHECK_V1',v_journal.request_json) then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;\n  select count(*) into v_count from public.audit_events a\n    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text\n      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';\n  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;\n  select * into strict v_audit from public.audit_events a\n    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text\n      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';\n  if v_audit.actor_user_id is distinct from v_choice.actor_user_id\n    or v_audit.after_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMATION_V1'\n    or v_audit.after_json->'choice' is distinct from to_jsonb(v_choice)\n    or v_audit.after_json->'admission' is distinct from v_saved\n    or v_audit.after_json->'request' is distinct from v_journal.request_json\n    or v_audit.after_json->>'request_sha256' is distinct from encode(v_journal.request_hash,'hex') then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;\n",
+  "rows_before_sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2",
+  "rows_after_sha256": "6d8c1454c8fdd3c8d58b59fa6a6e16cc6189238551261b75a21ae3ebc8df7893",
+  "rowHunks": [
+    {
+      "name": "native internal lock input/current recheck locals only",
+      "before": "  v_nhsp_paid_separate boolean;",
+      "after": "  v_nhsp_paid_separate boolean;v_nhsp_phased_projection boolean;v_nhsp_lock_input jsonb;"
+    },
+    {
+      "name": "record the finite actual native pre-I1 frame kind",
+      "before": "  v_paid_choices:=private.weekly_source_paid_overlap_projection_lock_v1(v_upload.id,p_actor_user_id,p_publication_id);",
+      "after": "  v_paid_choices:=private.weekly_source_paid_overlap_projection_lock_v1(v_upload.id,p_actor_user_id,p_publication_id);\n  v_nhsp_phased_projection:=exists(select 1 from jsonb_array_elements(v_paid_choices) c\n    where c->>'schema_version'='WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1');"
+    },
+    {
+      "name": "ordinary exact early check; NHSP fresh negative check is deferred until actual negative application",
+      "before": "  -- Re-read all current choices after the same scope/group/cycle order.\n  -- No second I-1 acquisition is attempted while holding business locks.\n  select coalesce(jsonb_agg(private.weekly_source_paid_overlap_choice_current_v1(r.id,p_actor_user_id) order by r.id),'[]'::jsonb)\n    into v_paid_recheck from public.weekly_source_upload_rows r\n    join lateral(select c.* from private.weekly_source_office_row_choices c\n      where c.upload_row_id=r.id order by c.id desc limit 1) choice on true\n    where r.upload_id=v_upload.id and choice.paid_overlap_target_work_event_id is not null;\n  if v_paid_recheck is distinct from v_paid_choices then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_CHANGED' using errcode='40001';end if;\n",
+      "after": "  if not v_nhsp_phased_projection then\n  -- Re-read all current choices after the same scope/group/cycle order.\n  -- No second I-1 acquisition is attempted while holding business locks.\n  select coalesce(jsonb_agg(private.weekly_source_paid_overlap_choice_current_v1(r.id,p_actor_user_id) order by r.id),'[]'::jsonb)\n    into v_paid_recheck from public.weekly_source_upload_rows r\n    join lateral(select c.* from private.weekly_source_office_row_choices c\n      where c.upload_row_id=r.id order by c.id desc limit 1) choice on true\n    where r.upload_id=v_upload.id and choice.paid_overlap_target_work_event_id is not null;\n  if v_paid_recheck is distinct from v_paid_choices then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_CHANGED' using errcode='40001';end if;\n  end if;\n"
+    },
+    {
+      "name": "native NHSP raw-sign negative-first order preserves every supplied row and all other input order",
+      "before": "  for v_row_json in select value from pg_catalog.jsonb_array_elements(p_rows)\n  loop",
+      "after": "  for v_row_json in\n    select item.value from pg_catalog.jsonb_array_elements(p_rows) with ordinality item(value,ordinal)\n    order by case when v_profile.profile_code='NHSP_FINAL_BACKING_V1' and exists(\n      select 1 from public.weekly_source_upload_rows physical\n      where physical.id=case when item.value->>'upload_row_id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'\n        then (item.value->>'upload_row_id')::uuid else null end\n        and physical.upload_id=v_upload.id and physical.source_shift_charge_pence<0) then 0 else 1 end,item.ordinal\n  loop"
+    },
+    {
+      "name": "fresh current native choice follows actual negatives and is bound back to pre-business I1 frame",
+      "before": "        if v_paid_choice is not null then\n          if v_paid_choice->>'candidate_id' is distinct from v_candidate_id::text",
+      "after": "        if v_paid_choice->>'schema_version'='WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1' then\n          v_nhsp_lock_input:=v_paid_choice;\n          v_paid_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_source_row.id,p_actor_user_id);\n          perform private.weekly_source_nhsp_projection_choice_recheck_v1(v_nhsp_lock_input,v_paid_choice,p_actor_user_id,p_publication_id);\n          select jsonb_agg(case when c->>'upload_row_id'=v_source_row.id::text then v_paid_choice else c end order by ord)\n            into v_paid_choices from jsonb_array_elements(v_paid_choices) with ordinality choices(c,ord);\n        end if;\n        if v_paid_choice is not null then\n          if v_paid_choice->>'candidate_id' is distinct from v_candidate_id::text"
+    },
+    {
+      "name": "the entire fresh paid-choice set rechecks after native negative/positive rows before completion",
+      "before": "  end loop;\n\n  if v_applied<>v_expected or exists(\n    select 1 from public.weekly_source_upload_rows source_row",
+      "after": "  end loop;\n\n  if v_nhsp_phased_projection then\n    select coalesce(jsonb_agg(private.weekly_source_paid_overlap_choice_current_v1(r.id,p_actor_user_id) order by r.id),'[]'::jsonb)\n      into v_paid_recheck from public.weekly_source_upload_rows r\n      join lateral(select c.* from private.weekly_source_office_row_choices c\n        where c.upload_row_id=r.id order by c.id desc limit 1) choice on true\n      where r.upload_id=v_upload.id and choice.paid_overlap_target_work_event_id is not null;\n    if v_paid_recheck is distinct from v_paid_choices then\n      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_CHANGED' using errcode='40001';end if;\n  end if;\n\n  if v_applied<>v_expected or exists(\n    select 1 from public.weekly_source_upload_rows source_row"
+    }
+  ],
+  "context_before_sha256": "bd14093c6c9e52fe532878bc0c68d8d50437c71870170fcc289233954bbd4388",
+  "context_after_sha256": "e4b7e99dd2a12dacd72442c2c87563a0d336c4af9ca04204057d6879644d50fa",
+  "contextHunks": [
+    {
+      "name": "actual BUILDING NHSP context reads immutable intent/current-root input only; native row owner still rederives full admission",
+      "before": "      v_paid_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_source_row.id,v_actor);",
+      "after": "      if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_publication.state='BUILDING' then\n        v_paid_choice:=private.weekly_source_nhsp_projection_lock_input_v1(v_source_row.id,v_actor,v_publication.id);\n      else\n      v_paid_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_source_row.id,v_actor);\n      end if;"
+    }
+  ],
+  "inputs": [
+    {
+      "commit": "cc90a82c01e46f74e5ce9a4250cc6f64a61a5814",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "saved": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "commit": "cc90a82c01e46f74e5ce9a4250cc6f64a61a5814",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-choice-comparison-consumer-20261015/forward/01_nhsp_negative_comparison.sqlinc",
+      "saved": "input/current_negative_comparison.sqlinc",
+      "bytes": 9957,
+      "sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91"
+    },
+    {
+      "commit": "cc90a82c01e46f74e5ce9a4250cc6f64a61a5814",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-separate-event-writer-construction-20261015/forward/01_complete_projection_rows.sqlinc",
+      "saved": "before/05_complete_projection_rows.sqlinc",
+      "bytes": 74228,
+      "sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2"
+    },
+    {
+      "commit": "cc90a82c01e46f74e5ce9a4250cc6f64a61a5814",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/02_complete_upload_context.sqlinc",
+      "saved": "before/06_complete_upload_context.sqlinc",
+      "bytes": 30158,
+      "sha256": "bd14093c6c9e52fe532878bc0c68d8d50437c71870170fcc289233954bbd4388"
+    }
+  ],
+  "native_calls": 0,
+  "canonical_mounted": false
+}

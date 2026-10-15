@@ -1,0 +1,147 @@
+-- Source-purpose native INPUT only. All current selection and paid facts
+-- remain delegated to their genuine native owners. No synthetic snapshot,
+-- no-reversal claim, monetary calculation or paid-writer permission.
+create or replace function private.weekly_source_nhsp_paid_overlap_basis_v1(
+  p_work_event_id uuid,p_actor_user_id uuid,p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_event public.weekly_work_events%rowtype;v_cycle public.weekly_source_cycles%rowtype;
+  v_root public.timesheets%rowtype;v_contract public.contracts%rowtype;
+  v_movement public.weekly_source_billing_movements%rowtype;v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_row public.weekly_source_upload_rows%rowtype;v_upload public.weekly_source_uploads%rowtype;
+  v_roots uuid[];v_root_id uuid;v_scope uuid;v_scope_count integer;v_native jsonb;
+  v_payment jsonb;v_rows jsonb:='[]'::jsonb;v_result jsonb;v_complete boolean:=true;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_work_event_id is null or p_actor_user_id is null or p_source_cycle_id is null then
+    raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_REQUEST_INVALID' using errcode='22023';end if;
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  if v_event.first_source_group_id is distinct from v_cycle.source_group_id
+    or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_event.client_id)
+    or not exists(select 1 from public.weekly_source_groups g
+      where g.id=v_cycle.source_group_id and g.active and g.source_family='NHSP') then
+    raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_SCOPE_FORBIDDEN' using errcode='42501';end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+    v_cycle.source_group_id,v_event.client_id,v_cycle.finalisation_week_ending);
+  if not private.weekly_source_office_next_owner_v1() then
+    v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1',
+      'state','UNAVAILABLE','reason','NEXT_NOT_ACTIVE','work_event_id',v_event.id,
+      'candidate_id',v_event.candidate_id,'client_id',v_event.client_id,'root_timesheet_ids',null,
+      'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,
+      'native_current_rows',null,'native_payment_facts',null,
+      'no_reversal_proved',null,'paid_writer_permission',null);
+    return v_result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1',v_result),'hex'));end if;
+  -- This is the single existing Source payment classifier/Original reader.
+  -- Its present CYCLE history field is not relabelled a NHSP current head.
+  -- The actual NHSP MOVEMENT selection below remains separately identified.
+  v_payment:=private.weekly_source_work_event_payment_facts_v1(v_event.id,p_actor_user_id,v_cycle.id);
+  select coalesce(array_agg(distinct family.canonical_timesheet_id order by family.canonical_timesheet_id),'{}'::uuid[])
+    into v_roots from public.weekly_source_row_timesheet_lineages lineage
+    cross join lateral public._pay_timesheet_rotation_scope(array[lineage.timesheet_id]) family
+    where lineage.work_event_id=v_event.id and lineage.candidate_id=v_event.candidate_id
+      and lineage.client_id=v_event.client_id;
+  if cardinality(v_roots)=0 or cardinality(v_roots)>200
+    or to_jsonb(v_roots) is distinct from v_payment->'root_timesheet_ids' then
+    raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_ROOT_UNBOUND' using errcode='55000';end if;
+  foreach v_root_id in array v_roots loop
+    select * into strict v_root from public.timesheets t where t.timesheet_id=v_root_id;
+    select * into strict v_contract from public.contracts c where c.id=v_root.contract_id;
+    if not v_root.is_current or v_root.revoked_at is not null or v_root.archived_at_utc is not null
+      or v_root.sheet_scope<>'WEEKLY' or v_root.line_type<>'HOURS'
+      or (v_contract.candidate_id,v_contract.client_id) is distinct from (v_event.candidate_id,v_event.client_id)
+      or v_event.work_date not between v_root.week_ending_date-6 and v_root.week_ending_date
+      or v_event.work_date not between v_contract.start_date and coalesce(v_contract.end_date,'infinity'::date)
+      or not exists(select 1 from public.weekly_source_group_clients membership
+        where membership.source_group_id=v_event.first_source_group_id and membership.client_id=v_contract.client_id
+          and v_root.week_ending_date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)) then
+      raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_ROOT_FORBIDDEN' using errcode='42501';end if;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+      v_event.first_source_group_id,v_contract.client_id,v_root.week_ending_date);
+    select count(*),min(scope.id::text)::uuid into v_scope_count,v_scope
+      from private.bpay_next_source_current_scopes scope where scope.root_timesheet_id=v_root_id;
+    if v_scope_count>1 then
+      raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_SCOPE_AMBIGUOUS' using errcode='55000';end if;
+    if v_scope_count=0 or not exists(select 1 from private.bpay_next_source_current_events ce
+      where ce.scope_id=v_scope and ce.work_event_id=v_event.id) then
+      -- Uncaptured does not mean absent/unpaid/no reversal. Preserve it as
+      -- an explicit unavailable native position; no history fallback occurs.
+      v_complete:=false;
+      v_rows:=v_rows||jsonb_build_array(jsonb_build_object('root_timesheet_id',v_root_id,
+        'state','UNAVAILABLE','reason','NATIVE_CURRENT_UNCAPTURED','native_current_event',null));
+      continue;
+    end if;
+    if not exists(select 1 from private.bpay_next_source_current_scopes scope where scope.id=v_scope
+      and scope.root_timesheet_id=v_root_id and scope.family_booking_id=v_root.booking_id
+      and scope.source_group_id=v_event.first_source_group_id
+      and scope.candidate_id=v_contract.candidate_id and scope.client_id=v_contract.client_id
+      and scope.contract_id=v_contract.id and scope.week_ending_date=v_root.week_ending_date) then
+      raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_SCOPE_UNBOUND' using errcode='55000';end if;
+    -- The native pure reader itself revalidates genuine CURRENT observation,
+    -- magnitude ambiguity, selected movement and immutable lineage/economics.
+    v_native:=private.bpay_next_source_current_event_v1(v_root_id,v_event.id);
+    if v_native->>'schema_version' is distinct from 'BPAY_NEXT_SOURCE_CURRENT_EVENT_V1'
+      or v_native->>'root_timesheet_id' is distinct from v_root_id::text
+      or v_native->>'work_event_id' is distinct from v_event.id::text
+      or v_native->>'source_kind' is distinct from 'NHSP'
+      or v_native->'source_observed' is distinct from 'true'::jsonb
+      or jsonb_typeof(v_native->'source_present') is distinct from 'boolean' then
+      raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_NATIVE_UNBOUND' using errcode='55000';end if;
+    if v_native->'source_present'='true'::jsonb then
+      select * into strict v_movement from public.weekly_source_billing_movements m
+        where m.id=(v_native->>'movement_id')::uuid;
+      select * into strict v_resolution from public.weekly_source_row_resolutions r
+        where r.id=(v_native->>'row_resolution_id')::uuid;
+      select * into strict v_row from public.weekly_source_upload_rows r where r.id=v_resolution.upload_row_id;
+      select * into strict v_upload from public.weekly_source_uploads u where u.id=v_row.upload_id;
+      if v_movement.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or v_movement.pay_effect<>'NORMAL'
+        or v_movement.source_line_kind<>'NHSP_PHYSICAL_POSITIVE' or v_movement.movement_role not in ('POSITIVE','REPLACEMENT')
+        or v_movement.work_event_id is distinct from v_event.id
+        or (v_movement.candidate_id,v_movement.actual_client_id,v_movement.contract_id) is distinct from
+          (v_contract.candidate_id,v_contract.client_id,v_contract.id)
+        or v_movement.final_revision_id::text is distinct from v_native->>'final_revision_id'
+        or v_movement.source_facts_json->>'row_resolution_id' is distinct from v_resolution.id::text
+        or v_resolution.mapping_state<>'RESOLVED' or v_resolution.work_event_id is distinct from v_event.id
+        or (v_resolution.candidate_id,v_resolution.client_id,v_resolution.contract_id) is distinct from
+          (v_contract.candidate_id,v_contract.client_id,v_contract.id)
+        or v_row.work_date is distinct from v_event.work_date or v_row.row_finalisation_state<>'SOURCE_WORKED'
+        or not exists(select 1 from public.weekly_source_format_profiles profile
+          where profile.id=v_upload.source_format_profile_id and profile.profile_code='NHSP_FINAL_BACKING_V1')
+        or not exists(select 1 from public.weekly_source_row_timesheet_lineages lineage
+          join public.weekly_source_row_economic_snapshots economic on economic.row_resolution_id=lineage.row_resolution_id
+          where lineage.id=(v_native->>'lineage_id')::uuid and lineage.row_resolution_id=v_resolution.id
+            and lineage.work_event_id=v_event.id and lineage.family_booking_id=v_root.booking_id
+            and (lineage.candidate_id,lineage.client_id,lineage.contract_id,lineage.week_ending_date) is not distinct from
+              (v_contract.candidate_id,v_contract.client_id,v_contract.id,v_root.week_ending_date)
+            and economic.id=(v_native->>'economic_snapshot_id')::uuid and economic.work_event_id=v_event.id)
+        or not exists(select 1 from private.bpay_next_source_current_origins origin
+          where origin.origin_kind='MOVEMENT' and origin.origin_id=v_movement.id and origin.movement_id=v_movement.id
+            and origin.scope_id=v_scope and origin.work_event_id=v_event.id and origin.active
+            and origin.final_revision_id=v_movement.final_revision_id and origin.row_resolution_id=v_resolution.id
+            and origin.source_hash=v_movement.movement_economic_hash and origin.contribution=1) then
+        raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_MOVEMENT_UNBOUND' using errcode='55000';end if;
+    elsif v_native->'movement_id' is distinct from 'null'::jsonb then
+      raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_NATIVE_UNBOUND' using errcode='55000';end if;
+    v_rows:=v_rows||jsonb_build_array(jsonb_build_object('root_timesheet_id',v_root_id,
+      'state','CURRENT_NATIVE_POSITION','native_current_event',v_native));
+  end loop;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1',
+    'state',case when v_complete then 'NATIVE_POSITION_INPUTS' else 'UNAVAILABLE' end,
+    'reason',case when v_complete then null else 'NATIVE_CURRENT_UNCAPTURED' end,
+    'work_event_id',v_event.id,'candidate_id',v_event.candidate_id,'client_id',v_event.client_id,
+    'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,'root_timesheet_ids',to_jsonb(v_roots),
+    'native_current_rows',v_rows,'native_payment_facts',v_payment,
+    'no_reversal_proved',null,'paid_writer_permission',null);
+  if octet_length(v_result::text)>524288 then
+    raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_BYTE_BOUND' using errcode='54000';end if;
+  return v_result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

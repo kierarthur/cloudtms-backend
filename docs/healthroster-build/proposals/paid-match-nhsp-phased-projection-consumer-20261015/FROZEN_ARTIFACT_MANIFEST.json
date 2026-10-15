@@ -1,0 +1,226 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_PHASED_PROJECTION_CONSUMER_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 43,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 49931,
+      "sha256": "5c663332ab32615e9eb8a70324cd688cc48b1f401551282b48cd88cbab6fd229"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 4845,
+      "sha256": "3d538d148c94b2feeaf1ba59fa0680258fce673c20213dbd08116a2c583696df"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 6055,
+      "sha256": "c4cc0020942756194a7c6845a97a12e495692c8a74f390f41fbb641a82460569"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 793,
+      "sha256": "131f7759220245420eecbcd8b507780edcf33f1ac4c669acaa23576c1a283ad5"
+    },
+    {
+      "file": "UNFROZEN_CONSTRUCTION_INPUTS.json",
+      "bytes": 16602,
+      "sha256": "e6ccc902113c01d499e75365407df2298ee6ba83e925c8598cf4b069bdf55b28"
+    },
+    {
+      "file": "before/00_complete_overlap_inputs.sqlinc",
+      "bytes": 8194,
+      "sha256": "752a4b5afb469af41b9f144c59e35764f8b439f4c33c21ef7b4b5a3c65f95f7e"
+    },
+    {
+      "file": "before/02_complete_choice_current_and_lock.sqlinc",
+      "bytes": 15405,
+      "sha256": "9759f6f283da73c72bdbfefc6d9a4324abf8b58a23eee4d3a431f2f2fce1cdae"
+    },
+    {
+      "file": "before/05_complete_projection_rows.sqlinc",
+      "bytes": 74228,
+      "sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2"
+    },
+    {
+      "file": "before/06_complete_upload_context.sqlinc",
+      "bytes": 30158,
+      "sha256": "bd14093c6c9e52fe532878bc0c68d8d50437c71870170fcc289233954bbd4388"
+    },
+    {
+      "file": "before/07_complete_choice_admit.sqlinc",
+      "bytes": 10567,
+      "sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3"
+    },
+    {
+      "file": "before/08_complete_match_question.sqlinc",
+      "bytes": 7664,
+      "sha256": "cc23b4feca41c2852f5c4d9a41f7040d70fa220995fb1b523f3c7082d4c565f6"
+    },
+    {
+      "file": "before/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 56476,
+      "sha256": "8bc4fb79020373f7d6da1907f9b71f8eb98c1c30bb0d9b9200b16d7f3fc8adc6"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 11962,
+      "sha256": "57500c526860f1b75eb597e0915e7938802390896f50aad4e1f3da7fc755ebe9"
+    },
+    {
+      "file": "complete-build-source.mjs",
+      "bytes": 18752,
+      "sha256": "836c3be94c5fda0785028489ee25ec237b3e996551a02b57ac3384a5cf6d213a"
+    },
+    {
+      "file": "forward/00_complete_overlap_inputs.sqlinc",
+      "bytes": 14700,
+      "sha256": "a63a548c927100df862abd3da45cd35c7944a21d094d775ef9d1a4a7ca8d2654"
+    },
+    {
+      "file": "forward/01_immutable_choice_input.sqlinc",
+      "bytes": 4055,
+      "sha256": "41ea3fa6c5f96391243fae87b0453afe3e2d29aa2a543e7026824d226a295872"
+    },
+    {
+      "file": "forward/02_complete_choice_current_and_lock.sqlinc",
+      "bytes": 15000,
+      "sha256": "05991dd5b1608f56b9cb8f260b609120e9f4074ecc0f8d10b849ee022f74d9d6"
+    },
+    {
+      "file": "forward/03_nhsp_projection_lock_input.sqlinc",
+      "bytes": 6879,
+      "sha256": "7a857d68434a7cb8b1a09abe9b4442187094b0e6b6f56fc1d8f277172a0671fb"
+    },
+    {
+      "file": "forward/04_nhsp_projection_choice_recheck.sqlinc",
+      "bytes": 3310,
+      "sha256": "1f8392febcc545ad9984b6224d24f30a230a17a49b59c80e1cdf745337f4cb1b"
+    },
+    {
+      "file": "forward/05_complete_projection_rows.sqlinc",
+      "bytes": 78237,
+      "sha256": "e51a9d46d0c27838e7dfce4506a6fa25625922acbdd5ba9ec67aadb53d1e41c0"
+    },
+    {
+      "file": "forward/06_complete_upload_context.sqlinc",
+      "bytes": 31212,
+      "sha256": "c63cc2c68cb8fff77c16ecf25f3682c824b21465f62cfdc703072a17baf5234c"
+    },
+    {
+      "file": "forward/07_complete_choice_admit.sqlinc",
+      "bytes": 11688,
+      "sha256": "1d45727c093df20fd6e7f58afe7b2e39a1943bb880602825a0c89d7f15c15512"
+    },
+    {
+      "file": "forward/08_complete_match_question.sqlinc",
+      "bytes": 9825,
+      "sha256": "04c36706e518e7c947e614e005f56658d1d0707d4fe4d3e808d97d7e11c12a74"
+    },
+    {
+      "file": "forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 57128,
+      "sha256": "840ee729a0acef3c2e5bed4f8ac6de9a8ea1705e296fdf9d8fe023474766b25e"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5952,
+      "sha256": "02d17003ebd70a9bcf8fa533576dc191a99f40ed4e9806084b66b9cfe7deea79"
+    },
+    {
+      "file": "input/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "file": "input/current_database_release.yml",
+      "bytes": 9484,
+      "sha256": "3b9a4bd699928b50fa302d8c7f28bd9c51f84d3e9bc9f436cb63d3c292bed0df"
+    },
+    {
+      "file": "input/current_magnit_contract_price_admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "file": "input/current_negative_comparison.sqlinc",
+      "bytes": 9957,
+      "sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91"
+    },
+    {
+      "file": "input/current_negative_population.sqlinc",
+      "bytes": 11997,
+      "sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa"
+    },
+    {
+      "file": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "file": "input/current_office_recheck.sqlinc",
+      "bytes": 21127,
+      "sha256": "4064405738cb2723b9f93a1026a6b875fd824feaec2ab8e2e99bef851019d6eb"
+    },
+    {
+      "file": "input/current_projection_begin.sqlinc",
+      "bytes": 19382,
+      "sha256": "018283e5c5a06594dbf39e91793c9b86c02f3b609e0c36db1906b94e2d5e640a"
+    },
+    {
+      "file": "input/current_projection_publish.sqlinc",
+      "bytes": 20146,
+      "sha256": "2340ac5eaae3c2dfd0824a8fd2463afb351766e0698068d894f63f8ebd678175"
+    },
+    {
+      "file": "input/current_release.json",
+      "bytes": 32156,
+      "sha256": "c04d629d9308c4b828ce5e9e800c49f49a651b2025e2a88d70a909589c528950"
+    },
+    {
+      "file": "input/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "file": "input/prerequisite_paid_choice_fields.sqlinc",
+      "bytes": 5117,
+      "sha256": "aad80d0146e0194d22ce5eefcbe768e8c12c293921d05d9223ea75c430b425b2"
+    },
+    {
+      "file": "input/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "file": "input/source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "input/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "file": "nhsp-candidate-branch.sqlinc",
+      "bytes": 6262,
+      "sha256": "f6f6a86948c1a8e5be0e8291b4d39033a196b462392d5889ecbc4cacb331396b"
+    },
+    {
+      "file": "nhsp-native-blocker-phase.sqlinc",
+      "bytes": 1971,
+      "sha256": "81759f3e002145d78612a5a2ebe50e38873230ed0fbf85e217ad762344f857f9"
+    },
+    {
+      "file": "phased-source.test.mjs",
+      "bytes": 15845,
+      "sha256": "587629ae1119bda17c872b02cbb44205802b49d7017a4836982a1ab7fbe6be1a"
+    }
+  ]
+}

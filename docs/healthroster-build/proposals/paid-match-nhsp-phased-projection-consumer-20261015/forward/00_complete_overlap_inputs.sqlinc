@@ -1,0 +1,176 @@
+-- Source-owned native input census. It does not select Same/Separate, set
+-- pay_effect, infer paid cash, or grant financial writer permission.
+create or replace function private.weekly_source_paid_overlap_candidates_v1(
+  p_upload_row_id uuid,p_actor_user_id uuid,p_candidate_id uuid,p_client_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_row public.weekly_source_upload_rows%rowtype;v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;v_event public.weekly_work_events%rowtype;
+  v_movement public.weekly_source_billing_movements%rowtype;v_snapshot public.weekly_source_final_snapshot_lines%rowtype;
+  v_current_snapshot jsonb;v_nhsp_negative jsonb;v_nhsp_basis jsonb;v_nhsp_target jsonb;v_nhsp_position jsonb;
+  v_nhsp_contract uuid;v_nhsp_start timestamp;v_nhsp_end timestamp;v_nhsp_break integer;
+  v_nhsp_source_row public.weekly_source_upload_rows%rowtype;
+  v_payment jsonb;v_items jsonb:='[]'::jsonb;v_result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_upload_row_id is null or p_actor_user_id is null or p_candidate_id is null or p_client_id is null then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_REQUEST_INVALID' using errcode='22023';end if;
+  select * into strict v_row from public.weekly_source_upload_rows where id=p_upload_row_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  if v_upload.purpose='FINAL_SOURCE_CORRECTION' then
+    perform private.weekly_source_paid_match_correction_scope_v1(v_upload.id,p_actor_user_id,false);
+  end if;
+  if exists(select 1 from public.weekly_source_groups g where g.id=v_cycle.source_group_id and g.source_family='NHSP') then
+    if v_upload.report_scope_id is null or v_upload.purpose<>'ORDINARY' or v_upload.correction_session_id is not null
+      or v_upload.state<>'CURRENT' or not exists(select 1 from public.weekly_source_report_scopes scope
+        where scope.id=v_upload.report_scope_id and scope.source_cycle_id=v_cycle.id
+          and scope.source_group_id=v_cycle.source_group_id and scope.client_id=p_client_id
+          and scope.self_bill_report_id is null and scope.current_complete_upload_id=v_upload.id)
+      or not exists(select 1 from public.weekly_source_format_profiles profile
+        where profile.id=v_upload.source_format_profile_id and profile.active and profile.profile_code='NHSP_FINAL_BACKING_V1')
+      or v_row.row_finalisation_state<>'SOURCE_WORKED' or v_row.source_money_parse_state is distinct from 'VALID'
+      or v_row.source_shift_charge_pence is null or v_row.source_shift_charge_pence<0
+      or v_row.start_at_local is null or v_row.end_at_local is null or v_row.end_at_local<=v_row.start_at_local
+      or coalesce(v_row.actual_net_minutes,0)<=0 then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SOURCE_SCOPE_INVALID' using errcode='22023';end if;
+    if not exists(select 1 from public.candidates c where c.id=p_candidate_id and c.active)
+      or not private.weekly_source_upload_client_eligible_v1(v_upload.id,p_client_id,v_row.work_date) then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_IDENTITY_NOT_ELIGIBLE' using errcode='22023';end if;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+      v_cycle.source_group_id,p_client_id,v_cycle.finalisation_week_ending);
+    for v_event in select event.* from public.weekly_work_events event
+      where event.first_source_group_id=v_cycle.source_group_id
+        and event.source_format_profile_id=v_upload.source_format_profile_id and event.identity_kind='SCHEDULE_TUPLE'
+        and event.candidate_id=p_candidate_id and event.client_id=p_client_id and event.work_date=v_row.work_date
+        -- C1 construction of this upload can create a distinct Separate event.
+        -- A mapping/lineage alone is never a previous paid/current position.
+        and exists(select 1 from public.weekly_source_billing_movements prior
+          where prior.work_event_id=event.id and prior.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+            and prior.source_line_kind='NHSP_PHYSICAL_POSITIVE' and prior.pay_effect='NORMAL'
+            and prior.movement_role in ('POSITIVE','REPLACEMENT'))
+      order by event.id
+    loop
+      v_nhsp_negative:=private.weekly_source_nhsp_negative_population_v1(v_upload.id,v_event.id,p_actor_user_id,v_cycle.id);
+      v_nhsp_basis:=v_nhsp_negative->'native_current_basis';
+      v_payment:=v_nhsp_basis->'native_payment_facts';
+      if v_nhsp_basis->>'state'='NATIVE_POSITION_INPUTS' and not exists(
+        select 1 from jsonb_array_elements(v_nhsp_basis->'native_current_rows') n
+        where n#>'{native_current_event,source_present}'='true'::jsonb) then continue;end if;
+      v_nhsp_position:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_CURRENT_OVERLAP_POSITION_INPUT_V1',
+        'state','UNAVAILABLE','reason','NATIVE_CURRENT_POSITION_UNAVAILABLE','work_event_id',v_event.id);
+      v_nhsp_contract:=null;v_nhsp_start:=null;v_nhsp_end:=null;v_nhsp_break:=null;
+      if v_nhsp_negative->'current_position_available'='true'::jsonb
+        and jsonb_array_length(v_nhsp_negative->'current_targets')=1 then
+        v_nhsp_target:=v_nhsp_negative#>'{current_targets,0}';
+        select * into strict v_movement from public.weekly_source_billing_movements m
+          where m.id=(v_nhsp_target->>'movement_id')::uuid and m.work_event_id=v_event.id
+            and m.movement_economic_hash=decode(v_nhsp_target->>'movement_economic_hash','hex');
+        select physical.* into strict v_nhsp_source_row from public.weekly_source_upload_rows physical
+          join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=physical.id
+          where resolution.id=(v_movement.source_facts_json->>'row_resolution_id')::uuid
+            and resolution.work_event_id=v_event.id and resolution.contract_id=v_movement.contract_id;
+        if v_nhsp_source_row.start_at_local is null or v_nhsp_source_row.end_at_local is null
+          or v_nhsp_source_row.start_at_local>=v_nhsp_source_row.end_at_local then
+          raise exception 'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_CLOCK_UNBOUND' using errcode='55000';end if;
+        if v_nhsp_source_row.start_at_local>=v_row.end_at_local or v_nhsp_source_row.end_at_local<=v_row.start_at_local then continue;end if;
+        v_nhsp_contract:=v_movement.contract_id;v_nhsp_start:=v_nhsp_source_row.start_at_local;
+        v_nhsp_end:=v_nhsp_source_row.end_at_local;v_nhsp_break:=v_nhsp_source_row.break_minutes;
+        v_nhsp_position:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_CURRENT_OVERLAP_POSITION_INPUT_V1',
+          'state','CURRENT_NATIVE_POSITION','reason',null,'work_event_id',v_event.id,
+          'candidate_id',p_candidate_id,'client_id',p_client_id,'contract_id',v_movement.contract_id,
+          'movement_id',v_movement.id,'movement_economic_hash',encode(v_movement.movement_economic_hash,'hex'),
+          'native_current_target',v_nhsp_target,'native_current_basis_sha256',v_nhsp_basis->'inputs_sha256');
+      elsif not private.weekly_source_work_event_schedule_compatible_v1(v_event.id,v_row.start_at_local,v_row.end_at_local) then
+        continue;
+      end if;
+      -- An unavailable native current position stays an explicit unknown in
+      -- the complete overlap population. Historical clocks never certify it.
+      v_items:=v_items||jsonb_build_array(jsonb_build_object('work_event_id',v_event.id,
+        'candidate_id',v_event.candidate_id,'client_id',v_event.client_id,'contract_id',v_nhsp_contract,
+        'work_date',v_event.work_date,'start_at_local',v_nhsp_start,'end_at_local',v_nhsp_end,'break_minutes',v_nhsp_break,
+        'current_native_position',v_nhsp_position,'nhsp_negative_population',v_nhsp_negative,'native_payment_facts',v_payment));
+    end loop;
+  else
+  if v_upload.report_scope_id is not null or v_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')
+    or not exists(select 1 from public.weekly_source_groups g
+      where g.id=v_cycle.source_group_id and g.active and g.source_family='ROSTER')
+    or not exists(select 1 from public.weekly_source_format_profiles p
+      where p.id=v_upload.source_format_profile_id and p.active and p.profile_code in
+      ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'))
+    or v_row.row_finalisation_state<>'SOURCE_WORKED' or v_row.start_at_local is null or v_row.end_at_local is null
+    or v_row.end_at_local<=v_row.start_at_local or coalesce(v_row.actual_net_minutes,0)<=0 then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SOURCE_SCOPE_INVALID' using errcode='22023';end if;
+  if not exists(select 1 from public.candidates c where c.id=p_candidate_id and c.active)
+    or not private.weekly_source_upload_client_eligible_v1(v_upload.id,p_client_id,v_row.work_date)
+    or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id<>p_client_id) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_IDENTITY_NOT_ELIGIBLE' using errcode='22023';end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+    v_cycle.source_group_id,p_client_id,v_cycle.finalisation_week_ending);
+  for v_event in select event.* from public.weekly_work_events event
+    where event.first_source_group_id=v_cycle.source_group_id
+      and event.source_format_profile_id=v_upload.source_format_profile_id
+      and event.identity_kind='PROFILE_EXTERNAL_KEY' and event.candidate_id=p_candidate_id
+      and event.client_id=p_client_id and event.work_date=v_row.work_date
+    order by event.id
+  loop
+    v_payment:=private.weekly_source_work_event_payment_facts_v1(v_event.id,p_actor_user_id,v_cycle.id);
+    -- A retained settlement is not a live positive. This exact current native
+    -- movement must be present before a clock overlap can be supplied.
+    if v_payment->>'current_pay_head_movement_id' is null then continue;end if;
+    select movement.* into strict v_movement from public.weekly_source_billing_movements movement
+      join public.weekly_source_final_revisions revision on revision.id=movement.final_revision_id
+      join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+      where movement.id=(v_payment->>'current_pay_head_movement_id')::uuid
+        and movement.work_event_id=v_event.id and movement.candidate_id=p_candidate_id
+        and movement.actual_client_id=p_client_id and movement.movement_role in ('POSITIVE','REPLACEMENT')
+        and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+        and revision.state='CURRENT' and revision.authority_scope_kind='CYCLE' and revision.report_scope_id is null
+        and cycle.source_group_id=v_cycle.source_group_id;
+    v_current_snapshot:=private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(v_event.id,v_movement.id,
+      p_candidate_id,p_client_id,v_movement.contract_id,v_cycle.source_group_id,
+      array(select value::uuid from jsonb_array_elements_text(v_payment->'root_timesheet_ids') value),v_cycle.id);
+    if v_current_snapshot->>'state'='CURRENT' then
+      select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot
+        where snapshot.id=(v_current_snapshot->>'snapshot_line_id')::uuid and snapshot.work_event_id=v_event.id
+          and snapshot.candidate_id=p_candidate_id and snapshot.client_id=p_client_id
+          and snapshot.contract_id=v_movement.contract_id and snapshot.work_date=v_row.work_date;
+    else
+      -- Retain a factual unknown/legacy overlap rather than erasing it. Its
+      -- original tuple never authorises Same/Separate without CURRENT proof.
+      select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot
+        join public.weekly_source_state_transitions transition on transition.new_snapshot_line_id=snapshot.id
+        where transition.id=v_movement.transition_id and transition.final_revision_id=v_movement.final_revision_id
+          and snapshot.final_revision_id=v_movement.final_revision_id and snapshot.work_event_id=v_event.id
+          and snapshot.candidate_id=p_candidate_id and snapshot.client_id=p_client_id
+          and snapshot.contract_id=v_movement.contract_id and snapshot.work_date=v_row.work_date;
+    end if;
+    if v_snapshot.start_at_local>=v_row.end_at_local or v_snapshot.end_at_local<=v_row.start_at_local then continue;end if;
+    v_items:=v_items||jsonb_build_array(jsonb_build_object('work_event_id',v_event.id,
+      'candidate_id',v_event.candidate_id,'client_id',v_event.client_id,'contract_id',v_snapshot.contract_id,
+      'original_profile_external_key',v_event.profile_external_key,'work_date',v_snapshot.work_date,
+      'start_at_local',v_snapshot.start_at_local,'end_at_local',v_snapshot.end_at_local,'break_minutes',v_snapshot.break_minutes,
+      'current_pay_head_movement_id',v_movement.id,'current_final_revision_id',v_movement.final_revision_id,
+      'movement_economic_hash',encode(v_movement.movement_economic_hash,'hex'),
+      'snapshot_line_id',v_snapshot.id,'snapshot_line_hash',encode(v_snapshot.snapshot_line_hash,'hex'),
+      'current_pay_snapshot',v_current_snapshot,'native_payment_facts',v_payment));
+  end loop;
+  end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1',
+    'upload_row_id',v_row.id,'upload_id',v_upload.id,'source_cycle_id',v_cycle.id,
+    'source_group_id',v_cycle.source_group_id,'source_format_profile_id',v_upload.source_format_profile_id,
+    'normalised_row_hash',encode(v_row.normalised_row_hash,'hex'),
+    'row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'),'actor_user_id',p_actor_user_id,
+    'candidate_id',p_candidate_id,'client_id',p_client_id,'overlaps',v_items);
+  if v_upload.purpose='FINAL_SOURCE_CORRECTION' then
+    v_result:=v_result||jsonb_build_object('correction_scope',
+      private.weekly_source_paid_match_correction_scope_v1(v_upload.id,p_actor_user_id,false));
+  end if;
+  return v_result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid) from public,anon,authenticated,service_role;

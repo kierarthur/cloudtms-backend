@@ -1,0 +1,71 @@
+  if exists(select 1 from public.weekly_source_groups g where g.id=v_cycle.source_group_id and g.source_family='NHSP') then
+    if v_upload.report_scope_id is null or v_upload.purpose<>'ORDINARY' or v_upload.correction_session_id is not null
+      or v_upload.state<>'CURRENT' or not exists(select 1 from public.weekly_source_report_scopes scope
+        where scope.id=v_upload.report_scope_id and scope.source_cycle_id=v_cycle.id
+          and scope.source_group_id=v_cycle.source_group_id and scope.client_id=p_client_id
+          and scope.self_bill_report_id is null and scope.current_complete_upload_id=v_upload.id)
+      or not exists(select 1 from public.weekly_source_format_profiles profile
+        where profile.id=v_upload.source_format_profile_id and profile.active and profile.profile_code='NHSP_FINAL_BACKING_V1')
+      or v_row.row_finalisation_state<>'SOURCE_WORKED' or v_row.source_money_parse_state is distinct from 'VALID'
+      or v_row.source_shift_charge_pence is null or v_row.source_shift_charge_pence<0
+      or v_row.start_at_local is null or v_row.end_at_local is null or v_row.end_at_local<=v_row.start_at_local
+      or coalesce(v_row.actual_net_minutes,0)<=0 then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SOURCE_SCOPE_INVALID' using errcode='22023';end if;
+    if not exists(select 1 from public.candidates c where c.id=p_candidate_id and c.active)
+      or not private.weekly_source_upload_client_eligible_v1(v_upload.id,p_client_id,v_row.work_date) then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_IDENTITY_NOT_ELIGIBLE' using errcode='22023';end if;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+      v_cycle.source_group_id,p_client_id,v_cycle.finalisation_week_ending);
+    for v_event in select event.* from public.weekly_work_events event
+      where event.first_source_group_id=v_cycle.source_group_id
+        and event.source_format_profile_id=v_upload.source_format_profile_id and event.identity_kind='SCHEDULE_TUPLE'
+        and event.candidate_id=p_candidate_id and event.client_id=p_client_id and event.work_date=v_row.work_date
+        -- C1 construction of this upload can create a distinct Separate event.
+        -- A mapping/lineage alone is never a previous paid/current position.
+        and exists(select 1 from public.weekly_source_billing_movements prior
+          where prior.work_event_id=event.id and prior.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+            and prior.source_line_kind='NHSP_PHYSICAL_POSITIVE' and prior.pay_effect='NORMAL'
+            and prior.movement_role in ('POSITIVE','REPLACEMENT'))
+      order by event.id
+    loop
+      v_nhsp_negative:=private.weekly_source_nhsp_negative_population_v1(v_upload.id,v_event.id,p_actor_user_id,v_cycle.id);
+      v_nhsp_basis:=v_nhsp_negative->'native_current_basis';
+      v_payment:=v_nhsp_basis->'native_payment_facts';
+      if v_nhsp_basis->>'state'='NATIVE_POSITION_INPUTS' and not exists(
+        select 1 from jsonb_array_elements(v_nhsp_basis->'native_current_rows') n
+        where n#>'{native_current_event,source_present}'='true'::jsonb) then continue;end if;
+      v_nhsp_position:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_CURRENT_OVERLAP_POSITION_INPUT_V1',
+        'state','UNAVAILABLE','reason','NATIVE_CURRENT_POSITION_UNAVAILABLE','work_event_id',v_event.id);
+      v_nhsp_contract:=null;v_nhsp_start:=null;v_nhsp_end:=null;v_nhsp_break:=null;
+      if v_nhsp_negative->'current_position_available'='true'::jsonb
+        and jsonb_array_length(v_nhsp_negative->'current_targets')=1 then
+        v_nhsp_target:=v_nhsp_negative#>'{current_targets,0}';
+        select * into strict v_movement from public.weekly_source_billing_movements m
+          where m.id=(v_nhsp_target->>'movement_id')::uuid and m.work_event_id=v_event.id
+            and m.movement_economic_hash=decode(v_nhsp_target->>'movement_economic_hash','hex');
+        select physical.* into strict v_nhsp_source_row from public.weekly_source_upload_rows physical
+          join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=physical.id
+          where resolution.id=(v_movement.source_facts_json->>'row_resolution_id')::uuid
+            and resolution.work_event_id=v_event.id and resolution.contract_id=v_movement.contract_id;
+        if v_nhsp_source_row.start_at_local is null or v_nhsp_source_row.end_at_local is null
+          or v_nhsp_source_row.start_at_local>=v_nhsp_source_row.end_at_local then
+          raise exception 'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_CLOCK_UNBOUND' using errcode='55000';end if;
+        if v_nhsp_source_row.start_at_local>=v_row.end_at_local or v_nhsp_source_row.end_at_local<=v_row.start_at_local then continue;end if;
+        v_nhsp_contract:=v_movement.contract_id;v_nhsp_start:=v_nhsp_source_row.start_at_local;
+        v_nhsp_end:=v_nhsp_source_row.end_at_local;v_nhsp_break:=v_nhsp_source_row.break_minutes;
+        v_nhsp_position:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_CURRENT_OVERLAP_POSITION_INPUT_V1',
+          'state','CURRENT_NATIVE_POSITION','reason',null,'work_event_id',v_event.id,
+          'candidate_id',p_candidate_id,'client_id',p_client_id,'contract_id',v_movement.contract_id,
+          'movement_id',v_movement.id,'movement_economic_hash',encode(v_movement.movement_economic_hash,'hex'),
+          'native_current_target',v_nhsp_target,'native_current_basis_sha256',v_nhsp_basis->'inputs_sha256');
+      elsif not private.weekly_source_work_event_schedule_compatible_v1(v_event.id,v_row.start_at_local,v_row.end_at_local) then
+        continue;
+      end if;
+      -- An unavailable native current position stays an explicit unknown in
+      -- the complete overlap population. Historical clocks never certify it.
+      v_items:=v_items||jsonb_build_array(jsonb_build_object('work_event_id',v_event.id,
+        'candidate_id',v_event.candidate_id,'client_id',v_event.client_id,'contract_id',v_nhsp_contract,
+        'work_date',v_event.work_date,'start_at_local',v_nhsp_start,'end_at_local',v_nhsp_end,'break_minutes',v_nhsp_break,
+        'current_native_position',v_nhsp_position,'nhsp_negative_population',v_nhsp_negative,'native_payment_facts',v_payment));
+    end loop;
+  else

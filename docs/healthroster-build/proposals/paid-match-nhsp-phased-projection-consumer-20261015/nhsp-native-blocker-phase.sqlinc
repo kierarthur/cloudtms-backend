@@ -1,0 +1,24 @@
+    -- Native negative-first classification. The Worker supplies a qualified
+    -- C1 proposal only; current generation negative resolutions, current native
+    -- position and paid facts decide whether the positive must remain blocked.
+    if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose='ORDINARY'
+      and v_source_row.row_finalisation_state='SOURCE_WORKED' and v_source_row.source_shift_charge_pence>=0
+      and pg_catalog.upper(pg_catalog.btrim(coalesce(v_row_json->>'mapping_state','')))='RESOLVED'
+      and private._weekly_source_effective_policy_v1((v_row_json->>'client_id')::uuid,
+        (v_row_json->>'contract_id')::uuid,v_source_row.work_date)->>'authority_mode'='SOURCE_AUTHORITY'
+      and not exists(select 1 from jsonb_array_elements(v_paid_choices) c
+        where c->>'upload_row_id'=v_source_row.id::text) then
+      v_paid_inputs:=private.weekly_source_paid_overlap_candidates_v1(v_source_row.id,p_actor_user_id,
+        (v_row_json->>'candidate_id')::uuid,(v_row_json->>'client_id')::uuid);
+      v_protected_matches:=private.weekly_source_protected_match_candidates_v1(v_source_row.id,
+        (v_row_json->>'candidate_id')::uuid,(v_row_json->>'client_id')::uuid);
+      if exists(select 1 from jsonb_array_elements(v_paid_inputs->'overlaps') item
+        where item#>'{native_payment_facts,paid}' is distinct from 'false'::jsonb
+          and not exists(select 1 from jsonb_array_elements(v_protected_matches) protected
+            where protected->>'work_event_id'=item->>'work_event_id')
+          and (item#>>'{current_native_position,state}' is distinct from 'CURRENT_NATIVE_POSITION'
+            or item#>'{nhsp_negative_population,no_reversal_proved}' is distinct from 'false'::jsonb)) then
+        v_row_json:=(v_row_json-'economic_snapshot'-'charge_check')||jsonb_build_object('mapping_state','SOURCE_ROW_BLOCKED',
+          'blocker_code','PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED');
+      end if;
+    end if;

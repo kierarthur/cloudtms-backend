@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 21,
+  "pass": 21,
+  "fail": 0,
+  "actual_proposed_Worker_constructor_cases": 8,
+  "syntax_pass": 11,
+  "complete_owner_reverses": 7,
+  "unique_hunks": 31,
+  "exact_input_pins": 17,
+  "new_private_signatures": 3,
+  "new_public_signatures": 0,
+  "new_table_column_calculator": 0,
+  "preserved_artifacts": 114,
+  "credential_findings": 0,
+  "whitespace_disposition": "EXACT INPUT/WHOLE PREDECESSOR EXCEPTIONS RETAINED",
+  "whitespace_exceptions": [
+    {
+      "file": "input/current_office_recheck.sqlinc",
+      "kind": "EXACT INPUT EOF BLANK"
+    }
+  ],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

@@ -1,0 +1,116 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "cc90a82c01e46f74e5ce9a4250cc6f64a61a5814",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_order": [
+    "forward/00_complete_overlap_inputs.sqlinc",
+    "forward/01_immutable_choice_input.sqlinc",
+    "forward/03_nhsp_projection_lock_input.sqlinc",
+    "forward/04_nhsp_projection_choice_recheck.sqlinc",
+    "forward/02_complete_choice_current_and_lock.sqlinc",
+    "forward/07_complete_choice_admit.sqlinc",
+    "forward/08_complete_match_question.sqlinc",
+    "forward/05_complete_projection_rows.sqlinc",
+    "forward/06_complete_upload_context.sqlinc",
+    "forward/broker/src/weekly-source/upload-publication-owner.mjs"
+  ],
+  "complete_owner_reverses": 7,
+  "unique_hunks": 31,
+  "new_private_signatures": [
+    "private.weekly_source_paid_choice_immutable_v1(uuid)",
+    "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+    "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)"
+  ],
+  "new_public_signatures": [],
+  "new_table_column_calculator": 0,
+  "current_source_inputs": 17,
+  "owners": [
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/01_complete_overlap_inputs.sqlinc",
+      "after_file": "forward/00_complete_overlap_inputs.sqlinc",
+      "before_sha256": "752a4b5afb469af41b9f144c59e35764f8b439f4c33c21ef7b4b5a3c65f95f7e",
+      "after_sha256": "a63a548c927100df862abd3da45cd35c7944a21d094d775ef9d1a4a7ca8d2654"
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-choice-comparison-consumer-20261015/forward/02_complete_choice_current.sqlinc",
+      "after_file": "forward/02_complete_choice_current_and_lock.sqlinc",
+      "before_sha256": "9759f6f283da73c72bdbfefc6d9a4324abf8b58a23eee4d3a431f2f2fce1cdae",
+      "after_sha256": "05991dd5b1608f56b9cb8f260b609120e9f4074ecc0f8d10b849ee022f74d9d6"
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/06_complete_choice_admit.sqlinc",
+      "after_file": "forward/07_complete_choice_admit.sqlinc",
+      "before_sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3",
+      "after_sha256": "1d45727c093df20fd6e7f58afe7b2e39a1943bb880602825a0c89d7f15c15512"
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-separate-event-writer-construction-20261015/forward/01_complete_projection_rows.sqlinc",
+      "after_file": "forward/05_complete_projection_rows.sqlinc",
+      "before_sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2",
+      "after_sha256": "e51a9d46d0c27838e7dfce4506a6fa25625922acbdd5ba9ec67aadb53d1e41c0"
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/02_complete_upload_context.sqlinc",
+      "after_file": "forward/06_complete_upload_context.sqlinc",
+      "before_sha256": "bd14093c6c9e52fe532878bc0c68d8d50437c71870170fcc289233954bbd4388",
+      "after_sha256": "c63cc2c68cb8fff77c16ecf25f3682c824b21465f62cfdc703072a17baf5234c"
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/03_complete_paid_match_question.sqlinc",
+      "after_file": "forward/08_complete_match_question.sqlinc",
+      "before_sha256": "cc23b4feca41c2852f5c4d9a41f7040d70fa220995fb1b523f3c7082d4c565f6",
+      "after_sha256": "04c36706e518e7c947e614e005f56658d1d0707d4fe4d3e808d97d7e11c12a74"
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "after_file": "forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "before_sha256": "8bc4fb79020373f7d6da1907f9b71f8eb98c1c30bb0d9b9200b16d7f3fc8adc6",
+      "after_sha256": "840ee729a0acef3c2e5bed4f8ac6de9a8ea1705e296fdf9d8fe023474766b25e"
+    }
+  ],
+  "ordinary_NHSP_NEXT_scope_only": true,
+  "full_saved_raw_audit_generations_untouched": true,
+  "actual_current_negative_first_no_reversal_constructor_required": true,
+  "internal_intent_not_CURRENT_permission": true,
+  "root_frame_recheck_before_positive_C1_and_final_census": true,
+  "older_UNFROZEN_CONSTRUCTION_INPUTS_file": "HISTORICAL INITIAL WIP PROVENANCE ONLY; NOT AN INSTALL RECIPE",
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-choice-comparison-consumer-20261015",
+      "artifacts": 13,
+      "manifest_sha256": "cc5d26034b72e05d888af62e935d0b84d26d734b1ee7716728bfb01b5922079e"
+    },
+    {
+      "packet": "paid-match-nhsp-native-invoice-values-construction-20261015",
+      "artifacts": 17,
+      "manifest_sha256": "cbae56a4c479d7d53660ea93de981f7c01e03ac24d228fea2779ac555aeb1296"
+    },
+    {
+      "packet": "paid-match-nhsp-negative-population-construction-20261015",
+      "artifacts": 21,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    },
+    {
+      "packet": "paid-match-nhsp-current-native-basis-construction-20261015",
+      "artifacts": 16,
+      "manifest_sha256": "67c33d965c537452c16ab52313ced8801429eb30f7f16a654e5b1bb35519f75c"
+    },
+    {
+      "packet": "paid-match-nhsp-separate-event-writer-construction-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "2e5864cb22b9e1a86525b1c430b048b0613f9cab278c189f23df9f061c1fa89f"
+    },
+    {
+      "packet": "paid-match-correct-final-choice-construction-20261014",
+      "artifacts": 33,
+      "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5"
+    }
+  ],
+  "NONE_invoice_origin_materialisation_capture_prepared_Office_Report_pipeline_still_incomplete": true,
+  "final_current_private_registry_verifier_contract_catalogue_REQUIRED": true,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

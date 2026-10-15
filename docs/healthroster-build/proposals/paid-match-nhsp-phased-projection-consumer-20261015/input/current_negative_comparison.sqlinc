@@ -1,0 +1,121 @@
+-- Finite internal comparison codec, not proof authority. The real Source
+-- constructor/immutable choice audit owns both raw inputs; current facts must
+-- be rederived by that constructor. Raw generations/IDs/history are retained.
+create or replace function private.weekly_source_nhsp_negative_comparison_v1(p_inputs jsonb)
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare n jsonb;t jsonb;basis jsonb;magnitude jsonb;key text;rows jsonb:='[]'::jsonb;result jsonb;ordinal integer:=0;
+begin
+  if jsonb_typeof(p_inputs) is distinct from 'object'
+    or not p_inputs ?& array['schema_version','upload_id','content_sha256','row_manifest_hash',
+      'source_cycle_id','source_group_id','report_scope_id','authority_scope_version',
+      'projection_publication_id','projection_generation','work_event_id','native_current_basis',
+      'current_targets','physical_row_count','negative_row_count','negative_rows',
+      'negative_population_complete','current_position_available','no_reversal_proved','paid_writer_permission','inputs_sha256']
+    or exists(select 1 from jsonb_object_keys(p_inputs) k where k not in
+      ('schema_version','upload_id','content_sha256','row_manifest_hash','source_cycle_id','source_group_id',
+       'report_scope_id','authority_scope_version','projection_publication_id','projection_generation','work_event_id',
+       'native_current_basis','current_targets','physical_row_count','negative_row_count','negative_rows',
+       'negative_population_complete','current_position_available','no_reversal_proved','paid_writer_permission','inputs_sha256'))
+    or p_inputs->>'schema_version' is distinct from 'WEEKLY_SOURCE_NHSP_NEGATIVE_POPULATION_INPUT_V1'
+    or p_inputs->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NHSP_NEGATIVE_POPULATION_INPUT_V1',p_inputs-'inputs_sha256'),'hex')
+    or p_inputs->'negative_population_complete' is distinct from 'true'::jsonb
+    or p_inputs->'current_position_available' is distinct from 'true'::jsonb
+    or p_inputs->'no_reversal_proved' is distinct from 'true'::jsonb
+    or p_inputs->'paid_writer_permission' is distinct from 'null'::jsonb
+    or jsonb_typeof(p_inputs->'current_targets') is distinct from 'array'
+    or jsonb_typeof(p_inputs->'negative_rows') is distinct from 'array'
+    or jsonb_typeof(p_inputs->'physical_row_count') is distinct from 'number'
+    or jsonb_typeof(p_inputs->'negative_row_count') is distinct from 'number'
+    or jsonb_typeof(p_inputs->'projection_generation') is distinct from 'number'
+    or jsonb_typeof(p_inputs->'authority_scope_version') is distinct from 'number'
+    or coalesce(p_inputs->>'authority_scope_version','')!~'^[1-9][0-9]*$'
+    or coalesce(p_inputs->>'content_sha256','')!~'^[0-9a-f]{64}$'
+    or coalesce(p_inputs->>'row_manifest_hash','')!~'^[0-9a-f]{64}$'
+    or coalesce(p_inputs->>'physical_row_count','')!~'^[0-9]+$'
+    or coalesce(p_inputs->>'negative_row_count','')!~'^[0-9]+$'
+    or coalesce(p_inputs->>'projection_generation','')!~'^[1-9][0-9]*$' then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+  if (p_inputs->>'negative_row_count')::numeric>2147483647
+    or (p_inputs->>'physical_row_count')::numeric>2147483647
+    or (p_inputs->>'projection_generation')::numeric>2147483647
+    or jsonb_array_length(p_inputs->'negative_rows')<>(p_inputs->>'negative_row_count')::integer
+    or (p_inputs->>'negative_row_count')::integer>(p_inputs->>'physical_row_count')::integer
+    or jsonb_array_length(p_inputs->'current_targets')=0 then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+  foreach t in array array[p_inputs->'upload_id',p_inputs->'source_cycle_id',p_inputs->'source_group_id',
+    p_inputs->'report_scope_id',p_inputs->'projection_publication_id',p_inputs->'work_event_id'] loop
+    if jsonb_typeof(t) is distinct from 'string' or trim(both '"' from t::text)!~'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+  end loop;
+  basis:=p_inputs->'native_current_basis';
+  if basis->>'schema_version' is distinct from 'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1'
+    or basis->>'state' is distinct from 'NATIVE_POSITION_INPUTS'
+    or basis->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1',basis-'inputs_sha256'),'hex')
+    or basis->'work_event_id' is distinct from p_inputs->'work_event_id'
+    or basis->'source_cycle_id' is distinct from p_inputs->'source_cycle_id'
+    or basis->'source_group_id' is distinct from p_inputs->'source_group_id' then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+  -- Validate each full native magnitude before making any comparison copy.
+  -- This validates the codec grain only; it does not re-price the values or
+  -- replace the real current Source constructor's provenance admission.
+  for magnitude in
+    select x->'economic_magnitude' from jsonb_array_elements(p_inputs->'negative_rows') x
+    union all select x->'economic_magnitude' from jsonb_array_elements(p_inputs->'current_targets') x
+  loop
+    if jsonb_typeof(magnitude) is distinct from 'object' or not magnitude ?& array['work_date','start_at_local',
+      'end_at_local','break_minutes','hours_day','hours_night','hours_sat','hours_sun','hours_bh','pay_pence','charge_pence']
+      or exists(select 1 from jsonb_object_keys(magnitude) k where k not in ('work_date','start_at_local',
+        'end_at_local','break_minutes','hours_day','hours_night','hours_sat','hours_sun','hours_bh','pay_pence','charge_pence')) then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+    foreach key in array array['work_date','start_at_local','end_at_local','break_minutes','hours_day','hours_night',
+      'hours_sat','hours_sun','hours_bh','pay_pence','charge_pence'] loop
+      if jsonb_typeof(magnitude->key) is distinct from 'string' then
+        raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+    end loop;
+  end loop;
+  for n in select value from jsonb_array_elements(p_inputs->'negative_rows') loop
+    if jsonb_typeof(n) is distinct from 'object' or not n ?& array['upload_row_id','source_row_ordinal','normalised_row_hash',
+      'state','row_resolution_id','generation','work_event_id','candidate_id','client_id','contract_id',
+      'economic_snapshot_id','calculation_fingerprint','economic_magnitude','magnitude_sha256']
+      or exists(select 1 from jsonb_object_keys(n) k where k not in ('upload_row_id','source_row_ordinal','normalised_row_hash',
+        'state','row_resolution_id','generation','work_event_id','candidate_id','client_id','contract_id',
+        'economic_snapshot_id','calculation_fingerprint','economic_magnitude','magnitude_sha256'))
+      or n->>'state' is distinct from 'NATIVE_RESOLVED_NEGATIVE'
+      or n->'generation' is distinct from p_inputs->'projection_generation'
+      or jsonb_typeof(n->'source_row_ordinal') is distinct from 'number'
+      or coalesce(n->>'source_row_ordinal','')!~'^[1-9][0-9]*$'
+      or coalesce(n->>'normalised_row_hash','')!~'^[0-9a-f]{64}$'
+      or coalesce(n->>'calculation_fingerprint','')!~'^[0-9a-f]{64}$'
+      or n->>'magnitude_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'BPAY_NEXT_SOURCE_NHSP_MAGNITUDE_V1',n->'economic_magnitude'),'hex') then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+    if (n->>'source_row_ordinal')::numeric>2147483647 or (n->>'source_row_ordinal')::integer<=ordinal then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+    ordinal:=(n->>'source_row_ordinal')::integer;
+    foreach t in array array[n->'upload_row_id',n->'row_resolution_id',n->'economic_snapshot_id',n->'work_event_id',
+      n->'candidate_id',n->'client_id',n->'contract_id'] loop
+      if jsonb_typeof(t) is distinct from 'string' or trim(both '"' from t::text)!~'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then
+        raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_UNBOUND' using errcode='55000';end if;
+    end loop;
+    -- Only these actual rebuild record IDs/generation differ when one exact
+    -- native C1/source fact is resolved again. Row/hash/event/full economic
+    -- magnitude and calculation fingerprint remain comparison authorities.
+    rows:=rows||jsonb_build_array(n-'row_resolution_id'-'economic_snapshot_id'-'generation');
+  end loop;
+  result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_FACTS_V1',
+    'upload_id',p_inputs->'upload_id','content_sha256',p_inputs->'content_sha256','row_manifest_hash',p_inputs->'row_manifest_hash',
+    'source_cycle_id',p_inputs->'source_cycle_id','source_group_id',p_inputs->'source_group_id',
+    'report_scope_id',p_inputs->'report_scope_id','work_event_id',p_inputs->'work_event_id',
+    'native_current_basis',basis,'current_targets',p_inputs->'current_targets',
+    'physical_row_count',p_inputs->'physical_row_count','negative_row_count',p_inputs->'negative_row_count','negative_rows',rows,
+    'negative_population_complete',true,'current_position_available',true,'no_reversal_proved',true,'paid_writer_permission',null);
+  return result||jsonb_build_object('facts_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NHSP_NEGATIVE_COMPARISON_FACTS_V1',result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_nhsp_negative_comparison_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_nhsp_negative_comparison_v1(jsonb) from public,anon,authenticated,service_role;
