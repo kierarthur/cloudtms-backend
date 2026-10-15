@@ -1,0 +1,6 @@
+{
+  "failed_before_retry_native_call": true,
+  "cause": "The same v_match CASE occurs in two distinct probe constructors; a batch-global uniqueness assertion was too strict.",
+  "corrected": "Match exactly once within each actual uniquely named constructor; preserve source copies.",
+  "production_changes_beyond_six_parentheses": 0
+}

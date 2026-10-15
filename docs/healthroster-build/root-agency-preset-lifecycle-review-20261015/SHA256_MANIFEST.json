@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "POLICY_8_TEST_OUTPUT.txt",
+      "bytes": 2397,
+      "sha256": "dd2d1c87ff76f1f3ab6bd244a94bbb5175df57d067b171b1f5d54b051aa9fc1e"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1090,
+      "sha256": "229fa126f40445621c2fce8d0cdf3602b21b9d673926f2674e0773b70e4e8ce7"
+    },
+    {
+      "file": "REVIEW_SOURCE.mjs.txt",
+      "bytes": 4311,
+      "sha256": "aa90f366395197dbb04b5e546f4fa3c955b2e103c0dbc5d92e5efe61ce7c62dc"
+    },
+    {
+      "file": "SOURCE_15_TEST_OUTPUT.txt",
+      "bytes": 3806,
+      "sha256": "80f257f323194477a709967569a112b6213fcfe1b5306b5e7ddea0c2969d1bd6"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 809,
+      "sha256": "182cfd3ef9a4935c4ef3d8d91aad8c312698305d5062c830c6b47e07729674ba"
+    }
+  ]
+}

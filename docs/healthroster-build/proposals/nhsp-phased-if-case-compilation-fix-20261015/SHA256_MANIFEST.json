@@ -1,0 +1,105 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "ABSENCE.sql",
+      "bytes": 359,
+      "sha256": "44827050d1eb11e46e0d06766162f992c16e33dd35d9344dddadfcb2b5dab3c4"
+    },
+    {
+      "file": "CHECKPOINT.mjs.txt",
+      "bytes": 7536,
+      "sha256": "5b3e3ab584c42f347545ef719f33f68baba029e4ba6a3508c115b513add98cf0"
+    },
+    {
+      "file": "COMPLETE_REVERSES.json",
+      "bytes": 10682,
+      "sha256": "f586eeb4f7153082a0b6b0445ef4d15e7a95fb5100fb7002590bd965c3f898b3"
+    },
+    {
+      "file": "FIX_SOURCE.mjs.txt",
+      "bytes": 4082,
+      "sha256": "6ec5d872c2a62621047bf8e182d631fc35ecbcf1d250bfd4da5da6759294cf8b"
+    },
+    {
+      "file": "INITIAL_NATIVE_RESULT.json",
+      "bytes": 1961,
+      "sha256": "db9f4645916a30fc5f73392331007e1d76e50ad7b874848d854196f632b261e1"
+    },
+    {
+      "file": "INITIAL_NATIVE_TRIAL.sql",
+      "bytes": 4688,
+      "sha256": "04853b9a140c4d37d50dc011e524063ecbc274f5cdd093acf97dbf1e2eb786b9"
+    },
+    {
+      "file": "INITIAL_SOURCE_PINS.json",
+      "bytes": 5289,
+      "sha256": "5ff9895356fdecbfa08ed247ab8df06d7101e93ef65b8ce6aca85ecf5f3b1eba"
+    },
+    {
+      "file": "PREPARE_HARNESS_REFUSAL.json",
+      "bytes": 335,
+      "sha256": "7086a47fac08fbc0df66c67ace33ec9bd473740d614198f63f088f6311095474"
+    },
+    {
+      "file": "RETRY01_NATIVE_RESULT.json",
+      "bytes": 2666,
+      "sha256": "05429d1822c5fbe0b4dedb8b1f26d4b0d4b2c6568727666e84b307cd71b9c607"
+    },
+    {
+      "file": "RETRY01_NATIVE_TRIAL.sql",
+      "bytes": 4952,
+      "sha256": "774bfe788e747b76fad3869bdf4e91c06968df13af52d4989e450c4ad36c556a"
+    },
+    {
+      "file": "REVIEW_AND_HANDOFF.md",
+      "bytes": 2399,
+      "sha256": "256b54192b7aa2ddbe026cc7e423d780d859f79687533940d0f4caf513afb866"
+    },
+    {
+      "file": "SHARED_TURN_JOURNAL.txt",
+      "bytes": 896,
+      "sha256": "bf0a9de2e9240b023ba7186c43262de98758dc44687dfd835b33344bf95d8f2b"
+    },
+    {
+      "file": "SOURCE_CHECK_OUTPUT.json",
+      "bytes": 311,
+      "sha256": "a5b946bff0826493d1d81c92763917f59ab0bbdfcdab9c4658d94d6cecf90487"
+    },
+    {
+      "file": "before/02_complete_choice_current_and_lock.sqlinc",
+      "bytes": 15000,
+      "sha256": "05991dd5b1608f56b9cb8f260b609120e9f4074ecc0f8d10b849ee022f74d9d6"
+    },
+    {
+      "file": "before/07_complete_choice_admit.sqlinc",
+      "bytes": 11688,
+      "sha256": "1d45727c093df20fd6e7f58afe7b2e39a1943bb880602825a0c89d7f15c15512"
+    },
+    {
+      "file": "before/08_complete_match_question.sqlinc",
+      "bytes": 9825,
+      "sha256": "04c36706e518e7c947e614e005f56658d1d0707d4fe4d3e808d97d7e11c12a74"
+    },
+    {
+      "file": "check-source.mjs",
+      "bytes": 2125,
+      "sha256": "29f2db3da71ec0a5c453cb13aa0956a2be5c0e2c271be60477c4a11138448083"
+    },
+    {
+      "file": "forward/02_complete_choice_current_and_lock.sqlinc",
+      "bytes": 15002,
+      "sha256": "b092481deb1d931a5358b985f3eec1b9c6332f12d6c679f18d5da7411cef1e96"
+    },
+    {
+      "file": "forward/07_complete_choice_admit.sqlinc",
+      "bytes": 11690,
+      "sha256": "0a6d7fb2f8948743c456feb7a4de6400b55762e6c6964ef3cfb0eef85f195797"
+    },
+    {
+      "file": "forward/08_complete_match_question.sqlinc",
+      "bytes": 9827,
+      "sha256": "a6bd5e49842ff59882fa3e3d4dbbdb8e058daffd1e91e5ce39573c4d12007e04"
+    }
+  ]
+}

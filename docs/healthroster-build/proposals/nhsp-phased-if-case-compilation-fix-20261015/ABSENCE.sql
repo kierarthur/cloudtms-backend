@@ -1,0 +1,1 @@
+select current_database() as database,to_regprocedure('private.hr_nhsp_case_f109f63548eb97c2()') is null as hr_nhsp_case_f109f63548eb97c2_absent,to_regprocedure('private.hr_nhsp_case_6865613e2d014c27()') is null as hr_nhsp_case_6865613e2d014c27_absent,to_regprocedure('private.hr_nhsp_case_4d34d2097f4f1694()') is null as hr_nhsp_case_4d34d2097f4f1694_absent;

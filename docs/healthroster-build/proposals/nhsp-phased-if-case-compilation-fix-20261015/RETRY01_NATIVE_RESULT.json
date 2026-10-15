@@ -1,0 +1,107 @@
+{
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "label": "NHSP phased exact IF CASE parentheses retry01 20261015",
+  "sqlSha256": "774bfe788e747b76fad3869bdf4e91c06968df13af52d4989e450c4ad36c556a",
+  "statementCount": 6,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "default_unavailable_branch_is_true"
+      ],
+      "rows": [
+        {
+          "default_unavailable_branch_is_true": true
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "default_unavailable_branch_is_true"
+      ],
+      "rows": [
+        {
+          "default_unavailable_branch_is_true": true
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "default_unavailable_branch_is_true"
+      ],
+      "rows": [
+        {
+          "default_unavailable_branch_is_true": true
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "database",
+          "hr_nhsp_case_f109f63548eb97c2_absent",
+          "hr_nhsp_case_6865613e2d014c27_absent",
+          "hr_nhsp_case_4d34d2097f4f1694_absent"
+        ],
+        "rows": [
+          {
+            "database": "cloudtms_test_clone",
+            "hr_nhsp_case_f109f63548eb97c2_absent": true,
+            "hr_nhsp_case_6865613e2d014c27_absent": true,
+            "hr_nhsp_case_4d34d2097f4f1694_absent": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ]
+}

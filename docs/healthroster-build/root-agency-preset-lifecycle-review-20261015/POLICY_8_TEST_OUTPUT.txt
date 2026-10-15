@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)
+ok 1 - SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)
+  ---
+  duration_ms: 4.3712
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)
+ok 2 - SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)
+  ---
+  duration_ms: 2.2442
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete current policy owner reverse public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)
+ok 3 - SOURCE_ONLY complete current policy owner reverse public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)
+  ---
+  duration_ms: 1.3939
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY CLIENT whitelist and return remain exact current native source
+ok 4 - SOURCE_ONLY CLIENT whitelist and return remain exact current native source
+  ---
+  duration_ms: 0.4975
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY only literal string NOT_REQUIRED is admitted in native Contract-write normalisation
+ok 5 - SOURCE_ONLY only literal string NOT_REQUIRED is admitted in native Contract-write normalisation
+  ---
+  duration_ms: 0.1328
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY INHERIT and all non-INHERIT native resolver returns retain the fixed key only conditionally
+ok 6 - SOURCE_ONLY INHERIT and all non-INHERIT native resolver returns retain the fixed key only conditionally
+  ---
+  duration_ms: 0.0992
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY actual public writer rejects any caller fixed-key choice before idempotency/economic mutation
+ok 7 - SOURCE_ONLY actual public writer rejects any caller fixed-key choice before idempotency/economic mutation
+  ---
+  duration_ms: 0.0775
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY no new signature/grant/settings endpoint or synthetic manager evidence
+ok 8 - SOURCE_ONLY no new signature/grant/settings endpoint or synthetic manager evidence
+  ---
+  duration_ms: 0.1234
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 150.6241

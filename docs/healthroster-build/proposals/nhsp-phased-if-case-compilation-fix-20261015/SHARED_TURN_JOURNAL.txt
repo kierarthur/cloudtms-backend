@@ -1,0 +1,4 @@
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parser-native-20261015","status":"TAKEN","takenAt":"2026-10-15T03:00:04.505Z","key":[20261013,1]}
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parser-native-20261015","status":"RELEASED","takenAt":"2026-10-15T03:00:04.505Z","releasedAt":"2026-10-15T03:00:19.969Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parentheses-retry01-20261015","status":"TAKEN","takenAt":"2026-10-15T03:02:46.568Z","key":[20261013,1]}
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parentheses-retry01-20261015","status":"RELEASED","takenAt":"2026-10-15T03:02:46.568Z","releasedAt":"2026-10-15T03:03:06.557Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}

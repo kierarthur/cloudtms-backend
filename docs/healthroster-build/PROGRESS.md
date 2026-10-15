@@ -478,3 +478,20 @@ Retry all28statements PASS with the entire constructor and actual native selecto
 Independent bounded physical canonical/source-verifier review of bdc1b7cb is PASS at e7e0b572bc94ef65ad05899d755cd43d75a82b97:65raw saved/Git pins,4whole16hunk reversals, originalACLtail/currentDispatcher, fullverifier2hunk reverse/14raw/31native/41bodies, exact177statement reconstruction and fresh restoration receipts. No concreteP0/P1/P2. It is not either final PartB critic. Git automatic maintenance reported denied old worktree metadata cleanup attempts; specialist did not run cleanup and its commit/push succeeded. Source construction and actual ordinary/calendar qualification continue.
 
 No connector/credential/Worker change, other-account route, business fixture, external effect, job pause, protected release, activation, app upload, Bank message, Docker or deliberate cleanup. Install2, fullrehearsal route envelope/final contract/registry/mandatoryverifier refresh, allactual acceptance and bothfinalcritics remain pending. Source candidate remains incomplete/notdeployable. Allnative results, unchanged source hashes, exact harness correction, independent physical review and turnjournal are backed in install2-source-selectors-canonical-20261015.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parser-native-20261015","status":"TAKEN","takenAt":"2026-10-15T03:00:04.505Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parser-native-20261015","status":"RELEASED","takenAt":"2026-10-15T03:00:04.505Z","releasedAt":"2026-10-15T03:00:19.969Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parentheses-retry01-20261015","status":"TAKEN","takenAt":"2026-10-15T03:02:46.568Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"nhsp-phased-exact-case-parentheses-retry01-20261015","status":"RELEASED","takenAt":"2026-10-15T03:02:46.568Z","releasedAt":"2026-10-15T03:03:06.557Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+
+## NHSP phased CASE compilation finding and forward fix — 15 October 2026
+
+Root confirmed P1-NHSP-PHASED-IF-CASE-COMPILE in Money1e54ff55: three actual unparenthesized CASE expressions in IF predicates fail exact standalone PL/pgSQL constructor probes with42601. accepted=true with continue_on_error did not hide those statement failures. All three attempts rolled back and all probe functions were absent on a fresh connection.
+
+Adjacent proposal nhsp-phased-if-case-compilation-fix-20261015 retains three complete owners, changing only parentheses around each existing CASE (three unique whole reversals, six added characters). Retry compiles all three expressions and three pure default-unavailable calls pass; all six statements error-free, rollback/fresh three-function absence true. Both shared turns explicitly unlocked and closed. No business owner or financial writer executed. One preparer-only uniqueness assertion failed before the retry because two different constructors share an expression; replacement is now scoped to the actual unique constructor.
+
+The grammar fix does not qualify complete business-owner compilation or full NHSP negative-first/recheck/NONE acceptance. Money will consume the exact qualified forward owners without replacing frozen1e54 or its new materialisation WIP. Independent bounded fix review and full phased source/native/current-caller gates remain pending. No canonical migration/repeatable/verifier count changed:400/1063/176UPGRADE177NEW. All source, exact parser probes/results, reversal and helper are backed in the proposal.

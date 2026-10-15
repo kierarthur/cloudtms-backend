@@ -1,0 +1,130 @@
+-- Complete current ROSTER paid-choice admission. It supplies actual locked
+-- facts to the existing Office recheck owner, not a public SQL transport.
+create or replace function private.weekly_source_paid_overlap_choice_admit_v1(p_request jsonb,p_discovery jsonb default null)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;v_request uuid;v_row_id uuid;v_candidate uuid;v_client uuid;v_contract uuid;v_target uuid;v_effect text;v_expected text;
+  v_row public.weekly_source_upload_rows%rowtype;v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;v_event public.weekly_work_events%rowtype;
+  v_inputs jsonb;v_observed jsonb;v_item jsonb;v_match jsonb;v_roots uuid[];v_root uuid;v_lock jsonb;
+  v_known uuid;v_auto uuid;v_reason text;v_native_paid jsonb;v_request_hash bytea;
+begin
+  if not (p_request ? 'pay_effect') then return null;end if;
+  perform private.weekly_source_query_require_service_v1();
+  if not p_request ?& array['actor_user_id','request_id','upload_id','upload_row_id','candidate_id','client_id',
+    'contract_id','match_reason','pay_effect','paid_overlap_target_work_event_id','expected_paid_overlap_inputs_sha256']
+    or jsonb_typeof(p_request->'pay_effect') is distinct from 'string'
+    or jsonb_typeof(p_request->'match_reason') is distinct from 'string'
+    or jsonb_typeof(p_request->'expected_paid_overlap_inputs_sha256') is distinct from 'string' then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_INVALID' using errcode='22023';end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;v_request:=(p_request->>'request_id')::uuid;v_row_id:=(p_request->>'upload_row_id')::uuid;
+    v_candidate:=(p_request->>'candidate_id')::uuid;v_client:=(p_request->>'client_id')::uuid;
+    v_contract:=(p_request->>'contract_id')::uuid;v_target:=(p_request->>'paid_overlap_target_work_event_id')::uuid;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_INVALID' using errcode='22023';end;
+  v_effect:=p_request->>'pay_effect';v_expected:=p_request->>'expected_paid_overlap_inputs_sha256';
+  v_reason:=btrim(p_request->>'match_reason');
+  if v_actor is null or v_request is null or v_row_id is null or v_candidate is null or v_client is null or v_contract is null or v_target is null
+    or v_effect not in ('NORMAL','NONE') or v_expected !~ '^[0-9a-f]{64}$' or char_length(v_reason) not between 1 and 1000
+    or (v_effect='NONE' and (p_request ? 'separate_shift' or (p_request->>'work_event_id')::uuid is distinct from v_target))
+    or (v_effect='NORMAL' and (p_request->'separate_shift' is distinct from 'true'::jsonb or p_request ? 'work_event_id')) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_INVALID' using errcode='22023';end if;
+  if private.weekly_source_pay_actor_allowed_v1(v_actor) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+  select * into strict v_row from public.weekly_source_upload_rows where id=v_row_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  if v_upload.id is distinct from (p_request->>'upload_id')::uuid then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_INVALID' using errcode='22023';end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',v_cycle.source_group_id,v_client,v_cycle.finalisation_week_ending);
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFFICE_RECHECK_V1',p_request);
+  if p_discovery is null then
+  perform private.weekly_source_pay_query_admit_v2();
+  v_inputs:=private.weekly_source_paid_overlap_candidates_v1(v_row_id,v_actor,v_candidate,v_client);
+  select coalesce(array_agg(distinct value::uuid order by value::uuid),'{}'::uuid[]) into v_roots
+    from jsonb_array_elements(v_inputs->'overlaps') item
+    cross join lateral jsonb_array_elements_text(item#>'{native_payment_facts,root_timesheet_ids}') value;
+  if cardinality(v_roots)=0 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_ROOT_UNAVAILABLE' using errcode='55000';end if;
+  -- This is the unchanged native complete I-1/family admission used by the
+  -- Source payment publication owner. It precedes every group/cycle lock.
+  v_lock:=private.weekly_source_lock_and_resolve_families_v1(v_candidate,v_roots,
+    'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',(p_request->>'request_id')::uuid,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  if v_lock->>'ok' is distinct from 'true' or v_lock->>'gate' is distinct from 'GRANTED' then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SCOPE_UNAVAILABLE' using errcode='55000';end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_LOCK_DISCOVERY_V1',
+    'request_sha256',encode(v_request_hash,'hex'),'actor_user_id',v_actor,'source_cycle_id',v_cycle.id,
+    'inputs',v_inputs,'native_root_ids',to_jsonb(v_roots),'native_lock_result',v_lock,
+    'native_backend_pid',pg_backend_pid(),'native_transaction_id',pg_current_xact_id()::text);
+  end if;
+  -- Only the owner-generated same request/transaction frame is admitted after
+  -- the caller's retained scope -> group -> cycle locks. No client flag enters.
+  if p_discovery->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_LOCK_DISCOVERY_V1'
+    or p_discovery->>'request_sha256' is distinct from encode(v_request_hash,'hex')
+    or p_discovery->>'actor_user_id' is distinct from v_actor::text
+    or p_discovery->>'source_cycle_id' is distinct from v_cycle.id::text
+    or p_discovery->>'native_backend_pid' is distinct from pg_backend_pid()::text
+    or p_discovery->>'native_transaction_id' is distinct from pg_current_xact_id()::text then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_LOCK_FRAME_UNBOUND' using errcode='55000';end if;
+  v_inputs:=p_discovery->'inputs';v_lock:=p_discovery->'native_lock_result';
+  v_roots:=array(select value::uuid from jsonb_array_elements_text(p_discovery->'native_root_ids') value);
+  perform 1 from public.weekly_work_events event where event.id in
+    (select (item->>'work_event_id')::uuid from jsonb_array_elements(v_inputs->'overlaps') item) order by event.id for share;
+  v_observed:=private.weekly_source_paid_overlap_candidates_v1(v_row_id,v_actor,v_candidate,v_client);
+  if v_observed is distinct from v_inputs or v_observed->>'inputs_sha256' is distinct from v_expected then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FACTS_CHANGED' using errcode='40001';end if;
+  select item into v_match from jsonb_array_elements(v_observed->'overlaps') item where item->>'work_event_id'=v_target::text;
+  if v_match is null then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_TARGET_NOT_ELIGIBLE' using errcode='55000';end if;
+  v_native_paid:=v_match->'native_payment_facts';
+  -- The existing Legacy allocation is HOURS provenance only. It does not
+  -- become a new cash/write certificate. Until its true complete native seam
+  -- exists, it refuses here. No paid_at/status/amount guess is substituted.
+  if case when v_match ? 'nhsp_negative_population' then
+      v_match#>>'{current_native_position,schema_version}' is distinct from 'WEEKLY_SOURCE_NHSP_CURRENT_OVERLAP_POSITION_INPUT_V1'
+      or v_match#>>'{current_native_position,state}' is distinct from 'CURRENT_NATIVE_POSITION'
+      or v_match#>'{current_native_position,work_event_id}' is distinct from v_match->'work_event_id'
+      or v_match#>'{current_native_position,contract_id}' is distinct from v_match->'contract_id'
+      or v_match#>'{current_native_position,native_current_basis_sha256}' is distinct from v_match#>'{nhsp_negative_population,native_current_basis,inputs_sha256}'
+      or v_match#>'{nhsp_negative_population,negative_population_complete}' is distinct from 'true'::jsonb
+      or v_match#>'{nhsp_negative_population,current_position_available}' is distinct from 'true'::jsonb
+      or v_match#>'{nhsp_negative_population,no_reversal_proved}' is distinct from 'true'::jsonb
+      or v_match#>'{nhsp_negative_population,paid_writer_permission}' is distinct from 'null'::jsonb
+      else v_match#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'
+    or v_match#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from v_match->>'snapshot_line_id'
+    or v_match#>>'{current_pay_snapshot,movement_id}' is distinct from v_match->>'current_pay_head_movement_id' end
+    or v_native_paid->'paid' is distinct from 'true'::jsonb
+    or (v_native_paid->>'paid_evidence_state') is null or (v_native_paid->>'paid_evidence_state') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT') then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_PAID_AUTHORITY_UNAVAILABLE' using errcode='55000';end if;
+  if not exists(select 1 from public.contracts c where c.id=v_contract and c.candidate_id=v_candidate and c.client_id=v_client
+    and v_row.work_date between c.start_date and coalesce(c.end_date,'infinity'::date))
+    or (v_effect='NONE' and v_match->>'contract_id' is distinct from v_contract::text) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CONTRACT_NOT_ELIGIBLE' using errcode='22023';end if;
+  select * into strict v_event from public.weekly_work_events where id=v_target;
+  if exists(select 1 from jsonb_array_elements(private.weekly_source_protected_match_candidates_v1(v_row_id,v_candidate,v_client)) item
+    where item->>'work_event_id'=v_target::text) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_PROTECTED_OWNER_REQUIRED' using errcode='55000';end if;
+  if v_upload.report_scope_id is null then
+  if exists(select 1 from public.weekly_work_events event where event.first_source_group_id=v_cycle.source_group_id
+    and event.source_format_profile_id=v_upload.source_format_profile_id and event.identity_kind='PROFILE_EXTERNAL_KEY'
+    and event.profile_external_key=v_row.external_source_key and (v_effect='NORMAL' or event.id<>v_target)) then
+    raise exception 'WEEKLY_SOURCE_PROFILE_EVENT_KEY_CONFLICT' using errcode='55000';end if;
+  v_known:=private.weekly_source_known_source_key_v1(v_row_id,v_candidate,v_client);
+  if v_known is not null and (v_effect='NORMAL' or v_known<>v_target) then
+    raise exception 'WEEKLY_SOURCE_PROFILE_EVENT_KEY_CONFLICT' using errcode='55000';end if;
+  v_auto:=private.weekly_source_identical_rekey_prior_v1(v_row_id);
+  if v_auto is not null then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUTOMATIC_REKEY' using errcode='55000';end if;
+  end if;
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFFICE_RECHECK_V1',p_request);
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_ADMISSION_V1',
+    'upload_row_id',v_row.id,'upload_id',v_upload.id,'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,
+    'candidate_id',v_candidate,'client_id',v_client,'contract_id',v_contract,'actor_user_id',v_actor,
+    'request_id',p_request->>'request_id','request_sha256',encode(v_request_hash,'hex'),
+    'paid_overlap_target_work_event_id',v_target,'pay_effect',v_effect,'reason',v_reason,
+    'inputs',v_observed,'inputs_sha256',v_expected,'native_root_ids',to_jsonb(v_roots),
+    'native_lock_result',v_lock,'native_backend_pid',pg_backend_pid(),'native_transaction_id',pg_current_xact_id()::text);
+end;
+$function$;
+alter function private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb) owner to postgres;
+revoke all on function private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb) from public,anon,authenticated,service_role;

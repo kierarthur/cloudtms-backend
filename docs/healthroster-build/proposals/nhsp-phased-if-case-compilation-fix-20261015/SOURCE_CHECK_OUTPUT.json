@@ -1,0 +1,1 @@
+{"source_fix":"PASS","whole_owners":3,"whole_unique_reversals":3,"only_added_parentheses":6,"initial_native_parser_errors":3,"retry_compiled_expressions":3,"retry_pure_branch_calls":3,"rollback_and_fresh_absence":true,"business_SQL_invoked":false,"whole_owner_compilation":false,"full_phased_acceptance":false}
