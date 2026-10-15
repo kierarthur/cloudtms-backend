@@ -1,0 +1,109 @@
+{
+  "source_only_mount": true,
+  "deployable": false,
+  "input_head": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+  "native_kernel_receipt": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/RETRY_01_NATIVE_RESULT.json",
+  "independent_case_fix_review": "PENDING",
+  "sources": [
+    {
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 6436,
+      "sha256": "e934e1f6f425c23a02f70d16c1039d8104965d8c725efb3f40688de8728e9ddf"
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "file": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/forward/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "bytes": 23386,
+      "sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "bytes": 7703,
+      "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+    }
+  ],
+  "outputs": [
+    {
+      "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+      "bytes": 6517,
+      "sha256": "f348f0b6849a40a58124c992128edd78ac95d886f764baed8bb70a4c341b82b7"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+      "bytes": 8168,
+      "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+      "bytes": 7703,
+      "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+      "bytes": 390,
+      "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7"
+    },
+    {
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "bytes": 3867,
+      "sha256": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3"
+    }
+  ],
+  "expected_definitions": [
+    {
+      "signature": "private.timesheet_correction_a0_source_token_assert_v1(jsonb)",
+      "body_sha256": "9c740017062e8b796b0e6c7f1c00c79fcf4108d68aa38d81ed2d4000c37ca000",
+      "volatility": "i"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_fence_scalar_acquire_core_v1(jsonb,boolean)",
+      "body_sha256": "ecc4320761f57d9c2e6e376121ab07cb5576c925cbaddba2072b1c8e548b6a31",
+      "volatility": "v"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean)",
+      "body_sha256": "a5ca75a91a3bd2725ff2f399f7432c7e5f0052bba07469affca2540686011b49",
+      "volatility": "v"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean)",
+      "body_sha256": "7b37741ba0377552a288ae700e95dde53b2f21ca7905bd81b4782071a6a7a2b8",
+      "volatility": "v"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)",
+      "body_sha256": "37eeb5ac3857fb815126e71b725eb264d20ec958ae7a4473248d1425c18abb1b",
+      "volatility": "v"
+    }
+  ],
+  "repeatable_closure_sha256": "6d66e7ac0c37f15cbf36ebc5955bcb51a10633247eea448718cdea4b11848853",
+  "release": {
+    "file": "supabase/release/current-release.json",
+    "before_sha256": "5f6b8f64ca672982589eb3711d1789fb876afce64d4f6d3d9d0c39b7f6c36c0c",
+    "after_sha256": "def592ae7624b8e9a7bce5e7f0f4f1d2011e0c942c35d5fdb0d61a66f433e5cd",
+    "before_upgrade": 173,
+    "after_upgrade": 174,
+    "before_new": 174,
+    "after_new": 175,
+    "appended_verifier": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+    "existing_prefix_preserved": true
+  },
+  "remaining": [
+    "full native owner union/callers/RAW/ACTIVE triggers/current roles and final engine contract",
+    "full exact-candidate safety/rehearsal and ordered protected Install2",
+    "all financial/security/document/API/Office/MyTMS/TestFlight/phone/both PartB gates"
+  ]
+}

@@ -1,0 +1,102 @@
+create or replace function private.timesheet_correction_a0_fence_scalar_acquire_core_v1(p_tokens jsonb,p_retain boolean)
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare t jsonb;k text;u uuid;s text;v_inserted integer;v_count integer;
+  v_timeout text:=current_setting('lock_timeout');v_xid numeric;v_span numrange;
+begin
+  if p_retain is null or jsonb_typeof(p_tokens) is distinct from 'array' or exists(
+    select 1 from jsonb_array_elements(p_tokens) x(value) where jsonb_typeof(x.value) is distinct from 'object'
+      or x.value->>'kind' is null or x.value->>'kind' not in('FAMILY_UUID','PHYSICAL_UUID','BOOKING','KEY_NORM',
+        'ALIAS_JSON_STRING','WORKFLOW_UUID','CONTRACT_WEEK_UUID','SOURCE_CYCLE_UUID',
+        'SOURCE_OBJECT','SOURCE_GROUP_CLIENT','SOURCE_CYCLE_CLIENT','SOURCE_GLOBAL_SETTINGS','SOURCE_REVISION_CLIENT','SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT')
+      or exists(select 1 from jsonb_object_keys(x.value) n(key) where n.key not in('kind','uuid','json'))
+      or(x.value->>'kind' in('FAMILY_UUID','PHYSICAL_UUID','WORKFLOW_UUID','CONTRACT_WEEK_UUID','SOURCE_CYCLE_UUID')
+        and(pg_input_is_valid(x.value->>'uuid','uuid') is distinct from true or x.value ? 'json'))
+      or(x.value->>'kind' in('BOOKING','KEY_NORM','ALIAS_JSON_STRING','SOURCE_OBJECT','SOURCE_GROUP_CLIENT','SOURCE_CYCLE_CLIENT','SOURCE_GLOBAL_SETTINGS','SOURCE_REVISION_CLIENT','SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT')
+        and(jsonb_typeof(x.value->'json') is distinct from 'string' or x.value ? 'uuid'))) then
+    raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  if p_retain and exists(select 1 from jsonb_array_elements(p_tokens) x(value)
+    where x.value ? 'json' and octet_length(x.value->'json'#>>'{}')>1536) then
+    raise exception 'CORRECTION_A0_TOKEN_IDENTITY_UNPROVED' using errcode='55000';end if;
+  if jsonb_array_length(p_tokens)=0 then return;end if;
+  if p_retain then v_span:=numrange(null,null,'()');else
+    -- xid8 is converted through exact decimal text, never narrowed to bigint.
+    -- Native API returns the top-level XID even inside a subtransaction.
+    v_xid:=pg_current_xact_id()::text::numeric;v_span:=numrange(v_xid,v_xid+1,'[)');
+  end if;
+  begin
+    -- One call orders PHYSICAL identities before parent/dependency identities.
+    -- Owner callers still supply Candidate/I1 -> existing family -> dependency
+    -- -> genuinely allocated phases, with the full native CAS after retention.
+    for t in select d.value from(select distinct x.value from jsonb_array_elements(p_tokens) x(value)
+      where not(x.value ? 'json') or octet_length(x.value->'json'#>>'{}')<=1536) d
+      order by case when d.value->>'kind' in('WORKFLOW_UUID','CONTRACT_WEEK_UUID','SOURCE_CYCLE_UUID','SOURCE_OBJECT','SOURCE_GROUP_CLIENT','SOURCE_CYCLE_CLIENT','SOURCE_GLOBAL_SETTINGS','SOURCE_REVISION_CLIENT','SOURCE_REVISION_EVENT','SOURCE_RESOLUTION_SLOT','SOURCE_LINEAGE_RESOLUTION_CLIENT','SOURCE_LINEAGE_EVENT_CLIENT','SOURCE_GROUP_REPORT_REVISION','SOURCE_GROUP_REVISION_EVENT') then 1 else 0 end,d.value
+    loop
+      k:=t->>'kind';u:=case when t ? 'uuid' then(t->>'uuid')::uuid end;
+      s:=case when t ? 'json' then t->'json'#>>'{}' end;
+      perform set_config('lock_timeout','1ms',true);
+      if p_retain then
+        perform 1 from private.timesheet_correction_a0_transaction_fences f
+          where f.retained and f.token_kind=k and((u is not null and f.uuid_identity=u)
+            or(s is not null and f.text_identity=s collate "C")) for update nowait;
+        if found then
+          update private.timesheet_correction_a0_transaction_fences f set touch_bit=not f.touch_bit
+            where f.retained and f.token_kind=k and((u is not null and f.uuid_identity=u)
+              or(s is not null and f.text_identity=s collate "C"));
+          get diagnostics v_count=row_count;
+          if v_count<>1 then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+        else
+          v_inserted:=null;
+          if u is not null then
+            insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,text_identity,retained,intent_span,touch_bit)
+              values(k,u,null,true,v_span,true) on conflict on constraint timesheet_correction_a0_fences_uuid_excl
+              do nothing returning 1 into v_inserted;
+          else
+            insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,text_identity,retained,intent_span,touch_bit)
+              values(k,null,s,true,v_span,true) on conflict on constraint timesheet_correction_a0_fences_text_excl
+              do nothing returning 1 into v_inserted;
+          end if;
+          if v_inserted is distinct from 1 then
+            perform 1 from private.timesheet_correction_a0_transaction_fences f where f.retained and f.token_kind=k
+              and((u is not null and f.uuid_identity=u) or(s is not null and f.text_identity=s collate "C")) for update nowait;
+            if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+            update private.timesheet_correction_a0_transaction_fences f set touch_bit=not f.touch_bit
+              where f.retained and f.token_kind=k and((u is not null and f.uuid_identity=u)
+                or(s is not null and f.text_identity=s collate "C"));
+            get diagnostics v_count=row_count;
+            if v_count<>1 then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+          end if;
+        end if;
+      else
+        perform 1 from private.timesheet_correction_a0_transaction_fences f where f.retained and f.token_kind=k
+          and((u is not null and f.uuid_identity=u) or(s is not null and f.text_identity=s collate "C")) for share nowait;
+        if not found then
+          v_inserted:=null;
+          if u is not null then
+            insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,text_identity,retained,intent_span,touch_bit)
+              values(k,u,null,false,v_span,false) on conflict on constraint timesheet_correction_a0_fences_uuid_excl
+              do nothing returning 1 into v_inserted;
+          else
+            insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,text_identity,retained,intent_span,touch_bit)
+              values(k,null,s,false,v_span,false) on conflict on constraint timesheet_correction_a0_fences_text_excl
+              do nothing returning 1 into v_inserted;
+          end if;
+          if v_inserted=1 then
+            -- Delete only this top-level transaction's own newly inserted span.
+            -- Other ordinary spans are disjoint. This never deletes a retained token.
+            delete from private.timesheet_correction_a0_transaction_fences f where not f.retained and f.intent_span=v_span
+              and f.token_kind=k and((u is not null and f.uuid_identity=u) or(s is not null and f.text_identity=s collate "C"));
+          else
+            perform 1 from private.timesheet_correction_a0_transaction_fences f where f.retained and f.token_kind=k
+              and((u is not null and f.uuid_identity=u) or(s is not null and f.text_identity=s collate "C")) for share nowait;
+            if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+          end if;
+        end if;
+      end if;
+    end loop;
+    perform set_config('lock_timeout',v_timeout,true);
+  exception when others then perform set_config('lock_timeout',v_timeout,true);raise;end;
+end;
+$function$;
+alter function private.timesheet_correction_a0_fence_scalar_acquire_core_v1(jsonb,boolean) owner to postgres;
+revoke all on function private.timesheet_correction_a0_fence_scalar_acquire_core_v1(jsonb,boolean) from public,anon,authenticated,service_role;

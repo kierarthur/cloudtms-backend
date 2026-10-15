@@ -1,0 +1,56 @@
+{
+  "inputs": [
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "commit": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+      "bytes": 12107,
+      "raw_sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/01_native_magnitude_core.sqlinc",
+      "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+      "bytes": 1334,
+      "raw_sha256": "f3816cce0f413c6bb02b2f5eb5be8a093fab2e388d0addfc1cebdd1e03cefccb",
+      "signature": "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/03_nhsp_negative_population.sqlinc",
+      "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+      "bytes": 11997,
+      "raw_sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/01_native_line_vat.sqlinc",
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "bytes": 1125,
+      "raw_sha256": "9d9f36f53d66ac88ccd38872d8ce14881a13b41ecedb59b4bb10a7e890af616c",
+      "signature": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/03_nhsp_price_admission.sqlinc",
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "bytes": 7001,
+      "raw_sha256": "f84627e8c6878cc745834925ccf796f77b2887cb78a4d70a0a31a0450e84ff90",
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/05_nhsp_native_invoice_values.sqlinc",
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "bytes": 3260,
+      "raw_sha256": "4046f609cf4df621d4c8ee3159a7f9de18ba6abed6ddd7b10a77d3752f2f79f5",
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)"
+    }
+  ],
+  "sql_bytes": 39687,
+  "sql_sha256": "838cbc5b3d775dc5f2859c605ea56802b8e865d3b2554e6a6d7f638e1a688ae0",
+  "verification_sha256": "5fdb6fa690fce09888e4d348cbe8d2aaa5f6e5e90482528e7e5830241ba00865",
+  "packaging_statements": 23,
+  "scope": "Six new private declarations compile on actual schema; seven extracted native VAT vectors and effective ACL only. No actual paid, C1/price/current-basis/negative-population/application routine execution, business fixture, writer or full native/financial qualification.",
+  "native": "PENDING",
+  "shared_key": [
+    20261013,
+    1
+  ]
+}

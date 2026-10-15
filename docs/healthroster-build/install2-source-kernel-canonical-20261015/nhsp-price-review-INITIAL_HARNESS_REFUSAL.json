@@ -1,0 +1,7 @@
+{
+  "source_only": true,
+  "initial_result": "Actual predecessor lookup refused before tests",
+  "cause": "Reviewer assumed both input pins were extracted signatures; FIN4 is an actual whole-own predecessor source pin.",
+  "correction": "Match exact before SHA; compare extracted definitions for native signature inputs and raw Git for whole-own predecessor.",
+  "frozen_implementation_or_assertions_changed": false
+}

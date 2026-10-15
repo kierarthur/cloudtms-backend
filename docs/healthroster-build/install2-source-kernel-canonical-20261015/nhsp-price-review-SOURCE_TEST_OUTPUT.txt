@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: both complete owners reverse four unique hunks to exact pinned full inputs
+ok 1 - both complete owners reverse four unique hunks to exact pinned full inputs
+  ---
+  duration_ms: 2.2994
+  type: 'test'
+  ...
+# Subtest: all five literal current source inputs and full native declarations match immutable Git bytes
+ok 2 - all five literal current source inputs and full native declarations match immutable Git bytes
+  ---
+  duration_ms: 222.5707
+  type: 'test'
+  ...
+# Subtest: the native VAT expression is copied exactly once, preserving signed pence and original typmods
+ok 3 - the native VAT expression is copied exactly once, preserving signed pence and original typmods
+  ---
+  duration_ms: 0.3075
+  type: 'test'
+  ...
+# Subtest: native movement factory delegates after its entire original authority and retains the exact frozen-money override/hash/insert suffix
+ok 4 - native movement factory delegates after its entire original authority and retains the exact frozen-money override/hash/insert suffix
+  ---
+  duration_ms: 0.5289
+  type: 'test'
+  ...
+# Subtest: complete FIN4 price gate appears byte-for-byte once in its extracted Source owner
+ok 5 - complete FIN4 price gate appears byte-for-byte once in its extracted Source owner
+  ---
+  duration_ms: 1.376
+  type: 'test'
+  ...
+# Subtest: native acceptance still binds the genuine source upload/hash/row/Contract/economic/policy identity and exact acceptance kinds
+ok 6 - native acceptance still binds the genuine source upload/hash/row/Contract/economic/policy identity and exact acceptance kinds
+  ---
+  duration_ms: 0.1049
+  type: 'test'
+  ...
+# Subtest: all original EXACT/rounding/mismatch/zero-sign/blocker guards are retained, with no new tolerance or zero/pay rule
+ok 7 - all original EXACT/rounding/mismatch/zero-sign/blocker guards are retained, with no new tolerance or zero/pay rule
+  ---
+  duration_ms: 0.1486
+  type: 'test'
+  ...
+# Subtest: FIN4 current C1/lineage then exact gate then original movement/commission/report totals order is retained
+ok 8 - FIN4 current C1/lineage then exact gate then original movement/commission/report totals order is retained
+  ---
+  duration_ms: 0.1523
+  type: 'test'
+  ...
+# Subtest: same native record fields are restored through full composite-type JSON round trip without a caller DTO
+ok 9 - same native record fields are restored through full composite-type JSON round trip without a caller DTO
+  ---
+  duration_ms: 0.1512
+  type: 'test'
+  ...
+# Subtest: new invoice values delegate actual NHSP positive row C1, native price owner and single native VAT owner
+ok 10 - new invoice values delegate actual NHSP positive row C1, native price owner and single native VAT owner
+  ---
+  duration_ms: 0.9667
+  type: 'test'
+  ...
+# Subtest: HealthRoster-only original invoice amount reader is untouched and never treated as NHSP authority
+ok 11 - HealthRoster-only original invoice amount reader is untouched and never treated as NHSP authority
+  ---
+  duration_ms: 0.387
+  type: 'test'
+  ...
+# Subtest: only exact three owner-private helpers are added, with no public ABI/table/column/recording/effect grant
+ok 12 - only exact three owner-private helpers are added, with no public ABI/table/column/recording/effect grant
+  ---
+  duration_ms: 534.3106
+  type: 'test'
+  ...
+# Subtest: all new read/value helpers are pure and no value/price helper admits a financial or capture write
+ok 13 - all new read/value helpers are pure and no value/price helper admits a financial or capture write
+  ---
+  duration_ms: 0.2988
+  type: 'test'
+  ...
+# Subtest: existing complete owner identities/header security plus corrected NO_CHANGE fields stay exact
+ok 14 - existing complete owner identities/header security plus corrected NO_CHANGE fields stay exact
+  ---
+  duration_ms: 2.0908
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 890.6225

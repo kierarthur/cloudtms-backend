@@ -1,0 +1,95 @@
+{
+  "source_and_bounded_native_proofs": true,
+  "artifacts": [
+    {
+      "file": "canonical-native-ABSENCE.sql",
+      "bytes": 743,
+      "sha256": "638aa7355ed65e387a6455a4456ec61bea19427ad63dc54e774ed2fa2ce221ae"
+    },
+    {
+      "file": "canonical-native-MANIFEST.json",
+      "bytes": 2554,
+      "sha256": "6a4ac4a8e57f7069401665a1ffd999b2cab5e63980417f58bfcb0dafff8ad193"
+    },
+    {
+      "file": "canonical-native-NATIVE_RESULT.json",
+      "bytes": 7580,
+      "sha256": "3bae116ec287db2f807d3368fc7ca61b4254ffe035195e4ec1f9bc3eb20910d7"
+    },
+    {
+      "file": "canonical-native-TRIAL.sql",
+      "bytes": 37927,
+      "sha256": "13005ecac06b3e0b294d724158ca7ce8041c61bd36d11c7f2a29820e9729cb70"
+    },
+    {
+      "file": "COMPOSITION.json",
+      "bytes": 4986,
+      "sha256": "9177b182beec91b1eb7baf886cb04b28d8031c5798ea636ce60b20ace7f04e0d"
+    },
+    {
+      "file": "CURRENT_RELEASE_BEFORE.json",
+      "bytes": 35146,
+      "sha256": "5f6b8f64ca672982589eb3711d1789fb876afce64d4f6d3d9d0c39b7f6c36c0c"
+    },
+    {
+      "file": "mount-source-kernel-foundation-20261015.mjs",
+      "bytes": 8846,
+      "sha256": "adbcb4a9a03300c2523b8b1c6a7c219fa27c2e02a02173e7335c454594f28f01"
+    },
+    {
+      "file": "NATIVE_TURN_JOURNAL.txt",
+      "bytes": 878,
+      "sha256": "c7f0d0ecb35103b8b88cec9050bedea62a59a34ff7ea46c0ad3506b45064b2cd"
+    },
+    {
+      "file": "nhsp-helper-native-ABSENCE.sql",
+      "bytes": 668,
+      "sha256": "5fdb6fa690fce09888e4d348cbe8d2aaa5f6e5e90482528e7e5830241ba00865"
+    },
+    {
+      "file": "nhsp-helper-native-MANIFEST.json",
+      "bytes": 3101,
+      "sha256": "8f0a890be1be4b72aeb701cc540c970d70c45538f755b2a242966c76caaea07b"
+    },
+    {
+      "file": "nhsp-helper-native-NATIVE_RESULT.json",
+      "bytes": 6070,
+      "sha256": "2adba3812984e75f716a7ff97ad094408d9e63a1fbb47ed710ba7f55d8656479"
+    },
+    {
+      "file": "nhsp-helper-native-TRIAL.sql",
+      "bytes": 39687,
+      "sha256": "838cbc5b3d775dc5f2859c605ea56802b8e865d3b2554e6a6d7f638e1a688ae0"
+    },
+    {
+      "file": "nhsp-price-review-CHECKS.json",
+      "bytes": 814,
+      "sha256": "aa3115b9c1497264fe0b3eb8f6384b2868b673a21cadfd0eb3fc116ed063606c"
+    },
+    {
+      "file": "nhsp-price-review-INITIAL_HARNESS_REFUSAL.json",
+      "bytes": 418,
+      "sha256": "9b74ec2fffad9f7eea759baa41f47703158e425ccc05cd63ffe01d43210498a4"
+    },
+    {
+      "file": "nhsp-price-review-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 3923,
+      "sha256": "29ec7db70bd2f1be26761717e23f00846716ff5745cab3b503f1c87b6c0b8dee"
+    },
+    {
+      "file": "prepare-canonical-source-kernel-native-20261015.mjs",
+      "bytes": 3379,
+      "sha256": "8b19452bab22e0f6540f646c1dfeade97aedc7f230c5ceaafa6c671fffc397d5"
+    },
+    {
+      "file": "prepare-nhsp-helper-native-20261015.mjs",
+      "bytes": 5938,
+      "sha256": "caa48c659623c5770adc0c7724803a9fef0231b296dcfaa6c24c6908945de3b9"
+    },
+    {
+      "file": "review-money-nhsp-price-20261015.mjs",
+      "bytes": 3888,
+      "sha256": "a070b4d2b85c21469ffeec21939a35b55ec20e71647cbe0ea111de63a783f869"
+    }
+  ]
+}

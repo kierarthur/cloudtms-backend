@@ -1,0 +1,24 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+  "before": {
+    "files": 18,
+    "manifest_sha256": "cbae56a4c479d7d53660ea93de981f7c01e03ac24d228fea2779ac555aeb1296"
+  },
+  "after": {
+    "files": 18,
+    "manifest_sha256": "cbae56a4c479d7d53660ea93de981f7c01e03ac24d228fea2779ac555aeb1296"
+  },
+  "actual_input_pins": 5,
+  "whole_owner_reverses": 2,
+  "unique_hunks": 4,
+  "exact_native_vat_and_price_extraction": true,
+  "source_cases": 14,
+  "output_sha256": "29ec7db70bd2f1be26761717e23f00846716ff5745cab3b503f1c87b6c0b8dee",
+  "remaining": [
+    "full actual NHSP NONE choice/negative/current invoice origin/FIN4/capture/prepared/Office/Report pipeline",
+    "final native root/roles/security/contract/financial acceptance"
+  ]
+}

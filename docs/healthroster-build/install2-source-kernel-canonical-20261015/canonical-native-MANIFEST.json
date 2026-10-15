@@ -1,0 +1,52 @@
+{
+  "canonical_source_only_trial": true,
+  "migration": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+  "repeatable": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+  "repeatable_closure_sha256": "6d66e7ac0c37f15cbf36ebc5955bcb51a10633247eea448718cdea4b11848853",
+  "verifier": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+  "verifier_source_sha256": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3",
+  "verifier_do_body_sha256": "ec2f56229c10eb7f3cad6b6a0beaed67e9e908c7e125526460ef5fe071bb0c6d",
+  "only_verifier_outer_commands_removed": [
+    "BEGIN",
+    "ROLLBACK"
+  ],
+  "original_kernel_assertions_unchanged": true,
+  "source_outputs": [
+    {
+      "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+      "bytes": 6517,
+      "sha256": "f348f0b6849a40a58124c992128edd78ac95d886f764baed8bb70a4c341b82b7"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+      "bytes": 8168,
+      "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+      "bytes": 7703,
+      "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+      "bytes": 390,
+      "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7"
+    },
+    {
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "bytes": 3867,
+      "sha256": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3"
+    }
+  ],
+  "sql_sha256": "13005ecac06b3e0b294d724158ca7ce8041c61bd36d11c7f2a29820e9729cb70",
+  "sql_bytes": 37927,
+  "packaging_statements": 31,
+  "verification_sha256": "638aa7355ed65e387a6455a4456ec61bea19427ad63dc54e774ed2fa2ce221ae",
+  "native": "PENDING",
+  "scope": "Actual new canonical kernel package plus its complete new mandatory constructor body. No full release/RR/concurrency/RAW/ACTIVE/financial/application acceptance."
+}
