@@ -1,0 +1,69 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "independent_review": "PENDING",
+  "compiled_contract_sha256": null,
+  "package": "agency-policy-source-phase-successor-20261015",
+  "root_input_pin": "d48f05205ae9ce066762be8a307d87b304ce71da",
+  "pure_cases": 13,
+  "pure_tap": "TAP version 13\n# Subtest: SOURCE_ONLY full current reversal 103_complete_active_source_guard_with_native_policy_union.sqlinc\nok 1 - SOURCE_ONLY full current reversal 103_complete_active_source_guard_with_native_policy_union.sqlinc\n  ---\n  duration_ms: 1.7908\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY full current reversal 104_complete_same_source_before_policy_and_active_union.sqlinc\nok 2 - SOURCE_ONLY full current reversal 104_complete_same_source_before_policy_and_active_union.sqlinc\n  ---\n  duration_ms: 1.5778\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY exact OLD/NEW raw + revision + policy union is rederived before ACTIVE lookup\nok 3 - SOURCE_ONLY exact OLD/NEW raw + revision + policy union is rederived before ACTIVE lookup\n  ---\n  duration_ms: 0.183\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY both range domains require identical kind and real Client UUID\nok 4 - SOURCE_ONLY both range domains require identical kind and real Client UUID\n  ---\n  duration_ms: 0.0923\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation other-group membership same actual date\nok 5 - UNIT_ONLY actual range relation other-group membership same actual date\n  ---\n  duration_ms: 0.0876\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation inactive group future activation same date\nok 6 - UNIT_ONLY actual range relation inactive group future activation same date\n  ---\n  duration_ms: 0.0466\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation prior disjoint date\nok 7 - UNIT_ONLY actual range relation prior disjoint date\n  ---\n  duration_ms: 0.04\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation next disjoint date\nok 8 - UNIT_ONLY actual range relation next disjoint date\n  ---\n  duration_ms: 0.0558\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation other Client\nok 9 - UNIT_ONLY actual range relation other Client\n  ---\n  duration_ms: 0.0607\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation Contract coverage cannot collide across domain\nok 10 - UNIT_ONLY actual range relation Contract coverage cannot collide across domain\n  ---\n  duration_ms: 0.0942\n  type: 'test'\n  ...\n# Subtest: UNIT_ONLY actual range relation lower unbounded membership\nok 11 - UNIT_ONLY actual range relation lower unbounded membership\n  ---\n  duration_ms: 0.0487\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY persisted capture business hash and original creator are unchanged\nok 12 - SOURCE_ONLY persisted capture business hash and original creator are unchanged\n  ---\n  duration_ms: 0.0696\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY underlying all-group/date projection and nested group activation are the exact root owners\nok 13 - SOURCE_ONLY underlying all-group/date projection and nested group activation are the exact root owners\n  ---\n  duration_ms: 1.3918\n  type: 'test'\n  ...\n1..13\n# tests 13\n# suites 0\n# pass 13\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 130.8323\n",
+  "syntax_files": [
+    "build-agency-policy-source-phase-successor.mjs",
+    "policy-source-phase-successor-construction-20261015/policy-source-phase.test.mjs"
+  ],
+  "syntax_pass": true,
+  "sql_lexical_pages": [
+    {
+      "path": "103_complete_active_source_guard_with_native_policy_union.sqlinc",
+      "statements": 6
+    },
+    {
+      "path": "104_complete_same_source_before_policy_and_active_union.sqlinc",
+      "statements": 12
+    },
+    {
+      "path": "reference/root-00_source_token_grammar.sqlinc",
+      "statements": 3
+    },
+    {
+      "path": "reference/root-01_complete_same_arbiter_schema.sqlinc",
+      "statements": 7
+    },
+    {
+      "path": "reference/root-02_complete_scalar_helpers.sqlinc",
+      "statements": 15
+    },
+    {
+      "path": "reference/root-03_coverage_and_compatibility_acquire.sqlinc",
+      "statements": 9
+    },
+    {
+      "path": "reference/root-04_native_source_footprint.sqlinc",
+      "statements": 3
+    },
+    {
+      "path": "reference/root-05_raw_selector_helpers.sqlinc",
+      "statements": 12
+    },
+    {
+      "path": "reference/root-06_complete_source_witness_policy_projection.sqlinc",
+      "statements": 3
+    }
+  ],
+  "sql_lexical_total": 70,
+  "sql_lexical_not_postgresql_compilation": true,
+  "preserved_ecbd_files": 29,
+  "preserved_ecbd_mismatches": 0,
+  "credential_pattern_findings": 0,
+  "credential_scan_scope": "private key / GitHub token source patterns only; no credential files inspected",
+  "raw_whitespace_pass": false,
+  "raw_whitespace_note": "Inherited full-owner/evidence whitespace not reclassified.",
+  "mandatory_unrun": [
+    "Root d48 selector/kernel independent source review and complete final late-BEFORE trigger registration",
+    "Native first/last BEFORE order and actual transformed NEW / statement visibility",
+    "Whole Candidate/I1/family/allocated/Source transaction order and hidden-RR schedules",
+    "Actual inter-RPC foreign publication/config refusal, legitimate same-request resumer and completion",
+    "Remaining original evidence/paid protection/NX-AI-6/Office/Report NONE engineering and native proof"
+  ]
+}

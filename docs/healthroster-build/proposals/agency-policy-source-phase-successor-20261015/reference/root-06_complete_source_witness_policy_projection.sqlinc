@@ -1,0 +1,201 @@
+-- Finite native dependency projection for the SAME proposed A0 arbiter.
+-- This reads actual selected Source parents. It does not retain a token,
+-- admit a writer, establish role/lock authority or create a second fence.
+create or replace function private.weekly_source_agency_source_dependencies_v1(
+ p_source_cycle_id uuid,p_client_ids uuid[]
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ facts jsonb; result jsonb; parents jsonb; relations jsonb; incidents jsonb; comparisons jsonb;
+ billing_movements jsonb; rule_set_ids jsonb; resolution_slots jsonb; revision_client_pairs jsonb;
+ revision_event_pairs jsonb; exact_report_bound_resolutions jsonb; policy_dates jsonb; policy_groups jsonb; policy_parents jsonb;
+ cycle public.weekly_source_cycles%rowtype; upload public.weekly_source_uploads%rowtype;
+ group_id uuid; clients uuid[]; field record; item jsonb; key_name text; value_text text;
+ values_json jsonb; coverage_start date; coverage_end date;
+begin
+ -- The existing Source reader owns current publication, accepted upload,
+ -- real Client scope and the exact native Source economic/identity checks.
+ facts:=private.weekly_source_bulk_source_facts_v1(p_source_cycle_id,p_client_ids);
+ if facts->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_FACTS_V1'
+  or facts->>'source_cycle_id' is distinct from p_source_cycle_id::text
+  or jsonb_typeof(facts->'client_ids') is distinct from 'array'
+  or jsonb_typeof(facts->'group') is distinct from 'object' then
+  raise exception 'AGENCY_SOURCE_DEPENDENCY_FACTS_UNAVAILABLE' using errcode='55000';end if;
+ select coalesce(array_agg(value::uuid order by value::uuid),'{}'::uuid[]) into clients
+  from jsonb_array_elements_text(facts->'client_ids') value;
+ group_id:=(facts#>>'{group,id}')::uuid;
+ select * into strict cycle from public.weekly_source_cycles where id=p_source_cycle_id and source_group_id=group_id;
+ select * into strict upload from public.weekly_source_uploads where id=cycle.current_complete_upload_id;
+ coverage_start:=coalesce(upload.confirmed_coverage_start_local_date,cycle.finalisation_week_ending-6);
+ coverage_end:=coalesce(upload.confirmed_coverage_end_local_date,cycle.finalisation_week_ending);
+ if coverage_start is null or coverage_end is null or coverage_start>coverage_end then
+  raise exception 'AGENCY_SOURCE_DEPENDENCY_COVERAGE_UNAVAILABLE' using errcode='55000';end if;
+
+ -- Exactly the current bulk reader's selected relation arrays. These preserve
+ -- raw NULLs by omitting absent keys; no row is assigned a synthetic parent.
+ -- SQL names/columns are literal. There is no caller relation selector or SQL.
+ relations:='[]'::jsonb;
+ for field in select * from(values
+  ('cycles','weekly_source_cycles',array['id','source_group_id','scope_client_id']),
+  ('clients','clients',array['id']),
+  ('memberships','weekly_source_group_clients',array['id','source_group_id','client_id']),
+  ('client_policies','weekly_source_client_policies',array['id','source_group_id','client_id']),
+  ('client_settings','client_settings',array['id','client_id']),
+  ('contracts','contracts',array['id','client_id','candidate_id']),
+  ('contract_policies','weekly_source_contract_policies',array['id','contract_id']),
+  ('assignments','weekly_source_group_rule_assignments',array['id','source_group_id','rule_set_version_id']),
+  ('rule_versions','weekly_source_rule_set_versions',array['id','rule_set_id']),
+  ('profiles','weekly_source_format_profiles',array['id']),
+  ('uploads','weekly_source_uploads',array['id','source_cycle_id','report_scope_id','source_format_profile_id','correction_session_id']),
+  ('publications','weekly_source_projection_publications',array['id','source_cycle_id','report_scope_id','upload_id','correction_session_id']),
+  ('rows','weekly_source_upload_rows',array['id','upload_id']),
+  ('resolutions','weekly_source_row_resolutions',array['id','upload_row_id','candidate_id','client_id','contract_id','work_event_id']),
+  ('economics','weekly_source_row_economic_snapshots',array['id','row_resolution_id','upload_row_id','work_event_id','candidate_id','client_id','contract_id']),
+  ('expense_policy_snapshots','weekly_source_row_expense_policy_snapshots',array['id','row_resolution_id','upload_row_id','work_event_id','candidate_id','client_id','contract_id']),
+  ('expense_authorities','weekly_expense_authority_generations',array['id','final_revision_id','work_event_id','contract_id','row_expense_policy_snapshot_id','prior_expense_authority_generation_id']),
+  ('expense_cell_evidence','weekly_source_expense_cell_evidence',array['id','upload_id']),
+  ('charge_checks','weekly_source_charge_checks',array['id','upload_row_id','row_resolution_id']),
+  ('charge_acceptances','weekly_source_charge_acceptances',array['id','upload_row_id','row_resolution_id','charge_check_id','source_upload_id','contract_id']),
+  ('invoice_hold_releases','weekly_source_invoice_hold_releases',array['id','upload_row_id']),
+  ('transitions','weekly_source_state_transitions',array['id','final_revision_id','finalisation_cycle_id','work_event_id','previous_snapshot_line_id','new_snapshot_line_id']),
+  ('report_scopes','weekly_source_report_scopes',array['id','source_cycle_id','source_group_id','client_id','current_complete_upload_id','current_final_revision_id','current_projection_publication_id','self_bill_report_id']),
+  ('reports','weekly_source_self_bill_reports',array['id','source_group_id','client_id','source_cycle_id']),
+  ('report_bindings','weekly_source_self_bill_report_line_bindings',array['id','report_row_id','export_upload_row_id','bound_row_resolution_id','export_projection_publication_id','work_event_id','self_bill_report_id']),
+  ('events','weekly_work_events',array['id','candidate_id','client_id','first_source_group_id','source_format_profile_id']),
+  ('revisions','weekly_source_final_revisions',array['id','source_cycle_id','report_scope_id','upload_id','predecessor_revision_id','prior_state_cutoff_revision_id','rule_set_version_id']),
+  ('snapshots','weekly_source_final_snapshot_lines',array['id','final_revision_id','upload_row_id','row_resolution_id','charge_check_id','work_event_id','candidate_id','client_id','contract_id']),
+  ('lineages','weekly_source_row_timesheet_lineages',array['id','row_resolution_id','source_cycle_id','work_event_id','candidate_id','client_id','contract_id','contract_week_id','timesheet_id']),
+  ('pay_receipts','weekly_source_ordinary_pay_projection_receipts',array['id','final_revision_id','source_cycle_id','client_id','root_timesheet_id','published_timesheet_financial_id']),
+  ('financial_identities','timesheets_financials',array['id','timesheet_id','client_id','candidate_id']),
+  ('root_identities','timesheets',array['timesheet_id','contract_id'])
+ ) mapping(facts_field,relation_name,uuid_columns) order by relation_name
+ loop
+  if jsonb_typeof(facts->field.facts_field) is distinct from 'array' then
+   raise exception 'AGENCY_SOURCE_DEPENDENCY_FACTS_UNAVAILABLE' using errcode='55000';end if;
+  parents:='[]'::jsonb;
+  foreach key_name in array field.uuid_columns loop
+   if exists(select 1 from jsonb_array_elements(facts->field.facts_field) row_data
+    where jsonb_typeof(row_data) is distinct from 'object'
+     or(row_data ? key_name and jsonb_typeof(row_data->key_name) is distinct from 'null'
+      and(jsonb_typeof(row_data->key_name) is distinct from 'string'
+       or pg_input_is_valid(row_data->>key_name,'uuid') is distinct from true))) then
+    raise exception 'AGENCY_SOURCE_DEPENDENCY_RAW_ID_INVALID' using errcode='55000';end if;
+   select coalesce(jsonb_agg(to_jsonb(id) order by id),'[]'::jsonb) into values_json from(
+    select distinct (row_data->>key_name)::uuid id from jsonb_array_elements(facts->field.facts_field) row_data
+     where row_data->>key_name is not null) actual;
+   parents:=parents||jsonb_build_array(jsonb_build_object('column',key_name,'type','UUID','values',values_json));
+  end loop;
+  relations:=relations||jsonb_build_array(jsonb_build_object('relation','public.'||field.relation_name,'keys',parents));
+ end loop;
+
+ -- These IDs are used by the native Source selector but deliberately absent
+ -- from its financial facts JSON. Select ALL states, before parent lookup.
+ select coalesce(jsonb_agg(to_jsonb(id) order by id),'[]'::jsonb) into incidents from(
+  select incident.id from public.weekly_discrepancy_incidents incident
+   where incident.source_cycle_id=cycle.id and incident.client_id=any(clients)) native;
+ select coalesce(jsonb_agg(to_jsonb(id) order by id),'[]'::jsonb) into comparisons from(
+  select distinct comparison.id from public.weekly_issue_comparison_revisions comparison
+   join public.weekly_discrepancy_incidents incident on incident.current_comparison_revision_id=comparison.id
+   where incident.source_cycle_id=cycle.id and incident.client_id=any(clients)) native;
+ -- The bulk reader validates these exact movement IDs/economic identities
+ -- against the actual receipt/root/financial provenance before returning.
+ -- They are a native read dependency even though the reader does not return
+ -- whole movement rows. No Report/NONE invoice companion becomes PAY basis.
+ select coalesce(jsonb_agg(to_jsonb(id) order by id),'[]'::jsonb) into billing_movements from(
+  select distinct (unit->>'movement_id')::uuid id
+   from jsonb_array_elements(facts->'pay_receipts') receipt
+   cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'
+    then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit) native;
+ select coalesce(jsonb_agg(to_jsonb(id) order by id),'[]'::jsonb) into rule_set_ids from(
+  select distinct (version->>'rule_set_id')::uuid id from jsonb_array_elements(facts->'rule_versions') version
+   where version->>'rule_set_id' is not null) native;
+ -- Predicate-shaped phantom scopes come from the SAME real facts read.
+ -- Every Source row/publication upload match is retained for every actually
+ -- selected Client, including slots with no currently visible resolution.
+ -- An existing report-bound resolution is a separate exact object dependency.
+ -- No parent-only upload/revision/event/Client scope substitutes for these
+ -- conjunctions, and no LIMIT/sample/truncation can claim a complete footprint.
+ with actual_rows as (
+  select (row_data->>'id')::uuid upload_row_id,(row_data->>'upload_id')::uuid upload_id
+   from jsonb_array_elements(facts->'rows') row_data
+ ), actual_publications as (
+  select (publication->>'upload_id')::uuid upload_id,
+   coalesce(publication->>'projection_generation',publication->>'authority_scope_version')::integer generation
+   from jsonb_array_elements(facts->'publications') publication
+ ), actual_slots as (
+  select distinct row_data.upload_row_id,publication.generation,client_id
+   from actual_rows row_data join actual_publications publication on publication.upload_id=row_data.upload_id
+   cross join unnest(clients) client_id
+ )
+ select coalesce(jsonb_agg(jsonb_build_array(upload_row_id,generation,client_id)
+  order by upload_row_id,generation,client_id),'[]'::jsonb) into resolution_slots from actual_slots;
+ select coalesce(jsonb_agg(jsonb_build_array(revision_id,client_id) order by revision_id,client_id),'[]'::jsonb)
+  into revision_client_pairs from(
+   select distinct (revision->>'id')::uuid revision_id,client_id
+    from jsonb_array_elements(facts->'revisions') revision cross join unnest(clients) client_id
+  ) native;
+ select coalesce(jsonb_agg(jsonb_build_array(revision_id,event_id) order by revision_id,event_id),'[]'::jsonb)
+  into revision_event_pairs from(
+   select distinct (revision->>'id')::uuid revision_id,(event->>'id')::uuid event_id
+    from jsonb_array_elements(facts->'revisions') revision cross join jsonb_array_elements(facts->'events') event
+  ) native;
+ select coalesce(jsonb_agg(to_jsonb(resolution_id) order by resolution_id),'[]'::jsonb)
+  into exact_report_bound_resolutions from(
+   select distinct (binding->>'bound_row_resolution_id')::uuid resolution_id
+    from jsonb_array_elements(facts->'report_bindings') binding
+    where binding->>'bound_row_resolution_id' is not null
+  ) native;
+ -- The effective-policy reader counts ALL active groups for each actual
+ -- Client/work date. A competing group's membership is a real phantom even
+ -- when the cycle's own group has not changed. No extra facts/CAS read.
+ select coalesce(jsonb_agg(jsonb_build_array(client_id,work_date) order by client_id,work_date),'[]'::jsonb)
+  into policy_dates from(select distinct (item->>'client_id')::uuid client_id,(item->>'work_date')::date work_date
+   from jsonb_array_elements(facts->'resolved_policies') item) actual;
+ select coalesce(jsonb_agg(jsonb_build_array(group_id,client_id) order by group_id,client_id),'[]'::jsonb)
+  into policy_groups from(select distinct (item#>>'{policy,source_group_id}')::uuid group_id,(item->>'client_id')::uuid client_id
+   from jsonb_array_elements(facts->'resolved_policies') item) actual;
+ select coalesce(jsonb_agg(jsonb_build_array(relation_name,id) order by relation_name,id),'[]'::jsonb)
+  into policy_parents from(select distinct field.relation_name,(item#>>array['policy',field.policy_key])::uuid id
+   from jsonb_array_elements(facts->'resolved_policies') item cross join(values
+    ('public.weekly_source_groups','source_group_id'),
+    ('public.weekly_source_group_clients','source_group_membership_id'),
+    ('public.weekly_source_client_policies','client_policy_id'),
+    ('public.weekly_source_contract_policies','contract_policy_id')
+   ) field(relation_name,policy_key) where item#>>array['policy',field.policy_key] is not null
+   union select distinct 'public.contracts',(item->>'contract_id')::uuid
+    from jsonb_array_elements(facts->'resolved_policies') item where item->>'contract_id' is not null) actual;
+ -- Group/client and date predicates are retained as typed native selectors,
+ -- not incorrectly squeezed into FAMILY_UUID or an existing cycle token.
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCIES_V1',
+  'source_cycle_id',cycle.id,'source_group_id',group_id,'client_ids',to_jsonb(clients),
+  'source_cas',jsonb_build_object('schema_version','WEEKLY_SOURCE_BULK_SOURCE_CAS_V1','source_cycle_id',cycle.id,
+   'client_ids',to_jsonb(clients),'source_cas_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+     'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1',facts),'hex')),
+  'relations',relations,'selected_incident_ids',incidents,'selected_comparison_ids',comparisons,
+  'selected_billing_movement_ids',billing_movements,'referenced_rule_set_ids',rule_set_ids,
+  'native_selector_scopes',jsonb_build_object(
+   'group_client_pairs',coalesce((select jsonb_agg(jsonb_build_object('source_group_id',group_id,'client_id',id) order by id)
+     from unnest(clients) id),'[]'::jsonb),
+   'policy_date_pairs',policy_dates,'policy_group_client_pairs',policy_groups,'policy_parent_objects',policy_parents,
+   'resolution_slots',resolution_slots,
+   'revision_client_pairs',revision_client_pairs,'revision_event_pairs',revision_event_pairs,
+   'exact_report_bound_resolution_ids',exact_report_bound_resolutions,
+   'contract_coverage',jsonb_build_object('client_ids',to_jsonb(clients),
+     'coverage_start',coverage_start,'coverage_end',coverage_end),
+   'all_assignments_source_group_id',group_id,'all_client_settings_client_ids',to_jsonb(clients),
+   'global_settings_singleton',true),
+  'family_bookings',coalesce((select jsonb_agg(jsonb_build_object('timesheet_id',row_data->'timesheet_id','booking_id',row_data->'booking_id')
+    order by row_data->>'timesheet_id') from jsonb_array_elements(facts->'root_identities') row_data),'[]'::jsonb),
+  'lineage_bookings',coalesce((select jsonb_agg(jsonb_build_object('lineage_id',row_data->'id','family_booking_id',row_data->'family_booking_id')
+    order by row_data->>'id') from jsonb_array_elements(facts->'lineages') row_data),'[]'::jsonb));
+ if octet_length(result::text)>8388608 then
+  raise exception 'AGENCY_SOURCE_DEPENDENCY_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ return result||jsonb_build_object('witness_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+  'WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCIES_V1',result),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_SOURCE_DEPENDENCY_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_source_dependencies_v1(uuid,uuid[]) owner to postgres;
+revoke all on function private.weekly_source_agency_source_dependencies_v1(uuid,uuid[]) from public,anon,authenticated,service_role;
