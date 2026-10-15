@@ -1,0 +1,97 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "parent_head": "aeeac1f4f64a4d0639a5e9f826c76ebe55a56268",
+  "packages": [
+    {
+      "package": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015",
+      "files": 34,
+      "manifest_sha256": "20d11a7119e20dafb17330582e912349b186abe5953c6b3ba5960537ef74786b",
+      "checks_sha256": "150109aa733e39d510677744d61075cf4d2dcd2896c21fd31e4755f6f095c1a7"
+    },
+    {
+      "package": "docs/healthroster-build/proposals/agency-fixed-approval-policy-support-20261015",
+      "files": 15,
+      "manifest_sha256": "f54b9fd0ea57b183cc0785780fbcbc2e0c18bd73d401cbb429b674d74edec0b9",
+      "checks_sha256": "3abd7db37017f2b789bce3a334dd0f8bb2c8770be4ebd9daf37bdebf1725d3c1"
+    }
+  ],
+  "full_unique_hunks": 32,
+  "raw_diff_check_exit": 2,
+  "raw_diff_check_findings": 528,
+  "raw_whitespace_pass": false,
+  "complete_whitespace_provenance": [
+    {
+      "output": "97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293",
+      "after_sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916"
+    },
+    {
+      "output": "98_complete_off_parent_with_actual_agency.sqlinc",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc",
+      "after_sha256": "19d0b2811cbb31fc8b8652869bfec4a77b3e2cad14b3d47d4fb4ce1face4500c"
+    },
+    {
+      "output": "99_complete_off_command_with_literal_agency.sqlinc",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4",
+      "after_sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8"
+    },
+    {
+      "output": "100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "after_sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349"
+    },
+    {
+      "output": "101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59",
+      "after_sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3"
+    },
+    {
+      "output": "runtime/off-rule-native-proxy.mjs",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69",
+      "after_sha256": "8776976a5447c92ad7448900455c0d6aaf16a75afac15c04cf6604fb3427548c"
+    },
+    {
+      "output": "runtime/off-rule-transport-rpc.mjs",
+      "full_before_trailing_lines": 0,
+      "full_after_trailing_lines": 0,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "after_sha256": "67d38fe081480956e797538b30e1ef93af7e0966be4703e8702a661fed1989d8"
+    },
+    {
+      "output": "102_complete_current_index_with_actual_off_agency.js",
+      "full_before_trailing_lines": 264,
+      "full_after_trailing_lines": 264,
+      "introduced_trailing_lines": 0,
+      "before_sha256": "f30a9d09d6aa29fc2225a828ccca17e02772389af79dd446d835de02dd8f8197",
+      "after_sha256": "ca8f7dd6adcc52f29a8b2f6fedafa904fbe8919ea4e8386c75114e25665afd48"
+    }
+  ],
+  "source_private_helper": "private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean)",
+  "service_or_browser_grant_added": false,
+  "static_closure": 139,
+  "independent_review": "PENDING",
+  "compiled_contract_sha256": null,
+  "source_tree_seal": null,
+  "other_frozen_packages_preserved": true
+}

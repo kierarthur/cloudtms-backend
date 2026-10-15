@@ -1,0 +1,64 @@
+// Current exact owner construction, not a Candidate finalise shortcut.
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import crypto from 'node:crypto';
+import {execFileSync} from 'node:child_process';import {fileURLToPath,pathToFileURL} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),root=path.resolve(repo,'../healthroster-install2-14102026');
+const pin='7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3',dir=path.join(here,'fixed-approval-policy-construction-20261015');
+const input='supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql';
+const raw=fs.readFileSync(path.join(root,input));assert.ok(raw.equals(execFileSync('git',['cat-file','blob',pin+':'+input],{cwd:root,maxBuffer:64e6})));
+const parserPath='docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/PINNED_A0_CURRENT_SOURCE_INDEX.mjs';
+const parserRoot=path.resolve(repo,'../healthroster-checklist-native-14102026');
+const parserPin='aea33728bb76c4d2c57a9e82abffa570e743a0f0';
+const parserBytes=fs.readFileSync(path.join(parserRoot,parserPath));
+assert.ok(parserBytes.equals(execFileSync('git',['cat-file','blob',parserPin+':'+parserPath],{cwd:parserRoot,maxBuffer:64e6})));
+// The inspected finite parser has no SQL evaluator or native connection.
+const {functionEvents}=await import('data:text/javascript;base64,'+parserBytes.toString('base64'));
+const definitions=new Map(functionEvents(raw.toString().replaceAll('\r\n','\n')).events.filter(e=>e.kind==='CREATE').map(e=>[e.id,e.definition]));
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex'),reverses=[];
+const save=(p,b)=>{const target=path.join(dir,p);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,b);};
+save('reference/current-policy-input.sql',raw);
+save('reference/pinned-source-parser.mjs',parserBytes);
+function changed(name,id,hunks){const before=definitions.get(id);assert.ok(before,id);let after=before;
+ for(const h of hunks){assert.equal(after.split(h.before).length,2,name+' before');after=after.replace(h.before,()=>h.after);assert.equal(after.split(h.after).length,2,name+' after');}
+ let reverse=after;for(const h of [...hunks].reverse())reverse=reverse.replace(h.after,()=>h.before);assert.equal(reverse,before);
+ save(name,after);save('before/'+name+'.txt',before);reverses.push({id,input,pin,raw_source_sha256:sha(raw),before_sha256:sha(before),after_sha256:sha(after),output:name,hunks});}
+const inherited=`  return pg_catalog.jsonb_build_object(
+    'approved_emails',v_emails,'approved_domains',v_domains,
+    'allow_free_business_email',v_allow_free
+  );`;
+changed('93_complete_fixed_contract_approval_normaliser.sqlinc','private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)',[
+ {before:"    where k not in ('mode','approved_emails','approved_domains')",after:"    where k not in ('mode','approved_emails','approved_domains','approval')"},
+ {before:"  v_emails:=private._candidate_manager_authoriser_email_array_v2(v_source->'approved_emails');",after:`  if v_scope='CONTRACT_WRITE' and v_source ? 'approval'
+    and (pg_catalog.jsonb_typeof(v_source->'approval') is distinct from 'string'
+      or v_source->>'approval' is distinct from 'NOT_REQUIRED') then
+    raise exception using errcode='22023',message='CANDIDATE_MANAGER_CONTRACT_POLICY_FIELD_INVALID';
+  end if;
+  v_emails:=private._candidate_manager_authoriser_email_array_v2(v_source->'approved_emails');`},
+ {before:"      'mode',v_mode,'approved_emails',v_emails,'approved_domains',v_domains\n    );",after:`      'mode',v_mode,'approved_emails',v_emails,'approved_domains',v_domains
+    )||case when v_source->'approval'='"NOT_REQUIRED"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;`},
+ {before:inherited,after:inherited.slice(0,-2)+`)||case when v_source->'approval'='"NOT_REQUIRED"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;`}
+]);
+changed('94_complete_effective_contract_fixed_approval.sqlinc','private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)',[
+ {before:"    return v_client||pg_catalog.jsonb_build_object('source_mode','INHERIT');",after:`    return v_client||pg_catalog.jsonb_build_object('source_mode','INHERIT')
+      ||case when v_contract_source->'approval'='"NOT_REQUIRED"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;`},
+ {before:"    'allow_free_business_email',v_allow_free,'source_mode',v_source_mode\n  );",after:`    'allow_free_business_email',v_allow_free,'source_mode',v_source_mode
+  )||case when v_contract_source->'approval'='"NOT_REQUIRED"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;`}
+]);
+changed('95_complete_public_manager_writer_fixed_policy_guard.sqlinc','public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)',[
+ {before:"  if p_contract_id is null or p_expected_contract_updated_at is null or p_actor_user_id is null",after:`  -- Primary26.12 / R242: this is not an Office setting. Only the actual
+  -- preset application/clear owner may derive the Contract's fixed key.
+  if pg_catalog.jsonb_typeof(p_policy)='object' and p_policy ? 'approval' then
+    raise exception using errcode='22023',message='CANDIDATE_MANAGER_FIXED_APPROVAL_NOT_EDITABLE';
+  end if;
+  if p_contract_id is null or p_expected_contract_updated_at is null or p_actor_user_id is null`},
+ {before:"  update public.contracts set candidate_manager_approval_policy_json=v_policy,updated_at=p_now_utc where id=p_contract_id;",after:`  -- An ordinary approved-email/domain edit cannot clear a system-fixed key.
+  -- It does not create the key for any other Contract or Client.
+  if v_contract.candidate_manager_approval_policy_json->'approval'='"NOT_REQUIRED"'::jsonb then
+    v_policy:=v_policy||pg_catalog.jsonb_build_object('approval','NOT_REQUIRED');
+  end if;
+  update public.contracts set candidate_manager_approval_policy_json=v_policy,updated_at=p_now_utc where id=p_contract_id;`}
+]);
+save('FIXED_APPROVAL_COMPLETE_REVERSES.json',JSON.stringify({source_only:true,native:false,mount_ready:false,pin,input,
+ raw_source_sha256:sha(raw),parser_pin:parserPin,parser_path:parserPath,parser_sha256:sha(parserBytes),reverses,new_signatures:[],public_signature_changes:[],
+ finalise_branch_implemented:false,transition_branch_implemented:false,preset_apply_clear_implemented:false,
+ source_policy_not_office_setting:true},null,2)+'\n');
+console.log(JSON.stringify({source_only:true,native:false,complete_owners:3,hunks:reverses.reduce((n,r)=>n+r.hunks.length,0)}));

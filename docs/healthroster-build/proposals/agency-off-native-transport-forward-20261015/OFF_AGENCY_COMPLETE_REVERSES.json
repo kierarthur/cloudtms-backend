@@ -1,0 +1,257 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "pins": [
+    {
+      "path": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/03_complete_off_scope_assert.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293",
+      "bytes": 12044
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-physical-contract-current-owner-20261015/forward/01_complete_off_parent_scope.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc",
+      "bytes": 26495
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/01_complete_off_command.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4",
+      "bytes": 19812
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/02_complete_off_transport.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "bytes": 4106
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/03_complete_off_setup_shape.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59",
+      "bytes": 6040
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69",
+      "bytes": 3815
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "raw_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "bytes": 3520
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/81_complete_worker_index_with_one_click_agency_continuation.js",
+      "pin": "4c26565f68521fa868b211ce36ba22a9471053c0",
+      "raw_sha256": "c4430ed25062c7df12c7ce5fee62963ad3fff16dc4485aafb9842c581a450472",
+      "bytes": 8941054
+    }
+  ],
+  "reverses": [
+    {
+      "output": "97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "before_sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293",
+      "after_sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916",
+      "hunks": [
+        {
+          "before": "    or v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'",
+          "after": "    or (v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'\n      and not(auth->>'purpose'='SOURCE_FIXTURE_SETUP' and v.values_json->>'invoice_sender'='AGENCY_INVOICE'\n        and auth->'allowed_operations' @> jsonb_build_array('weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1')\n        and not(auth->'allowed_operations' @> jsonb_build_array('REPORT_FIN_AB_FINALISE'))))"
+        }
+      ]
+    },
+    {
+      "output": "98_complete_off_parent_with_actual_agency.sqlinc",
+      "before_sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc",
+      "after_sha256": "19d0b2811cbb31fc8b8652869bfec4a77b3e2cad14b3d47d4fb4ce1face4500c",
+      "hunks": [
+        {
+          "before": "      'root_timesheet_id','evidence_timesheet_id','upload_row_id','client_id','candidate_id','contract_id','decision_bundle_id'] loop",
+          "after": "      'root_timesheet_id','evidence_timesheet_id','upload_row_id','client_id','candidate_id','contract_id','decision_bundle_id','p_contract_week_id','p_request_id'] loop"
+        },
+        {
+          "before": "      case field\n        when 'upload_id','expected_current_upload_id' then",
+          "after": "      case field\n        when 'p_contract_week_id','p_request_id' then\n          parent:=private.weekly_source_off_rule_agency_parent_v1(case when field='p_contract_week_id'\n            then 'weekly_source_agency_timesheet_change_v1'\n            when subject ? 'p_actor_user_id' then case when exists(select 1\n              from private.weekly_source_agency_timesheet_change_requests r where r.id=selector and r.phase='FINANCIAL_CURRENT')\n                then 'weekly_source_agency_change_authorise_step_v1' else 'weekly_source_agency_change_return_step_v1' end\n            when exists(select 1 from private.weekly_source_agency_timesheet_change_requests r\n              where r.id=selector and r.phase='AUTHORISED') then case when subject ? 'p_snapshot'\n                then 'weekly_source_agency_validation_apply_v1' else 'weekly_source_agency_validation_context_v1' end\n            when subject ? 'p_snapshot' then 'weekly_source_agency_change_worker_apply_v1'\n            else 'weekly_source_agency_change_worker_context_v1' end,\n            subject,p_actor,qualified);\n        when 'upload_id','expected_current_upload_id' then"
+        }
+      ]
+    },
+    {
+      "output": "99_complete_off_command_with_literal_agency.sqlinc",
+      "before_sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4",
+      "after_sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8",
+      "hunks": [
+        {
+          "before": "'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE') then",
+          "after": "'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE','weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1') then"
+        },
+        {
+          "before": "    when 'REPORT_FIN_AB_FINALISE' then result:=private.weekly_source_rule_report_fixture_finalise_v1(auth,req);",
+          "after": "    when 'REPORT_FIN_AB_FINALISE' then result:=private.weekly_source_rule_report_fixture_finalise_v1(auth,req);\n    when 'weekly_source_agency_timesheet_change_v1' then result:=public.weekly_source_agency_timesheet_change_v1(\n      (req->>'p_contract_week_id')::uuid,req->>'p_reason',req->>'p_expected_signature',req->>'p_request_key',(req->>'p_actor_user_id')::uuid);\n    when 'weekly_source_agency_change_worker_context_v1' then result:=public.weekly_source_agency_change_worker_context_v1((req->>'p_request_id')::uuid);\n    when 'weekly_source_agency_change_worker_apply_v1' then result:=public.weekly_source_agency_change_worker_apply_v1(\n      (req->>'p_request_id')::uuid,(req->>'p_expected_request_version')::bigint,req->>'p_expected_context_sha256',req->'p_snapshot');\n    when 'weekly_source_agency_validation_context_v1' then result:=public.weekly_source_agency_validation_context_v1((req->>'p_request_id')::uuid);\n    when 'weekly_source_agency_validation_apply_v1' then result:=public.weekly_source_agency_validation_apply_v1(\n      (req->>'p_request_id')::uuid,(req->>'p_expected_request_version')::bigint,req->>'p_expected_context_sha256',req->'p_snapshot');\n    when 'weekly_source_agency_change_authorise_step_v1' then result:=public.weekly_source_agency_change_authorise_step_v1(\n      (req->>'p_request_id')::uuid,(req->>'p_actor_user_id')::uuid);\n    when 'weekly_source_agency_change_return_step_v1' then result:=public.weekly_source_agency_change_return_step_v1(\n      (req->>'p_request_id')::uuid,(req->>'p_actor_user_id')::uuid);"
+        },
+        {
+          "before": "  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,auth);",
+          "after": "  if op in ('weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1') then\n    perform private.weekly_source_off_rule_agency_parent_v1(op,req,actor,true);\n  end if;\n  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,auth);"
+        }
+      ]
+    },
+    {
+      "output": "100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "before_sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "after_sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349",
+      "hunks": [
+        {
+          "before": "    'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1') then purpose:='SOURCE_FIXTURE_SETUP';",
+          "after": "    'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1') then purpose:='SOURCE_FIXTURE_SETUP';"
+        },
+        {
+          "before": "  if (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)",
+          "after": "  if op in ('weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1') then\n    -- Worker has no Office token actor. Resolve ONLY its actual stored phase\n    -- actor through the finite current-request native parent. Execute rechecks.\n    parent_scope:=private.weekly_source_off_rule_agency_parent_v1(op,req,actor,false);\n    if parent_scope is null then return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1',\n      'qualified_fixture',false,'operational_ready',false);end if;\n    actor:=(parent_scope->>'actor_user_id')::uuid;\n  end if;\n  if (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)"
+        }
+      ]
+    },
+    {
+      "output": "101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "before_sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59",
+      "after_sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3",
+      "hunks": [
+        {
+          "before": "    'REPORT_FIN_AB_FINALISE'] when 'AUTOMATIC_JOURNEY'",
+          "after": "    'REPORT_FIN_AB_FINALISE','weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'] when 'AUTOMATIC_JOURNEY'"
+        }
+      ]
+    },
+    {
+      "output": "runtime/off-rule-native-proxy.mjs",
+      "before_sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69",
+      "after_sha256": "8776976a5447c92ad7448900455c0d6aaf16a75afac15c04cf6604fb3427548c",
+      "hunks": [
+        {
+          "before": "'weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE']);",
+          "after": "'weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE','weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1']);"
+        },
+        {
+          "before": "export async function createOffRuleNativeDependencies",
+          "after": "export const agencyOperations=Object.freeze(['weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1']);\nexport function assertOffAgencyNativeRequest(name,req){\n if(!agencyOperations.includes(name))return;\n const exact=keys=>req&&typeof req==='object'&&!Array.isArray(req)&&Object.keys(req).sort().join('|')===keys.sort().join('|');\n const id=v=>typeof v==='string'&&uuid.test(v),text=(v,max)=>typeof v==='string'&&v.length>=1&&v.length<=max;\n if(name==='weekly_source_agency_timesheet_change_v1'){\n  if(!exact(['p_contract_week_id','p_reason','p_expected_signature','p_request_key','p_actor_user_id'])\n    ||!id(req.p_contract_week_id)||!id(req.p_actor_user_id)||!text(req.p_reason,2000)\n    ||!text(req.p_expected_signature,512)||!text(req.p_request_key,200))fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');\n }else if(['weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'].includes(name)){\n  if(!exact(['p_request_id','p_actor_user_id'])||!id(req.p_request_id)||!id(req.p_actor_user_id))fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');\n }else if(['weekly_source_agency_change_worker_context_v1','weekly_source_agency_validation_context_v1'].includes(name)){\n  if(!exact(['p_request_id'])||!id(req.p_request_id))fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');\n }else if(!exact(['p_request_id','p_expected_request_version','p_expected_context_sha256','p_snapshot'])\n   ||!id(req.p_request_id)||!Number.isSafeInteger(req.p_expected_request_version)||req.p_expected_request_version<1\n   ||typeof req.p_expected_context_sha256!=='string'||!/^[0-9a-f]{64}$/.test(req.p_expected_context_sha256)\n   ||!req.p_snapshot||typeof req.p_snapshot!=='object'||Array.isArray(req.p_snapshot)\n   ||new TextEncoder().encode(JSON.stringify(req.p_snapshot)).length>1048576)fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');\n}\nexport async function createOffRuleNativeDependencies"
+        },
+        {
+          "before": "const nativeRequest=name==='weekly_source_projection_rows_apply_atomic_v1'?args:args.p_request;",
+          "after": "const positional=['weekly_source_projection_rows_apply_atomic_v1','weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'].includes(name);\n  const nativeRequest=positional?args:args.p_request;"
+        },
+        {
+          "before": "(name!=='weekly_source_projection_rows_apply_atomic_v1'&&(Object.keys(args).length!==1||!Object.hasOwn(args,'p_request')))",
+          "after": "(!positional&&(Object.keys(args).length!==1||!Object.hasOwn(args,'p_request')))"
+        },
+        {
+          "before": "  return dependencies.dataRpc('weekly_source_group_rule_feature_set_atomic_v1'",
+          "after": "  assertOffAgencyNativeRequest(name,nativeRequest);\n  return dependencies.dataRpc('weekly_source_group_rule_feature_set_atomic_v1'"
+        }
+      ]
+    },
+    {
+      "output": "runtime/off-rule-transport-rpc.mjs",
+      "before_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "after_sha256": "67d38fe081480956e797538b30e1ef93af7e0966be4703e8702a661fed1989d8",
+      "hunks": [
+        {
+          "before": "import {sourceOperations,automaticOperations} from './off-rule-native-proxy.mjs';",
+          "after": "import {sourceOperations,automaticOperations,assertOffAgencyNativeRequest} from './off-rule-native-proxy.mjs';"
+        },
+        {
+          "before": "  const actor=getActor();if(!uuid.test(actor)||!uuid.test(agencyId))fail('OFF_RULE_TRANSPORT_AUTHENTICATED_SCOPE_REQUIRED');",
+          "after": "  const worker=['weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'].includes(name);\n  const actor=getActor();if((!worker&&!uuid.test(actor))||(worker&&actor!==null&&!uuid.test(actor))||!uuid.test(agencyId))\n   fail('OFF_RULE_TRANSPORT_AUTHENTICATED_SCOPE_REQUIRED');"
+        },
+        {
+          "before": "  const positional=name==='weekly_source_projection_rows_apply_atomic_v1',req=positional?args:args?.p_request;",
+          "after": "  const positional=['weekly_source_projection_rows_apply_atomic_v1','weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'].includes(name),req=positional?args:args?.p_request;"
+        },
+        {
+          "before": "(Object.hasOwn(req,'p_actor_user_id')&&req.p_actor_user_id!==actor)",
+          "after": "(Object.hasOwn(req,'p_actor_user_id')&&(!worker||actor!==null)&&req.p_actor_user_id!==actor)"
+        },
+        {
+          "before": "  const owner='weekly_source_group_rule_feature_set_atomic_v1';",
+          "after": "  assertOffAgencyNativeRequest(name,req);\n  const owner='weekly_source_group_rule_feature_set_atomic_v1';"
+        },
+        {
+          "before": "   ||admission.actor_user_id!==actor||!uuid.test(admission.source_cycle_id)||!uuid.test(admission.scope_id)",
+          "after": "   ||typeof admission.actor_user_id!=='string'||!uuid.test(admission.actor_user_id)||(!worker&&admission.actor_user_id!==actor)||(worker&&actor!==null&&admission.actor_user_id!==actor)||typeof admission.source_cycle_id!=='string'||!uuid.test(admission.source_cycle_id)||typeof admission.scope_id!=='string'||!uuid.test(admission.scope_id)"
+        },
+        {
+          "before": "   ||!/^[0-9a-f]{64}$/.test(admission.authorization_sha256)",
+          "after": "   ||typeof admission.authorization_sha256!=='string'||!/^[0-9a-f]{64}$/.test(admission.authorization_sha256)"
+        },
+        {
+          "before": "  return unwrap(await baseRpc(owner,{p_request:{actor_user_id:actor,agency_id:agencyId,environment:'TEST',qualification_action:'OFF_RULE_COMMAND',",
+          "after": "  return unwrap(await baseRpc(owner,{p_request:{actor_user_id:admission.actor_user_id,agency_id:agencyId,environment:'TEST',qualification_action:'OFF_RULE_COMMAND',"
+        }
+      ]
+    },
+    {
+      "output": "102_complete_current_index_with_actual_off_agency.js",
+      "before_sha256": "f30a9d09d6aa29fc2225a828ccca17e02772389af79dd446d835de02dd8f8197",
+      "after_sha256": "ca8f7dd6adcc52f29a8b2f6fedafa904fbe8919ea4e8386c75114e25665afd48",
+      "hunks": [
+        {
+          "before": "    if (agencyTarget) {\n      let receipt;\n      try {",
+          "after": "    if (agencyTarget) {\n      let receipt;\n        // Only the six literal Agency Worker calls below derive a stored\n        // native phase actor. Ordinary Source/C1 calls retain token admission.\n          const agencyOffScope = { getActor: () => null,\n            agencyId: String(env.MYTMS_OFFICE_AGENCY_ID || '').trim().toLowerCase(),\n            environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase() };\n          const agencyOffRpc = createOffRuleTransportRpc({ ...agencyOffScope,\n            baseRpc: (name, args, options) => sbRpc(env, name, args, options) });\n          const agencyOffRecordingRpc = createOffRuleTransportRpc({ ...agencyOffScope,\n            baseRpc: (name, args, options) => sbRpcRecordingGuardRefusal(env, name, args, options) });\n      try {"
+        },
+        {
+          "before": "const returned = decodeAgencyReturnStep(await sbRpcRecordingGuardRefusal(env,\n            'weekly_source_agency_change_return_step_v1'",
+          "after": "const returned = decodeAgencyReturnStep(await agencyOffRecordingRpc(\n            'weekly_source_agency_change_return_step_v1'"
+        },
+        {
+          "before": "const authorise = decodeAgencyAuthoriseStepResult(await sbRpcRecordingGuardRefusal(env,\n            'weekly_source_agency_change_authorise_step_v1'",
+          "after": "const authorise = decodeAgencyAuthoriseStepResult(await agencyOffRecordingRpc(\n            'weekly_source_agency_change_authorise_step_v1'"
+        },
+        {
+          "before": "            readContext: requestId => sbRpc(env, 'weekly_source_agency_validation_context_v1', { p_request_id: requestId }),",
+          "after": "            readContext: requestId => agencyOffRpc('weekly_source_agency_validation_context_v1', { p_request_id: requestId }),"
+        },
+        {
+          "before": "            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_validation_apply_v1', args)",
+          "after": "            applySnapshot: args => agencyOffRecordingRpc('weekly_source_agency_validation_apply_v1', args)"
+        },
+        {
+          "before": "            readContext: requestId => sbRpc(env, 'weekly_source_agency_change_worker_context_v1', { p_request_id: requestId }),",
+          "after": "            readContext: requestId => agencyOffRpc('weekly_source_agency_change_worker_context_v1', { p_request_id: requestId }),"
+        },
+        {
+          "before": "          nativeCommand: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_timesheet_change_v1', args),",
+          "after": "          nativeCommand: args => weeklySourceOffRecordingRpc('weekly_source_agency_timesheet_change_v1', args),"
+        },
+        {
+          "before": "            readContext: id => sbRpc(env, 'weekly_source_agency_change_worker_context_v1', { p_request_id: id }),",
+          "after": "            readContext: id => weeklySourceOffRpc('weekly_source_agency_change_worker_context_v1', { p_request_id: id }),"
+        },
+        {
+          "before": "            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_change_worker_apply_v1', args)\n          });",
+          "after": "            applySnapshot: args => agencyOffRecordingRpc('weekly_source_agency_change_worker_apply_v1', args)\n          });"
+        },
+        {
+          "before": "            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_change_worker_apply_v1', args)\n          }),",
+          "after": "            applySnapshot: args => weeklySourceOffRecordingRpc('weekly_source_agency_change_worker_apply_v1', args)\n          }),"
+        }
+      ]
+    }
+  ],
+  "operations": [
+    "weekly_source_agency_timesheet_change_v1",
+    "weekly_source_agency_change_worker_context_v1",
+    "weekly_source_agency_change_worker_apply_v1",
+    "weekly_source_agency_validation_context_v1",
+    "weekly_source_agency_validation_apply_v1",
+    "weekly_source_agency_change_authorise_step_v1",
+    "weekly_source_agency_change_return_step_v1"
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean)"
+  ],
+  "new_public_signatures": [],
+  "existing_scope_qualification_only": true,
+  "command_frame_unchanged": true,
+  "recorder_9_to_13_unchanged": true
+}

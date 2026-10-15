@@ -1,0 +1,45 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "independent_review": "PENDING",
+  "compiled_contract_sha256": null,
+  "package": "agency-fixed-approval-policy-support-20261015",
+  "root_input_pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+  "pure_cases": 8,
+  "pure_tap": "TAP version 13\n# Subtest: SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)\nok 1 - SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)\n  ---\n  duration_ms: 4.4327\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)\nok 2 - SOURCE_ONLY complete current policy owner reverse private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)\n  ---\n  duration_ms: 1.2993\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY complete current policy owner reverse public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)\nok 3 - SOURCE_ONLY complete current policy owner reverse public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)\n  ---\n  duration_ms: 1.2982\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY CLIENT whitelist and return remain exact current native source\nok 4 - SOURCE_ONLY CLIENT whitelist and return remain exact current native source\n  ---\n  duration_ms: 0.4099\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY only literal string NOT_REQUIRED is admitted in native Contract-write normalisation\nok 5 - SOURCE_ONLY only literal string NOT_REQUIRED is admitted in native Contract-write normalisation\n  ---\n  duration_ms: 0.1195\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY INHERIT and all non-INHERIT native resolver returns retain the fixed key only conditionally\nok 6 - SOURCE_ONLY INHERIT and all non-INHERIT native resolver returns retain the fixed key only conditionally\n  ---\n  duration_ms: 0.0876\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY actual public writer rejects any caller fixed-key choice before idempotency/economic mutation\nok 7 - SOURCE_ONLY actual public writer rejects any caller fixed-key choice before idempotency/economic mutation\n  ---\n  duration_ms: 0.0668\n  type: 'test'\n  ...\n# Subtest: SOURCE_ONLY no new signature/grant/settings endpoint or synthetic manager evidence\nok 8 - SOURCE_ONLY no new signature/grant/settings endpoint or synthetic manager evidence\n  ---\n  duration_ms: 0.0982\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 136.1792\n",
+  "syntax_files": [
+    "build-agency-fixed-approval-policy.mjs",
+    "fixed-approval-policy-construction-20261015/fixed-approval-policy.test.mjs",
+    "fixed-approval-policy-construction-20261015/reference/pinned-source-parser.mjs"
+  ],
+  "syntax_pass": true,
+  "sql_lexical_pages": [
+    {
+      "path": "93_complete_fixed_contract_approval_normaliser.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "94_complete_effective_contract_fixed_approval.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "95_complete_public_manager_writer_fixed_policy_guard.sqlinc",
+      "statements": 1
+    }
+  ],
+  "sql_lexical_total": 3,
+  "sql_lexical_not_postgresql_compilation": true,
+  "preserved_ecbd_files": 29,
+  "preserved_ecbd_mismatches": 0,
+  "credential_pattern_findings": 0,
+  "credential_scan_scope": "private key / GitHub token source patterns only; no credential files inspected",
+  "raw_whitespace_pass": false,
+  "raw_whitespace_note": "Inherited full-owner/evidence whitespace not reclassified.",
+  "mandatory_unrun": [
+    "Actual same existing Client/Contract settings owner preset apply/clear",
+    "Actual weekly Candidate transition/finalise worker signature and manager-not-required branch",
+    "Actual document/Inventory/manager-query compatibility and source role/caller closure",
+    "PostgreSQL compilation and ordinary policy byte-for-byte native parity"
+  ]
+}

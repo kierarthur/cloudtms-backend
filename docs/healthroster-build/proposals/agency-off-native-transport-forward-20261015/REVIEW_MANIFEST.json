@@ -1,0 +1,172 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "entries": [
+    {
+      "path": "100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "bytes": 5205,
+      "sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349"
+    },
+    {
+      "path": "101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "bytes": 6358,
+      "sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3"
+    },
+    {
+      "path": "102_complete_current_index_with_actual_off_agency.js",
+      "bytes": 8941104,
+      "sha256": "ca8f7dd6adcc52f29a8b2f6fedafa904fbe8919ea4e8386c75114e25665afd48"
+    },
+    {
+      "path": "96_off_agency_native_parent.sqlinc",
+      "bytes": 10944,
+      "sha256": "c6f7b865a2f9d770fd4af0bcf282c18a5d8a1b11c138340e0f7c7f4618631910"
+    },
+    {
+      "path": "97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "bytes": 12625,
+      "sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916"
+    },
+    {
+      "path": "98_complete_off_parent_with_actual_agency.sqlinc",
+      "bytes": 27588,
+      "sha256": "19d0b2811cbb31fc8b8652869bfec4a77b3e2cad14b3d47d4fb4ce1face4500c"
+    },
+    {
+      "path": "99_complete_off_command_with_literal_agency.sqlinc",
+      "bytes": 21997,
+      "sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8"
+    },
+    {
+      "path": "ACTUAL_AGENCY_PUBLIC_OWNER_INPUTS.json",
+      "bytes": 4107,
+      "sha256": "26ca0fdcad454168c88d482544c4da7cbd29c6dde8f162debf4396ec65352526"
+    },
+    {
+      "path": "CURRENT_OFF_LITERAL_IMPORT_CLOSURE.json",
+      "bytes": 66209,
+      "sha256": "90b8c9cc907256b681a19758a9fb8dbd52550551b187617605238ed60e01ea8c"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 1875,
+      "sha256": "77baf96bbfdc075b3ebc20f12cba2a81e5d6cbe979b92af6e92d0bf42189696e"
+    },
+    {
+      "path": "OFF_AGENCY_COMPLETE_REVERSES.json",
+      "bytes": 24303,
+      "sha256": "6c6a5bafe1b70e5fe7b2bd84a52c246cb46a94de7e0ad4c6f2e002b6b845c437"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 23771,
+      "sha256": "150109aa733e39d510677744d61075cf4d2dcd2896c21fd31e4755f6f095c1a7"
+    },
+    {
+      "path": "before/100_complete_off_transport_with_native_phase_actor.sqlinc.txt",
+      "bytes": 4106,
+      "sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc"
+    },
+    {
+      "path": "before/101_complete_off_setup_shape_with_finite_agency.sqlinc.txt",
+      "bytes": 6040,
+      "sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59"
+    },
+    {
+      "path": "before/102_complete_current_index_with_actual_off_agency.js.txt",
+      "bytes": 8940399,
+      "sha256": "f30a9d09d6aa29fc2225a828ccca17e02772389af79dd446d835de02dd8f8197"
+    },
+    {
+      "path": "before/97_complete_off_scope_assert_with_finite_agency.sqlinc.txt",
+      "bytes": 12044,
+      "sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293"
+    },
+    {
+      "path": "before/98_complete_off_parent_with_actual_agency.sqlinc.txt",
+      "bytes": 26495,
+      "sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc"
+    },
+    {
+      "path": "before/99_complete_off_command_with_literal_agency.sqlinc.txt",
+      "bytes": 19812,
+      "sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4"
+    },
+    {
+      "path": "before/runtime/off-rule-native-proxy.mjs.txt",
+      "bytes": 3815,
+      "sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69"
+    },
+    {
+      "path": "before/runtime/off-rule-transport-rpc.mjs.txt",
+      "bytes": 3520,
+      "sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 30466,
+      "sha256": "09e4b52fc250474e17150298ec655d27f387cca0decf88a53c95a2ba2e055f53"
+    },
+    {
+      "path": "check-native-inputs-reference.mjs.txt",
+      "bytes": 6447,
+      "sha256": "16bcadf3ce36b66f36421a9e93e11c3809779efab9eece68ff985d1e57e830df"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 9029,
+      "sha256": "eac82b3a7ab9df111ca49331610d2036bca0c12d14fe20cd7cb9cb82f962d8ff"
+    },
+    {
+      "path": "off-agency-transport.test.mjs",
+      "bytes": 13166,
+      "sha256": "ebe2e409337074bbdedbb9c01cbfce4704a8fe98de76a747fd5f717c2d2bffbd"
+    },
+    {
+      "path": "reference/native-authorise.sqlinc",
+      "bytes": 12290,
+      "sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924"
+    },
+    {
+      "path": "reference/native-business.sqlinc",
+      "bytes": 4768,
+      "sha256": "14a00fd9a67d100d3690aa9d9f5992dfdd67ad53c9707c2adc96ae1e9cedf7b3"
+    },
+    {
+      "path": "reference/native-return.sqlinc",
+      "bytes": 1656,
+      "sha256": "9b4cac9d661e390272b25b84e02771d0aabd9c809961a67fcdffb3a8ee088fcb"
+    },
+    {
+      "path": "reference/native-validation-apply.sqlinc",
+      "bytes": 16313,
+      "sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e"
+    },
+    {
+      "path": "reference/native-validation-context.sqlinc",
+      "bytes": 6744,
+      "sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a"
+    },
+    {
+      "path": "reference/native-worker-apply.sqlinc",
+      "bytes": 14688,
+      "sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e"
+    },
+    {
+      "path": "reference/native-worker-context.sqlinc",
+      "bytes": 7819,
+      "sha256": "899bcda05f68cdf61c2a614fffe19dd7aafe51ac1f1d762ab50f3e014f76d678"
+    },
+    {
+      "path": "runtime/off-rule-native-proxy.mjs",
+      "bytes": 6615,
+      "sha256": "8776976a5447c92ad7448900455c0d6aaf16a75afac15c04cf6604fb3427548c"
+    },
+    {
+      "path": "runtime/off-rule-transport-rpc.mjs",
+      "bytes": 4609,
+      "sha256": "67d38fe081480956e797538b30e1ef93af7e0966be4703e8702a661fed1989d8"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+-- The actual canonical Worker reads its existing native inputs under the
+-- genuine authorised request. Nothing here authorises from a status alone.
+create or replace function private.weekly_source_agency_validation_context_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; f public.timesheets_financials%rowtype; q public.ts_financials_outbox%rowtype;
+ v public.timesheet_validations%rowtype; facts jsonb; context jsonb; weekly jsonb; shifts jsonb; frame jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,r.initial_row_signature,r.request_key,r.updated_by_user_id);
+ if r.state<>'ACTIVE' or r.phase<>'AUTHORISED' then raise exception 'AGENCY_CHANGE_VALIDATION_PHASE_NOT_READY' using errcode='55000';end if;
+ select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+ select * into strict f from public.timesheets_financials where id=r.current_financial_id and is_current;
+ select * into strict v from public.timesheet_validations where timesheet_id=t.timesheet_id;
+ select * into strict q from public.ts_financials_outbox where id=r.outbox_id;
+ facts:=private.weekly_source_agency_week_facts_v1(t.timesheet_id);
+ if t.is_current is distinct from true or t.version is distinct from r.current_timesheet_version
+  or t.authorised_at_server is null or t.revoked_at is not null or f.timesheet_version is distinct from t.version
+  or f.authorised_at_utc is distinct from t.authorised_at_server
+  or f.authorised_by_user_id::text is distinct from r.native_receipts#>>'{authorise,phase_actor_user_id}'
+  or (r.native_receipts#>>'{authorise,authorised_at_server}')::timestamptz is distinct from t.authorised_at_server
+  or f.paid_at_utc is not null or f.locked_by_invoice_id is not null
+  or exists(select 1 from public.invoice_lines where timesheet_id=t.timesheet_id)
+  or t.actual_schedule_json is distinct from r.native_receipts#>'{original_capture,schedule}'
+  or f.actual_schedule_json is distinct from t.actual_schedule_json
+  or q.timesheet_id is distinct from t.timesheet_id or q.reason is distinct from 'CONTEXT_CHANGED'::public.ts_fin_reason_enum
+  or r.outbox_reason is distinct from q.reason or q.attempt_count<1 or q.next_attempt_at is null
+  or q.next_attempt_at<=transaction_timestamp() or v.validation_source_kind is distinct from 'AGENCY_INVOICE_WEEK'
+  or v.last_source is not null or v.pre_validated or v.validation_source_publication_id is distinct from r.source_publication_id
+  or v.status::text not in('VALIDATION_OK','VALIDATION_ERROR') or encode(v.validation_source_facts_sha256,'hex') is distinct from facts->>'facts_hash'
+  or facts->>'publication_id' is distinct from r.source_publication_id::text
+  or r.native_receipts#>>'{validation_refresh,request_id}' is distinct from r.id::text
+  or r.native_receipts#>>'{validation_refresh,outbox_id}' is distinct from q.id::text
+  or r.native_receipts#>>'{validation_refresh,financial_id}' is distinct from f.id::text
+  or r.native_receipts#>>'{validation_refresh,facts_hash}' is distinct from facts->>'facts_hash'
+  or r.native_receipts#>>'{validation_refresh,validation_row_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+   'AGENCY_NATIVE_TYPED_VALIDATION_ROW_V1',to_jsonb(v)),'hex') then
+  raise exception 'AGENCY_CHANGE_GENUINE_VALIDATION_CONTEXT_REQUIRED' using errcode='55000';end if;
+ select to_jsonb(x) into strict context from public.tsfin_load_context_batch(array[t.timesheet_id]) x where x.effective_timesheet_id=t.timesheet_id;
+ select to_jsonb(x) into strict weekly from public.tsfin_load_weekly_context_batch(array[t.timesheet_id]) x where x.timesheet_id=t.timesheet_id;
+ select x.shifts into strict shifts from public.tsfin_load_nhsp_shifts_batch(array[t.timesheet_id]) x where x.timesheet_id=t.timesheet_id;
+ if context#>>'{out_timesheet,timesheet_id}' is distinct from t.timesheet_id::text or context#>>'{out_cur_fin,id}' is distinct from f.id::text
+  or context#>>'{out_candidate,id}' is distinct from r.candidate_id::text or context->>'out_client_id' is distinct from r.client_id::text
+  or weekly#>>'{out_cw,id}' is distinct from r.contract_week_id::text or weekly#>>'{out_contract,id}' is distinct from r.contract_id::text
+  or jsonb_typeof(shifts) is distinct from 'array' or jsonb_array_length(shifts)>100 then
+  raise exception 'AGENCY_CHANGE_NATIVE_CALCULATOR_CONTEXT_UNAVAILABLE' using errcode='55000';end if;
+ frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_AUTHORISED_VALIDATION_CONTEXT_V1',
+  'request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),'request_version',r.version,'phase',r.phase,
+  'phase_actor_user_id',r.updated_by_user_id,'current_row_signature',r.current_row_signature,'source_cas',r.source_cas,
+  'source_schedule',t.actual_schedule_json,'outbox_id',q.id,'outbox_reason',q.reason,'outbox_row',to_jsonb(q),
+  'context',context,'weekly_context',weekly,'weekly_validation',to_jsonb(v),'nhsp_shifts',shifts,
+  'week_facts_sha256',facts->>'facts_hash','week_complete',facts->'complete','validation_actor_user_id',v.validation_source_actor_user_id);
+ if octet_length(frame::text)>2097152 then raise exception 'AGENCY_CHANGE_WORKER_CONTEXT_BOUND_EXCEEDED' using errcode='54000';end if;
+ return frame||jsonb_build_object('context_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+  'WEEKLY_SOURCE_AGENCY_AUTHORISED_VALIDATION_CONTEXT_V1',frame),'hex'));
+exception when no_data_found or too_many_rows then raise exception 'AGENCY_CHANGE_NATIVE_VALIDATION_CONTEXT_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_validation_context_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_validation_context_v1(uuid) from public,anon,authenticated,service_role;
+create or replace function public.weekly_source_agency_validation_context_v1(p_request_id uuid)
+returns jsonb language sql volatile security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$ select private.weekly_source_agency_validation_context_v1(p_request_id); $function$;
+alter function public.weekly_source_agency_validation_context_v1(uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_validation_context_v1(uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_validation_context_v1(uuid) to service_role;

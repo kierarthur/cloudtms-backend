@@ -1,0 +1,271 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import crypto from 'node:crypto';
+import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..');
+const money=path.resolve(repo,'../healthroster-v2-money-build-13102026'),root=path.resolve(repo,'../healthroster-install2-14102026');
+const dir=path.join(here,'off-agency-native-transport-construction-20261015'),mpin='1a7ad79f9c4e2796fe067a05c253e39bd07482c7',rpin='7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3';
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex'),pins=[],reverses=[];
+const save=(p,b)=>{const target=path.join(dir,p);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,b);};
+function input(w,p,pin,hash){const raw=fs.readFileSync(path.join(w,p));assert.ok(raw.equals(execFileSync('git',['cat-file','blob',pin+':'+p],{cwd:w,maxBuffer:96e6})),p);if(hash)assert.equal(sha(raw),hash);pins.push({path:p,pin,raw_sha256:sha(raw),bytes:raw.length});return raw.toString().replaceAll('\r\n','\n');}
+function change(name,before,hunks){let after=before;for(const h of hunks){assert.equal(after.split(h.before).length,2,name+' unique before');after=after.replace(h.before,()=>h.after);assert.equal(after.split(h.after).length,2,name+' unique after');}let rev=after;for(const h of [...hunks].reverse())rev=rev.replace(h.after,()=>h.before);assert.equal(rev,before);save(name,after);save('before/'+name+'.txt',before);reverses.push({output:name,before_sha256:sha(before),after_sha256:sha(after),hunks});return after;}
+const folder='docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/';
+const operations=['weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'];
+const sqlNames=operations.map(x=>"'"+x+"'").join(',');
+const helper=String.raw`-- Finite actual Agency authority for OFF discovery and native command dispatch.
+-- No caller phase/actor/scope override, Source correction alias, or new journey.
+create or replace function private.weekly_source_off_rule_agency_parent_v1(
+ p_operation text,p_native_request jsonb,p_actor_user_id uuid,p_require_active boolean
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ cw public.contract_weeks%rowtype; k public.contracts%rowtype; t public.timesheets%rowtype;
+ c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype; cycles uuid[]; actor uuid; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_operation='weekly_source_agency_timesheet_change_v1' then
+  if not private.weekly_source_qualification_closed_object_v1(p_native_request,
+     array['p_contract_week_id','p_reason','p_expected_signature','p_request_key','p_actor_user_id'])
+    or jsonb_typeof(p_native_request->'p_actor_user_id') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_contract_week_id') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_reason') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_expected_signature') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_request_key') is distinct from 'string'
+    or length(p_native_request->>'p_reason') not between 1 and 2000
+    or length(p_native_request->>'p_expected_signature') not between 1 and 512
+    or length(p_native_request->>'p_request_key') not between 1 and 200 then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  actor:=(p_native_request->>'p_actor_user_id')::uuid;
+  if actor is distinct from p_actor_user_id then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_ACTOR_CHANGED' using errcode='42501';end if;
+  select * into strict cw from public.contract_weeks where id=(p_native_request->>'p_contract_week_id')::uuid;
+ else
+  if p_operation in('weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1') then
+   if not private.weekly_source_qualification_closed_object_v1(p_native_request,array['p_request_id','p_actor_user_id'])
+     or jsonb_typeof(p_native_request->'p_actor_user_id') is distinct from 'string' then
+    raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  elsif p_operation in('weekly_source_agency_change_worker_context_v1','weekly_source_agency_validation_context_v1') then
+   if not private.weekly_source_qualification_closed_object_v1(p_native_request,array['p_request_id']) then
+    raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  elsif p_operation in('weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_apply_v1') then
+   if not private.weekly_source_qualification_closed_object_v1(p_native_request,
+      array['p_request_id','p_expected_request_version','p_expected_context_sha256','p_snapshot'])
+     or jsonb_typeof(p_native_request->'p_expected_request_version') is distinct from 'number'
+     or p_native_request->>'p_expected_request_version' !~ '^[1-9][0-9]*$'
+     or (p_native_request->>'p_expected_request_version')::bigint>9007199254740991
+     or jsonb_typeof(p_native_request->'p_expected_context_sha256') is distinct from 'string'
+     or p_native_request->>'p_expected_context_sha256' !~ '^[0-9a-f]{64}$'
+     or jsonb_typeof(p_native_request->'p_snapshot') is distinct from 'object'
+     or octet_length((p_native_request->'p_snapshot')::text)>1048576 then
+    raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  else raise exception 'WEEKLY_SOURCE_OFF_AGENCY_OPERATION_REFUSED' using errcode='42501';end if;
+  if jsonb_typeof(p_native_request->'p_request_id') is distinct from 'string' then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  select * into r from private.weekly_source_agency_timesheet_change_requests where id=(p_native_request->>'p_request_id')::uuid;
+  if not found then
+   if p_require_active then raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_UNAVAILABLE' using errcode='55000';end if;
+   return null; -- No stored parent: discovery cannot assert a fixture.
+  end if;
+  actor:=r.updated_by_user_id;
+  if p_native_request ? 'p_actor_user_id' and (p_native_request->>'p_actor_user_id')::uuid is distinct from actor then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_ACTOR_CHANGED' using errcode='42501';end if;
+  if p_actor_user_id is not null and p_actor_user_id is distinct from actor then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_ACTOR_CHANGED' using errcode='42501';end if;
+  if not p_require_active then
+   -- Discovery retains the actual immutable request scope even when a current
+   -- target changed. It is NOT a current-parent admission. Execute rederives
+   -- every current native identity/CAS/phase below before its audit/dispatch.
+   return jsonb_build_object('source_cycle_id',r.source_cycle_id,'source_group_id',r.source_group_id,
+    'agency_id',r.agency_id,'contract_week_id',r.contract_week_id,'contract_id',r.contract_id,
+    'client_id',r.client_id,'candidate_id',r.candidate_id,'agency_timesheet_id',r.current_timesheet_id,
+    'timesheet_version',r.current_timesheet_version,'week_ending_date',r.week_ending_date,
+    'actor_user_id',actor,'request_id',r.id,'request_version',r.version,
+    'request_sha256',encode(r.request_sha256,'hex'),'phase',r.phase,'source_cas',r.source_cas);
+  end if;
+  if p_require_active and not(r.state='COMPLETED' and r.phase='COMPLETED'
+     and p_operation in('weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'))
+   and (r.state is distinct from 'ACTIVE'
+    or (p_operation in('weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1')
+      and r.phase is distinct from 'AUTHORISED')
+    or (p_operation in('weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1')
+      and r.phase not in('UNAUTHORISED','RECOMPUTE_PENDING'))
+    or (p_operation='weekly_source_agency_change_authorise_step_v1' and r.phase not in('FINANCIAL_CURRENT','AUTHORISED'))
+    or (p_operation='weekly_source_agency_change_return_step_v1' and r.phase is distinct from 'AUTHORISED')) then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_PHASE_CHANGED' using errcode='40001';end if;
+  if p_operation in('weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_apply_v1')
+    and (p_native_request->>'p_expected_request_version')::bigint is distinct from r.version then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_VERSION_CHANGED' using errcode='40001';end if;
+  select * into strict cw from public.contract_weeks where id=r.contract_week_id;
+ end if;
+ select * into strict k from public.contracts where id=cw.contract_id;
+ select array_agg(cycle.id order by cycle.id) into cycles from public.weekly_source_cycles cycle
+  join public.weekly_source_groups g on g.id=cycle.source_group_id and g.active and g.source_family='ROSTER'
+  join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=k.client_id
+    and cw.week_ending_date between member.valid_from and coalesce(member.valid_to,'infinity'::date)
+  where cycle.finalisation_week_ending=cw.week_ending_date and (cycle.scope_client_id is null or cycle.scope_client_id=k.client_id);
+ if cardinality(cycles)>1 then
+  select array_agg(cycle.id order by cycle.id) into cycles from public.weekly_source_cycles cycle
+   where cycle.id=any(cycles) and cycle.scope_client_id=k.client_id;end if;
+ if coalesce(cardinality(cycles),0)<>1 then raise exception 'WEEKLY_SOURCE_OFF_AGENCY_CYCLE_AMBIGUOUS' using errcode='55000';end if;
+ select * into strict c from public.weekly_source_cycles where id=cycles[1];
+ select * into strict g from public.weekly_source_groups where id=c.source_group_id;
+ if g.environment is distinct from 'TEST' then
+  raise exception 'WEEKLY_SOURCE_OFF_AGENCY_TEST_REQUIRED' using errcode='42501';end if;
+ if not p_require_active then
+  return jsonb_build_object('source_cycle_id',c.id,'source_group_id',g.id,'agency_id',g.agency_id,
+   'contract_week_id',cw.id,'contract_id',k.id,'client_id',k.client_id,'candidate_id',k.candidate_id,
+   'agency_timesheet_id',cw.timesheet_id,'week_ending_date',cw.week_ending_date,'actor_user_id',actor);
+ end if;
+ select * into strict t from public.timesheets where timesheet_id=cw.timesheet_id;
+ if actor is null or k.client_id is null or k.candidate_id is null
+   or coalesce(cw.additional_seq,0)<>0 or coalesce(cw.is_adjustment,false)
+   or t.contract_id is distinct from k.id or t.week_ending_date is distinct from cw.week_ending_date
+   or t.is_current is distinct from true or t.revoked_at is not null or t.archived_at_utc is not null
+   or t.sheet_scope::text is distinct from 'WEEKLY' or t.line_type::text is distinct from 'HOURS'
+   or t.correction_id is not null or coalesce(t.is_adjustment,false) then
+  raise exception 'WEEKLY_SOURCE_OFF_AGENCY_PHYSICAL_SCOPE_CHANGED' using errcode='40001';end if;
+ if r.id is not null and (r.environment is distinct from 'TEST' or r.source_cycle_id is distinct from c.id
+   or r.agency_id is distinct from g.agency_id
+   or r.source_group_id is distinct from c.source_group_id or r.contract_id is distinct from k.id
+   or r.client_id is distinct from k.client_id or r.candidate_id is distinct from k.candidate_id
+   or r.current_timesheet_id is distinct from t.timesheet_id or r.current_timesheet_version is distinct from t.version
+   or r.week_ending_date is distinct from cw.week_ending_date
+   or r.source_publication_id is distinct from c.current_projection_publication_id
+   or r.source_upload_id is distinct from c.current_complete_upload_id
+   or private.weekly_source_bulk_source_cas_v1(c.id,array[k.client_id]) is distinct from r.source_cas) then
+  raise exception 'WEEKLY_SOURCE_OFF_AGENCY_CURRENT_CAPTURE_CHANGED' using errcode='40001';end if;
+ result:=jsonb_build_object('source_cycle_id',c.id,'source_group_id',c.source_group_id,'agency_id',g.agency_id,
+  'contract_week_id',cw.id,'contract_id',k.id,'client_id',k.client_id,'candidate_id',k.candidate_id,
+  'agency_timesheet_id',t.timesheet_id,'timesheet_version',t.version,'week_ending_date',cw.week_ending_date,
+  'actor_user_id',actor,'request_id',r.id,'request_version',r.version,'request_sha256',encode(r.request_sha256,'hex'),
+  'phase',r.phase,'source_cas',r.source_cas);
+ return result;
+end;
+$function$;
+alter function private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean) from public,anon,authenticated,service_role;
+`;
+save('96_off_agency_native_parent.sqlinc',helper);
+const authority=input(money,'docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/03_complete_off_scope_assert.sqlinc',mpin,'5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293');
+change('97_complete_off_scope_assert_with_finite_agency.sqlinc',authority,[{before:"    or v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'",after:`    or (v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+      and not(auth->>'purpose'='SOURCE_FIXTURE_SETUP' and v.values_json->>'invoice_sender'='AGENCY_INVOICE'
+        and auth->'allowed_operations' @> jsonb_build_array(${sqlNames})
+        and not(auth->'allowed_operations' @> jsonb_build_array('REPORT_FIN_AB_FINALISE'))))`}]);
+const parent=input(money,'docs/healthroster-build/proposals/paid-match-off-physical-contract-current-owner-20261015/forward/01_complete_off_parent_scope.sqlinc',mpin,'bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc');
+change('98_complete_off_parent_with_actual_agency.sqlinc',parent,[{before:"      'root_timesheet_id','evidence_timesheet_id','upload_row_id','client_id','candidate_id','contract_id','decision_bundle_id'] loop",after:"      'root_timesheet_id','evidence_timesheet_id','upload_row_id','client_id','candidate_id','contract_id','decision_bundle_id','p_contract_week_id','p_request_id'] loop"},
+ {before:"      case field\n        when 'upload_id','expected_current_upload_id' then",after:`      case field
+        when 'p_contract_week_id','p_request_id' then
+          parent:=private.weekly_source_off_rule_agency_parent_v1(case when field='p_contract_week_id'
+            then 'weekly_source_agency_timesheet_change_v1'
+            when subject ? 'p_actor_user_id' then case when exists(select 1
+              from private.weekly_source_agency_timesheet_change_requests r where r.id=selector and r.phase='FINANCIAL_CURRENT')
+                then 'weekly_source_agency_change_authorise_step_v1' else 'weekly_source_agency_change_return_step_v1' end
+            when exists(select 1 from private.weekly_source_agency_timesheet_change_requests r
+              where r.id=selector and r.phase='AUTHORISED') then case when subject ? 'p_snapshot'
+                then 'weekly_source_agency_validation_apply_v1' else 'weekly_source_agency_validation_context_v1' end
+            when subject ? 'p_snapshot' then 'weekly_source_agency_change_worker_apply_v1'
+            else 'weekly_source_agency_change_worker_context_v1' end,
+            subject,p_actor,qualified);
+        when 'upload_id','expected_current_upload_id' then`}]);
+const command=input(money,folder+'01_complete_off_command.sqlinc',mpin,'532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4');
+change('99_complete_off_command_with_literal_agency.sqlinc',command,[
+ {before:"'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE') then",after:`'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE',${sqlNames}) then`},
+ {before:"    when 'REPORT_FIN_AB_FINALISE' then result:=private.weekly_source_rule_report_fixture_finalise_v1(auth,req);",after:`    when 'REPORT_FIN_AB_FINALISE' then result:=private.weekly_source_rule_report_fixture_finalise_v1(auth,req);
+    when 'weekly_source_agency_timesheet_change_v1' then result:=public.weekly_source_agency_timesheet_change_v1(
+      (req->>'p_contract_week_id')::uuid,req->>'p_reason',req->>'p_expected_signature',req->>'p_request_key',(req->>'p_actor_user_id')::uuid);
+    when 'weekly_source_agency_change_worker_context_v1' then result:=public.weekly_source_agency_change_worker_context_v1((req->>'p_request_id')::uuid);
+    when 'weekly_source_agency_change_worker_apply_v1' then result:=public.weekly_source_agency_change_worker_apply_v1(
+      (req->>'p_request_id')::uuid,(req->>'p_expected_request_version')::bigint,req->>'p_expected_context_sha256',req->'p_snapshot');
+    when 'weekly_source_agency_validation_context_v1' then result:=public.weekly_source_agency_validation_context_v1((req->>'p_request_id')::uuid);
+    when 'weekly_source_agency_validation_apply_v1' then result:=public.weekly_source_agency_validation_apply_v1(
+      (req->>'p_request_id')::uuid,(req->>'p_expected_request_version')::bigint,req->>'p_expected_context_sha256',req->'p_snapshot');
+    when 'weekly_source_agency_change_authorise_step_v1' then result:=public.weekly_source_agency_change_authorise_step_v1(
+      (req->>'p_request_id')::uuid,(req->>'p_actor_user_id')::uuid);
+    when 'weekly_source_agency_change_return_step_v1' then result:=public.weekly_source_agency_change_return_step_v1(
+      (req->>'p_request_id')::uuid,(req->>'p_actor_user_id')::uuid);`},
+ {before:"  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,auth);",after:`  if op in (${sqlNames}) then
+    perform private.weekly_source_off_rule_agency_parent_v1(op,req,actor,true);
+  end if;
+  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,auth);`}]);
+const status=input(money,folder+'02_complete_off_transport.sqlinc',mpin,'861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc');
+change('100_complete_off_transport_with_native_phase_actor.sqlinc',status,[
+ {before:"    'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1') then purpose:='SOURCE_FIXTURE_SETUP';",after:`    'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1',${sqlNames}) then purpose:='SOURCE_FIXTURE_SETUP';`},
+ {before:"  if (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)",after:`  if op in (${operations.slice(1).map(x=>"'"+x+"'").join(',')}) then
+    -- Worker has no Office token actor. Resolve ONLY its actual stored phase
+    -- actor through the finite current-request native parent. Execute rechecks.
+    parent_scope:=private.weekly_source_off_rule_agency_parent_v1(op,req,actor,false);
+    if parent_scope is null then return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1',
+      'qualified_fixture',false,'operational_ready',false);end if;
+    actor:=(parent_scope->>'actor_user_id')::uuid;
+  end if;
+  if (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)`}]);
+const shape=input(money,folder+'03_complete_off_setup_shape.sqlinc',mpin,'5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59');
+change('101_complete_off_setup_shape_with_finite_agency.sqlinc',shape,[{before:"    'REPORT_FIN_AB_FINALISE'] when 'AUTOMATIC_JOURNEY'",after:`    'REPORT_FIN_AB_FINALISE',${sqlNames}] when 'AUTOMATIC_JOURNEY'`}]);
+const proxy=input(money,folder+'broker/src/weekly-source/off-rule-native-proxy.mjs',mpin,'bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69');
+const codec=String.raw`export const agencyOperations=Object.freeze(['weekly_source_agency_timesheet_change_v1','weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1']);
+export function assertOffAgencyNativeRequest(name,req){
+ if(!agencyOperations.includes(name))return;
+ const exact=keys=>req&&typeof req==='object'&&!Array.isArray(req)&&Object.keys(req).sort().join('|')===keys.sort().join('|');
+ const id=v=>typeof v==='string'&&uuid.test(v),text=(v,max)=>typeof v==='string'&&v.length>=1&&v.length<=max;
+ if(name==='weekly_source_agency_timesheet_change_v1'){
+  if(!exact(['p_contract_week_id','p_reason','p_expected_signature','p_request_key','p_actor_user_id'])
+    ||!id(req.p_contract_week_id)||!id(req.p_actor_user_id)||!text(req.p_reason,2000)
+    ||!text(req.p_expected_signature,512)||!text(req.p_request_key,200))fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');
+ }else if(['weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'].includes(name)){
+  if(!exact(['p_request_id','p_actor_user_id'])||!id(req.p_request_id)||!id(req.p_actor_user_id))fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');
+ }else if(['weekly_source_agency_change_worker_context_v1','weekly_source_agency_validation_context_v1'].includes(name)){
+  if(!exact(['p_request_id'])||!id(req.p_request_id))fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');
+ }else if(!exact(['p_request_id','p_expected_request_version','p_expected_context_sha256','p_snapshot'])
+   ||!id(req.p_request_id)||!Number.isSafeInteger(req.p_expected_request_version)||req.p_expected_request_version<1
+   ||typeof req.p_expected_context_sha256!=='string'||!/^[0-9a-f]{64}$/.test(req.p_expected_context_sha256)
+   ||!req.p_snapshot||typeof req.p_snapshot!=='object'||Array.isArray(req.p_snapshot)
+   ||new TextEncoder().encode(JSON.stringify(req.p_snapshot)).length>1048576)fail('OFF_RULE_TRANSPORT_NATIVE_PAYLOAD_INVALID');
+}
+`;
+change('runtime/off-rule-native-proxy.mjs',proxy,[{before:"'weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE']);",after:`'weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE',${sqlNames}]);`},
+ {before:"export async function createOffRuleNativeDependencies",after:codec+"export async function createOffRuleNativeDependencies"},
+ {before:"const nativeRequest=name==='weekly_source_projection_rows_apply_atomic_v1'?args:args.p_request;",after:`const positional=['weekly_source_projection_rows_apply_atomic_v1',${sqlNames}].includes(name);
+  const nativeRequest=positional?args:args.p_request;`},
+ {before:"(name!=='weekly_source_projection_rows_apply_atomic_v1'&&(Object.keys(args).length!==1||!Object.hasOwn(args,'p_request')))",after:"(!positional&&(Object.keys(args).length!==1||!Object.hasOwn(args,'p_request')))"},
+ {before:"  return dependencies.dataRpc('weekly_source_group_rule_feature_set_atomic_v1'",after:"  assertOffAgencyNativeRequest(name,nativeRequest);\n  return dependencies.dataRpc('weekly_source_group_rule_feature_set_atomic_v1'"}]);
+// The actor-bearing direct route and actorless scheduled Worker share the exact
+// existing native status/command owner. No arbitrary getActor callback is added.
+const transport=input(root,'broker/src/weekly-source/off-rule-transport-rpc.mjs',rpin);
+change('runtime/off-rule-transport-rpc.mjs',transport,[
+ {before:"import {sourceOperations,automaticOperations} from './off-rule-native-proxy.mjs';",after:"import {sourceOperations,automaticOperations,assertOffAgencyNativeRequest} from './off-rule-native-proxy.mjs';"},
+ {before:"  const actor=getActor();if(!uuid.test(actor)||!uuid.test(agencyId))fail('OFF_RULE_TRANSPORT_AUTHENTICATED_SCOPE_REQUIRED');",after:`  const worker=['weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1','weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'].includes(name);
+  const actor=getActor();if((!worker&&!uuid.test(actor))||(worker&&actor!==null&&!uuid.test(actor))||!uuid.test(agencyId))
+   fail('OFF_RULE_TRANSPORT_AUTHENTICATED_SCOPE_REQUIRED');`},
+ {before:"  const positional=name==='weekly_source_projection_rows_apply_atomic_v1',req=positional?args:args?.p_request;",after:`  const positional=['weekly_source_projection_rows_apply_atomic_v1',${sqlNames}].includes(name),req=positional?args:args?.p_request;`},
+ {before:"(Object.hasOwn(req,'p_actor_user_id')&&req.p_actor_user_id!==actor)",after:"(Object.hasOwn(req,'p_actor_user_id')&&(!worker||actor!==null)&&req.p_actor_user_id!==actor)"},
+ {before:"  const owner='weekly_source_group_rule_feature_set_atomic_v1';",after:"  assertOffAgencyNativeRequest(name,req);\n  const owner='weekly_source_group_rule_feature_set_atomic_v1';"},
+ {before:"   ||admission.actor_user_id!==actor||!uuid.test(admission.source_cycle_id)||!uuid.test(admission.scope_id)",after:"   ||typeof admission.actor_user_id!=='string'||!uuid.test(admission.actor_user_id)||(!worker&&admission.actor_user_id!==actor)||(worker&&actor!==null&&admission.actor_user_id!==actor)||typeof admission.source_cycle_id!=='string'||!uuid.test(admission.source_cycle_id)||typeof admission.scope_id!=='string'||!uuid.test(admission.scope_id)"},
+ {before:"   ||!/^[0-9a-f]{64}$/.test(admission.authorization_sha256)",after:"   ||typeof admission.authorization_sha256!=='string'||!/^[0-9a-f]{64}$/.test(admission.authorization_sha256)"},
+ {before:"  return unwrap(await baseRpc(owner,{p_request:{actor_user_id:actor,agency_id:agencyId,environment:'TEST',qualification_action:'OFF_RULE_COMMAND',",after:"  return unwrap(await baseRpc(owner,{p_request:{actor_user_id:admission.actor_user_id,agency_id:agencyId,environment:'TEST',qualification_action:'OFF_RULE_COMMAND',"}]);
+const ip='docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/81_complete_worker_index_with_one_click_agency_continuation.js';
+const index=input(repo,ip,'4c26565f68521fa868b211ce36ba22a9471053c0');
+change('102_complete_current_index_with_actual_off_agency.js',index,[
+ {before:"    if (agencyTarget) {\n      let receipt;\n      try {",after:`    if (agencyTarget) {
+      let receipt;
+        // Only the six literal Agency Worker calls below derive a stored
+        // native phase actor. Ordinary Source/C1 calls retain token admission.
+          const agencyOffScope = { getActor: () => null,
+            agencyId: String(env.MYTMS_OFFICE_AGENCY_ID || '').trim().toLowerCase(),
+            environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase() };
+          const agencyOffRpc = createOffRuleTransportRpc({ ...agencyOffScope,
+            baseRpc: (name, args, options) => sbRpc(env, name, args, options) });
+          const agencyOffRecordingRpc = createOffRuleTransportRpc({ ...agencyOffScope,
+            baseRpc: (name, args, options) => sbRpcRecordingGuardRefusal(env, name, args, options) });
+      try {`},
+ {before:"const returned = decodeAgencyReturnStep(await sbRpcRecordingGuardRefusal(env,\n            'weekly_source_agency_change_return_step_v1'",after:"const returned = decodeAgencyReturnStep(await agencyOffRecordingRpc(\n            'weekly_source_agency_change_return_step_v1'"},
+ {before:"const authorise = decodeAgencyAuthoriseStepResult(await sbRpcRecordingGuardRefusal(env,\n            'weekly_source_agency_change_authorise_step_v1'",after:"const authorise = decodeAgencyAuthoriseStepResult(await agencyOffRecordingRpc(\n            'weekly_source_agency_change_authorise_step_v1'"},
+ {before:"            readContext: requestId => sbRpc(env, 'weekly_source_agency_validation_context_v1', { p_request_id: requestId }),",after:"            readContext: requestId => agencyOffRpc('weekly_source_agency_validation_context_v1', { p_request_id: requestId }),"},
+ {before:"            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_validation_apply_v1', args)",after:"            applySnapshot: args => agencyOffRecordingRpc('weekly_source_agency_validation_apply_v1', args)"},
+ {before:"            readContext: requestId => sbRpc(env, 'weekly_source_agency_change_worker_context_v1', { p_request_id: requestId }),",after:"            readContext: requestId => agencyOffRpc('weekly_source_agency_change_worker_context_v1', { p_request_id: requestId }),"},
+ {before:"          nativeCommand: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_timesheet_change_v1', args),",after:"          nativeCommand: args => weeklySourceOffRecordingRpc('weekly_source_agency_timesheet_change_v1', args),"},
+ {before:"            readContext: id => sbRpc(env, 'weekly_source_agency_change_worker_context_v1', { p_request_id: id }),",after:"            readContext: id => weeklySourceOffRpc('weekly_source_agency_change_worker_context_v1', { p_request_id: id }),"},
+ // Same original apply text occurs twice; retain complete exact adjacent owners.
+ {before:"            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_change_worker_apply_v1', args)\n          });",after:"            applySnapshot: args => agencyOffRecordingRpc('weekly_source_agency_change_worker_apply_v1', args)\n          });"},
+ {before:"            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_change_worker_apply_v1', args)\n          }),",after:"            applySnapshot: args => weeklySourceOffRecordingRpc('weekly_source_agency_change_worker_apply_v1', args)\n          }),"}]);
+save('OFF_AGENCY_COMPLETE_REVERSES.json',JSON.stringify({source_only:true,native:false,mount_ready:false,pins,reverses,operations,
+ new_private_signatures:['private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean)'],new_public_signatures:[],
+ existing_scope_qualification_only:true,command_frame_unchanged:true,recorder_9_to_13_unchanged:true},null,2)+'\n');
+console.log(JSON.stringify({source_only:true,native:false,owners:reverses.length,new_private:1,hunks:reverses.reduce((n,r)=>n+r.hunks.length,0)}));

@@ -1,0 +1,66 @@
+{
+  "source_only": true,
+  "native": false,
+  "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+  "native_owner_input_pins": [
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/80_native_agency_business_entry.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "14a00fd9a67d100d3690aa9d9f5992dfdd67ad53c9707c2adc96ae1e9cedf7b3",
+      "bytes": 4768,
+      "signature": "public.weekly_source_agency_timesheet_change_v1(uuid,text,text,text,uuid)",
+      "definition_sha256": "a7a62b5f9e1e5ff2260e378fbf247e1f9cdf178648189c13c700d271902c0121"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "899bcda05f68cdf61c2a614fffe19dd7aafe51ac1f1d762ab50f3e014f76d678",
+      "bytes": 7819,
+      "signature": "public.weekly_source_agency_change_worker_context_v1(uuid)",
+      "definition_sha256": "d58abbaaa701618e47e349714928a74bd4aa4fea868ef50036dab9175db74d3e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/reference/19_agency_native_worker_apply.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e",
+      "bytes": 14688,
+      "signature": "public.weekly_source_agency_change_worker_apply_v1(uuid,bigint,text,jsonb)",
+      "definition_sha256": "6509e4aee11ee3f2c24d6de811dfda19af6137791d5d0f578f1f54278afa6781"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/60_agency_authorised_validation_context.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a",
+      "bytes": 6744,
+      "signature": "public.weekly_source_agency_validation_context_v1(uuid)",
+      "definition_sha256": "37178fd92c03089d27bfa3e4adb60de8fd6284c5f87a9aa8d6b95edff2d76ca3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/61_agency_authorised_native_observation.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e",
+      "bytes": 16313,
+      "signature": "public.weekly_source_agency_validation_apply_v1(uuid,bigint,text,jsonb)",
+      "definition_sha256": "9e8168f035a8030d7baa9d7c4cab622e0bbb9f22e3afd67dee0c3e439ca059b5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/reference/46_agency_native_authorise_step.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924",
+      "bytes": 12290,
+      "signature": "public.weekly_source_agency_change_authorise_step_v1(uuid,uuid)",
+      "definition_sha256": "4b4dab611c9bd295a1d3506420a78852838253e778244771a01e53fd128f15cb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/54_return_step_service_reply.sqlinc",
+      "pin": "ecbd37def2626b109c5cf609835e682667e96e3c",
+      "raw_sha256": "9b4cac9d661e390272b25b84e02771d0aabd9c809961a67fcdffb3a8ee088fcb",
+      "bytes": 1656,
+      "signature": "public.weekly_source_agency_change_return_step_v1(uuid,uuid)",
+      "definition_sha256": "331c565c0e1265876c4460d5ed95f99467741337a765a60937d067466463b4d7"
+    }
+  ],
+  "helper_private_request_schema": "agency-source-phase-active-capture-forward-20261015/88_complete_same_request_store_source_tokens.sqlinc",
+  "worker_scope": "Stored real phase actor; existing native context/lease/current-CAS/writer/observation still mandatory",
+  "new_public_signatures": []
+}

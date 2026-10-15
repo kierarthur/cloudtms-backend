@@ -1,0 +1,77 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "entries": [
+    {
+      "path": "93_complete_fixed_contract_approval_normaliser.sqlinc",
+      "bytes": 3629,
+      "sha256": "fd2a54af3d95c0a7bf1c014fc0baa91e76c38aca0ec27fb5c919a4b7750e0677"
+    },
+    {
+      "path": "94_complete_effective_contract_fixed_approval.sqlinc",
+      "bytes": 2876,
+      "sha256": "e7d304e85999744cd41e0e1cf21f8bcd98f34714916e94a5fb9831262414cb84"
+    },
+    {
+      "path": "95_complete_public_manager_writer_fixed_policy_guard.sqlinc",
+      "bytes": 3228,
+      "sha256": "cf18a06a3186e645bd4af6fbd28528e6d5b5b22a4ec563c27eba7a6e6f6cf9e2"
+    },
+    {
+      "path": "FIXED_APPROVAL_COMPLETE_REVERSES.json",
+      "bytes": 6433,
+      "sha256": "5fe8997ac9c23cd505dbb44f1ef12cb5d6be4e06c7cdeb2b28c5f29c5160ac85"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 1442,
+      "sha256": "09a631f8b400cf55041754d2973c804874b52c1276f1c371a867d30c2536a422"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 4150,
+      "sha256": "3abd7db37017f2b789bce3a334dd0f8bb2c8770be4ebd9daf37bdebf1725d3c1"
+    },
+    {
+      "path": "before/93_complete_fixed_contract_approval_normaliser.sqlinc.txt",
+      "bytes": 3023,
+      "sha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d"
+    },
+    {
+      "path": "before/94_complete_effective_contract_fixed_approval.sqlinc.txt",
+      "bytes": 2573,
+      "sha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311"
+    },
+    {
+      "path": "before/95_complete_public_manager_writer_fixed_policy_guard.sqlinc.txt",
+      "bytes": 2563,
+      "sha256": "7fa5bb9b50a394ce92ccd45c76d1f6cf94446692be729b293118e1ecbdaa2bd5"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 6771,
+      "sha256": "d308ac8af9a9be9e0db83628010b0787f041eec1a53e51f8135321a29e5c1fe1"
+    },
+    {
+      "path": "fixed-approval-policy.test.mjs",
+      "bytes": 3470,
+      "sha256": "311f44a793ce4f95fa2d96aee11a092d46e224a84d126f15b406c6278cd3ada9"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 9029,
+      "sha256": "eac82b3a7ab9df111ca49331610d2036bca0c12d14fe20cd7cb9cb82f962d8ff"
+    },
+    {
+      "path": "reference/current-policy-input.sql",
+      "bytes": 28588,
+      "sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+    },
+    {
+      "path": "reference/pinned-source-parser.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    }
+  ]
+}

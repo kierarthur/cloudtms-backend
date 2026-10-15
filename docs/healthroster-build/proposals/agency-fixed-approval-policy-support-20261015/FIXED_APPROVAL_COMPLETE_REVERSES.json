@@ -1,0 +1,84 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+  "input": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+  "raw_source_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+  "parser_pin": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+  "parser_path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+  "parser_sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6",
+  "reverses": [
+    {
+      "id": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "input": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "raw_source_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "before_sha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d",
+      "after_sha256": "fd2a54af3d95c0a7bf1c014fc0baa91e76c38aca0ec27fb5c919a4b7750e0677",
+      "output": "93_complete_fixed_contract_approval_normaliser.sqlinc",
+      "hunks": [
+        {
+          "before": "    where k not in ('mode','approved_emails','approved_domains')",
+          "after": "    where k not in ('mode','approved_emails','approved_domains','approval')"
+        },
+        {
+          "before": "  v_emails:=private._candidate_manager_authoriser_email_array_v2(v_source->'approved_emails');",
+          "after": "  if v_scope='CONTRACT_WRITE' and v_source ? 'approval'\n    and (pg_catalog.jsonb_typeof(v_source->'approval') is distinct from 'string'\n      or v_source->>'approval' is distinct from 'NOT_REQUIRED') then\n    raise exception using errcode='22023',message='CANDIDATE_MANAGER_CONTRACT_POLICY_FIELD_INVALID';\n  end if;\n  v_emails:=private._candidate_manager_authoriser_email_array_v2(v_source->'approved_emails');"
+        },
+        {
+          "before": "      'mode',v_mode,'approved_emails',v_emails,'approved_domains',v_domains\n    );",
+          "after": "      'mode',v_mode,'approved_emails',v_emails,'approved_domains',v_domains\n    )||case when v_source->'approval'='\"NOT_REQUIRED\"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;"
+        },
+        {
+          "before": "  return pg_catalog.jsonb_build_object(\n    'approved_emails',v_emails,'approved_domains',v_domains,\n    'allow_free_business_email',v_allow_free\n  );",
+          "after": "  return pg_catalog.jsonb_build_object(\n    'approved_emails',v_emails,'approved_domains',v_domains,\n    'allow_free_business_email',v_allow_free\n  )||case when v_source->'approval'='\"NOT_REQUIRED\"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;"
+        }
+      ]
+    },
+    {
+      "id": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "input": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "raw_source_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "before_sha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311",
+      "after_sha256": "e7d304e85999744cd41e0e1cf21f8bcd98f34714916e94a5fb9831262414cb84",
+      "output": "94_complete_effective_contract_fixed_approval.sqlinc",
+      "hunks": [
+        {
+          "before": "    return v_client||pg_catalog.jsonb_build_object('source_mode','INHERIT');",
+          "after": "    return v_client||pg_catalog.jsonb_build_object('source_mode','INHERIT')\n      ||case when v_contract_source->'approval'='\"NOT_REQUIRED\"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;"
+        },
+        {
+          "before": "    'allow_free_business_email',v_allow_free,'source_mode',v_source_mode\n  );",
+          "after": "    'allow_free_business_email',v_allow_free,'source_mode',v_source_mode\n  )||case when v_contract_source->'approval'='\"NOT_REQUIRED\"'::jsonb then pg_catalog.jsonb_build_object('approval','NOT_REQUIRED') else '{}'::jsonb end;"
+        }
+      ]
+    },
+    {
+      "id": "public.contract_manager_authoriser_policy_update_v1(uuid,timestamp with time zone,jsonb,uuid,text,timestamp with time zone)",
+      "input": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "raw_source_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "before_sha256": "7fa5bb9b50a394ce92ccd45c76d1f6cf94446692be729b293118e1ecbdaa2bd5",
+      "after_sha256": "cf18a06a3186e645bd4af6fbd28528e6d5b5b22a4ec563c27eba7a6e6f6cf9e2",
+      "output": "95_complete_public_manager_writer_fixed_policy_guard.sqlinc",
+      "hunks": [
+        {
+          "before": "  if p_contract_id is null or p_expected_contract_updated_at is null or p_actor_user_id is null",
+          "after": "  -- Primary26.12 / R242: this is not an Office setting. Only the actual\n  -- preset application/clear owner may derive the Contract's fixed key.\n  if pg_catalog.jsonb_typeof(p_policy)='object' and p_policy ? 'approval' then\n    raise exception using errcode='22023',message='CANDIDATE_MANAGER_FIXED_APPROVAL_NOT_EDITABLE';\n  end if;\n  if p_contract_id is null or p_expected_contract_updated_at is null or p_actor_user_id is null"
+        },
+        {
+          "before": "  update public.contracts set candidate_manager_approval_policy_json=v_policy,updated_at=p_now_utc where id=p_contract_id;",
+          "after": "  -- An ordinary approved-email/domain edit cannot clear a system-fixed key.\n  -- It does not create the key for any other Contract or Client.\n  if v_contract.candidate_manager_approval_policy_json->'approval'='\"NOT_REQUIRED\"'::jsonb then\n    v_policy:=v_policy||pg_catalog.jsonb_build_object('approval','NOT_REQUIRED');\n  end if;\n  update public.contracts set candidate_manager_approval_policy_json=v_policy,updated_at=p_now_utc where id=p_contract_id;"
+        }
+      ]
+    }
+  ],
+  "new_signatures": [],
+  "public_signature_changes": [],
+  "finalise_branch_implemented": false,
+  "transition_branch_implemented": false,
+  "preset_apply_clear_implemented": false,
+  "source_policy_not_office_setting": true
+}
