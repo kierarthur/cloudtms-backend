@@ -1,0 +1,54 @@
+{
+  "source_only": true,
+  "money": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+  "agency": "7afa77836974e011516d146be6778a5db32fc9e6",
+  "preceding_preserved_artifacts": 137,
+  "preceding_manifest_sha256": "4b136d306089ab14213b1b00197bd79e9faa4c6ef24f12953a28c865cee7b8a9",
+  "inputs": [
+    {
+      "commit": "7afa77836974e011516d146be6778a5db32fc9e6",
+      "file": "docs/healthroster-build/proposals/agency-current-shared-owner-union-forward-20261015/forward/13_current_97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "selected_file": "forward/13_current_97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "bytes": 12625,
+      "sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916"
+    },
+    {
+      "commit": "7afa77836974e011516d146be6778a5db32fc9e6",
+      "file": "docs/healthroster-build/proposals/agency-current-shared-owner-union-forward-20261015/forward/14_current_98_complete_off_parent_with_actual_agency.sqlinc",
+      "selected_file": "forward/14_current_98_complete_off_parent_with_actual_agency.sqlinc",
+      "bytes": 27436,
+      "sha256": "dfd6d56f81e7a6db25984f9085b0e1a6a96e758ad6a645b52e7159c3055afdc3"
+    },
+    {
+      "commit": "7afa77836974e011516d146be6778a5db32fc9e6",
+      "file": "docs/healthroster-build/proposals/agency-current-shared-owner-union-forward-20261015/forward/15_current_99_complete_off_command_with_literal_agency.sqlinc",
+      "selected_file": "forward/15_current_99_complete_off_command_with_literal_agency.sqlinc",
+      "bytes": 21997,
+      "sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8"
+    },
+    {
+      "commit": "7afa77836974e011516d146be6778a5db32fc9e6",
+      "file": "docs/healthroster-build/proposals/agency-current-shared-owner-union-forward-20261015/forward/16_current_100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "selected_file": "forward/16_current_100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "bytes": 5205,
+      "sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349"
+    },
+    {
+      "commit": "7afa77836974e011516d146be6778a5db32fc9e6",
+      "file": "docs/healthroster-build/proposals/agency-current-shared-owner-union-forward-20261015/forward/17_current_101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "selected_file": "forward/17_current_101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "bytes": 6358,
+      "sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3"
+    }
+  ],
+  "replaced_function_owners": 5,
+  "newly_included_existing_root_function": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+  "selected_complete_function_count": 71,
+  "selected_complete_file_count": 70,
+  "selected_public_service_count": 9,
+  "selected_private_owner_count": 62,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "whole_primary_complete": false
+}

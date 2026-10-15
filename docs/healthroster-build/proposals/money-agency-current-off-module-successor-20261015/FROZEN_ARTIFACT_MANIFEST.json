@@ -1,0 +1,105 @@
+{
+  "schema_version": "MONEY_AGENCY_CURRENT_OFF_MODULE_SOURCE_SUCCESSOR_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native": false,
+  "canonical_mounted": false,
+  "artifact_count": 19,
+  "artifacts": [
+    {
+      "file": "HANDOFF.md",
+      "bytes": 2501,
+      "sha256": "1d6edec8f86ee93d4739eee4d90bf740756527238c8c73863684cbdd3f2f5ebe"
+    },
+    {
+      "file": "SELECTED_CURRENT_MONEY_MODULE_RECIPE.json",
+      "bytes": 92298,
+      "sha256": "b5f7eb5ef68480494e4d97d9baa6b76a98464f98d5485fc339066aec5602eb7c"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 675,
+      "sha256": "59389fffd58ff9fdd94da65f11e68e155f956caaadb4b273ef20fec9e72da5bc"
+    },
+    {
+      "file": "SOURCE_PROVENANCE.json",
+      "bytes": 2971,
+      "sha256": "7df4abb251ef5d95d1c23e7267ae3dc0b5c8c412a92fd590c1836fc1bb501eea"
+    },
+    {
+      "file": "build-successor.mjs",
+      "bytes": 6378,
+      "sha256": "24fd61556ec788cdc85ffb8281e3546609aac98a7fde02fab3a9704faa9892b2"
+    },
+    {
+      "file": "forward/13_current_97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "bytes": 12625,
+      "sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916"
+    },
+    {
+      "file": "forward/14_current_98_complete_off_parent_with_actual_agency.sqlinc",
+      "bytes": 27436,
+      "sha256": "dfd6d56f81e7a6db25984f9085b0e1a6a96e758ad6a645b52e7159c3055afdc3"
+    },
+    {
+      "file": "forward/15_current_99_complete_off_command_with_literal_agency.sqlinc",
+      "bytes": 21997,
+      "sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8"
+    },
+    {
+      "file": "forward/16_current_100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "bytes": 5205,
+      "sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349"
+    },
+    {
+      "file": "forward/17_current_101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "bytes": 6358,
+      "sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3"
+    },
+    {
+      "file": "forward/99_current_money_agency_off_acl.sqlinc",
+      "bytes": 17630,
+      "sha256": "d202303ddbe22b36f5d4746dd7394bd3ea9d58b6e0c3cbc07ef03dfcea0bc406"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2932,
+      "sha256": "c8d6ff7782a287dc456a7ac6279cf2855d341f01e4f3bb5a0d3ed72ebb089168"
+    },
+    {
+      "file": "input/agency_COMPLETE_CURRENT_SHARED_REVERSES.json",
+      "bytes": 960698,
+      "sha256": "b2b9d991a4466a14786a305b54286685e7f91fb6036f5572f5db0d810df05a1f"
+    },
+    {
+      "file": "input/agency_OFF_PREDECESSOR_PROVENANCE.json",
+      "bytes": 3014,
+      "sha256": "4d6c1a99b5ae7af3504e50236cfa1b8f2c5d9230004b0f5bfcac673d4f0378df"
+    },
+    {
+      "file": "input/agency_REVIEW_MANIFEST.json",
+      "bytes": 25373,
+      "sha256": "39d32b7a52c8094514e6a6c82add2c016ccca6ce4383e278e218b39cbadbaf19"
+    },
+    {
+      "file": "input/agency_SELECTED_CURRENT_MODULE_RECIPE.json",
+      "bytes": 1812,
+      "sha256": "63c27e86aba0425e75adebe04862a5a613afd1dc139e1d564468dacd7928c79a"
+    },
+    {
+      "file": "input/preceding_money_manifest.json",
+      "bytes": 27109,
+      "sha256": "4b136d306089ab14213b1b00197bd79e9faa4c6ef24f12953a28c865cee7b8a9"
+    },
+    {
+      "file": "input/preceding_money_recipe.json",
+      "bytes": 54382,
+      "sha256": "e49dea2133a15b30a5c56d153364ebe03e3dd06d7d535673f31f4b06eeb2484f"
+    },
+    {
+      "file": "module-successor.test.mjs",
+      "bytes": 5201,
+      "sha256": "653c6559f03050b546329f0e0f66a91d25183575f11d5c10d05f6e383a13b95a"
+    }
+  ]
+}

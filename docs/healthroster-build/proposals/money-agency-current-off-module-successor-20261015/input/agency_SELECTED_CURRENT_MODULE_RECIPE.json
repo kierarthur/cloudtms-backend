@@ -1,0 +1,35 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "whole_agency_complete": false,
+  "current_root_pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "previous_module_pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+  "once_only_migrations": [
+    "migration/01_same_agency_request_store.sqlinc",
+    "../agency-current-source-callers-lifecycle-module-20261015/migration/02_typed_existing_validation_columns.sqlinc"
+  ],
+  "selected_complete_repeatable": "01_selected_full_agency_sql_recipe.sql",
+  "selected_final_verification": "02_selected_final_security_recipe.sql",
+  "shared_files": 17,
+  "selected_shared_function_owners": 18,
+  "changed_shared_function_owners": 17,
+  "original_389_verifier_121": "FIX_REQUIRED: excludes actual existing bounded E7 service helper grant; select122 successor instead",
+  "old_source_modules_not_later_replayed": [
+    "389 mandatory shared-owner reference bodies",
+    "Money OFF18 five old whole owners",
+    "original389/121 private service deny expectation"
+  ],
+  "runtime_files": "Preserve all three exact f500 Candidate runtime files from389 MOUNTED_CANDIDATE_RUNTIME_PRESERVE; no runtime bytes in this SQL packet",
+  "pending_actual_engineering": [
+    "Prospective Contract raw fixed approval persistence and complete writer census",
+    "Full Worker index/routes/Office producer+consumer union owned by root",
+    "True first Original/protection/NX-AI-6 and full NONE financial path"
+  ],
+  "native_gates_not_claimed": [
+    "Full final chronological PostgreSQL compile/function and signature contract",
+    "Exact complete ACL/security/owner/search_path/verifier union",
+    "Actual read committed lock/CAS/old-RR/race/foreign writer schedules",
+    "Genuine Candidate/Agency/OFF/invoice/protection/documents/API/UI/phone/financial proofs"
+  ]
+}
