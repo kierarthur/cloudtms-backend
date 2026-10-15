@@ -1,0 +1,19 @@
+{
+  "canonicalI2": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "functions": [
+    {
+      "signature": "public.timesheet_archive_row_guard_v1()",
+      "inputPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\supabase\\repeatable\\26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "inputSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "outputSha256": "53b33d072e151bb2325c1662ecd4b7dbfb5fac49428eb9b6d89ca107c72935af",
+      "exactChange": "One DECLARE variable and exact resolver/consume arm before original BEGIN body; all original body bytes retained."
+    },
+    {
+      "signature": "public.timesheet_archived_evidence_guard_v1()",
+      "inputPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\supabase\\repeatable\\26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "inputSha256": "1e3e6d9a7f8fea06ee51737e4a37db193a1c689a49f5a9de1907220ccfeafedc",
+      "outputSha256": "b35c329c05dd4047aa57b1b9408fd3d601abc4c6e469c52b768948006406ce68",
+      "exactChange": "One DECLARE variable and exact resolver/consume arm before original BEGIN body; all original body bytes retained."
+    }
+  ]
+}

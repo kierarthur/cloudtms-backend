@@ -1,0 +1,244 @@
+-- V6 schema BODY for root-owned scaffold 01. Not an independently installable migration.
+-- Reviewed final content afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88.
+
+create table private.timesheet_contract_move_operations (
+  id uuid primary key,
+  accept_request_id uuid unique,
+  accept_request_hash bytea check(accept_request_hash is null or octet_length(accept_request_hash)=32),
+  purpose text not null check(purpose in('CONTRACT_CORRECTION','DAILY_RATE_CORRECTION')),
+  state text not null check(state in('REVIEWED','COMPLETE','SUPERSEDED')),
+  state_revision bigint not null check(state_revision>0),
+  family_root_id uuid not null references public.timesheets(timesheet_id),
+  from_timesheet_id uuid not null references public.timesheets(timesheet_id),
+  to_timesheet_id uuid references public.timesheets(timesheet_id) deferrable initially deferred,
+  from_contract_id uuid references public.contracts(id),
+  to_contract_id uuid references public.contracts(id),
+  candidate_id uuid not null references public.candidates(id),
+  actual_client_id uuid not null references public.clients(id),
+  -- NULL is allowed only while this preview transaction assembles the genuine sealed review.
+  -- The deferred commit guard requires real hashes plus the matching immutable review.
+  expected_scope_hash bytea check(expected_scope_hash is null or octet_length(expected_scope_hash)=32),
+  before_pay_cut_hash bytea check(before_pay_cut_hash is null or octet_length(before_pay_cut_hash)=32),
+  before_invoice_hash bytea check(before_invoice_hash is null or octet_length(before_invoice_hash)=32),
+  after_invoice_hash bytea check(after_invoice_hash is null or octet_length(after_invoice_hash)=32),
+  invoice_authority text not null check(invoice_authority in('SOURCE_FINANCIAL','CONTRACT_PRICED','MIXED','UNRESOLVED')),
+  invoice_move_policy text not null check(invoice_move_policy in('PRESERVE_SOURCE','ORDINARY_CORRECTION','MIXED','REVIEW_REQUIRED')),
+  financial_state text not null check(financial_state in('NOT_APPROVED','QUALIFIED','REVIEW_REQUIRED')),
+  reason text check(reason is null or length(btrim(reason)) between 1 and 2000),
+  created_by_user_id uuid not null references public.tms_users(id),
+  created_at_utc timestamptz not null,
+  completed_at_utc timestamptz,
+  financial_command_id uuid,
+  current_financial_cut_id uuid,
+  accepted_review_id uuid,
+  accepted_review_digest bytea check(accepted_review_digest is null or octet_length(accepted_review_digest)=32),
+  billing_revision bigint not null default 0 check(billing_revision>=0),
+  unchanged_work_sha256 bytea check(unchanged_work_sha256 is null or octet_length(unchanged_work_sha256)=32),
+  placement_receipt_json jsonb,
+  accepted_valuation_json jsonb,
+  preparation_operation_id uuid,
+  receipt_json jsonb check(receipt_json is null or jsonb_typeof(receipt_json)='object'),
+  unique(id,family_root_id),
+  check((accept_request_id is null)=(accept_request_hash is null)),
+  check((state='REVIEWED' and accept_request_id is null
+    and completed_at_utc is null and receipt_json is null)
+    or (state<>'REVIEWED' and accept_request_id is not null and to_timesheet_id is not null
+    and completed_at_utc is not null and receipt_json is not null and reason is not null and after_invoice_hash is not null)),
+  check((purpose='CONTRACT_CORRECTION' and from_contract_id is not null and to_contract_id is not null
+    and from_contract_id<>to_contract_id and (to_timesheet_id is null or to_timesheet_id<>from_timesheet_id))
+    or (purpose='DAILY_RATE_CORRECTION' and from_contract_id is null and to_contract_id is null
+      and (to_timesheet_id is null or to_timesheet_id=from_timesheet_id))),
+  check(state='REVIEWED' or (accepted_review_id is not null and accepted_review_digest is not null
+    and unchanged_work_sha256 is not null and placement_receipt_json is not null and billing_revision>0)),
+  check(invoice_authority<>'SOURCE_FINANCIAL' or invoice_move_policy='PRESERVE_SOURCE'),
+  check(invoice_authority<>'SOURCE_FINANCIAL' or after_invoice_hash is null or before_invoice_hash=after_invoice_hash)
+);
+
+create table private.timesheet_contract_move_requests (
+  request_id uuid primary key,
+  operation_id uuid not null references private.timesheet_contract_move_operations(id) deferrable initially deferred,
+  request_kind text not null check(request_kind in('PREVIEW','ACCEPT','RESUME_FINANCIAL')),
+  request_hash bytea not null check(octet_length(request_hash)=32),
+  review_id uuid,
+  state_revision bigint not null check(state_revision>0),
+  receipt_json jsonb check(receipt_json is null or jsonb_typeof(receipt_json)='object'),
+  created_at_utc timestamptz not null,
+  unique(operation_id,request_id),
+  unique(operation_id,request_id,request_hash)
+);
+
+create table private.timesheet_contract_move_reviews (
+  id uuid primary key,
+  operation_id uuid not null references private.timesheet_contract_move_operations(id),
+  review_no bigint not null check(review_no>0),
+  preview_request_id uuid not null unique,
+  preview_request_hash bytea not null check(octet_length(preview_request_hash)=32),
+  review_digest bytea not null check(octet_length(review_digest)=32),
+  scope_hash bytea not null check(octet_length(scope_hash)=32),
+  pay_cut_hash bytea not null check(octet_length(pay_cut_hash)=32),
+  invoice_hash bytea not null check(octet_length(invoice_hash)=32),
+  manifest_json jsonb not null check(jsonb_typeof(manifest_json)='object'),
+  created_at_utc timestamptz not null,
+  unique(operation_id,review_no),
+  unique(operation_id,id),
+  foreign key(operation_id,preview_request_id,preview_request_hash)
+    references private.timesheet_contract_move_requests(operation_id,request_id,request_hash) deferrable initially deferred
+);
+alter table private.timesheet_contract_move_requests add constraint timesheet_contract_move_request_review_fk
+  foreign key(operation_id,review_id) references private.timesheet_contract_move_reviews(operation_id,id) deferrable initially deferred;
+alter table private.timesheet_contract_move_operations add constraint timesheet_contract_move_accept_request_fk
+  foreign key(id,accept_request_id,accept_request_hash)
+  references private.timesheet_contract_move_requests(operation_id,request_id,request_hash) deferrable initially deferred;
+
+create table private.timesheet_contract_move_members (
+  operation_id uuid not null,
+  family_root_id uuid not null references public.timesheets(timesheet_id),
+  member_key text not null check(length(member_key) between 1 and 200),
+  role text not null check(role in('WORK','EXPENSE_CARRIER','CORRECTION_MEMBER')),
+  from_timesheet_id uuid not null references public.timesheets(timesheet_id),
+  from_version integer not null check(from_version>0),
+  from_financial_id uuid references public.timesheets_financials(id),
+  from_contract_id uuid references public.contracts(id),
+  to_timesheet_id uuid references public.timesheets(timesheet_id) deferrable initially deferred,
+  to_version integer check(to_version>0),
+  to_financial_id uuid references public.timesheets_financials(id),
+  to_contract_id uuid references public.contracts(id),
+  original_booking_id text not null check(length(original_booking_id) between 1 and 128),
+  current_booking_id text check(length(current_booking_id) between 1 and 128),
+  expense_component_ids uuid[] not null,
+  workflow_ids uuid[] not null,
+  source_lineage_ids uuid[] not null,
+  immutable_evidence_hash bytea not null check(octet_length(immutable_evidence_hash)=32),
+  approval_evidence_hash bytea not null check(octet_length(approval_evidence_hash)=32),
+  member_hash bytea not null check(octet_length(member_hash)=32),
+  primary key(operation_id,member_key),
+  unique(operation_id,to_timesheet_id),
+  foreign key(operation_id,family_root_id) references private.timesheet_contract_move_operations(id,family_root_id),
+  check((to_timesheet_id is null)=(to_version is null)),
+  check((to_timesheet_id is null)=(current_booking_id is null))
+);
+
+create table private.timesheet_contract_current_placements (
+  family_root_id uuid not null references public.timesheets(timesheet_id),
+  member_key text not null,
+  role text not null check(role in('WORK','EXPENSE_CARRIER','CORRECTION_MEMBER')),
+  is_primary boolean not null,
+  current_timesheet_id uuid not null unique references public.timesheets(timesheet_id),
+  current_contract_id uuid references public.contracts(id),
+  operation_id uuid not null,
+  placement_revision bigint not null check(placement_revision>0),
+  placement_receipt_id uuid not null,
+  candidate_id uuid not null references public.candidates(id),
+  actual_client_id uuid not null references public.clients(id),
+  primary key(family_root_id,member_key),
+  foreign key(operation_id,member_key) references private.timesheet_contract_move_members(operation_id,member_key) deferrable initially deferred,
+  foreign key(operation_id,family_root_id) references private.timesheet_contract_move_operations(id,family_root_id) deferrable initially deferred
+);
+create unique index timesheet_contract_one_primary_placement on private.timesheet_contract_current_placements(family_root_id) where is_primary;
+
+create table private.timesheet_contract_family_aliases (
+  timesheet_id uuid primary key references public.timesheets(timesheet_id),
+  family_root_id uuid not null references public.timesheets(timesheet_id),
+  member_key text not null,
+  original_timesheet_id uuid not null references public.timesheets(timesheet_id),
+  member_role text not null check(member_role in('WORK','EXPENSE_CARRIER','CORRECTION_MEMBER')),
+  accepted_operation_id uuid not null,
+  accepted_at_utc timestamptz not null,
+  foreign key(accepted_operation_id,member_key) references private.timesheet_contract_move_members(operation_id,member_key) deferrable initially deferred,
+  foreign key(accepted_operation_id,family_root_id) references private.timesheet_contract_move_operations(id,family_root_id) deferrable initially deferred
+);
+create index timesheet_contract_family_alias_lookup on private.timesheet_contract_family_aliases(family_root_id,member_key,timesheet_id);
+
+create table private.timesheet_contract_move_execution_contexts (
+  id uuid primary key,
+  operation_id uuid not null references private.timesheet_contract_move_operations(id),
+  backend_pid integer not null,
+  transaction_id xid8 not null,
+  actor_user_id uuid not null references public.tms_users(id),
+  review_id uuid not null,
+  manifest_sha256 bytea not null check(octet_length(manifest_sha256)=32),
+  billing_revision bigint not null check(billing_revision>0),
+  event_no bigint not null default 0 check(event_no>=0),
+  phase text not null check(phase in('ACCEPT_PLACEMENT','DAILY_RATE_REVISION','INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE')),
+  -- Owner-derived complete OLD/NEW guard events from locked native rows; never transport JSON.
+  native_manifest_json jsonb not null check(jsonb_typeof(native_manifest_json)='object'),
+  created_at_utc timestamptz not null,
+  expires_at_utc timestamptz not null,
+  unique(operation_id,backend_pid,transaction_id),
+  foreign key(operation_id,review_id) references private.timesheet_contract_move_reviews(operation_id,id),
+  check(expires_at_utc=created_at_utc+interval '120 seconds'),
+  check(backend_pid>0)
+);
+
+create table private.timesheet_contract_move_capabilities (
+  id uuid primary key,
+  execution_context_id uuid not null references private.timesheet_contract_move_execution_contexts(id),
+  operation_id uuid not null references private.timesheet_contract_move_operations(id),
+  member_key text not null,
+  phase text not null,
+  billing_revision bigint not null check(billing_revision>0),
+  event_no bigint not null check(event_no>0),
+  authority_receipt_id uuid not null,
+  guard_name text not null,
+  relation_oid oid not null,
+  row_operation text not null check(row_operation in('INSERT','UPDATE')),
+  backend_pid integer not null,
+  transaction_id xid8 not null,
+  actor_user_id uuid not null references public.tms_users(id),
+  manifest_sha256 bytea not null check(octet_length(manifest_sha256)=32),
+  scope_receipt_id uuid,
+  expected_old_sha256 bytea check(expected_old_sha256 is null or octet_length(expected_old_sha256)=32),
+  expected_new_sha256 bytea not null check(octet_length(expected_new_sha256)=32),
+  allowed_changed_columns text[] not null,
+  created_at_utc timestamptz not null,
+  expires_at_utc timestamptz not null,
+  unique nulls not distinct(operation_id,member_key,phase,guard_name,relation_oid,row_operation,scope_receipt_id,billing_revision,event_no,expected_new_sha256),
+  check((row_operation='INSERT' and expected_old_sha256 is null) or (row_operation='UPDATE' and expected_old_sha256 is not null)),
+  check(expires_at_utc<=created_at_utc+interval '120 seconds')
+);
+
+create table private.timesheet_contract_move_capability_consumptions (
+  execution_context_id uuid not null,
+  manifest_sha256 bytea not null check(octet_length(manifest_sha256)=32),
+  expected_events_json jsonb not null check(jsonb_typeof(expected_events_json)='array'),
+  operation_id uuid not null references private.timesheet_contract_move_operations(id),
+  member_key text not null,
+  phase text not null,
+  billing_revision bigint not null check(billing_revision>0),
+  event_no bigint not null check(event_no>0),
+  authority_receipt_id uuid not null,
+  guard_name text not null,
+  relation_oid oid not null,
+  row_operation text not null check(row_operation in('INSERT','UPDATE')),
+  scope_receipt_id uuid,
+  row_sha256 bytea not null check(octet_length(row_sha256)=32),
+  capability_id uuid not null unique,
+  consumed_at_utc timestamptz not null,
+  unique nulls not distinct(operation_id,member_key,phase,guard_name,relation_oid,row_operation,scope_receipt_id,billing_revision,event_no,row_sha256)
+);
+
+-- Exact private owner policy. service_role receives neither table access nor policy.
+do $owner_policy$
+declare n text;
+begin
+  foreach n in array array['timesheet_contract_move_operations','timesheet_contract_move_requests',
+    'timesheet_contract_move_reviews','timesheet_contract_move_members','timesheet_contract_current_placements',
+    'timesheet_contract_family_aliases','timesheet_contract_move_execution_contexts',
+    'timesheet_contract_move_capabilities','timesheet_contract_move_capability_consumptions'] loop
+    -- Protected release maps logical owner to the audited provider CURRENT_USER.
+    execute format('alter table private.%I owner to %I',n,current_user);
+    execute format('alter table private.%I enable row level security',n);
+    execute format('alter table private.%I force row level security',n);
+    execute format('create policy timesheet_contract_move_owner_only on private.%I for all to current_user using(true) with check(true)',n);
+    execute format('revoke all on private.%I from public,anon,authenticated,service_role',n);
+  end loop;
+end;
+$owner_policy$;
+
+alter table private.timesheet_contract_move_operations add constraint timesheet_contract_move_accepted_review_fk
+ foreign key(id,accepted_review_id) references private.timesheet_contract_move_reviews(operation_id,id) deferrable initially deferred;
+
+-- Generic Archive still rejects authorised records. Exact correction capability is the sole exception.
+alter table public.timesheets drop constraint timesheets_archived_not_authorised_chk;
+alter table public.timesheets add constraint timesheets_archived_not_authorised_chk
+ check(archived_at_utc is null or authorised_at_server is null or archived_reason_code='CONTRACT_MOVE');

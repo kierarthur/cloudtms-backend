@@ -1,0 +1,56 @@
+-- Final acceptance assertion. No finance/APPLIED or PDF/Issue barrier on physical placement.
+create or replace function private.timesheet_contract_move_assert_v1(p_operation_id uuid,p_review_id uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; r private.timesheet_contract_move_reviews%rowtype;
+ m private.timesheet_contract_move_members%rowtype; t public.timesheets%rowtype; source_member jsonb; receipt_id uuid;
+begin
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=p_operation_id for update;
+ select v.* into r from private.timesheet_contract_move_reviews v where v.id=p_review_id and v.operation_id=o.id for share;
+ if o.id is null or r.id is null or o.purpose<>'CONTRACT_CORRECTION' or o.accepted_review_id is distinct from r.id
+  or o.accepted_review_digest is distinct from r.review_digest or o.placement_receipt_json is null
+  or o.placement_receipt_json->>'operation_id' is distinct from o.id::text
+  or o.placement_receipt_json->>'review_id' is distinct from r.id::text or o.to_timesheet_id is null
+  or o.placement_receipt_json->>'current_timesheet_id' is distinct from o.to_timesheet_id::text
+  or o.unchanged_work_sha256 is distinct from private.timesheet_contract_move_row_hash_v1(r.manifest_json#>'{physical,members}')
+  or (select count(*) from private.timesheet_contract_move_members v where v.operation_id=o.id)
+     <>jsonb_array_length(r.manifest_json#>'{physical,members}') then
+  raise exception 'CONTRACT_MOVE_PLACEMENT_NOT_PROVED' using errcode='23514';
+ end if;
+ receipt_id:=(o.placement_receipt_json->>'receipt_id')::uuid;
+ if receipt_id is null then raise exception 'CONTRACT_MOVE_PLACEMENT_NOT_PROVED' using errcode='23514';end if;
+ for m in select v.* from private.timesheet_contract_move_members v where v.operation_id=o.id order by v.member_key loop
+  select value into source_member from jsonb_array_elements(r.manifest_json#>'{physical,members}') v where v->>'member_key'=m.member_key;
+  select v.* into t from public.timesheets v where v.timesheet_id=m.to_timesheet_id;
+  if source_member is null or t.timesheet_id is null or not t.is_current or t.archived_at_utc is not null
+   or t.contract_id is distinct from o.to_contract_id or t.version<>m.to_version
+   or not exists(select 1 from private.timesheet_contract_current_placements p where p.operation_id=o.id
+    and p.family_root_id=m.family_root_id and p.member_key=m.member_key and p.current_timesheet_id=t.timesheet_id
+    and p.current_contract_id=t.contract_id and p.placement_receipt_id=receipt_id)
+   or not exists(select 1 from public.timesheets old_t where old_t.timesheet_id=m.from_timesheet_id
+    and not old_t.is_current and old_t.archived_reason_code='CONTRACT_MOVE' and old_t.archived_at_utc is not null)
+   or private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_evidence_v1((source_member->>'original_timesheet_id')::uuid))
+      is distinct from m.immutable_evidence_hash
+   or private.timesheet_contract_move_row_hash_v1((select to_jsonb(f) from public.timesheets_financials f where f.id=m.from_financial_id))
+      is distinct from decode(source_member->>'financial_row_sha256','hex') then
+   raise exception 'CONTRACT_MOVE_ORIGINAL_OR_CURRENT_CHANGED' using errcode='23514';
+  end if;
+ end loop;
+ if o.financial_state='NOT_APPROVED' then
+  -- Actual canonical owner proves no Work/no approved/no economic effect; paid or unknown is never treated as zero.
+  perform private.bpay_next_contract_move_not_required_v1(o.id);
+  if o.financial_command_id is not null then raise exception 'CONTRACT_MOVE_UNEXPECTED_FINANCIAL_COMMAND' using errcode='23514';end if;
+ elsif o.financial_state<>'QUALIFIED' or not exists(select 1 from private.bpay_next_command c
+  join private.bpay_next_command_member cm on cm.command_id=c.id and cm.candidate_id=o.candidate_id
+  where c.id=o.financial_command_id and c.command_kind='CONTRACT_MOVE_APPLY' and c.status='SEALED'
+   and c.expected_member_count=1 and c.sealed_at_utc is not null) then
+  raise exception 'CONTRACT_MOVE_NATIVE_COMMAND_NOT_REGISTERED' using errcode='23514';
+ end if;
+ -- Invoice owner checks Source equality, exact exclusive component coverage and durable native registration.
+ perform private.invoice_contract_move_obligation_assert_v1(o.id,o.billing_revision);
+ if exists(select 1 from private.timesheet_contract_move_execution_contexts c where c.operation_id=o.id)
+  or exists(select 1 from private.timesheet_contract_move_capabilities c where c.operation_id=o.id) then
+  raise exception 'CONTRACT_MOVE_LIVE_AUTHORITY_AT_COMPLETION' using errcode='23514';
+ end if;
+end;
+$function$;

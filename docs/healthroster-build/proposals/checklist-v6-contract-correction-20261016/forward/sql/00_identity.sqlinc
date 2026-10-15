@@ -1,0 +1,232 @@
+create or replace function private.timesheet_contract_move_row_hash_v1(p_row jsonb)
+returns bytea language sql immutable strict security definer set search_path='pg_catalog','extensions','pg_temp'
+as $function$ select extensions.digest(p_row::text,'sha256'); $function$;
+
+create or replace function private.timesheet_contract_move_changed_columns_v1(p_old jsonb,p_new jsonb)
+returns text[] language sql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+ select coalesce(array_agg(k order by k),'{}'::text[]) from
+ (select jsonb_object_keys(p_old) k union select jsonb_object_keys(p_new) k) x
+ where p_old->k is distinct from p_new->k;
+$function$;
+
+create or replace function private.timesheet_contract_move_uuid_array_v1(p_ids uuid[])
+returns boolean language sql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+ select p_ids is not null and p_ids is not distinct from
+ coalesce((select array_agg(distinct x order by x) from unnest(p_ids) x where x is not null),'{}'::uuid[]);
+$function$;
+
+-- No monetary/source history scan. Every physical alias resolves directly to one family member.
+create or replace function private.timesheet_contract_current_placement_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare a private.timesheet_contract_family_aliases%rowtype; p private.timesheet_contract_current_placements%rowtype;
+ o private.timesheet_contract_move_operations%rowtype; t public.timesheets%rowtype; root_id uuid; native_chain jsonb;
+begin
+ if p_timesheet_id is null then raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='22023'; end if;
+ select v.* into a from private.timesheet_contract_family_aliases v where v.timesheet_id=p_timesheet_id;
+ if found then
+  select v.* into p from private.timesheet_contract_current_placements v
+   where v.family_root_id=a.family_root_id and v.member_key=a.member_key;
+  select v.* into o from private.timesheet_contract_move_operations v where v.id=p.operation_id;
+  select v.* into t from public.timesheets v where v.timesheet_id=p.current_timesheet_id;
+  if p.current_timesheet_id is null or t.timesheet_id is null or not t.is_current or t.archived_at_utc is not null
+   or t.contract_id is distinct from p.current_contract_id or a.member_role<>p.role
+   or o.id is null or o.state<>'COMPLETE' or o.placement_receipt_json->>'receipt_id' is distinct from p.placement_receipt_id::text
+   or o.placement_receipt_json->>'operation_id' is distinct from o.id::text
+   or o.accepted_review_id is null or o.receipt_json is null
+   or not exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=o.id
+     and m.member_key=p.member_key and m.to_timesheet_id=t.timesheet_id and m.to_version=t.version
+     and m.family_root_id=p.family_root_id and m.role=p.role)
+   or not exists(select 1 from private.timesheet_contract_move_members m
+     join private.timesheet_contract_move_operations accepted on accepted.id=m.operation_id
+     where m.operation_id=a.accepted_operation_id and accepted.state in('COMPLETE','SUPERSEDED')
+      and m.member_key=a.member_key and m.family_root_id=a.family_root_id and m.role=a.member_role
+      and a.timesheet_id in(m.from_timesheet_id,m.to_timesheet_id)) then
+   raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+  end if;
+  return jsonb_build_object('version','CURRENT_CONTRACT_PLACEMENT_V1','requested_timesheet_id',p_timesheet_id,
+   'family_root_id',p.family_root_id,'current_timesheet_id',t.timesheet_id,'current_contract_id',t.contract_id,
+   'placement_revision',p.placement_revision::text,'placement_receipt_id',p.placement_receipt_id,'legacy_origin',false);
+ end if;
+ select v.* into t from public.timesheets v where v.timesheet_id=p_timesheet_id;
+ if not found or t.archived_at_utc is not null then raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000'; end if;
+ -- Native booking rotations retain their exact booking family; never choose max(version).
+ if (select count(*) from public.timesheets v where v.booking_id=t.booking_id and v.is_current and v.archived_at_utc is null)<>1 then
+  raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+ end if;
+ select v.* into t from public.timesheets v where v.booking_id=t.booking_id and v.is_current and v.archived_at_utc is null;
+ if exists(select 1 from private.timesheet_contract_family_aliases v where v.timesheet_id=t.timesheet_id) then
+  -- A previously unknown alias cannot fall through to original Contract qualification.
+  raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+ end if;
+ root_id:=t.timesheet_id;
+ if t.parent_timesheet_id is not null or exists(select 1 from public.timesheets child where child.parent_timesheet_id=t.timesheet_id) then
+  -- Existing signed correction family is explicit native identity, never a move chain.
+  native_chain:=public.timesheet_correction_chain_scope_v1(t.timesheet_id,false,32,100);
+  root_id:=(native_chain->>'root_timesheet_id')::uuid;
+  if native_chain->>'valid' is distinct from 'true' or root_id is null then
+   raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+  end if;
+  select v.* into t from public.timesheets v where v.timesheet_id=(native_chain->>'latest_positive_timesheet_id')::uuid
+   and v.is_current and v.archived_at_utc is null;
+  if not found or exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=t.timesheet_id) then
+   raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+  end if;
+ end if;
+ return jsonb_build_object('version','CURRENT_CONTRACT_PLACEMENT_V1','requested_timesheet_id',p_timesheet_id,
+  'family_root_id',root_id,'current_timesheet_id',t.timesheet_id,'current_contract_id',t.contract_id,
+  'placement_revision','0','placement_receipt_id',null,'legacy_origin',true);
+end;
+$function$;
+
+-- Every claim/move caller acquires this gate BEFORE native component locks.
+create or replace function private.timesheet_contract_move_family_lock_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare placement jsonb; checked jsonb; candidate uuid; root_id uuid;
+begin
+ placement:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ root_id:=(placement->>'family_root_id')::uuid;
+ select c.candidate_id into candidate from public.timesheets t join public.contracts c on c.id=t.contract_id
+  where t.timesheet_id=(placement->>'current_timesheet_id')::uuid;
+ if candidate is null then raise exception 'CONTRACT_MOVE_NATIVE_CANDIDATE_UNBOUND' using errcode='55000'; end if;
+ perform 1 from public.candidates c where c.id=candidate for update;
+ perform 1 from private.bpay_next_worker_control c where c.candidate_id=candidate for update;
+ perform 1 from private.timesheet_contract_current_placements p where p.family_root_id=root_id order by p.member_key for update;
+ perform 1 from public.timesheets t where t.timesheet_id=root_id or t.timesheet_id=(placement->>'current_timesheet_id')::uuid
+  or t.timesheet_id in(select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=root_id)
+  order by t.timesheet_id for update;
+ checked:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ if checked is distinct from placement then raise exception 'REVIEW_STALE' using errcode='40001'; end if;
+ return checked;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_immutable_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','pg_temp'
+as $function$ begin raise exception 'CONTRACT_MOVE_IMMUTABLE' using errcode='55000'; end; $function$;
+
+create or replace function private.timesheet_contract_move_operation_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' then raise exception 'CONTRACT_MOVE_OPERATION_IMMUTABLE' using errcode='55000'; end if;
+ if tg_op='INSERT' then
+  if new.state<>'REVIEWED' or new.state_revision<>1 or new.accept_request_id is not null then
+   raise exception 'CONTRACT_MOVE_INITIAL_STATE_INVALID' using errcode='23514';
+  end if;
+ elsif old.state<>'REVIEWED' then
+  if new.state<>'SUPERSEDED' or old.state<>'COMPLETE' or new.state_revision<>old.state_revision+1
+   or (to_jsonb(new)-array['state','state_revision']) is distinct from (to_jsonb(old)-array['state','state_revision']) then
+   raise exception 'CONTRACT_MOVE_ACCEPT_RECEIPT_IMMUTABLE' using errcode='55000';
+  end if;
+ elsif new.state_revision<>old.state_revision+1
+  or (to_jsonb(new)-array['state','state_revision','accept_request_id','accept_request_hash','to_timesheet_id',
+   'after_invoice_hash','financial_state','reason','completed_at_utc','financial_command_id','current_financial_cut_id',
+   'receipt_json','accepted_review_id','accepted_review_digest','billing_revision','unchanged_work_sha256','expected_scope_hash','before_pay_cut_hash','before_invoice_hash','invoice_authority','invoice_move_policy',
+   'placement_receipt_json','accepted_valuation_json','preparation_operation_id'])
+  is distinct from (to_jsonb(old)-array['state','state_revision','accept_request_id','accept_request_hash','to_timesheet_id',
+   'after_invoice_hash','financial_state','reason','completed_at_utc','financial_command_id','current_financial_cut_id',
+   'receipt_json','accepted_review_id','accepted_review_digest','billing_revision','unchanged_work_sha256','expected_scope_hash','before_pay_cut_hash','before_invoice_hash','invoice_authority','invoice_move_policy',
+   'placement_receipt_json','accepted_valuation_json','preparation_operation_id']) then
+  raise exception 'CONTRACT_MOVE_OPERATION_CAS_REQUIRED' using errcode='40001';
+ end if;
+ if not private.weekly_source_pay_actor_allowed_v1(new.created_by_user_id) then
+  raise exception 'CONTRACT_MOVE_ACTOR_NOT_ALLOWED' using errcode='42501';
+ end if;
+ return new;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_request_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' or (tg_op='UPDATE' and (old.receipt_json is not null or new.receipt_json is null
+  or (to_jsonb(new)-'receipt_json') is distinct from (to_jsonb(old)-'receipt_json'))) then
+  raise exception 'CONTRACT_MOVE_REQUEST_IMMUTABLE' using errcode='55000';
+ end if;
+ return new;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_member_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;
+begin
+ if tg_op='DELETE' then raise exception 'CONTRACT_MOVE_MEMBER_IMMUTABLE' using errcode='55000'; end if;
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=new.operation_id for update;
+ if o.id is null or o.state<>'REVIEWED' or (tg_op='UPDATE' and not (
+   (old.to_timesheet_id is null and (to_jsonb(new)-array['to_timesheet_id','to_version','to_financial_id','current_booking_id'])
+     is not distinct from (to_jsonb(old)-array['to_timesheet_id','to_version','to_financial_id','current_booking_id']))
+   or (old.to_timesheet_id is not null and old.to_financial_id is null and new.to_financial_id is not null
+     and (to_jsonb(new)-'to_financial_id') is not distinct from (to_jsonb(old)-'to_financial_id'))))
+  or not private.timesheet_contract_move_uuid_array_v1(new.expense_component_ids)
+  or not private.timesheet_contract_move_uuid_array_v1(new.workflow_ids)
+  or not private.timesheet_contract_move_uuid_array_v1(new.source_lineage_ids) then
+  raise exception 'CONTRACT_MOVE_MEMBER_IMMUTABLE' using errcode='55000';
+ end if;
+ if o.purpose='CONTRACT_CORRECTION' and (new.from_contract_id is null or new.to_contract_id<>o.to_contract_id
+  or new.from_timesheet_id=new.to_timesheet_id or new.original_booking_id=new.current_booking_id)
+  or o.purpose='DAILY_RATE_CORRECTION' and (new.from_contract_id is not null or new.to_contract_id is not null
+    or new.to_timesheet_id is not null and new.from_timesheet_id<>new.to_timesheet_id) then
+  raise exception 'CONTRACT_MOVE_MEMBER_PURPOSE_MISMATCH' using errcode='23514';
+ end if;
+ return new;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_placement_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' then raise exception 'CONTRACT_MOVE_PLACEMENT_IMMUTABLE' using errcode='55000'; end if;
+ if tg_op='UPDATE' and ((to_jsonb(new)-array['current_timesheet_id','current_contract_id','operation_id','placement_revision','placement_receipt_id'])
+  is distinct from (to_jsonb(old)-array['current_timesheet_id','current_contract_id','operation_id','placement_revision','placement_receipt_id'])
+  or new.placement_revision<>old.placement_revision+1 or new.operation_id=old.operation_id) then
+  raise exception 'CONTRACT_MOVE_PLACEMENT_CAS_REQUIRED' using errcode='40001';
+ end if;
+ if tg_op='INSERT' and new.placement_revision<>1 or not exists(select 1 from private.timesheet_contract_move_members m
+  join private.timesheet_contract_move_operations o on o.id=m.operation_id where m.operation_id=new.operation_id
+   and m.family_root_id=new.family_root_id and m.member_key=new.member_key and m.role=new.role
+   and m.to_timesheet_id=new.current_timesheet_id and m.to_contract_id is not distinct from new.current_contract_id
+   and o.purpose='CONTRACT_CORRECTION' and o.state='REVIEWED'
+   and (tg_op='INSERT' or m.from_timesheet_id=old.current_timesheet_id)) then
+  raise exception 'CONTRACT_MOVE_PLACEMENT_MEMBER_MISMATCH' using errcode='23514';
+ end if;
+ return new;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_commit_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;
+begin
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=new.id;
+ if o.state='REVIEWED' and (o.to_timesheet_id is not null or o.placement_receipt_json is not null)
+  or o.expected_scope_hash is null or o.before_pay_cut_hash is null or o.before_invoice_hash is null
+  or not exists(select 1 from private.timesheet_contract_move_reviews r where r.operation_id=o.id
+    and r.scope_hash=o.expected_scope_hash and r.pay_cut_hash=o.before_pay_cut_hash and r.invoice_hash=o.before_invoice_hash)
+  or exists(select 1 from private.timesheet_contract_move_execution_contexts c where c.operation_id=o.id)
+  or exists(select 1 from private.timesheet_contract_move_capabilities c where c.operation_id=o.id) then
+  raise exception 'CONTRACT_MOVE_INCOMPLETE_TRANSACTION' using errcode='23514';
+ end if;
+ if o.state='COMPLETE' and o.purpose='CONTRACT_CORRECTION' then
+  perform private.timesheet_contract_move_assert_v1(o.id,o.accepted_review_id);
+ end if;
+ return null;
+end;
+$function$;
+
+create trigger timesheet_contract_move_operation_guard before insert or update or delete on private.timesheet_contract_move_operations for each row execute function private.timesheet_contract_move_operation_guard_v1();
+create trigger timesheet_contract_move_request_guard before update or delete on private.timesheet_contract_move_requests for each row execute function private.timesheet_contract_move_request_guard_v1();
+create trigger timesheet_contract_move_member_guard before insert or update or delete on private.timesheet_contract_move_members for each row execute function private.timesheet_contract_move_member_guard_v1();
+create trigger timesheet_contract_move_placement_guard before insert or update or delete on private.timesheet_contract_current_placements for each row execute function private.timesheet_contract_move_placement_guard_v1();
+create trigger timesheet_contract_move_review_immutable before update or delete on private.timesheet_contract_move_reviews for each row execute function private.timesheet_contract_move_immutable_v1();
+create trigger timesheet_contract_move_alias_immutable before update or delete on private.timesheet_contract_family_aliases for each row execute function private.timesheet_contract_move_immutable_v1();
+create trigger timesheet_contract_move_consumption_immutable before update or delete on private.timesheet_contract_move_capability_consumptions for each row execute function private.timesheet_contract_move_immutable_v1();
+create constraint trigger timesheet_contract_move_commit_guard after insert or update on private.timesheet_contract_move_operations deferrable initially deferred for each row execute function private.timesheet_contract_move_commit_guard_v1();

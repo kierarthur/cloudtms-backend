@@ -1,0 +1,193 @@
+CREATE OR REPLACE FUNCTION public.timesheet_archive_row_guard_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_archive_fields_changed boolean := false;
+  v_transition_action text := NULL;
+  v_capability_token uuid := NULL;
+  v_capability_consumed boolean := false;
+  v_old_without_archive jsonb;
+  v_new_without_archive jsonb;
+  v_move_capability uuid;
+BEGIN
+  -- V6 exact one-use acceptance arm. All original ordinary refusal logic follows unchanged.
+  IF TG_OP IN ('INSERT','UPDATE') THEN
+    v_move_capability:=private.timesheet_contract_move_capability_resolve_v1(
+      'public.timesheet_archive_row_guard_v1',TG_RELID,TG_OP,CASE WHEN TG_OP='UPDATE' THEN to_jsonb(OLD) ELSE NULL END,to_jsonb(NEW));
+    IF v_move_capability IS NOT NULL THEN
+      PERFORM private.timesheet_contract_move_capability_consume_v1(v_move_capability,
+        'public.timesheet_archive_row_guard_v1',TG_RELID,TG_OP,CASE WHEN TG_OP='UPDATE' THEN to_jsonb(OLD) ELSE NULL END,to_jsonb(NEW));
+      RETURN NEW;
+    END IF;
+  END IF;
+  -- Archive metadata cannot be manufactured while inserting a new timesheet.
+  -- Every Archive starts from an existing authoritative row and must pass
+  -- through timesheet_archive_transition_v1.
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.archived_at_utc IS NOT NULL
+       OR NEW.archived_by_user_id IS NOT NULL
+       OR NEW.archived_reason_code IS NOT NULL THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_RPC_REQUIRED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', NEW.timesheet_id,
+          'action', 'ARCHIVE',
+          'reason', 'archive_metadata_on_insert_is_forbidden'
+        )::text;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.archived_at_utc IS NOT NULL THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'TIMESHEET_ARCHIVED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', OLD.timesheet_id,
+          'reason', 'ordinary_delete_for_archived_timesheet_is_forbidden'
+        )::text;
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF NEW.archived_at_utc IS NULL THEN
+    IF NEW.archived_by_user_id IS NOT NULL OR NEW.archived_reason_code IS NOT NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'ARCHIVE_METADATA_INVALID';
+    END IF;
+  ELSE
+    IF NEW.archived_by_user_id IS NULL OR NULLIF(BTRIM(NEW.archived_reason_code), '') IS NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'ARCHIVE_METADATA_INVALID';
+    END IF;
+    IF NEW.authorised_at_server IS NOT NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_MUST_BE_UNAUTHORISED_BEFORE_ARCHIVE';
+    END IF;
+  END IF;
+
+  v_archive_fields_changed :=
+    NEW.archived_at_utc IS DISTINCT FROM OLD.archived_at_utc
+    OR NEW.archived_by_user_id IS DISTINCT FROM OLD.archived_by_user_id
+    OR NEW.archived_reason_code IS DISTINCT FROM OLD.archived_reason_code;
+
+  IF v_archive_fields_changed THEN
+    IF OLD.archived_at_utc IS NULL AND NEW.archived_at_utc IS NOT NULL THEN
+      v_transition_action := 'ARCHIVE';
+    ELSIF OLD.archived_at_utc IS NOT NULL AND NEW.archived_at_utc IS NULL THEN
+      v_transition_action := 'UNARCHIVE';
+    ELSE
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_INVALID',
+        DETAIL = jsonb_build_object('timesheet_id', OLD.timesheet_id)::text;
+    END IF;
+
+    v_old_without_archive := to_jsonb(OLD) - ARRAY[
+      'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'updated_at'
+    ];
+    v_new_without_archive := to_jsonb(NEW) - ARRAY[
+      'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'updated_at'
+    ];
+
+    IF v_new_without_archive IS DISTINCT FROM v_old_without_archive THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_METADATA_ONLY',
+        DETAIL = jsonb_build_object('timesheet_id', OLD.timesheet_id)::text;
+    END IF;
+
+    BEGIN
+      v_capability_token := NULLIF(
+        current_setting('cloudtms.archive_transition_capability', true),
+        ''
+      )::uuid;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        v_capability_token := NULL;
+    END;
+
+    IF v_capability_token IS NOT NULL THEN
+      DELETE FROM public.timesheet_archive_transition_capability AS capability
+      WHERE capability.capability_token = v_capability_token
+        AND capability.backend_pid = pg_backend_pid()
+        AND capability.transaction_id = txid_current()
+        AND capability.timesheet_id = OLD.timesheet_id
+        AND capability.action = v_transition_action
+      RETURNING true INTO v_capability_consumed;
+    END IF;
+
+    IF COALESCE(v_capability_consumed, false) IS DISTINCT FROM true THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_RPC_REQUIRED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', OLD.timesheet_id,
+          'action', v_transition_action
+        )::text;
+    END IF;
+  ELSIF OLD.archived_at_utc IS NOT NULL THEN
+    v_old_without_archive := to_jsonb(OLD) - ARRAY['updated_at'];
+    v_new_without_archive := to_jsonb(NEW) - ARRAY['updated_at'];
+    IF v_new_without_archive IS DISTINCT FROM v_old_without_archive THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'TIMESHEET_ARCHIVED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', OLD.timesheet_id,
+          'reason', 'archived_timesheet_content_is_read_only'
+        )::text;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.timesheet_archive_row_guard_v1() FROM PUBLIC,anon,authenticated,service_role;
+
+CREATE OR REPLACE FUNCTION public.timesheet_archived_evidence_guard_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_old_timesheet_id uuid := CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN OLD.timesheet_id ELSE NULL END;
+  v_new_timesheet_id uuid := CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN NEW.timesheet_id ELSE NULL END;
+  v_timesheet_ids uuid[] := array_remove(ARRAY[v_old_timesheet_id, v_new_timesheet_id]::uuid[], NULL);
+  v_archived_timesheet_id uuid := NULL;
+  v_move_capability uuid;
+BEGIN
+  -- V6 exact one-use acceptance arm. All original ordinary refusal logic follows unchanged.
+  IF TG_OP IN ('INSERT','UPDATE') THEN
+    v_move_capability:=private.timesheet_contract_move_capability_resolve_v1(
+      'public.timesheet_archived_evidence_guard_v1',TG_RELID,TG_OP,CASE WHEN TG_OP='UPDATE' THEN to_jsonb(OLD) ELSE NULL END,to_jsonb(NEW));
+    IF v_move_capability IS NOT NULL THEN
+      PERFORM private.timesheet_contract_move_capability_consume_v1(v_move_capability,
+        'public.timesheet_archived_evidence_guard_v1',TG_RELID,TG_OP,CASE WHEN TG_OP='UPDATE' THEN to_jsonb(OLD) ELSE NULL END,to_jsonb(NEW));
+      RETURN NEW;
+    END IF;
+  END IF;
+  PERFORM 1
+  FROM public.timesheets AS t
+  WHERE t.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY t.timesheet_id
+  FOR KEY SHARE OF t;
+
+  SELECT t.timesheet_id
+    INTO v_archived_timesheet_id
+  FROM public.timesheets AS t
+  WHERE t.archived_at_utc IS NOT NULL
+    AND t.timesheet_id = ANY(v_timesheet_ids)
+  ORDER BY t.timesheet_id
+  LIMIT 1;
+
+  IF v_archived_timesheet_id IS NOT NULL THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'TIMESHEET_ARCHIVED',
+      DETAIL = jsonb_build_object(
+        'timesheet_id', v_archived_timesheet_id,
+        'reason', 'archived_timesheet_evidence_is_read_only'
+      )::text;
+  END IF;
+
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.timesheet_archived_evidence_guard_v1() FROM PUBLIC,anon,authenticated,service_role;

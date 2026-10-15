@@ -1,0 +1,40 @@
+-- Exact same-closure ACL: no wildcard prefix and no service/browser helper execution.
+do $acl$
+declare signature text;
+begin
+ foreach signature in array array[
+  'private.timesheet_contract_current_placement_v1(uuid)',
+  'private.timesheet_contract_move_assert_v1(uuid,uuid)',
+  'private.timesheet_contract_move_booking_part_v1(text)',
+  'private.timesheet_contract_move_booking_v1(uuid,uuid,date,integer)',
+  'private.timesheet_contract_move_capability_assert_v1(uuid,text,oid,text,jsonb,jsonb)',
+  'private.timesheet_contract_move_capability_cleanup_v1()',
+  'private.timesheet_contract_move_capability_consume_v1(uuid,text,oid,text,jsonb,jsonb)',
+  'private.timesheet_contract_move_capability_issue_v1(uuid,text,text,text)',
+  'private.timesheet_contract_move_capability_resolve_v1(text,oid,text,jsonb,jsonb)',
+  'private.timesheet_contract_move_changed_columns_v1(jsonb,jsonb)',
+  'private.timesheet_contract_move_commit_guard_v1()',
+  'private.timesheet_contract_move_context_commit_guard_v1()',
+  'private.timesheet_contract_move_context_guard_v1()',
+  'private.timesheet_contract_move_context_v1()',
+  'private.timesheet_contract_move_event_assert_v1(uuid,jsonb)',
+  'private.timesheet_contract_move_event_register_v1(text,text,oid,text,jsonb,jsonb,uuid,uuid)',
+  'private.timesheet_contract_move_evidence_v1(uuid)',
+  'private.timesheet_contract_move_family_lock_v1(uuid)',
+  'private.timesheet_contract_move_immutable_v1()',
+  'private.timesheet_contract_move_inherited_evidence_v1(jsonb)',
+  'private.timesheet_contract_move_member_guard_v1()',
+  'private.timesheet_contract_move_operation_guard_v1()',
+  'private.timesheet_contract_move_placement_guard_v1()',
+  'private.timesheet_contract_move_request_guard_v1()',
+  'private.timesheet_contract_move_row_hash_v1(jsonb)',
+  'private.timesheet_contract_move_scope_v1(uuid,boolean)',
+  'private.timesheet_contract_move_stage_v1(uuid,uuid,bytea)',
+  'private.timesheet_contract_move_uuid_array_v1(uuid[])'
+ ] loop
+  if to_regprocedure(signature) is null then raise exception 'CONTRACT_MOVE_ACL_DEFINITION_MISSING: %',signature;end if;
+  execute format('alter function %s owner to %I',signature,current_user);
+  execute format('revoke all on function %s from public,anon,authenticated,service_role',signature);
+ end loop;
+end;
+$acl$;

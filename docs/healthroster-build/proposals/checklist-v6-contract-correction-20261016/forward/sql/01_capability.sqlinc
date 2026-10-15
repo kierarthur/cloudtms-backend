@@ -1,0 +1,282 @@
+-- Shared single-use transaction authority. GUC is a locator, never a permission.
+create or replace function private.timesheet_contract_move_context_v1()
+returns private.timesheet_contract_move_execution_contexts language plpgsql volatile security definer
+set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare locator text:=nullif(current_setting('cloudtms.contract_move_execution_context',true),'');
+ c private.timesheet_contract_move_execution_contexts%rowtype;
+begin
+ if locator is null then return null; end if;
+ if locator!~'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+  raise exception 'CONTRACT_MOVE_CONTEXT_FORGED' using errcode='42501';
+ end if;
+ select v.* into c from private.timesheet_contract_move_execution_contexts v where v.id=locator::uuid for update;
+ if c.id is null or c.backend_pid<>pg_backend_pid() or c.transaction_id<>pg_current_xact_id()
+  or c.expires_at_utc<=clock_timestamp() or not private.weekly_source_pay_actor_allowed_v1(c.actor_user_id)
+  or c.manifest_sha256<>private.timesheet_contract_move_row_hash_v1(c.native_manifest_json)
+  or not exists(select 1 from private.timesheet_contract_move_operations o
+   join private.timesheet_contract_move_reviews r on r.id=c.review_id and r.operation_id=o.id
+   where o.id=c.operation_id and o.created_by_user_id=c.actor_user_id
+    and ((c.phase in('ACCEPT_PLACEMENT','DAILY_RATE_REVISION') and o.state='REVIEWED')
+      or (c.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE')
+       and (o.state='COMPLETE' or (o.state='REVIEWED' and o.accepted_review_id=c.review_id and o.placement_receipt_json is not null))))
+    and o.billing_revision=c.billing_revision) then
+  raise exception 'CONTRACT_MOVE_CONTEXT_NOT_CURRENT' using errcode='42501';
+ end if;
+ return c;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_context_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' then
+  if old.backend_pid<>pg_backend_pid() or old.transaction_id<>pg_current_xact_id() then
+   raise exception 'CONTRACT_MOVE_CONTEXT_OTHER_TRANSACTION' using errcode='42501';
+  end if;
+  if exists(select 1 from private.timesheet_contract_move_capabilities k where k.execution_context_id=old.id)
+   or exists(select 1 from jsonb_array_elements(old.native_manifest_json->'events') e
+    where not exists(select 1 from private.timesheet_contract_move_capability_consumptions k
+     where k.execution_context_id=old.id and k.event_no=(e->>'event_no')::bigint
+      and k.member_key=e->>'member_key' and k.guard_name=e->>'guard_name'
+      and k.phase=old.phase and k.billing_revision=old.billing_revision
+      and k.relation_oid=to_regclass(e->>'relation')::oid and k.row_operation=e->>'row_operation'
+      and k.scope_receipt_id is not distinct from (e->>'scope_receipt_id')::uuid
+      and k.authority_receipt_id=(e->>'authority_receipt_id')::uuid
+      and k.row_sha256=private.timesheet_contract_move_row_hash_v1(e->'new_row'))) then
+   raise exception 'CONTRACT_MOVE_GUARD_EVENTS_INCOMPLETE' using errcode='23514';
+  end if;
+  return old;
+ end if;
+ if new.backend_pid<>pg_backend_pid() or new.transaction_id<>pg_current_xact_id()
+  or new.expires_at_utc<>new.created_at_utc+interval '120 seconds' or new.expires_at_utc<=clock_timestamp()
+  or new.manifest_sha256<>private.timesheet_contract_move_row_hash_v1(new.native_manifest_json)
+  or not private.weekly_source_pay_actor_allowed_v1(new.actor_user_id)
+  or not exists(select 1 from private.timesheet_contract_move_operations o
+   join private.timesheet_contract_move_reviews r on r.operation_id=o.id and r.id=new.review_id
+   where o.id=new.operation_id and o.created_by_user_id=new.actor_user_id and o.billing_revision=new.billing_revision)
+  or new.native_manifest_json->>'version'<>'CORRECTION_NATIVE_EVENTS_V1'
+  or jsonb_typeof(new.native_manifest_json->'events') is distinct from 'array' then
+  raise exception 'CONTRACT_MOVE_CONTEXT_IDENTITY_INVALID' using errcode='42501';
+ end if;
+ if tg_op='UPDATE' and ((to_jsonb(new)-array['event_no','native_manifest_json','manifest_sha256'])
+   is distinct from (to_jsonb(old)-array['event_no','native_manifest_json','manifest_sha256'])
+   or new.event_no<>old.event_no+1
+   or jsonb_array_length(new.native_manifest_json->'events')<>jsonb_array_length(old.native_manifest_json->'events')+1
+   or (new.native_manifest_json->'events')-(jsonb_array_length(new.native_manifest_json->'events')-1)
+    is distinct from old.native_manifest_json->'events') then
+  raise exception 'CONTRACT_MOVE_CONTEXT_EVENT_APPEND_ONLY' using errcode='23514';
+ end if;
+ if tg_op='UPDATE' and exists(select 1 from private.timesheet_contract_move_capabilities k where k.execution_context_id=old.id) then
+  raise exception 'CONTRACT_MOVE_PREVIOUS_EVENT_NOT_CONSUMED' using errcode='23514';
+ end if;
+ return new;
+end;
+$function$;
+create trigger timesheet_contract_move_context_guard before insert or update or delete
+ on private.timesheet_contract_move_execution_contexts for each row execute function private.timesheet_contract_move_context_guard_v1();
+
+create or replace function private.timesheet_contract_move_context_commit_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+begin
+ if exists(select 1 from private.timesheet_contract_move_execution_contexts c where c.id=new.id)
+  or exists(select 1 from private.timesheet_contract_move_capabilities c where c.execution_context_id=new.id) then
+  raise exception 'CONTRACT_MOVE_LIVE_AUTHORITY_AT_COMMIT' using errcode='23514';
+ end if;
+ return null;
+end;
+$function$;
+create constraint trigger timesheet_contract_move_context_commit_guard after insert or update
+ on private.timesheet_contract_move_execution_contexts deferrable initially deferred
+ for each row execute function private.timesheet_contract_move_context_commit_guard_v1();
+
+-- Native SQL callers only. No public wrapper accepts rows, guard names or event manifests.
+create or replace function private.timesheet_contract_move_event_register_v1(
+ p_member_key text,p_guard_name text,p_relation_oid oid,p_row_operation text,p_old_row jsonb,p_new_row jsonb,p_authority_receipt_id uuid,p_scope_receipt_id uuid default null)
+returns bigint language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; e jsonb; seq bigint;
+begin
+ c:=private.timesheet_contract_move_context_v1();
+ if c.id is null or p_authority_receipt_id is null or jsonb_typeof(p_new_row) is distinct from 'object'
+  or p_row_operation not in('INSERT','UPDATE') or (p_row_operation='INSERT' and p_old_row is not null)
+  or (p_row_operation='UPDATE' and jsonb_typeof(p_old_row) is distinct from 'object') then
+  raise exception 'CONTRACT_MOVE_NATIVE_EVENT_INVALID' using errcode='23514';
+ end if;
+ seq:=c.event_no+1;
+ e:=jsonb_build_object('event_no',seq::text,'member_key',p_member_key,'guard_name',p_guard_name,
+  'relation',(select n.nspname||'.'||r.relname from pg_class r join pg_namespace n on n.oid=r.relnamespace where r.oid=p_relation_oid),
+  'row_operation',p_row_operation,'old_row',p_old_row,'new_row',p_new_row,
+  'authority_receipt_id',p_authority_receipt_id,'scope_receipt_id',p_scope_receipt_id);
+ update private.timesheet_contract_move_execution_contexts set event_no=seq,
+  native_manifest_json=jsonb_set(c.native_manifest_json,'{events}',(c.native_manifest_json->'events')||jsonb_build_array(e)),
+  manifest_sha256=private.timesheet_contract_move_row_hash_v1(jsonb_set(c.native_manifest_json,'{events}',(c.native_manifest_json->'events')||jsonb_build_array(e))) where id=c.id;
+ return seq;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_event_assert_v1(p_context uuid,p_event jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; o private.timesheet_contract_move_operations%rowtype;
+ rel oid:=to_regclass(p_event->>'relation'); cols text[]; old_row jsonb:=nullif(p_event->'old_row','null'::jsonb);
+ new_row jsonb:=p_event->'new_row'; guard text:=p_event->>'guard_name'; op text:=p_event->>'row_operation';
+ changed text[]; allowed boolean:=false; m jsonb;
+begin
+ c:=private.timesheet_contract_move_context_v1();
+ if c.id is distinct from p_context then raise exception 'CONTRACT_MOVE_CONTEXT_REQUIRED' using errcode='42501'; end if;
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=c.operation_id;
+ if not exists(select 1 from pg_trigger t join pg_proc p on p.oid=t.tgfoid join pg_namespace n on n.oid=p.pronamespace
+  where t.tgrelid=rel and not t.tgisinternal and t.tgenabled<>'D' and n.nspname||'.'||p.proname=guard
+   and (t.tgtype&1)=1 and ((op='INSERT' and (t.tgtype&4)=4) or (op='UPDATE' and (t.tgtype&16)=16))) then
+  raise exception 'CONTRACT_MOVE_GUARD_NOT_REGISTERED' using errcode='23514';
+ end if;
+ select array_agg(a.attname::text order by a.attname::text) into cols from pg_attribute a where a.attrelid=rel and a.attnum>0 and not a.attisdropped;
+ if cols is null or (select array_agg(k order by k) from jsonb_object_keys(new_row) k) is distinct from cols
+  or (op='INSERT' and old_row is not null)
+  or (op='UPDATE' and (jsonb_typeof(old_row) is distinct from 'object'
+    or (select array_agg(k order by k) from jsonb_object_keys(old_row) k) is distinct from cols)) then
+  raise exception 'CONTRACT_MOVE_FULL_ROW_REQUIRED' using errcode='23514';
+ end if;
+ select value into m from jsonb_array_elements(c.native_manifest_json->'members')
+  where value->>'member_key'=p_event->>'member_key';
+ if m is null then raise exception 'CONTRACT_MOVE_MEMBER_REQUIRED' using errcode='23514'; end if;
+ if c.phase='ACCEPT_PLACEMENT' and o.purpose='CONTRACT_CORRECTION' then
+  if rel='public.timesheets'::regclass and guard='public.timesheet_archive_row_guard_v1' then
+   if op='INSERT' then
+    allowed:=(new_row->>'timesheet_id')::uuid=(m->>'to_timesheet_id')::uuid
+      and (new_row->>'contract_id')::uuid=o.to_contract_id and new_row->>'sheet_scope'='WEEKLY'
+      and new_row->>'archived_at_utc' is null and (new_row->>'is_current')::boolean;
+   elsif op='UPDATE' then
+    changed:=private.timesheet_contract_move_changed_columns_v1(old_row,new_row);
+    allowed:=(old_row->>'timesheet_id')::uuid=(m->>'from_timesheet_id')::uuid
+      and old_row->>'archived_at_utc' is null and new_row->>'archived_at_utc' is not null
+      and new_row->>'archived_reason_code'='CONTRACT_MOVE' and (new_row->>'archived_by_user_id')::uuid=c.actor_user_id
+      and not (new_row->>'is_current')::boolean
+      and changed<@array['archived_at_utc','archived_by_user_id','archived_reason_code','is_current','updated_at']::text[]
+      and (new_row->>'authorised_at_server') is not distinct from (old_row->>'authorised_at_server');
+   end if;
+  elsif rel='public.timesheets_financials'::regclass and op='INSERT'
+   and guard in('public.timesheet_archived_evidence_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1') then
+   allowed:=(new_row->>'timesheet_id')::uuid=(m->>'to_timesheet_id')::uuid
+    and new_row->>'paid_at_utc' is null and new_row->>'paid_by_user_id' is null
+    and new_row->>'locked_by_invoice_id' is null;
+  end if;
+ elsif c.phase='DAILY_RATE_REVISION' and o.purpose='DAILY_RATE_CORRECTION' then
+  allowed:=rel='public.timesheets_financials'::regclass and op='INSERT'
+    and guard in('public.timesheet_archived_evidence_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1')
+    and (new_row->>'timesheet_id')::uuid=o.from_timesheet_id and new_row->>'paid_at_utc' is null;
+ elsif c.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE') then
+  allowed:=rel='public.invoice_lines'::regclass and op in('INSERT','UPDATE')
+   and guard in('public.invoice_line_archived_timesheet_guard_v1','private.weekly_source_invoice_line_owner_guard_v1')
+   and p_event->>'scope_receipt_id' is not null;
+ end if;
+ if allowed is distinct from true then raise exception 'CONTRACT_MOVE_GUARD_PHASE_REFUSED' using errcode='42501'; end if;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_capability_issue_v1(p_operation_id uuid,p_member_key text,p_phase text,p_guard_name text)
+returns uuid language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; e jsonb; cap_id uuid:=gen_random_uuid(); now_utc timestamptz:=clock_timestamp();
+begin
+ c:=private.timesheet_contract_move_context_v1();
+ if c.id is null or c.operation_id is distinct from p_operation_id or c.phase is distinct from p_phase
+  or (select count(*) from jsonb_array_elements(c.native_manifest_json->'events') e
+    where e->>'member_key'=p_member_key and e->>'guard_name'=p_guard_name
+      and not exists(select 1 from private.timesheet_contract_move_capability_consumptions k where k.execution_context_id=c.id
+        and k.event_no=(e->>'event_no')::bigint and k.guard_name=p_guard_name))<>1 then
+  raise exception 'CONTRACT_MOVE_ISSUE_CONTEXT_REQUIRED' using errcode='42501';
+ end if;
+ select value into e from jsonb_array_elements(c.native_manifest_json->'events') e
+  where e->>'member_key'=p_member_key and e->>'guard_name'=p_guard_name
+    and not exists(select 1 from private.timesheet_contract_move_capability_consumptions k where k.execution_context_id=c.id
+      and k.event_no=(e->>'event_no')::bigint and k.guard_name=p_guard_name);
+ perform private.timesheet_contract_move_event_assert_v1(c.id,e);
+ if exists(select 1 from private.timesheet_contract_move_capability_consumptions k where k.operation_id=c.operation_id
+  and k.member_key=p_member_key and k.phase=p_phase and k.guard_name=p_guard_name and k.relation_oid=to_regclass(e->>'relation')::oid
+  and k.row_operation=e->>'row_operation' and k.scope_receipt_id is not distinct from (e->>'scope_receipt_id')::uuid
+  and k.billing_revision=c.billing_revision and k.event_no=(e->>'event_no')::bigint
+  and k.row_sha256=private.timesheet_contract_move_row_hash_v1(e->'new_row')) then
+  raise exception 'CONTRACT_MOVE_GUARD_EVENT_ALREADY_CONSUMED' using errcode='23505';
+ end if;
+ insert into private.timesheet_contract_move_capabilities(id,execution_context_id,operation_id,member_key,phase,billing_revision,event_no,
+  authority_receipt_id,guard_name,relation_oid,row_operation,backend_pid,transaction_id,actor_user_id,manifest_sha256,scope_receipt_id,
+  expected_old_sha256,expected_new_sha256,allowed_changed_columns,created_at_utc,expires_at_utc)
+ values(cap_id,c.id,c.operation_id,p_member_key,c.phase,c.billing_revision,(e->>'event_no')::bigint,(e->>'authority_receipt_id')::uuid,
+  p_guard_name,to_regclass(e->>'relation')::oid,e->>'row_operation',pg_backend_pid(),pg_current_xact_id(),c.actor_user_id,c.manifest_sha256,
+  (e->>'scope_receipt_id')::uuid,private.timesheet_contract_move_row_hash_v1(nullif(e->'old_row','null'::jsonb)),
+  private.timesheet_contract_move_row_hash_v1(e->'new_row'),private.timesheet_contract_move_changed_columns_v1(nullif(e->'old_row','null'::jsonb),e->'new_row'),
+  now_utc,least(now_utc+interval '120 seconds',c.expires_at_utc));
+ return cap_id;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_capability_assert_v1(p_capability_id uuid,p_guard_name text,p_relation_oid oid,p_row_operation text,p_old_row jsonb,p_new_row jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare k private.timesheet_contract_move_capabilities%rowtype; c private.timesheet_contract_move_execution_contexts%rowtype; e jsonb;
+begin
+ c:=private.timesheet_contract_move_context_v1();
+ select v.* into k from private.timesheet_contract_move_capabilities v where v.id=p_capability_id for update;
+ if c.id is null or k.id is null or k.execution_context_id<>c.id or k.operation_id<>c.operation_id or k.phase<>c.phase
+  or k.backend_pid<>pg_backend_pid() or k.transaction_id<>pg_current_xact_id() or k.actor_user_id<>c.actor_user_id
+  or k.billing_revision<>c.billing_revision or k.guard_name is distinct from p_guard_name
+  or k.relation_oid is distinct from p_relation_oid or k.row_operation is distinct from p_row_operation
+  or k.expires_at_utc<=clock_timestamp() or k.manifest_sha256<>c.manifest_sha256
+  or k.expected_old_sha256 is distinct from private.timesheet_contract_move_row_hash_v1(p_old_row)
+  or k.expected_new_sha256 is distinct from private.timesheet_contract_move_row_hash_v1(p_new_row)
+  or k.allowed_changed_columns is distinct from private.timesheet_contract_move_changed_columns_v1(p_old_row,p_new_row) then
+  raise exception 'CONTRACT_MOVE_CAPABILITY_REFUSED' using errcode='42501';
+ end if;
+ select value into e from jsonb_array_elements(c.native_manifest_json->'events') e
+  where (e->>'event_no')::bigint=k.event_no and e->>'member_key'=k.member_key and e->>'guard_name'=k.guard_name;
+ if e is null then raise exception 'CONTRACT_MOVE_CAPABILITY_REFUSED' using errcode='42501'; end if;
+ perform private.timesheet_contract_move_event_assert_v1(c.id,e);
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_capability_resolve_v1(p_guard_name text,p_relation_oid oid,p_row_operation text,p_old_row jsonb,p_new_row jsonb)
+returns uuid language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; cap_id uuid; count_caps integer;
+begin
+ c:=private.timesheet_contract_move_context_v1();if c.id is null then return null; end if;
+ select count(*),(array_agg(k.id))[1] into count_caps,cap_id from private.timesheet_contract_move_capabilities k
+  where k.execution_context_id=c.id and k.guard_name=p_guard_name and k.relation_oid=p_relation_oid and k.row_operation=p_row_operation
+   and k.expected_old_sha256 is not distinct from private.timesheet_contract_move_row_hash_v1(p_old_row)
+   and k.expected_new_sha256=private.timesheet_contract_move_row_hash_v1(p_new_row);
+ if count_caps<>1 then raise exception 'CONTRACT_MOVE_CAPABILITY_REFUSED' using errcode='42501'; end if;
+ perform private.timesheet_contract_move_capability_assert_v1(cap_id,p_guard_name,p_relation_oid,p_row_operation,p_old_row,p_new_row);return cap_id;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_capability_consume_v1(p_capability_id uuid,p_guard_name text,p_relation_oid oid,p_row_operation text,p_old_row jsonb,p_new_row jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare k private.timesheet_contract_move_capabilities%rowtype; c private.timesheet_contract_move_execution_contexts%rowtype;
+begin
+ perform private.timesheet_contract_move_capability_assert_v1(p_capability_id,p_guard_name,p_relation_oid,p_row_operation,p_old_row,p_new_row);
+ c:=private.timesheet_contract_move_context_v1();delete from private.timesheet_contract_move_capabilities where id=p_capability_id returning * into k;
+ if not found then raise exception 'CONTRACT_MOVE_CAPABILITY_ALREADY_CONSUMED' using errcode='23505'; end if;
+ insert into private.timesheet_contract_move_capability_consumptions(execution_context_id,manifest_sha256,expected_events_json,
+  operation_id,member_key,phase,billing_revision,event_no,authority_receipt_id,guard_name,relation_oid,row_operation,scope_receipt_id,
+  row_sha256,capability_id,consumed_at_utc)
+ values(c.id,k.manifest_sha256,c.native_manifest_json->'events',k.operation_id,k.member_key,k.phase,k.billing_revision,k.event_no,
+  k.authority_receipt_id,k.guard_name,k.relation_oid,k.row_operation,k.scope_receipt_id,k.expected_new_sha256,k.id,clock_timestamp());
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_capability_cleanup_v1()
+returns integer language plpgsql volatile security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; n integer;
+begin
+ c:=private.timesheet_contract_move_context_v1();if c.id is null then return 0; end if;
+ -- Cleanup never hides an unused expected event or expired authority. Its DELETE guard proves completeness.
+ delete from private.timesheet_contract_move_execution_contexts where id=c.id;get diagnostics n=row_count;
+ perform set_config('cloudtms.contract_move_execution_context','',true);return n;
+end;
+$function$;
