@@ -1,0 +1,12 @@
+create or replace function private.bpay_next_line_pay_basis_v1(p_line_id uuid)
+returns bytea language sql stable security invoker set search_path=pg_catalog,private
+as $function$
+  select pg_catalog.sha256(pg_catalog.convert_to(jsonb_build_array(r.work_id,a.component_key,
+    r.source_pay_channel,r.source_umbrella_id,a.component_kind,
+    a.tax_treatment,a.approved_quantity,case when a.approved_quantity<>0 then a.approved_unit_rate end,a.source_pay_ex_vat,
+    coalesce((select jsonb_agg(jsonb_build_array(d.bucket,d.approved_hours,
+      case when d.approved_hours<>0 then d.source_pay_rate end) order by d.bucket)
+      from private.bpay_next_rate_detail d where d.approved_line_id=a.id),'[]'::jsonb))::text,'UTF8'))
+  from private.bpay_next_approved_line a join private.bpay_next_work_revision r on r.id=a.revision_id
+  where a.id=p_line_id
+$function$;

@@ -1,0 +1,656 @@
+{
+  "status": "UNMOUNTED_DAILY_NATIVE_AVAILABLE_HOLD_SOURCE_GRAPH",
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "census_sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+  "roots": [
+    "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)"
+  ],
+  "routines": [
+    {
+      "id": "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)",
+      "name": "private.weekly_source_checklist_ordinary_next_hold_money_v1",
+      "file": "PINNED_NATIVE77_SHARED_CORE_OR_NEW_PURPOSE",
+      "definition_sha256": "234c55b88a4c33841b5b9c9066fcae8b91caff013bb5d85c78c42757ff80d75d",
+      "saved_file": "read-graph/private.weekly_source_checklist_ordinary_next_hold_money_v1_uuid_jsonb_uuid_.sqlinc",
+      "callees": [
+        "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+        "private.bpay_next_approval_route_v1(uuid)",
+        "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+        "private.bpay_next_workbench_accepted_work_v1(uuid,text,text)",
+        "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+        "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)",
+        "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+        "private.weekly_source_pay_actor_allowed_v1(uuid)",
+        "private.weekly_source_pay_query_scope_v1(uuid)",
+        "private.weekly_source_query_require_service_v1()",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "PROPOSED_PRIVATE_CORE_OR_PURPOSE"
+    },
+    {
+      "id": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "name": "private._weekly_source_settings_assert_request_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4",
+      "saved_file": "read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_approval_route_v1(uuid)",
+      "name": "private.bpay_next_approval_route_v1",
+      "file": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
+      "definition_sha256": "8dd97a2a7c46ff95530f191346d03bf4f48867076e9556e58b235225668faa48",
+      "saved_file": "read-graph/private.bpay_next_approval_route_v1_uuid_.sqlinc",
+      "callees": [
+        "private._candidate_expense_source_family_v1(uuid)",
+        "public._ctms_import_correction_classify_v1(uuid)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+      "name": "private.bpay_next_snooze_at_cut_v1",
+      "file": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
+      "definition_sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40",
+      "saved_file": "read-graph/private.bpay_next_snooze_at_cut_v1_uuid_uuid_text_text_bigint_date_.sqlinc",
+      "callees": [
+        "private.bpay_next_line_pay_basis_v1(uuid)",
+        "private.bpay_next_segment_pay_basis_v1(uuid)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_workbench_accepted_work_v1(uuid,text,text)",
+      "name": "private.bpay_next_workbench_accepted_work_v1",
+      "file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "definition_sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874",
+      "saved_file": "read-graph/private.bpay_next_workbench_accepted_work_v1_uuid_text_text_.sqlinc",
+      "callees": [
+        "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+        "private.bpay_next_workbench_require_next_v1()"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "name": "private.weekly_source_actual_timesheet_submission_v1",
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "definition_sha256": "e87a243a9ff1d70579fb09fc8b44ffb2b035cdbe1bb26f1eb5d0c36b1924800e",
+      "saved_file": "read-graph/private.weekly_source_actual_timesheet_submission_v1_uuid_.sqlinc",
+      "callees": [
+        "private._candidate_daily_canonical_save_input_v1(uuid,integer)",
+        "private._candidate_sha256_jsonb_v1(jsonb)",
+        "public._import_review_query_evidence_core_v1(uuid)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)",
+      "name": "private.weekly_source_checklist_native_members_core_v1",
+      "file": "PINNED_NATIVE77_SHARED_CORE_OR_NEW_PURPOSE",
+      "definition_sha256": "520cc261070a9eaa0291ce647adc5dcff9ed5153846b5a8cde3d8dbbfe063444",
+      "saved_file": "read-graph/private.weekly_source_checklist_native_members_core_v1_uuid_uuid_boolean_.sqlinc",
+      "callees": [
+        "private.bpay_next_treatment_approval_revision_v1(uuid)",
+        "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)",
+        "private.bpay_next_workbench_require_next_v1()",
+        "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "PROPOSED_PRIVATE_CORE_OR_PURPOSE"
+    },
+    {
+      "id": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "name": "private.weekly_source_office_authority_v1",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "saved_file": "read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "callees": [
+        "private.weekly_source_pay_actor_allowed_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+      "saved_file": "read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "name": "private.weekly_source_pay_query_scope_v1",
+      "file": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "definition_sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf",
+      "saved_file": "read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "callees": [
+        "private._candidate_expense_source_family_v1(uuid)",
+        "private.weekly_source_resolve_root_identity_v1(uuid)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_query_require_service_v1()",
+      "name": "private.weekly_source_query_require_service_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "saved_file": "read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "name": "private.weekly_source_sha256_jsonb_v1",
+      "file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "saved_file": "read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "callees": [
+        "private.weekly_source_sha256_text_v1(text,text)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private._candidate_expense_source_family_v1(uuid)",
+      "name": "private._candidate_expense_source_family_v1",
+      "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "definition_sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d",
+      "saved_file": "read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "public._ctms_import_correction_classify_v1(uuid)",
+      "name": "public._ctms_import_correction_classify_v1",
+      "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "definition_sha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2",
+      "saved_file": "read-graph/public._ctms_import_correction_classify_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_line_pay_basis_v1(uuid)",
+      "name": "private.bpay_next_line_pay_basis_v1",
+      "file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "definition_sha256": "818c2abd303df43114907cafaff5294e1d2dbc03e122a55f12a751d56be16f09",
+      "saved_file": "read-graph/private.bpay_next_line_pay_basis_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_segment_pay_basis_v1(uuid)",
+      "name": "private.bpay_next_segment_pay_basis_v1",
+      "file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "definition_sha256": "243d62acde0d820d4724dd7eb3391affa26e607bf4d58b13b287933084ae366c",
+      "saved_file": "read-graph/private.bpay_next_segment_pay_basis_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_workbench_require_next_v1()",
+      "name": "private.bpay_next_workbench_require_next_v1",
+      "file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "definition_sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359",
+      "saved_file": "read-graph/private.bpay_next_workbench_require_next_v1__.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private._candidate_daily_canonical_save_input_v1(uuid,integer)",
+      "name": "private._candidate_daily_canonical_save_input_v1",
+      "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "definition_sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664",
+      "saved_file": "read-graph/private._candidate_daily_canonical_save_input_v1_uuid_integer_.sqlinc",
+      "callees": [
+        "private._candidate_sha256_jsonb_v1(jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private._candidate_sha256_jsonb_v1(jsonb)",
+      "name": "private._candidate_sha256_jsonb_v1",
+      "file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "definition_sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103",
+      "saved_file": "read-graph/private._candidate_sha256_jsonb_v1_jsonb_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "public._import_review_query_evidence_core_v1(uuid)",
+      "name": "public._import_review_query_evidence_core_v1",
+      "file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "definition_sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3",
+      "saved_file": "read-graph/public._import_review_query_evidence_core_v1_uuid_.sqlinc",
+      "callees": [
+        "public._import_review_hash_v1(text)",
+        "public._import_review_timesheet_protection_core_v1(uuid)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_treatment_approval_revision_v1(uuid)",
+      "name": "private.bpay_next_treatment_approval_revision_v1",
+      "file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "definition_sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7",
+      "saved_file": "read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)",
+      "name": "private.bpay_next_work_segment_gross_balance_v1",
+      "file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "definition_sha256": "96e70b650ed344ef419112ffcdebcf167baedca5ffc035ee79066fe1ad5d6045",
+      "saved_file": "read-graph/private.bpay_next_work_segment_gross_balance_v1_uuid_text_text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)",
+      "name": "private.weekly_source_checklist_native_bound_snapshot_core_v1",
+      "file": "PINNED_NATIVE77_SHARED_CORE_OR_NEW_PURPOSE",
+      "definition_sha256": "781219bb45111ecf0afa14fb08b11195b06cbd4f56b45a26b54249492162012d",
+      "saved_file": "read-graph/private.weekly_source_checklist_native_bound_snapshot_core_v1_uuid_bigint_boolean_.sqlinc",
+      "callees": [
+        "private.bpay_next_source_binding_members_v1(uuid)",
+        "private.bpay_next_source_command_id_v1(uuid)",
+        "private.bpay_next_treatment_approval_revision_v1(uuid)",
+        "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 4,
+      "source_kind": "PROPOSED_PRIVATE_CORE_OR_PURPOSE"
+    },
+    {
+      "id": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "name": "private.weekly_source_resolve_root_identity_v1",
+      "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "definition_sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6",
+      "saved_file": "read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "callees": [
+        "public._pay_timesheet_rotation_scope(uuid[])"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_sha256_text_v1(text,text)",
+      "name": "private.weekly_source_sha256_text_v1",
+      "file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "definition_sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+      "saved_file": "read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "public._import_review_hash_v1(text)",
+      "name": "public._import_review_hash_v1",
+      "file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "definition_sha256": "d4f5765fda0fe332115c79994e636aa4232d6cdbf52e5d1f68f396c4b06bc5a8",
+      "saved_file": "read-graph/public._import_review_hash_v1_text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "public._import_review_timesheet_protection_core_v1(uuid)",
+      "name": "public._import_review_timesheet_protection_core_v1",
+      "file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "definition_sha256": "12dd76a6785a4382e9fb47e71c4dffca3152273f52a1e3aebf9895cc3fea0410",
+      "saved_file": "read-graph/public._import_review_timesheet_protection_core_v1_uuid_.sqlinc",
+      "callees": [
+        "public._pay_batch_status_is_active_reservation(text)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_source_binding_members_v1(uuid)",
+      "name": "private.bpay_next_source_binding_members_v1",
+      "file": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "definition_sha256": "771eaefe07928ff4a93abb73e8d5073f7bf1f9addda5ddd9b629a786053efa36",
+      "saved_file": "read-graph/private.bpay_next_source_binding_members_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.bpay_next_source_command_id_v1(uuid)",
+      "name": "private.bpay_next_source_command_id_v1",
+      "file": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+      "definition_sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec",
+      "saved_file": "read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)",
+      "name": "private.weekly_source_checklist_native_initial_bound_assert_core_v1",
+      "file": "PINNED_NATIVE77_SHARED_CORE_OR_NEW_PURPOSE",
+      "definition_sha256": "318887be00ac528a3dd988682c264ddacde15974d112b82aeac12faa754f0226",
+      "saved_file": "read-graph/private.weekly_source_checklist_native_initial_bound_assert_core_v1_uuid_boolean_.sqlinc",
+      "callees": [
+        "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "PROPOSED_PRIVATE_CORE_OR_PURPOSE"
+    },
+    {
+      "id": "public._pay_timesheet_rotation_scope(uuid[])",
+      "name": "public._pay_timesheet_rotation_scope",
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "definition_sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "saved_file": "read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "public._pay_batch_status_is_active_reservation(text)",
+      "name": "public._pay_batch_status_is_active_reservation",
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "definition_sha256": "f2dff9d19beebfaea5bf833a575bde09248af72f9f713c3b1bb4e027054e2a82",
+      "saved_file": "read-graph/public._pay_batch_status_is_active_reservation_text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)",
+      "name": "private.weekly_source_checklist_native_initial_certificate_core_v1",
+      "file": "PINNED_NATIVE77_SHARED_CORE_OR_NEW_PURPOSE",
+      "definition_sha256": "ef5ce9d473fd80c9134d23e7c32305af70f36d0c06618d10868b039615c10af1",
+      "saved_file": "read-graph/private.weekly_source_checklist_native_initial_certificate_core_v1_uuid_boolean_.sqlinc",
+      "callees": [
+        "private.bpay_next_source_command_id_v1(uuid)",
+        "private.bpay_next_treatment_approval_revision_v1(uuid)",
+        "private.weekly_source_effective_inventory_v1(uuid)",
+        "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 1,
+      "source_kind": "PROPOSED_PRIVATE_CORE_OR_PURPOSE"
+    },
+    {
+      "id": "private.weekly_source_effective_inventory_v1(uuid)",
+      "name": "private.weekly_source_effective_inventory_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f",
+      "saved_file": "read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "callees": [
+        "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+        "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+        "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+        "private.weekly_source_publication_component_content_v1(jsonb)",
+        "private.weekly_source_publication_request_digest_v1(jsonb)",
+        "private.weekly_source_resolve_root_identity_v1(uuid)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+      "name": "private.weekly_source_inventory_approval_basis_v2",
+      "file": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+      "definition_sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc",
+      "saved_file": "read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "callees": [
+        "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+        "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+        "private.weekly_source_publication_component_content_v1(jsonb)",
+        "private.weekly_source_publication_request_digest_v1(jsonb)",
+        "private.weekly_source_resolve_root_identity_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "direct_flags": [
+        "execute"
+      ],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+      "name": "private.weekly_source_entitlement_components_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118",
+      "saved_file": "read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "callees": [
+        "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+        "private.weekly_source_protected_component_event_v1(jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+      "name": "private.weekly_source_initial_additional_components_v2",
+      "file": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+      "definition_sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438",
+      "saved_file": "read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "callees": [
+        "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+      "name": "private.weekly_source_publication_component_canonical_v1",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "definition_sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb",
+      "saved_file": "read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "callees": [
+        "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+        "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_publication_component_content_v1(jsonb)",
+      "name": "private.weekly_source_publication_component_content_v1",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "definition_sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8",
+      "saved_file": "read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_publication_request_digest_v1(jsonb)",
+      "name": "private.weekly_source_publication_request_digest_v1",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "definition_sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278",
+      "saved_file": "read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "callees": [
+        "private.weekly_source_canonical_json_text_v1(jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+      "name": "private.weekly_source_entitlement_component_id_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8",
+      "saved_file": "read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "callees": [
+        "private.weekly_source_entitlement_derived_uuid_v1(text,text)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_protected_component_event_v1(jsonb)",
+      "name": "private.weekly_source_protected_component_event_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab",
+      "saved_file": "read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+      "name": "private.weekly_source_publication_require_keys_v1",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "definition_sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4",
+      "saved_file": "read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)",
+      "name": "private.weekly_source_publication_scalar_v1",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "definition_sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306",
+      "saved_file": "read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_canonical_json_text_v1(jsonb)",
+      "name": "private.weekly_source_canonical_json_text_v1",
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "definition_sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345",
+      "saved_file": "read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "callees": [
+        "private.weekly_source_canonical_json_text_v1(jsonb)"
+      ],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    },
+    {
+      "id": "private.weekly_source_entitlement_derived_uuid_v1(text,text)",
+      "name": "private.weekly_source_entitlement_derived_uuid_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "definition_sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388",
+      "saved_file": "read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "callees": [],
+      "direct_flags": [],
+      "row_lock_sites": 0,
+      "source_kind": "CURRENT_LITERAL_NATIVE"
+    }
+  ],
+  "unchanged_predecessor_callees": 45,
+  "external_boundaries": [
+    {
+      "caller": "public._ctms_import_correction_classify_v1(uuid)",
+      "name": "extensions.digest",
+      "kind": "EXTERNAL_PGCRYPTO_EXTENSION_SOURCE_BOUNDARY",
+      "compiled_ABI": false,
+      "native_purity": false
+    },
+    {
+      "caller": "private._candidate_sha256_jsonb_v1(jsonb)",
+      "name": "extensions.digest",
+      "kind": "EXTERNAL_PGCRYPTO_EXTENSION_SOURCE_BOUNDARY",
+      "compiled_ABI": false,
+      "native_purity": false
+    },
+    {
+      "caller": "private.weekly_source_sha256_text_v1(text,text)",
+      "name": "extensions.digest",
+      "kind": "EXTERNAL_PGCRYPTO_EXTENSION_SOURCE_BOUNDARY",
+      "compiled_ABI": false,
+      "native_purity": false
+    },
+    {
+      "caller": "public._import_review_hash_v1(text)",
+      "name": "extensions.digest",
+      "kind": "EXTERNAL_PGCRYPTO_EXTENSION_SOURCE_BOUNDARY",
+      "compiled_ABI": false,
+      "native_purity": false
+    }
+  ],
+  "dynamic_read_boundaries": [
+    {
+      "caller": "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+      "body_sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc",
+      "literal_SQL": "select count(*),jsonb_agg(to_jsonb(d))->0\n          from private.bpay_next_source_chosen_detail d\n          where d.head_id=$1 and d.component_id=$2\n            and d.decision_bundle_id=$3 and d.bundle_revision=$4",
+      "literal_SQL_sha256": "a184bbc0e3d1c93b05d9f51d0d2b36bcc9f63a12b3965852d2c33c67f655a16c",
+      "input_binding": "v_head.id, actual component UUID, v_head.decision_bundle_id, v_head.bundle_revision",
+      "native_purity": false
+    }
+  ],
+  "TRUE_native_parity": false,
+  "FALSE_native_purity": false,
+  "canonical_mounted": false
+}

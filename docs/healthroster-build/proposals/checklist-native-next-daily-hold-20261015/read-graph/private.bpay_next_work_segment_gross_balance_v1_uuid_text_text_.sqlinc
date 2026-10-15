@@ -1,0 +1,11 @@
+create or replace function private.bpay_next_work_segment_gross_balance_v1(
+  p_work_id uuid,p_component_key text,p_segment_key text)
+returns table(realised_source_ex_vat numeric,active_held_source_ex_vat numeric)
+language sql stable security invoker set search_path=pg_catalog,private
+as $function$
+  select coalesce((select sum(e.source_disposition_ex_vat) from private.bpay_next_work_segment_effect_share e
+      where e.work_id=p_work_id and e.component_key=p_component_key and e.segment_key=p_segment_key),0),
+    coalesce((select sum(s.source_reserved_ex_vat) from private.bpay_next_work_segment_origin_share s
+      join private.bpay_next_hold h on h.id=s.hold_id and h.status='ACTIVE'
+      where s.work_id=p_work_id and s.component_key=p_component_key and s.segment_key=p_segment_key),0)
+$function$;

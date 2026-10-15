@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: whole strict transport keeps Daily actual date and finite native source EX VAT amount
+ok 1 - whole strict transport keeps Daily actual date and finite native source EX VAT amount
+  ---
+  duration_ms: 2.5163
+  type: 'test'
+  ...
+# Subtest: Daily cannot borrow missing null malformed coercible or different financial date
+ok 2 - Daily cannot borrow missing null malformed coercible or different financial date
+  ---
+  duration_ms: 0.5706
+  type: 'test'
+  ...
+# Subtest: existing weekly financial witness remains accepted with absent or explicit null Daily field
+ok 3 - existing weekly financial witness remains accepted with absent or explicit null Daily field
+  ---
+  duration_ms: 0.4311
+  type: 'test'
+  ...
+# Subtest: Daily actor physical financial Work revision and exact four-key scope remain closed
+ok 4 - Daily actor physical financial Work revision and exact four-key scope remain closed
+  ---
+  duration_ms: 0.4829
+  type: 'test'
+  ...
+# Subtest: actual reduced pay read retains quantity and date but refuses an action
+ok 5 - actual reduced pay read retains quantity and date but refuses an action
+  ---
+  duration_ms: 0.426
+  type: 'test'
+  ...
+# Subtest: Daily hold does not become invoice cash reservation or paid process authority
+ok 6 - Daily hold does not become invoice cash reservation or paid process authority
+  ---
+  duration_ms: 0.2567
+  type: 'test'
+  ...
+# Subtest: native Daily financial item cannot be relabelled Source invoice query information or a new counted submission
+ok 7 - native Daily financial item cannot be relabelled Source invoice query information or a new counted submission
+  ---
+  duration_ms: 0.2671
+  type: 'test'
+  ...
+# Subtest: Daily amount cannot certify an aggregate completed row
+ok 8 - Daily amount cannot certify an aggregate completed row
+  ---
+  duration_ms: 0.3206
+  type: 'test'
+  ...
+# Subtest: all five complete owners reverse nineteen exact hunks to raw pinned Git inputs
+ok 9 - all five complete owners reverse nineteen exact hunks to raw pinned Git inputs
+  ---
+  duration_ms: 243.1266
+  type: 'test'
+  ...
+# Subtest: native writer changes only exact Daily Client projection and preserves every native amount reason lock and ACL
+ok 10 - native writer changes only exact Daily Client projection and preserves every native amount reason lock and ACL
+  ---
+  duration_ms: 1.064
+  type: 'test'
+  ...
+# Subtest: Daily read retains complete current physical TF and captured native approval identities before any positive amount
+ok 11 - Daily read retains complete current physical TF and captured native approval identities before any positive amount
+  ---
+  duration_ms: 0.5449
+  type: 'test'
+  ...
+# Subtest: Sunday native gate current member conservation accepted cuts and exact monetary conversion remain intact
+ok 12 - Sunday native gate current member conservation accepted cuts and exact monetary conversion remain intact
+  ---
+  duration_ms: 0.4276
+  type: 'test'
+  ...
+# Subtest: pure read proposal contains no native writer rate refresh row lock or SQL evaluator
+ok 13 - pure read proposal contains no native writer rate refresh row lock or SQL evaluator
+  ---
+  duration_ms: 5.0789
+  type: 'test'
+  ...
+# Subtest: existing public actor-wide frame and retention owner are preserved around finite Daily presentation
+ok 14 - existing public actor-wide frame and retention owner are preserved around finite Daily presentation
+  ---
+  duration_ms: 0.844
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 393.5274

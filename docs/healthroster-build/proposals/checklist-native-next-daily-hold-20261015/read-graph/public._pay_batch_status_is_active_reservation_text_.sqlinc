@@ -1,0 +1,19 @@
+CREATE OR REPLACE FUNCTION public._pay_batch_status_is_active_reservation(p_status text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT upper(btrim(coalesce(p_status, ''))) IN (
+    'DRAFT',
+    'DRAFT_CREATED',
+    'READY',
+    'WAITING_BANK_CONFIRM',
+    'PARTIAL',
+    'BLOCKED_FUNDS',
+    'SCHEDULED',
+    'EXECUTING',
+    'AWAITING_AUTHORISATION',
+    'AUTHORISED_FOR_PAYMENT'
+  );
+$function$;

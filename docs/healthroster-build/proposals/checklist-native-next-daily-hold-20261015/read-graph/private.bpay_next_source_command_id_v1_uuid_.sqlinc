@@ -1,0 +1,12 @@
+create or replace function private.bpay_next_source_command_id_v1(
+  p_source_event_id uuid
+) returns uuid
+language sql immutable strict
+set search_path = pg_catalog
+as $function$
+  select (
+    pg_catalog.substr(h,1,8)||'-'||pg_catalog.substr(h,9,4)||'-'||
+    pg_catalog.substr(h,13,4)||'-'||pg_catalog.substr(h,17,4)||'-'||
+    pg_catalog.substr(h,21,12))::uuid
+  from (select pg_catalog.md5('BPAY-NEXT-SOURCE-V1:'||p_source_event_id::text) h) x
+$function$;

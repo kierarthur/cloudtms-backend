@@ -1,0 +1,9 @@
+create or replace function private.weekly_source_publication_component_content_v1(
+  p_component jsonb
+) returns jsonb
+language sql
+immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select p_component-'component_ordinal'-'movement_id'-'movement_group_id';
+$function$;

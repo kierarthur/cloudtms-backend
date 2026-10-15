@@ -1,0 +1,9 @@
+create or replace function private.bpay_next_workbench_require_next_v1()
+returns void language plpgsql stable security definer set search_path=pg_catalog,private
+as $function$
+begin
+  if not exists(select 1 from private.bpay_next_module_control m where m.id=1 and m.active_owner='NEXT') then
+    raise exception using errcode='55000',message='BPAY_NEXT_MODULE_NOT_ACTIVE';
+  end if;
+end
+$function$;

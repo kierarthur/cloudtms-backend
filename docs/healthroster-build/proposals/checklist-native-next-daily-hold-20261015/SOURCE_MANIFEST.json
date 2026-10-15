@@ -1,0 +1,407 @@
+{
+  "status": "UNMOUNTED_RESOLVED_CONTRACTLESS_DAILY_NATIVE_AVAILABLE_HOLD_SOURCE_INCREMENT",
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "predecessor": "e7e0b572bc94ef65ad05899d755cd43d75a82b97",
+  "predecessor_raw_saved_pins_unchanged": 75,
+  "whole_owners": 5,
+  "literal_hunks": 19,
+  "source_cases": 199,
+  "focused_cases": 14,
+  "unchanged_whole_predecessor_assertions": 118,
+  "read_graph_routines": 46,
+  "unchanged_read_callees": 45,
+  "conditional_TRUE_lock_sites": 5,
+  "compiled_FALSE_purity": false,
+  "TRUE_parity": false,
+  "actual_native_writer_qualification": false,
+  "native_Daily_positive": false,
+  "nonSunday_native_period_support": false,
+  "ordinary_LEGACY": false,
+  "whole_row_amounts": false,
+  "full_process_completion": false,
+  "syntax": [
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/build-read-graph.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/build-source.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/check-source.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/checklist-read.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/healthroster-checklist-source.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/checklist-read.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/healthroster-checklist-source.mjs",
+    "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/whole-predecessor-regressions.mjs"
+  ],
+  "lexical": [
+    {
+      "file": "forward/15102026_0352_native_workbench_daily_client_v1.sql",
+      "statements": 5,
+      "psql_controls": [
+        "\\set ON_ERROR_STOP on"
+      ]
+    },
+    {
+      "file": "forward/wp_u3_native_checklist.sqlinc",
+      "statements": 4,
+      "psql_controls": []
+    },
+    {
+      "file": "forward/wp_u3_ordinary_next_hold.sqlinc",
+      "statements": 3,
+      "psql_controls": []
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/COMPLETE_FORWARD_AND_REVERSE.json",
+      "bytes": 19379,
+      "sha256": "e24f2abc9e80fa46d68ed3ca15e3bb126d08414bba5386abf53b4c34f4a8cb8c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/FOCUSED_TEST_OUTPUT.txt",
+      "bytes": 3566,
+      "sha256": "9587dc9957da4177bfa76c7fc235b6ad0cffe5c620bee8e6d8e2f50a45abeb20"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/HANDOFF.md",
+      "bytes": 6709,
+      "sha256": "2288116d62ae51f45ad45278bd5883255ef4c7919b39b5c2749cea35967d8e2b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/INITIAL_WHOLE_PREDECESSOR_HARNESS_METADATA.txt",
+      "bytes": 29096,
+      "sha256": "d72ca21251f13e9d58e67f1544789c6f7db3ffd559f0225f087ad65743a87a63"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/NATIVE_READ_GRAPH.json",
+      "bytes": 32512,
+      "sha256": "1df55fced48c02fde5c5974633d08fe0ceb98b698567af1aac11f715817cddef"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/SOURCE_TEST_OUTPUT.txt",
+      "bytes": 57218,
+      "sha256": "4821f64ec3b14ccb3bd14dba1aba4550ab463956853825ef342171a53304b27c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/WHOLE_PREDECESSOR_OUTPUT.txt",
+      "bytes": 32814,
+      "sha256": "26ea4220963ffbf2b39e5190bb4d5b8fd6f537dbc6e65882c60a55db3244ced6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/WHOLE_PREDECESSOR_PINS.json",
+      "bytes": 2930,
+      "sha256": "bc00a327d0cb7f4df01c26abf9009fa969d34291e4f98c555cdf981ac05cb2a5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/build-read-graph.mjs",
+      "bytes": 4712,
+      "sha256": "0ef700daf689acf3f6367eff1ec847c76762c463e07fd0c1781744d691d3f30d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/build-source.mjs",
+      "bytes": 17031,
+      "sha256": "a6d38d7c9c93bfeb178238b44d9271b4d18a53f5a916285a9da1b3b2d50f3182"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/check-source.mjs",
+      "bytes": 4427,
+      "sha256": "bea36ecccf6d243a2aa118cdb9e0deabf81e89f2c0cdff558dddbe69b0e00aaa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/15102026_0352_native_workbench_daily_client_v1.sql",
+      "bytes": 44913,
+      "sha256": "ad8f9c6d4dced0f495aad27054f91b6fa542b1a8d61fce9a0c4c23fbe290b3b4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/healthroster-checklist-source.mjs",
+      "bytes": 39189,
+      "sha256": "bc79256b6d0e3938f12f0d7e4f7a5bdcd817f7533b4730ac36e25c82e57d0c31"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/wp_u3_native_checklist.sqlinc",
+      "bytes": 59378,
+      "sha256": "d87ac5d415df6d61195b657e61fb2a90f2fa6cec8c59ce58a69e0e456188ed83"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 26431,
+      "sha256": "ee01428a370f5fb669b78eeeaa9ab9c21bb67cfb135b6e3f1a83b8b59460a1c3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/15102026_0352_native_workbench_daily_client_v1.sql",
+      "bytes": 41811,
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/healthroster-checklist-source.mjs",
+      "bytes": 38922,
+      "sha256": "24eab68f71c697c118203c79bb850d554baa05988511ce40eceae679a1d7b23b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/wp_u3_native_checklist.sqlinc",
+      "bytes": 59367,
+      "sha256": "bfbb8a4c1eb9c8ef99fb7c885b1f478adf3d396cb8ecf933df8ba3310ae2edff"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/input/wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 23548,
+      "sha256": "39cb3d1f2d6d6803481d1a90c2efe83653c7ee5217196df0cefebe4641bdf04e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private._candidate_daily_canonical_save_input_v1_uuid_integer_.sqlinc",
+      "bytes": 2303,
+      "sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private._candidate_sha256_jsonb_v1_jsonb_.sqlinc",
+      "bytes": 298,
+      "sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "bytes": 574,
+      "sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_approval_route_v1_uuid_.sqlinc",
+      "bytes": 5777,
+      "sha256": "8dd97a2a7c46ff95530f191346d03bf4f48867076e9556e58b235225668faa48"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_line_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 859,
+      "sha256": "818c2abd303df43114907cafaff5294e1d2dbc03e122a55f12a751d56be16f09"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_segment_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 1071,
+      "sha256": "243d62acde0d820d4724dd7eb3391affa26e607bf4d58b13b287933084ae366c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_snooze_at_cut_v1_uuid_uuid_text_text_bigint_date_.sqlinc",
+      "bytes": 1741,
+      "sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_source_binding_members_v1_uuid_.sqlinc",
+      "bytes": 3498,
+      "sha256": "771eaefe07928ff4a93abb73e8d5073f7bf1f9addda5ddd9b629a786053efa36"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "bytes": 460,
+      "sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "bytes": 2406,
+      "sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_work_segment_gross_balance_v1_uuid_text_text_.sqlinc",
+      "bytes": 808,
+      "sha256": "96e70b650ed344ef419112ffcdebcf167baedca5ffc035ee79066fe1ad5d6045"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_workbench_accepted_work_v1_uuid_text_text_.sqlinc",
+      "bytes": 3129,
+      "sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.bpay_next_workbench_require_next_v1__.sqlinc",
+      "bytes": 398,
+      "sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_actual_timesheet_submission_v1_uuid_.sqlinc",
+      "bytes": 10754,
+      "sha256": "e87a243a9ff1d70579fb09fc8b44ffb2b035cdbe1bb26f1eb5d0c36b1924800e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "bytes": 2456,
+      "sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_checklist_native_bound_snapshot_core_v1_uuid_bigint_boolean_.sqlinc",
+      "bytes": 11408,
+      "sha256": "781219bb45111ecf0afa14fb08b11195b06cbd4f56b45a26b54249492162012d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_checklist_native_initial_bound_assert_core_v1_uuid_boolean_.sqlinc",
+      "bytes": 3325,
+      "sha256": "318887be00ac528a3dd988682c264ddacde15974d112b82aeac12faa754f0226"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_checklist_native_initial_certificate_core_v1_uuid_boolean_.sqlinc",
+      "bytes": 9397,
+      "sha256": "ef5ce9d473fd80c9134d23e7c32305af70f36d0c06618d10868b039615c10af1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_checklist_native_members_core_v1_uuid_uuid_boolean_.sqlinc",
+      "bytes": 8948,
+      "sha256": "520cc261070a9eaa0291ce647adc5dcff9ed5153846b5a8cde3d8dbbfe063444"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_checklist_ordinary_next_hold_money_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 25848,
+      "sha256": "234c55b88a4c33841b5b9c9066fcae8b91caff013bb5d85c78c42757ff80d75d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "bytes": 12756,
+      "sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "bytes": 586,
+      "sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5357,
+      "sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "bytes": 1007,
+      "sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "bytes": 4461,
+      "sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "bytes": 15704,
+      "sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3525,
+      "sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "bytes": 1480,
+      "sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "bytes": 5138,
+      "sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "bytes": 285,
+      "sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "bytes": 335,
+      "sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "bytes": 1749,
+      "sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "bytes": 7676,
+      "sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 509,
+      "sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/public._ctms_import_correction_classify_v1_uuid_.sqlinc",
+      "bytes": 3605,
+      "sha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/public._import_review_hash_v1_text_.sqlinc",
+      "bytes": 299,
+      "sha256": "d4f5765fda0fe332115c79994e636aa4232d6cdbf52e5d1f68f396c4b06bc5a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/public._import_review_query_evidence_core_v1_uuid_.sqlinc",
+      "bytes": 6888,
+      "sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/public._import_review_timesheet_protection_core_v1_uuid_.sqlinc",
+      "bytes": 6311,
+      "sha256": "12dd76a6785a4382e9fb47e71c4dffca3152273f52a1e3aebf9895cc3fea0410"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/public._pay_batch_status_is_active_reservation_text_.sqlinc",
+      "bytes": 459,
+      "sha256": "f2dff9d19beebfaea5bf833a575bde09248af72f9f713c3b1bb4e027054e2a82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5333,
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/whole-predecessor-regressions.mjs",
+      "bytes": 2480,
+      "sha256": "88f67fba08be69a2f07b06035dae8bd7ccfbb212662881968cadde6c35b53b43"
+    },
+    {
+      "file": "tests/healthroster-checklist-native-daily-hold.test.mjs",
+      "bytes": 11187,
+      "sha256": "6b48e669df1b6046613a05f012bb113b23b2189acaec2c850ed50a496dfb5d0d"
+    }
+  ]
+}
