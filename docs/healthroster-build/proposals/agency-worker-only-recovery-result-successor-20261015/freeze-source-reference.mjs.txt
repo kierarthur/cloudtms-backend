@@ -1,0 +1,18 @@
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),source=path.join(here,'worker-only-recovery-result-successor-construction-20261015');
+const target=path.resolve(here,'../agency-worker-only-recovery-result-successor-20261015');
+assert.equal(fs.existsSync(target),false,'Never rewrite a frozen source packet');
+const result=spawnSync(process.execPath,['--test','--test-reporter=tap',path.join(source,'recovery-result.test.mjs')],{encoding:'utf8',timeout:60000});
+assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/# pass 25/);
+fs.cpSync(source,target,{recursive:true});
+fs.copyFileSync(path.join(here,'prepare-worker-only-recovery-result-successor.mjs'),path.join(target,'prepare-source-reference.mjs.txt'));
+fs.copyFileSync(fileURLToPath(import.meta.url),path.join(target,'freeze-source-reference.mjs.txt'));
+fs.writeFileSync(path.join(target,'SOURCE_CHECKS.json'),JSON.stringify({source_only:true,native:false,mounted:false,independent_review:'PENDING',
+ input_commit:'9320ff3b494c5d105f1e9725aef7071bb724682f',complete_owners:1,whole_function_hunks:1,source_checks:1,actual_extracted_javascript_unit_cases:24,total_pass:25,tap:result.stdout,
+ remaining:['Real Candidate workflow finalisation/recovery and concurrent login/API proof','Native SQL and rendered real document lifecycle gates','Final canonical current-owner composition']},null,2)+'\n');
+fs.writeFileSync(path.join(target,'HANDBACK.md'),`# Candidate recovery result successor\n\nThis source-only successor fixes P2-WORKER-ONLY-RECOVERY-FALSE-SUCCESS in the immutable 9320 Candidate packet. The actual recovery owner now checks both worker-only and manager results after shared single-flight deferral handling. Only literal ok=true increments recovered; false or malformed results follow existing failure/diagnostic handling. Existing per-workflow leasing, sequential recovery, bounded manager RPC, exact worker-only qualification and target skip rules remain.\n\nThe complete backend forward reverses through one entire recovery-function hunk to the exact committed 9320 input. The other backend bytes are identical. The source check and 24 actual extracted JavaScript unit cases pass, including predecessor reproduction, negative/malformed outcomes, PHONE/EMAIL and worker-only success/deferral, busy lease, skipped stale target and sequential leases. No database/network/app call, canonical mount or native qualification occurred. Keep the 9320 freeze unchanged and select this complete backend as its adjacent successor in the final current root union.\n`);
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex'),entries=[];
+function walk(dir,relative=''){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,e.name),rel=path.join(relative,e.name).replaceAll('\\','/');if(e.isDirectory())walk(file,rel);else{const b=fs.readFileSync(file);entries.push({path:rel,bytes:b.length,sha256:sha(b)});}}}
+walk(target);entries.sort((a,b)=>a.path.localeCompare(b.path));
+fs.writeFileSync(path.join(target,'REVIEW_MANIFEST.json'),JSON.stringify({source_only:true,native:false,mounted:false,entries},null,2)+'\n');
+console.log(JSON.stringify({target,files:entries.length+1,manifest_sha256:sha(fs.readFileSync(path.join(target,'REVIEW_MANIFEST.json'))),pass:25}));

@@ -1,0 +1,12868 @@
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import QRCode from 'qrcode';
+import {
+  buildOfficialWeekPeriod,
+  officialTimesheetNumber,
+  renderOfficialTimesheetPdfBytes
+} from './timesheet-official-pdf.js';
+import { validateFrozenTimesheetPresentationModel } from './invoice-presentation-contract.js';
+import {
+  correctionCapability, correctionPresentation, correctionSchedule,
+  serializeCandidateCorrection, serializeManagerCorrection
+} from './candidate-correction-v1.js';
+import {
+  candidateBootstrapCorrelation,
+  composeCandidateBootstrapPhase1b,
+  handleCandidateDailyPhase1bRequest
+} from './candidate-daily-phase1b.js';
+import { isCandidateDailyPath, normalizeCandidateDailyBookedSource } from './candidate-daily-contract-v1.js';
+import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
+import {
+  buildCandidatePaperPageQrViaAdapter,
+  verifyCandidatePaperQrViaAdapter
+} from './mytms-manager-control-adapter.js';
+import { buildTsq2PagePayload } from './timesheet-qr-payload.js';
+import { decodeCandidatePaperQrTextsFromJpeg } from './candidate-paper-page-image.js';
+// WP-32 / WP-23 handoff N3, HANDOVER 2 round-5 ruling A2 and contract decision D13.
+import {
+  isManagedRootGuardRefusal,
+  recordGuardRefusalAfterRollback
+} from './weekly-source/guard-refusal-record.mjs';
+import { bpayBusyEnvelope } from './bpay-busy.js';
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SHA256_RE = /^[0-9a-f]{64}$/i;
+const CANDIDATE_PREFIX = '/candidate-app/v1';
+const MANAGER_PREFIX = '/candidate-manager/v1';
+const MAX_JSON_BYTES = 1024 * 1024;
+const MAX_COMPONENT_BYTES = 15 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 10000;
+const MAX_IMAGE_PIXELS = 40_000_000;
+const ACCESS_TTL_SECONDS = 15 * 60;
+const REFRESH_TTL_DAYS = 30;
+const REFRESH_ABSOLUTE_TTL_DAYS = 90;
+const PASSWORD_ITERATIONS = 100000;
+const PASSWORD_SCHEME = 'PBKDF2-HMAC-SHA256';
+const PASSWORD_SCHEME_VERSION = 1;
+const RENDERER_CONTRACT_VERSION = 'CANDIDATE_REVIEW_DOCUMENTS_V1';
+const DOCUMENT_BRANDING_CONTRACT_VERSION = 'CANDIDATE_DOCUMENT_BRANDING_V1';
+const CANDIDATE_APP_AGENCY_BRANDING_CONTRACT_VERSION = 'CANDIDATE_APP_AGENCY_BRANDING_V1';
+const MANAGER_ACTION_METHODS = Object.freeze({
+  start: 'GET',
+  progress: 'POST',
+  approve: 'POST',
+  refuse: 'POST'
+});
+
+const AUTH_ERROR_CODES = new Set([
+  'OFFICE_AUTH_REQUIRED',
+  'CANDIDATE_ACCESS_TOKEN_INVALID',
+  'CANDIDATE_ACCESS_TOKEN_EXPIRED',
+  'CANDIDATE_SESSION_INVALID',
+  'CANDIDATE_SESSION_EXPIRED',
+  'CANDIDATE_LOGIN_INVALID',
+  'CANDIDATE_CHALLENGE_INVALID',
+  'CANDIDATE_CHALLENGE_EXPIRED',
+  'CANDIDATE_CHALLENGE_ALREADY_USED',
+  'CANDIDATE_VERIFIED_CHALLENGE_INVALID',
+  'MANAGER_APPROVAL_REQUEST_NOT_READY',
+  'MANAGER_APPROVAL_REQUEST_EXPIRED'
+]);
+
+const CONFLICT_ERROR_CODES = new Set([
+  'CANDIDATE_NOTIFICATION_IDEMPOTENCY_CONFLICT',
+  'TIMESHEET_WORK_INTERVAL_OVERLAP',
+  'CANDIDATE_CONTEXT_STALE',
+  'CANDIDATE_TIMESHEET_MOVED',
+  'CANDIDATE_REQUEST_GENERATION_STALE',
+  'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS',
+  'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT',
+  'CANDIDATE_REJECTION_SCOPE_CONFLICT',
+  'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH',
+  'CANDIDATE_IDEMPOTENCY_CONFLICT',
+  'CANDIDATE_ACTION_NOT_ELIGIBLE',
+  'CANDIDATE_REQUIRES_UNAUTHORISE',
+  'CANDIDATE_PROTECTED_FINANCIAL_HISTORY',
+  'CANDIDATE_IMPORT_AUTHORITATIVE',
+  'CANDIDATE_TOO_MANY_AFFECTED_WORKFLOWS',
+  'IDEMPOTENCY_CONFLICT',
+  'WORKFLOW_VERSION_MISMATCH',
+  'WORKFLOW_GENERATION_CONFLICT',
+  'ROW_SIGNATURE_MISMATCH',
+  'TIMESHEET_MOVED',
+  'ROUTE_CHANGE_CONTEXT_CHANGED',
+  'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE',
+  'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED',
+  'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED',
+  'CANDIDATE_RECEIPT_STORAGE_STALE',
+  'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT',
+  'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH',
+  'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT',
+  'CANDIDATE_COMPONENT_PREPARE_STATE_CONFLICT',
+  'CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT',
+  'CANDIDATE_PAPER_RETURN_PAGE_DUPLICATE',
+  'CANDIDATE_PAPER_WORKFLOW_CONFLICT',
+  'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+  'CANDIDATE_BREAK_ENTRY_CONTEXT_STALE',
+  'CANDIDATE_PAPER_QR_PROOF_STALE',
+  'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+  'CANDIDATE_PAPER_RETURN_PACK_STALE',
+  'MANAGER_REVIEW_MANIFEST_MISMATCH',
+  'CANDIDATE_EXPENSE_COMPONENT_CHANGED',
+  'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED',
+  'CANDIDATE_PAPER_DOCUMENT_UPDATE_REQUIRED',
+  'CANDIDATE_EXPENSE_PENDING_WORKFLOW_CONFLICT',
+  'CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED',
+  'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED'
+]);
+
+const NOT_FOUND_ERROR_CODES = new Set([
+  'CANDIDATE_NOTIFICATION_NOT_FOUND',
+  'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND',
+  'CANDIDATE_ROUTE_NOT_FOUND',
+  'CANDIDATE_WORKFLOW_NOT_FOUND',
+  'CANDIDATE_DAILY_SHIFT_NOT_FOUND',
+  'CANDIDATE_WORKFLOW_CONTRACT_NOT_FOUND',
+  'CANDIDATE_WORKFLOW_WEEK_NOT_FOUND',
+  'CANDIDATE_REMINDER_BATCH_NOT_FOUND',
+  'TIMESHEET_NOT_FOUND'
+]);
+
+const COMPONENT_MEDIA_TYPES = Object.freeze({
+  CANDIDATE_SIGNATURE: ['image/png', 'image/jpeg'],
+  MANAGER_SIGNATURE: ['image/png', 'image/jpeg'],
+  EXPENSE_EVIDENCE: ['image/png', 'image/jpeg', 'application/pdf'],
+  MILEAGE_FORM: ['image/png', 'image/jpeg', 'application/pdf'],
+  SIGNED_RETURN: ['image/png', 'image/jpeg', 'application/pdf']
+});
+const PAPER_RETURN_PROOF_V1 = 'CANDIDATE_PAPER_RETURN_PROOF_V1';
+const PAPER_RETURN_PROOF_V2 = 'CANDIDATE_PAPER_RETURN_PROOF_V2';
+const PAPER_PAGE_QR_V2 = 'CANDIDATE_PAPER_PAGE_QR_V2';
+const GENERIC_DOCUMENT_WORKFLOW_ID = '00000000-0000-0000-0000-000000000000';
+const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
+const CORRECTION_CONVERTERS = Object.freeze({ segmentBreak, normaliseAdaptiveBreakEntry });
+CONFLICT_ERROR_CODES.add('CANDIDATE_CORRECTION_CLIENT_REQUIRED');
+const MANAGER_FINALISATION_LEASE_MS = 3 * 60 * 1000;
+const MANAGER_FINALISATION_RPC_TIMEOUT_MS = 20 * 1000;
+const MANAGER_INTERACTIVE_DB_TIMEOUT_MS = 8 * 1000;
+
+const CANDIDATE_WORKFLOW_ACTIONS = new Set([
+  'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
+  'CREATE_EMAIL_APPROVAL_REQUEST', 'PAPER_PREPARE', 'PAPER_EMAIL', 'PAPER_RETURN', 'REMIND',
+  'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF', 'RETRY_FINALISATION',
+  'MILEAGE_FORM_PREPARE', 'MILEAGE_FORM_EMAIL',
+  'REMOVE_EXPENSE', 'WITHDRAW_EXPENSE', 'CANCEL_EXPENSE',
+  'WITHDRAW_ENTIRE_CLAIM', 'CANCEL_ENTIRE_CLAIM',
+  'BEGIN_EXPENSE_UPDATE', 'ABORT_EXPENSE_UPDATE',
+  'RESUBMIT_EXPENSE_CATEGORY', 'CREATE_UPDATED_DOCUMENTS'
+]);
+
+const ROUTE_INTERVENTION_REASONS = new Set([
+  'CANDIDATE_SUPPLIED_MANUAL_TIMESHEET',
+  'CANDIDATE_REPORTED_HOURS_INCORRECT',
+  'HIRING_MANAGER_REPORTED_HOURS_INCORRECT',
+  'ELECTRONIC_SUBMISSION_TECHNICAL_FAILURE',
+  'OTHER_EXCEPTIONAL_OFFICE_INTERVENTION'
+]);
+
+const OFFICE_CONTRACT_VERSION = 'CLOUDTMS_OFFICE_CANDIDATE_API_V1';
+const MAX_OFFICE_REMINDER_BATCH_ROWS = 1000;
+const MAX_OFFICE_REMINDER_SOURCE_ROWS = 10000;
+const OFFICE_REMINDER_PAGE_SIZE = 25;
+const MAX_OFFICE_REMINDER_PAGE_SIZE = 100;
+const OFFICE_PROJECTION_SURFACES = new Set([
+  'SIMPLE_TIMESHEET', 'TIMESHEET_SUMMARY', 'BULK_PROCESS', 'BULK_AUTHORISE',
+  'INVOICE_GENERATOR', 'INVOICE_ISSUER'
+]);
+const OFFICE_MANAGER_ACTIONS = Object.freeze({
+  remind: 'REMIND',
+  renew: 'RENEW',
+  cancel: 'MANAGER_REQUEST_CANCEL',
+  'cancel-manager-handoff': 'CANCEL_MANAGER_HANDOFF',
+  'phone-review': 'BEGIN_MANAGER_REVIEW',
+  'phone-progress': 'RECORD_REVIEW_PROGRESS',
+  'phone-approve': 'PHONE_APPROVE',
+  'phone-refuse': 'MANAGER_REFUSE'
+});
+const OFFICE_ADMIN_PERMISSIONS = new Set([
+  'view_candidate_state', 'change_route', 'reject_submission', 'resubmit_rejected',
+  'send_manager_reminder', 'send_manager_reminder_batch', 'renew_manager_request',
+  'cancel_manager_request', 'manage_phone_approval', 'manage_paper',
+  'retry_finalisation', 'mark_no_work'
+]);
+const OFFICE_WORKFLOW_ACTION_PERMISSIONS = Object.freeze({
+  remind: 'send_manager_reminder',
+  renew: 'renew_manager_request',
+  cancel: 'cancel_manager_request',
+  'cancel-manager-handoff': 'manage_phone_approval',
+  'phone-review': 'manage_phone_approval',
+  'phone-progress': 'manage_phone_approval',
+  'phone-approve': 'manage_phone_approval',
+  'phone-refuse': 'manage_phone_approval',
+  'reject-expense-category': 'reject_submission',
+  'retry-finalisation': 'retry_finalisation'
+});
+
+class CandidateHttpError extends Error {
+  constructor(status, code, message = code, details = null) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+function jsonResponse(status, body, headers = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers }
+  });
+}
+
+function requestId(request) {
+  const supplied = String(request.headers.get('x-request-id') || '').trim();
+  return supplied && supplied.length <= 120 ? supplied : crypto.randomUUID();
+}
+
+function text(value) {
+  return String(value == null ? '' : value).trim();
+}
+
+function candidatePaperPagesError(status, code, pageKeys) {
+  const replacementPageKeys = [...new Set((Array.isArray(pageKeys) ? pageKeys : [])
+    .map((value) => text(value))
+    .filter((value) => value && value.length <= 256))].slice(0, 100);
+  return new CandidateHttpError(
+    status,
+    code,
+    code,
+    replacementPageKeys.length
+      ? { replacement_page_keys: replacementPageKeys }
+      : null
+  );
+}
+
+function candidatePaperPageError(status, code, pageKey) {
+  return candidatePaperPagesError(status, code, [pageKey]);
+}
+
+function upper(value) {
+  return text(value).toUpperCase();
+}
+
+function isObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function requireUuid(value, code = 'INVALID_UUID') {
+  const out = text(value);
+  if (!UUID_RE.test(out)) throw new CandidateHttpError(400, code);
+  return out;
+}
+
+function requireSha256(value, code = 'INVALID_SHA256') {
+  const out = text(value).replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(out)) throw new CandidateHttpError(400, code);
+  return out;
+}
+
+function requireCandidateIdempotency(value) {
+  const key = text(value);
+  if (!key || key.length > 200) {
+    throw new CandidateHttpError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  return key;
+}
+
+function publicCredentialVersions(value) {
+  if (!isObject(value)) return null;
+  const contractVersion = text(value.contract_version);
+  const output = {
+    contract_version: contractVersion,
+    access_key_version: Number(value.access_key_version),
+    refresh_key_version: Number(value.refresh_key_version),
+    public_session_key_version: Number(value.public_session_key_version)
+  };
+  if (contractVersion !== 'CANDIDATE_PUBLIC_CREDENTIAL_VERSIONS_V1'
+      || [output.access_key_version, output.refresh_key_version, output.public_session_key_version]
+        .some(version => !Number.isSafeInteger(version) || version < 1 || version > 65535)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID');
+  }
+  return output;
+}
+
+function publicPhoneBinding(value) {
+  if (!isObject(value)
+      || text(value.contract_version) !== 'CANDIDATE_PUBLIC_PHONE_BINDING_V1'
+      || !SHA256_RE.test(text(value.public_session_binding_sha256))
+      || (value.device_binding_sha256 != null
+        && !SHA256_RE.test(text(value.device_binding_sha256)))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PHONE_HANDOFF_BINDING_INVALID');
+  }
+  return {
+    contract_version: 'CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+    public_session_binding_sha256: text(value.public_session_binding_sha256).toLowerCase(),
+    device_binding_sha256: value.device_binding_sha256 == null
+      ? null : text(value.device_binding_sha256).toLowerCase()
+  };
+}
+
+function publicPushIdentityProofs(value, currentHmac, currentVersion) {
+  const source = Array.isArray(value) && value.length
+    ? value
+    : [{ key_version: currentVersion, identity_hmac: currentHmac }];
+  if (source.length > 32) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  }
+  const seen = new Set();
+  const proofs = source.map((proof) => {
+    const keyVersion = Number(proof?.key_version);
+    const identityHmac = text(proof?.identity_hmac).toLowerCase();
+    if (!Number.isSafeInteger(keyVersion) || keyVersion < 1 || keyVersion > 65535
+        || !SHA256_RE.test(identityHmac) || seen.has(keyVersion)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+    }
+    seen.add(keyVersion);
+    return { key_version: keyVersion, identity_hmac: identityHmac };
+  });
+  if (!proofs.some(proof => (
+    proof.key_version === currentVersion && proof.identity_hmac === currentHmac
+  ))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  }
+  return proofs;
+}
+
+function requireInteger(value, code = 'INVALID_INTEGER', minimum = 0) {
+  const out = Number(value);
+  if (!Number.isSafeInteger(out) || out < minimum) throw new CandidateHttpError(400, code);
+  return out;
+}
+
+function normaliseEmail(value) {
+  const out = text(value).toLowerCase();
+  if (!EMAIL_RE.test(out)) throw new CandidateHttpError(400, 'CANDIDATE_EMAIL_INVALID');
+  return out;
+}
+
+function normaliseMediaType(value) {
+  return text(value).split(';')[0].trim().toLowerCase();
+}
+
+const CANDIDATE_NOTIFICATION_PREFERENCE_KEYS = Object.freeze([
+  'push',
+  'manager_approval_updates',
+  'timesheet_expense_attention',
+  'authorisation',
+  'payment',
+  'approval_reminders',
+  'resubmission_required'
+]);
+
+function safeCandidateNotificationPreferences(value) {
+  const source = isObject(value) ? value : {};
+  const valueOrDefault = (key, legacyKeys = []) => {
+    if (typeof source[key] === 'boolean') return source[key];
+    const legacy = legacyKeys.map(name => source[name]).filter(item => typeof item === 'boolean');
+    return legacy.length ? legacy.every(Boolean) : true;
+  };
+  return {
+    push: valueOrDefault('push'),
+    manager_approval_updates: valueOrDefault(
+      'manager_approval_updates', ['manager_approval', 'manager_refusal']
+    ),
+    timesheet_expense_attention: valueOrDefault(
+      'timesheet_expense_attention', ['office_rejection']
+    ),
+    authorisation: valueOrDefault('authorisation'),
+    payment: valueOrDefault('payment'),
+    approval_reminders: valueOrDefault('approval_reminders'),
+    resubmission_required: valueOrDefault('resubmission_required')
+  };
+}
+
+function requireCandidateNotificationPreferences(value) {
+  if (!isObject(value)
+      || Object.keys(value).length !== CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.length
+      || !CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.every(key => typeof value[key] === 'boolean')
+      || !Object.keys(value).every(key => CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.includes(key))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_PREFERENCES_INVALID');
+  }
+  return Object.fromEntries(
+    CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.map(key => [key, value[key]])
+  );
+}
+
+function hex(bytes) {
+  return Array.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes))
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function bytesFromHex(value) {
+  const input = text(value).replace(/^\\x/i, '');
+  if (!/^[0-9a-f]*$/i.test(input) || input.length % 2 !== 0) return new Uint8Array();
+  const out = new Uint8Array(input.length / 2);
+  for (let index = 0; index < out.length; index += 1) out[index] = parseInt(input.slice(index * 2, index * 2 + 2), 16);
+  return out;
+}
+
+function base64UrlEncode(bytes) {
+  let binary = '';
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  for (const byte of source) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlDecode(value) {
+  const source = text(value).replace(/-/g, '+').replace(/_/g, '/');
+  const padded = source + '='.repeat((4 - source.length % 4) % 4);
+  const binary = atob(padded);
+  const out = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) out[index] = binary.charCodeAt(index);
+  return out;
+}
+
+function randomToken(byteCount = 32) {
+  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(byteCount)));
+}
+
+async function sha256Bytes(value) {
+  const bytes = value instanceof Uint8Array
+    ? value
+    : value instanceof ArrayBuffer
+      ? new Uint8Array(value)
+      : encoder.encode(String(value == null ? '' : value));
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+}
+
+async function sha256Hex(value) {
+  return hex(await sha256Bytes(value));
+}
+
+async function importHmacKey(secret) {
+  if (!text(secret)) throw new CandidateHttpError(503, 'CANDIDATE_TOKEN_SECRET_UNAVAILABLE');
+  return crypto.subtle.importKey('raw', encoder.encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+async function signCompact(secret, payload) {
+  const encoded = base64UrlEncode(encoder.encode(JSON.stringify(payload)));
+  const signature = await crypto.subtle.sign('HMAC', await importHmacKey(secret), encoder.encode(encoded));
+  return `${encoded}.${base64UrlEncode(signature)}`;
+}
+
+async function deterministicOpaqueToken(secret, namespace, ...parts) {
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await importHmacKey(secret),
+    encoder.encode([namespace, ...parts.map(value => String(value == null ? '' : value))].join('\u001f'))
+  );
+  return base64UrlEncode(signature);
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isObject(value)) {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+function configuredKeyVersion(env, name) {
+  const version = Number(env[name] || 1);
+  if (!Number.isSafeInteger(version) || version < 1 || version > 32) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+  }
+  return version;
+}
+
+function versionedSecret(env, prefix, version, fallback) {
+  const configured = text(env[`${prefix}_V${version}`]);
+  if (configured) return configured;
+  if (Number(version) === 1 && text(fallback)) return text(fallback);
+  throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+}
+
+function authReplayKeyVersion(env) {
+  return configuredKeyVersion(env, 'CANDIDATE_AUTH_REPLAY_KEY_VERSION');
+}
+
+function authReplayReadVersions(env) {
+  const values = new Set([authReplayKeyVersion(env)]);
+  for (const raw of text(env.CANDIDATE_AUTH_REPLAY_READ_KEY_VERSIONS).split(',')) {
+    if (!raw) continue;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 32) {
+      throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+    }
+    values.add(parsed);
+  }
+  return Array.from(values);
+}
+
+function authReplaySecret(env, version) {
+  if (!authReplayReadVersions(env).includes(Number(version))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+  }
+  return versionedSecret(env, 'CANDIDATE_AUTH_REPLAY_SECRET', version,
+    env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
+}
+
+function challengeKeyVersion(env) {
+  return configuredKeyVersion(env, 'CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION');
+}
+
+function challengeReadVersions(env) {
+  const values = new Set([challengeKeyVersion(env)]);
+  for (const raw of text(env.CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS).split(',')) {
+    if (!raw) continue;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 32) {
+      throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+    }
+    values.add(parsed);
+  }
+  return Array.from(values);
+}
+
+function challengeSecretForVersion(env, version) {
+  return versionedSecret(env, 'CANDIDATE_CHALLENGE_TOKEN_SECRET', version,
+    env.CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET);
+}
+
+function managerTokenKeyVersion(env) {
+  return configuredKeyVersion(env, 'CANDIDATE_MANAGER_TOKEN_KEY_VERSION');
+}
+
+function managerTokenSecret(env, version) {
+  return versionedSecret(env, 'CANDIDATE_MANAGER_TOKEN_SECRET', version,
+    env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
+}
+
+async function requestHmacSha256(secret, namespace, value) {
+  const signature = await crypto.subtle.sign(
+    'HMAC', await importHmacKey(secret),
+    encoder.encode(`${namespace}\u001f${canonicalJson(value)}`)
+  );
+  return hex(signature);
+}
+
+async function authSecretProof(env, version, purpose, secretValue) {
+  return requestHmacSha256(
+    authReplaySecret(env, version), `candidate-auth-secret-proof-v1:${purpose}`,
+    String(secretValue == null ? '' : secretValue)
+  );
+}
+
+async function authRequestSha256(env, version, action, identity) {
+  return requestHmacSha256(
+    authReplaySecret(env, version), 'candidate-auth-mutation-request-v1',
+    { contract_version: 'CANDIDATE_AUTH_MUTATION_REQUEST_V1', action: upper(action), ...identity }
+  );
+}
+
+async function deterministicRefreshToken(env, version, action, sessionId, idempotencyKey) {
+  return deterministicOpaqueToken(
+    authReplaySecret(env, version), 'candidate-refresh-token-v1',
+    environmentName(env), upper(action), requireUuid(sessionId), idempotencyKey
+  );
+}
+
+async function verifyCompact(secret, token) {
+  const [encoded, signature] = text(token).split('.');
+  if (!encoded || !signature) return null;
+  let valid = false;
+  try {
+    valid = await crypto.subtle.verify('HMAC', await importHmacKey(secret), base64UrlDecode(signature), encoder.encode(encoded));
+  } catch {
+    return null;
+  }
+  if (!valid) return null;
+  try {
+    const payload = JSON.parse(decoder.decode(base64UrlDecode(encoded)));
+    if (!isObject(payload)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function importEnvelopeKey(secret, purpose) {
+  if (!text(secret)) throw new CandidateHttpError(503, 'CANDIDATE_TOKEN_SECRET_UNAVAILABLE');
+  const material = await sha256Bytes(`${purpose}:${String(secret)}`);
+  return crypto.subtle.importKey('raw', material, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function sealEnvelope(secret, purpose, payload) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(purpose) },
+    await importEnvelopeKey(secret, purpose),
+    encoder.encode(JSON.stringify(payload))
+  ));
+  return `v1.${base64UrlEncode(iv)}.${base64UrlEncode(ciphertext)}`;
+}
+
+async function openEnvelope(secret, purpose, value) {
+  const [version, ivEncoded, ciphertextEncoded] = text(value).split('.');
+  if (version !== 'v1' || !ivEncoded || !ciphertextEncoded) return null;
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64UrlDecode(ivEncoded), additionalData: encoder.encode(purpose) },
+      await importEnvelopeKey(secret, purpose),
+      base64UrlDecode(ciphertextEncoded)
+    );
+    const payload = JSON.parse(decoder.decode(plain));
+    return isObject(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function environmentName(env) {
+  const value = upper(env.CANDIDATE_APP_ENVIRONMENT);
+  if (!['TEST', 'LIVE'].includes(value)) throw new CandidateHttpError(503, 'CANDIDATE_ENVIRONMENT_INVALID');
+  return value;
+}
+
+function tokenSecret(env) {
+  const value = text(env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
+  if (!value) throw new CandidateHttpError(503, 'CANDIDATE_TOKEN_SECRET_UNAVAILABLE');
+  return value;
+}
+
+function challengeTokenSecret(env) {
+  const value = text(env.CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET);
+  if (!value) throw new CandidateHttpError(503, 'CANDIDATE_CHALLENGE_SECRET_UNAVAILABLE');
+  return value;
+}
+
+function serviceHeaders(env, extras = {}) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!text(env.SUPABASE_URL) || !text(key)) throw new CandidateHttpError(503, 'CANDIDATE_DATABASE_UNAVAILABLE');
+  return { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json', ...extras };
+}
+
+async function readJson(request, maxBytes = MAX_JSON_BYTES) {
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > maxBytes) throw new CandidateHttpError(413, 'REQUEST_BODY_TOO_LARGE');
+  const bodyText = await request.text();
+  if (encoder.encode(bodyText).byteLength > maxBytes) throw new CandidateHttpError(413, 'REQUEST_BODY_TOO_LARGE');
+  if (!bodyText) return {};
+  try {
+    const parsed = JSON.parse(bodyText);
+    if (!isObject(parsed)) throw new Error('object required');
+    return parsed;
+  } catch {
+    throw new CandidateHttpError(400, 'INVALID_JSON');
+  }
+}
+
+async function restRows(env, table, query, options = {}) {
+  const timeoutMs = Number(options?.timeoutMs);
+  const response = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers: serviceHeaders(env),
+    ...(Number.isSafeInteger(timeoutMs) && timeoutMs > 0
+      ? { signal: AbortSignal.timeout(timeoutMs) }
+      : {})
+  });
+  if (!response.ok) {
+    const error = new Error(`CANDIDATE_DATABASE_READ_FAILED:${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  const value = await response.json().catch(() => []);
+  return Array.isArray(value) ? value : [];
+}
+
+async function restRowsPaged(env, table, query, { pageSize = 1000, maxRows = MAX_OFFICE_REMINDER_BATCH_ROWS } = {}) {
+  const rows = [];
+  let offset = 0;
+  while (true) {
+    const page = await restRows(env, table, `${query}${query ? '&' : ''}limit=${pageSize}&offset=${offset}`);
+    rows.push(...page);
+    if (rows.length > maxRows) throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_CATALOGUE_TOO_LARGE');
+    if (page.length < pageSize) return rows;
+    offset += page.length;
+  }
+}
+
+async function restOne(env, table, query, options = {}) {
+  const rows = await restRows(
+    env, table, `${query}${query.includes('limit=') ? '' : '&limit=1'}`, options
+  );
+  return rows[0] || null;
+}
+
+async function restWrite(env, table, method, query, body, prefer = 'return=representation') {
+  const suffix = query ? `?${query}` : '';
+  const response = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}${suffix}`, {
+    method,
+    headers: serviceHeaders(env, { Prefer: prefer }),
+    body: JSON.stringify(body)
+  });
+  const responseText = await response.text().catch(() => '');
+  if (!response.ok) throw new Error(`CANDIDATE_DATABASE_WRITE_FAILED:${response.status}`);
+  if (!responseText) return null;
+  try {
+    const value = JSON.parse(responseText);
+    return Array.isArray(value) ? value[0] || null : value;
+  } catch {
+    return null;
+  }
+}
+
+function unwrapRpc(value, name = '') {
+  let out = value;
+  if (out && isObject(out) && Object.prototype.hasOwnProperty.call(out, 'data')) out = out.data;
+  if (Array.isArray(out) && out.length === 1) out = out[0];
+  if (out && isObject(out) && name && Object.prototype.hasOwnProperty.call(out, name)) out = out[name];
+  if (Array.isArray(out) && out.length === 1) out = out[0];
+  return out;
+}
+
+function knownErrorCode(error) {
+  if (error instanceof CandidateHttpError) return error.code;
+  const preferredFrom = (source) => (text(source).toUpperCase()
+    .match(/[A-Z][A-Z0-9_]{2,}/g) || []).find((value) => (
+    value.startsWith('CANDIDATE_') || value.startsWith('MANAGER_') ||
+    value.startsWith('WORKFLOW_') || value.startsWith('ROUTE_') ||
+    value.startsWith('TIMESHEET_') || value === 'IDEMPOTENCY_CONFLICT' ||
+    value === 'ROW_SIGNATURE_MISMATCH' || value === 'RATE_ISSUE' ||
+    value === 'PAY_CHANNEL_ISSUE' || value === 'PAY_METHOD_MISSING' ||
+    value === 'EXPENSE_INVOICE_EMAIL_REQUIRED'
+  ));
+  // PostgREST supplies the database's closed error in its structured JSON.
+  // Prefer that authority over an RPC function name embedded earlier in the
+  // transport error string (for example candidate_app_bootstrap_v1).
+  for (const source of [
+    error?.json?.message,
+    error?.json?.details,
+    error?.json?.hint,
+    error?.code
+  ]) {
+    const preferred = preferredFrom(source);
+    if (preferred) return preferred;
+  }
+  return preferredFrom(error?.message) || 'CANDIDATE_REQUEST_FAILED';
+}
+
+function safeCandidateTransportDiagnostic(error) {
+  const message = text(error?.json?.message);
+  const localMessage = text(error?.message);
+  const sqlstate = text(error?.json?.code).toUpperCase();
+  let databaseFinalState = null;
+  const allowedRoles = new Set(['EXPENSE_ONLY', 'IMPORT_HOURS', 'HOURS_ONLY', 'COMBINED_ALLOWED', 'FLEXIBLE']);
+  const allowedLineTypes = new Set(['HOURS', 'EXPENSES', 'MILEAGE']);
+  for (const source of [error?.json?.details, error?.json?.detail, error?.details]) {
+    try {
+      const parsed = typeof source === 'string' ? JSON.parse(source) : source;
+      if (!isObject(parsed)) continue;
+      const recordRole = upper(parsed.record_role);
+      const expectedLineType = upper(parsed.expected_line_type);
+      const requestedLineType = upper(parsed.requested_line_type);
+      if (allowedRoles.has(recordRole)
+          && allowedLineTypes.has(expectedLineType)
+          && allowedLineTypes.has(requestedLineType)) {
+        databaseFinalState = {
+          record_role: recordRole,
+          expected_line_type: expectedLineType,
+          requested_line_type: requestedLineType
+        };
+        break;
+      }
+    } catch {
+      // Provider detail is optional and must never widen the diagnostic shape.
+    }
+  }
+  let databaseErrorClass = null;
+  let databaseObject = null;
+  const classifiers = [
+    ['FUNCTION_NOT_FOUND', /^function\s+([a-z0-9_.]+)\s*\(/i],
+    ['COLUMN_NOT_FOUND', /^column\s+"?([a-z0-9_.]+)"?\s+does not exist/i],
+    ['RELATION_NOT_FOUND', /^relation\s+"?([a-z0-9_.]+)"?\s+does not exist/i],
+    ['PERMISSION_DENIED', /^permission denied for (?:function|relation|schema)\s+"?([a-z0-9_.]+)"?/i],
+    ['INVALID_INPUT_SYNTAX', /^invalid input syntax for type\s+([a-z0-9_ ]+):/i],
+    ['NOT_NULL_VIOLATION', /^null value in column\s+"?([a-z0-9_.]+)"?/i],
+    ['UNDEFINED_OPERATOR', /^operator does not exist:/i]
+  ];
+  for (const [classification, pattern] of classifiers) {
+    const match = message.match(pattern);
+    if (!match) continue;
+    databaseErrorClass = classification;
+    databaseObject = match[1] ? text(match[1]).toLowerCase() : null;
+    break;
+  }
+  return {
+    error_code: knownErrorCode(error),
+    transport_function: /^[a-z][a-z0-9_]{2,100}$/i.test(text(error?.fn))
+      ? text(error.fn) : null,
+    transport_status: Number.isInteger(Number(error?.status)) ? Number(error.status) : null,
+    database_sqlstate: /^[0-9A-Z]{5}$/.test(sqlstate) ? sqlstate : null,
+    database_error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(message) ? message : null,
+    database_final_state: databaseFinalState,
+    database_error_class: databaseErrorClass,
+    database_object: databaseObject,
+    local_error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(localMessage)
+      ? localMessage : null,
+    local_error_class: error instanceof TypeError ? 'TYPE_ERROR'
+      : error instanceof ReferenceError ? 'REFERENCE_ERROR'
+        : error instanceof RangeError ? 'RANGE_ERROR' : null,
+    local_error_property: text(
+      localMessage.match(/Cannot read properties of (?:undefined|null) \(reading '([a-z0-9_]+)'\)/i)?.[1]
+    ).toLowerCase() || null,
+    source_location: text(error?.stack).match(/candidate-(?:app-backend|private-worker)\.js:(\d+):(\d+)/)?.slice(1).join(':') || null
+  };
+}
+
+const OFFICE_ERROR_ALIASES = Object.freeze({
+  IDEMPOTENCY_CONFLICT: 'CANDIDATE_IDEMPOTENCY_CONFLICT',
+  ROW_SIGNATURE_MISMATCH: 'CANDIDATE_CONTEXT_STALE',
+  ROUTE_CHANGE_CONTEXT_CHANGED: 'CANDIDATE_CONTEXT_STALE',
+  TIMESHEET_MOVED: 'CANDIDATE_TIMESHEET_MOVED',
+  CANDIDATE_MANAGER_MAIL_DELIVERY_IN_PROGRESS: 'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS',
+  CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS: 'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS',
+  CANDIDATE_CANCELLATION_REASON_REQUIRED: 'CANDIDATE_REASON_REQUIRED',
+  MANAGER_REFUSAL_REASON_REQUIRED: 'CANDIDATE_REASON_REQUIRED',
+  ROUTE_INTERVENTION_REASON_REQUIRED: 'CANDIDATE_REASON_REQUIRED',
+  CANDIDATE_CANCELLATION_REASON_INVALID: 'CANDIDATE_REASON_INVALID',
+  MANAGER_REFUSAL_REASON_INVALID: 'CANDIDATE_REASON_INVALID',
+  ROUTE_CHANGE_REASON_INVALID: 'CANDIDATE_REASON_INVALID',
+  CANDIDATE_REJECT_REQUIRES_UNAUTHORISE: 'CANDIDATE_REQUIRES_UNAUTHORISE',
+  ROUTE_CHANGE_REQUIRES_UNAUTHORISE: 'CANDIDATE_REQUIRES_UNAUTHORISE',
+  CANDIDATE_REJECT_PROTECTED_HISTORY: 'CANDIDATE_PROTECTED_FINANCIAL_HISTORY',
+  ROUTE_CHANGE_IMPORT_AUTHORITATIVE_BLOCK: 'CANDIDATE_IMPORT_AUTHORITATIVE'
+});
+
+function officeErrorCode(error) {
+  const source = knownErrorCode(error);
+  return OFFICE_ERROR_ALIASES[source] || source;
+}
+
+function errorResponse(error, correlationId, office = false, safeDiagnosticDetails = null) {
+  // Stage 2 H3: a Banking Pay busy refusal is a clean, retryable 409. It
+  // carries no transport diagnostic, so no database text reaches the client.
+  const busy = bpayBusyEnvelope(error);
+  if (busy) return jsonResponse(busy.status, {
+    ...busy.body, retryable: true, request_id: correlationId,
+    ...(busy.body.error_code === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY'
+      ? { retry_class: 'RETRY_SAME_REQUEST' } : {})
+  });
+  const code = office ? officeErrorCode(error) : knownErrorCode(error);
+  let status = error instanceof CandidateHttpError ? error.status : 400;
+  if (AUTH_ERROR_CODES.has(code)) status = 401;
+  else if (CONFLICT_ERROR_CODES.has(code)) status = 409;
+  else if (NOT_FOUND_ERROR_CODES.has(code)) status = 404;
+  else if (status !== 405 && (code.endsWith('_DISABLED') || code.includes('NOT_ALLOWED') || code.includes('FORBIDDEN'))) status = 403;
+  else if (code === 'CANDIDATE_REQUEST_FAILED') status = 500;
+  const professionalMessages = {
+    TIMESHEET_WORK_INTERVAL_OVERLAP: 'You have already submitted a timesheet containing these hours. This timesheet cannot be accepted.',
+    CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED: 'You have already submitted this type of expense for this client and week ending. Check the existing claim before submitting it again.',
+    CANDIDATE_EVIDENCE_BYTES_ALREADY_USED: 'This supporting item is still attached to a current claim. Choose a different item, or remove it from the current claim first if that option is available.',
+    CANDIDATE_RECEIPT_STORAGE_STALE: 'This saved receipt can no longer be reused. Take a new photo of the receipt and try again.',
+    CANDIDATE_CONTEXT_STALE: 'This timesheet changed. Refresh it before trying again.',
+    CANDIDATE_REQUEST_GENERATION_STALE: 'This manager request changed. Refresh it before trying again.',
+    CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED: 'The selected timesheets changed. Review the current selection before sending reminders.',
+    CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS: 'A provider handoff is in progress. Try again when it has completed.',
+    CANDIDATE_TIMESHEET_MOVED: 'This timesheet has moved to a newer version. Refresh it before trying again.',
+    CANDIDATE_REASON_REQUIRED: 'Enter the required reason before continuing.',
+    CANDIDATE_REASON_INVALID: 'Choose a valid reason before continuing.',
+    CANDIDATE_REQUIRES_UNAUTHORISE: 'Unauthorise this timesheet before continuing.',
+    CANDIDATE_PROTECTED_FINANCIAL_HISTORY: 'Protected financial history prevents this Candidate action.',
+    CANDIDATE_IMPORT_AUTHORITATIVE: 'The imported record is authoritative and cannot be changed here.',
+    CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT: 'Another Candidate PAPER workflow must be resolved before continuing.',
+    CANDIDATE_REJECTION_SCOPE_CONFLICT: 'CloudTMS could not establish one safe rejection scope.',
+    CANDIDATE_WORKFLOW_ANCHOR_MISMATCH: 'This submission no longer matches the current timesheet. Refresh it before trying again.',
+    CANDIDATE_IDEMPOTENCY_CONFLICT: 'This operation key has already been used for a different request.',
+    CANDIDATE_BREAK_ENTRY_CONTEXT_STALE: 'The break-entry setting changed. Refresh the timesheet before submitting it.',
+    CANDIDATE_BREAK_ENTRY_MODE_MISMATCH: 'Use the break-entry format shown for this timesheet.',
+    CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE: 'Break entry is not available for this timesheet route.',
+    CANDIDATE_BREAK_ENTRY_REQUIRED: 'Enter the break for each worked period, or confirm that no break was taken.',
+    CANDIDATE_WORK_INTERVAL_CONTRADICTORY: 'The times entered conflict with an older saved value. Reopen the timesheet and check the hours before submitting it.',
+    MANAGER_DEPENDENCY_UNAVAILABLE: 'The manager approval service is temporarily unavailable. No decision has been recorded. Try again.',
+    CANDIDATE_PAPER_QR_UNREADABLE: 'The timesheet QR code could not be read. Take a clearer photograph of the full page.',
+    CANDIDATE_PAPER_QR_AMBIGUOUS: 'This image contains more than one page QR. Photograph one complete page at a time.',
+    CANDIDATE_PAPER_QR_PROOF_MISMATCH: 'The photographed timesheet does not match this submission.',
+    CANDIDATE_PAPER_QR_PROOF_FORBIDDEN: 'A QR code is not expected on this supporting page.',
+    CANDIDATE_PAPER_QR_PROOF_STALE: 'The returned-paper upload changed. Start the upload again.',
+    CANDIDATE_PAPER_RETURN_PACK_STALE: 'One signed page no longer matches this document pack. Refresh it before trying again.',
+    CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE: 'Photograph every signed page in this document pack before returning it.',
+    CANDIDATE_PAPER_RETURN_IMAGE_REQUIRED: 'Use one clear photograph or saved image for each signed page. PDF files are not accepted.',
+    METHOD_NOT_ALLOWED: 'This operation does not support that HTTP method.'
+  };
+  const body = {
+    ok: false,
+    error_code: code,
+    message: professionalMessages[code] || 'CloudTMS could not complete this Candidate operation.',
+    retryable: ['CANDIDATE_CONTEXT_STALE', 'CANDIDATE_TIMESHEET_MOVED', 'CANDIDATE_REQUEST_GENERATION_STALE',
+      'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED', 'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS',
+      'MANAGER_DEPENDENCY_UNAVAILABLE'].includes(code),
+    request_id: correlationId
+  };
+  if (error instanceof CandidateHttpError && error.details != null) body.details = error.details;
+  else if (code === 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED') {
+    try {
+      const databaseDetails = JSON.parse(text(error?.json?.details));
+      if (isObject(databaseDetails)) body.details = databaseDetails;
+    } catch {
+      // The warning remains fail-closed when a provider omits malformed detail.
+    }
+  }
+  if (isObject(safeDiagnosticDetails)) {
+    body.details = {
+      ...(isObject(body.details) ? body.details : {}),
+      transport_diagnostic: safeDiagnosticDetails
+    };
+  }
+  const headers = {};
+  const retryAfterSeconds = Number(error instanceof CandidateHttpError
+    ? error.details?.retry_after_seconds : 0);
+  if (status === 429 && Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0) {
+    headers['retry-after'] = String(retryAfterSeconds);
+  }
+  return jsonResponse(status, body, headers);
+}
+
+function testTransportDiagnosticDetails(env, diagnostic) {
+  if (environmentName(env) !== 'TEST' || !isObject(diagnostic)) return null;
+  if (diagnostic.error_code !== 'CANDIDATE_REQUEST_FAILED'
+      && !diagnostic.database_sqlstate
+      && !(diagnostic.transport_function && Number(diagnostic.transport_status) >= 400)) {
+    return null;
+  }
+  return diagnostic;
+}
+
+async function createAccessToken(env, session) {
+  const issuedAt = Date.parse(text(session?.issued_at_utc));
+  const now = Number.isFinite(issuedAt)
+    ? Math.floor(issuedAt / 1000) : Math.floor(Date.now() / 1000);
+  return signCompact(tokenSecret(env), {
+    typ: 'candidate_access', aud: 'cloudtms-candidate-app',
+    env: environmentName(env), sid: session.session_id, rot: Number(session.rotation || 0),
+    iat: now, exp: now + ACCESS_TTL_SECONDS
+  });
+}
+
+function bearerToken(request) {
+  const match = /^Bearer\s+(.+)$/i.exec(text(request.headers.get('authorization')));
+  return match ? text(match[1]) : '';
+}
+
+async function candidateAccessClaims(request, env) {
+  const payload = await verifyCompact(tokenSecret(env), bearerToken(request));
+  const now = Math.floor(Date.now() / 1000);
+  if (!payload || payload.typ !== 'candidate_access' || payload.aud !== 'cloudtms-candidate-app'
+      || payload.env !== environmentName(env) || !UUID_RE.test(text(payload.sid))) {
+    throw new CandidateHttpError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+  }
+  if (!Number.isFinite(Number(payload.exp)) || Number(payload.exp) <= now) {
+    throw new CandidateHttpError(401, 'CANDIDATE_ACCESS_TOKEN_EXPIRED');
+  }
+  return payload;
+}
+
+async function verifyCandidateAccess(request, env) {
+  const payload = await candidateAccessClaims(request, env);
+  const session = await restOne(env, 'candidate_app_sessions',
+    `id=eq.${encodeURIComponent(payload.sid)}&select=id,account_id,environment,selected_candidate_id,status,rotation,expires_at_utc,absolute_expires_at_utc`);
+  if (!session || session.environment !== payload.env || session.status !== 'ACTIVE'
+      || Number(session.rotation) !== Number(payload.rot)
+      || Date.parse(session.expires_at_utc) <= Date.now() || Date.parse(session.absolute_expires_at_utc) <= Date.now()) {
+    throw new CandidateHttpError(401, 'CANDIDATE_SESSION_INVALID');
+  }
+  return {
+    session_id: session.id,
+    account_id: session.account_id,
+    selected_candidate_id: session.selected_candidate_id,
+    rotation: Number(session.rotation),
+    environment: session.environment
+  };
+}
+
+async function derivePasswordVerifier(password, salt = null, iterations = PASSWORD_ITERATIONS) {
+  const secret = String(password == null ? '' : password);
+  if (secret.length < 12 || secret.length > 512) throw new CandidateHttpError(400, 'CANDIDATE_PASSWORD_POLICY_FAILED');
+  const saltBytes = salt || crypto.getRandomValues(new Uint8Array(16));
+  const imported = await crypto.subtle.importKey('raw', encoder.encode(secret), 'PBKDF2', false, ['deriveBits']);
+  const digest = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations }, imported, 256
+  ));
+  return {
+    salt_hex: hex(saltBytes), digest_hex: hex(digest),
+    scheme: PASSWORD_SCHEME, scheme_version: PASSWORD_SCHEME_VERSION,
+    params: { hash: 'SHA-256', iterations, length_bytes: 32 }
+  };
+}
+
+async function passwordVerificationProof(password, account) {
+  const scheme = upper(account?.password_scheme);
+  const schemeVersion = Number(account?.password_scheme_version);
+  const params = isObject(account?.password_params_json) ? account.password_params_json : {};
+  const iterations = Number(params.iterations || PASSWORD_ITERATIONS);
+  const lengthBytes = Number(params.length_bytes || 32);
+  const hashName = upper(params.hash || 'SHA-256');
+  const salt = bytesFromHex(account?.password_salt);
+  const expected = bytesFromHex(account?.password_digest);
+  const accountId = text(account?.id).toLowerCase();
+  const verifierValid = scheme === PASSWORD_SCHEME
+    && schemeVersion === PASSWORD_SCHEME_VERSION
+    && Number.isSafeInteger(iterations) && iterations >= 50000 && iterations <= PASSWORD_ITERATIONS
+    && lengthBytes === 32 && hashName === 'SHA-256'
+    && salt.length >= 16 && expected.length === 32;
+  if (!verifierValid) {
+    return {
+      matches: false,
+      presented_password_digest_hex: null,
+      expected_password_authority_sha256: null
+    };
+  }
+  const presented = bytesFromHex(
+    (await derivePasswordVerifier(password, salt, iterations)).digest_hex
+  );
+  let difference = presented.length ^ expected.length;
+  for (let index = 0; index < expected.length; index += 1) {
+    difference |= (presented[index] || 0) ^ expected[index];
+  }
+  const canonicalAuthority = UUID_RE.test(accountId) ? [
+    'CANDIDATE_PASSWORD_AUTHORITY_V1', accountId, scheme, String(schemeVersion),
+    hex(salt), hex(expected), hashName, String(iterations), String(lengthBytes)
+  ].join('\n') : null;
+  return {
+    matches: difference === 0,
+    presented_password_digest_hex: hex(presented),
+    expected_password_authority_sha256: canonicalAuthority
+      ? await sha256Hex(canonicalAuthority) : null
+  };
+}
+
+async function verifyPassword(password, account) {
+  return (await passwordVerificationProof(password, account)).matches;
+}
+
+function sessionExpiries(now = new Date()) {
+  return {
+    expires_at_utc: new Date(now.getTime() + REFRESH_TTL_DAYS * 86400000).toISOString(),
+    absolute_expires_at_utc: new Date(now.getTime() + REFRESH_ABSOLUTE_TTL_DAYS * 86400000).toISOString()
+  };
+}
+
+function safeSessionResponse(sessionResult, accessToken, refreshToken) {
+  return {
+    ok: true,
+    access_token: accessToken,
+    access_token_type: 'Bearer',
+    access_expires_in_seconds: ACCESS_TTL_SECONDS,
+    refresh_token: refreshToken,
+    session_id: sessionResult.session_id,
+    rotation: Number(sessionResult.rotation || 0),
+    selected_candidate_id: sessionResult.selected_candidate_id || null,
+    selection_required: sessionResult.selection_required === true,
+    candidate_ids: Array.isArray(sessionResult.candidate_ids) ? sessionResult.candidate_ids : undefined,
+    issued_at_utc: sessionResult.issued_at_utc,
+    expires_at_utc: sessionResult.expires_at_utc,
+    absolute_expires_at_utc: sessionResult.absolute_expires_at_utc,
+    public_credential_versions: isObject(sessionResult.public_credential_versions)
+      ? sessionResult.public_credential_versions : undefined
+  };
+}
+
+async function selectedCandidateSessionResponse(env, claims, sessionId, rotation, result) {
+  const issuedAtUtc = new Date(Number(claims.iat) * 1000).toISOString();
+  const accessToken = await createAccessToken(env, {
+    session_id: sessionId,
+    rotation: Number(rotation || 0),
+    issued_at_utc: issuedAtUtc
+  });
+  return {
+    ...result,
+    access_token: accessToken,
+    access_expires_in_seconds: ACCESS_TTL_SECONDS,
+    issued_at_utc: issuedAtUtc
+  };
+}
+
+// ---------------------------------------------------------------------------
+// WP-32 — the durable caller's record of a managed-root guard refusal.
+//
+// HANDOVER 2 round-5 ruling A2 / contract decision D13.  The owner is WP-14c's
+// `public.weekly_source_guard_refusal_record_after_rollback_v1`; the module is
+// WP-23's `weekly-source/guard-refusal-record.mjs`; WP-23 handoff N3 hands the
+// remaining call sites here with a three-line recipe, which is what follows.
+//
+// WP-14c's four caller rules: a NEW transaction that has not written (the record
+// is its own PostgREST request); only after the rollback (only ever from a
+// `catch`); the SAME correlation identity the attempt carried (generated before
+// the attempt, below); and a failure of the record must never change the outcome
+// of the refusal — `recordGuardRefusalAfterRollback` is total, and the extra
+// `try`/`catch` here covers the predicate and the log as well, so nothing on
+// this path can raise.
+// ---------------------------------------------------------------------------
+
+function candidateAppGuardRefusalCorrelationId() {
+  try {
+    const unique = globalThis.crypto?.randomUUID?.();
+    const fallback = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return `ws62-broker:candidate-app:${unique || fallback}`;
+  } catch {
+    return `ws62-broker:candidate-app:${Date.now().toString(36)}`;
+  }
+}
+
+// Only the one unambiguous Office actor key is read.  A Candidate session id or a
+// workflow id is NOT an actor, so anything else is reported absent rather than
+// guessed; WP-14c's owner accepts a null actor.
+function candidateAppGuardRefusalActor(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const value = args.p_actor_user_id;
+  return (typeof value === 'string' && value.trim()) ? value.trim() : null;
+}
+
+async function recordCandidateAppGuardRefusal(rpc, error, correlationId, name, args) {
+  try {
+    if (!isManagedRootGuardRefusal(error)) return;
+    try {
+      console.warn('[WEEKLY_SOURCE_GUARD_REFUSAL] ' + JSON.stringify({
+        caller: `broker:candidate-app:${name}`,
+        correlation_id: correlationId
+      }));
+    } catch {}
+    await recordGuardRefusalAfterRollback({
+      rpc: (functionName, functionArgs, functionOptions) =>
+        rpc(functionName, functionArgs, functionOptions),
+      error,
+      correlationId,
+      caller: `broker:candidate-app:${name}`,
+      actorUserId: candidateAppGuardRefusalActor(args)
+    });
+  } catch {
+    // WP-14c rule 4: a failure of the record must never change the refusal.
+  }
+}
+
+async function rpcCall(deps, name, args, options = undefined) {
+  // WP-32: this is the Candidate app's single RPC funnel, so the recipe applied
+  // once here covers every guarded entry point the Candidate surface reaches
+  // (E1a, E3, E10, E11, E23).  `unwrapRpc` stays OUTSIDE the catch: a shape
+  // failure is not a database refusal and must not be recorded as one.
+  const guardRefusalCorrelationId = candidateAppGuardRefusalCorrelationId();
+  let result;
+  try {
+    result = await deps.rpc(name, args, options);
+  } catch (error) {
+    await recordCandidateAppGuardRefusal(
+      (functionName, functionArgs, functionOptions) => deps.rpc(functionName, functionArgs, functionOptions),
+      error,
+      guardRefusalCorrelationId,
+      name,
+      args
+    );
+    throw error;
+  }
+  return unwrapRpc(result, name);
+}
+
+function managerDependencyFailure(error) {
+  const status = Number(error?.status);
+  return status === 408 || status >= 500 || error?.name === 'AbortError'
+    || error instanceof TypeError || /timed out|timeout/i.test(text(error?.message));
+}
+
+function managerDependencyUnavailable(error, stage) {
+  if (!managerDependencyFailure(error)) throw error;
+  console.error('[candidate-app] manager interactive dependency unavailable', {
+    stage,
+    status: Number.isSafeInteger(Number(error?.status)) ? Number(error.status) : null
+  });
+  throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+}
+
+async function managerRpcCall(deps, stage, name, args) {
+  try {
+    return await rpcCall(deps, name, args, { timeoutMs: MANAGER_INTERACTIVE_DB_TIMEOUT_MS });
+  } catch (error) {
+    return managerDependencyUnavailable(error, stage);
+  }
+}
+
+async function managerRestOne(env, stage, table, query) {
+  try {
+    return await restOne(env, table, query, { timeoutMs: MANAGER_INTERACTIVE_DB_TIMEOUT_MS });
+  } catch (error) {
+    return managerDependencyUnavailable(error, stage);
+  }
+}
+
+function publicAppBase(request, env) {
+  const configured = text(env.CANDIDATE_APP_PUBLIC_URL).replace(/\/$/, '');
+  if (!configured || !/^https:\/\//i.test(configured)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PUBLIC_URL_UNAVAILABLE');
+  }
+  return configured;
+}
+
+function deferBackground(ctx, promise, label, details = {}) {
+  const guarded = Promise.resolve(promise).catch((error) => {
+    console.error('[candidate-app] background task failed', {
+      label,
+      error_code: knownErrorCode(error),
+      ...details
+    });
+    return { ok: false, error_code: knownErrorCode(error) };
+  });
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(guarded);
+    return true;
+  }
+  return guarded;
+}
+
+async function finaliseReceivedPaperReturn(result, finalise) {
+  try {
+    const finalisation = await finalise();
+    return {
+      status: 200,
+      body: {
+        ...result,
+        finalisation,
+        finalisation_pending: finalisation?.finalisation_pending === true,
+        canonical_processing_attempted: true
+      }
+    };
+  } catch (error) {
+    return {
+      status: 202,
+      body: {
+        ...result,
+        finalisation_pending: true,
+        canonical_processing_attempted: true,
+        retry_required: true,
+        retry_error_code: knownErrorCode(error)
+      }
+    };
+  }
+}
+
+async function queueChallengeMail(env, request, result, purpose, email, token) {
+  const purposeText = purpose === 'ACTIVATE' ? 'activate your Candidate App account' : 'reset your Candidate App password';
+  const route = purpose === 'ACTIVATE' ? 'activate' : 'reset-password';
+  const link = `${publicAppBase(request, env)}/candidate/${route}#token=${encodeURIComponent(token)}&challenge=${encodeURIComponent(result.challenge_id)}`;
+  const htmlLink = link.replaceAll('&', '&amp;');
+  const subject = purpose === 'ACTIVATE' ? 'Activate your CloudTMS Candidate App account' : 'Reset your CloudTMS Candidate App password';
+  const bodyText = `Use the secure link below to ${purposeText}.\n\n${link}\n\nThis link expires at ${result.expires_at_utc}. If you did not request this, no action is required.`;
+  const deterministicKey = `CANDIDATE_AUTH_${purpose}:${result.challenge_id}`;
+  return restWrite(env, 'mail_outbox', 'POST', 'on_conflict=deterministic_outbox_key', {
+    type: 'TIMESHEET_GENERAL', to: email, subject,
+    body_html: `<p>Use the secure link below to ${purposeText}.</p><p><a href="${htmlLink}">${subject}</a></p><p>This link expires at ${result.expires_at_utc}. If you did not request this, no action is required.</p>`,
+    body_text: bodyText, attachments: [], status: 'QUEUED',
+    reference: `candidate-auth:${purpose.toLowerCase()}:${result.challenge_id}`,
+    recipient_kind: 'CANDIDATE', context_kind: 'CANDIDATE_AUTH', context_id: null,
+    email_type: 'CANDIDATE_APP_TRANSACTIONAL', scheduled_for_utc: new Date().toISOString(),
+    next_attempt_at_utc: new Date().toISOString(), deterministic_outbox_key: deterministicKey,
+    payment_scope_json: {}
+  }, 'resolution=ignore-duplicates,return=representation');
+}
+
+async function candidateAuthReceiptMetadata(
+  deps, env, action, idempotencyKey, identities = {}, reservationMetadata = {}
+) {
+  const proposedKeyVersion = authReplayKeyVersion(env);
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: action,
+    p_environment: environmentName(env),
+    p_account_id: identities.account_id || null,
+    p_email_normalized: identities.email_normalized || null,
+    p_session_id: identities.session_id || null,
+    p_selected_candidate_id: identities.selected_candidate_id || null,
+    p_payload: {
+      replay_probe_only: true,
+      reserve_request_key_version: true,
+      idempotency_key_version: proposedKeyVersion,
+      ...reservationMetadata
+    },
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  if (result?.request_version_reserved !== true) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const keyVersion = requireInteger(
+    result?.request_key_version || proposedKeyVersion,
+    'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  // A reservation remains usable during a rolling writer change only while
+  // its exact version is intentionally retained by the private Worker.
+  authReplaySecret(env, keyVersion);
+  return { ...result, request_key_version: keyVersion };
+}
+
+async function candidateAuthExactReplay(
+  deps, env, action, idempotencyKey, requestSha256, keyVersion, identities = {}
+) {
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: action,
+    p_environment: environmentName(env),
+    p_account_id: identities.account_id || null,
+    p_email_normalized: identities.email_normalized || null,
+    p_session_id: identities.session_id || null,
+    p_selected_candidate_id: identities.selected_candidate_id || null,
+    p_payload: {
+      replay_probe_only: true,
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
+    },
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  return result?.idempotent_replay === true ? result : null;
+}
+
+async function candidateAuthReplayAfterPreconditionFailure(
+  deps, env, action, idempotencyKey, requestSha256, keyVersion, identities, error
+) {
+  const errorCode = knownErrorCode(error);
+  if (![
+    'CANDIDATE_SESSION_INVALID', 'CANDIDATE_SESSION_EXPIRED',
+    'CANDIDATE_ACCESS_TOKEN_INVALID', 'CANDIDATE_ACCESS_TOKEN_EXPIRED',
+    'CANDIDATE_LOGIN_INVALID'
+  ].includes(errorCode)) throw error;
+  const replay = await candidateAuthExactReplay(
+    deps, env, action, idempotencyKey, requestSha256, keyVersion, identities
+  );
+  if (replay) return replay;
+  throw error;
+}
+
+async function refreshTokenForSessionResult(env, fallbackKeyVersion, action, result, idempotencyKey) {
+  const resultKeyVersion = requireInteger(
+    result?.token_key_version || fallbackKeyVersion,
+    'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  return deterministicRefreshToken(
+    env, resultKeyVersion, action, result?.session_id, idempotencyKey
+  );
+}
+
+async function challengeTokenForReceipt(
+  env, purpose, email, challengeId, idempotencyKey, expectedHashHex, recordedKeyVersion
+) {
+  const keyVersion = requireInteger(
+    recordedKeyVersion, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  if (!challengeReadVersions(env).includes(keyVersion)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+  }
+  const token = await deterministicOpaqueToken(
+    challengeSecretForVersion(env, keyVersion), 'candidate-auth-challenge-v1',
+    environmentName(env), purpose, email, challengeId || '', idempotencyKey
+  );
+  if (await sha256Hex(token) !== expectedHashHex) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  return token;
+}
+
+async function phoneTokenForWorkflowResult(
+  env, result, workflowId, expectedGeneration, idempotencyKey
+) {
+  const expectedHashHex = text(result?.approval_token_hash_hex).toLowerCase();
+  if (!SHA256_RE.test(expectedHashHex)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const keyVersion = requireInteger(
+    result?.handoff_token_key_version,
+    'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  if (keyVersion > 32) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+  }
+  const token = await deterministicOpaqueToken(
+    managerTokenSecret(env, keyVersion),
+    'candidate-phone-handoff-v1', workflowId, expectedGeneration, idempotencyKey
+  );
+  if (await sha256Hex(token) !== expectedHashHex) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const { approval_token_hash_hex: _internalTokenHash, ...publicResult } = result;
+  return { ...publicResult, manager_handoff_token: token };
+}
+
+async function handleChallengeStart(request, env, deps, isResend = false) {
+  const body = await readJson(request);
+  const email = normaliseEmail(body.email);
+  const purpose = upper(body.purpose || 'ACTIVATE');
+  if (!['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)) throw new CandidateHttpError(400, 'CANDIDATE_CHALLENGE_PURPOSE_INVALID');
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const challengeId = isResend
+    ? requireUuid(body.challenge_id, 'CANDIDATE_CHALLENGE_INVALID') : null;
+  const receipt = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', {
+    p_action: isResend ? 'RESEND' : 'START',
+    p_environment: environmentName(env),
+    p_email_normalized: email,
+    p_purpose: purpose,
+    p_challenge_id: challengeId,
+    p_token_hash: null,
+    p_token_key_version: null,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  const replayTokenHash = receipt?.replay_receipt_found === true
+    ? text(receipt.token_hash_hex).toLowerCase() : '';
+  if (receipt?.replay_receipt_found === true && !SHA256_RE.test(replayTokenHash)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const replayTokenKeyVersion = receipt?.replay_receipt_found === true
+    ? requireInteger(receipt.token_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
+    : null;
+  const tokenKeyVersion = replayTokenKeyVersion || challengeKeyVersion(env);
+  const challengeToken = receipt?.replay_receipt_found === true
+    ? null
+    : await deterministicOpaqueToken(
+      challengeSecretForVersion(env, tokenKeyVersion),
+      'candidate-auth-challenge-v1',
+      environmentName(env), purpose, email, challengeId || '', idempotencyKey
+    );
+  const tokenHashHex = replayTokenHash || hex(await sha256Bytes(challengeToken));
+  const args = {
+    p_action: isResend ? 'RESEND' : 'START', p_environment: environmentName(env),
+    p_email_normalized: email, p_purpose: purpose,
+    p_challenge_id: challengeId,
+    p_token_hash: `\\x${tokenHashHex}`, p_idempotency_key: idempotencyKey,
+    p_token_key_version: tokenKeyVersion,
+    p_now_utc: new Date().toISOString()
+  };
+  const result = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', args);
+  if (result?.ok !== true) {
+    const code = text(result?.error_code) || 'CANDIDATE_CHALLENGE_INVALID';
+    if (['CANDIDATE_CHALLENGE_RESEND_TOO_SOON', 'CANDIDATE_CHALLENGE_RESEND_LIMIT'].includes(code)) {
+      const retryAfter = Number(result?.retry_after_seconds || 0);
+      throw new CandidateHttpError(429, code, code, {
+        ...(Number.isSafeInteger(retryAfter) && retryAfter > 0
+          ? { retry_after_seconds: retryAfter } : {}),
+        terminal: result?.terminal === true
+      });
+    }
+    throw new CandidateHttpError(400, code);
+  }
+  // The database transition and mail insert are deliberately separate durable authorities.
+  // On a retry, the challenge RPC returns the same challenge with deliver_email=false;
+  // the create-only deterministic outbox key makes this safe to retry after a
+  // prior mail-insert failure without resetting queued or sent delivery truth.
+  if (result?.challenge_id && result?.expires_at_utc) {
+    const winningTokenHash = text(result.token_hash_hex).toLowerCase();
+    if (!SHA256_RE.test(winningTokenHash)) {
+      throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+    }
+    const winningTokenKeyVersion = requireInteger(
+      result.token_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+    );
+    const deliveryToken = await challengeTokenForReceipt(
+      env, purpose, email, challengeId, idempotencyKey,
+      winningTokenHash, winningTokenKeyVersion
+    );
+    await queueChallengeMail(env, request, result, purpose, email, deliveryToken);
+  }
+  return jsonResponse(202, { ok: true, accepted: true });
+}
+
+async function handleChallengeVerify(request, env, deps) {
+  const body = await readJson(request);
+  const purpose = upper(body.purpose || 'ACTIVATE');
+  const token = text(body.token);
+  if (!token) throw new CandidateHttpError(400, 'CANDIDATE_CHALLENGE_INVALID');
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const result = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', {
+    p_action: 'VERIFY', p_environment: environmentName(env),
+    p_email_normalized: normaliseEmail(body.email), p_purpose: purpose,
+    p_challenge_id: body.challenge_id ? requireUuid(body.challenge_id) : null,
+    p_token_hash: `\\x${await sha256Hex(token)}`, p_idempotency_key: idempotencyKey,
+    p_token_key_version: null,
+    p_now_utc: new Date().toISOString()
+  });
+  if (result?.ok !== true) throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_CHALLENGE_INVALID');
+  return jsonResponse(200, {
+    ok: true, challenge_id: result.challenge_id, purpose: result.purpose,
+    expires_at_utc: result.expires_at_utc
+  });
+}
+
+async function handlePasswordComplete(request, env, deps) {
+  const body = await readJson(request);
+  const credentialVersions = publicCredentialVersions(body.public_credential_versions);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const challengeId = requireUuid(body.challenge_id, 'CANDIDATE_VERIFIED_CHALLENGE_REQUIRED');
+  const selectedCandidateId = body.selected_candidate_id
+    ? requireUuid(body.selected_candidate_id) : null;
+  const deviceHash = body.device_id ? await sha256Hex(text(body.device_id)) : null;
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, 'ACTIVATE_PASSWORD', idempotencyKey,
+    { selected_candidate_id: selectedCandidateId }
+  );
+  const keyVersion = metadata.request_key_version;
+  const requestSha256 = await authRequestSha256(env, keyVersion, 'ACTIVATE_PASSWORD', {
+    challenge_id: challengeId,
+    selected_candidate_id: selectedCandidateId,
+    password_proof: await authSecretProof(env, keyVersion, 'new-password', body.password),
+    device_id_hash_hex: deviceHash,
+    platform: text(body.platform).slice(0, 80) || null
+  });
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, 'ACTIVATE_PASSWORD', idempotencyKey, requestSha256, keyVersion,
+      { selected_candidate_id: selectedCandidateId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    const refreshToken = await deterministicRefreshToken(
+      env, keyVersion, 'ACTIVATE_PASSWORD', replay.session_id, idempotencyKey
+    );
+    return jsonResponse(200, safeSessionResponse(
+      replay, await createAccessToken(env, replay), refreshToken
+    ));
+  }
+  const verifier = await derivePasswordVerifier(body.password);
+  const sessionId = crypto.randomUUID();
+  const refreshToken = await deterministicRefreshToken(
+    env, keyVersion, 'ACTIVATE_PASSWORD', sessionId, idempotencyKey
+  );
+  const refreshHash = await sha256Hex(refreshToken);
+  const now = new Date();
+  const expiries = sessionExpiries(now);
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: 'ACTIVATE_PASSWORD', p_environment: environmentName(env),
+    p_account_id: null, p_email_normalized: null, p_session_id: sessionId,
+    p_selected_candidate_id: selectedCandidateId,
+    p_payload: {
+      challenge_id: challengeId,
+      password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
+      password_salt_hex: verifier.salt_hex, password_digest_hex: verifier.digest_hex,
+      password_params: verifier.params, refresh_token_hash_hex: refreshHash,
+      ...expiries, ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
+      platform: text(body.platform).slice(0, 80) || null,
+      ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
+    },
+    p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
+  });
+  const winningRefreshToken = await refreshTokenForSessionResult(
+    env, keyVersion, 'ACTIVATE_PASSWORD', result, idempotencyKey
+  );
+  const accessToken = await createAccessToken(env, result);
+  return jsonResponse(200, safeSessionResponse(result, accessToken, winningRefreshToken));
+}
+
+async function handleLogin(request, env, deps) {
+  const body = await readJson(request);
+  const credentialVersions = publicCredentialVersions(body.public_credential_versions);
+  const email = normaliseEmail(body.email);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const selectedCandidateId = body.selected_candidate_id
+    ? requireUuid(body.selected_candidate_id) : null;
+  const deviceHash = body.device_id ? await sha256Hex(text(body.device_id)) : null;
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, 'LOGIN_SUCCESS', idempotencyKey,
+    { email_normalized: email, selected_candidate_id: selectedCandidateId }
+  );
+  const keyVersion = metadata.request_key_version;
+  const requestSha256 = await authRequestSha256(env, keyVersion, 'LOGIN_SUCCESS', {
+    email_normalized: email,
+    selected_candidate_id: selectedCandidateId,
+    password_proof: await authSecretProof(env, keyVersion, 'login-password', body.password),
+    device_id_hash_hex: deviceHash,
+    platform: text(body.platform).slice(0, 80) || null
+  });
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, 'LOGIN_SUCCESS', idempotencyKey, requestSha256, keyVersion,
+      { email_normalized: email, selected_candidate_id: selectedCandidateId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    if (replay.ok !== true) {
+      throw new CandidateHttpError(401, replay.error_code || 'CANDIDATE_LOGIN_INVALID');
+    }
+    const refreshToken = await deterministicRefreshToken(
+      env, keyVersion, 'LOGIN_SUCCESS', replay.session_id, idempotencyKey
+    );
+    return jsonResponse(200, safeSessionResponse(
+      replay, await createAccessToken(env, replay), refreshToken
+    ));
+  }
+  const account = await restOne(env, 'candidate_app_accounts',
+    `environment=eq.${encodeURIComponent(environmentName(env))}&email_normalized=eq.${encodeURIComponent(email)}` +
+    '&select=id,environment,status,password_scheme,password_scheme_version,password_salt,password_digest,password_params_json,locked_until_utc');
+  const passwordProof = await passwordVerificationProof(body.password, account || {
+    password_scheme: PASSWORD_SCHEME,
+    password_scheme_version: PASSWORD_SCHEME_VERSION,
+    password_salt: '00'.repeat(16),
+    password_digest: '00'.repeat(32),
+    password_params_json: { hash: 'SHA-256', iterations: PASSWORD_ITERATIONS, length_bytes: 32 }
+  });
+  const passwordAuthorityPayload = account && passwordProof.expected_password_authority_sha256
+    ? {
+        presented_password_digest_hex: passwordProof.presented_password_digest_hex,
+        expected_password_authority_sha256: passwordProof.expected_password_authority_sha256
+      }
+    : {};
+  const passwordOk = passwordProof.matches;
+  if (!passwordOk) {
+    const failed = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+      p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account?.id || null,
+      p_email_normalized: email, p_session_id: null, p_selected_candidate_id: null,
+      p_payload: {
+        login_failed: true,
+        ...passwordAuthorityPayload,
+        ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
+        idempotency_request_sha256: requestSha256,
+        idempotency_key_version: keyVersion
+      }, p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+    });
+    if (failed?.ok !== false) {
+      throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+    }
+    throw new CandidateHttpError(401, 'CANDIDATE_LOGIN_INVALID');
+  }
+  const sessionId = crypto.randomUUID();
+  const refreshToken = await deterministicRefreshToken(
+    env, keyVersion, 'LOGIN_SUCCESS', sessionId, idempotencyKey
+  );
+  const now = new Date();
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account.id,
+    p_email_normalized: email, p_session_id: sessionId,
+    p_selected_candidate_id: selectedCandidateId,
+    p_payload: {
+      refresh_token_hash_hex: await sha256Hex(refreshToken), ...sessionExpiries(now),
+      ...passwordAuthorityPayload,
+      ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
+      platform: text(body.platform).slice(0, 80) || null,
+      ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
+    },
+    p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
+  });
+  if (result?.ok !== true) {
+    throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_LOGIN_INVALID');
+  }
+  const winningRefreshToken = await refreshTokenForSessionResult(
+    env, keyVersion, 'LOGIN_SUCCESS', result, idempotencyKey
+  );
+  return jsonResponse(200, safeSessionResponse(
+    result, await createAccessToken(env, result), winningRefreshToken
+  ));
+}
+
+async function handleRefresh(request, env, deps) {
+  const body = await readJson(request);
+  const credentialVersions = publicCredentialVersions(body.public_credential_versions);
+  const oldRefresh = text(body.refresh_token);
+  if (!oldRefresh) throw new CandidateHttpError(401, 'CANDIDATE_SESSION_INVALID');
+  const oldSessionId = requireUuid(body.session_id, 'CANDIDATE_SESSION_INVALID');
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, 'REFRESH_SESSION', idempotencyKey, { session_id: oldSessionId }
+  );
+  const keyVersion = metadata.request_key_version;
+  const requestSha256 = await authRequestSha256(env, keyVersion, 'REFRESH_SESSION', {
+    session_id: oldSessionId,
+    presented_refresh_token_proof: await authSecretProof(
+      env, keyVersion, 'presented-refresh-token', oldRefresh
+    )
+  });
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, 'REFRESH_SESSION', idempotencyKey, requestSha256, keyVersion,
+      { session_id: oldSessionId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    if (replay?.ok !== true) {
+      throw new CandidateHttpError(401, replay?.error_code || 'CANDIDATE_SESSION_INVALID');
+    }
+    const replayRefresh = await deterministicRefreshToken(
+      env, keyVersion, 'REFRESH_SESSION', replay.session_id, idempotencyKey
+    );
+    return jsonResponse(200, safeSessionResponse(
+      replay, await createAccessToken(env, replay), replayRefresh
+    ));
+  }
+  const newSessionId = crypto.randomUUID();
+  const newRefresh = await deterministicRefreshToken(
+    env, keyVersion, 'REFRESH_SESSION', newSessionId, idempotencyKey
+  );
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: 'REFRESH_SESSION', p_environment: environmentName(env),
+    p_account_id: null, p_email_normalized: null,
+    p_session_id: oldSessionId, p_selected_candidate_id: null,
+    p_payload: {
+      presented_refresh_token_hash_hex: await sha256Hex(oldRefresh),
+      new_refresh_token_hash_hex: await sha256Hex(newRefresh), new_session_id: newSessionId,
+      ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
+    }, p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  if (result?.ok !== true) throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_SESSION_INVALID');
+  const winningRefreshToken = await refreshTokenForSessionResult(
+    env, keyVersion, 'REFRESH_SESSION', result, idempotencyKey
+  );
+  return jsonResponse(200, safeSessionResponse(
+    result, await createAccessToken(env, result), winningRefreshToken
+  ));
+}
+
+async function handleAccountAction(request, env, deps, action, routeIdentity = {}) {
+  const body = request.method === 'GET' ? {} : await readJson(request);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const claims = await candidateAccessClaims(request, env);
+  let payload = {};
+  let selectedCandidateId = null;
+  let pushTokenCiphertext = null;
+  let pushEncryptionKeyVersion = null;
+  let pushIdentityKeyVersion = null;
+  let pushIdentityProofCatalog = null;
+  let requestIdentity = { session_id: claims.sid };
+  if (action === 'SELECT_TEST_CANDIDATE') {
+    selectedCandidateId = requireUuid(body.selected_candidate_id, 'CANDIDATE_SELECTION_NOT_ALLOWED');
+    requestIdentity = { ...requestIdentity, selected_candidate_id: selectedCandidateId };
+  } else if (action === 'SET_NOTIFICATION_PREFERENCES') {
+    body.notification_preferences = requireCandidateNotificationPreferences(
+      body.notification_preferences
+    );
+    requestIdentity = { ...requestIdentity, notification_preferences: body.notification_preferences };
+  } else if (action === 'MARK_NOTIFICATION_READ') {
+    const notificationId = requireUuid(
+      routeIdentity.notification_id,
+      'CANDIDATE_NOTIFICATION_NOT_FOUND'
+    );
+    requestIdentity = { ...requestIdentity, notification_id: notificationId };
+  } else if (action === 'REGISTER_PUSH_TOKEN') {
+    const ciphertext = text(body.push_token_ciphertext_hex);
+    const tokenIdentityHmac = text(body.push_token_identity_hmac).toLowerCase();
+    const tokenIdentityKeyVersion = Number(body.push_token_identity_key_version);
+    const provider = upper(body.push_provider);
+    const keyVersion = Number(body.push_key_version);
+    if (!/^[0-9a-f]{58,32768}$/i.test(ciphertext) || ciphertext.length % 2 !== 0
+        || !SHA256_RE.test(tokenIdentityHmac)
+        || !Number.isSafeInteger(tokenIdentityKeyVersion) || tokenIdentityKeyVersion < 1
+        || !['APNS', 'FCM', 'WEB_PUSH'].includes(provider)
+        || !Number.isSafeInteger(keyVersion) || keyVersion < 1 || keyVersion > 32767) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+    }
+    pushTokenCiphertext = ciphertext;
+    pushEncryptionKeyVersion = keyVersion;
+    pushIdentityKeyVersion = tokenIdentityKeyVersion;
+    pushIdentityProofCatalog = publicPushIdentityProofs(
+      body.push_token_identity_proofs, tokenIdentityHmac, tokenIdentityKeyVersion
+    );
+    requestIdentity = {
+      ...requestIdentity,
+      push_provider: provider
+    };
+  } else if (action === 'CHANGE_PASSWORD') {
+    requestIdentity = { ...requestIdentity, password_change: true };
+  }
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, action, idempotencyKey,
+    { session_id: claims.sid, selected_candidate_id: selectedCandidateId },
+    action === 'REGISTER_PUSH_TOKEN'
+      ? { push_token_identity_key_version: pushIdentityKeyVersion }
+      : {}
+  );
+  const keyVersion = metadata.request_key_version;
+  if (action === 'REGISTER_PUSH_TOKEN') {
+    const semanticIdentityVersion = Number(
+      metadata.push_token_identity_key_version || pushIdentityKeyVersion
+    );
+    const semanticIdentity = pushIdentityProofCatalog.find(
+      proof => proof.key_version === semanticIdentityVersion
+    );
+    if (!semanticIdentity) {
+      throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+    }
+    requestIdentity = {
+      ...requestIdentity,
+      push_token_identity_hmac: semanticIdentity.identity_hmac,
+      push_token_identity_key_version: semanticIdentity.key_version
+    };
+  }
+  if (action === 'CHANGE_PASSWORD') {
+    requestIdentity = {
+      ...requestIdentity,
+      current_password_proof: await authSecretProof(
+        env, keyVersion, 'current-password', body.current_password
+      ),
+      new_password_proof: await authSecretProof(
+        env, keyVersion, 'new-password', body.password
+      )
+    };
+  }
+  const requestSha256 = await authRequestSha256(env, keyVersion, action, requestIdentity);
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, action, idempotencyKey, requestSha256, keyVersion,
+      { session_id: claims.sid, selected_candidate_id: selectedCandidateId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    if (action === 'SELECT_TEST_CANDIDATE') {
+      return jsonResponse(200, await selectedCandidateSessionResponse(
+        env, claims, claims.sid, claims.rot, replay
+      ));
+    }
+    if (action === 'CHANGE_PASSWORD' && replay?.ok !== true) {
+      throw new CandidateHttpError(401, replay?.error_code || 'CANDIDATE_LOGIN_INVALID');
+    }
+    return jsonResponse(200, replay);
+  }
+
+  let access;
+  try {
+    access = await verifyCandidateAccess(request, env);
+  } catch (error) {
+    const replay = await candidateAuthReplayAfterPreconditionFailure(
+      deps, env, action, idempotencyKey, requestSha256, keyVersion,
+      { session_id: claims.sid, selected_candidate_id: selectedCandidateId }, error
+    );
+    if (action === 'SELECT_TEST_CANDIDATE') {
+      return jsonResponse(200, await selectedCandidateSessionResponse(
+        env, claims, claims.sid, claims.rot, replay
+      ));
+    }
+    return jsonResponse(200, replay);
+  }
+  if (action === 'SET_NOTIFICATION_PREFERENCES') {
+    payload = { notification_preferences: body.notification_preferences };
+  } else if (action === 'MARK_NOTIFICATION_READ') {
+    payload = { notification_id: requestIdentity.notification_id };
+  } else if (action === 'REGISTER_PUSH_TOKEN') {
+    payload = {
+      push_provider: requestIdentity.push_provider,
+      push_token_ciphertext_hex: pushTokenCiphertext,
+      push_key_version: pushEncryptionKeyVersion,
+      push_token_identity_hmac: requestIdentity.push_token_identity_hmac,
+      push_token_identity_key_version: requestIdentity.push_token_identity_key_version
+    };
+  } else if (action === 'CHANGE_PASSWORD') {
+    const account = await restOne(env, 'candidate_app_accounts',
+      `id=eq.${encodeURIComponent(access.account_id)}` +
+      '&select=id,password_scheme,password_scheme_version,password_salt,password_digest,password_params_json');
+    const currentPasswordProof = await passwordVerificationProof(body.current_password, account);
+    const verifier = await derivePasswordVerifier(body.password);
+    payload = {
+      password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
+      password_salt_hex: verifier.salt_hex, password_digest_hex: verifier.digest_hex,
+      password_params: verifier.params,
+      presented_password_digest_hex: currentPasswordProof.presented_password_digest_hex,
+      expected_password_authority_sha256: currentPasswordProof.expected_password_authority_sha256
+    };
+  }
+  payload = {
+    ...payload,
+    idempotency_request_sha256: requestSha256,
+    idempotency_key_version: keyVersion
+  };
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: action, p_environment: access.environment, p_account_id: access.account_id,
+    p_email_normalized: null, p_session_id: access.session_id,
+    p_selected_candidate_id: selectedCandidateId, p_payload: payload,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  if (action === 'CHANGE_PASSWORD' && result?.ok !== true) {
+    throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_LOGIN_INVALID');
+  }
+  if (action === 'SELECT_TEST_CANDIDATE') {
+    return jsonResponse(200, await selectedCandidateSessionResponse(
+      env, claims, access.session_id, access.rotation, result
+    ));
+  }
+  return jsonResponse(200, result);
+}
+
+function componentMediaTypes(kind) {
+  const allowed = COMPONENT_MEDIA_TYPES[upper(kind)];
+  if (!allowed) throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_KIND_INVALID');
+  return allowed;
+}
+
+function positiveLimit(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+function uploadLimits(env) {
+  return {
+    bytes: positiveLimit(env.CANDIDATE_MAX_UPLOAD_BYTES, MAX_COMPONENT_BYTES, 1024, MAX_COMPONENT_BYTES),
+    dimension: positiveLimit(env.CANDIDATE_MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, 256, 30000),
+    pixels: positiveLimit(env.CANDIDATE_MAX_IMAGE_PIXELS, MAX_IMAGE_PIXELS, 65_536, 120_000_000)
+  };
+}
+
+function containsAscii(bytes, value) {
+  const pattern = encoder.encode(value);
+  outer: for (let index = 0; index <= bytes.length - pattern.length; index += 1) {
+    for (let offset = 0; offset < pattern.length; offset += 1) {
+      if (bytes[index + offset] !== pattern[offset]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
+
+async function validateComponentBytes(bytes, mediaType, env = {}) {
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const type = normaliseMediaType(mediaType);
+  const limits = uploadLimits(env);
+  if (!source.byteLength || source.byteLength > limits.bytes) {
+    throw new CandidateHttpError(413, 'CANDIDATE_COMPONENT_SIZE_INVALID');
+  }
+  if (type === 'application/pdf') {
+    const header = decoder.decode(source.slice(0, Math.min(1024, source.byteLength)));
+    if (!header.includes('%PDF-') || containsAscii(source, '/Encrypt')) {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_PDF_INVALID');
+    }
+    let document;
+    try {
+      document = await PDFDocument.load(source, { ignoreEncryption: false, updateMetadata: false });
+    } catch {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_PDF_INVALID');
+    }
+    if (document.getPageCount() !== 1) {
+      throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_PDF_ONE_PAGE_REQUIRED');
+    }
+    return { media_type: type, page_count: 1, width: null, height: null };
+  }
+  if (type === 'image/png') {
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (source.length < signature.length || signature.some((value, index) => source[index] !== value)) {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_IMAGE_INVALID');
+    }
+  } else if (type === 'image/jpeg') {
+    if (source.length < 4 || source[0] !== 0xff || source[1] !== 0xd8
+        || source[source.length - 2] !== 0xff || source[source.length - 1] !== 0xd9) {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_IMAGE_INVALID');
+    }
+  } else {
+    throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_INVALID');
+  }
+  try {
+    const document = await PDFDocument.create({ updateMetadata: false });
+    const image = type === 'image/png' ? await document.embedPng(source) : await document.embedJpg(source);
+    const width = Number(image.width);
+    const height = Number(image.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1
+        || width > limits.dimension || height > limits.dimension || width * height > limits.pixels) {
+      throw new CandidateHttpError(413, 'CANDIDATE_SOURCE_IMAGE_DIMENSIONS_INVALID');
+    }
+    return { media_type: type, page_count: 1, width, height };
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_IMAGE_INVALID');
+  }
+}
+
+function extensionForMedia(mediaType) {
+  const extension = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'application/pdf': 'pdf'
+  }[normaliseMediaType(mediaType)];
+  if (!extension) throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_INVALID');
+  return extension;
+}
+
+function componentStorageKey(environment, workflowId, generation, componentKind, mediaType) {
+  const extension = extensionForMedia(mediaType);
+  return `candidate-app/${environment.toLowerCase()}/${workflowId}/${generation}/source/${upper(componentKind).toLowerCase()}-${crypto.randomUUID()}.${extension}`;
+}
+
+function preparedUploadContract(result, expected) {
+  const contract = {
+    component_id: requireUuid(result?.component_id, 'CANDIDATE_COMPONENT_PREPARE_FAILED'),
+    storage_key: text(result?.storage_key),
+    media_type: normaliseMediaType(result?.media_type),
+    byte_size: Number(result?.byte_size),
+    component_kind: upper(result?.component_kind),
+    document_role: upper(result?.document_role),
+    expense_category: result?.expense_category == null ? null : upper(result.expense_category),
+    paper_return_page_key: result?.paper_return_page_key == null ? null : text(result.paper_return_page_key),
+    workflow_generation: Number(result?.workflow_generation),
+    state: upper(result?.state)
+  };
+  if (!contract.storage_key
+      || contract.media_type !== expected.media_type
+      || contract.byte_size !== expected.byte_size
+      || contract.component_kind !== expected.component_kind
+      || contract.document_role !== expected.document_role
+      || contract.expense_category !== expected.expense_category
+      || contract.paper_return_page_key !== expected.paper_return_page_key
+      || !Number.isSafeInteger(contract.workflow_generation)
+      || contract.workflow_generation !== expected.workflow_generation
+      || !['PENDING', 'IMMUTABLE'].includes(contract.state)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  return contract;
+}
+
+async function reusableCandidateExpenseSource(
+  env, access, workflowId, componentKind, documentRole, expenseCategory,
+  mediaType, byteSize, sourceContentSha256
+) {
+  if (!sourceContentSha256) return null;
+  if (!['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  const workflow = await workflowRow(env, workflowId);
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id
+      || workflow.environment !== environmentName(env)) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  const digest = encodeURIComponent(`\\x${sourceContentSha256}`);
+  const sources = await restRows(
+    env,
+    'candidate_submission_components',
+    `source_content_sha256=eq.${digest}`
+      + '&source_component_id=is.null'
+      + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
+      + 'expense_category,storage_key,media_type,byte_size,state,immutable_at_utc,'
+      + 'source_content_sha256&limit=2'
+  );
+  if (!sources.length) return null;
+  if (sources.length !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_AMBIGUOUS');
+  }
+  const source = sources[0];
+  const sourceWorkflow = await restOne(
+    env,
+    'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(source.workflow_id)}`
+      + '&select=id,environment,account_id,candidate_id,workflow_kind,scope,'
+      + 'contract_id,week_ending_date,state'
+  );
+  const sameWorkflowHistory = sourceWorkflow
+    && sourceWorkflow.id === workflow.id
+    && Number.isSafeInteger(Number(source.workflow_generation))
+    && Number(source.workflow_generation) < Number(workflow.generation);
+  const weeklyKinds = ['CONTRACT_HOURS', 'CONTRACT_EXPENSE', 'CONTRACT_COMBINED'];
+  const targetIsWeeklyClaim = upper(workflow.scope) === 'WEEKLY'
+    && weeklyKinds.includes(upper(workflow.workflow_kind));
+  // This read is only a same-family/immutable-source preflight.  The final
+  // live-use decision belongs to candidate_component_prepare_atomic_v1, which
+  // serialises on the immutable root and evaluates its exact current uses in
+  // the same transaction as the new component insert.
+  const sameClaimFamily = sourceWorkflow
+    && sourceWorkflow.id !== workflow.id
+    && sourceWorkflow.environment === workflow.environment
+    && sourceWorkflow.account_id === workflow.account_id
+    && sourceWorkflow.candidate_id === workflow.candidate_id
+    && sourceWorkflow.contract_id === workflow.contract_id
+    && sourceWorkflow.week_ending_date === workflow.week_ending_date
+    && upper(sourceWorkflow.scope) === 'WEEKLY'
+    && weeklyKinds.includes(upper(sourceWorkflow.workflow_kind));
+  if (!targetIsWeeklyClaim
+      || !(sameWorkflowHistory || sameClaimFamily)
+      || !['IMMUTABLE', 'SUPERSEDED', 'REJECTED', 'ABANDONED'].includes(upper(source.state))
+      || source.immutable_at_utc == null
+      || upper(source.component_kind) !== componentKind
+      || upper(source.document_role) !== documentRole
+      || (source.expense_category == null ? null : upper(source.expense_category)) !== expenseCategory
+      || normaliseMediaType(source.media_type) !== mediaType
+      || Number(source.byte_size) !== byteSize
+      || text(source.source_content_sha256).replace(/^\\x/i, '').toLowerCase() !== sourceContentSha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  // The historical database row proves the immutable lineage identity.  The
+  // selected bytes are uploaded again under a new component-owned R2 key and
+  // COMPONENT_COMPLETE checks their digest against this root.  Do not depend
+  // on the historical R2 object: its former claim may legitimately clean it up
+  // after this preflight, which would make a zero-copy reference unsafe.
+  return source;
+}
+
+function candidateComponentDigest(value) {
+  return text(value).replace(/^\\x/i, '').toLowerCase();
+}
+
+function candidateComponentPrepareModeMatches(component, expected, allowLegacyClone = false) {
+  const state = upper(component?.state);
+  const actualDigest = candidateComponentDigest(component?.source_content_sha256);
+  const expectedDigest = candidateComponentDigest(component?.expected_source_content_sha256);
+  if (expected.source_component_id) {
+    if (component?.source_component_id !== expected.source_component_id) return false;
+    if (expectedDigest === expected.source_content_sha256) {
+      return (state === 'PENDING' && !actualDigest)
+        || (state === 'IMMUTABLE' && actualDigest === expected.source_content_sha256);
+    }
+    // Every source-linked reuse owns a fresh upload.  A legacy zero-copy row
+    // has no expected digest proving that fresh copy, so it must never be
+    // accepted as a completed replay.  The legacy allowance below remains
+    // intentionally limited to direct-root first-use idempotency.
+    return false;
+  }
+  if (component?.source_component_id != null) return false;
+  const requestedDigest = expected.requested_source_content_sha256 || '';
+  if (requestedDigest) {
+    if (expectedDigest === requestedDigest) {
+      return (state === 'PENDING' && !actualDigest)
+        || (state === 'IMMUTABLE' && actualDigest === requestedDigest);
+    }
+    // Completed roots created by the immediately preceding release did not
+    // persist the expected digest.  They remain safe to replay only when their
+    // immutable actual digest matches the newly supplied request exactly.
+    return allowLegacyClone
+      && state === 'IMMUTABLE'
+      && !expectedDigest
+      && actualDigest === requestedDigest;
+  }
+  if (expectedDigest) return false;
+  return (state === 'PENDING' && !actualDigest)
+    || (state === 'IMMUTABLE' && Boolean(actualDigest));
+}
+
+async function currentCandidateExpenseComponentReplay(
+  env, workflowId, generation, expected, reusableSource
+) {
+  if (!reusableSource
+      || !['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(expected.component_kind)) return null;
+  const digest = encodeURIComponent(`\\x${expected.source_content_sha256}`);
+  const sourceId = encodeURIComponent(reusableSource.id);
+  const categoryFilter = expected.expense_category == null
+    ? '&expense_category=is.null'
+    : `&expense_category=eq.${encodeURIComponent(expected.expense_category)}`;
+  const matches = await restRows(
+    env,
+    'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&workflow_generation=eq.${generation}`
+      + `&component_kind=eq.${encodeURIComponent(expected.component_kind)}`
+      + `&document_role=eq.${encodeURIComponent(expected.document_role)}`
+      + categoryFilter
+      + `&media_type=eq.${encodeURIComponent(expected.media_type)}`
+      + `&byte_size=eq.${expected.byte_size}`
+      + `&source_content_sha256=eq.${digest}`
+      + `&or=(id.eq.${sourceId},source_component_id.eq.${sourceId})`
+      + '&state=eq.IMMUTABLE'
+      + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
+      + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
+      + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
+      + 'expected_source_content_sha256,source_content_sha256,source_component_id&limit=2'
+  );
+  if (!matches.length) return null;
+  if (matches.length !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_AMBIGUOUS');
+  }
+  const component = matches[0];
+  const legacyZeroCopyReuse = component.source_component_id === reusableSource.id
+    && upper(component.state) === 'IMMUTABLE'
+    && !candidateComponentDigest(component.expected_source_content_sha256)
+    && candidateComponentDigest(component.source_content_sha256)
+      === expected.source_content_sha256;
+  if (legacyZeroCopyReuse) {
+    // This older completed row may still point at the historical receipt's
+    // storage object.  It cannot prove the fresh current copy now required for
+    // safe reuse, so give the Candidate the specific recoverable instruction.
+    throw new CandidateHttpError(409, 'CANDIDATE_RECEIPT_STORAGE_STALE');
+  }
+  if (!candidateComponentPrepareMatches(component, workflowId, generation, expected)
+      || !candidateComponentPrepareModeMatches(component, expected, true)
+      || (component.id !== reusableSource.id
+        && component.source_component_id !== reusableSource.id)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  return {
+    ok: true,
+    component_id: component.id,
+    workflow_generation: Number(component.workflow_generation),
+    storage_key: component.storage_key,
+    media_type: component.media_type,
+    byte_size: Number(component.byte_size),
+    component_kind: component.component_kind,
+    document_role: component.document_role,
+    expense_category: component.expense_category,
+    paper_return_page_key: component.paper_return_page_key,
+    state: component.state,
+    idempotent_replay: true
+  };
+}
+
+function candidateComponentPrepareMatches(component, workflowId, generation, expected) {
+  return component
+    && component.workflow_id === workflowId
+    && Number(component.workflow_generation) === generation
+    && upper(component.component_kind) === expected.component_kind
+    && upper(component.document_role) === expected.document_role
+    && (component.expense_category == null ? null : upper(component.expense_category))
+      === expected.expense_category
+    && (component.paper_return_page_key == null ? null : text(component.paper_return_page_key))
+      === expected.paper_return_page_key
+    && normaliseMediaType(component.media_type) === expected.media_type
+    && Number(component.byte_size) === expected.byte_size
+    && component.approval_request_id == null
+    && component.manager_signature_capture_method == null;
+}
+
+async function repairInterruptedCandidateExpensePrepare(
+  env, deps, access, workflowId, generation, idempotencyKey, expected, reusableSource
+) {
+  if (!reusableSource) return idempotencyKey;
+  const select = 'id,workflow_id,workflow_generation,component_kind,document_role,'
+    + 'expense_category,paper_return_page_key,media_type,byte_size,state,'
+    + 'approval_request_id,manager_signature_capture_method,expected_source_content_sha256,'
+    + 'source_content_sha256,source_component_id';
+  const existing = await restOne(
+    env,
+    'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&upload_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
+      + `&select=${select}`
+  );
+  if (!existing) return idempotencyKey;
+  if (!candidateComponentPrepareMatches(existing, workflowId, generation, expected)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  const state = upper(existing.state);
+  if (candidateComponentPrepareModeMatches(existing, expected, true)) {
+    return idempotencyKey;
+  }
+  const interruptedDirectPrepare = existing.source_component_id == null
+    && existing.expected_source_content_sha256 == null
+    && existing.source_content_sha256 == null
+    && ['PENDING', 'SUPERSEDED'].includes(state);
+  if (!interruptedDirectPrepare) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  const repairDigest = await sha256Hex([
+    'candidate-expense-lineage-repair-v1', workflowId, String(generation),
+    idempotencyKey, existing.id, reusableSource.id
+  ].join('\u001f'));
+  if (state === 'PENDING') {
+    await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+      access, env, workflowId, 'COMPONENT_SUPERSEDE', generation,
+      { component_id: existing.id }, `supersede:${repairDigest}`
+    ));
+  }
+  return `lineage:${repairDigest}`;
+}
+
+async function preparedCandidateComponentReplay(
+  env, access, workflowId, generation, idempotencyKey, expected, options = {}
+) {
+  const componentSelect = 'id,workflow_id,workflow_generation,component_kind,document_role,'
+    + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
+    + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
+    + 'expected_source_content_sha256,source_content_sha256,source_component_id';
+  let component = await restOne(
+    env,
+    'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&upload_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
+      + `&select=${componentSelect}`
+  );
+  if (options.exactDirectOnly === true) {
+    if (!component || component.source_component_id != null) return null;
+  }
+  let recoveredPendingPrepare = false;
+  if (!component && options.exactDirectOnly !== true) {
+    // Older builds could lose the locally persisted prepare key after the
+    // database had durably created the component but before the HTTP response
+    // reached the phone. Recover only one exact, still-unuploaded component.
+    // A source-linked component carries the exact expected digest, so both its
+    // pending upload and its completed immutable copy can be recovered safely.
+    const reuseRecoveryFilter = expected.source_component_id
+      ? `&state=in.(PENDING,IMMUTABLE)&source_component_id=eq.${encodeURIComponent(expected.source_component_id)}`
+        + `&expected_source_content_sha256=eq.${encodeURIComponent(`\\x${expected.source_content_sha256}`)}`
+      : expected.requested_source_content_sha256
+        ? `&state=eq.PENDING&expected_source_content_sha256=eq.${encodeURIComponent(`\\x${expected.requested_source_content_sha256}`)}`
+          + '&source_content_sha256=is.null&source_component_id=is.null'
+        : '&state=eq.PENDING&expected_source_content_sha256=is.null'
+          + '&source_content_sha256=is.null&source_component_id=is.null';
+    const pending = await restRows(
+      env,
+      'candidate_submission_components',
+      `workflow_id=eq.${encodeURIComponent(workflowId)}`
+        + `&workflow_generation=eq.${generation}`
+        + `&component_kind=eq.${encodeURIComponent(expected.component_kind)}`
+        + `&document_role=eq.${encodeURIComponent(expected.document_role)}`
+        + `&media_type=eq.${encodeURIComponent(expected.media_type)}`
+        + `&byte_size=eq.${expected.byte_size}`
+        + '&approval_request_id=is.null&manager_signature_capture_method=is.null'
+        + reuseRecoveryFilter
+        + (expected.expense_category == null
+          ? '&expense_category=is.null'
+          : `&expense_category=eq.${encodeURIComponent(expected.expense_category)}`)
+        + (expected.paper_return_page_key == null
+          ? '&paper_return_page_key=is.null'
+          : `&paper_return_page_key=eq.${encodeURIComponent(expected.paper_return_page_key)}`)
+        + `&select=${componentSelect}&limit=2`
+    );
+    if (pending.length > 1) {
+      throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_RECOVERY_AMBIGUOUS');
+    }
+    if (pending.length === 1) {
+      [component] = pending;
+      recoveredPendingPrepare = true;
+    }
+  }
+  if (!component) return null;
+
+  const workflow = await restOne(
+    env,
+    'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(workflowId)}`
+      + '&select=id,account_id,candidate_id,environment,generation,state'
+  );
+  if (!workflow
+      || workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id
+      || workflow.environment !== environmentName(env)) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== generation) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (['FINALISED', 'CANCELLED', 'REJECTED', 'SUPERSEDED'].includes(upper(workflow.state))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_NOT_MUTABLE');
+  }
+  if (component.workflow_id !== workflowId
+      || (!recoveredPendingPrepare && component.upload_idempotency_key !== idempotencyKey)
+      || component.approval_request_id != null
+      || component.manager_signature_capture_method != null
+      || !candidateComponentPrepareMatches(component, workflowId, generation, expected)
+      || !candidateComponentPrepareModeMatches(component, expected, true)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  const authoritative = preparedUploadContract({
+    ...component,
+    component_id: component.id
+  }, expected);
+  return { ...component, ...authoritative, idempotent_replay: true };
+}
+
+async function uploadTicket(env, payload) {
+  const now = Math.floor(Date.now() / 1000);
+  return sealEnvelope(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET, 'candidate-component-upload-v2', {
+    typ: 'candidate_component_upload', aud: 'cloudtms-component-upload-v2',
+    iat: now, exp: now + 10 * 60, nonce: crypto.randomUUID(), ...payload
+  });
+}
+
+async function verifyUploadTicket(env, value) {
+  const payload = await openEnvelope(
+    env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
+    'candidate-component-upload-v2',
+    value
+  );
+  if (!payload || payload.typ !== 'candidate_component_upload'
+      || payload.aud !== 'cloudtms-component-upload-v2'
+      || !['CANDIDATE_SESSION', 'MANAGER_EMAIL', 'MANAGER_PHONE'].includes(payload.authority_kind)
+      || Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
+    throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+  }
+  return payload;
+}
+
+async function paperReturnStagedReceipt(env, payload) {
+  const now = Math.floor(Date.now() / 1000);
+  return sealEnvelope(
+    env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
+    'candidate-paper-return-stage-v2',
+    {
+      typ: 'candidate_paper_return_stage',
+      aud: 'cloudtms-paper-return-pack-v2',
+      iat: now,
+      exp: now + 24 * 60 * 60,
+      ...payload
+    }
+  );
+}
+
+async function verifyPaperReturnStagedReceipt(env, value) {
+  const payload = await openEnvelope(
+    env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
+    'candidate-paper-return-stage-v2',
+    value
+  );
+  if (!payload || payload.typ !== 'candidate_paper_return_stage'
+      || payload.aud !== 'cloudtms-paper-return-pack-v2'
+      || Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_PACK_STALE');
+  }
+  return payload;
+}
+
+function managerRouteAuthority(request) {
+  const authorityKind = upper(request.headers.get('x-cloudtms-manager-route-authority'));
+  if (!['MANAGER_EMAIL', 'MANAGER_PHONE', 'WEEKLY_QUERY_MANAGER_EMAIL'].includes(authorityKind)) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  if (authorityKind === 'MANAGER_PHONE') return { authority_kind: authorityKind };
+  if (authorityKind === 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    const authority = {
+      authority_kind: authorityKind,
+      manager_route_ticket_id: text(request.headers.get('x-cloudtms-manager-route-ticket')).toLowerCase(),
+      route_revision: Number(request.headers.get('x-cloudtms-manager-route-revision')),
+      review_batch_route_hmac: text(
+        request.headers.get('x-cloudtms-manager-route-weekly-batch-hmac')
+      ).toLowerCase(),
+      recipient_generation_route_hmac: text(
+        request.headers.get('x-cloudtms-manager-route-weekly-recipient-generation-hmac')
+      ).toLowerCase(),
+      original_membership_hash: text(
+        request.headers.get('x-cloudtms-manager-route-weekly-membership-hash')
+      ).toLowerCase(),
+      credential_generation: Number(
+        request.headers.get('x-cloudtms-manager-route-credential-generation')
+      )
+    };
+    if (!UUID_RE.test(authority.manager_route_ticket_id)
+        || !Number.isSafeInteger(authority.route_revision) || authority.route_revision < 1
+        || !SHA256_RE.test(authority.review_batch_route_hmac)
+        || !SHA256_RE.test(authority.recipient_generation_route_hmac)
+        || !SHA256_RE.test(authority.original_membership_hash)
+        || !Number.isSafeInteger(authority.credential_generation)
+        || authority.credential_generation < 1) {
+      throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+    }
+    return authority;
+  }
+  const authority = {
+    authority_kind: authorityKind,
+    manager_route_ticket_id: text(request.headers.get('x-cloudtms-manager-route-ticket')).toLowerCase(),
+    route_revision: Number(request.headers.get('x-cloudtms-manager-route-revision')),
+    workflow_route_hmac: text(request.headers.get('x-cloudtms-manager-route-workflow-hmac')).toLowerCase(),
+    approval_request_route_hmac: text(request.headers.get('x-cloudtms-manager-route-request-hmac')).toLowerCase(),
+    request_generation: Number(request.headers.get('x-cloudtms-manager-route-request-generation')),
+    credential_generation: Number(request.headers.get('x-cloudtms-manager-route-credential-generation'))
+  };
+  if (!UUID_RE.test(authority.manager_route_ticket_id)
+      || !Number.isSafeInteger(authority.route_revision) || authority.route_revision < 1
+      || !SHA256_RE.test(authority.workflow_route_hmac)
+      || !SHA256_RE.test(authority.approval_request_route_hmac)
+      || !Number.isSafeInteger(authority.request_generation) || authority.request_generation < 1
+      || !Number.isSafeInteger(authority.credential_generation)
+      || authority.credential_generation < 1) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  return authority;
+}
+
+async function assertManagerRouteWorkflow(env, workflowId, authority) {
+  if (authority.authority_kind !== 'MANAGER_EMAIL') return;
+  const expected = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'manager-email-workflow-v1', workflowId
+  );
+  if (expected !== authority.workflow_route_hmac) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+}
+
+async function assertManagerRouteResult(env, result, authority) {
+  if (authority?.authority_kind !== 'MANAGER_EMAIL') return;
+  const requestId = requireUuid(
+    result?.approval_request_id, 'MANAGER_ROUTE_CONTEXT_INVALID'
+  );
+  const expected = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'manager-email-request-v1', requestId
+  );
+  if (expected !== authority.approval_request_route_hmac
+      || Number(result?.approval_request_generation || result?.request_generation)
+        !== authority.request_generation) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+}
+
+async function assertManagerRouteApprovalContext(env, approval, authority) {
+  if (!authority) return;
+  const method = upper(approval?.method);
+  const expectedAuthority = method === 'PHONE'
+    ? 'MANAGER_PHONE'
+    : method === 'EMAIL'
+      ? 'MANAGER_EMAIL'
+      : '';
+  if (!expectedAuthority || authority.authority_kind !== expectedAuthority) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  await assertManagerRouteResult(env, {
+    approval_request_id: approval?.id || approval?.approval_request_id,
+    approval_request_generation:
+      approval?.request_generation || approval?.approval_request_generation
+  }, authority);
+}
+
+function routedManagerControlRpc(env, deps, schema, functionName, args) {
+  return typeof deps?.controlPlaneRpc === 'function'
+    ? deps.controlPlaneRpc(schema, functionName, args)
+    : controlPlaneRpc(env, schema, functionName, args);
+}
+
+function completeManagerEmailRoute(env, deps, authority, ctx) {
+  if (authority?.authority_kind !== 'MANAGER_EMAIL') return;
+  const completion = routedManagerControlRpc(
+    env, deps, 'control', 'manager_email_route_transition_v1', {
+    p_transition: {
+      manager_route_ticket_id: authority.manager_route_ticket_id,
+      expected_route_revision: authority.route_revision,
+      target_state: 'COMPLETED'
+    }
+  });
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(completion.catch(() => null));
+  } else {
+    completion.catch(() => null);
+  }
+}
+
+async function currentManagerEmailRouteTickets(env, workflowId) {
+  try {
+    const rows = await restRows(env, 'candidate_manager_email_route_receipts',
+      `workflow_id=eq.${encodeURIComponent(requireUuid(workflowId))}&state=eq.CURRENT`
+      + '&select=manager_route_ticket_id,route_revision&limit=100');
+    return rows.filter(row => UUID_RE.test(text(row.manager_route_ticket_id))
+      && Number.isSafeInteger(Number(row.route_revision)) && Number(row.route_revision) >= 1);
+  } catch {
+    return [];
+  }
+}
+
+function retireManagerEmailRoutes(env, deps, routes, ctx) {
+  if (!Array.isArray(routes) || !routes.length) return;
+  const retirement = Promise.allSettled(routes.map(route => routedManagerControlRpc(
+    env, deps, 'control', 'manager_email_route_transition_v1', {
+      p_transition: {
+        manager_route_ticket_id: route.manager_route_ticket_id,
+        expected_route_revision: Number(route.route_revision), target_state: 'RETIRED'
+      }
+    }
+  )));
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(retirement);
+  else retirement.catch(() => null);
+}
+
+function exactKeys(value, required, optional = []) {
+  if (!isObject(value)) return false;
+  const permitted = new Set([...required, ...optional]);
+  const keys = Object.keys(value);
+  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && keys.every((key) => permitted.has(key));
+}
+
+async function validateCandidatePaperReturnProof(env, deps, access, workflowId, generation, body) {
+  const proof = body.signed_return_proof;
+  if (!exactKeys(proof, [
+    'proof_contract_version', 'paper_return_manifest_sha256',
+    'paper_return_page_key', 'detected_qr_count'
+  ], ['qr_text'])) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_REQUIRED');
+  }
+  const proofVersion = text(proof.proof_contract_version);
+  if (![PAPER_RETURN_PROOF_V1, PAPER_RETURN_PROOF_V2].includes(proofVersion)
+      || !SHA256_RE.test(text(proof.paper_return_manifest_sha256))
+      || text(proof.paper_return_page_key) !== text(body.paper_return_page_key)
+      || !Number.isSafeInteger(proof.detected_qr_count)
+      || proof.detected_qr_count < 0 || proof.detected_qr_count > 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
+  }
+  if (proofVersion === PAPER_RETURN_PROOF_V2 && proof.detected_qr_count !== 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  let decodedQr = null;
+  if (proof.detected_qr_count === 1) {
+    if (!text(proof.qr_text)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+    }
+    try {
+      decodedQr = await verifyCandidatePaperQrViaAdapter(env, proof.qr_text);
+    } catch (error) {
+      const code = text(error?.code || error?.message);
+      if (code === 'TSQ1_SIGNING_SECRET_MISSING') {
+        throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
+      }
+      throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+    }
+  } else if (Object.prototype.hasOwnProperty.call(proof, 'qr_text')) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
+  }
+  if (proofVersion === PAPER_RETURN_PROOF_V2 && Number(decodedQr?.v) !== 2) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  if (proofVersion === PAPER_RETURN_PROOF_V1
+      && proof.detected_qr_count === 1 && Number(decodedQr?.v) !== 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  const commonArgs = {
+    p_session_id: access.session_id,
+    p_environment: access.environment || environmentName(env),
+    p_workflow_id: workflowId,
+    p_expected_generation: generation,
+    p_manifest_sha256_hex: text(proof.paper_return_manifest_sha256).toLowerCase(),
+    p_page_key: text(proof.paper_return_page_key),
+    p_now_utc: new Date().toISOString()
+  };
+  const result = proofVersion === PAPER_RETURN_PROOF_V2
+    ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
+      ...commonArgs,
+      p_qr_payload: decodedQr
+    })
+    : await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+      ...commonArgs,
+      p_qr_token: decodedQr?.tok || null,
+      p_qr_token_sha256_hex: null
+    });
+  if (result?.proof_contract_version !== proofVersion
+      || result?.workflow_id !== workflowId
+      || Number(result?.workflow_generation) !== generation
+      || result?.paper_return_page_key !== text(proof.paper_return_page_key)
+      || !SHA256_RE.test(text(result?.proof_receipt_sha256))
+      || (proofVersion === PAPER_RETURN_PROOF_V1
+        && result?.qr_required === true && !SHA256_RE.test(text(result?.qr_token_sha256)))
+      || (proofVersion === PAPER_RETURN_PROOF_V2
+        && !SHA256_RE.test(text(result?.qr_payload_sha256)))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_PROOF_UNAVAILABLE');
+  }
+  if (result.qr_required === true && proof.detected_qr_count !== 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  if (result.qr_required !== true && proof.detected_qr_count !== 0) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
+  }
+  return {
+    ...result,
+    ...(proofVersion === PAPER_RETURN_PROOF_V2 ? { qr_payload: decodedQr } : {})
+  };
+}
+
+async function revalidateCandidatePaperReturnProof(env, deps, ticket, sessionId) {
+  if (!ticket.paper_return_proof) return;
+  const proof = ticket.paper_return_proof;
+  const commonArgs = {
+    p_session_id: sessionId,
+    p_environment: ticket.env,
+    p_workflow_id: ticket.workflow_id,
+    p_expected_generation: Number(ticket.generation),
+    p_manifest_sha256_hex: proof.paper_return_manifest_sha256,
+    p_page_key: proof.paper_return_page_key,
+    p_now_utc: new Date().toISOString()
+  };
+  const result = proof.proof_contract_version === PAPER_RETURN_PROOF_V2
+    ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
+      ...commonArgs,
+      p_qr_payload: proof.qr_payload
+    })
+    : await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+      ...commonArgs,
+      p_qr_token: null,
+      p_qr_token_sha256_hex: proof.qr_token_sha256 || null
+    });
+  if (result?.proof_receipt_sha256 !== proof.proof_receipt_sha256
+      || result?.paper_return_page_key !== proof.paper_return_page_key
+      || Boolean(result?.qr_required) !== Boolean(proof.qr_required)
+      || (proof.proof_contract_version === PAPER_RETURN_PROOF_V2
+        && result?.qr_payload_sha256 !== proof.qr_payload_sha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_QR_PROOF_STALE');
+  }
+}
+
+async function candidatePaperReturnPackReceipts(env, access, workflowId, generation, receipts) {
+  if (!Array.isArray(receipts) || receipts.length < 1 || receipts.length > 100
+      || receipts.some((value) => typeof value !== 'string' || value.length < 40 || value.length > 32768)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE');
+  }
+  const workflow = await workflowRow(env, workflowId);
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id
+      || workflow.environment !== environmentName(env)
+      || Number(workflow.generation) !== generation
+      || upper(workflow.route) !== 'PAPER'
+      || !['AWAITING_PAPER_RETURN', 'RECEIVED', 'FINALISED'].includes(upper(workflow.state))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_PACK_STALE');
+  }
+  const expectedPages = safePaperReturnPages(parseJson(workflow.paper_return_manifest_json, {}));
+  const manifestSha256 = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  if (!expectedPages.length || !SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE');
+  }
+  const expectedByKey = new Map(expectedPages.map((page) => [page.page_key, page]));
+  const seenPageKeys = new Set();
+  const verifiedPages = [];
+  for (const sealed of receipts) {
+    const receipt = await verifyPaperReturnStagedReceipt(env, sealed);
+    const pageKey = text(receipt.page_key);
+    const expected = expectedByKey.get(pageKey);
+    if (!expected || seenPageKeys.has(pageKey)
+        || receipt.environment !== environmentName(env)
+        || receipt.workflow_id !== workflowId
+        || Number(receipt.workflow_generation) !== generation
+        || receipt.candidate_session_id !== access.session_id
+        || text(receipt.manifest_sha256).toLowerCase() !== manifestSha256
+        || !UUID_RE.test(text(receipt.component_id))
+        || !SHA256_RE.test(text(receipt.source_content_sha256))
+        || !SHA256_RE.test(text(receipt.proof_receipt_sha256))
+        || !SHA256_RE.test(text(receipt.qr_payload_sha256))
+        || text(receipt.media_type).toLowerCase() !== 'image/jpeg'
+        || !Number.isSafeInteger(Number(receipt.byte_size)) || Number(receipt.byte_size) < 1
+        || !Number.isSafeInteger(Number(receipt.image_width)) || Number(receipt.image_width) < 1
+        || !Number.isSafeInteger(Number(receipt.image_height)) || Number(receipt.image_height) < 1) {
+      throw candidatePaperPagesError(
+        409,
+        'CANDIDATE_PAPER_RETURN_PACK_STALE',
+        expected && !seenPageKeys.has(pageKey) ? [pageKey] : []
+      );
+    }
+    const stored = await env.R2?.head(text(receipt.storage_key));
+    const metadata = stored?.customMetadata || {};
+    if (!stored
+        || text(metadata.purpose) !== 'candidate-component'
+        || text(metadata.workflow_id) !== workflowId
+        || text(metadata.component_id) !== receipt.component_id
+        || text(metadata.sha256).toLowerCase() !== text(receipt.source_content_sha256).toLowerCase()
+        || text(metadata.media_type).toLowerCase() !== 'image/jpeg'
+        || Number(metadata.byte_size) !== Number(receipt.byte_size)
+        || text(metadata.paper_return_proof_receipt_sha256).toLowerCase()
+          !== text(receipt.proof_receipt_sha256).toLowerCase()
+        || text(metadata.paper_return_qr_payload_sha256).toLowerCase()
+          !== text(receipt.qr_payload_sha256).toLowerCase()) {
+      throw candidatePaperPageError(409, 'CANDIDATE_PAPER_RETURN_PACK_STALE', pageKey);
+    }
+    seenPageKeys.add(pageKey);
+    verifiedPages.push({
+      ordinal: expected.ordinal,
+      component_id: receipt.component_id,
+      page_key: pageKey,
+      source_content_sha256: text(receipt.source_content_sha256).toLowerCase(),
+      byte_size: Number(receipt.byte_size),
+      media_type: 'image/jpeg',
+      image_width: Number(receipt.image_width),
+      image_height: Number(receipt.image_height),
+      manifest_sha256: manifestSha256,
+      qr_payload: receipt.qr_payload,
+      proof_receipt_sha256: text(receipt.proof_receipt_sha256).toLowerCase(),
+      qr_payload_sha256: text(receipt.qr_payload_sha256).toLowerCase()
+    });
+  }
+  const missingPageKeys = expectedPages
+    .filter((page) => !seenPageKeys.has(page.page_key))
+    .map((page) => page.page_key);
+  if (missingPageKeys.length || seenPageKeys.size !== expectedPages.length) {
+    throw candidatePaperPagesError(
+      400,
+      'CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE',
+      missingPageKeys
+    );
+  }
+  return verifiedPages.sort((left, right) => left.ordinal - right.ordinal);
+}
+
+async function handleComponentPrepare(request, env, deps, workflowId, owner = 'candidate') {
+  if (owner === 'manager') {
+    const updateHold = await managerPendingExpenseUpdateHold(request, env, deps, workflowId);
+    if (updateHold) {
+      return jsonResponse(202, updateHold, {
+        'retry-after': String(Math.max(1, Number(updateHold.retry_after_seconds) || 2))
+      });
+    }
+  }
+  const body = await readJson(request);
+  const generation = requireInteger(body.generation, 'WORKFLOW_VERSION_MISMATCH', 1);
+  const componentKind = upper(body.component_kind || (owner === 'office' ? 'MANAGER_SIGNATURE' : ''));
+  const mediaType = normaliseMediaType(body.media_type);
+  const allowed = componentMediaTypes(componentKind);
+  if (!allowed.includes(mediaType)) throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_INVALID');
+  const byteSize = requireInteger(body.byte_size, 'CANDIDATE_COMPONENT_SIZE_INVALID', 1);
+  if (byteSize > uploadLimits(env).bytes) throw new CandidateHttpError(413, 'CANDIDATE_COMPONENT_SIZE_INVALID');
+  const environment = environmentName(env);
+  let sessionId = null;
+  let approvalTokenHash = null;
+  let ownerId = null;
+  let authority = null;
+  let captureMethod = null;
+  let expectedContentSha256 = null;
+  let candidateAccess = null;
+  let paperReturnProof = null;
+  let reusableSource = null;
+  if (owner === 'candidate') {
+    const access = await verifyCandidateAccess(request, env);
+    candidateAccess = access;
+    sessionId = access.session_id;
+    ownerId = access.session_id;
+    if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {
+      await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
+    }
+  } else if (owner === 'manager') {
+    authority = managerRouteAuthority(request);
+    await assertManagerRouteWorkflow(env, workflowId, authority);
+    const managerToken = bearerToken(request);
+    if (!managerToken) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+    const managerRead = await managerDocumentReadContextWithHoldRetry(
+      request, env, deps, workflowId
+    );
+    if (managerRead.hold) {
+      return jsonResponse(202, managerRead.hold, {
+        'retry-after': String(Math.max(1, Number(managerRead.hold.retry_after_seconds) || 2))
+      });
+    }
+    const managerContext = managerRead.context;
+    await assertManagerRouteApprovalContext(env, managerContext.approval, authority);
+    approvalTokenHash = await sha256Hex(managerToken);
+    ownerId = approvalTokenHash;
+    captureMethod = upper(body.capture_method);
+    if (!['DRAW', 'UPLOAD'].includes(captureMethod)
+        || (authority.authority_kind === 'MANAGER_PHONE' && captureMethod !== 'DRAW')) {
+      throw new CandidateHttpError(400, 'MANAGER_SIGNATURE_CAPTURE_METHOD_INVALID');
+    }
+    expectedContentSha256 = text(body.content_sha256).toLowerCase();
+    if (!SHA256_RE.test(expectedContentSha256)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+    }
+  } else if (owner === 'office') {
+    const user = await deps.requireOfficeUser(request, ['admin']);
+    if (!user) throw new CandidateHttpError(401, 'OFFICE_AUTH_REQUIRED');
+    ownerId = requireUuid(user.id, 'OFFICE_AUTH_REQUIRED');
+    authority = { authority_kind: 'MANAGER_PHONE' };
+    captureMethod = 'DRAW';
+  }
+  if (owner === 'candidate' && componentKind === 'SIGNED_RETURN') {
+    paperReturnProof = await validateCandidatePaperReturnProof(
+      env, deps, candidateAccess, workflowId, generation, body
+    );
+    if (paperReturnProof.proof_contract_version === PAPER_RETURN_PROOF_V2
+        && mediaType !== 'image/jpeg') {
+      throw candidatePaperPageError(
+        415,
+        'CANDIDATE_PAPER_RETURN_IMAGE_REQUIRED',
+        body.paper_return_page_key
+      );
+    }
+  } else if (Object.prototype.hasOwnProperty.call(body, 'signed_return_proof')) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
+  }
+  if (owner === 'candidate' && componentKind === 'MILEAGE_FORM') {
+    if (mediaType !== 'image/jpeg') {
+      throw new CandidateHttpError(415, 'CANDIDATE_MILEAGE_FORM_IMAGE_REQUIRED');
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'mileage_form_proof')) {
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_PROOF_FORBIDDEN');
+  }
+  let approvalRequestId = body.approval_request_id ? requireUuid(body.approval_request_id) : null;
+  if (owner === 'office') {
+    const workflow = await workflowRow(env, workflowId);
+    if (Number(workflow.generation) !== generation) {
+      throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+    }
+    const approval = await exactOfficeApproval(
+      env, workflowId, generation, approvalRequestId,
+      requireInteger(body.approval_request_generation, 'CANDIDATE_REQUEST_GENERATION_STALE', 1)
+    );
+    if (upper(approval.method) !== 'PHONE' || upper(approval.state) !== 'PENDING') {
+      throw new CandidateHttpError(409, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+    }
+    approvalRequestId = approval.id;
+  }
+  const sourceContentSha256 = body.source_content_sha256 == null
+    ? null : text(body.source_content_sha256).toLowerCase();
+  if (sourceContentSha256 != null && !SHA256_RE.test(sourceContentSha256)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+  }
+  if (owner !== 'candidate' && sourceContentSha256 != null) {
+    throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  if (owner === 'candidate'
+      && sourceContentSha256 != null
+      && !['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  if (owner === 'candidate'
+      && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+      && sourceContentSha256 == null) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+  }
+  const idempotencyKey = owner === 'office'
+    ? requireOfficeIdempotency(body.idempotency_key)
+    : requireCandidateIdempotency(body.idempotency_key);
+  const directExpected = {
+    media_type: mediaType,
+    byte_size: byteSize,
+    component_kind: componentKind,
+    document_role: upper(body.document_role || (owner === 'office' ? 'MANAGER_SIGNATURE' : '')),
+    expense_category: body.expense_category == null ? null : upper(body.expense_category),
+    paper_return_page_key: body.paper_return_page_key == null
+      ? null
+      : text(body.paper_return_page_key),
+    workflow_generation: generation,
+    source_component_id: null,
+    source_content_sha256: null,
+    requested_source_content_sha256: sourceContentSha256
+  };
+  // Replay the caller's exact direct component before looking for an ended
+  // historical receipt with the same digest.  Once a first-use upload has
+  // completed, that component is itself the digest root; treating it as a new
+  // reuse request would incorrectly reject an ordinary lost-response retry.
+  const exactDirectReplay = owner === 'candidate'
+    ? await preparedCandidateComponentReplay(
+      env, candidateAccess, workflowId, generation, idempotencyKey,
+      directExpected, { exactDirectOnly: true }
+    )
+    : null;
+  if (owner === 'candidate' && !exactDirectReplay) {
+    reusableSource = await reusableCandidateExpenseSource(
+      env, candidateAccess, workflowId, componentKind,
+      upper(body.document_role || ''),
+      body.expense_category == null ? null : upper(body.expense_category),
+      mediaType, byteSize, sourceContentSha256
+    );
+  }
+  const databaseExpectedContentSha256 = owner === 'candidate'
+    && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+    ? sourceContentSha256
+    : expectedContentSha256;
+  const uploadExpectedContentSha256 = databaseExpectedContentSha256
+    || (owner === 'candidate'
+      && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+      ? sourceContentSha256
+      : null);
+  const storageKey = componentStorageKey(environment, workflowId, generation, componentKind, mediaType);
+  const payload = {
+    component_kind: componentKind,
+    document_role: upper(body.document_role || (owner === 'office' ? 'MANAGER_SIGNATURE' : '')),
+    expense_category: body.expense_category == null ? null : upper(body.expense_category),
+    paper_return_page_key: body.paper_return_page_key == null ? null : text(body.paper_return_page_key),
+    storage_key: storageKey, media_type: mediaType, byte_size: byteSize,
+    ...(reusableSource ? {
+      source_component_id: reusableSource.id,
+      source_content_sha256_hex: sourceContentSha256
+    } : {}),
+    approval_request_id: approvalRequestId,
+    ...(owner === 'office' ? { service_phone_approval: true, actor_user_id: ownerId } : {}),
+    ...(approvalTokenHash ? {
+      approval_token_hash_hex: approvalTokenHash
+    } : {}),
+    ...(captureMethod ? { manager_signature_capture_method: captureMethod } : {}),
+    ...(databaseExpectedContentSha256
+      ? { expected_source_content_sha256_hex: databaseExpectedContentSha256 }
+      : {})
+    ,...(paperReturnProof ? {
+      paper_return_proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
+    } : {})
+  };
+  const expected = {
+    media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
+    document_role: payload.document_role, expense_category: payload.expense_category,
+    paper_return_page_key: payload.paper_return_page_key,
+    workflow_generation: generation,
+    source_component_id: reusableSource?.id ?? null,
+    source_content_sha256: reusableSource ? sourceContentSha256 : null,
+    requested_source_content_sha256: sourceContentSha256
+  };
+  const currentExpenseReplay = owner === 'candidate'
+    ? await currentCandidateExpenseComponentReplay(
+      env, workflowId, generation, expected, reusableSource
+    )
+    : null;
+  const effectiveIdempotencyKey = owner === 'candidate'
+    ? await repairInterruptedCandidateExpensePrepare(
+      env, deps, candidateAccess, workflowId, generation,
+      idempotencyKey, expected, reusableSource
+    )
+    : idempotencyKey;
+  const preparedReplay = exactDirectReplay || currentExpenseReplay || (owner === 'candidate'
+    ? await preparedCandidateComponentReplay(
+      env, candidateAccess, workflowId, generation, effectiveIdempotencyKey, expected
+    )
+    : null);
+  const transitionName = owner === 'candidate'
+    ? 'candidate_component_prepare_atomic_v1'
+    : 'candidate_workflow_transition_atomic_v1';
+  const transitionArgs = owner === 'candidate' ? {
+      p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
+      p_expected_generation: generation, p_payload: payload,
+      p_idempotency_key: effectiveIdempotencyKey, p_now_utc: new Date().toISOString()
+    } : {
+      p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
+      p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
+      p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+    };
+  const result = preparedReplay || (owner === 'manager'
+    ? await managerRpcCall(deps, 'signature-prepare', transitionName, transitionArgs)
+    : await rpcCall(deps, transitionName, transitionArgs));
+  if (authority?.authority_kind === 'MANAGER_EMAIL') {
+    await assertManagerRouteResult(env, result, authority);
+  }
+  const authoritative = preparedUploadContract(result, expected);
+  const componentId = authoritative.component_id;
+  const ticket = authoritative.state === 'PENDING' ? await uploadTicket(env, {
+    env: environment,
+    authority_kind: authority?.authority_kind || 'CANDIDATE_SESSION',
+    owner, owner_id: ownerId, workflow_id: workflowId,
+    ...(owner === 'candidate' ? {
+      candidate_account_id: candidateAccess.account_id,
+      candidate_id: candidateAccess.selected_candidate_id
+    } : {}),
+    candidate_session_id: null,
+    generation: authoritative.workflow_generation, component_id: componentId, component_kind: authoritative.component_kind,
+    key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
+    completion_idempotency_key: `${effectiveIdempotencyKey}:complete`,
+    ...(uploadExpectedContentSha256
+      ? { expected_content_sha256: uploadExpectedContentSha256 }
+      : {}),
+    ...(captureMethod ? { capture_method: captureMethod } : {}),
+    ...(paperReturnProof ? { paper_return_proof: {
+      proof_contract_version: paperReturnProof.proof_contract_version,
+      paper_return_manifest_sha256: paperReturnProof.paper_return_manifest_sha256,
+      paper_return_page_key: paperReturnProof.paper_return_page_key,
+      qr_required: paperReturnProof.qr_required === true,
+      qr_token_sha256: paperReturnProof.qr_token_sha256 || null,
+      qr_payload: paperReturnProof.qr_payload || null,
+      qr_payload_sha256: paperReturnProof.qr_payload_sha256 || null,
+      proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
+    } } : {}),
+    ...(authority?.authority_kind === 'MANAGER_EMAIL' ? {
+      manager_route_ticket_id: authority.manager_route_ticket_id,
+      route_revision: authority.route_revision,
+      workflow_route_hmac: authority.workflow_route_hmac,
+      approval_request_route_hmac: authority.approval_request_route_hmac,
+      request_generation: authority.request_generation,
+      credential_generation: authority.credential_generation
+    } : {})
+  }) : null;
+  return jsonResponse(result.idempotent_replay === true ? 200 : 201, {
+    ok: true, workflow_id: workflowId, generation: authoritative.workflow_generation, component_id: componentId,
+    idempotent_replay: result.idempotent_replay === true,
+    reused_existing_upload: authoritative.state === 'IMMUTABLE',
+    ...(ticket ? { upload: {
+      method: 'PUT', url: `${owner === 'office' ? '/api/candidate-app' : CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
+      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600,
+      ...(owner === 'manager' && uploadExpectedContentSha256
+        ? { expected_content_sha256: uploadExpectedContentSha256 }
+        : {})
+    } } : {})
+  });
+}
+
+async function authenticateUploadOwner(request, env, deps, ticket) {
+  if (ticket.owner === 'candidate') {
+    if (ticket.authority_kind !== 'CANDIDATE_SESSION'
+        || request.headers.has('x-cloudtms-manager-route-authority')) {
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+    }
+    const access = await verifyCandidateAccess(request, env);
+    const stableCandidateBinding = UUID_RE.test(text(ticket.candidate_account_id))
+      && UUID_RE.test(text(ticket.candidate_id));
+    if (stableCandidateBinding) {
+      if (access.account_id !== ticket.candidate_account_id
+          || access.selected_candidate_id !== ticket.candidate_id) {
+        throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+      }
+    } else if (access.session_id !== ticket.owner_id) {
+      // Compatibility for upload tickets issued before the stable
+      // account-and-Candidate binding was introduced.
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+    }
+    return { session_id: access.session_id, approval_token_hash_hex: null };
+  }
+  if (ticket.owner === 'manager') {
+    const authority = managerRouteAuthority(request);
+    if (authority.authority_kind !== ticket.authority_kind) {
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_AUDIENCE_MISMATCH');
+    }
+    if (authority.authority_kind === 'MANAGER_EMAIL') {
+      const exact = [
+        'manager_route_ticket_id', 'route_revision', 'workflow_route_hmac',
+        'approval_request_route_hmac', 'request_generation', 'credential_generation'
+      ].every((name) => String(authority[name]) === String(ticket[name]));
+      if (!exact) throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_AUDIENCE_MISMATCH');
+      await assertManagerRouteWorkflow(env, ticket.workflow_id, authority);
+    }
+    const managerToken = bearerToken(request);
+    const digest = managerToken ? await sha256Hex(managerToken) : '';
+    if (!digest || digest !== ticket.owner_id) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+    return { session_id: null, approval_token_hash_hex: digest };
+  }
+  if (ticket.owner === 'office') {
+    if (ticket.authority_kind !== 'MANAGER_PHONE') {
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_AUDIENCE_MISMATCH');
+    }
+    const user = await deps.requireOfficeUser(request, ['admin']);
+    if (!user || user.id !== ticket.owner_id) throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+    return { session_id: ticket.candidate_session_id || null, approval_token_hash_hex: null };
+  }
+  throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+}
+
+async function handleComponentUpload(request, env, deps, encodedTicket) {
+  const ticket = await verifyUploadTicket(env, decodeURIComponent(encodedTicket));
+  const owner = await authenticateUploadOwner(request, env, deps, ticket);
+  if (ticket.owner === 'candidate' && ticket.workflow_id !== GENERIC_DOCUMENT_WORKFLOW_ID
+      && UUID_RE.test(text(ticket.candidate_account_id)) && UUID_RE.test(text(ticket.candidate_id))) {
+    // authenticateUploadOwner already proves this encrypted stable binding
+    // against the currently selected Candidate before the purpose read.
+    await admitCandidateCorrectionWorkflow(request, env, deps,
+      { selected_candidate_id: ticket.candidate_id }, ticket.workflow_id);
+  }
+  if (ticket.owner === 'manager') {
+    const hold = await managerRpcCall(deps, 'signature-upload-hold', 'candidate_expense_update_manager_hold_v1', {
+      p_environment: environmentName(env),
+      p_workflow_id: requireUuid(ticket.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+      p_approval_token_hash_hex: owner.approval_token_hash_hex,
+      p_now_utc: new Date().toISOString()
+    });
+    if (hold?.state === 'UPDATING') {
+      return jsonResponse(202, hold, {
+        'retry-after': String(Math.max(1, Number(hold.retry_after_seconds) || 2))
+      });
+    }
+  }
+  const contentType = normaliseMediaType(request.headers.get('content-type'));
+  if (contentType !== ticket.media_type) throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_MISMATCH');
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (declared && declared !== Number(ticket.byte_size)) throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_SIZE_MISMATCH');
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength !== Number(ticket.byte_size) || bytes.byteLength < 1
+      || bytes.byteLength > uploadLimits(env).bytes) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_SIZE_MISMATCH');
+  }
+  const validated = await validateComponentBytes(bytes, contentType, env);
+  const bucket = env.R2;
+  if (!bucket || typeof bucket.put !== 'function') throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
+  const digest = await sha256Hex(bytes);
+  if (ticket.expected_content_sha256 && digest !== ticket.expected_content_sha256) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_MISMATCH');
+  }
+  let storedPaperQr = null;
+  if (ticket.paper_return_proof?.proof_contract_version === PAPER_RETURN_PROOF_V2) {
+    const replacementPageKey = ticket.paper_return_proof.paper_return_page_key;
+    if (contentType !== 'image/jpeg') {
+      throw candidatePaperPageError(415, 'CANDIDATE_PAPER_RETURN_IMAGE_REQUIRED', replacementPageKey);
+    }
+    let decoded;
+    try {
+      decoded = decodeCandidatePaperQrTextsFromJpeg(bytes);
+    } catch {
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_UNREADABLE', replacementPageKey);
+    }
+    const pageQrs = decoded.qr_texts.filter((value) => text(value).startsWith('TSQ2.'));
+    if (pageQrs.length !== 1) {
+      throw candidatePaperPageError(
+        400,
+        pageQrs.length ? 'CANDIDATE_PAPER_QR_AMBIGUOUS' : 'CANDIDATE_PAPER_QR_UNREADABLE',
+        replacementPageKey
+      );
+    }
+    let qrPayload;
+    try {
+      qrPayload = await verifyCandidatePaperQrViaAdapter(env, pageQrs[0]);
+    } catch (error) {
+      const code = text(error?.code || error?.message);
+      if (code === 'TSQ2_SIGNING_SECRET_MISSING') {
+        throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
+      }
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_UNREADABLE', replacementPageKey);
+    }
+    if (Number(qrPayload?.v) !== 2
+        || JSON.stringify(qrPayload) !== JSON.stringify(ticket.paper_return_proof.qr_payload)) {
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH', replacementPageKey);
+    }
+    const payloadHash = text(ticket.paper_return_proof.qr_payload_sha256).toLowerCase();
+    if (!SHA256_RE.test(payloadHash)) {
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH', replacementPageKey);
+    }
+    storedPaperQr = {
+      payload_hash: payloadHash,
+      detected_qr_count: 1,
+      width: decoded.width,
+      height: decoded.height
+    };
+  }
+  await revalidateCandidatePaperReturnProof(env, deps, ticket, owner.session_id);
+  const stored = await bucket.put(ticket.key, bytes, {
+    onlyIf: { etagDoesNotMatch: '*' },
+    httpMetadata: { contentType }, customMetadata: {
+      purpose: 'candidate-component', workflow_id: ticket.workflow_id,
+      component_id: ticket.component_id, media_type: contentType,
+      byte_size: String(bytes.byteLength), sha256: digest,
+      authority_kind: ticket.authority_kind,
+      capture_method: ticket.capture_method || '',
+      paper_return_proof_receipt_sha256: ticket.paper_return_proof?.proof_receipt_sha256 || '',
+      paper_return_qr_payload_sha256: storedPaperQr?.payload_hash || ''
+    }
+  });
+  if (!stored) {
+    const existing = await bucket.head(ticket.key);
+    const metadata = existing?.customMetadata || {};
+    if (!existing || text(metadata.sha256).toLowerCase() !== digest
+        || text(metadata.workflow_id) !== ticket.workflow_id
+        || text(metadata.component_id) !== ticket.component_id
+        || text(metadata.media_type).toLowerCase() !== contentType
+        || Number(metadata.byte_size) !== bytes.byteLength) {
+      throw new CandidateHttpError(409, 'CANDIDATE_UPLOAD_TICKET_ALREADY_USED');
+    }
+  }
+  const completionPayload = {
+    component_id: ticket.component_id, source_content_sha256_hex: digest,
+    verified_byte_size: bytes.byteLength, verified_media_type: contentType,
+    ...(ticket.capture_method ? { manager_signature_capture_method: ticket.capture_method } : {}),
+    ...(validated.width ? { verified_image_width: validated.width } : {}),
+    ...(validated.height ? { verified_image_height: validated.height } : {}),
+    ...(ticket.owner === 'office' ? { service_phone_approval: true, actor_user_id: ticket.owner_id } : {}),
+    ...(owner.approval_token_hash_hex ? { approval_token_hash_hex: owner.approval_token_hash_hex } : {})
+  };
+  if (storedPaperQr) {
+    const stagedReceipt = await paperReturnStagedReceipt(env, {
+      environment: ticket.env,
+      workflow_id: ticket.workflow_id,
+      workflow_generation: Number(ticket.generation),
+      candidate_session_id: owner.session_id,
+      component_id: ticket.component_id,
+      page_key: ticket.paper_return_proof.paper_return_page_key,
+      manifest_sha256: ticket.paper_return_proof.paper_return_manifest_sha256,
+      qr_payload: ticket.paper_return_proof.qr_payload,
+      proof_receipt_sha256: ticket.paper_return_proof.proof_receipt_sha256,
+      qr_payload_sha256: storedPaperQr.payload_hash,
+      storage_key: ticket.key,
+      source_content_sha256: digest,
+      byte_size: bytes.byteLength,
+      media_type: contentType,
+      image_width: storedPaperQr.width,
+      image_height: storedPaperQr.height
+    });
+    return jsonResponse(202, {
+      ok: true,
+      workflow_id: ticket.workflow_id,
+      generation: Number(ticket.generation),
+      component_id: ticket.component_id,
+      state: 'STAGED_FOR_PACK_CONFIRMATION',
+      media_type: contentType,
+      byte_size: bytes.byteLength,
+      content_sha256: digest,
+      idempotent_replay: !stored,
+      page_count: validated.page_count,
+      image_width: validated.width,
+      image_height: validated.height,
+      paper_return_staged: true,
+      staged_receipt: stagedReceipt
+    });
+  }
+  const completionArgs = {
+      p_session_id: owner.session_id, p_environment: ticket.env,
+      p_workflow_id: ticket.workflow_id, p_action: 'COMPONENT_COMPLETE',
+      p_expected_generation: Number(ticket.generation),
+      p_payload: completionPayload, p_idempotency_key: ticket.completion_idempotency_key,
+      p_now_utc: new Date().toISOString()
+    };
+  const result = ticket.owner === 'manager'
+    ? await managerRpcCall(
+      deps, 'signature-upload-complete', 'candidate_workflow_transition_atomic_v1', completionArgs
+    )
+    : await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', completionArgs);
+  return jsonResponse(200, {
+    ok: true, workflow_id: ticket.workflow_id, generation: Number(ticket.generation),
+    component_id: ticket.component_id, state: result.state, media_type: contentType,
+    byte_size: bytes.byteLength, content_sha256: digest,
+    idempotent_replay: !stored || result.idempotent_replay === true,
+    page_count: validated.page_count,
+    image_width: validated.width,
+    image_height: validated.height
+  });
+}
+
+async function r2Bytes(env, key, expectedHash = null) {
+  const canonical = text(key).replace(/^\/+/, '');
+  if (!canonical) throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+  const object = await env.R2?.get(canonical);
+  if (!object) throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (expectedHash && (await sha256Hex(bytes)) !== expectedHash.toLowerCase()) {
+    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_DIGEST_MISMATCH');
+  }
+  return { bytes, media_type: normaliseMediaType(object.httpMetadata?.contentType || 'application/octet-stream') };
+}
+
+function dataUrl(bytes, mediaType) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${mediaType};base64,${btoa(binary)}`;
+}
+
+async function immutablePut(env, key, bytes, mediaType, metadata = {}) {
+  const bucket = env.R2;
+  if (!bucket) throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
+  const digest = await sha256Hex(bytes);
+  const stored = await bucket.put(key, bytes, {
+    onlyIf: { etagDoesNotMatch: '*' },
+    httpMetadata: { contentType: mediaType },
+    customMetadata: { ...metadata, sha256: digest, media_type: mediaType, byte_size: String(bytes.byteLength) }
+  });
+  if (stored) return { created: true, sha256: digest };
+  const existing = await bucket.head(key);
+  if (!existing || text(existing.customMetadata?.sha256).toLowerCase() !== digest
+      || text(existing.customMetadata?.media_type).toLowerCase() !== mediaType
+      || Number(existing.customMetadata?.byte_size) !== bytes.byteLength) {
+    throw new CandidateHttpError(409, 'CANDIDATE_RENDER_IDEMPOTENCY_CONFLICT');
+  }
+  return { created: false, sha256: digest };
+}
+
+function managerFinalisationLeaseKey(env, workflowId, generation) {
+  return [
+    'candidate-app', environmentName(env).toLowerCase(), 'manager-finalisation-leases',
+    requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    requireInteger(generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  ].join('/');
+}
+
+async function acquireManagerFinalisationLease(env, workflowId, generation, nowMs = Date.now()) {
+  const bucket = env.R2;
+  if (!bucket || typeof bucket.head !== 'function' || typeof bucket.put !== 'function') {
+    throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
+  }
+  const key = managerFinalisationLeaseKey(env, workflowId, generation);
+  const existing = await bucket.head(key);
+  const existingExpiry = Date.parse(text(existing?.customMetadata?.expires_at_utc));
+  if (existing && (!Number.isFinite(existingExpiry) || existingExpiry > nowMs)) {
+    return { acquired: false, key };
+  }
+  const token = crypto.randomUUID();
+  const expiresAtMs = nowMs + MANAGER_FINALISATION_LEASE_MS;
+  const onlyIf = existing?.etag
+    ? { etagMatches: existing.etag }
+    : { etagDoesNotMatch: '*' };
+  const stored = await bucket.put(key, new Uint8Array(), {
+    onlyIf,
+    customMetadata: {
+      purpose: 'candidate-manager-finalisation-single-flight',
+      token,
+      expires_at_utc: new Date(expiresAtMs).toISOString()
+    }
+  });
+  return stored
+    ? { acquired: true, key, token, expires_at_ms: expiresAtMs }
+    : { acquired: false, key };
+}
+
+async function releaseManagerFinalisationLease(env, lease, nowMs = Date.now()) {
+  const bucket = env.R2;
+  if (!lease?.acquired || !lease.token || !lease.key
+      || nowMs >= Number(lease.expires_at_ms) - 5000
+      || typeof bucket?.head !== 'function' || typeof bucket?.delete !== 'function') return false;
+  const current = await bucket.head(lease.key);
+  if (text(current?.customMetadata?.token) !== lease.token) return false;
+  await bucket.delete(lease.key);
+  return true;
+}
+
+async function withManagerFinalisationLease(env, workflowId, generation, work) {
+  const lease = await acquireManagerFinalisationLease(env, workflowId, generation);
+  if (!lease.acquired) {
+    return {
+      ok: true,
+      workflow_id: workflowId,
+      state: 'FINALISATION_PENDING',
+      finalisation_pending: true,
+      single_flight_deferred: true
+    };
+  }
+  try {
+    const result = await work();
+    try {
+      await releaseManagerFinalisationLease(env, lease);
+    } catch (error) {
+      console.warn('[candidate-app] manager finalisation lease release failed',
+        safeCandidateTransportDiagnostic(error));
+    }
+    return result;
+  } catch (error) {
+    // Retain the short lease after failure so a disconnected PostgREST call
+    // cannot immediately be followed by a competing finaliser on the same row.
+    throw error;
+  }
+}
+
+function parseJson(value, fallback = null) {
+  if (value == null) return fallback;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { return fallback; }
+  }
+  return value;
+}
+
+function ymdAdd(dateText, days) {
+  const value = new Date(`${dateText}T12:00:00Z`);
+  if (Number.isNaN(value.getTime())) return null;
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function hhmm(value) {
+  const source = text(value);
+  const match = /(?:T|^)(\d{2}):(\d{2})/.exec(source);
+  if (!match) return '';
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours <= 23 && minutes <= 59 ? `${match[1]}:${match[2]}` : '';
+}
+
+function assertCandidateScheduleAliasConsistency(factualSubmission) {
+  const facts = isObject(factualSubmission) ? factualSubmission : {};
+  const owners = [facts, facts.hours_submission, facts.timesheet_patch_json,
+    facts.hours_submission?.timesheet_patch_json].filter(isObject);
+  const scheduleSegments = [];
+  for (const owner of owners) {
+    if ([
+      'start', 'start_time', 'worked_start', 'finish', 'finish_time',
+      'end', 'end_time', 'worked_end', 'start_utc', 'worked_start_iso',
+      'start_iso', 'end_utc', 'worked_end_iso', 'end_iso'
+    ].some(key => Object.prototype.hasOwnProperty.call(owner, key))) {
+      scheduleSegments.push(owner);
+    }
+    for (const key of ['actual_schedule_json', 'schedule_json']) {
+      if (Array.isArray(owner[key])) scheduleSegments.push(...owner[key].filter(isObject));
+    }
+  }
+  const assertClockAliases = (segment, keys, boundary) => {
+    const values = keys
+      .filter(key => Object.prototype.hasOwnProperty.call(segment, key))
+      .map(key => hhmm(segment[key]))
+      .filter(Boolean);
+    if (new Set(values).size > 1) {
+      throw new CandidateHttpError(
+        400, 'CANDIDATE_WORK_INTERVAL_CONTRADICTORY',
+        'CANDIDATE_WORK_INTERVAL_CONTRADICTORY', { boundary }
+      );
+    }
+  };
+  const assertInstantAliases = (segment, keys, boundary) => {
+    const values = keys
+      .filter(key => Object.prototype.hasOwnProperty.call(segment, key))
+      .map(key => Date.parse(text(segment[key])))
+      .filter(Number.isFinite);
+    if (new Set(values).size > 1) {
+      throw new CandidateHttpError(
+        400, 'CANDIDATE_WORK_INTERVAL_CONTRADICTORY',
+        'CANDIDATE_WORK_INTERVAL_CONTRADICTORY', { boundary }
+      );
+    }
+  };
+  for (const segment of scheduleSegments) {
+    assertClockAliases(segment, ['start', 'start_time', 'worked_start'], 'START');
+    assertClockAliases(segment, ['finish', 'finish_time', 'end', 'end_time', 'worked_end'], 'END');
+    assertInstantAliases(segment, ['start_utc', 'worked_start_iso', 'start_iso'], 'START');
+    assertInstantAliases(segment, ['end_utc', 'worked_end_iso', 'end_iso'], 'END');
+  }
+  return factualSubmission;
+}
+
+function minuteOfDay(value) {
+  const valueText = hhmm(value);
+  if (!valueText) return null;
+  const [hours, minutes] = valueText.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function intervalMinutes(start, end) {
+  const startMinute = minuteOfDay(start);
+  const endMinute = minuteOfDay(end);
+  if (startMinute == null || endMinute == null || startMinute === endMinute) return 0;
+  return endMinute > startMinute ? endMinute - startMinute : endMinute + 1440 - startMinute;
+}
+
+function explicitNoBreak(value) {
+  if (!isObject(value)) return false;
+  if (value.no_break === true || value.noBreak === true) return true;
+  const hasMinutes = Object.prototype.hasOwnProperty.call(value, 'break_minutes')
+    || Object.prototype.hasOwnProperty.call(value, 'break_mins');
+  if (!hasMinutes) return false;
+  const raw = value.break_minutes ?? value.break_mins;
+  return raw !== null && raw !== '' && Number(raw) === 0;
+}
+
+function segmentBreak(segment) {
+  // Weekly Source preserves the signed break as a nested break_entry. The
+  // ordinary Timesheet renderer also receives legacy flat break fields.
+  // Read the signed source shape first so its informational PDF cannot show
+  // gross shift hours as paid hours or omit the break window.
+  const entry = isObject(segment?.break_entry) ? segment.break_entry : null;
+  if (entry) {
+    const kind = upper(entry.kind);
+    if (kind === 'NO_BREAK') {
+      return { break_start_local: '', break_end_local: '', break_minutes: 0, break_display_mode: 'NONE' };
+    }
+    if (kind === 'START_END_TIMES') {
+      const start = hhmm(entry.break_start);
+      const end = hhmm(entry.break_end);
+      const minutes = intervalMinutes(start, end);
+      if (!start || !end || minutes < 1 || Number(entry.calculated_break_minutes) !== minutes) {
+        throw new CandidateHttpError(409, 'CANDIDATE_RENDER_BREAK_INVALID');
+      }
+      return { break_start_local: start, break_end_local: end, break_minutes: minutes, break_display_mode: 'EXPLICIT_INTERVAL' };
+    }
+    if (kind === 'DURATION_MINUTES') {
+      const minutes = Number(entry.break_minutes);
+      if (!Number.isSafeInteger(minutes) || minutes < 1) {
+        throw new CandidateHttpError(409, 'CANDIDATE_RENDER_BREAK_INVALID');
+      }
+      return { break_start_local: '', break_end_local: '', break_minutes: minutes, break_display_mode: 'MINUTES_ONLY' };
+    }
+    throw new CandidateHttpError(409, 'CANDIDATE_RENDER_BREAK_INVALID');
+  }
+  const windows = Array.isArray(segment?.breaks) ? segment.breaks : [];
+  const primaryStart = text(segment?.break_start || segment?.breakStart || segment?.break_start_time);
+  const primaryEnd = text(segment?.break_end || segment?.breakEnd || segment?.break_end_time);
+  const firstWindow = windows.find((entry) => hhmm(entry?.start) && hhmm(entry?.end));
+  const breakStart = hhmm(primaryStart || firstWindow?.start);
+  const breakEnd = hhmm(primaryEnd || firstWindow?.end);
+  const explicitValue = segment?.break_minutes ?? segment?.break_mins ?? segment?.unpaid_break_minutes;
+  const explicitMinutes = explicitValue === '' || explicitValue == null ? null : Number(explicitValue);
+  const minutes = breakStart && breakEnd
+    ? intervalMinutes(breakStart, breakEnd)
+    : Number.isFinite(explicitMinutes) && explicitMinutes >= 0 ? explicitMinutes : 0;
+  return {
+    break_start_local: breakStart,
+    break_end_local: breakEnd,
+    break_minutes: Math.round(minutes),
+    break_display_mode: breakStart && breakEnd ? 'EXPLICIT_INTERVAL' : minutes > 0 ? 'MINUTES_ONLY' : 'NONE'
+  };
+}
+
+function normaliseAdaptiveBreakEntry(entry, expectedMode) {
+  if (!isObject(entry) || !exactKeys(entry, ['kind'], [
+    'break_start', 'break_end', 'calculated_break_minutes', 'break_minutes', 'no_break'
+  ])) {
+    throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+  }
+  const kind = upper(entry.kind);
+  if (kind === 'NO_BREAK') {
+    if (entry.no_break !== true || Number(entry.break_minutes) !== 0
+        || Object.prototype.hasOwnProperty.call(entry, 'break_start')
+        || Object.prototype.hasOwnProperty.call(entry, 'break_end')
+        || Object.prototype.hasOwnProperty.call(entry, 'calculated_break_minutes')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+    }
+    return { no_break: true, break_minutes: 0 };
+  }
+  if (kind === 'START_END_TIMES' && expectedMode === 'START_END_TIMES') {
+    const start = hhmm(entry.break_start);
+    const end = hhmm(entry.break_end);
+    const calculated = intervalMinutes(start, end);
+    if (!start || !end || calculated < 1 || !Number.isSafeInteger(entry.calculated_break_minutes)
+        || entry.calculated_break_minutes !== calculated
+        || Object.prototype.hasOwnProperty.call(entry, 'break_minutes')
+        || Object.prototype.hasOwnProperty.call(entry, 'no_break')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+    }
+    return { break_start: start, break_end: end, break_minutes: calculated };
+  }
+  if (kind === 'DURATION_MINUTES' && expectedMode === 'DURATION_MINUTES') {
+    if (!Number.isSafeInteger(entry.break_minutes) || entry.break_minutes < 1
+        || entry.break_minutes > 24 * 60
+        || Object.prototype.hasOwnProperty.call(entry, 'break_start')
+        || Object.prototype.hasOwnProperty.call(entry, 'break_end')
+        || Object.prototype.hasOwnProperty.call(entry, 'calculated_break_minutes')
+        || Object.prototype.hasOwnProperty.call(entry, 'no_break')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+    }
+    return { break_minutes: entry.break_minutes };
+  }
+  throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_MODE_MISMATCH');
+}
+
+function normaliseCandidateBreakSubmission(factualSubmission, context) {
+  const facts = structuredClone(isObject(factualSubmission) ? factualSubmission : {});
+  if (context?.applicable !== true) {
+    const owners = [facts, facts.hours_submission, facts.timesheet_patch_json,
+      facts.hours_submission?.timesheet_patch_json].filter(isObject);
+    const hasAdaptiveEntry = owners.some(owner => (
+      Object.prototype.hasOwnProperty.call(owner, 'break_entry')
+      || ['actual_schedule_json', 'schedule_json'].some(key => (
+        Array.isArray(owner[key]) && owner[key].some(segment => (
+          isObject(segment) && Object.prototype.hasOwnProperty.call(segment, 'break_entry')
+        ))
+      ))
+    ));
+    if (Object.prototype.hasOwnProperty.call(facts, 'break_entry_context') || hasAdaptiveEntry) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE');
+    }
+    return facts;
+  }
+  const supplied = facts.break_entry_context;
+  if (!exactKeys(supplied, ['context_version', 'context_token', 'mode'])
+      || supplied.context_version !== BREAK_ENTRY_CONTEXT_VERSION
+      || supplied.context_token !== context.context_token
+      || supplied.mode !== context.mode) {
+    throw new CandidateHttpError(409, 'CANDIDATE_BREAK_ENTRY_CONTEXT_STALE');
+  }
+  delete facts.break_entry_context;
+  let seen = 0;
+  const normaliseArray = (segments) => segments.map((segment) => {
+    if (!isObject(segment) || !Object.prototype.hasOwnProperty.call(segment, 'break_entry')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_REQUIRED');
+    }
+    const result = { ...segment, ...normaliseAdaptiveBreakEntry(segment.break_entry, context.mode) };
+    delete result.break_entry;
+    seen += 1;
+    return result;
+  });
+  const owners = [facts, facts.hours_submission, facts.timesheet_patch_json,
+    facts.hours_submission?.timesheet_patch_json].filter(isObject);
+  for (const owner of owners) {
+    for (const key of ['actual_schedule_json', 'schedule_json']) {
+      if (Array.isArray(owner[key])) owner[key] = normaliseArray(owner[key]);
+    }
+  }
+  if (seen === 0 && Object.prototype.hasOwnProperty.call(facts, 'break_entry')) {
+    Object.assign(facts, normaliseAdaptiveBreakEntry(facts.break_entry, context.mode));
+    delete facts.break_entry;
+    seen = 1;
+  }
+  if (seen === 0) throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_REQUIRED');
+  return facts;
+}
+
+function candidateWorkflowRequiresBreakEntry(workflow) {
+  return upper(workflow?.workflow_kind) !== 'CONTRACT_EXPENSE';
+}
+
+function scheduleFromImmutable(workflow, timesheet) {
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const hoursSubmission = parseJson(immutable.hours_submission, immutable) || immutable;
+  const timesheetPatch = parseJson(hoursSubmission.timesheet_patch_json, {}) || {};
+  const candidates = [
+    hoursSubmission.actual_schedule_json,
+    hoursSubmission.schedule_json,
+    timesheetPatch.actual_schedule_json,
+    timesheetPatch.schedule_json,
+    timesheet?.actual_schedule_json
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseJson(candidate, candidate);
+    if (Array.isArray(parsed)) return parsed;
+  }
+  if (workflow.scope === 'DAILY') {
+    const actualStart = timesheetPatch.worked_start_iso || immutable.actual_start || immutable.start || immutable.worked_start_iso || timesheet?.worked_start_iso;
+    const actualEnd = timesheetPatch.worked_end_iso || immutable.actual_end || immutable.end || immutable.worked_end_iso || timesheet?.worked_end_iso;
+    const noBreak = explicitNoBreak(timesheetPatch) || explicitNoBreak(immutable);
+    return [{
+      date: workflow.work_date,
+      start: hhmm(actualStart), end: hhmm(actualEnd),
+      break_start: noBreak ? '' : hhmm(timesheetPatch.break_start_iso || immutable.break_start || immutable.break_start_iso || timesheet?.break_start_iso),
+      break_end: noBreak ? '' : hhmm(timesheetPatch.break_end_iso || immutable.break_end || immutable.break_end_iso || timesheet?.break_end_iso),
+      break_minutes: noBreak ? 0 : timesheetPatch.break_minutes ?? immutable.break_minutes ?? timesheet?.break_minutes ?? null,
+      ref_num: immutable.reference_number || timesheet?.reference_number || null
+    }];
+  }
+  return [];
+}
+
+function scheduleLine(segment, index) {
+  const date = text(segment?.date || segment?.work_date || segment?.worked_date).slice(0, 10);
+  const start = hhmm(segment?.start || segment?.start_time || segment?.actual_start || segment?.worked_start_iso || segment?.start_utc || segment?.start_iso);
+  const end = hhmm(segment?.end || segment?.end_time || segment?.actual_end || segment?.worked_end_iso || segment?.end_utc || segment?.end_iso);
+  const breakInfo = segmentBreak(segment);
+  const duration = intervalMinutes(start, end);
+  const paidMinutes = Math.max(0, duration - breakInfo.break_minutes);
+  return {
+    row_key: text(segment?.row_key || segment?.segment_id) || `segment:${date}:${index + 1}`,
+    display_order: index + 1,
+    segment_id: text(segment?.segment_id) || `candidate-segment-${index + 1}`,
+    date,
+    worked_start_utc: text(segment?.start_utc || segment?.worked_start_iso) || null,
+    worked_end_utc: text(segment?.end_utc || segment?.worked_end_iso) || null,
+    display_start_local: start,
+    display_end_local: end,
+    ...breakInfo,
+    bucket_hours: {
+      DAY: Number(segment?.hours_day || 0), NIGHT: Number(segment?.hours_night || 0),
+      SAT: Number(segment?.hours_sat || 0), SUN: Number(segment?.hours_sun || 0),
+      BH: Number(segment?.hours_bh || 0)
+    },
+    paid_minutes: paidMinutes,
+    band: text(segment?.band) || null,
+    booking_reference: text(segment?.ref_num || segment?.reference || segment?.booking_reference) || null,
+    reference_required: false,
+    reference_source: text(segment?.ref_num || segment?.reference || segment?.booking_reference) ? 'SEGMENT' : null,
+    reference_row_key: text(segment?.row_key || segment?.segment_id) || `segment:${date}:${index + 1}`
+  };
+}
+
+function additionalUnitRows(workflow, timesheet) {
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const hoursSubmission = parseJson(immutable.hours_submission, immutable) || immutable;
+  const timesheetPatch = parseJson(hoursSubmission.timesheet_patch_json, {}) || {};
+  const weekly = parseJson(timesheetPatch.additional_units_week ?? hoursSubmission.additional_units_week ?? timesheet?.additional_units_week, {}) || {};
+  const perDay = parseJson(timesheetPatch.additional_units_per_day ?? hoursSubmission.additional_units_per_day ?? timesheet?.additional_units_per_day, {}) || {};
+  const rows = [];
+  const push = (code, value, date = null) => {
+    const object = isObject(value) ? value : {};
+    const quantity = Number(object.unit_count ?? object.quantity ?? object.units ?? value);
+    if (!Number.isFinite(quantity) || quantity === 0) return;
+    rows.push({
+      row_key: `additional:${upper(code)}:${date || 'weekly'}:${rows.length + 1}`,
+      display_order: rows.length + 1,
+      code: upper(code), rate_type: text(object.bucket_name || object.rate_type || code),
+      date, quantity, unit: text(object.unit_name || object.unit || 'unit'),
+      frequency: date ? 'PER_DAY' : 'WEEKLY'
+    });
+  };
+  for (const [code, value] of Object.entries(weekly)) push(code, value, null);
+  for (const [date, values] of Object.entries(perDay)) {
+    if (!isObject(values)) continue;
+    for (const [code, value] of Object.entries(values)) push(code, value, date);
+  }
+  return rows;
+}
+
+function candidateNameParts(candidate) {
+  const first = text(candidate?.first_name);
+  const last = text(candidate?.last_name || candidate?.surname);
+  if (first || last) return { first_name: first || 'Candidate', surname: last || '-' };
+  const pieces = text(candidate?.display_name || candidate?.name).split(/\s+/).filter(Boolean);
+  return { first_name: pieces.shift() || 'Candidate', surname: pieces.join(' ') || '-' };
+}
+
+function officialPresentationFromRows({ timesheet, contractRow, candidate, client, branding, renderer_contract_version } = {}) {
+  const worker = candidateNameParts(candidate);
+  const dailyHospital = upper(timesheet?.sheet_scope) === 'DAILY' ? text(timesheet?.hospital_norm) : '';
+  const clientName = text(client?.name) || dailyHospital || 'CloudTMS Client';
+  return {
+    schema_version: 'OFFICIAL_CANDIDATE_PRESENTATION_V1',
+    worker: {
+      ...worker,
+      job_profile_title: text(contractRow?.role || timesheet?.job_title_norm) || null
+    },
+    client: {
+      name: clientName,
+      hospital: dailyHospital || text(contractRow?.display_site) || clientName,
+      site_ward: text(contractRow?.ward_hint || timesheet?.ward_norm) || '-'
+    },
+    band: text(contractRow?.band || timesheet?.band) || null,
+    renderer_contract_version: text(renderer_contract_version) || RENDERER_CONTRACT_VERSION,
+    branding: branding || { agency_name: 'Arthur Rai Medical Services' },
+    wording: {
+      header: { lines: ['Please review the recorded work and all attached evidence before approving.'] },
+      footer: { lines: ['CloudTMS official timesheet'] },
+      temporary_worker_declaration: {
+        title: 'Temporary Worker Declaration',
+        lines: ['I declare that the hours and units recorded are complete and accurate.']
+      },
+      client_declaration: {
+        title: 'Client Declaration',
+        lines: ['I confirm that the recorded work was completed and is approved.']
+      }
+    }
+  };
+}
+
+async function buildOfficialPresentationSnapshot(env, workflow) {
+  const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+  const [timesheet, contractRow, candidate] = await Promise.all([
+    timesheetId
+      ? restOne(env, 'timesheets', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=timesheet_id,sheet_scope,hospital_norm,ward_norm,job_title_norm,band`)
+      : Promise.resolve(null),
+    workflow.contract_id
+      ? restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=id,client_id,role,display_site,ward_hint,band`)
+      : Promise.resolve(null),
+    restOne(env, 'candidates', `id=eq.${encodeURIComponent(workflow.candidate_id)}&select=id,first_name,last_name,display_name`)
+  ]);
+  const financials = timesheetId
+    ? await restOne(env, 'timesheets_financials', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=client_id`)
+    : null;
+  const clientId = contractRow?.client_id || financials?.client_id;
+  const client = clientId
+    ? await restOne(env, 'clients', `id=eq.${encodeURIComponent(clientId)}&select=id,name`)
+    : null;
+  const branding = await candidateDocumentBranding(env);
+  return officialPresentationFromRows({
+    timesheet, contractRow, candidate, client,
+    branding: {
+      contract_version: branding.contract_version,
+      agency_name: branding.agency_name,
+      logo_key: branding.logo_key,
+      logo_sha256: branding.logo_sha256,
+      logo_media_type: branding.logo_media_type,
+      branding_contract_sha256: branding.branding_contract_sha256
+    },
+    renderer_contract_version: RENDERER_CONTRACT_VERSION
+  });
+}
+
+async function loadRenderState(env, contract) {
+  const workflowId = requireUuid(contract.workflow_id, 'CANDIDATE_RENDER_CONTRACT_INVALID');
+  const generation = requireInteger(contract.workflow_generation, 'CANDIDATE_RENDER_CONTRACT_INVALID', 1);
+  const [workflow, component] = await Promise.all([
+    restOne(env, 'candidate_submission_workflows',
+      `id=eq.${encodeURIComponent(workflowId)}&generation=eq.${generation}&select=*`),
+    restOne(env, 'candidate_submission_components',
+      `id=eq.${encodeURIComponent(contract.component_id)}&workflow_id=eq.${encodeURIComponent(workflowId)}&workflow_generation=eq.${generation}&select=*`)
+  ]);
+  if (!workflow) throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  if (!component) throw new CandidateHttpError(404, 'CANDIDATE_COMPONENT_NOT_FOUND');
+  const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+  const [timesheet, financials, contractRow, candidate] = await Promise.all([
+    timesheetId
+      ? restOne(env, 'timesheets', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&select=*`)
+      : Promise.resolve(null),
+    timesheetId
+      ? restOne(env, 'timesheets_financials',
+        `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=client_id,candidate_id,worked_start_iso,worked_end_iso`)
+      : Promise.resolve(null),
+    workflow.contract_id
+      ? restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=*`)
+      : Promise.resolve(null),
+    restOne(env, 'candidates', `id=eq.${encodeURIComponent(workflow.candidate_id)}&select=*`)
+  ]);
+  const clientId = contractRow?.client_id || financials?.client_id || timesheet?.client_id;
+  const client = clientId ? await restOne(env, 'clients', `id=eq.${encodeURIComponent(clientId)}&select=*`) : null;
+  return { workflow, component, timesheet, financials, contract: contractRow, candidate, client };
+}
+
+async function signatureAsset(env, componentId, fallbackKey = null, fallbackHash = null) {
+  let component = null;
+  if (componentId) component = await restOne(env, 'candidate_submission_components', `id=eq.${encodeURIComponent(componentId)}&select=*`);
+  const key = component?.storage_key || fallbackKey;
+  const expectedHash = component?.source_content_sha256 ? text(component.source_content_sha256).replace(/^\\x/, '') : fallbackHash;
+  if (!key) return { identity: {}, data: null };
+  const source = await r2Bytes(env, key, expectedHash || null);
+  if (!['image/png', 'image/jpeg'].includes(source.media_type)) {
+    throw new CandidateHttpError(415, 'CANDIDATE_SIGNATURE_MEDIA_TYPE_UNSUPPORTED');
+  }
+  return {
+    identity: {
+      r2_key: key,
+      sha256: expectedHash || await sha256Hex(source.bytes),
+      media_type: source.media_type,
+      size_bytes: source.bytes.byteLength
+    },
+    data: { data_url: dataUrl(source.bytes, source.media_type) }
+  };
+}
+
+function officialPeriodWithShiftLines(endDate, lines) {
+  const period = buildOfficialWeekPeriod(endDate);
+  return {
+    ...period,
+    days: period.days.map((day) => ({
+      ...day,
+      shift_lines: lines.filter((line) => line.date === day.date)
+        .map((line, index) => ({ ...line, display_order: index + 1 }))
+    }))
+  };
+}
+
+async function buildOfficialCandidateModel(env, contract, state, phase, options = {}) {
+  const { workflow, timesheet, candidate, client, contract: contractRow } = state;
+  const frozen = parseJson(workflow.immutable_submission_json, {}) || {};
+  const frozenPresentation = parseJson(frozen.official_presentation, {}) || {};
+  const frozenHours = parseJson(frozen.hours_submission, frozen) || frozen;
+  const frozenTimesheetId = frozenHours?.timesheet_create_json?.timesheet_id;
+  const officialTimesheetId = timesheet?.timesheet_id || workflow.target_timesheet_id
+    || workflow.anchor_timesheet_id || frozenTimesheetId;
+  if (!UUID_RE.test(text(officialTimesheetId))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_RENDER_TIMESHEET_ID_INVALID');
+  }
+  const endDate = text(workflow.week_ending_date || timesheet?.week_ending_date || workflow.work_date).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_DATE_INVALID');
+  const rawSchedule = frozenPresentation.correction
+    ? correctionSchedule(frozenPresentation.correction.reviewed_schedule, CORRECTION_CONVERTERS)
+    : scheduleFromImmutable(workflow, timesheet);
+  if (frozenPresentation.correction) {
+    const submitted = correctionSchedule(scheduleFromImmutable(workflow, null), CORRECTION_CONVERTERS);
+    if (canonicalJson(submitted) !== canonicalJson(rawSchedule)) {
+      throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+    }
+  }
+  const lines = rawSchedule.map(scheduleLine).filter((line) => line.date && line.display_start_local && line.display_end_local);
+  lines.sort((a, b) => a.date.localeCompare(b.date) || a.display_start_local.localeCompare(b.display_start_local) || a.segment_id.localeCompare(b.segment_id));
+  const period = officialPeriodWithShiftLines(endDate, lines);
+  const paidMinutes = lines.reduce((sum, line) => sum + Number(line.paid_minutes || 0), 0);
+  const paperReturnQrText = text(options.paper_return_qr_text);
+  if (paperReturnQrText && !paperReturnQrText.startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
+  // A V2 printed-return page is deliberately unsigned when it leaves the
+  // system. Both signatures are added to the physical page and returned as
+  // one verified pack, so an earlier electronic Candidate signature must not
+  // be required or embedded in this rendering.
+  const candidateSignature = paperReturnQrText
+    ? { identity: {}, data: null }
+    : await signatureAsset(env, workflow.candidate_signature_component_id);
+  const workerOnly = contract.worker_only_approval === true
+    && upper(contract.form_variant) === 'ELECTRONIC_WORKER_SIGNED'
+    && workflow.scope === 'WEEKLY' && workflow.workflow_kind === 'CONTRACT_HOURS'
+    && workflow.route === 'ELECTRONIC'
+    && parseJson(workflow.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';
+  const managerSignature = phase === 'FINAL' && !workerOnly
+    ? await signatureAsset(env, workflow.manager_signature_component_id, contract.manager?.signature_storage_key, contract.manager?.signature_sha256)
+    : { identity: {}, data: null };
+  const additionalRows = additionalUnitRows(workflow, timesheet);
+  const worker = isObject(frozenPresentation.worker)
+    ? frozenPresentation.worker
+    : candidateNameParts(candidate);
+  const formVariant = paperReturnQrText
+    ? 'ELECTRONIC_UNSIGNED'
+    : workerOnly ? 'ELECTRONIC_WORKER_SIGNED'
+      : (phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW');
+  const signedDate = londonCalendarDate(workflow.candidate_signed_at_utc);
+  const managerDate = londonCalendarDate(
+    workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
+  );
+  const branding = await candidateDocumentBranding(env, workflow);
+  const model = {
+    schema_version: 'TIMESHEET_RENDER_MODEL_V2',
+    template_version: 'timesheet-professional-v2',
+    layout_contract_version: 'TIMESHEET_ONE_PAGE_LANDSCAPE_V2',
+    timesheet_id: officialTimesheetId,
+    document_revision: Number(timesheet?.version || workflow.generation || 1),
+    timesheet_number: officialTimesheetNumber(officialTimesheetId),
+    sheet_scope: workflow.scope,
+    form_variant: formVariant,
+    submission_mode: 'ELECTRONIC', locale: 'en-GB', time_zone: 'Europe/London',
+    week_period: period,
+    worker: {
+      ...worker,
+      job_profile_title: text(
+        frozenPresentation.worker?.job_profile_title || contractRow?.role || contractRow?.job_title ||
+        contractRow?.job_profile_title || candidate?.job_title
+      ) || null
+    },
+    client: isObject(frozenPresentation.client) ? frozenPresentation.client : {
+      name: text(client?.name || client?.client_name) || 'CloudTMS Client',
+      hospital: text(client?.name || client?.client_name) || 'CloudTMS Client',
+      site_ward: text(contractRow?.ward || contractRow?.site_ward || timesheet?.ward) || '-'
+    },
+    band: text(frozenPresentation.band || contractRow?.band || timesheet?.band) || null,
+    branding: {
+      agency_name: branding.agency_name,
+      logo: branding.logo ? {
+        r2_key: branding.logo_key,
+        sha256: branding.logo_sha256,
+        media_type: branding.logo_media_type
+      } : {}
+    },
+    wording: workerOnly ? {
+      ...(isObject(frozenPresentation.wording) ? frozenPresentation.wording : {}),
+      header: { lines: ['This is the work recorded and signed by the worker.'] },
+      temporary_worker_declaration: frozenPresentation.wording?.temporary_worker_declaration || {
+        title: 'Temporary Worker Declaration',
+        lines: ['I declare that the hours and units recorded are complete and accurate.']
+      },
+      client_declaration: { title: '', lines: [] }
+    } : isObject(frozenPresentation.wording) ? frozenPresentation.wording : {
+      header: { lines: ['Please review the recorded work and all attached evidence before approving.'] },
+      footer: { lines: ['CloudTMS official timesheet'] },
+      temporary_worker_declaration: {
+        title: 'Temporary Worker Declaration',
+        lines: ['I declare that the hours and units recorded are complete and accurate.']
+      },
+      client_declaration: {
+        title: 'Client Declaration',
+        lines: ['I confirm that the recorded work was completed and is approved.']
+      }
+    },
+    additional_units_section: {
+      schema_version: 'TIMESHEET_ADDITIONAL_UNITS_V1', visible: additionalRows.length > 0,
+      title: 'Additional rates / units',
+      column_labels: { rate_type: 'Rate Type', date: 'Date', quantity: 'Quantity', unit: 'Unit' },
+      minimum_blank_space_rows: 1, rows: additionalRows
+    },
+    totals: { paid_minutes: paidMinutes },
+    authorisation: { authorised: phase === 'FINAL' && !workerOnly, authorised_at_utc: phase === 'FINAL' && !workerOnly ? workflow.manager_approved_at_utc : null },
+    signatures: {
+      candidate: { ...candidateSignature.identity, signed_date: signedDate },
+      authoriser: phase === 'FINAL' && !workerOnly
+        ? { ...managerSignature.identity, signed_date: managerDate, name: workflow.manager_name, position: workflow.manager_position }
+        : {}
+    },
+    qr: { required: false, signed: false, status: null, payload: null, token: null },
+    layout: {
+      one_page_required: true, allowed_modes: ['NORMAL', 'COMPACT', 'ULTRA'], second_page_allowed: false,
+      minimum_font_size: 5.5, minimum_row_height_mm: 3.45, minimum_signature_height_mm: 7,
+      minimum_additional_blank_rows: 1,
+      ...(paperReturnQrText ? { paper_return_qr_panel: true } : {})
+    }
+  };
+  validateFrozenTimesheetPresentationModel(model);
+  return { model, assets: {
+    logo: branding.logo ? { data_url: dataUrl(branding.logo.bytes, branding.logo.media_type) } : null,
+    candidate_signature: candidateSignature.data,
+    authoriser_signature: managerSignature.data,
+    qr_text: paperReturnQrText || null
+  } };
+}
+
+function expenseClaim(workflow) {
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const expenseSubmission = parseJson(immutable.expense_submission || immutable.expense_claim || immutable.expenses || immutable, {}) || {};
+  return {
+    expenseSubmission,
+    claim: parseJson(expenseSubmission.canonical_tsfin_snapshot, expenseSubmission) || expenseSubmission
+  };
+}
+
+const SUBMITTED_FACT_DISPLAY_STATES = new Set([
+  'WORKER_SUBMITTED',
+  'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+  'READY_FOR_MANAGER_APPROVAL',
+  'AWAITING_MANAGER_APPROVAL',
+  'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+  'READY_TO_FINALISE'
+]);
+
+function currentSubmittedDisplayWorkflow(detail) {
+  if (!isObject(detail)) return null;
+  const workflows = Array.isArray(detail.workflows) ? detail.workflows.filter(isObject) : [];
+  const eligible = workflows.filter((workflow) => (
+    text(workflow.workflow_id)
+    && SUBMITTED_FACT_DISPLAY_STATES.has(upper(workflow.state))
+  ));
+  if (!eligible.length) return null;
+  const managerWorkflowId = text(detail.manager_review?.workflow_id);
+  return eligible.find((workflow) => text(workflow.workflow_id) === managerWorkflowId)
+    || eligible.find((workflow) => workflow.detail_action_owner === true)
+    || eligible.slice().sort((left, right) => (
+      text(right.updated_at_utc).localeCompare(text(left.updated_at_utc))
+    ))[0]
+    || null;
+}
+
+function candidateSubmittedFactsProjection(detail, workflow) {
+  if (!isObject(detail) || !isObject(workflow)
+      || !SUBMITTED_FACT_DISPLAY_STATES.has(upper(workflow.state))) return detail;
+  const projected = structuredClone(detail);
+  const kind = upper(workflow.workflow_kind);
+  if (['CONTRACT_HOURS', 'CONTRACT_COMBINED', 'DAILY'].includes(kind)) {
+    const schedule = scheduleFromImmutable(workflow, null);
+    if (schedule.length) {
+      const paidMinutes = schedule.reduce((total, segment, index) => (
+        total + scheduleLine(segment, index).paid_minutes
+      ), 0);
+      projected.hours = {
+        ...(isObject(projected.hours) ? projected.hours : {}),
+        total_hours: paidMinutes / 60,
+        actual_schedule_json: schedule
+      };
+    }
+  }
+  if (['CONTRACT_EXPENSE', 'CONTRACT_COMBINED'].includes(kind)) {
+    const { expenseSubmission, claim } = expenseClaim(workflow);
+    const amount = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    };
+    const travel = amount(claim.travel_pay_ex_vat ?? expenseSubmission.travel_amount);
+    const accommodation = amount(claim.accommodation_pay_ex_vat ?? expenseSubmission.accommodation_amount);
+    const other = amount(claim.other_pay_ex_vat ?? expenseSubmission.other_amount);
+    projected.expenses = {
+      ...(isObject(projected.expenses) ? projected.expenses : {}),
+      expenses_pay_ex_vat: travel + accommodation + other,
+      expenses_description: text(claim.expenses_description ?? expenseSubmission.description) || null,
+      mileage_units: amount(claim.mileage_units ?? expenseSubmission.mileage_units),
+      // Mileage pay remains financial authority and is never invented from Candidate input.
+      mileage_pay_ex_vat: amount(projected.expenses?.mileage_pay_ex_vat),
+      travel_pay_ex_vat: travel,
+      accommodation_pay_ex_vat: accommodation,
+      other_pay_ex_vat: other
+    };
+  }
+  return projected;
+}
+
+async function projectCurrentSubmittedFacts(env, access, detail) {
+  const owner = currentSubmittedDisplayWorkflow(detail);
+  if (!owner) return detail;
+  const workflowId = requireUuid(owner.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  const generation = requireInteger(owner.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const expectedState = upper(owner.state);
+  const row = await restOne(env, 'candidate_submission_workflows', [
+    `id=eq.${encodeURIComponent(workflowId)}`,
+    `candidate_id=eq.${encodeURIComponent(requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED'))}`,
+    `environment=eq.${encodeURIComponent(environmentName(env))}`,
+    `generation=eq.${generation}`,
+    `state=eq.${encodeURIComponent(expectedState)}`,
+    'select=id,candidate_id,environment,generation,workflow_kind,scope,work_date,state,immutable_submission_json,immutable_submission_sha256,updated_at_utc'
+  ].join('&'));
+  if (!row || !text(row.immutable_submission_sha256)) return detail;
+  return candidateSubmittedFactsProjection(detail, row);
+}
+
+async function enrichCandidateComponentLineage(env, detail) {
+  if (!isObject(detail) || !Array.isArray(detail.components) || !detail.components.length) return detail;
+  const ids = [...new Set(detail.components.map((component) => text(component?.id))
+    .filter((id) => UUID_RE.test(id)))];
+  if (!ids.length) return detail;
+  const rows = await restRows(env, 'candidate_submission_components', [
+    `id=in.(${ids.join(',')})`,
+    'select=id,source_component_id,paper_return_page_key'
+  ].join('&'));
+  const byId = new Map(rows.map((row) => [text(row?.id), row]));
+  return {
+    ...detail,
+    components: detail.components.map((component) => {
+      const lineage = byId.get(text(component?.id));
+      return lineage ? {
+        ...component,
+        source_component_id: lineage.source_component_id == null ? null : text(lineage.source_component_id),
+        paper_return_page_key: lineage.paper_return_page_key == null ? null : text(lineage.paper_return_page_key)
+      } : component;
+    })
+  };
+}
+
+const SUBMITTED_EXPENSE_CARD_STATES = new Set([
+  'WORKER_SUBMITTED', 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+  'READY_FOR_MANAGER_APPROVAL', 'AWAITING_MANAGER_APPROVAL', 'MANAGER_APPROVED',
+  'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT', 'READY_TO_FINALISE',
+  'AWAITING_PAPER_RETURN', 'RECEIVED', 'FINALISED'
+]);
+
+function nonNegativeCandidateAmount(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return 0;
+}
+
+function submittedExpenseTotals(workflow, financial = null) {
+  const { expenseSubmission, claim } = expenseClaim(workflow);
+  const mileageUnits = nonNegativeCandidateAmount(
+    claim.mileage_units, expenseSubmission.mileage_units,
+    expenseSubmission.total_mileage, financial?.mileage_units
+  );
+  const mileagePay = nonNegativeCandidateAmount(
+    claim.mileage_pay_ex_vat, expenseSubmission.mileage_pay_ex_vat,
+    financial?.mileage_pay_ex_vat
+  );
+  const travel = nonNegativeCandidateAmount(
+    claim.travel_pay_ex_vat, expenseSubmission.travel_amount,
+    financial?.travel_pay_ex_vat
+  );
+  const accommodation = nonNegativeCandidateAmount(
+    claim.accommodation_pay_ex_vat, expenseSubmission.accommodation_amount,
+    financial?.accommodation_pay_ex_vat
+  );
+  const other = nonNegativeCandidateAmount(
+    claim.other_pay_ex_vat, expenseSubmission.other_amount,
+    financial?.other_pay_ex_vat
+  );
+  return {
+    expenses_pay_ex_vat: travel + accommodation + other,
+    expenses_description: text(
+      claim.expenses_description ?? expenseSubmission.description
+        ?? financial?.expenses_description
+    ) || null,
+    mileage_units: mileageUnits,
+    mileage_pay_ex_vat: mileagePay,
+    travel_pay_ex_vat: travel,
+    accommodation_pay_ex_vat: accommodation,
+    other_pay_ex_vat: other
+  };
+}
+
+function addSubmittedExpenseTotals(left, right) {
+  return {
+    expenses_pay_ex_vat: nonNegativeCandidateAmount(left?.expenses_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.expenses_pay_ex_vat),
+    expenses_description: null,
+    mileage_units: nonNegativeCandidateAmount(left?.mileage_units)
+      + nonNegativeCandidateAmount(right?.mileage_units),
+    mileage_pay_ex_vat: nonNegativeCandidateAmount(left?.mileage_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.mileage_pay_ex_vat),
+    travel_pay_ex_vat: nonNegativeCandidateAmount(left?.travel_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.travel_pay_ex_vat),
+    accommodation_pay_ex_vat: nonNegativeCandidateAmount(left?.accommodation_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.accommodation_pay_ex_vat),
+    other_pay_ex_vat: nonNegativeCandidateAmount(left?.other_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.other_pay_ex_vat)
+  };
+}
+
+function emptySubmittedExpenseTotals() {
+  return {
+    expenses_pay_ex_vat: 0,
+    expenses_description: null,
+    mileage_units: 0,
+    mileage_pay_ex_vat: 0,
+    travel_pay_ex_vat: 0,
+    accommodation_pay_ex_vat: 0,
+    other_pay_ex_vat: 0
+  };
+}
+
+function emptyCandidateExpenseProjection() {
+  return {
+    ...emptySubmittedExpenseTotals(),
+    supporting_evidence_count: 0,
+    supporting_evidence_categories: [],
+    category_statuses: [],
+    expense_category_context: { pending_categories: [], accepted_categories: [] }
+  };
+}
+
+function immutableMileageUnits(workflow) {
+  const immutable = parseJson(workflow?.immutable_submission_json, {}) || {};
+  const submission = parseJson(immutable.expense_submission, {}) || {};
+  const snapshot = parseJson(submission.canonical_tsfin_snapshot, {}) || {};
+  const value = Number(snapshot.mileage_units ?? submission.mileage_units ?? 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function cardWithExpenseEvidenceFacts(card, facts = {}) {
+  return {
+    ...card,
+    expenses: {
+      ...(isObject(card?.expenses) ? card.expenses : {}),
+      mileage_units: Number(facts.mileage_units) || 0,
+      supporting_evidence_count: Number(facts.supporting_evidence_count) || 0,
+      supporting_evidence_categories: Array.isArray(facts.supporting_evidence_categories)
+        ? facts.supporting_evidence_categories : []
+    }
+  };
+}
+
+function candidatePaperEmailDeliveryMatches(row, workflow) {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  const manifestHash = text(workflow?.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  return ['QUEUED', 'CLAIMED', 'SENT'].includes(upper(row?.status))
+    && text(row?.reference) === `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`
+    && upper(scope.candidate_mail_authority) === 'CANDIDATE_PAPER_PACK_EMAIL_V1'
+    && scope.candidate_workflow_id === workflow.id
+    && Number(scope.candidate_workflow_generation) === Number(workflow.generation)
+    && text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() === manifestHash;
+}
+
+async function candidatePaperEmailDeliveryByWorkflow(env, workflows) {
+  const eligible = workflows.filter((workflow) => (
+    UUID_RE.test(text(workflow?.id))
+    && UUID_RE.test(text(workflow?.candidate_id))
+    && Number.isSafeInteger(Number(workflow?.generation))
+    && Number(workflow.generation) >= 1
+    && upper(workflow?.route) === 'PAPER'
+    && upper(workflow?.state) === 'AWAITING_PAPER_RETURN'
+    && SHA256_RE.test(text(workflow?.paper_return_manifest_sha256)
+      .replace(/^\\x/i, '').toLowerCase())
+  ));
+  if (!eligible.length) return new Map();
+  const references = eligible.map((workflow) => (
+    `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`
+  ));
+  const candidateIds = [...new Set(eligible.map((workflow) => text(workflow.candidate_id)))];
+  const rows = await restRows(env, 'mail_outbox', [
+    'type=eq.TIMESHEET_QR',
+    'recipient_kind=eq.CANDIDATE',
+    `recipient_id=in.(${candidateIds.map(encodeURIComponent).join(',')})`,
+    `reference=in.(${references.map(encodeURIComponent).join(',')})`,
+    'select=status,reference,payment_scope_json,created_at_utc',
+    'order=created_at_utc.desc',
+    `limit=${Math.min(eligible.length * 10, 500)}`
+  ].join('&'));
+  const deliveryByWorkflow = new Map();
+  for (const workflow of eligible) {
+    const reference = `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`;
+    const exact = rows.filter((row) => text(row?.reference) === reference
+      && candidatePaperEmailDeliveryMatches(row, workflow));
+    if (!exact.length) continue;
+    const obtainedAtUtc = exact.map((row) => text(row?.created_at_utc))
+      .filter((value) => Number.isFinite(Date.parse(value)))
+      .sort((left, right) => right.localeCompare(left))[0] || null;
+    deliveryByWorkflow.set(workflow.id, {
+      paper_pack_obtained: true,
+      paper_pack_delivery_methods: ['EMAIL'],
+      paper_pack_obtained_at_utc: obtainedAtUtc
+    });
+  }
+  return deliveryByWorkflow;
+}
+
+async function enrichCandidatePaperDeliveryState(env, response) {
+  if (!isObject(response)) return response;
+  const projected = Array.isArray(response.items)
+    ? response.items.flatMap((item) => Array.isArray(item?.workflows) ? item.workflows : [])
+    : Array.isArray(response.workflows) ? response.workflows : [];
+  const workflowIds = [...new Set(projected
+    // The lightweight Timesheet-page workflow overlay intentionally omits
+    // route and generation. AWAITING_PAPER_RETURN is already a paper-only
+    // state; the authoritative workflow read below still proves PAPER,
+    // generation, candidate and manifest before any delivery is projected.
+    .filter((workflow) => upper(workflow?.state) === 'AWAITING_PAPER_RETURN')
+    .map((workflow) => text(workflow?.workflow_id))
+    .filter((id) => UUID_RE.test(id)))];
+  if (!workflowIds.length) return response;
+  const workflows = await restRows(env, 'candidate_submission_workflows', [
+    `id=in.(${workflowIds.map(encodeURIComponent).join(',')})`,
+    `environment=eq.${encodeURIComponent(environmentName(env))}`,
+    'select=id,candidate_id,generation,route,state,paper_return_manifest_sha256'
+  ].join('&'));
+  const deliveryByWorkflow = await candidatePaperEmailDeliveryByWorkflow(env, workflows);
+  if (!deliveryByWorkflow.size) return response;
+  const enrichWorkflow = (workflow) => ({
+    ...workflow,
+    ...(deliveryByWorkflow.get(text(workflow?.workflow_id)) || {})
+  });
+  if (Array.isArray(response.items)) {
+    return {
+      ...response,
+      items: response.items.map((item) => ({
+        ...item,
+        workflows: Array.isArray(item?.workflows) ? item.workflows.map(enrichWorkflow) : []
+      }))
+    };
+  }
+  return {
+    ...response,
+    workflows: Array.isArray(response.workflows) ? response.workflows.map(enrichWorkflow) : []
+  };
+}
+
+async function enrichCandidatePageExpenseSummaries(env, access, page) {
+  if (!isObject(page) || !Array.isArray(page.items) || !page.items.length) return page;
+  const cards = page.items;
+  const workflowIds = [...new Set(cards.flatMap((card) => Array.isArray(card?.workflows)
+    ? card.workflows.map((workflow) => text(workflow?.workflow_id)) : [])
+    .filter((id) => UUID_RE.test(id)))];
+  if (!workflowIds.length) return { ...page, items: cards.map((card) => cardWithExpenseEvidenceFacts(card)) };
+  const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const workflows = await restRows(env, 'candidate_submission_workflows', [
+    `id=in.(${workflowIds.join(',')})`,
+    `candidate_id=eq.${encodeURIComponent(candidateId)}`,
+    `environment=eq.${encodeURIComponent(environmentName(env))}`,
+    'select=id,generation,workflow_kind,state,immutable_submission_json,updated_at_utc'
+  ].join('&'));
+  const submittedById = new Map(workflows.filter((workflow) => (
+    ['CONTRACT_EXPENSE', 'CONTRACT_COMBINED'].includes(upper(workflow?.workflow_kind))
+    && SUBMITTED_EXPENSE_CARD_STATES.has(upper(workflow?.state))
+  )).map((workflow) => [text(workflow.id), workflow]));
+  if (!submittedById.size) return { ...page, items: cards.map((card) => cardWithExpenseEvidenceFacts(card)) };
+  const selectedByCard = new Map();
+  const selectedIds = new Set();
+  for (const card of cards) {
+    const selected = (Array.isArray(card?.workflows) ? card.workflows : [])
+      .map((workflow) => submittedById.get(text(workflow?.workflow_id)))
+      .filter(Boolean);
+    if (!selected.length) continue;
+    selectedByCard.set(card, selected);
+    for (const workflow of selected) selectedIds.add(text(workflow.id));
+  }
+  const components = selectedIds.size ? await restRows(env, 'candidate_submission_components', [
+    `workflow_id=in.(${[...selectedIds].join(',')})`,
+    'superseded_at_utc=is.null',
+    'component_kind=in.(MILEAGE_FORM,EXPENSE_EVIDENCE)',
+    'select=id,workflow_id,workflow_generation,component_kind,expense_category'
+  ].join('&')) : [];
+  const componentsByWorkflowGeneration = new Map();
+  for (const component of components) {
+    const workflowId = text(component?.workflow_id);
+    const workflowGeneration = Number(component?.workflow_generation);
+    const componentKind = upper(component?.component_kind);
+    if (!workflowId || !Number.isSafeInteger(workflowGeneration) || workflowGeneration < 1
+        || !['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)) continue;
+    const workflowGenerationKey = `${workflowId}:${workflowGeneration}`;
+    const list = componentsByWorkflowGeneration.get(workflowGenerationKey) || [];
+    list.push(component);
+    componentsByWorkflowGeneration.set(workflowGenerationKey, list);
+  }
+  return {
+    ...page,
+    items: cards.map((card) => {
+      const workflowsForCard = selectedByCard.get(card);
+      if (!workflowsForCard?.length) return cardWithExpenseEvidenceFacts(card);
+      let totals = emptySubmittedExpenseTotals();
+      const evidence = [];
+      for (const workflow of workflowsForCard) {
+        totals = addSubmittedExpenseTotals(totals, submittedExpenseTotals(workflow));
+        const displayGeneration = upper(workflow.state) === 'FINALISED'
+          ? Math.max(Number(workflow.generation) - 1, 1) : Number(workflow.generation);
+        evidence.push(...(componentsByWorkflowGeneration.get(
+          `${text(workflow.id)}:${displayGeneration}`
+        ) || []));
+      }
+      const categories = [...new Set(evidence.map((component) => (
+        upper(component?.component_kind) === 'MILEAGE_FORM'
+          ? 'MILEAGE' : upper(component?.expense_category) || 'OTHER'
+      )).filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))];
+      return {
+        ...cardWithExpenseEvidenceFacts(card, {
+        ...totals,
+        supporting_evidence_count: evidence.length,
+        supporting_evidence_categories: categories
+        }),
+        expenses: {
+          ...totals,
+          supporting_evidence_count: evidence.length,
+          supporting_evidence_categories: categories
+        }
+      };
+    })
+  };
+}
+
+async function enrichCandidateSubmittedExpenseClaims(env, access, detail) {
+  if (!isObject(detail)) return detail;
+  const projected = (Array.isArray(detail.workflows) ? detail.workflows : []).filter((workflow) => (
+    UUID_RE.test(text(workflow?.workflow_id))
+    && ['CONTRACT_EXPENSE', 'CONTRACT_COMBINED'].includes(upper(workflow?.workflow_kind))
+    && SUBMITTED_EXPENSE_CARD_STATES.has(upper(workflow?.state))
+  ));
+  if (!projected.length) {
+    return {
+      ...detail,
+      submitted_expense_totals: emptySubmittedExpenseTotals(),
+      expense_claims: []
+    };
+  }
+  const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const workflowIds = [...new Set(projected.map((workflow) => text(workflow.workflow_id)))];
+  const targetIds = [...new Set(projected.map((workflow) => text(workflow.target_timesheet_id))
+    .filter((id) => UUID_RE.test(id)))];
+  const [workflowRows, financialRows, timesheetRows] = await Promise.all([
+    restRows(env, 'candidate_submission_workflows', [
+      `id=in.(${workflowIds.join(',')})`,
+      `candidate_id=eq.${encodeURIComponent(candidateId)}`,
+      `environment=eq.${encodeURIComponent(environmentName(env))}`,
+      'select=id,generation,workflow_kind,state,target_timesheet_id,immutable_submission_json,worker_submitted_at_utc,updated_at_utc'
+    ].join('&')),
+    targetIds.length ? restRows(env, 'timesheets_financials', [
+      `timesheet_id=in.(${targetIds.join(',')})`, 'is_current=eq.true',
+      'select=timesheet_id,expenses_description,mileage_units,mileage_pay_ex_vat,travel_pay_ex_vat,accommodation_pay_ex_vat,other_pay_ex_vat,authorised_at_utc,paid_at_utc,locked_by_invoice_id,processing_status'
+    ].join('&')) : Promise.resolve([]),
+    targetIds.length ? restRows(env, 'timesheets', [
+      `timesheet_id=in.(${targetIds.join(',')})`, 'is_current=eq.true',
+      'select=timesheet_id,status'
+    ].join('&')) : Promise.resolve([])
+  ]);
+  const projectedById = new Map(projected.map((workflow) => [text(workflow.workflow_id), workflow]));
+  const financialByTimesheet = new Map(financialRows.map((row) => [text(row.timesheet_id), row]));
+  const statusByTimesheet = new Map(timesheetRows.map((row) => [text(row.timesheet_id), upper(row.status)]));
+  const cancelActions = new Set((Array.isArray(detail.available_actions) ? detail.available_actions : [])
+    .filter((action) => ['CANCEL_ENTIRE_CLAIM_AND_START_AGAIN', 'DISCARD_EXPENSE_CLAIM'].includes(upper(action?.code)))
+    .map((action) => text(action?.workflow_id))
+    .filter(Boolean));
+  const claims = workflowRows.flatMap((workflow) => {
+    const projection = projectedById.get(text(workflow.id));
+    if (!projection || Number(workflow.generation) !== Number(projection.generation)
+        || upper(workflow.state) !== upper(projection.state)) return [];
+    const targetTimesheetId = text(projection.target_timesheet_id || workflow.target_timesheet_id) || null;
+    const financial = targetTimesheetId ? financialByTimesheet.get(targetTimesheetId) : null;
+    const timesheetStatus = targetTimesheetId ? statusByTimesheet.get(targetTimesheetId) : '';
+    const protectedClaim = Boolean(
+      financial?.authorised_at_utc || financial?.paid_at_utc || financial?.locked_by_invoice_id
+      || ['AUTHORISED', 'AUTHORIZED', 'INVOICED', 'PAID'].includes(timesheetStatus)
+    );
+    const statusCode = financial?.paid_at_utc || timesheetStatus === 'PAID' ? 'PAID'
+      : financial?.locked_by_invoice_id || timesheetStatus === 'INVOICED' ? 'INVOICED'
+        : financial?.authorised_at_utc || ['AUTHORISED', 'AUTHORIZED'].includes(timesheetStatus)
+          ? 'OFFICE_AUTHORISED'
+          : ['MANAGER_APPROVED', 'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT', 'READY_TO_FINALISE', 'FINALISED', 'RECEIVED'].includes(upper(workflow.state))
+            ? 'MANAGER_APPROVED'
+            : upper(workflow.state) === 'AWAITING_PAPER_RETURN' ? 'AWAITING_SIGNED_DOCUMENTS'
+              : ['READY_FOR_MANAGER_APPROVAL', 'AWAITING_MANAGER_APPROVAL'].includes(upper(workflow.state))
+                ? 'MANAGER_APPROVAL_REQUIRED' : 'SUBMITTED';
+    const displayGeneration = upper(workflow.state) === 'FINALISED'
+      ? Math.max(Number(workflow.generation) - 1, 1) : Number(workflow.generation);
+    const supporting = (Array.isArray(detail.components) ? detail.components : []).filter((component) => (
+      text(component?.workflow_id) === text(workflow.id)
+      && Number(component?.workflow_generation) === displayGeneration
+      && upper(component?.state) !== 'SUPERSEDED'
+      && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(upper(component?.component_kind))
+    ));
+    const categories = [...new Set(supporting.map((component) => (
+      upper(component?.component_kind) === 'MILEAGE_FORM'
+        ? 'MILEAGE' : upper(component?.expense_category) || 'OTHER'
+    )).filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))];
+    return [{
+      workflow_id: text(workflow.id),
+      generation: Number(workflow.generation),
+      document_generation: displayGeneration,
+      state: upper(workflow.state),
+      status_code: statusCode,
+      manager_approval_state: upper(projection.manager_approval_state || workflow.state),
+      target_timesheet_id: targetTimesheetId,
+      submitted_at_utc: workflow.worker_submitted_at_utc || null,
+      updated_at_utc: workflow.updated_at_utc,
+      protected: protectedClaim,
+      can_withdraw: !protectedClaim && cancelActions.has(text(workflow.id)),
+      totals: submittedExpenseTotals(workflow, financial),
+      supporting_evidence_count: supporting.length,
+      supporting_evidence_categories: categories
+    }];
+  }).sort((left, right) => (
+    text(left.submitted_at_utc || left.updated_at_utc)
+      .localeCompare(text(right.submitted_at_utc || right.updated_at_utc))
+      || left.workflow_id.localeCompare(right.workflow_id)
+  ));
+  const aggregate = claims.reduce(
+    (totals, claim) => addSubmittedExpenseTotals(totals, claim.totals),
+    emptySubmittedExpenseTotals()
+  );
+  return {
+    ...detail,
+    expenses: claims.length ? aggregate : detail.expenses,
+    submitted_expense_totals: aggregate,
+    expense_claims: claims
+  };
+}
+
+function candidateCategoryTotals(categories) {
+  const totals = emptySubmittedExpenseTotals();
+  for (const category of Array.isArray(categories) ? categories : []) {
+    if (category?.included_in_total !== true) continue;
+    const amount = Number(category?.amount) || 0;
+    const kind = upper(category?.expense_category);
+    if (kind === 'MILEAGE') {
+      totals.mileage_units += Number(category?.mileage_units) || 0;
+      totals.mileage_pay_ex_vat += amount;
+    } else if (kind === 'TRAVEL') {
+      totals.travel_pay_ex_vat += amount;
+      totals.expenses_pay_ex_vat += amount;
+    } else if (kind === 'ACCOMMODATION') {
+      totals.accommodation_pay_ex_vat += amount;
+      totals.expenses_pay_ex_vat += amount;
+    } else if (kind === 'OTHER') {
+      totals.other_pay_ex_vat += amount;
+      totals.expenses_pay_ex_vat += amount;
+    }
+  }
+  return totals;
+}
+
+function candidateExpenseCategoryIdentity(category) {
+  const componentId = text(category?.expense_component_id);
+  if (UUID_RE.test(componentId)) {
+    return [
+      text(category?.workflow_id),
+      componentId,
+      Number(category?.component_generation) || 0
+    ].join(':');
+  }
+  return [
+    text(category?.workflow_id),
+    upper(category?.expense_category),
+    Number(category?.component_generation) || 0,
+    Number(category?.amount) || 0,
+    Number(category?.mileage_units) || 0
+  ].join(':');
+}
+
+function mergeCandidateExpenseCategories(...groups) {
+  const merged = new Map();
+  for (const group of groups) {
+    for (const category of Array.isArray(group) ? group : []) {
+      const identity = candidateExpenseCategoryIdentity(category);
+      if (!merged.has(identity)) merged.set(identity, category);
+    }
+  }
+  return [...merged.values()];
+}
+
+async function candidateAdvancedExpenseProjection(env, deps, workflowIds, timesheetIds) {
+  const workflows = [...new Set((workflowIds || []).filter((id) => UUID_RE.test(text(id))))];
+  const timesheets = [...new Set((timesheetIds || []).filter((id) => UUID_RE.test(text(id))))];
+  const result = await rpcCall(deps, 'candidate_expense_component_projection_v1', {
+    p_environment: environmentName(env),
+    p_workflow_ids: workflows.length ? workflows : [],
+    p_timesheet_ids: timesheets.length ? timesheets : []
+  });
+  return {
+    claims: Array.isArray(result?.claims) ? result.claims : [],
+    timesheets: Array.isArray(result?.timesheets) ? result.timesheets : []
+  };
+}
+
+async function enrichCandidatePageAdvancedExpenses(env, deps, page) {
+  if (!isObject(page) || !Array.isArray(page.items) || !page.items.length) return page;
+  const workflowIds = page.items.flatMap((card) => Array.isArray(card?.workflows)
+    ? card.workflows.map((workflow) => workflow?.workflow_id) : []);
+  const timesheetIds = page.items.flatMap((card) => [
+    card?.timesheet_id,
+    ...(Array.isArray(card?.workflows) ? card.workflows.flatMap((workflow) => [
+      workflow?.target_timesheet_id,
+      workflow?.anchor_timesheet_id
+    ]) : [])
+  ]);
+  const projection = await candidateAdvancedExpenseProjection(env, deps, workflowIds, timesheetIds);
+  const timesheetById = new Map(projection.timesheets.map((row) => [text(row?.timesheet_id), row]));
+  return {
+    ...page,
+    items: page.items.map((card) => {
+      const linkedTimesheetIds = new Set([
+        card?.timesheet_id,
+        ...(Array.isArray(card?.workflows) ? card.workflows.flatMap((workflow) => [
+          workflow?.target_timesheet_id,
+          workflow?.anchor_timesheet_id
+        ]) : [])
+      ].map(text).filter((id) => UUID_RE.test(id)));
+      const linkedTimesheets = [...linkedTimesheetIds]
+        .map((id) => timesheetById.get(id)).filter(Boolean);
+      const projected = timesheetById.get(text(card?.timesheet_id)) || {
+        category_statuses: [],
+        expense_category_context: { pending_categories: [], accepted_categories: [] },
+        hours_component_status: null,
+        whole_claim_action: null
+      };
+      if (upper(card?.sheet_scope) === 'DAILY') {
+        return {
+          ...card,
+          hours_component_status: projected.hours_component_status || null,
+          whole_claim_action: null,
+          expenses: emptyCandidateExpenseProjection()
+        };
+      }
+      const cardWorkflowIds = new Set((Array.isArray(card?.workflows) ? card.workflows : [])
+        .map((workflow) => text(workflow?.workflow_id)).filter((id) => UUID_RE.test(id)));
+      const categories = mergeCandidateExpenseCategories(
+        linkedTimesheets.flatMap((row) => (
+          Array.isArray(row?.category_statuses) ? row.category_statuses : []
+        )),
+        projection.claims.filter((claim) => cardWorkflowIds.has(text(claim?.workflow_id)))
+          .flatMap((claim) => Array.isArray(claim?.categories) ? claim.categories : [])
+      );
+      const totals = candidateCategoryTotals(categories);
+      const hasAuthoritativeCategories = categories.length > 0;
+      const existingExpenses = isObject(card.expenses) ? card.expenses : {};
+      return {
+        ...card,
+        hours_component_status: projected.hours_component_status || null,
+        whole_claim_action: projected.whole_claim_action || null,
+        expenses: {
+          ...existingExpenses,
+          ...(hasAuthoritativeCategories ? totals : {}),
+          supporting_evidence_count: hasAuthoritativeCategories
+            ? categories.filter((category) => category?.included_in_total === true)
+              .reduce((sum, category) => (
+                sum + Math.max(0, Number(category?.supporting_evidence_count) || 0)
+              ), 0)
+            : Math.max(0, Number(existingExpenses.supporting_evidence_count) || 0),
+          supporting_evidence_categories: hasAuthoritativeCategories
+            ? [...new Set(categories
+              .filter((category) => category?.included_in_total === true)
+              .map((category) => upper(category?.expense_category))
+              .filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))]
+            : (Array.isArray(existingExpenses.supporting_evidence_categories)
+              ? existingExpenses.supporting_evidence_categories : []),
+          category_statuses: categories,
+          expense_category_context: isObject(projected.expense_category_context)
+            ? projected.expense_category_context
+            : { pending_categories: [], accepted_categories: [] }
+        }
+      };
+    })
+  };
+}
+
+async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
+  if (!isObject(detail)) return detail;
+  const workflows = Array.isArray(detail.workflows) ? detail.workflows : [];
+  const workflowIds = workflows.map((workflow) => workflow?.workflow_id);
+  const detailTimesheetId = detail.timesheet_id || detail.timesheet?.id;
+  const timesheetIds = [detailTimesheetId,
+    ...workflows.map((workflow) => workflow?.target_timesheet_id)].filter(Boolean);
+  const projection = await candidateAdvancedExpenseProjection(env, deps, workflowIds, timesheetIds);
+  const timesheetById = new Map(projection.timesheets.map((row) => [text(row?.timesheet_id), row]));
+  const base = timesheetById.get(text(detailTimesheetId))
+    || { category_statuses: [], expense_category_context: {
+      pending_categories: [], accepted_categories: []
+    }, hours_component_status: null, whole_claim_action: null };
+  if (upper(detail?.timesheet?.sheet_scope || detail?.sheet_scope) === 'DAILY') {
+    return {
+      ...detail,
+      hours_component_status: base.hours_component_status || null,
+      whole_claim_action: null,
+      expense_category_context: { pending_categories: [], accepted_categories: [] },
+      expenses: emptyCandidateExpenseProjection(),
+      submitted_expense_totals: emptySubmittedExpenseTotals(),
+      expense_claims: []
+    };
+  }
+  const categories = mergeCandidateExpenseCategories(
+    projection.timesheets.flatMap((row) => (
+      Array.isArray(row?.category_statuses) ? row.category_statuses : []
+    )),
+    projection.claims.flatMap((claim) => (
+      Array.isArray(claim?.categories) ? claim.categories : []
+    ))
+  );
+  const totals = candidateCategoryTotals(categories);
+  const hasAuthoritativeCategories = categories.length > 0;
+  const existingExpenses = isObject(detail.expenses) ? detail.expenses : {};
+  const expenseCategoryContext = {
+    pending_categories: [...new Set(projection.timesheets.flatMap((row) => (
+      Array.isArray(row?.expense_category_context?.pending_categories)
+        ? row.expense_category_context.pending_categories : []
+    )))],
+    accepted_categories: [...new Set(projection.timesheets.flatMap((row) => (
+      Array.isArray(row?.expense_category_context?.accepted_categories)
+        ? row.expense_category_context.accepted_categories : []
+    )))]
+  };
+  return {
+    ...detail,
+    hours_component_status: base.hours_component_status || null,
+    whole_claim_action: base.whole_claim_action || null,
+    expense_category_context: expenseCategoryContext,
+    expenses: {
+      ...existingExpenses,
+      ...(hasAuthoritativeCategories ? totals : {}),
+      supporting_evidence_count: hasAuthoritativeCategories
+        ? categories.filter((category) => category?.included_in_total === true)
+          .reduce((sum, category) => (
+            sum + Math.max(0, Number(category?.supporting_evidence_count) || 0)
+          ), 0)
+        : Math.max(0, Number(existingExpenses.supporting_evidence_count) || 0),
+      supporting_evidence_categories: hasAuthoritativeCategories
+        ? [...new Set(categories
+          .filter((category) => category?.included_in_total === true)
+          .map((category) => upper(category?.expense_category))
+          .filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))]
+        : (Array.isArray(existingExpenses.supporting_evidence_categories)
+          ? existingExpenses.supporting_evidence_categories : []),
+      category_statuses: categories,
+      expense_category_context: expenseCategoryContext
+    },
+    submitted_expense_totals: hasAuthoritativeCategories
+      ? totals
+      : (isObject(detail.submitted_expense_totals)
+        ? detail.submitted_expense_totals : emptySubmittedExpenseTotals()),
+    expense_claims: projection.claims.length ? projection.claims
+      : (Array.isArray(detail.expense_claims) ? detail.expense_claims : [])
+  };
+}
+
+function pounds(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `£${amount.toFixed(2)}` : null;
+}
+
+function mileageUnitLabel(value) {
+  return Number(value) === 1 ? 'mile' : 'miles';
+}
+
+function expenseSummaryDisplayLines(workflow) {
+  const { expenseSubmission, claim } = expenseClaim(workflow);
+  const mileage = Number(claim.mileage_units ?? expenseSubmission.mileage_units ?? expenseSubmission.total_mileage);
+  const values = [
+    ['Accommodation', claim.accommodation_pay_ex_vat ?? expenseSubmission.accommodation_amount],
+    ['Travel', claim.travel_pay_ex_vat ?? expenseSubmission.travel_amount],
+    ['Other', claim.other_pay_ex_vat ?? expenseSubmission.other_amount]
+  ];
+  const lines = [];
+  if (Number.isFinite(mileage) && mileage !== 0) lines.push(`Mileage: ${mileage} ${mileageUnitLabel(mileage)}`);
+  for (const [label, value] of values) {
+    const formatted = pounds(value);
+    if (formatted && Number(value) !== 0) lines.push(`${label}: ${formatted}`);
+  }
+  const totalSource = claim.expenses_pay_ex_vat;
+  const explicitTotal = totalSource === null || totalSource === undefined || totalSource === ''
+    ? Number.NaN : Number(totalSource);
+  if (!Number.isFinite(explicitTotal)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_DISPLAY_TOTAL_REQUIRED');
+  }
+  if (!lines.length && explicitTotal !== 0) lines.push(`Expenses: ${pounds(explicitTotal)}`);
+  return {
+    lines,
+    total: pounds(explicitTotal)
+  };
+}
+
+function expenseLines(workflow, component) {
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const presentation = parseJson(immutable.official_presentation, {}) || {};
+  const summary = expenseSummaryDisplayLines(workflow);
+  return [
+    `Candidate: ${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(),
+    `Client: ${text(presentation.client?.name) || '-'}`,
+    `Week ending: ${ukDate(workflow.week_ending_date)}`,
+    ...summary.lines,
+    `Total claim: ${summary.total}`
+  ];
+}
+
+function frozenBrandingContract(value) {
+  if (!value) return null;
+  if (value.contract_version || value.branding_contract_sha256) return value;
+  const immutable = parseJson(value.immutable_submission_json, {}) || {};
+  const presentation = parseJson(immutable.official_presentation, {}) || {};
+  return isObject(presentation.branding) ? presentation.branding : null;
+}
+
+async function brandingContractSha256(contract) {
+  return sha256Hex(JSON.stringify({
+    contract_version: contract.contract_version,
+    agency_name: contract.agency_name,
+    logo_key: contract.logo_key,
+    logo_sha256: contract.logo_sha256,
+    logo_media_type: contract.logo_media_type
+  }));
+}
+
+function contentAddressedBrandingLogoKey(digest, mediaType) {
+  if (!SHA256_RE.test(text(digest))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+  }
+  const extension = mediaType === 'image/png' ? 'png'
+    : mediaType === 'image/jpeg' ? 'jpg' : null;
+  if (!extension) throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+  return `candidate-app/branding/${text(digest).toLowerCase()}.${extension}`;
+}
+
+async function candidateDocumentBranding(env, frozenSource = null) {
+  const frozen = frozenBrandingContract(frozenSource);
+  if (frozen) {
+    const contract = {
+      contract_version: text(frozen.contract_version),
+      agency_name: text(frozen.agency_name),
+      logo_key: text(frozen.logo_key) || null,
+      logo_sha256: text(frozen.logo_sha256).toLowerCase() || null,
+      logo_media_type: normaliseMediaType(frozen.logo_media_type || '') || null,
+      branding_contract_sha256: text(frozen.branding_contract_sha256).toLowerCase()
+    };
+    if (contract.contract_version !== DOCUMENT_BRANDING_CONTRACT_VERSION || !contract.agency_name
+        || !SHA256_RE.test(contract.branding_contract_sha256)
+        || contract.branding_contract_sha256 !== await brandingContractSha256(contract)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    if (!contract.logo_key) {
+      if (contract.logo_sha256 || contract.logo_media_type) {
+        throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+      }
+      return { ...contract, logo: null };
+    }
+    if (!SHA256_RE.test(contract.logo_sha256)
+        || !['image/png', 'image/jpeg'].includes(contract.logo_media_type)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+    }
+    if (contract.logo_key !== contentAddressedBrandingLogoKey(contract.logo_sha256, contract.logo_media_type)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    const logo = await r2Bytes(env, contract.logo_key, contract.logo_sha256);
+    if (logo.media_type !== contract.logo_media_type) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+    }
+    return { ...contract, logo };
+  }
+  const settings = await restOne(env, 'settings_defaults', 'id=eq.1&select=agency_name,agency_logo');
+  const contract = {
+    contract_version: DOCUMENT_BRANDING_CONTRACT_VERSION,
+    agency_name: text(settings?.agency_name) || 'Arthur Rai Medical Services',
+    logo_key: text(settings?.agency_logo) || null,
+    logo_sha256: null,
+    logo_media_type: null
+  };
+  let logo = null;
+  if (contract.logo_key) {
+    logo = await r2Bytes(env, contract.logo_key);
+    if (!['image/png', 'image/jpeg'].includes(logo.media_type)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+    }
+    contract.logo_sha256 = await sha256Hex(logo.bytes);
+    contract.logo_media_type = logo.media_type;
+    contract.logo_key = contentAddressedBrandingLogoKey(contract.logo_sha256, contract.logo_media_type);
+    await immutablePut(env, contract.logo_key, logo.bytes, contract.logo_media_type, {
+      purpose: 'candidate-branding-logo',
+      logo_sha256: contract.logo_sha256
+    });
+  }
+  contract.branding_contract_sha256 = await brandingContractSha256(contract);
+  return { ...contract, logo };
+}
+
+async function candidateAppAgencyBranding(env) {
+  try {
+    const settings = await restOne(
+      env,
+      'settings_defaults',
+      'id=eq.1&select=agency_name,candidate_app_logo_asset_key'
+    );
+    const agencyName = text(settings?.agency_name) || null;
+    const logoKey = text(settings?.candidate_app_logo_asset_key) || null;
+    if (!logoKey) {
+      return {
+        agency_name: agencyName,
+        logo_data_url: null,
+        logo_media_type: null,
+        logo_sha256: null
+      };
+    }
+    const keyMatch = /^candidate-app\/branding\/([0-9a-f]{64})\.png$/.exec(logoKey);
+    if (!keyMatch) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    const logo = await r2Bytes(env, logoKey, keyMatch[1]);
+    if (logo.media_type !== 'image/png' || logo.bytes.byteLength > 512 * 1024) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    return {
+      agency_name: agencyName,
+      logo_data_url: dataUrl(logo.bytes, logo.media_type),
+      logo_media_type: logo.media_type,
+      logo_sha256: keyMatch[1]
+    };
+  } catch (error) {
+    console.error('[candidate-app] agency branding unavailable',
+      safeCandidateTransportDiagnostic(error));
+    return {
+      agency_name: null,
+      logo_data_url: null,
+      logo_media_type: null,
+      logo_sha256: null
+    };
+  }
+}
+
+async function candidateAppAgencyDocumentBranding(env) {
+  const settings = await restOne(
+    env,
+    'settings_defaults',
+    'id=eq.1&select=agency_name,candidate_app_logo_asset_key'
+  );
+  const contract = {
+    contract_version: CANDIDATE_APP_AGENCY_BRANDING_CONTRACT_VERSION,
+    agency_name: text(settings?.agency_name) || 'CloudTMS agency',
+    logo_key: text(settings?.candidate_app_logo_asset_key) || null,
+    logo_sha256: null,
+    logo_media_type: null
+  };
+  let logo = null;
+  if (contract.logo_key) {
+    const keyMatch = /^candidate-app\/branding\/([0-9a-f]{64})\.png$/.exec(contract.logo_key);
+    if (!keyMatch) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    logo = await r2Bytes(env, contract.logo_key, keyMatch[1]);
+    if (logo.media_type !== 'image/png' || logo.bytes.byteLength > 512 * 1024) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    contract.logo_sha256 = keyMatch[1];
+    contract.logo_media_type = logo.media_type;
+  }
+  contract.branding_contract_sha256 = await brandingContractSha256(contract);
+  return { ...contract, logo };
+}
+
+async function drawCandidateBranding(pdf, page, branding, {
+  x = 34, y = 800, maxWidth = 140, maxHeight = 32, align = 'left'
+} = {}) {
+  if (branding.logo) {
+    const image = branding.logo.media_type === 'image/png'
+      ? await pdf.embedPng(branding.logo.bytes) : await pdf.embedJpg(branding.logo.bytes);
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
+    const width = image.width * scale;
+    page.drawImage(image, {
+      x: align === 'right' ? x - width : x,
+      y,
+      width,
+      height: image.height * scale
+    });
+  }
+}
+
+async function embedExpenseSource(pdf, page, env, component, renderInput, contentTop, contentHeight) {
+  const renderSourceId = renderInput?.source_component_id || null;
+  const permittedSourceId = component.source_component_id || component.id;
+  const expected = candidateComponentDigest(component.source_content_sha256) || null;
+  const renderDigest = candidateComponentDigest(renderInput?.source_content_sha256) || null;
+  if (!renderSourceId && !expected) return false;
+  if (!component.storage_key
+      || !expected
+      || renderSourceId !== permittedSourceId
+      || renderDigest !== expected) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  // Render only the current component-owned copy.  The historical lineage
+  // root may already have been cleaned up after its claim ended, and must not
+  // remain a storage dependency for the new live claim.
+  const source = await r2Bytes(env, component.storage_key, expected);
+  const width = page.getWidth() - 72;
+  if (source.media_type === 'application/pdf') {
+    const input = await PDFDocument.load(source.bytes);
+    if (input.getPageCount() !== 1) throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_PDF_ONE_PAGE_REQUIRED');
+    const [embedded] = await pdf.embedPdf(source.bytes, [0]);
+    const scale = Math.min(width / embedded.width, contentHeight / embedded.height);
+    page.drawPage(embedded, {
+      x: (page.getWidth() - embedded.width * scale) / 2,
+      y: contentTop - embedded.height * scale,
+      width: embedded.width * scale, height: embedded.height * scale
+    });
+    return true;
+  }
+  const image = source.media_type === 'image/png' ? await pdf.embedPng(source.bytes) : await pdf.embedJpg(source.bytes);
+  const scale = Math.min(width / image.width, contentHeight / image.height);
+  page.drawImage(image, {
+    x: (page.getWidth() - image.width * scale) / 2,
+    y: contentTop - image.height * scale,
+    width: image.width * scale, height: image.height * scale
+  });
+  return true;
+}
+
+function expenseTextLines(font, value, size, width) {
+  const lines = [];
+  let line = '';
+  // Character-level fallback also preserves long, unbroken names/references.
+  for (const character of String(value ?? '')) {
+    if (line && font.widthOfTextAtSize(line + character, size) > width) {
+      const space = line.lastIndexOf(' ');
+      if (space > 0) {
+        lines.push(line.slice(0, space));
+        line = line.slice(space + 1) + character;
+      } else {
+        lines.push(line);
+        line = character;
+      }
+    } else line += character;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawExpenseValue(page, font, value, x, y, width, preferredSize, options = {}) {
+  const string = String(value ?? '');
+  const measured = font.widthOfTextAtSize(string, preferredSize);
+  const size = measured > width ? preferredSize * width / measured : preferredSize;
+  const textWidth = font.widthOfTextAtSize(string, size);
+  page.drawText(string, { x: options.right ? x + width - textWidth : x, y,
+    size, font, color: options.color || rgb(0.08, 0.12, 0.2) });
+}
+
+function drawExpenseIdentity(page, font, lines, top, width) {
+  let y = top;
+  for (const value of lines) {
+    for (const line of expenseTextLines(font, value, 14, width)) {
+      if (y < 160) throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_TEXT_CAPACITY_EXCEEDED');
+      page.drawText(line, { x: 42, y, size: 14, font, color: rgb(0.08, 0.12, 0.2) });
+      y -= 18;
+    }
+    y -= 6;
+  }
+  return y;
+}
+
+function expenseClaimHeaderLines(font, lines, width) {
+  const result = [];
+  let line = 'Claim: ';
+  for (const value of lines) {
+    const next = line === 'Claim: ' ? line + value : line + ' | ' + value;
+    if (font.widthOfTextAtSize(next, 12) <= width) line = next;
+    else {
+      if (line !== 'Claim: ') result.push(line);
+      line = line === 'Claim: ' ? line + value : value;
+      if (font.widthOfTextAtSize(line, 12) > width) {
+        const wrapped = expenseTextLines(font, line, 12, width);
+        result.push(...wrapped.slice(0, -1));
+        line = wrapped.at(-1);
+      }
+    }
+  }
+  result.push(line);
+  return result;
+}
+
+async function renderExpensePage(env, contract, state, phase) {
+  const { workflow, component } = state;
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const page = pdf.addPage([595.28, 841.89]);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const branding = await candidateDocumentBranding(env, workflow);
+  const paperReturnQrText = text(contract.paper_return_qr_text);
+  const isPaperReturn = paperReturnQrText.startsWith('TSQ2.');
+  const isExpenseSummary = upper(component.component_kind) === 'EXPENSE_SUMMARY';
+  const isMileageEvidence = upper(component.component_kind) === 'MILEAGE_FORM'
+    && upper(component.expense_category) === 'MILEAGE';
+  page.drawRectangle({ x: 0, y: 790, width: page.getWidth(), height: 52, color: rgb(0.04, 0.12, 0.24) });
+  await drawCandidateBranding(pdf, page, branding, { x: 420, y: 800, maxWidth: 135, maxHeight: 30 });
+  page.drawText(isExpenseSummary ? 'Expense summary'
+    : isMileageEvidence ? 'Mileage evidence' : 'Expense evidence', {
+    x: 36, y: 812, size: 16, font: bold, color: rgb(1, 1, 1)
+  });
+  const displayOrdinal = isPaperReturn
+    ? contract.review_ordinal
+    : component.review_ordinal || contract.review_ordinal;
+  drawExpenseValue(page, regular,
+    `${branding.agency_name} | Page ${displayOrdinal} | ${component.expense_category || 'General'}`,
+    36, 797, 370, 10, { color: rgb(0.86, 0.9, 0.96) });
+  const summary = expenseSummaryDisplayLines(workflow);
+  const claimLinesAtTop = expenseClaimHeaderLines(regular, summary.lines, isPaperReturn ? 395 : 523);
+  const claimTotalY = 772 - claimLinesAtTop.length * 15 - 4;
+  let mileageBannerY = Math.min(isPaperReturn ? 654 : 716, claimTotalY - 48);
+  const sourceTop = isMileageEvidence ? mileageBannerY - 12
+    : Math.min(isPaperReturn ? 650 : 748, claimTotalY - 18);
+  const hasSource = await embedExpenseSource(
+    pdf, page, env, component, contract.render_input,
+    sourceTop,
+    sourceTop - (isPaperReturn ? 140 : 190)
+  );
+  if (hasSource && !isExpenseSummary) {
+    claimLinesAtTop.forEach((line, index) => page.drawText(line, {
+      x: 36, y: 772 - index * 15, size: 12, font: regular,
+      color: rgb(0.08, 0.12, 0.2) }));
+    drawExpenseValue(page, bold, `Claim total: ${summary.total}`,
+      36, claimTotalY, isPaperReturn ? 395 : 523, 16);
+  }
+  if (!hasSource) {
+    const lines = expenseLines(workflow, component).slice(0, 24);
+    if (isExpenseSummary) {
+      const identity = lines.slice(0, 3);
+      let y = drawExpenseIdentity(page, regular, identity, 752, isPaperReturn ? 389 : 511);
+      const claimLines = lines.slice(3, -1);
+      const totalLine = lines.at(-1) || 'Total claim: £0.00';
+      const claimHeaderY = Math.min(isPaperReturn ? 625 : 670, y - 26);
+      if (claimHeaderY - claimLines.length * 38 - 55 < 145) {
+        throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_TEXT_CAPACITY_EXCEEDED');
+      }
+      page.drawRectangle({ x: 42, y: claimHeaderY, width: 511, height: 32, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+      page.drawText('Claim details', { x: 54, y: claimHeaderY + 10, size: 14, font: bold, color: rgb(0.07, 0.14, 0.24) });
+      y = claimHeaderY - 38;
+      for (const line of claimLines) {
+        const colon = line.indexOf(':');
+        const label = colon >= 0 ? line.slice(0, colon) : line;
+        const value = colon >= 0 ? line.slice(colon + 1).trim() : '';
+        page.drawRectangle({ x: 42, y: y - 10, width: 511, height: 38, borderColor: rgb(0.4, 0.47, 0.55), borderWidth: 0.7 });
+        drawExpenseValue(page, regular, label, 54, y + 1, 295, 14);
+        drawExpenseValue(page, bold, value, 365, y, 176, 18, { right: true });
+        y -= 38;
+      }
+      page.drawRectangle({ x: 42, y: y - 17, width: 511, height: 45, color: rgb(0.95, 0.97, 0.99), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+      const totalColon = totalLine.indexOf(':');
+      drawExpenseValue(page, bold, totalLine.slice(0, totalColon + 1), 54, y - 1, 295, 15);
+      drawExpenseValue(page, bold, totalLine.slice(totalColon + 1).trim(), 365, y - 2, 176, 20, { right: true });
+    } else {
+      const identityBottom = drawExpenseIdentity(page, regular, lines, 750, isPaperReturn ? 389 : 511);
+      if (isMileageEvidence) mileageBannerY = Math.min(mileageBannerY, identityBottom - 40);
+    }
+  }
+  if (isMileageEvidence) {
+    const mileageUnits = submittedMileageUnits(parseJson(workflow.immutable_submission_json, {}) || {});
+    const label = `Total mileage for this claim: ${mileageUnits} ${mileageUnitLabel(mileageUnits)}`;
+    page.drawRectangle({
+      x: 36, y: mileageBannerY, width: isPaperReturn ? 395 : 523, height: 38,
+      color: rgb(0.9, 0.95, 0.98), borderColor: rgb(0.1, 0.42, 0.62), borderWidth: 1
+    });
+    drawExpenseValue(page, bold, label, 50, mileageBannerY + 12,
+      isPaperReturn ? 367 : 495, 15, { color: rgb(0.04, 0.2, 0.32) });
+  }
+  if (isPaperReturn) {
+    await drawCandidatePaperPageQr(page, paperReturnQrText, {
+      x: page.getWidth() - 124,
+      y: 688,
+      size: 88,
+      label: text(contract.paper_return_display_name) || 'Page QR'
+    });
+  }
+  if (isExpenseSummary) {
+    page.drawText('Automatically generated summary. No manager signature is required.', {
+      x: 36, y: 30, size: 8, font: regular, color: rgb(0.35, 0.42, 0.5)
+    });
+  } else if (phase === 'FINAL') {
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    drawExpenseValue(page, bold, `Approved by ${workflow.manager_name || contract.manager?.name || ''}`, 48, 116, 264, 12);
+    drawExpenseValue(page, regular, `Position: ${workflow.manager_position || contract.manager?.position || ''}`, 48, 98, 264, 11);
+    drawExpenseValue(page, regular, `Approval date: ${londonCalendarDate(
+      workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
+    ) || ''}`, 48, 80, 264, 11);
+    const signature = await signatureAsset(env, workflow.manager_signature_component_id, contract.manager?.signature_storage_key, contract.manager?.signature_sha256);
+    if (!signature.data?.data_url) throw new CandidateHttpError(409, 'MANAGER_SIGNATURE_REQUIRED');
+    const decoded = base64UrlDecode(signature.data.data_url.split(',')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''));
+    const image = signature.data.data_url.startsWith('data:image/png') ? await pdf.embedPng(decoded) : await pdf.embedJpg(decoded);
+    const scale = Math.min(180 / image.width, 55 / image.height);
+    page.drawImage(image, { x: 330, y: 70, width: image.width * scale, height: image.height * scale });
+  } else if (isPaperReturn) {
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 68, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawLine({ start: { x: 48, y: 58 }, end: { x: 340, y: 58 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager signature', { x: 48, y: 46, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
+    page.drawLine({ start: { x: 370, y: 58 }, end: { x: 535, y: 58 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 46, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
+  } else {
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawText('Hiring manager review', { x: 48, y: 112, size: 11, font: bold });
+    page.drawText('Review this page together with every page in the manifest before approval.', { x: 48, y: 91, size: 9, font: regular });
+    page.drawText('Manager signature and approval date intentionally blank.', { x: 48, y: 72, size: 9, font: regular });
+  }
+  return { pdf_bytes: new Uint8Array(await pdf.save()), page_count: 1 };
+}
+
+async function renderCandidateExpenseSummaryPdf(env, job) {
+  const totals = isObject(job?.totals) ? job.totals : {};
+  const identity = isObject(totals.identity) ? totals.identity : {};
+  const evidenceCounts = isObject(totals.evidence_counts) ? totals.evidence_counts : {};
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const page = pdf.addPage([595.28, 841.89]);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const branding = await candidateAppAgencyDocumentBranding(env);
+  page.drawRectangle({ x: 0, y: 790, width: page.getWidth(), height: 52,
+    color: rgb(0.04, 0.12, 0.24) });
+  await drawCandidateBranding(pdf, page, branding, {
+    x: 420, y: 800, maxWidth: 135, maxHeight: 30
+  });
+  page.drawText('Expense summary', {
+    x: 36, y: 810, size: 18, font: bold, color: rgb(1, 1, 1)
+  });
+  page.drawText('Automatically updated internal record', {
+    x: 36, y: 794, size: 9, font: regular, color: rgb(0.86, 0.9, 0.96)
+  });
+  const identityLines = [
+    `Candidate: ${text(identity.candidate_name) || '-'}`,
+    `Client: ${text(identity.client_name) || '-'}`,
+    `Contract: ${[text(identity.contract_role), text(identity.contract_site)]
+      .filter(Boolean).join(' · ') || '-'}`,
+    `Week ending: ${ukDate(identity.week_ending_date) || '-'}`
+  ];
+  let y = drawExpenseIdentity(page, regular, identityLines, 748, 511);
+  y -= 14;
+  const rows = [
+    ['MILEAGE', 'Mileage', totals.mileage_pay_ex_vat],
+    ['TRAVEL', 'Travel', totals.travel_pay_ex_vat],
+    ['ACCOMMODATION', 'Accommodation', totals.accommodation_pay_ex_vat],
+    ['OTHER', 'Other', totals.other_pay_ex_vat]
+  ].filter(([category, , rawAmount]) => Number(rawAmount || 0) !== 0
+    || (category === 'MILEAGE' && Number(totals.mileage_units || 0) !== 0));
+  if (y - rows.length * 42 - 50 < 100) {
+    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_TEXT_CAPACITY_EXCEEDED');
+  }
+  for (const [category, label, rawAmount] of rows) {
+    const amount = Number(rawAmount || 0);
+    page.drawRectangle({ x: 42, y: y - 12, width: 511, height: 42,
+      borderColor: rgb(0.4, 0.47, 0.55), borderWidth: 0.7 });
+    page.drawText(label, { x: 56, y: y + 1, size: 14, font: regular });
+    const evidenceCount = Number(evidenceCounts[category] || 0);
+    const detail = category === 'MILEAGE'
+      ? `${Number(totals.mileage_units || 0)} ${mileageUnitLabel(totals.mileage_units || 0)} · ${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`
+      : `${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`;
+    drawExpenseValue(page, regular, detail, 190, y + 3, 239, 11,
+      { color: rgb(0.25, 0.3, 0.38) });
+    drawExpenseValue(page, bold, `£${amount.toFixed(2)}`, 441, y, 100, 18, { right: true });
+    y -= 42;
+  }
+  const total = Number(totals.total_pay_ex_vat || 0);
+  page.drawRectangle({ x: 42, y: y - 16, width: 511, height: 48,
+    color: rgb(0.93, 0.96, 0.99), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+  page.drawText('Total expenses', { x: 56, y: y, size: 16, font: bold });
+  drawExpenseValue(page, bold, `£${total.toFixed(2)}`, 441, y - 1, 100, 20, { right: true });
+  page.drawText('This page does not require a signature or date.', {
+    x: 42, y: 75, size: 9, font: regular, color: rgb(0.25, 0.3, 0.38)
+  });
+  return new Uint8Array(await pdf.save());
+}
+
+export async function drainCandidateExpenseSummaries(env, deps, options = {}) {
+  const limit = Math.max(1, Math.min(Number(options.limit || 10), 25));
+  const claimed = await rpcCall(deps, 'candidate_expense_summary_claim_v1', {
+    p_limit: limit,
+    p_lease_seconds: 300,
+    p_now_utc: new Date().toISOString()
+  });
+  const jobs = Array.isArray(claimed?.jobs) ? claimed.jobs : [];
+  const results = [];
+  for (const job of jobs) {
+    const refreshId = requireUuid(job.refresh_id, 'CANDIDATE_EXPENSE_SUMMARY_NOT_FOUND');
+    const claimToken = requireUuid(job.claim_token, 'CANDIDATE_EXPENSE_SUMMARY_RECEIPT_INVALID');
+    const timesheetId = requireUuid(job.timesheet_id, 'TIMESHEET_NOT_FOUND');
+    const generation = requireInteger(
+      job.summary_generation, 'CANDIDATE_EXPENSE_SUMMARY_RECEIPT_INVALID', 1
+    );
+    const totalsSha256 = text(job.totals_sha256).toLowerCase();
+    if (!SHA256_RE.test(totalsSha256)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_SUMMARY_RECEIPT_INVALID');
+    }
+    let storageKey = null;
+    try {
+      const bytes = await renderCandidateExpenseSummaryPdf(env, job);
+      const summarySha256 = await sha256Hex(bytes);
+      storageKey = `candidate-app/${environmentName(env).toLowerCase()}`
+        + `/expense-summaries/${timesheetId}/${String(generation).padStart(6, '0')}`
+        + `-${totalsSha256}-${claimToken}.pdf`;
+      await rpcCall(deps, 'candidate_expense_summary_render_begin_v1', {
+        p_refresh_id: refreshId,
+        p_claim_token: claimToken,
+        p_expected_totals_sha256: totalsSha256,
+        p_storage_key: storageKey,
+        p_now_utc: new Date().toISOString()
+      });
+      await immutablePut(env, storageKey, bytes, 'application/pdf', {
+        purpose: 'candidate-expense-summary',
+        timesheet_id: timesheetId,
+        summary_generation: String(generation),
+        totals_sha256: totalsSha256,
+        sha256: summarySha256,
+        signed: 'false'
+      });
+      const result = await rpcCall(deps, 'candidate_expense_summary_complete_v1', {
+        p_refresh_id: refreshId,
+        p_claim_token: claimToken,
+        p_expected_totals_sha256: totalsSha256,
+        p_storage_key: storageKey,
+        p_summary_sha256: summarySha256,
+        p_now_utc: new Date().toISOString()
+      });
+      try {
+        if (!await queueCandidateInvoiceEvidencePreparation(env, [timesheetId])
+            && typeof deps?.prepareInvoiceEvidence === 'function') {
+          await deps.prepareInvoiceEvidence({ timesheetIds: [timesheetId] });
+        }
+      } catch (error) {
+        console.error('[candidate-app] invoice evidence preparation dispatch failed', {
+          timesheet_id: timesheetId,
+          error_code: knownErrorCode(error) || 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE'
+        });
+      }
+      results.push(result);
+    } catch (error) {
+      const failureCode = knownErrorCode(error).slice(0, 100);
+      try {
+        const failureResult = await rpcCall(deps, 'candidate_expense_summary_fail_v1', {
+          p_refresh_id: refreshId,
+          p_claim_token: claimToken,
+          p_failure_code: /^[A-Z][A-Z0-9_]{2,99}$/.test(failureCode)
+            ? failureCode : 'CANDIDATE_EXPENSE_SUMMARY_RENDER_FAILED',
+          p_storage_key: storageKey,
+          p_now_utc: new Date().toISOString()
+        });
+        if (failureResult?.state === 'READY') {
+          results.push(failureResult);
+          continue;
+        }
+      } catch {}
+      results.push({ ok: false, refresh_id: refreshId, error_code: failureCode });
+    }
+  }
+  return { ok: results.every((result) => result?.ok === true),
+    claimed_count: jobs.length, results };
+}
+
+export async function recoverUnpreparedCandidateInvoiceEvidence(env, deps, limit = 25) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 25, 100));
+  const rows = await restRows(env, 'timesheet_evidence',
+    'processing_state=eq.READY&document_asset_id=is.null'
+    + '&document_role=in.(SOURCE_EVIDENCE,MILEAGE_CLAIM_FORM,EXPENSE_MILEAGE_APPROVAL_SUMMARY)'
+    + '&storage_key=like.candidate-app%2F*'
+    + '&select=timesheet_id,kind,document_role,created_at'
+    + '&order=created_at.desc'
+    + `&limit=${boundedLimit}`);
+  const excludedRoles = new Set([
+    'CANDIDATE_SIGNATURE', 'MANAGER_SIGNATURE', 'ELECTRONIC_SIGNATURES', 'SIGNED_TIMESHEET'
+  ]);
+  const timesheetIds = [...new Set(rows.filter((row) => {
+    const kind = upper(row?.kind);
+    const role = upper(row?.document_role);
+    return UUID_RE.test(text(row?.timesheet_id))
+      && kind !== 'TIMESHEET'
+      && !excludedRoles.has(kind)
+      && !excludedRoles.has(role);
+  }).map((row) => text(row.timesheet_id).toLowerCase()))].slice(0, 25);
+  if (!timesheetIds.length) {
+    return { ok: true, timesheet_count: 0 };
+  }
+  if (typeof deps?.prepareInvoiceEvidence !== 'function') {
+    throw new CandidateHttpError(503, 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE');
+  }
+  const result = await deps.prepareInvoiceEvidence({ timesheetIds });
+  return { ok: result?.ok === true, timesheet_count: timesheetIds.length, result };
+}
+
+function candidateRpcArgs(access, env, overrides = {}) {
+  return {
+    p_session_id: access?.session_id || null,
+    p_environment: access?.environment || environmentName(env),
+    p_now_utc: new Date().toISOString(),
+    ...overrides
+  };
+}
+
+function workflowActionArgs(access, env, workflowId, action, generation, payload, idempotencyKey) {
+  return candidateRpcArgs(access, env, {
+    p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    p_action: upper(action),
+    p_expected_generation: generation == null ? null : requireInteger(generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+    p_payload: isObject(payload) ? payload : {},
+    p_idempotency_key: requireCandidateIdempotency(idempotencyKey)
+  });
+}
+
+function workflowCancelArgs(access, env, workflowId, generation, payload, idempotencyKey) {
+  return candidateRpcArgs(access, env, {
+    p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    p_expected_generation: generation == null
+      ? null : requireInteger(generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+    p_payload: isObject(payload) ? payload : {},
+    p_idempotency_key: requireCandidateIdempotency(idempotencyKey)
+  });
+}
+
+async function probeWorkflowMutationReplay(
+  env, deps, access, workflowId, action, generation, idempotencyKey, semanticPayload
+) {
+  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+    access, env, workflowId, action, generation, {
+      mutation_replay_probe_only: true,
+      mutation_replay_semantic_payload: isObject(semanticPayload) ? semanticPayload : {}
+    }, idempotencyKey
+  ));
+  return result?.idempotent_replay === true ? result : null;
+}
+
+async function workflowRow(env, workflowId) {
+  const row = await restOne(env, 'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'))}&select=*`);
+  if (!row) throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  return row;
+}
+
+function forbiddenFinancialKeys(value, path = '') {
+  if (!isObject(value) && !Array.isArray(value)) return [];
+  const prohibited = /(?:^canonical_tsfin_snapshot$|^rates?$|^rate_source_refs_json$|(?:^|_)(?:pay|charge|margin|vat|erni)(?:_|$)|^invoice_breakdown_json$|^processing_status$|^authorised_at_utc$|^paid_at_utc$)/i;
+  const hits = [];
+  for (const [key, child] of Object.entries(value)) {
+    const current = path ? `${path}.${key}` : key;
+    if (prohibited.test(key)) hits.push(current);
+    if (isObject(child) || Array.isArray(child)) hits.push(...forbiddenFinancialKeys(child, current));
+  }
+  return hits;
+}
+
+function managerRouteHmacSecret(env) {
+  const secret = text(env.MYTMS_MANAGER_ROUTE_HMAC_SECRET);
+  if (secret.length < 32) throw new CandidateHttpError(503, 'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
+  return secret;
+}
+
+function managerAgencyId(env) {
+  return requireUuid(env.CANDIDATE_AGENCY_ID || env.MYTMS_OFFICE_AGENCY_ID,
+    'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
+}
+
+function escapeManagerMailHtml(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+async function candidateManagerMail(env, deps, token, workflowId, managerEmail, kind = 'INITIAL', workflowKind = '') {
+  const environment = environmentName(env);
+  const agencyId = managerAgencyId(env);
+  const [originAuthority, templateAuthority] = await Promise.all([
+    routedManagerControlRpc(env, deps, 'control', 'manager_review_origin_resolve_v1', {
+      p_agency_id: agencyId, p_environment_label: environment
+    }),
+    deps.rpc('candidate_manager_email_settings_get_v1', {})
+  ]);
+  const origin = text(originAuthority?.manager_review_public_origin).replace(/\/$/, '');
+  if (!/^https:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?$/.test(origin)) {
+    throw new CandidateHttpError(503, 'MANAGER_REVIEW_ORIGIN_UNAVAILABLE');
+  }
+  const link = `${origin}/manager/timesheet/${encodeURIComponent(workflowId)}#token=${encodeURIComponent(token)}`;
+  const submissionType = upper(workflowKind) === 'CONTRACT_EXPENSE' ? 'EXPENSE_CLAIM' : 'TIMESHEET';
+  const workflow = await workflowRow(env, workflowId);
+  const candidate = await restOne(env, 'candidates',
+    `id=eq.${encodeURIComponent(requireUuid(workflow.candidate_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'))}`
+    + '&select=id,display_name,first_name,last_name');
+  const candidateName = text(candidate?.display_name
+    || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`).trim();
+  if (!candidateName || candidateName.length > 200) {
+    throw new CandidateHttpError(503, 'MANAGER_EMAIL_CANDIDATE_NAME_UNAVAILABLE');
+  }
+  const template = templateAuthority?.templates?.[submissionType]?.[kind];
+  if (!isObject(template) || template.include_link !== true || !text(template.subject)
+      || !text(template.body_text) || !text(template.body_html) || !text(template.button_text)
+      || /<(?:a|script|style|iframe|form)\b|\b(?:href|src)\s*=|https?:\/\//i.test(template.body_html)
+      || template.subject.length > 240 || template.body_text.length > 20_000
+      || template.body_html.length > 50_000 || template.button_text.length > 80) {
+    throw new CandidateHttpError(503, 'MANAGER_EMAIL_TEMPLATE_UNAVAILABLE');
+  }
+  const expiryText = 'This secure link expires seven days after it is issued.';
+  const safeLink = link.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const submissionLabel = submissionType === 'EXPENSE_CLAIM' ? 'expense claim' : 'timesheet';
+  const actionText = `${template.button_text} ${candidateName} ${submissionLabel}`;
+  return {
+    manager_email: normaliseEmail(managerEmail),
+    mail: {
+      to: normaliseEmail(managerEmail), subject: template.subject,
+      body_text: `${template.body_text}\n\n${expiryText}\n\n${actionText}: ${link}`,
+      body_html: `${template.body_html}<p>${expiryText}</p><p><a href="${safeLink}" rel="noopener noreferrer">${escapeManagerMailHtml(actionText)}</a></p>`,
+      manager_template_version: templateAuthority.version,
+      manager_template_sha256: templateAuthority.semantic_sha256_hex,
+      manager_origin_version: originAuthority.settings_version,
+      manager_origin_sha256: originAuthority.manager_review_origin_semantic_sha256_hex,
+      manager_submission_type: submissionType
+    }
+  };
+}
+
+async function candidateManagerTerminalMail(deps, kind, workflowKind = '') {
+  const mailKind = upper(kind);
+  if (!['WITHDRAWAL', 'CANCELLATION'].includes(mailKind)) {
+    throw new CandidateHttpError(500, 'MANAGER_EMAIL_TEMPLATE_UNAVAILABLE');
+  }
+  const templateAuthority = await deps.rpc('candidate_manager_email_settings_get_v1', {});
+  const submissionType = upper(workflowKind) === 'CONTRACT_EXPENSE' ? 'EXPENSE_CLAIM' : 'TIMESHEET';
+  const template = templateAuthority?.templates?.[submissionType]?.[mailKind];
+  if (!isObject(template) || template.include_link !== false || !text(template.subject)
+      || !text(template.body_text) || !text(template.body_html) || template.button_text !== null
+      || /<(?:a|img|svg|script|style|iframe|form)\b|\b(?:href|src|on\w+)\s*=|https?:\/\//i.test(template.body_html)
+      || template.subject.length > 240 || template.body_text.length > 20_000
+      || template.body_html.length > 50_000) {
+    throw new CandidateHttpError(503, 'MANAGER_EMAIL_TEMPLATE_UNAVAILABLE');
+  }
+  return {
+    subject: template.subject, body_text: template.body_text, body_html: template.body_html,
+    manager_template_version: templateAuthority.version,
+    manager_template_sha256: templateAuthority.semantic_sha256_hex,
+    manager_submission_type: submissionType
+  };
+}
+
+async function registerManagerEmailRoute(env, deps, {
+  workflowId, approvalRequestId, requestGeneration, credentialGeneration,
+  mailOutboxId, managerToken, mailKind, expiresAtUtc, mutationKey
+}) {
+  const secret = managerRouteHmacSecret(env);
+  const environment = environmentName(env);
+  const agencyId = managerAgencyId(env);
+  const credentialHmac = await requestHmacSha256(secret, 'manager-email-credential-v1', managerToken);
+  const workflowHmac = await requestHmacSha256(secret, 'manager-email-workflow-v1', workflowId);
+  const requestHmac = await requestHmacSha256(secret, 'manager-email-request-v1', approvalRequestId);
+  const idempotencyHmac = await requestHmacSha256(
+    secret, 'manager-email-route-idempotency-v1',
+    { workflow_id: workflowId, approval_request_id: approvalRequestId, mail_kind: mailKind,
+      mutation_key: mutationKey }
+  );
+  const issuedAtUtc = new Date().toISOString();
+  const registrationFacts = {
+    contract_version: 'MANAGER_EMAIL_ROUTE_REGISTRATION_V1', environment_label: environment,
+    agency_id: agencyId, credential_hmac_hex: credentialHmac,
+    workflow_route_hmac_hex: workflowHmac,
+    approval_request_route_hmac_hex: requestHmac, request_generation: requestGeneration,
+    credential_generation: credentialGeneration, mail_kind: mailKind,
+    expires_at_utc: expiresAtUtc
+  };
+  const semanticSha256 = await sha256Hex(canonicalJson(registrationFacts));
+  const route = await routedManagerControlRpc(
+    env, deps, 'control', 'manager_email_route_register_v1', {
+    p_registration: {
+      ...registrationFacts, authority_kind: 'MANAGER_EMAIL',
+      credential_key_version: 1, semantic_sha256_hex: semanticSha256,
+      idempotency_key_hmac_hex: idempotencyHmac, issued_at_utc: issuedAtUtc
+    },
+    p_now_utc: issuedAtUtc
+  });
+  const receipt = await deps.rpc('candidate_manager_email_route_receipt_commit_v1', {
+    p_environment: environment, p_workflow_id: workflowId,
+    p_approval_request_id: approvalRequestId, p_request_generation: requestGeneration,
+    p_credential_generation: credentialGeneration, p_mail_outbox_id: mailOutboxId,
+    p_manager_token_hash_hex: await sha256Hex(managerToken),
+    p_manager_route_ticket_id: route.manager_route_ticket_id,
+    p_route_revision: route.route_revision,
+    p_registration_receipt_sha256_hex: route.registration_receipt_sha256_hex,
+    p_route_semantic_sha256_hex: semanticSha256, p_mail_kind: mailKind,
+    p_idempotency_key: mutationKey, p_now_utc: issuedAtUtc
+  });
+  return { route, receipt };
+}
+
+function renderContracts(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.components)) return value.components;
+  return [];
+}
+
+function safeQrPackResponse(value) {
+  const source = isObject(value) ? value : {};
+  return {
+    queued: source.queued === true,
+    send_state: text(source.send_state) || null,
+    document_state: text(source.document_state || source.document_version_status) || null,
+    document_operation_id: UUID_RE.test(text(source.document_operation_id)) ? text(source.document_operation_id) : null,
+    current_timesheet_id: UUID_RE.test(text(source.current_timesheet_id)) ? text(source.current_timesheet_id) : null,
+    timesheet_version: Number.isSafeInteger(Number(source.current_version || source.timesheet_version))
+      ? Number(source.current_version || source.timesheet_version) : null,
+    recipient_available: source.recipient_available === true
+  };
+}
+
+function safeCandidateWorkflowPolicy(value) {
+  const source = isObject(value) ? value : {};
+  const manager = isObject(source.manager_approval_policy)
+    ? source.manager_approval_policy : {};
+  const textArray = (input) => Array.isArray(input)
+    ? input.map(item => text(item).trim()).filter(Boolean) : [];
+  return {
+    paper_submission_enabled: source.paper_submission_enabled === true,
+    allow_daily_manager_authorise_on_phone:
+      source.allow_daily_manager_authorise_on_phone === true,
+    allow_daily_manager_authorise_by_email:
+      source.allow_daily_manager_authorise_by_email === true,
+    manager_approval_policy: {
+      approved_emails: textArray(manager.approved_emails),
+      approved_domains: textArray(manager.approved_domains),
+      allow_free_business_email: manager.allow_free_business_email === true
+    }
+  };
+}
+
+function safeExpensePlacement(value) {
+  const source = isObject(value) ? value : {};
+  const placement = upper(source.placement);
+  if (!['BLOCKED', 'SAME_RECORD', 'REUSE_CARRIER', 'CREATE_CARRIER'].includes(placement)) {
+    throw new CandidateHttpError(502, 'CANDIDATE_EXPENSE_PLACEMENT_INVALID');
+  }
+  const anchorContractWeekId = text(source.anchor_contract_week_id);
+  if (!UUID_RE.test(anchorContractWeekId)) {
+    throw new CandidateHttpError(502, 'CANDIDATE_EXPENSE_PLACEMENT_INVALID');
+  }
+  const capabilities = isObject(source.capabilities) ? source.capabilities : {};
+  const anchorTimesheetId = text(source.anchor_timesheet_id);
+  const targetTimesheetId = text(source.target_timesheet_id);
+  const targetContractWeekId = text(source.target_contract_week_id);
+  const idempotencyKey = text(source.idempotency_key);
+  return {
+    ok: true,
+    placement,
+    reason_code: text(source.reason_code) || null,
+    anchor_timesheet_id: UUID_RE.test(anchorTimesheetId) ? anchorTimesheetId : null,
+    anchor_contract_week_id: anchorContractWeekId,
+    target_timesheet_id: UUID_RE.test(targetTimesheetId) ? targetTimesheetId : null,
+    target_contract_week_id: UUID_RE.test(targetContractWeekId) ? targetContractWeekId : null,
+    target_record_role: text(source.target_record_role) || null,
+    capabilities: {
+      can_use_same_record: placement === 'SAME_RECORD',
+      can_reuse_carrier: placement === 'REUSE_CARRIER',
+      can_create_carrier: placement === 'CREATE_CARRIER',
+      can_edit_expenses: capabilities.can_edit_expenses === true,
+      requires_carrier: capabilities.requires_carrier === true
+        || placement === 'REUSE_CARRIER' || placement === 'CREATE_CARRIER'
+    },
+    ...(typeof source.idempotent_replay === 'boolean'
+      ? { idempotent_replay: source.idempotent_replay } : {}),
+    ...(UUID_RE.test(idempotencyKey) ? { idempotency_key: idempotencyKey } : {})
+  };
+}
+
+function normaliseCandidateWorkflowCreatePayload(value) {
+  const supplied = isObject(value) ? value : {};
+  const workflowKind = upper(supplied.workflow_kind);
+  const timesheetId = UUID_RE.test(text(supplied.timesheet_id))
+    ? text(supplied.timesheet_id) : null;
+  if (Object.hasOwn(supplied, 'daily_source')) {
+    const source = normalizeCandidateDailyBookedSource(supplied.daily_source);
+    if (!source || workflowKind !== 'DAILY' || supplied.scope !== 'DAILY'
+        || supplied.route !== 'PHONE' || supplied.submission_requested !== true
+        || ['timesheet_id', 'target_timesheet_id', 'contract_id', 'contract_week_id',
+          'anchor_timesheet_id', 'week_ending_date'].some((key) => Object.hasOwn(supplied, key))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_DAILY_IDENTITY_INVALID');
+    }
+    return { ...supplied, daily_source: source };
+  }
+  return {
+    ...supplied,
+    ...(timesheetId && workflowKind === 'DAILY' && !supplied.target_timesheet_id
+      ? { target_timesheet_id: timesheetId } : {}),
+    ...(timesheetId && workflowKind === 'CONTRACT_EXPENSE' && !supplied.anchor_timesheet_id
+      ? { anchor_timesheet_id: timesheetId } : {})
+  };
+}
+
+function safePaperReturnPages(value, options = {}) {
+  const source = isObject(value) ? value : {};
+  const pages = Array.isArray(source.pages) ? source.pages : [];
+  const manifestVersion = Number(source.manifest_version || 1);
+  const includeSourceContentSha256 = options?.includeSourceContentSha256 === true;
+  if (![1, 2].includes(manifestVersion)
+      || (manifestVersion === 2 && source.qr_contract_version !== PAPER_PAGE_QR_V2)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  return pages.map((page, index) => {
+    if (!isObject(page) || !text(page.page_key).trim() || !text(page.component_kind).trim()) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const componentKind = upper(page.component_kind);
+    const pageKey = text(page.page_key).trim();
+    if (componentKind === 'EXPENSE_SUMMARY' || upper(pageKey) === 'EXPENSE_SUMMARY') {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const sourceComponentId = page.source_component_id == null
+      ? null : requireUuid(page.source_component_id, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    const sourceContentSha256 = page.source_content_sha256 == null
+      ? null : text(page.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
+    const storageCategory = page.expense_category == null ? null : upper(page.expense_category);
+    if (manifestVersion === 2) {
+      if (Number(page.ordinal) !== index + 1
+          || !text(page.display_name).trim()
+          || !/^[TSME]$/.test(text(page.page_kind_code))
+          || !/^(?:A|M|O|T)?$/.test(text(page.category_code))
+          || !/^[0-9a-f]{16}$/i.test(text(page.page_key_sha256_16))
+          || !Number.isSafeInteger(Number(page.category_occurrence))
+          || Number(page.category_occurrence) < 1
+          || page.qr_required !== true
+          || (['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+            && (!sourceComponentId || !SHA256_RE.test(sourceContentSha256)))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+      }
+    }
+    return {
+      ordinal: index + 1,
+      page_key: pageKey,
+      component_kind: componentKind,
+      expense_category: storageCategory,
+      source_component_id: sourceComponentId,
+      qr_required: manifestVersion === 2
+        ? true
+        : componentKind === 'HOURS_TIMESHEET' && pageKey === 'HOURS_TIMESHEET',
+      ...(manifestVersion === 2 ? {
+        display_name: text(page.display_name).trim(),
+        manifest_version: manifestVersion,
+        qr_contract_version: PAPER_PAGE_QR_V2,
+        category_occurrence: Number(page.category_occurrence),
+        page_kind_code: text(page.page_kind_code),
+        category_code: text(page.category_code),
+        page_key_sha256_16: text(page.page_key_sha256_16).toLowerCase()
+      } : {}),
+      ...(includeSourceContentSha256 && sourceContentSha256
+        ? { source_content_sha256: sourceContentSha256 }
+        : {})
+    };
+  });
+}
+
+async function bindCandidatePaperOutbox(env, workflow, timesheetId, pack) {
+  if (pack?.recipient_available !== true || pack?.queued !== true) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
+  }
+  const outboxId = requireUuid(pack.mail_outbox_id, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  const row = await restOne(env, 'mail_outbox',
+    `id=eq.${encodeURIComponent(outboxId)}`
+    + '&select=id,type,context_kind,context_id,status,payment_scope_json,attachments,'
+    + 'scheduled_for_utc,next_attempt_at_utc,attempt_lease_token,attempt_lease_expires_at_utc');
+  if (!row || row.type !== 'TIMESHEET_QR' || row.context_kind !== 'timesheets'
+      || row.context_id !== timesheetId) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
+  }
+  const binding = {
+    candidate_workflow_id: workflow.id,
+    candidate_workflow_generation: Number(workflow.generation),
+    paper_return_manifest_sha256: text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase()
+  };
+  if (!UUID_RE.test(text(binding.candidate_workflow_id))
+      || !Number.isSafeInteger(binding.candidate_workflow_generation)
+      || binding.candidate_workflow_generation < 1
+      || !SHA256_RE.test(binding.paper_return_manifest_sha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
+  }
+  const existing = parseJson(row.payment_scope_json, {}) || {};
+  for (const [key, value] of Object.entries(binding)) {
+    if (String(existing[key] ?? '') !== String(value)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
+    }
+  }
+  if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
+  if (['QUEUED', 'SENT'].includes(row.status) && candidateCompletePackAttachmentMatchesScope(row)) {
+    return { bound: true, recipient_available: true, mail_outbox_id: outboxId, pack_ready: true };
+  }
+  if (row.status === 'SENT') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_ALREADY_SENT');
+  const attachments = parseJson(row.attachments, []) || [];
+  const held = existing.candidate_paper_pack_ready === false
+    && existing.mail_held_until_pdf_rendered === true
+    && existing.mail_hold_reason === 'CANDIDATE_PAPER_PACK_PENDING'
+    && attachments.length === 0
+    && row.status === 'QUEUED'
+    && !text(row.attempt_lease_token);
+  if (!held) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  }
+  return { bound: true, recipient_available: true, mail_outbox_id: outboxId };
+}
+
+function withoutInternalRenderContracts(value) {
+  if (!isObject(value)) return value;
+  const safe = { ...value };
+  delete safe.render_contract;
+  delete safe.final_render_contract;
+  delete safe.daily_materialisation_contract;
+  return safe;
+}
+
+function safeFinalisationResult(value) {
+  const source = isObject(value) ? value : {};
+  const safe = {};
+  const scalarKeys = [
+    'ok', 'workflow_id', 'generation', 'state', 'idempotent_replay',
+    'target_timesheet_id', 'hours_timesheet_id', 'expense_timesheet_id',
+    'auto_authorised', 'finalisation_pending', 'single_flight_deferred', 'reason', 'error_code'
+  ];
+  for (const key of scalarKeys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) safe[key] = source[key];
+  }
+  if (Array.isArray(source.issue_codes)) safe.issue_codes = source.issue_codes;
+  if (Array.isArray(source.auto_authorisation_blockers)) {
+    safe.auto_authorisation_blockers = source.auto_authorisation_blockers;
+  }
+  if (source.ok === true && source.state === 'RECEIVED' && source.office_resolution_pending === true) {
+    // Office matching is internal work, not a Candidate or manager failure.
+    // Preserve the normal successful receipt; never leak setup/rate diagnostics.
+    delete safe.reason;
+    delete safe.error_code;
+    delete safe.issue_codes;
+    delete safe.auto_authorisation_blockers;
+  }
+  return safe;
+}
+
+async function renderComponentDocument(env, contract, phase, stateOverride = null) {
+  const state = stateOverride || await loadRenderState(env, contract);
+  if (upper(contract.component_kind) === 'HOURS_TIMESHEET') {
+    const { model, assets } = await buildOfficialCandidateModel(env, contract, state, phase);
+    const rendered = await renderOfficialTimesheetPdfBytes(model, assets);
+    return {
+      pdf_bytes: rendered.pdf_bytes,
+      page_count: rendered.page_count,
+      candidate_signature_sha256: text(state.workflow.candidate_signature_sha256).replace(/^\\x/i, '') || null
+    };
+  }
+  return renderExpensePage(env, contract, state, phase);
+}
+
+async function readyGeneratedDocumentReceipt(env, key, expected) {
+  const object = await env.R2?.head(key);
+  if (!object) return null;
+  const metadata = object.customMetadata || {};
+  const valid = metadata.purpose === expected.purpose
+    && metadata.workflow_id === expected.workflow_id
+    && metadata.workflow_generation === String(expected.workflow_generation)
+    && metadata.component_id === expected.component_id
+    && text(metadata.render_input_sha256).toLowerCase() === expected.render_input_sha256
+    && text(metadata.branding_contract_sha256).toLowerCase() === expected.branding_contract_sha256
+    && text(metadata.renderer_contract_version) === expected.renderer_contract_version
+    && text(metadata.media_type).toLowerCase() === 'application/pdf'
+    && SHA256_RE.test(text(metadata.sha256))
+    && Number(metadata.byte_size) === Number(object.size)
+    && Number(metadata.page_count) > 0;
+  if (!valid) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_IDEMPOTENCY_CONFLICT');
+  return {
+    sha256: text(metadata.sha256).toLowerCase(),
+    byte_size: Number(object.size),
+    page_count: Number(metadata.page_count)
+  };
+}
+
+async function renderAndRegister(env, deps, renderContract, phase, officeActorId = null) {
+  const contracts = renderContracts(renderContract);
+  if (!contracts.length) throw new CandidateHttpError(409, 'MANAGER_REVIEW_DOCUMENT_NOT_READY');
+  const results = [];
+  for (const contract of contracts) {
+    const workflowId = requireUuid(contract.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+    const generation = requireInteger(contract.workflow_generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+    const componentId = requireUuid(contract.component_id, 'CANDIDATE_COMPONENT_NOT_FOUND');
+    const renderInputHash = text(contract.render_input_sha256).toLowerCase();
+    if (!SHA256_RE.test(renderInputHash)) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_CONTRACT_INVALID');
+    const state = await loadRenderState(env, contract);
+    const frozen = parseJson(state.workflow.immutable_submission_json, {}) || {};
+    const brandingHash = text(frozen.official_presentation?.branding?.branding_contract_sha256).toLowerCase();
+    const rendererVersion = text(state.workflow.renderer_contract_version || frozen.official_presentation?.renderer_contract_version);
+    if (!SHA256_RE.test(brandingHash)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    if (rendererVersion !== RENDERER_CONTRACT_VERSION) {
+      throw new CandidateHttpError(409, 'CANDIDATE_RENDERER_CONTRACT_UNSUPPORTED');
+    }
+    const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflowId}/${generation}/${phase.toLowerCase()}/${String(contract.review_ordinal).padStart(3, '0')}-${componentId}-${renderInputHash}-${rendererVersion}.pdf`;
+    const identity = {
+      purpose: `candidate-${phase.toLowerCase()}`,
+      workflow_id: workflowId,
+      workflow_generation: generation,
+      component_id: componentId,
+      render_input_sha256: renderInputHash,
+      branding_contract_sha256: brandingHash,
+      renderer_contract_version: rendererVersion
+    };
+    let durable = await readyGeneratedDocumentReceipt(env, storageKey, identity);
+    let rendered = null;
+    if (!durable) {
+      rendered = await renderComponentDocument(env, contract, phase, state);
+      const digest = await sha256Hex(rendered.pdf_bytes);
+      await immutablePut(env, storageKey, rendered.pdf_bytes, 'application/pdf', {
+        ...identity,
+        workflow_generation: String(generation),
+        renderer_contract_version: rendererVersion,
+        page_count: String(Number(rendered.page_count || 1)),
+        sha256: digest
+      });
+      durable = {
+        sha256: digest,
+        byte_size: rendered.pdf_bytes.byteLength,
+        page_count: Number(rendered.page_count || 1)
+      };
+    }
+    const digest = durable.sha256;
+    const workerOnly = contract.worker_only_approval === true
+      && upper(contract.form_variant) === 'ELECTRONIC_WORKER_SIGNED';
+    const receipt = {
+      form_variant: upper(contract.form_variant),
+      workflow_id: workflowId,
+      workflow_generation: generation,
+      component_id: componentId,
+      component_kind: upper(contract.component_kind),
+      document_role: upper(contract.document_role),
+      review_ordinal: Number(contract.review_ordinal),
+      scope: upper(contract.scope),
+      page_count: durable.page_count,
+      render_input_sha256: renderInputHash,
+      branding_contract_sha256: brandingHash,
+      renderer_contract_version: rendererVersion,
+      candidate_signature_embedded: contract.candidate_signature_embedded === true,
+      manager_signature_embedded:
+        phase === 'FINAL' && !workerOnly && upper(contract.component_kind) !== 'EXPENSE_SUMMARY',
+      manager_approval_date_embedded:
+        phase === 'FINAL' && !workerOnly && upper(contract.component_kind) !== 'EXPENSE_SUMMARY'
+    };
+    if (phase === 'FINAL' && upper(contract.component_kind) !== 'EXPENSE_SUMMARY') {
+      receipt.manager_signature_sha256 = text(contract.manager?.signature_sha256).replace(/^\\x/i, '').toLowerCase();
+      receipt.manager_name = text(contract.manager?.name);
+      receipt.manager_position = text(contract.manager?.position);
+      receipt.manager_approved_at_utc = contract.manager?.approval_date_utc;
+      const candidateSignatureSha256 = rendered?.candidate_signature_sha256
+        || text(state.workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
+      if (candidateSignatureSha256) receipt.candidate_signature_sha256 = candidateSignatureSha256;
+    }
+    if (workerOnly) {
+      receipt.candidate_signature_sha256 = text(state.workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
+    }
+    const action = phase === 'FINAL' ? 'REGISTER_FINAL_SIGNED_DOCUMENT' : 'REGISTER_REVIEW_COMPONENT';
+    const registrationPayload = {
+        component_id: componentId,
+        storage_key: storageKey,
+        media_type: 'application/pdf',
+        byte_size: durable.byte_size,
+        page_count: durable.page_count,
+        content_sha256_hex: digest,
+        render_input_sha256_hex: renderInputHash,
+        renderer_contract_version: rendererVersion,
+        renderer_receipt: receipt
+      };
+    const registrationKey = `candidate-render:${phase.toLowerCase()}:${workflowId}:${generation}:${componentId}:${digest}`;
+    const result = officeActorId
+      ? await officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
+        workflow_id: workflowId,
+        generation,
+        workflow_action: action,
+        idempotency_key: registrationKey,
+        payload: registrationPayload
+      })
+      : await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+        null, env, workflowId, action, generation, registrationPayload, registrationKey
+      ));
+    results.push(result);
+    if (workerOnly && result?.worker_only_approval === true && result?.state === 'READY_TO_FINALISE') {
+      const completion = await withManagerFinalisationLease(env, workflowId, generation, () =>
+        finaliseWorkflow(env, deps, workflowId, generation,
+          `candidate-worker-only-finalise:${workflowId}:${generation}`, officeActorId));
+      results.push(completion);
+    }
+  }
+  return results;
+}
+
+async function resolveWorkflowSession(env, workflow) {
+  const session = await restOne(env, 'candidate_app_sessions',
+    `account_id=eq.${encodeURIComponent(workflow.account_id)}&environment=eq.${encodeURIComponent(workflow.environment)}` +
+    '&status=eq.ACTIVE&expires_at_utc=gt.now()&absolute_expires_at_utc=gt.now()' +
+    '&select=id,account_id,environment,selected_candidate_id,rotation,expires_at_utc,absolute_expires_at_utc&order=last_used_at_utc.desc');
+  if (!session || session.selected_candidate_id !== workflow.candidate_id) return null;
+  return { session_id: session.id, account_id: session.account_id, environment: session.environment, rotation: Number(session.rotation) };
+}
+
+async function lifecycleSignature(deps, workflow) {
+  const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id || null;
+  const result = await rpcCall(deps, 'timesheet_lifecycle_signature_v1', {
+    p_timesheet_id: timesheetId,
+    // An unmaterialised standalone expense carrier has no Timesheet row to
+    // sign. Its atomic placement authority deliberately validates the protected
+    // hours Timesheet that anchors the carrier. Never pair that anchor with the
+    // carrier's different Contract-week identity.
+    p_contract_week_id: timesheetId ? null : workflow.contract_week_id || null,
+    p_include_payload: false
+  });
+  return text(result?.backend_row_signature || result?.mutation_row_signature || result?.row_signature || result?.expected_row_signature);
+}
+
+async function probeFinalisationReplay(
+  env, deps, workflow, generation, idempotencyKey, serviceFinalisation, officeActorId = null
+) {
+  const finalisationKey = workflow.workflow_kind === 'DAILY'
+    ? `${idempotencyKey}:finalise` : idempotencyKey;
+  const dailyMaterialisationJson = {
+    service_finalisation: { ...serviceFinalisation, replay_probe_only: true }
+  };
+  const result = officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'FINALISE_REPLAY_LOOKUP', {
+      workflow_id: workflow.id,
+      generation,
+      idempotency_key: finalisationKey,
+      daily_materialisation_json: dailyMaterialisationJson
+    })
+    : await rpcCall(deps, 'candidate_submission_finalize_single_flight_v1', {
+      p_session_id: null,
+      p_environment: environmentName(env),
+      p_workflow_id: workflow.id,
+      p_expected_generation: generation,
+      p_expected_row_signature: null,
+      p_idempotency_key: finalisationKey,
+      p_now_utc: new Date().toISOString(),
+      p_daily_materialisation_json: dailyMaterialisationJson
+    }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
+  return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
+}
+
+async function probeFinalisationReplayByKey(
+  env, deps, workflow, generation, idempotencyKey, officeActorId = null
+) {
+  const finalisationKey = workflow.workflow_kind === 'DAILY'
+    ? `${idempotencyKey}:finalise` : idempotencyKey;
+  const result = officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'FINALISE_REPLAY_LOOKUP', {
+      workflow_id: workflow.id,
+      generation,
+      idempotency_key: finalisationKey,
+      replay_key_probe_only: true
+    })
+    : await rpcCall(deps, 'candidate_submission_finalize_single_flight_v1', {
+      p_session_id: null,
+      p_environment: environmentName(env),
+      p_workflow_id: workflow.id,
+      p_expected_generation: generation,
+      p_expected_row_signature: null,
+      p_idempotency_key: finalisationKey,
+      p_now_utc: new Date().toISOString(),
+      p_daily_materialisation_json: {
+        service_finalisation: {
+          contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+          workflow_generation: generation,
+          replay_key_probe_only: true
+        }
+      }
+    }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
+  return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
+}
+
+async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKey, officeActorId = null) {
+  idempotencyKey = requireCandidateIdempotency(idempotencyKey);
+  const workflow = await workflowRow(env, workflowId);
+  const receiptReplay = await probeFinalisationReplayByKey(
+    env, deps, workflow, generation, idempotencyKey, officeActorId
+  );
+  if (receiptReplay) return receiptReplay;
+  const workerOnly = workflow.scope === 'WEEKLY' && workflow.workflow_kind === 'CONTRACT_HOURS'
+    && workflow.route === 'ELECTRONIC'
+    && parseJson(workflow.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';
+  const approved = upper(workflow.route) === 'PAPER' || workerOnly ? null : await restOne(env, 'candidate_approval_requests',
+    `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(generation)}`
+    + '&state=eq.APPROVED&select=id,request_generation,method,review_manifest_sha256,approved_at_utc&order=approved_at_utc.desc');
+  const finalisationIdentity = {
+    contract_version: 'CANDIDATE_FINALISATION_IDENTITY_V1',
+    workflow_id: workflow.id,
+    workflow_generation: generation,
+    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',
+    approval_request_id: approved?.id || null,
+    approval_request_generation: approved ? Number(approved.request_generation) : null,
+    review_manifest_sha256_hex: text(workerOnly ? workflow.review_manifest_sha256 : approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase() || null,
+    paper_return_manifest_sha256_hex: upper(workflow.route) === 'PAPER'
+      ? text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() : null
+  };
+  if (workerOnly) {
+    finalisationIdentity.candidate_signature_sha256_hex = text(workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
+    finalisationIdentity.policy_snapshot_sha256_hex = text(workflow.policy_snapshot_sha256).replace(/^\\x/i, '').toLowerCase();
+  }
+  const replayServiceFinalisation = {
+    contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+    workflow_generation: generation,
+    approval_request_id: approved?.id || null,
+    approval_request_generation: approved ? Number(approved.request_generation) : null,
+    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',
+    review_manifest_sha256_hex: finalisationIdentity.review_manifest_sha256_hex || '',
+    paper_return_manifest_sha256_hex: finalisationIdentity.paper_return_manifest_sha256_hex || '',
+    finalisation_identity: finalisationIdentity,
+    actor_user_id: officeActorId || null
+  };
+  const replay = await probeFinalisationReplay(
+    env, deps, workflow, generation, idempotencyKey, replayServiceFinalisation, officeActorId
+  );
+  if (replay) return replay;
+  if (upper(workflow.route) !== 'PAPER' && !workerOnly && !approved) {
+    throw new CandidateHttpError(409, 'FINAL_SIGNED_DOCUMENT_NOT_READY');
+  }
+  const serviceFinalisation = {
+    contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+    approval_request_id: approved?.id || null,
+    approval_request_generation: approved ? Number(approved.request_generation) : null,
+    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',
+    workflow_generation: generation,
+    review_manifest_sha256_hex: finalisationIdentity.review_manifest_sha256_hex || '',
+    paper_return_manifest_sha256_hex: finalisationIdentity.paper_return_manifest_sha256_hex || '',
+    finalisation_identity: finalisationIdentity,
+    actor_user_id: officeActorId || null
+  };
+  if (workflow.workflow_kind === 'DAILY') {
+    return safeFinalisationResult(await deps.finaliseDaily({
+      sessionId: null,
+      environment: environmentName(env),
+      workflowId: workflow.id,
+      expectedGeneration: generation,
+      idempotencyKey,
+      nowUtc: new Date().toISOString(),
+      serviceFinalisation,
+      officeActorId
+    }));
+  }
+  const finalisationPayload = {
+    p_session_id: null,
+    p_environment: environmentName(env),
+    p_workflow_id: workflow.id,
+    p_expected_generation: generation,
+    p_expected_row_signature: await lifecycleSignature(deps, workflow),
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString(),
+    p_daily_materialisation_json: { service_finalisation: serviceFinalisation }
+  };
+  return safeFinalisationResult(officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'FINALISE_EXECUTE', {
+      workflow_id: workflow.id,
+      generation,
+      expected_row_signature: finalisationPayload.p_expected_row_signature,
+      idempotency_key: finalisationPayload.p_idempotency_key,
+      daily_materialisation_json: finalisationPayload.p_daily_materialisation_json
+    })
+    : await rpcCall(
+      deps,
+      'candidate_submission_finalize_single_flight_v1',
+      finalisationPayload,
+      { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS }
+    ));
+}
+
+export async function recoverPendingCandidateManagerFinalisations(
+  env, deps, limit = 5, options = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 5, 10));
+  const environment = environmentName(env);
+  const target = options.target || null;
+  const rows = target ? [{
+    id: requireUuid(target.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation: requireInteger(
+      target.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+    )
+  }] : await restRows(env, 'candidate_submission_workflows',
+    `environment=eq.${encodeURIComponent(environment)}`
+    + '&state=in.(MANAGER_APPROVED_PENDING_FINAL_DOCUMENT,READY_TO_FINALISE)'
+    + '&route=in.(PHONE,EMAIL,ELECTRONIC)'
+    + '&select=id,generation,state,updated_at_utc'
+    + '&order=updated_at_utc.asc'
+    + `&limit=${boundedLimit}`);
+  let recovered = 0;
+  let deferred = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const row of rows) {
+    try {
+      const completion = await withManagerFinalisationLease(
+        env, row.id, Number(row.generation), async () => {
+          const current = await workflowRow(env, row.id);
+          const workerOnly = current.scope === 'WEEKLY' && current.workflow_kind === 'CONTRACT_HOURS'
+            && current.route === 'ELECTRONIC' && current.state === 'READY_TO_FINALISE'
+            && Number(current.generation) === Number(row.generation)
+            && parseJson(current.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';
+          if (workerOnly) return finaliseWorkflow(env, deps, row.id, Number(row.generation),
+            `candidate-system-worker-only-recovery:${row.id}:${row.generation}`);
+          const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {
+            p_environment: environment,
+            p_workflow_id: requireUuid(row.id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+            p_expected_generation: requireInteger(row.generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+            p_now_utc: new Date().toISOString()
+          }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
+          await renderAndRegister(env, deps, recovery?.final_render_contract, 'FINAL');
+          const completion = await finaliseWorkflow(
+            env,
+            deps,
+            row.id,
+            Number(row.generation),
+            `candidate-system-finalise-recovery:${row.id}:${row.generation}`
+          );
+          return completion;
+        }
+      );
+      if (completion?.single_flight_deferred === true) {
+        deferred += 1;
+        continue;
+      }
+      // Both worker-only and manager recovery require genuine completion.
+      if (completion?.ok !== true) {
+        throw new CandidateHttpError(
+          409,
+          knownErrorCode({ code: completion?.error_code })
+            || 'CANDIDATE_MANAGER_FINALISATION_INCOMPLETE'
+        );
+      }
+      recovered += 1;
+    } catch (error) {
+      const errorCode = knownErrorCode(error);
+      if (target && [
+        'CANDIDATE_MANAGER_FINALISATION_RECOVERY_NOT_ALLOWED',
+        'WORKFLOW_GENERATION_CONFLICT',
+        'CANDIDATE_WORKFLOW_NOT_FOUND'
+      ].includes(errorCode)) {
+        skipped += 1;
+        continue;
+      }
+      failed += 1;
+      console.error('[candidate-app] manager finalisation recovery failed',
+        safeCandidateTransportDiagnostic(error));
+    }
+  }
+  return { scanned: rows.length, recovered, deferred, skipped, failed };
+}
+
+export async function resumePendingCandidateReviewRenders(
+  env, deps, limit = 1, options = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 1, 5));
+  const target = options.target || null;
+  const receipt = await rpcCall(deps, 'candidate_review_render_recovery_list_v1', {
+    p_environment: environmentName(env),
+    p_limit: boundedLimit,
+    p_workflow_id: target?.workflow_id || null,
+    p_workflow_generation: target?.generation == null ? null : Number(target.generation),
+    p_now_utc: new Date().toISOString()
+  });
+  if (receipt?.ok !== true
+      || receipt?.contract_version !== 'CANDIDATE_REVIEW_RENDER_RECOVERY_LIST_V1'
+      || !Array.isArray(receipt?.items)
+      || Number(receipt?.count) !== receipt.items.length) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REVIEW_RENDER_RECOVERY_FAILED');
+  }
+  let recovered = 0;
+  let failed = 0;
+  for (const row of receipt.items) {
+    try {
+      const workflowId = requireUuid(row.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+      const generation = requireInteger(
+        row.workflow_generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+      );
+      const contract = row.render_contract;
+      if (contract?.workflow_id !== workflowId
+          || Number(contract?.workflow_generation) !== generation) {
+        throw new CandidateHttpError(409, 'CANDIDATE_REVIEW_RENDER_RECOVERY_FAILED');
+      }
+      await renderAndRegister(env, deps, contract, 'REVIEW');
+      recovered += 1;
+    } catch (error) {
+      failed += 1;
+      console.error('[candidate-app] scheduled review document refresh failed', {
+        workflow_id: text(row?.workflow_id) || null,
+        error_code: knownErrorCode(error) || 'CANDIDATE_REVIEW_RENDER_RECOVERY_FAILED'
+      });
+    }
+  }
+  return { scanned: receipt.items.length, recovered, failed };
+}
+
+export async function recoverPendingCandidateExpenseUpdates(env, deps, limit = 20) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
+  return rpcCall(deps, 'candidate_expense_update_recover_expired_v1', {
+    p_environment: environmentName(env),
+    p_limit: boundedLimit,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+export async function resumePendingCandidateExpenseUpdateRenders(
+  env, deps, limit = 1, options = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 1, 5));
+  const target = options.target || null;
+  const receipt = await rpcCall(deps, 'candidate_expense_update_render_recovery_list_v1', {
+    p_environment: environmentName(env),
+    p_limit: boundedLimit,
+    p_update_id: target?.update_id
+      ? requireUuid(target.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY') : null,
+    p_operation_id: target?.operation_id
+      ? requireUuid(target.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND') : null,
+    p_now_utc: new Date().toISOString()
+  });
+  if (receipt?.ok !== true
+      || receipt?.contract_version !== 'CANDIDATE_EXPENSE_RENDER_RECOVERY_LIST_V1'
+      || !Array.isArray(receipt?.items)
+      || Number(receipt?.count) !== receipt.items.length) {
+    throw new CandidateHttpError(503, 'CANDIDATE_EXPENSE_UPDATE_RECOVERY_FAILED');
+  }
+  const rows = receipt.items;
+  const renderUpdate = options.renderUpdate || ((renderEnv, renderDeps, submitted, key) =>
+    renderAndRebindPendingExpenseUpdate(
+      renderEnv, renderDeps, submitted, key, { abortOnFailure: false }
+    ));
+  let recovered = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const updateId = requireUuid(row.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+      const workflowId = requireUuid(row.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+      const operationId = row.operation_id == null ? null
+        : requireUuid(row.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND');
+      const submitted = parseJson(row.submit_result_json, {}) || {};
+      if (submitted.update_id !== updateId
+          || submitted.workflow_id !== workflowId
+          || !submitted.render_contract) {
+        throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+      }
+      await renderUpdate(
+        env, deps, submitted, operationId
+          ? `candidate-expense-operation:${operationId}`
+          : `candidate-expense-update:${updateId}`
+      );
+      recovered += 1;
+    } catch (error) {
+      failed += 1;
+      console.error('[candidate-app] scheduled expense document refresh failed', {
+        update_id: text(row?.update_id) || null,
+        workflow_id: text(row?.workflow_id) || null,
+        error_code: knownErrorCode(error) || 'CANDIDATE_EXPENSE_UPDATE_RECOVERY_FAILED'
+      });
+    }
+  }
+  return { scanned: rows.length, recovered, failed };
+}
+
+async function correctionProjection(deps, timesheetId, candidateId) {
+  if (!timesheetId) return null;
+  return rpcCall(deps, 'timesheet_correction_request_projection_v1', {
+    p_timesheet_id: requireUuid(timesheetId),
+    p_candidate_id: requireUuid(candidateId, 'CANDIDATE_SELECTION_REQUIRED')
+  });
+}
+
+function admitCorrectionReplacement(request, raw, timesheetId, mutation = false) {
+  const compatible = correctionCapability(request);
+  if (!raw || raw.replacement_timesheet_id !== timesheetId) return compatible;
+  correctionCapability(request, raw.state === 'WAITING');
+  if (mutation && raw.state !== 'WAITING') {
+    throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+  }
+  return compatible;
+}
+
+async function admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId) {
+  const raw = await rpcCall(deps, 'timesheet_correction_workflow_projection_v1', {
+    p_workflow_id: workflowId, p_candidate_id: access.selected_candidate_id
+  });
+  const id = raw?.replacement_timesheet_id;
+  admitCorrectionReplacement(request, raw, id, true);
+  if (raw && raw.replacement_timesheet_id === id) {
+    serializeCandidateCorrection(raw, id, CORRECTION_CONVERTERS);
+  }
+  return raw;
+}
+
+function frozenCorrectionDailyShift(raw) {
+  const source = raw.frozen_daily_shift;
+  if (!isObject(source) || source.booking_id !== raw.original_booking_id
+      || !/^\d{4}-\d{2}-\d{2}$/.test(text(source.work_date))
+      || !/^\d{4}-\d{2}-\d{2}$/.test(text(source.week_ending_date))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+  }
+  const output = {};
+  for (const key of ['booking_id', 'work_date', 'week_ending_date', 'hospital', 'ward', 'job_title',
+    'shift_type', 'shift_starts_at', 'shift_ends_at']) {
+    const value = source[key];
+    if (!Object.hasOwn(source, key) || (value !== null && typeof value !== 'string')) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    output[key] = value;
+  }
+  for (const key of ['shift_starts_at', 'shift_ends_at']) {
+    if (output[key] !== null && !Number.isFinite(Date.parse(output[key]))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+  }
+  return output;
+}
+
+async function enrichCandidateCorrection(request, deps, access, detail) {
+  const id = detail?.timesheet?.id;
+  const raw = await correctionProjection(deps, id, access.selected_candidate_id);
+  const compatible = admitCorrectionReplacement(request, raw, id);
+  if (!raw || !compatible) return detail;
+  // R0 is an authorized ordinary history record, but is outside the public
+  // V1 fragment's declared root/reversed/P0 identity set.
+  if (![raw.root_timesheet_id, raw.reversed_timesheet_id, raw.replacement_timesheet_id].includes(id)) return detail;
+  const correction = serializeCandidateCorrection(raw, id, CORRECTION_CONVERTERS);
+  const replacement = correction.replacement_timesheet_id === id;
+  return { ...detail, correction, ...(replacement && detail.timesheet.sheet_scope === 'DAILY'
+    ? { daily_shift: frozenCorrectionDailyShift(raw) } : {}) };
+}
+
+async function handleCandidateRead(request, env, deps, kind, params = {}) {
+  const access = await verifyCandidateAccess(request, env);
+  const url = new URL(request.url);
+  if (kind === 'bootstrap') {
+    const bootstrap = await rpcCall(deps, 'candidate_app_bootstrap_v1', candidateRpcArgs(access, env, {
+      p_expected_rotation: access.rotation
+    }));
+    const correlationId = candidateBootstrapCorrelation(request);
+    const response = composeCandidateBootstrapPhase1b(bootstrap);
+    response.notification_preferences = safeCandidateNotificationPreferences(
+      response.notification_preferences
+    );
+    response.agency_branding = await candidateAppAgencyBranding(env);
+    return jsonResponse(200, response, {
+      'x-correlation-id': correlationId
+    });
+  }
+  if (kind === 'page') {
+    const requestedView = text(url.searchParams.get('view') || 'current').toLowerCase();
+    if (!['current', 'history'].includes(requestedView)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_VIEW_INVALID');
+    }
+    const cursor = url.searchParams.get('cursor');
+    if (cursor && cursor.length > 2048) {
+      throw new CandidateHttpError(400, 'CANDIDATE_CURSOR_INVALID');
+    }
+    const rawLimit = Number(url.searchParams.get('limit') || 50);
+    if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PAGE_LIMIT_INVALID');
+    }
+    const page = await rpcCall(deps, 'candidate_app_timesheet_page_v2', candidateRpcArgs(access, env, {
+      p_view: requestedView.toUpperCase(),
+      p_cursor: cursor,
+      p_limit: rawLimit
+    }));
+    const legacyEnriched = await enrichCandidatePageExpenseSummaries(env, access, page);
+    const enriched = await enrichCandidatePageAdvancedExpenses(env, deps, legacyEnriched);
+    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, enriched));
+  }
+  if (kind === 'detail') {
+    const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v2', candidateRpcArgs(access, env, {
+      p_timesheet_id: params.timesheetId ? requireUuid(params.timesheetId) : null,
+      p_contract_week_id: params.contractWeekId ? requireUuid(params.contractWeekId)
+        : (url.searchParams.get('contract_week_id') ? requireUuid(url.searchParams.get('contract_week_id')) : null),
+      p_workflow_id: params.workflowId ? requireUuid(params.workflowId)
+        : (url.searchParams.get('workflow_id') ? requireUuid(url.searchParams.get('workflow_id')) : null)
+    }));
+    const enrichedDetail = await enrichCandidateComponentLineage(env, detail);
+    const submittedFacts = await projectCurrentSubmittedFacts(env, access, enrichedDetail);
+    const legacyExpenseClaims = await enrichCandidateSubmittedExpenseClaims(
+      env, access, submittedFacts
+    );
+    const expenseClaims = await enrichCandidateDetailAdvancedExpenses(
+      env, deps, legacyExpenseClaims
+    );
+    const corrected = await enrichCandidateCorrection(request, deps, access, expenseClaims);
+    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, corrected));
+  }
+  if (kind === 'missing-options') {
+    return jsonResponse(200, await rpcCall(deps, 'candidate_missing_week_options_v1', candidateRpcArgs(access, env, {
+      p_contract_id: requireUuid(params.contractId),
+      p_from: text(url.searchParams.get('from')),
+      p_to: text(url.searchParams.get('to'))
+    })));
+  }
+  throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+}
+
+async function handleCandidateWeeklySourceRequest(
+  request, env, deps, requestId, action
+) {
+  const access = await verifyCandidateAccess(request, env);
+  const id = requireUuid(requestId, 'WEEKLY_SOURCE_CANDIDATE_REQUEST_NOT_FOUND');
+  const rpcArgs = candidateRpcArgs(access, env, { p_request_id: id });
+  if (action === 'GET') {
+    return jsonResponse(200, await rpcCall(
+      deps, 'weekly_source_candidate_app_request_get_v1', rpcArgs
+    ));
+  }
+  const body = await readJson(request);
+  if (!isObject(body) || Array.isArray(body)) {
+    throw new CandidateHttpError(400, 'WEEKLY_SOURCE_CANDIDATE_REQUEST_INVALID');
+  }
+  const rpcName = action === 'DRAFT'
+    ? 'weekly_source_candidate_app_draft_save_atomic_v1'
+    : 'weekly_source_candidate_app_submit_atomic_v1';
+  return jsonResponse(200, await rpcCall(deps, rpcName, {
+    ...rpcArgs,
+    p_body: body
+  }));
+}
+
+async function handleCandidateWeeklySourceSelfSubmit(request, env, deps, workflowId) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  if (!isObject(body) || Array.isArray(body)) {
+    throw new CandidateHttpError(400, 'WEEKLY_SOURCE_CANDIDATE_SELF_SUBMIT_INVALID');
+  }
+  const id = requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  return jsonResponse(200, await rpcCall(
+    deps, 'weekly_source_candidate_self_submit_atomic_v1',
+    candidateRpcArgs(access, env, { p_body: {
+      workflow_id: id,
+      expected_workflow_generation: generation,
+      candidate_signature_component_id: requireUuid(
+        body.candidate_signature_component_id, 'WEEKLY_SOURCE_CANDIDATE_SELF_SUBMIT_INVALID'
+      ),
+      candidate_signed_at_utc: text(body.candidate_signed_at_utc),
+      immutable_submission: body.immutable_submission,
+      idempotency_key: idempotencyKey
+    } })
+  ));
+}
+
+async function handleAddMissingWeek(request, env, deps, contractId) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  const result = await rpcCall(deps, 'candidate_contract_week_add_missing_atomic_v1', candidateRpcArgs(access, env, {
+    p_contract_id: requireUuid(contractId),
+    p_week_ending_date: text(body.week_ending_date),
+    p_idempotency_key: requireCandidateIdempotency(body.idempotency_key)
+  }));
+  return jsonResponse(201, result);
+}
+
+async function handleExpensePlacement(request, env, deps, timesheetId, createCarrier = false) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  const anchorTimesheetId = requireUuid(timesheetId);
+  if (createCarrier) {
+    const result = await rpcCall(deps, 'expense_carrier_resolve_or_create_atomic_v1', {
+      p_candidate_id: requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED'),
+      p_environment: access.environment,
+      p_anchor_timesheet_id: anchorTimesheetId,
+      p_expected_row_signature: text(body.expected_row_signature) || null,
+      p_idempotency_key: requireCandidateIdempotency(body.idempotency_key),
+      p_now_utc: new Date().toISOString()
+    });
+    return jsonResponse(200, safeExpensePlacement(result));
+  }
+  const proposedClaim = isObject(body.proposed_claim) ? body.proposed_claim : {};
+  const forbidden = forbiddenFinancialKeys(proposedClaim);
+  if (forbidden.length) {
+    throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
+  }
+  const result = await rpcCall(deps, 'expense_placement_resolve_v1', {
+    p_candidate_id: requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED'),
+    p_environment: access.environment,
+    p_anchor_timesheet_id: anchorTimesheetId,
+    p_contract_week_id: body.contract_week_id ? requireUuid(body.contract_week_id) : null,
+    p_proposed_claim: proposedClaim,
+    p_now_utc: new Date().toISOString()
+  });
+  return jsonResponse(200, safeExpensePlacement(result));
+}
+
+async function handleWorkflowCreate(request, env, deps) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  const workflowId = body.workflow_id ? requireUuid(body.workflow_id) : crypto.randomUUID();
+  const payload = normaliseCandidateWorkflowCreatePayload(
+    isObject(body.workflow) ? body.workflow : body
+  );
+  const correction = await rpcCall(deps, 'timesheet_correction_create_projection_v1', {
+    p_candidate_id: access.selected_candidate_id,
+    p_contract_week_id: payload.contract_week_id || null,
+    p_target_timesheet_id: payload.target_timesheet_id || (payload.anchor_timesheet_id ? null : payload.timesheet_id) || null,
+    p_anchor_timesheet_id: payload.anchor_timesheet_id || null
+  });
+  const targetId = correction?.replacement_timesheet_id;
+  admitCorrectionReplacement(request, correction, targetId, true);
+  if (correction) {
+    serializeCandidateCorrection(correction, targetId, CORRECTION_CONVERTERS);
+    if (correction.candidate_id !== access.selected_candidate_id) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    // The purpose RPC proves each supplied selector before returning these
+    // server-owned identities. Preserve the native CREATE owner and replay
+    // hash while binding its worked target to the exact physical P0.
+    payload.target_timesheet_id = requireUuid(targetId, 'CANDIDATE_CONTEXT_STALE');
+    if (correction.replacement_week_id != null) {
+      if (upper(payload.scope) !== 'WEEKLY') {
+        throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+      }
+      payload.contract_week_id = requireUuid(correction.replacement_week_id, 'CANDIDATE_CONTEXT_STALE');
+    } else if (upper(payload.scope) !== 'DAILY') {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+  }
+  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+    access, env, workflowId, 'CREATE', null, payload,
+    requireCandidateIdempotency(body.idempotency_key)
+  ));
+  return jsonResponse(201, {
+    ...result,
+    policy: safeCandidateWorkflowPolicy(result?.policy)
+  });
+}
+
+async function handleWorkflowResubmit(request, env, deps, workflowId) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const idempotencyKey = requireUuid(body.idempotency_key, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
+  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+    access, env, workflowId, 'RESUBMIT_REJECTED', generation, {}, idempotencyKey
+  ));
+  return jsonResponse(201, {
+    ...result,
+    policy: safeCandidateWorkflowPolicy(result?.policy)
+  });
+}
+
+function pendingExpenseUpdateBaseFacts(workflow) {
+  const immutable = parseJson(workflow?.immutable_submission_json, {}) || {};
+  const hours = parseJson(
+    immutable.hours_submission || immutable.hours_claim || immutable,
+    {}
+  ) || {};
+  const expense = parseJson(
+    immutable.expense_submission || immutable.expense_claim || immutable,
+    {}
+  ) || {};
+  const hoursSnapshot = parseJson(hours.canonical_tsfin_snapshot, hours) || hours;
+  const expenseSnapshot = parseJson(expense.canonical_tsfin_snapshot, expense) || expense;
+  const baseClaim = {
+    ...(Number(expenseSnapshot.mileage_units) > 0
+      ? { mileage_units: Number(expenseSnapshot.mileage_units), mileage_total_confirmed: true }
+      : {}),
+    ...(Number(expenseSnapshot.travel_pay_ex_vat) > 0
+      ? { travel_amount: Number(expenseSnapshot.travel_pay_ex_vat) } : {}),
+    ...(Number(expenseSnapshot.accommodation_pay_ex_vat) > 0
+      ? { accommodation_amount: Number(expenseSnapshot.accommodation_pay_ex_vat) } : {}),
+    ...(Number(expenseSnapshot.other_pay_ex_vat) > 0
+      ? { other_amount: Number(expenseSnapshot.other_pay_ex_vat) } : {}),
+    ...(text(expenseSnapshot.expenses_description || expense.description).trim()
+      ? { description: text(expenseSnapshot.expenses_description || expense.description).trim() }
+      : {})
+  };
+  const timesheetPatch = parseJson(hours.timesheet_patch_json, {}) || {};
+  return {
+    claim: baseClaim,
+    actual_schedule_json: Array.isArray(timesheetPatch.actual_schedule_json)
+      ? timesheetPatch.actual_schedule_json
+      : Array.isArray(hoursSnapshot.actual_schedule_json)
+        ? hoursSnapshot.actual_schedule_json : null,
+    additional_units_week: isObject(timesheetPatch.additional_units_week)
+      ? timesheetPatch.additional_units_week
+      : isObject(hoursSnapshot.additional_units_week)
+        ? hoursSnapshot.additional_units_week : null,
+    additional_units_per_day: isObject(timesheetPatch.additional_units_per_day)
+      ? timesheetPatch.additional_units_per_day
+      : isObject(hoursSnapshot.additional_units_per_day)
+        ? hoursSnapshot.additional_units_per_day : null,
+    break_entry_context: isObject(immutable.break_entry_context)
+      ? immutable.break_entry_context
+      : isObject(hours.break_entry_context) ? hours.break_entry_context : null
+  };
+}
+
+// A pending expense edit is a delta over the already frozen submission.  The
+// Candidate app deliberately uploads only the new/replacement categories;
+// the private Worker restores untouched expense and hours facts from the
+// server-owned draft generation before canonical financial calculation.
+// The database still compares every unplanned category with its saved prior
+// generation, so a client cannot use this merge to change an unplanned item.
+function mergePendingExpenseUpdateFacts(workflow, supplied) {
+  const facts = isObject(supplied) ? structuredClone(supplied) : {};
+  const base = pendingExpenseUpdateBaseFacts(workflow);
+  const suppliedClaim = isObject(facts.expense_claim) ? facts.expense_claim : {};
+  // Hours and their declaration were not selected for amendment. Discard any
+  // client copy (including a stale screen copy) and restore the exact current
+  // server facts. Expense-only claims therefore cannot acquire hours here.
+  delete facts.actual_schedule_json;
+  delete facts.timesheet_patch_json;
+  delete facts.additional_units_week;
+  delete facts.additional_units_per_day;
+  delete facts.break_entry_context;
+  return {
+    ...facts,
+    ...(Array.isArray(base.actual_schedule_json)
+      ? { actual_schedule_json: base.actual_schedule_json } : {}),
+    ...(isObject(base.additional_units_week)
+      ? { additional_units_week: base.additional_units_week } : {}),
+    ...(isObject(base.additional_units_per_day)
+      ? { additional_units_per_day: base.additional_units_per_day } : {}),
+    ...(isObject(base.break_entry_context)
+      ? { break_entry_context: base.break_entry_context } : {}),
+    expense_claim: { ...base.claim, ...suppliedClaim }
+  };
+}
+
+async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey) {
+  const supplied = isObject(body.immutable_submission) ? structuredClone(body.immutable_submission) : {};
+  const forbidden = forbiddenFinancialKeys(supplied);
+  if (forbidden.length) throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
+  const authoritySubmission = workflow.workflow_kind === 'DAILY'
+    ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied, mutationKey })
+    : await deps.buildWeeklySubmission({ workflow, factualSubmission: supplied, mutationKey });
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const id = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+  const rawCorrection = await correctionProjection(deps, id, workflow.candidate_id);
+  if (rawCorrection && rawCorrection.replacement_timesheet_id === id) {
+    const correction = serializeCandidateCorrection(rawCorrection, id, CORRECTION_CONVERTERS);
+    if (correction.state !== 'WAITING') throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    // Read only the canonical producer's actual submitted schedule. Never the
+    // Office proposal, mutable Rota, or the earlier signed record's schedule.
+    const reviewed = scheduleFromImmutable({ ...workflow, immutable_submission_json: authoritySubmission }, null);
+    if (!reviewed.length) throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    const frozen = correctionPresentation(rawCorrection, reviewed, CORRECTION_CONVERTERS);
+    presentation.correction = frozen;
+    presentation.wording.header.lines = [...frozen.header_lines, ...presentation.wording.header.lines];
+  }
+  return {
+    ...authoritySubmission,
+    official_presentation: presentation
+  };
+}
+
+function pdfBase64(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function escapeCandidateMailHtml(value) {
+  return text(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+}
+
+function normaliseMileageFormUnits(value) {
+  const mileageUnits = Number(value);
+  if (!Number.isFinite(mileageUnits) || mileageUnits <= 0 || mileageUnits > 1_000_000) {
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_UNITS_INVALID');
+  }
+  return Math.round(mileageUnits * 100) / 100;
+}
+
+function submittedMileageUnits(immutableSubmission) {
+  const expenseSubmission = parseJson(
+    immutableSubmission?.expense_submission
+      || immutableSubmission?.expense_claim
+      || immutableSubmission?.expenses
+      || immutableSubmission,
+    {}
+  ) || {};
+  const claim = parseJson(
+    expenseSubmission.canonical_tsfin_snapshot,
+    expenseSubmission
+  ) || expenseSubmission;
+  const supplied = claim.mileage_units
+    ?? expenseSubmission.mileage_units
+    ?? claim.total_mileage
+    ?? expenseSubmission.total_mileage;
+  if (supplied == null || supplied === '') return 0;
+  return normaliseMileageFormUnits(supplied);
+}
+
+async function assertCandidateMileageEvidenceMatchesSubmission(env, workflow, immutableSubmission) {
+  const mileageUnits = submittedMileageUnits(immutableSubmission);
+  if (mileageUnits <= 0) return;
+  const claim = isObject(immutableSubmission?.expense_claim)
+    ? immutableSubmission.expense_claim
+    : isObject(immutableSubmission?.expense_submission)
+      ? immutableSubmission.expense_submission
+      : {};
+  if (claim.mileage_total_confirmed !== true) {
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_TOTAL_CONFIRMATION_REQUIRED');
+  }
+  const components = await restRows(env, 'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflow.id)}`
+    + `&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+    + '&component_kind=eq.MILEAGE_FORM&expense_category=eq.MILEAGE&state=eq.IMMUTABLE'
+    + '&select=id,media_type,byte_size,storage_key,source_content_sha256');
+  if (!components.length) {
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_EVIDENCE_REQUIRED');
+  }
+  for (const component of components) {
+    const expectedHash = text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
+    if (normaliseMediaType(component.media_type) !== 'image/jpeg'
+        || !Number.isSafeInteger(Number(component.byte_size))
+        || Number(component.byte_size) < 1
+        || !text(component.storage_key)
+        || !SHA256_RE.test(expectedHash)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_EVIDENCE_INVALID');
+    }
+    const object = await env.R2?.head(text(component.storage_key));
+    if (!object
+        || normaliseMediaType(object.httpMetadata?.contentType) !== 'image/jpeg'
+        || Number(object.size) !== Number(component.byte_size)
+        || text(object.customMetadata?.sha256).toLowerCase() !== expectedHash) {
+      throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_EVIDENCE_INVALID');
+    }
+  }
+}
+
+async function candidateGenericMileageFormArtifact(env) {
+  const agencyBranding = await candidateAppAgencyDocumentBranding(env);
+  const bytes = await mileageClaimFormBytes(env, agencyBranding);
+  const semanticSha256 = await sha256Hex(JSON.stringify({
+    contract_version: 'CANDIDATE_GENERIC_MILEAGE_FORM_V1',
+    agency_branding_sha256: agencyBranding.branding_contract_sha256,
+    content_sha256: await sha256Hex(bytes)
+  }));
+  const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/agency/`
+    + `${agencyBranding.branding_contract_sha256}/generic/mileage-claim-form-v1.pdf`;
+  const stored = await immutablePut(env, storageKey, bytes, 'application/pdf', {
+    purpose: 'candidate-generic-mileage-claim-form',
+    semantic_sha256: semanticSha256,
+    agency_branding_sha256: agencyBranding.branding_contract_sha256,
+    agency_logo_sha256: agencyBranding.logo_sha256 || 'none',
+    page_count: '1'
+  });
+  return {
+    bytes,
+    storage_key: storageKey,
+    sha256: stored.sha256,
+    semantic_sha256: semanticSha256,
+    filename: 'Mileage_Claim_Form.pdf',
+    agency_name: agencyBranding.agency_name,
+    idempotent_replay: stored.created !== true
+  };
+}
+
+async function handleCandidateMileageFormAction(env, access, body, dbAction) {
+  if (Number(body.generation) !== 1) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (body.mileage_units != null || body.payload?.mileage_units != null) {
+    throw new CandidateHttpError(400, 'CANDIDATE_GENERIC_MILEAGE_FORM_MUST_NOT_DECLARE_MILEAGE');
+  }
+  const artifact = await candidateGenericMileageFormArtifact(env);
+  const common = {
+    ok: true,
+    workflow_id: GENERIC_DOCUMENT_WORKFLOW_ID,
+    generation: 1,
+    state: 'GENERIC_DOCUMENT_READY',
+    idempotent_replay: artifact.idempotent_replay,
+    mileage_form_state: dbAction === 'MILEAGE_FORM_EMAIL' ? 'EMAIL_QUEUED' : 'PREPARED',
+    mileage_form_scope: 'GENERIC',
+    mileage_form_filename: artifact.filename,
+    mileage_form_sha256: artifact.sha256,
+    mileage_form_byte_size: artifact.bytes.byteLength
+  };
+  if (dbAction === 'MILEAGE_FORM_PREPARE') {
+    return { ...common, mileage_form_content_base64: pdfBase64(artifact.bytes) };
+  }
+  const account = await restOne(env, 'candidate_app_accounts',
+    `id=eq.${encodeURIComponent(access.account_id)}`
+    + `&environment=eq.${encodeURIComponent(environmentName(env))}`
+    + '&status=eq.ACTIVE&select=id,email_normalized');
+  if (!text(account?.email_normalized)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REGISTERED_EMAIL_NOT_AVAILABLE');
+  }
+  const email = normaliseEmail(account?.email_normalized);
+  const safeAgency = escapeCandidateMailHtml(artifact.agency_name);
+  const bodyText = `${artifact.agency_name} has prepared the attached blank Mileage Claim Form.\n\n`
+    + 'You can print or reuse this form whenever you need to record mileage. Complete one or more sheets, then photograph the completed unsigned sheets when adding Mileage in MyTMS.';
+  const deterministicKey = `CANDIDATE_GENERIC_MILEAGE_FORM:${access.account_id}:${body.idempotency_key}`;
+  const outbox = await restWrite(env, 'mail_outbox', 'POST', 'on_conflict=deterministic_outbox_key', {
+    type: 'TIMESHEET_GENERAL', to: email,
+    subject: 'Your blank Mileage Claim Form',
+    body_html: `<p>${safeAgency} has prepared the attached blank Mileage Claim Form.</p>`
+      + '<p>You can print or reuse this form whenever you need to record mileage. Complete one or more sheets, then photograph the completed unsigned sheets when adding Mileage in MyTMS.</p>',
+    body_text: bodyText,
+    attachments: [{
+      r2_key: artifact.storage_key,
+      filename: artifact.filename,
+      content_type: 'application/pdf',
+      sha256: artifact.sha256,
+      size_bytes: artifact.bytes.byteLength,
+      page_count: 1
+    }],
+    status: 'QUEUED',
+    reference: `candidate-generic-mileage-form:${access.account_id}`,
+    recipient_kind: 'CANDIDATE',
+    recipient_id: access.selected_candidate_id,
+    context_kind: 'CANDIDATE_ACCOUNT',
+    context_id: access.account_id,
+    email_type: 'CANDIDATE_APP_TRANSACTIONAL',
+    scheduled_for_utc: new Date().toISOString(),
+    next_attempt_at_utc: new Date().toISOString(),
+    deterministic_outbox_key: deterministicKey,
+    payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_GENERIC_DOCUMENT_V1',
+      mileage_form_semantic_sha256: artifact.semantic_sha256
+    }
+  }, 'resolution=ignore-duplicates,return=representation');
+  const durable = outbox || await restOne(env, 'mail_outbox',
+    `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}&select=id,status`);
+  if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_MILEAGE_FORM_EMAIL_NOT_QUEUED');
+  }
+  return {
+    ...common,
+    idempotent_replay: artifact.idempotent_replay || !outbox,
+    mail_outbox_id: durable.id
+  };
+}
+
+async function queueCandidatePaperPackEmail(env, workflow, access, body, context) {
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== Number(body.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (upper(workflow.scope) !== 'WEEKLY' || upper(workflow.route) !== 'PAPER'
+      || upper(workflow.state) !== 'AWAITING_PAPER_RETURN') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
+  }
+  if (context.ready !== true || context.complete?.ready !== true
+      || context.workflow.id !== workflow.id
+      || Number(context.workflow.generation) !== Number(workflow.generation)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_NOT_READY');
+  }
+  const account = await restOne(env, 'candidate_app_accounts',
+    `id=eq.${encodeURIComponent(workflow.account_id)}`
+    + `&environment=eq.${encodeURIComponent(environmentName(env))}`
+    + '&status=eq.ACTIVE&select=id,email_normalized');
+  if (!text(account?.email_normalized)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REGISTERED_EMAIL_NOT_AVAILABLE');
+  }
+  const email = normaliseEmail(account.email_normalized);
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const agencyName = text(presentation.branding?.agency_name) || 'CloudTMS agency';
+  const candidateName = `${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim()
+    || 'Candidate';
+  const weekEnding = ukDate(workflow.week_ending_date);
+  const filename = `Official_Documents_${text(workflow.week_ending_date).slice(0, 10)}.pdf`;
+  const manifestSha256 = text(workflow.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const sourceTimesheetId = requireUuid(
+    workflow.target_timesheet_id || workflow.anchor_timesheet_id,
+    'CANDIDATE_PAPER_PACK_NOT_FOUND'
+  );
+  const deterministicKey = `CANDIDATE_PAPER_PACK_EMAIL:${workflow.id}:${workflow.generation}:${body.idempotency_key}`;
+  const now = new Date().toISOString();
+  const outbox = await restWrite(env, 'mail_outbox', 'POST',
+    'on_conflict=deterministic_outbox_key', {
+      type: 'TIMESHEET_QR',
+      to: email,
+      subject: `Documents to print and sign for week ending ${weekEnding}`,
+      body_html: `<p>${escapeCandidateMailHtml(agencyName)} has prepared the attached documents for ${escapeCandidateMailHtml(candidateName)}.</p>`
+        + `<p>Week ending: ${escapeCandidateMailHtml(weekEnding)}</p>`
+        + '<p>Print every page, obtain the required manager signatures, then return to MyTMS and photograph every signed page.</p>',
+      body_text: `${agencyName} has prepared the attached documents for ${candidateName}.\n\n`
+        + `Week ending: ${weekEnding}\n\n`
+        + 'Print every page, obtain the required manager signatures, then return to MyTMS and photograph every signed page.',
+      attachments: [{
+        r2_key: context.complete.key,
+        filename,
+        content_type: 'application/pdf',
+        sha256: context.complete.sha256,
+        size_bytes: Number(context.complete.byte_size),
+        page_count: Number(context.complete.page_count),
+        candidate_workflow_id: workflow.id,
+        candidate_workflow_generation: Number(workflow.generation),
+        paper_return_manifest_sha256: manifestSha256
+      }],
+      status: 'QUEUED',
+      reference: `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`,
+      recipient_kind: 'CANDIDATE',
+      recipient_id: workflow.candidate_id,
+      context_kind: 'timesheets',
+      context_id: sourceTimesheetId,
+      email_type: 'CANDIDATE_APP_TRANSACTIONAL',
+      scheduled_for_utc: now,
+      next_attempt_at_utc: now,
+      deterministic_outbox_key: deterministicKey,
+      payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
+        candidate_workflow_id: workflow.id,
+        candidate_workflow_generation: Number(workflow.generation),
+        paper_return_manifest_sha256: manifestSha256,
+        candidate_paper_pack_ready: true,
+        mail_held_until_pdf_rendered: false,
+        mail_hold_reason: null,
+        candidate_complete_pack_storage_key: context.complete.key,
+        candidate_complete_pack_sha256: context.complete.sha256,
+        candidate_complete_pack_size_bytes: Number(context.complete.byte_size),
+        candidate_complete_pack_page_count: Number(context.complete.page_count),
+        candidate_complete_pack_media_type: 'application/pdf'
+      }
+    }, 'resolution=ignore-duplicates,return=representation');
+  const durable = outbox || await restOne(env, 'mail_outbox',
+    `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}`
+    + '&select=id,status,deterministic_outbox_key,attachments,payment_scope_json,context_kind,context_id');
+  if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_EMAIL_NOT_QUEUED');
+  }
+  if (!candidateCompletePackAttachmentMatchesScope(durable, 'CANDIDATE_PAPER_PACK_EMAIL_V1')
+      || upper(durable.context_kind) !== 'TIMESHEETS'
+      || text(durable.context_id) !== sourceTimesheetId) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT');
+  }
+  return {
+    ok: true,
+    workflow_id: workflow.id,
+    generation: Number(workflow.generation),
+    state: workflow.state,
+    paper_email_state: upper(durable.status) === 'SENT' ? 'SENT' : 'EMAIL_QUEUED',
+    idempotent_replay: !outbox,
+    mail_outbox_id: durable.id
+  };
+}
+
+async function handleCandidatePaperEmailAction(request, env, deps, workflow, access, body) {
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== Number(body.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (upper(workflow.scope) !== 'WEEKLY' || upper(workflow.route) !== 'PAPER'
+      || upper(workflow.state) !== 'AWAITING_PAPER_RETURN') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
+  }
+  const timesheetId = requireUuid(
+    workflow.target_timesheet_id || workflow.anchor_timesheet_id,
+    'CANDIDATE_PAPER_PACK_NOT_FOUND'
+  );
+  const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  return queueCandidatePaperPackEmail(env, workflow, access, body, context);
+}
+
+function candidateExpenseCategoryChanges(value, options = {}) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4) {
+    throw new CandidateHttpError(400, 'CANDIDATE_EXPENSE_UPDATE_PLAN_INVALID');
+  }
+  const seen = new Set();
+  return value.map((entry) => {
+    if (!isObject(entry)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_EXPENSE_UPDATE_PLAN_INVALID');
+    }
+    const updateKind = upper(entry.update_kind);
+    const expenseCategory = upper(entry.expense_category);
+    const allowedKinds = options.allowRemove === true
+      ? ['ADD_CATEGORY', 'REPLACE_CATEGORY', 'REMOVE_CATEGORY']
+      : ['ADD_CATEGORY', 'REPLACE_CATEGORY'];
+    if (!allowedKinds.includes(updateKind)
+        || !['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(expenseCategory)
+        || seen.has(expenseCategory)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_EXPENSE_UPDATE_PLAN_INVALID');
+    }
+    seen.add(expenseCategory);
+    if (updateKind === 'ADD_CATEGORY') {
+      if (entry.expense_component_id != null || entry.component_generation != null) {
+        throw new CandidateHttpError(400, 'CANDIDATE_EXPENSE_UPDATE_PLAN_INVALID');
+      }
+      return { update_kind: updateKind, expense_category: expenseCategory };
+    }
+    return {
+      update_kind: updateKind,
+      expense_category: expenseCategory,
+      expense_component_id: requireUuid(
+        entry.expense_component_id, 'CANDIDATE_EXPENSE_UPDATE_PLAN_INVALID'
+      ),
+      component_generation: requireInteger(
+        entry.component_generation, 'CANDIDATE_EXPENSE_UPDATE_PLAN_INVALID', 1
+      )
+    };
+  });
+}
+
+function candidateExpenseCategoryResubmissionResult(result) {
+  const invalid = () => {
+    throw new CandidateHttpError(
+      409, 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RECEIPT_INVALID'
+    );
+  };
+  const requiredUuid = (value) => {
+    const candidate = text(value);
+    if (!UUID_RE.test(candidate)) invalid();
+    return candidate;
+  };
+  const positiveInteger = (value) => {
+    const candidate = Number(value);
+    if (!Number.isSafeInteger(candidate) || candidate < 1) invalid();
+    return candidate;
+  };
+  let categoryChanges;
+  try {
+    categoryChanges = candidateExpenseCategoryChanges(result?.category_changes);
+  } catch {
+    invalid();
+  }
+  const expenseCategory = text(result?.expense_category);
+  const editorMode = text(result?.editor_mode);
+  if (result?.ok !== true
+      || text(result?.contract_version)
+        !== 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1'
+      || text(result?.action_code) !== 'RESUBMIT_EXPENSE_CATEGORY'
+      || !['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(expenseCategory)
+      || !['NEW_EXPENSE_CLAIM', 'PENDING_MANAGER_UPDATE', 'PAPER_REPLACEMENT']
+        .includes(editorMode)
+      || text(result?.state) !== 'WORKER_DRAFT'
+      || result?.blank_claim !== true
+      || typeof result?.route_selection_required !== 'boolean'
+      || typeof result?.paper_pack_replacement !== 'boolean'
+      || typeof result?.old_pack_recoverable !== 'boolean'
+      || typeof result?.manager_link_preserved !== 'boolean'
+      || typeof result?.idempotent_replay !== 'boolean'
+      || categoryChanges?.length !== 1
+      || categoryChanges[0].update_kind !== 'ADD_CATEGORY'
+      || categoryChanges[0].expense_category !== expenseCategory) {
+    invalid();
+  }
+  const modeShape = {
+    NEW_EXPENSE_CLAIM: {
+      update_state: 'NONE', update_id: null, route_selection_required: true,
+      route: null, paper_pack_replacement: false, old_pack_recoverable: false,
+      manager_link_preserved: false
+    },
+    PENDING_MANAGER_UPDATE: {
+      update_state: 'UPDATING', route_selection_required: false,
+      route: 'ELECTRONIC', paper_pack_replacement: false,
+      old_pack_recoverable: false, manager_link_preserved: true
+    },
+    PAPER_REPLACEMENT: {
+      update_state: 'UPDATING', route_selection_required: false,
+      route: 'PAPER', paper_pack_replacement: true,
+      old_pack_recoverable: true, manager_link_preserved: false
+    }
+  }[editorMode];
+  const updateId = result?.update_id == null ? null : requiredUuid(result.update_id);
+  const updateIdRequired = editorMode !== 'NEW_EXPENSE_CLAIM';
+  if (text(result?.update_state) !== modeShape.update_state
+      || (updateIdRequired ? updateId === null : updateId !== null)
+      || result.route_selection_required !== modeShape.route_selection_required
+      || (result.route ?? null) !== modeShape.route
+      || result.paper_pack_replacement !== modeShape.paper_pack_replacement
+      || result.old_pack_recoverable !== modeShape.old_pack_recoverable
+      || result.manager_link_preserved !== modeShape.manager_link_preserved) {
+    invalid();
+  }
+  return {
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1',
+    ok: true,
+    operation_id: requiredUuid(result.operation_id),
+    action_code: 'RESUBMIT_EXPENSE_CATEGORY',
+    source_workflow_id: requiredUuid(result.source_workflow_id),
+    source_expense_component_id: requiredUuid(result.source_expense_component_id),
+    source_component_generation: positiveInteger(result.source_component_generation),
+    expense_category: expenseCategory,
+    category_changes: categoryChanges,
+    editor_mode: editorMode,
+    workflow_id: requiredUuid(result.workflow_id),
+    generation: positiveInteger(result.generation),
+    state: 'WORKER_DRAFT',
+    update_state: modeShape.update_state,
+    update_id: updateId,
+    blank_claim: true,
+    route_selection_required: modeShape.route_selection_required,
+    route: modeShape.route,
+    paper_pack_replacement: modeShape.paper_pack_replacement,
+    old_pack_recoverable: modeShape.old_pack_recoverable,
+    manager_link_preserved: modeShape.manager_link_preserved,
+    idempotent_replay: result.idempotent_replay
+  };
+}
+
+async function abortPendingExpenseUpdate(env, deps, workflowId, updateId, failureCode, key) {
+  return rpcCall(deps, 'candidate_expense_update_abort_atomic_v1', {
+    p_session_id: null,
+    p_environment: environmentName(env),
+    p_workflow_id: workflowId,
+    p_update_id: updateId,
+    p_service_recovery: true,
+    p_failure_code: failureCode,
+    p_idempotency_key: key,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+async function renderAndRebindPendingExpenseUpdate(
+  env, deps, result, mutationKey, { abortOnFailure = true } = {}
+) {
+  const workflowId = requireUuid(result?.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+  const updateId = requireUuid(result?.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+  try {
+    await renderAndRegister(env, deps, result?.render_contract, 'REVIEW');
+    return await rpcCall(deps, 'candidate_expense_update_rebind_atomic_v1', {
+      p_environment: environmentName(env),
+      p_workflow_id: workflowId,
+      p_update_id: updateId,
+      p_idempotency_key: `${mutationKey}:rebind`,
+      p_now_utc: new Date().toISOString()
+    });
+  } catch (error) {
+    if (!abortOnFailure) throw error;
+    try {
+      await abortPendingExpenseUpdate(
+        env, deps, workflowId, updateId,
+        'CANDIDATE_EXPENSE_UPDATE_RENDER_FAILED', `${mutationKey}:abort-render-failure`
+      );
+    } catch (abortError) {
+      console.error('[candidate-app] pending expense update recovery failed', {
+        workflow_id: workflowId,
+        update_id: updateId,
+        error_code: knownErrorCode(abortError)
+      });
+    }
+    throw error;
+  }
+}
+
+async function renderHeldPaperPackThenRebind(deps, pack, timesheetId, rebind) {
+  if (deps.nudgeQrPack) {
+    await deps.nudgeQrPack({ pack, timesheetId });
+  }
+  return rebind();
+}
+
+function candidateEmptyTimesheetOutcome(receipt, uuidArray, invalid) {
+  const consequence = text(receipt?.empty_timesheet_consequence);
+  if (![
+    'NONE', 'PERMANENT_REMOVE', 'REMOVE_FROM_CURRENT_KEEP_HISTORY'
+  ].includes(consequence) || typeof receipt?.owning_timesheet_deleted !== 'boolean') {
+    invalid();
+  }
+  const deletedTimesheetIds = uuidArray(receipt.deleted_timesheet_ids);
+  const retainedTimesheetIds = uuidArray(receipt.retained_timesheet_ids);
+  const removedFromCurrentTimesheetIds = uuidArray(
+    receipt.removed_from_current_timesheet_ids
+  );
+  const deleted = new Set(deletedTimesheetIds);
+  const retained = new Set(retainedTimesheetIds);
+  const removed = new Set(removedFromCurrentTimesheetIds);
+  if (deletedTimesheetIds.some(id => retained.has(id))) invalid();
+  if (consequence === 'NONE' && (
+    receipt.owning_timesheet_deleted || deleted.size || removedFromCurrentTimesheetIds.length
+  )) {
+    invalid();
+  }
+  if (consequence === 'PERMANENT_REMOVE' && (
+    !receipt.owning_timesheet_deleted
+    || removedFromCurrentTimesheetIds.length < 1
+    || deleted.size !== removed.size
+    || removedFromCurrentTimesheetIds.some(id => !deleted.has(id))
+  )) {
+    invalid();
+  }
+  if (consequence === 'REMOVE_FROM_CURRENT_KEEP_HISTORY' && (
+    receipt.owning_timesheet_deleted
+    || deleted.size
+    || removedFromCurrentTimesheetIds.length < 1
+    || removedFromCurrentTimesheetIds.some(id => !retained.has(id))
+  )) {
+    invalid();
+  }
+  return {
+    empty_timesheet_consequence: consequence,
+    owning_timesheet_deleted: receipt.owning_timesheet_deleted,
+    deleted_timesheet_ids: deletedTimesheetIds,
+    retained_timesheet_ids: retainedTimesheetIds,
+    removed_from_current_timesheet_ids: removedFromCurrentTimesheetIds
+  };
+}
+
+function assertTimesheetOutcomeAffected(outcome, affectedTimesheetIds, invalid) {
+  const affected = new Set(affectedTimesheetIds);
+  if ([
+    ...outcome.deleted_timesheet_ids,
+    ...outcome.retained_timesheet_ids,
+    ...outcome.removed_from_current_timesheet_ids
+  ].some(id => !affected.has(id))) {
+    invalid();
+  }
+}
+
+function assertTimesheetOutcomeOwner(ownerId, outcome, invalid) {
+  if (ownerId == null) {
+    if (outcome.empty_timesheet_consequence !== 'NONE') invalid();
+    return;
+  }
+  if (outcome.empty_timesheet_consequence === 'NONE') {
+    if (!outcome.retained_timesheet_ids.includes(ownerId)
+        || outcome.removed_from_current_timesheet_ids.includes(ownerId)) {
+      invalid();
+    }
+    return;
+  }
+  if (!outcome.removed_from_current_timesheet_ids.includes(ownerId)) invalid();
+  if (outcome.empty_timesheet_consequence === 'PERMANENT_REMOVE') {
+    if (!outcome.deleted_timesheet_ids.includes(ownerId)) invalid();
+  } else if (!outcome.retained_timesheet_ids.includes(ownerId)) {
+    invalid();
+  }
+}
+
+function candidateExpenseCategoryCommittedResult(result) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_CATEGORY_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const candidate = text(value);
+    if (!UUID_RE.test(candidate)) invalid();
+    return candidate;
+  };
+  const uuidArray = (value) => {
+    if (!Array.isArray(value)) invalid();
+    const values = value.map(requiredUuid);
+    if (new Set(values).size !== values.length) invalid();
+    return values;
+  };
+  const positiveInteger = (value) => {
+    const candidate = Number(value);
+    if (!Number.isSafeInteger(candidate) || candidate < 1) invalid();
+    return candidate;
+  };
+  const actionCode = text(result?.action_code);
+  const expectedState = {
+    REMOVE_EXPENSE: 'SUPERSEDED',
+    WITHDRAW_EXPENSE: 'WITHDRAWN',
+    CANCEL_EXPENSE: 'CANCELLED'
+  }[actionCode];
+  const financial = result?.financial_result;
+  let financialResult;
+  if (financial?.ok !== true || typeof financial?.financial_changed !== 'boolean'
+      || typeof financial?.zero_expense_carrier !== 'boolean') {
+    invalid();
+  }
+  if (financial.financial_changed === false) {
+    if (financial.timesheet_id !== null || financial.zero_expense_carrier !== false) invalid();
+    financialResult = {
+      ok: true, timesheet_id: null, financial_changed: false,
+      zero_expense_carrier: false
+    };
+  } else {
+    const remainingExpenseValue = Number(financial.remaining_expense_value);
+    const remainingTotalHours = Number(financial.remaining_total_hours);
+    const remainingAdditionalValue = Number(financial.remaining_additional_value);
+    if (!Number.isFinite(remainingExpenseValue) || remainingExpenseValue < 0
+        || !Number.isFinite(remainingTotalHours)
+        || !Number.isFinite(remainingAdditionalValue) || remainingAdditionalValue < 0) {
+      invalid();
+    }
+    financialResult = {
+      ok: true,
+      timesheet_id: requiredUuid(financial.timesheet_id),
+      financial_changed: true,
+      remaining_expense_value: remainingExpenseValue,
+      remaining_total_hours: remainingTotalHours,
+      remaining_additional_value: remainingAdditionalValue,
+      zero_expense_carrier: financial.zero_expense_carrier
+    };
+  }
+  if (result?.ok !== true
+      || text(result?.contract_version) !== 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1'
+      || !expectedState || text(result?.state) !== expectedState
+      || text(result?.update_state) !== 'NONE'
+      || typeof result?.zero_expense_carrier !== 'boolean'
+      || result.zero_expense_carrier !== financialResult.zero_expense_carrier
+      || typeof result?.idempotent_replay !== 'boolean') {
+    invalid();
+  }
+  const timesheetOutcome = candidateEmptyTimesheetOutcome(result, uuidArray, invalid);
+  const affectedTimesheetIds = uuidArray(result.affected_timesheet_ids);
+  assertTimesheetOutcomeOwner(
+    financialResult.financial_changed ? financialResult.timesheet_id : null,
+    timesheetOutcome,
+    invalid
+  );
+  assertTimesheetOutcomeAffected(timesheetOutcome, affectedTimesheetIds, invalid);
+  if (result.zero_expense_carrier === false
+      && timesheetOutcome.empty_timesheet_consequence !== 'NONE') {
+    invalid();
+  }
+  if ((financialResult.financial_changed
+    && !affectedTimesheetIds.includes(financialResult.timesheet_id))) {
+    invalid();
+  }
+  if (!Array.isArray(result.r2_cleanup_keys)) invalid();
+  const r2CleanupKeys = result.r2_cleanup_keys.map((value) => {
+    const key = text(value);
+    if (!key) invalid();
+    return key;
+  });
+  if (new Set(r2CleanupKeys).size !== r2CleanupKeys.length) invalid();
+  return {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: requiredUuid(result.operation_id),
+    workflow_id: requiredUuid(result.workflow_id),
+    generation: positiveInteger(result.generation),
+    expense_component_id: requiredUuid(result.expense_component_id),
+    component_generation: positiveInteger(result.component_generation),
+    state: expectedState,
+    update_state: 'NONE',
+    action_code: actionCode,
+    financial_result: financialResult,
+    zero_expense_carrier: result.zero_expense_carrier,
+    ...timesheetOutcome,
+    affected_timesheet_ids: affectedTimesheetIds,
+    r2_cleanup_keys: r2CleanupKeys,
+    idempotent_replay: result.idempotent_replay
+  };
+}
+
+function candidateExpenseCategoryPaperGuidanceResult(result) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_CATEGORY_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const candidate = text(value);
+    if (!UUID_RE.test(candidate)) invalid();
+    return candidate;
+  };
+  const positiveInteger = (value) => {
+    const candidate = Number(value);
+    if (!Number.isSafeInteger(candidate) || candidate < 1) invalid();
+    return candidate;
+  };
+  let changes;
+  try {
+    changes = candidateExpenseCategoryChanges(
+      result?.paper_replacement_category_changes, { allowRemove: true }
+    );
+  } catch {
+    invalid();
+  }
+  const componentId = requiredUuid(result?.expense_component_id);
+  const componentGeneration = positiveInteger(result?.component_generation);
+  if (result?.ok !== true
+      || text(result?.contract_version) !== 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1'
+      || result?.operation_id !== null
+      || text(result?.state) !== 'SUBMITTED'
+      || text(result?.update_state) !== 'NONE'
+      || text(result?.action_code) !== 'WITHDRAW_EXPENSE'
+      || result?.paper_replacement_required !== true
+      || text(result?.empty_timesheet_consequence) !== 'NONE'
+      || !Array.isArray(result?.removed_from_current_timesheet_ids)
+      || result.removed_from_current_timesheet_ids.length !== 0
+      || text(result?.paper_replacement_action) !== 'CREATE_UPDATED_DOCUMENTS'
+      || result?.idempotent_replay !== false
+      || changes?.length !== 1
+      || changes[0].update_kind !== 'REMOVE_CATEGORY'
+      || changes[0].expense_component_id !== componentId
+      || changes[0].component_generation !== componentGeneration) {
+    invalid();
+  }
+  return {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: null,
+    workflow_id: requiredUuid(result.workflow_id),
+    generation: positiveInteger(result.generation),
+    expense_component_id: componentId,
+    component_generation: componentGeneration,
+    state: 'SUBMITTED',
+    update_state: 'NONE',
+    action_code: 'WITHDRAW_EXPENSE',
+    paper_replacement_required: true,
+    empty_timesheet_consequence: 'NONE',
+    removed_from_current_timesheet_ids: [],
+    paper_replacement_action: 'CREATE_UPDATED_DOCUMENTS',
+    paper_replacement_category_changes: changes,
+    idempotent_replay: false
+  };
+}
+
+function candidateExpenseCategoryActionResult(result) {
+  return result?.paper_replacement_required === true
+    ? candidateExpenseCategoryPaperGuidanceResult(result)
+    : candidateExpenseCategoryCommittedResult(result);
+}
+
+function candidateWholeClaimActionResult(result) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_WHOLE_CLAIM_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const candidate = text(value);
+    if (!UUID_RE.test(candidate)) invalid();
+    return candidate;
+  };
+  const uuidArray = (value) => {
+    if (!Array.isArray(value)) invalid();
+    const values = value.map(requiredUuid);
+    if (new Set(values).size !== values.length) invalid();
+    return values;
+  };
+  const actionCode = text(result?.action_code);
+  if (result?.ok !== true
+      || text(result?.contract_version) !== 'CANDIDATE_WHOLE_CLAIM_ACTION_RESULT_V1'
+      || !['WITHDRAW_ENTIRE_CLAIM', 'CANCEL_ENTIRE_CLAIM'].includes(actionCode)
+      || text(result?.state) !== 'CANCELLED'
+      || typeof result?.idempotent_replay !== 'boolean'
+      || !Array.isArray(result?.workflow_results) || result.workflow_results.length < 1
+      || !Array.isArray(result?.empty_timesheet_results)) {
+    invalid();
+  }
+  const workflowResults = result.workflow_results.map((workflow) => {
+    const generation = Number(workflow?.generation);
+    const cancellationReason = workflow?.cancellation_reason;
+    const cancellationReasonCode = workflow?.cancellation_reason_code;
+    const withdrawalReset = workflow?.submission_withdrawal_reset;
+    const mailRetirement = workflow?.manager_mail_retirement;
+    const withdrawalCount = Number(workflow?.manager_withdrawal_count);
+    if (workflow?.ok !== true || text(workflow?.state) !== 'CANCELLED'
+        || !Number.isSafeInteger(generation) || generation < 1
+        || !(cancellationReason === null
+          || typeof cancellationReason === 'string' && cancellationReason.length <= 1000)
+        || !(cancellationReasonCode === null || typeof cancellationReasonCode === 'string')
+        || !(withdrawalReset === null || isObject(withdrawalReset))
+        || !Number.isSafeInteger(withdrawalCount) || withdrawalCount < 0
+        || !(mailRetirement === null || isObject(mailRetirement))) {
+      invalid();
+    }
+    return {
+      ok: true,
+      workflow_id: requiredUuid(workflow.workflow_id),
+      state: 'CANCELLED',
+      generation,
+      cancellation_reason: cancellationReason,
+      cancellation_reason_code: cancellationReasonCode,
+      submission_withdrawal_reset: withdrawalReset === null
+        ? null : structuredClone(withdrawalReset),
+      manager_withdrawal_count: withdrawalCount,
+      manager_mail_retirement: mailRetirement === null
+        ? null : structuredClone(mailRetirement)
+    };
+  });
+  if (new Set(workflowResults.map(item => item.workflow_id)).size !== workflowResults.length) {
+    invalid();
+  }
+  const emptyTimesheetResults = result.empty_timesheet_results.map((entry) => {
+    const outcome = candidateEmptyTimesheetOutcome(entry, uuidArray, invalid);
+    const timesheetId = requiredUuid(entry?.timesheet_id);
+    assertTimesheetOutcomeOwner(timesheetId, outcome, invalid);
+    return { timesheet_id: timesheetId, ...outcome };
+  });
+  const zeroCarrierIds = uuidArray(result.zero_expense_carrier_timesheet_ids);
+  const deletedIds = uuidArray(result.deleted_timesheet_ids);
+  const retainedIds = uuidArray(result.retained_timesheet_ids);
+  const removedIds = uuidArray(result.removed_from_current_timesheet_ids);
+  const expectedEmptyIds = new Set(emptyTimesheetResults.map(entry => entry.timesheet_id));
+  const expectedDeleted = new Set(emptyTimesheetResults.flatMap(entry => entry.deleted_timesheet_ids));
+  const expectedRetained = new Set(emptyTimesheetResults.flatMap(entry => entry.retained_timesheet_ids));
+  const expectedRemoved = new Set(
+    emptyTimesheetResults.flatMap(entry => entry.removed_from_current_timesheet_ids)
+  );
+  const sameSet = (values, expected) => values.length === expected.size
+    && values.every(value => expected.has(value));
+  if (expectedEmptyIds.size !== emptyTimesheetResults.length
+      || !sameSet(zeroCarrierIds, expectedEmptyIds)
+      || !sameSet(deletedIds, expectedDeleted)
+      || !sameSet(retainedIds, expectedRetained)
+      || !sameSet(removedIds, expectedRemoved)
+      || !Array.isArray(result.r2_cleanup_keys)) {
+    invalid();
+  }
+  const r2CleanupKeys = result.r2_cleanup_keys.map((value) => {
+    const key = text(value);
+    if (!key) invalid();
+    return key;
+  });
+  if (new Set(r2CleanupKeys).size !== r2CleanupKeys.length) invalid();
+  return {
+    ok: true,
+    contract_version: 'CANDIDATE_WHOLE_CLAIM_ACTION_RESULT_V1',
+    operation_id: requiredUuid(result.operation_id),
+    action_code: actionCode,
+    state: 'CANCELLED',
+    workflow_results: workflowResults,
+    zero_expense_carrier_timesheet_ids: zeroCarrierIds,
+    empty_timesheet_results: emptyTimesheetResults,
+    deleted_timesheet_ids: deletedIds,
+    retained_timesheet_ids: retainedIds,
+    removed_from_current_timesheet_ids: removedIds,
+    r2_cleanup_keys: r2CleanupKeys,
+    idempotent_replay: result.idempotent_replay
+  };
+}
+
+function officeExpenseCategoryRejectionResult(result) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_CATEGORY_REJECTION_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const candidate = text(value);
+    if (!UUID_RE.test(candidate)) invalid();
+    return candidate;
+  };
+  const uuidArray = (value) => {
+    if (!Array.isArray(value)) invalid();
+    const values = value.map(requiredUuid);
+    if (new Set(values).size !== values.length) invalid();
+    return values;
+  };
+  const generation = Number(result?.component_generation);
+  const refusal = result?.refusal;
+  if (result?.ok !== true
+      || text(result?.contract_version) !== 'OFFICE_EXPENSE_CATEGORY_REJECTION_RESULT_V2'
+      || text(result?.action_code) !== 'REJECT_EXPENSE_CATEGORY'
+      || text(result?.state) !== 'OFFICE_REJECTED'
+      || !Number.isSafeInteger(generation) || generation < 1
+      || !isObject(refusal) || text(refusal.kind) !== 'AGENCY_REJECTION'
+      || !text(refusal.reason) || text(refusal.reason).length > 1000
+      || Number.isNaN(Date.parse(text(refusal.at_utc)))
+      || typeof result?.idempotent_replay !== 'boolean') {
+    invalid();
+  }
+  const timesheetOutcome = candidateEmptyTimesheetOutcome(result, uuidArray, invalid);
+  const affectedIds = uuidArray(result.affected_timesheet_ids);
+  const refreshIds = uuidArray(result.refresh_timesheet_ids);
+  const hints = result.refresh_hints;
+  const previousOwningTimesheetId = requiredUuid(result.previous_owning_timesheet_id);
+  assertTimesheetOutcomeOwner(previousOwningTimesheetId, timesheetOutcome, invalid);
+  assertTimesheetOutcomeAffected(timesheetOutcome, affectedIds, invalid);
+  if (affectedIds.length !== refreshIds.length
+      || affectedIds.some(id => !refreshIds.includes(id))
+      || !affectedIds.includes(previousOwningTimesheetId)
+      || !isObject(hints)
+      || hints.summary !== true || hints.simple_timesheet !== true
+      || hints.bulk_process !== true || hints.bulk_authorise !== true
+      || text(hints.refetch) !== 'AFFECTED_ROWS') {
+    invalid();
+  }
+  return {
+    ok: true,
+    contract_version: 'OFFICE_EXPENSE_CATEGORY_REJECTION_RESULT_V2',
+    operation_id: requiredUuid(result.operation_id),
+    action_code: 'REJECT_EXPENSE_CATEGORY',
+    workflow_id: requiredUuid(result.workflow_id),
+    expense_component_id: requiredUuid(result.expense_component_id),
+    component_generation: generation,
+    state: 'OFFICE_REJECTED',
+    refusal: {
+      kind: 'AGENCY_REJECTION', reason: text(refusal.reason), at_utc: text(refusal.at_utc)
+    },
+    previous_owning_timesheet_id: previousOwningTimesheetId,
+    ...timesheetOutcome,
+    affected_timesheet_ids: affectedIds,
+    refresh_timesheet_ids: refreshIds,
+    refresh_hints: {
+      summary: true, simple_timesheet: true, bulk_process: true,
+      bulk_authorise: true, refetch: 'AFFECTED_ROWS'
+    },
+    idempotent_replay: result.idempotent_replay
+  };
+}
+
+function candidatePaperDocumentUpdateCompleteResult(
+  committed, promoted, pack, outboxBinding, paperReturnPages
+) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const result = text(value);
+    if (!UUID_RE.test(result)) invalid();
+    return result;
+  };
+  const optionalUuid = (value) => {
+    if (value == null || text(value) === '') return null;
+    return requiredUuid(value);
+  };
+  const uuidArray = (value) => {
+    if (!Array.isArray(value)) invalid();
+    const result = value.map(requiredUuid);
+    if (new Set(result).size !== result.length) invalid();
+    return result;
+  };
+  const generation = Number(committed?.generation);
+  const manifestSha256 = text(promoted?.paper_return_manifest_sha256).toLowerCase();
+  const pageCount = Number(promoted?.paper_return_page_count);
+  const categoryChanges = candidateExpenseCategoryChanges(
+    committed?.category_changes, { allowRemove: true }
+  );
+  const safePack = safeQrPackResponse(pack);
+  const timesheetOutcome = candidateEmptyTimesheetOutcome(committed, uuidArray, invalid);
+  const previousOwningTimesheetId = optionalUuid(committed?.previous_owning_timesheet_id);
+  const affectedTimesheetIds = uuidArray(committed?.affected_timesheet_ids);
+  assertTimesheetOutcomeOwner(previousOwningTimesheetId, timesheetOutcome, invalid);
+  assertTimesheetOutcomeAffected(timesheetOutcome, affectedTimesheetIds, invalid);
+  if (committed?.ok !== true
+      || upper(committed?.state) !== 'AWAITING_PAPER_RETURN'
+      || upper(committed?.update_state) !== 'NONE'
+      || !Number.isSafeInteger(generation) || generation < 1
+      || !SHA256_RE.test(manifestSha256)
+      || !Number.isSafeInteger(pageCount) || pageCount < 1
+      || !Array.isArray(paperReturnPages) || paperReturnPages.length !== pageCount
+      || (previousOwningTimesheetId != null
+        && !affectedTimesheetIds.includes(previousOwningTimesheetId))
+      || pack?.queued !== true || outboxBinding?.bound !== true) {
+    invalid();
+  }
+  return candidatePaperDocumentUpdateStoredCompleteResult({
+    contract_version: 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',
+    ok: true,
+    operation_id: requiredUuid(committed.operation_id),
+    action_code: 'CREATE_UPDATED_DOCUMENTS',
+    stage: 'COMPLETE',
+    workflow_id: requiredUuid(committed.workflow_id),
+    generation,
+    state: 'AWAITING_PAPER_RETURN',
+    update_state: 'NONE',
+    update_id: requiredUuid(committed.update_id),
+    category_changes: categoryChanges,
+    route: 'PAPER',
+    route_selection_required: false,
+    upload_mode: 'EXISTING_WORKFLOW_DELTA',
+    submission_requires_update_id: true,
+    approval_request_id: null,
+    approval_request_generation: null,
+    paper_pack_replacement: true,
+    old_pack_recoverable: false,
+    old_pack_retired: true,
+    manager_link_preserved: false,
+    previous_owning_timesheet_id: previousOwningTimesheetId,
+    ...timesheetOutcome,
+    affected_timesheet_ids: affectedTimesheetIds,
+    expense_component_id: null,
+    paper_return_manifest_sha256: manifestSha256,
+    paper_return_page_count: pageCount,
+    paper_return_manifest_version: 2,
+    paper_return_qr_contract_version: PAPER_PAGE_QR_V2,
+    paper_pack_queued: true,
+    paper_pack: safePack,
+    paper_pack_email_bound: true,
+    paper_return_pages: paperReturnPages,
+    idempotent_replay: committed.idempotent_replay === true
+  });
+}
+
+function candidatePaperDocumentUpdateStoredCompleteResult(result) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const candidate = text(value);
+    if (!UUID_RE.test(candidate)) invalid();
+    return candidate;
+  };
+  const optionalUuid = (value) => {
+    if (value == null || text(value) === '') return null;
+    return requiredUuid(value);
+  };
+  const uuidArray = (value) => {
+    if (!Array.isArray(value)) invalid();
+    const values = value.map(requiredUuid);
+    if (new Set(values).size !== values.length) invalid();
+    return values;
+  };
+  let categoryChanges;
+  try {
+    categoryChanges = candidateExpenseCategoryChanges(
+      result?.category_changes, { allowRemove: true }
+    );
+  } catch {
+    invalid();
+  }
+  const generation = Number(result?.generation);
+  const pageCount = Number(result?.paper_return_page_count);
+  const manifestSha256 = text(result?.paper_return_manifest_sha256).toLowerCase();
+  const timesheetOutcome = candidateEmptyTimesheetOutcome(result, uuidArray, invalid);
+  const previousOwningTimesheetId = optionalUuid(result?.previous_owning_timesheet_id);
+  const affectedTimesheetIds = uuidArray(result?.affected_timesheet_ids);
+  assertTimesheetOutcomeOwner(previousOwningTimesheetId, timesheetOutcome, invalid);
+  assertTimesheetOutcomeAffected(timesheetOutcome, affectedTimesheetIds, invalid);
+  const packSource = result?.paper_pack;
+  if (!isObject(packSource)
+      || typeof packSource.queued !== 'boolean'
+      || !(packSource.send_state === null || typeof packSource.send_state === 'string')
+      || !(packSource.document_state === null || typeof packSource.document_state === 'string')
+      || !(packSource.document_operation_id === null
+        || UUID_RE.test(text(packSource.document_operation_id)))
+      || !(packSource.current_timesheet_id === null
+        || UUID_RE.test(text(packSource.current_timesheet_id)))
+      || !(packSource.timesheet_version === null
+        || Number.isSafeInteger(Number(packSource.timesheet_version))
+          && Number(packSource.timesheet_version) >= 1)
+      || typeof packSource.recipient_available !== 'boolean') {
+    invalid();
+  }
+  const paperPack = safeQrPackResponse(packSource);
+  if (!Array.isArray(result?.paper_return_pages)) invalid();
+  const paperReturnPages = result.paper_return_pages.map((page, index) => {
+    const componentKind = text(page?.component_kind);
+    const expenseCategory = page?.expense_category == null
+      ? null : text(page.expense_category);
+    const sourceComponentId = page?.source_component_id == null
+      ? null : requiredUuid(page.source_component_id);
+    const ordinal = Number(page?.ordinal);
+    const occurrence = Number(page?.category_occurrence);
+    const pageKey = text(page?.page_key);
+    const displayName = text(page?.display_name);
+    const pageKindCode = text(page?.page_kind_code);
+    const categoryCode = text(page?.category_code);
+    const pageKeySha = text(page?.page_key_sha256_16).toLowerCase();
+    if (!isObject(page) || ordinal !== index + 1 || !pageKey || !displayName
+        || !['HOURS_TIMESHEET', 'MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+        || !(expenseCategory === null
+          || ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(expenseCategory))
+        || page.qr_required !== true || Number(page.manifest_version) !== 2
+        || text(page.qr_contract_version) !== PAPER_PAGE_QR_V2
+        || !Number.isSafeInteger(occurrence) || occurrence < 1
+        || !['T', 'M', 'E'].includes(pageKindCode)
+        || !['', 'A', 'M', 'O', 'T'].includes(categoryCode)
+        || !/^[a-f0-9]{16}$/.test(pageKeySha)) {
+      invalid();
+    }
+    return {
+      ordinal, page_key: pageKey, component_kind: componentKind,
+      expense_category: expenseCategory, source_component_id: sourceComponentId,
+      qr_required: true, display_name: displayName, manifest_version: 2,
+      qr_contract_version: PAPER_PAGE_QR_V2, category_occurrence: occurrence,
+      page_kind_code: pageKindCode, category_code: categoryCode,
+      page_key_sha256_16: pageKeySha
+    };
+  });
+  if (result?.ok !== true
+      || text(result?.contract_version) !== 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1'
+      || text(result?.action_code) !== 'CREATE_UPDATED_DOCUMENTS'
+      || text(result?.stage) !== 'COMPLETE'
+      || text(result?.state) !== 'AWAITING_PAPER_RETURN'
+      || text(result?.update_state) !== 'NONE'
+      || !Number.isSafeInteger(generation) || generation < 1
+      || text(result?.route) !== 'PAPER'
+      || result?.route_selection_required !== false
+      || text(result?.upload_mode) !== 'EXISTING_WORKFLOW_DELTA'
+      || result?.submission_requires_update_id !== true
+      || result?.approval_request_id !== null
+      || result?.approval_request_generation !== null
+      || result?.paper_pack_replacement !== true
+      || result?.old_pack_recoverable !== false
+      || result?.old_pack_retired !== true
+      || result?.manager_link_preserved !== false
+      || result?.expense_component_id !== null
+      || !SHA256_RE.test(manifestSha256)
+      || !Number.isSafeInteger(pageCount) || pageCount < 1
+      || Number(result?.paper_return_manifest_version) !== 2
+      || text(result?.paper_return_qr_contract_version) !== PAPER_PAGE_QR_V2
+      || result?.paper_pack_queued !== true || paperPack.queued !== true
+      || result?.paper_pack_email_bound !== true
+      || paperReturnPages.length !== pageCount
+      || (previousOwningTimesheetId != null
+        && !affectedTimesheetIds.includes(previousOwningTimesheetId))
+      || typeof result?.idempotent_replay !== 'boolean') {
+    invalid();
+  }
+  return {
+    contract_version: 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',
+    ok: true,
+    operation_id: requiredUuid(result.operation_id),
+    action_code: 'CREATE_UPDATED_DOCUMENTS',
+    stage: 'COMPLETE',
+    workflow_id: requiredUuid(result.workflow_id),
+    generation,
+    state: 'AWAITING_PAPER_RETURN',
+    update_state: 'NONE',
+    update_id: requiredUuid(result.update_id),
+    category_changes: categoryChanges,
+    route: 'PAPER',
+    route_selection_required: false,
+    upload_mode: 'EXISTING_WORKFLOW_DELTA',
+    submission_requires_update_id: true,
+    approval_request_id: null,
+    approval_request_generation: null,
+    paper_pack_replacement: true,
+    old_pack_recoverable: false,
+    old_pack_retired: true,
+    manager_link_preserved: false,
+    previous_owning_timesheet_id: previousOwningTimesheetId,
+    ...timesheetOutcome,
+    affected_timesheet_ids: affectedTimesheetIds,
+    expense_component_id: null,
+    paper_return_manifest_sha256: manifestSha256,
+    paper_return_page_count: pageCount,
+    paper_return_manifest_version: 2,
+    paper_return_qr_contract_version: PAPER_PAGE_QR_V2,
+    paper_pack_queued: true,
+    paper_pack: paperPack,
+    paper_pack_email_bound: true,
+    paper_return_pages: paperReturnPages,
+    idempotent_replay: result.idempotent_replay
+  };
+}
+
+function candidateExpenseCategoryPendingUpdateResult(begin, committed, actionCode) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const result = text(value);
+    if (!UUID_RE.test(result)) invalid();
+    return result;
+  };
+  const optionalUuid = (value) => {
+    if (value == null || text(value) === '') return null;
+    return requiredUuid(value);
+  };
+  const uuidArray = (value) => {
+    if (!Array.isArray(value)) invalid();
+    const result = value.map(requiredUuid);
+    if (new Set(result).size !== result.length) invalid();
+    return result;
+  };
+  const generation = Number(committed?.generation);
+  const approvalRequestGeneration = Number(committed?.approval_request_generation);
+  const preservedComponentCount = Number(
+    committed?.preserved_component_count ?? begin?.preserved_component_count
+  );
+  const signatureComponentId = Object.hasOwn(committed || {}, 'candidate_signature_component_id')
+    ? committed.candidate_signature_component_id
+    : begin?.candidate_signature_component_id;
+  const categoryChanges = candidateExpenseCategoryChanges(
+    committed?.category_changes, { allowRemove: true }
+  );
+  const timesheetOutcome = candidateEmptyTimesheetOutcome(committed, uuidArray, invalid);
+  const previousOwningTimesheetId = optionalUuid(committed?.previous_owning_timesheet_id);
+  const affectedTimesheetIds = uuidArray(committed?.affected_timesheet_ids);
+  assertTimesheetOutcomeOwner(previousOwningTimesheetId, timesheetOutcome, invalid);
+  assertTimesheetOutcomeAffected(timesheetOutcome, affectedTimesheetIds, invalid);
+  if (actionCode !== 'WITHDRAW_EXPENSE'
+      || committed?.ok !== true
+      || upper(committed?.contract_version) !== 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1'
+      || upper(committed?.action_code) !== actionCode
+      || upper(committed?.state) !== 'AWAITING_MANAGER_APPROVAL'
+      || upper(committed?.update_state) !== 'NONE'
+      || committed?.manager_link_preserved !== true
+      || committed?.paper_pack_replacement !== false
+      || committed?.old_pack_recoverable !== false
+      || committed?.old_pack_retired !== false
+      || committed?.automatic_resubmission_required !== true
+      || !Number.isSafeInteger(generation) || generation < 1
+      || !Number.isSafeInteger(approvalRequestGeneration) || approvalRequestGeneration < 1
+      || !Number.isSafeInteger(preservedComponentCount) || preservedComponentCount < 0
+      || categoryChanges.length !== 1
+      || categoryChanges[0].update_kind !== 'REMOVE_CATEGORY'
+      || (previousOwningTimesheetId != null
+        && !affectedTimesheetIds.includes(previousOwningTimesheetId))) {
+    invalid();
+  }
+  return {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: requiredUuid(committed.operation_id),
+    action_code: actionCode,
+    workflow_id: requiredUuid(committed.workflow_id),
+    state: 'AWAITING_MANAGER_APPROVAL',
+    generation,
+    update_state: 'NONE',
+    update_id: requiredUuid(committed.update_id),
+    category_changes: categoryChanges,
+    approval_request_id: requiredUuid(committed.approval_request_id),
+    approval_request_generation: approvalRequestGeneration,
+    manager_link_preserved: true,
+    paper_pack_replacement: false,
+    old_pack_recoverable: false,
+    old_pack_retired: false,
+    preserved_component_count: preservedComponentCount,
+    candidate_signature_component_id: optionalUuid(signatureComponentId),
+    previous_owning_timesheet_id: previousOwningTimesheetId,
+    ...timesheetOutcome,
+    affected_timesheet_ids: affectedTimesheetIds,
+    expense_component_id: requiredUuid(committed.expense_component_id),
+    automatic_resubmission_required: true,
+    idempotent_replay: committed.idempotent_replay === true
+  };
+}
+
+function candidateExpenseCategoryPendingUpdateAcceptedResult(begin, submitted, actionCode) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const result = text(value);
+    if (!UUID_RE.test(result)) invalid();
+    return result;
+  };
+  const generation = Number(submitted?.generation);
+  const approvalRequestGeneration = Number(submitted?.approval_request_generation);
+  const preservedComponentCount = Number(begin?.preserved_component_count);
+  const categoryChanges = candidateExpenseCategoryChanges(
+    begin?.category_changes, { allowRemove: true }
+  );
+  if (actionCode !== 'WITHDRAW_EXPENSE'
+      || begin?.ok !== true
+      || upper(begin?.contract_version) !== 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1'
+      || upper(begin?.action_code) !== actionCode
+      || begin?.automatic_resubmission_required !== true
+      || submitted?.ok !== true
+      || upper(submitted?.state) !== 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT'
+      || upper(submitted?.update_state) !== 'UPDATING'
+      || submitted?.manager_link_preserved !== true
+      || submitted?.paper_pack_replacement !== false
+      || submitted?.old_pack_recoverable !== false
+      || !Number.isSafeInteger(generation) || generation < 1
+      || !Number.isSafeInteger(approvalRequestGeneration) || approvalRequestGeneration < 1
+      || !Number.isSafeInteger(preservedComponentCount) || preservedComponentCount < 0
+      || categoryChanges.length !== 1
+      || categoryChanges[0].update_kind !== 'REMOVE_CATEGORY') {
+    invalid();
+  }
+  return {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_UPDATE_ACCEPTED_V1',
+    operation_id: requiredUuid(begin.operation_id),
+    action_code: actionCode,
+    workflow_id: requiredUuid(submitted.workflow_id),
+    state: 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+    generation,
+    update_state: 'UPDATING',
+    update_id: requiredUuid(submitted.update_id),
+    category_changes: categoryChanges,
+    approval_request_id: requiredUuid(submitted.approval_request_id),
+    approval_request_generation: approvalRequestGeneration,
+    manager_link_preserved: true,
+    paper_pack_replacement: false,
+    old_pack_recoverable: false,
+    preserved_component_count: preservedComponentCount,
+    expense_component_id: requiredUuid(begin.expense_component_id),
+    automatic_resubmission_required: true,
+    review_rendering_accepted: true,
+    idempotent_replay: submitted.idempotent_replay === true
+  };
+}
+
+async function prepareAndRebindPaperExpenseUpdate(
+  env, deps, access, submitted, mutationKey, ctx
+) {
+  const workflowId = requireUuid(
+    submitted?.workflow_id, 'CANDIDATE_EXPENSE_PAPER_REPLACEMENT_NOT_READY'
+  );
+  const updateId = requireUuid(
+    submitted?.update_id, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID'
+  );
+  const generation = requireInteger(
+    submitted?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+  );
+  try {
+    const prePrepareWorkflow = await workflowRow(env, workflowId);
+    if (prePrepareWorkflow.workflow_kind !== 'CONTRACT_EXPENSE') {
+      const target = await rpcCall(deps, 'candidate_weekly_paper_target_prepare_v1',
+        candidateRpcArgs(access, env, {
+          p_workflow_id: workflowId,
+          p_expected_generation: generation,
+          p_now_utc: new Date().toISOString()
+        }));
+      if (target?.ok !== true || !UUID_RE.test(text(target?.timesheet_id))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+      }
+    }
+    const prepared = await rpcCall(
+      deps, 'candidate_weekly_paper_prepare_atomic_v1',
+      workflowActionArgs(
+        access, env, workflowId, 'PAPER_PREPARE', generation, {},
+        `${mutationKey}:paper-prepare`
+      )
+    );
+    if (prepared?.state !== 'AWAITING_PAPER_RETURN'
+        || !SHA256_RE.test(text(prepared?.paper_return_manifest_sha256))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const promoted = await rpcCall(deps, 'candidate_paper_manifest_v2_promote_v1',
+      candidateRpcArgs(access, env, {
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_expected_v1_manifest_sha256_hex:
+          text(prepared.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
+        p_now_utc: new Date().toISOString()
+      }));
+    if (promoted?.ok !== true || Number(promoted?.manifest_version) !== 2
+        || promoted?.qr_contract_version !== PAPER_PAGE_QR_V2
+        || !SHA256_RE.test(text(promoted?.paper_return_manifest_sha256))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const workflow = await workflowRow(env, workflowId);
+    const timesheetId = requireUuid(
+      workflow.target_timesheet_id || workflow.anchor_timesheet_id,
+      'CANDIDATE_PAPER_TIMESHEET_NOT_READY'
+    );
+    const paperReturnPages = safePaperReturnPages(
+      parseJson(workflow.paper_return_manifest_json, {})
+    );
+    if (!paperReturnPages.length
+        || paperReturnPages.length !== Number(promoted.paper_return_page_count)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const pack = prepared?.paper_pack;
+    const outboxBinding = await bindCandidatePaperOutbox(env, workflow, timesheetId, pack);
+    // Rebind requires the freshly rendered outbox attachment to be READY in
+    // this request. Passing ctx would let the queue helper detach the render
+    // into waitUntil and race this call against an unfinished pack.
+    const committed = await renderHeldPaperPackThenRebind(
+      deps, pack, timesheetId,
+      () => rpcCall(deps, 'candidate_expense_update_rebind_atomic_v1', {
+        p_environment: environmentName(env),
+        p_workflow_id: workflowId,
+        p_update_id: updateId,
+        p_idempotency_key: `${mutationKey}:rebind`,
+        p_now_utc: new Date().toISOString()
+      })
+    );
+    const completeResult = candidatePaperDocumentUpdateCompleteResult(
+      committed, promoted, pack, outboxBinding, paperReturnPages
+    );
+    const storedCompleteResult = await rpcCall(
+      deps, 'candidate_expense_paper_update_receipt_commit_v1', {
+      p_environment: environmentName(env),
+      p_operation_id: requireUuid(
+        completeResult.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+      ),
+      p_update_id: updateId,
+      p_result: completeResult,
+      p_now_utc: new Date().toISOString()
+      }
+    );
+    return candidatePaperDocumentUpdateStoredCompleteResult(storedCompleteResult);
+  } catch (error) {
+    try {
+      await abortPendingExpenseUpdate(
+        env, deps, workflowId, updateId,
+        'CANDIDATE_EXPENSE_PAPER_REPLACEMENT_FAILED',
+        `${mutationKey}:abort-paper-replacement`
+      );
+    } catch (abortError) {
+      console.error('[candidate-app] PAPER expense update recovery failed', {
+        workflow_id: workflowId,
+        update_id: updateId,
+        error_code: knownErrorCode(abortError)
+      });
+    }
+    throw error;
+  }
+}
+
+async function prepareAndRebindOfficePaperExpenseUpdate(
+  env, deps, actorUserId, submitted, mutationKey, ctx
+) {
+  const workflowId = requireUuid(
+    submitted?.workflow_id, 'CANDIDATE_EXPENSE_PAPER_REPLACEMENT_NOT_READY'
+  );
+  const updateId = requireUuid(
+    submitted?.update_id, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID'
+  );
+  const operationId = requireUuid(
+    submitted?.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+  );
+  const generation = requireInteger(
+    submitted?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+  );
+  try {
+    const prepared = await rpcCall(deps, 'candidate_office_expense_paper_prepare_v1', {
+      p_actor_user_id: requireUuid(actorUserId, 'OFFICE_AUTH_REQUIRED'),
+      p_environment: environmentName(env),
+      p_operation_id: operationId,
+      p_update_id: updateId,
+      p_workflow_id: workflowId,
+      p_expected_generation: generation,
+      p_idempotency_key: `${mutationKey}:paper-prepare`,
+      p_now_utc: new Date().toISOString()
+    });
+    if (prepared?.state !== 'AWAITING_PAPER_RETURN'
+        || !SHA256_RE.test(text(prepared?.paper_return_manifest_sha256))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const promoted = await rpcCall(deps, 'candidate_office_expense_paper_promote_v1', {
+      p_actor_user_id: requireUuid(actorUserId, 'OFFICE_AUTH_REQUIRED'),
+      p_environment: environmentName(env),
+      p_operation_id: operationId,
+      p_update_id: updateId,
+      p_workflow_id: workflowId,
+      p_expected_generation: generation,
+      p_expected_v1_manifest_sha256_hex:
+        text(prepared.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
+      p_now_utc: new Date().toISOString()
+    });
+    if (promoted?.ok !== true || Number(promoted?.manifest_version) !== 2
+        || promoted?.qr_contract_version !== PAPER_PAGE_QR_V2
+        || !SHA256_RE.test(text(promoted?.paper_return_manifest_sha256))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const workflow = await workflowRow(env, workflowId);
+    const timesheetId = requireUuid(
+      workflow.target_timesheet_id || workflow.anchor_timesheet_id,
+      'CANDIDATE_PAPER_TIMESHEET_NOT_READY'
+    );
+    const paperReturnPages = safePaperReturnPages(
+      parseJson(workflow.paper_return_manifest_json, {})
+    );
+    if (!paperReturnPages.length
+        || paperReturnPages.length !== Number(promoted.paper_return_page_count)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const pack = prepared?.paper_pack;
+    await bindCandidatePaperOutbox(env, workflow, timesheetId, pack);
+    // Office rejection has the same atomic replacement boundary as Candidate
+    // edits: do not allow waitUntil to return before the held pack is ready.
+    return await renderHeldPaperPackThenRebind(
+      deps, pack, timesheetId,
+      () => rpcCall(deps, 'candidate_expense_update_rebind_atomic_v1', {
+        p_environment: environmentName(env),
+        p_workflow_id: workflowId,
+        p_update_id: updateId,
+        p_idempotency_key: `${mutationKey}:rebind`,
+        p_now_utc: new Date().toISOString()
+      })
+    );
+  } catch (error) {
+    try {
+      await abortPendingExpenseUpdate(
+        env, deps, workflowId, updateId,
+        'CANDIDATE_EXPENSE_PAPER_REPLACEMENT_FAILED',
+        `${mutationKey}:abort-paper-replacement`
+      );
+    } catch (abortError) {
+      console.error('[candidate-app] office paper expense update recovery failed', {
+        workflow_id: workflowId,
+        update_id: updateId,
+        error_code: knownErrorCode(abortError)
+      });
+    }
+    throw error;
+  }
+}
+
+async function submitAutomaticPendingExpenseUpdate(env, deps, access, begin, mutationKey) {
+  if (begin?.ok === true
+      && upper(begin?.state) === 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT'
+      && upper(begin?.update_state) === 'UPDATING'
+      && begin?.render_contract) {
+    return begin;
+  }
+  const workflow = await workflowRow(env, begin.workflow_id);
+  const immutableSubmission = parseJson(workflow.immutable_submission_json, {}) || {};
+  const payload = {
+    immutable_submission: immutableSubmission,
+    submission_request_identity: {
+      contract_version: 'CANDIDATE_WORKER_SUBMISSION_REQUEST_V1',
+      factual_submission: (() => {
+        const facts = structuredClone(immutableSubmission);
+        delete facts.official_presentation;
+        return facts;
+      })(),
+      candidate_signature_component_id: workflow.candidate_signature_component_id || null,
+      candidate_signed_at_utc: workflow.candidate_signed_at_utc || null,
+      approval_route: upper(workflow.route)
+    },
+    candidate_signature_component_id: workflow.candidate_signature_component_id || null,
+    ...(workflow.candidate_signed_at_utc
+      ? { candidate_signed_at_utc: workflow.candidate_signed_at_utc } : {}),
+    approval_route: upper(workflow.route),
+    renderer_contract_version: RENDERER_CONTRACT_VERSION
+  };
+  return rpcCall(deps, 'candidate_expense_update_submit_atomic_v1', {
+    p_session_id: access.session_id,
+    p_environment: access.environment || environmentName(env),
+    p_workflow_id: workflow.id,
+    p_expected_generation: Number(workflow.generation),
+    p_update_id: begin.update_id,
+    p_payload: payload,
+    p_idempotency_key: `${mutationKey}:submit`,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+async function queuePendingExpenseDocumentRefresh(env, submitted, operationId) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_EXPENSE_RENDER_QUEUE_MESSAGE_V1',
+    workflow_id: requireUuid(
+      submitted?.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY'
+    ),
+    update_id: requireUuid(
+      submitted?.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY'
+    ),
+    operation_id: operationId == null ? null : requireUuid(
+      operationId, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+    )
+  });
+  return true;
+}
+
+async function queueCandidateReviewDocumentRefresh(env, result) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_REVIEW_RENDER_QUEUE_MESSAGE_V1',
+    workflow_id: requireUuid(result?.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation: requireInteger(result?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  });
+  return true;
+}
+
+async function queueCandidateManagerFinalisation(env, result) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1',
+    workflow_id: requireUuid(result?.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation: requireInteger(result?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  });
+  return true;
+}
+
+async function queueCandidateInvoiceEvidencePreparation(env, timesheetIds) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  const canonicalIds = [...new Set((Array.isArray(timesheetIds) ? timesheetIds : [])
+    .filter(Boolean)
+    .map((value) => requireUuid(value, 'TIMESHEET_NOT_FOUND').toLowerCase()))].sort();
+  if (!canonicalIds.length || canonicalIds.length > 25) {
+    throw new CandidateHttpError(409, 'MYTMS_INVOICE_EVIDENCE_REQUEST_INVALID');
+  }
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_INVOICE_EVIDENCE_PREPARE_QUEUE_MESSAGE_V1',
+    timesheet_ids: canonicalIds
+  });
+  return true;
+}
+
+async function handleAdvancedExpenseWorkflowAction(
+  request, env, deps, access, workflowId, dbAction, body, mutationKey, ctx
+) {
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  if (dbAction === 'BEGIN_EXPENSE_UPDATE') {
+    const result = await rpcCall(deps, 'candidate_expense_update_begin_atomic_v1', {
+      p_session_id: access.session_id,
+      p_environment: access.environment || environmentName(env),
+      p_workflow_id: workflowId,
+      p_expected_generation: generation,
+      p_category_changes: candidateExpenseCategoryChanges(body.category_changes),
+      p_idempotency_key: mutationKey,
+      p_now_utc: new Date().toISOString()
+    });
+    return jsonResponse(200, result);
+  }
+  if (dbAction === 'ABORT_EXPENSE_UPDATE') {
+    const result = await rpcCall(deps, 'candidate_expense_update_abort_atomic_v1', {
+      p_session_id: access.session_id,
+      p_environment: access.environment || environmentName(env),
+      p_workflow_id: workflowId,
+      p_update_id: requireUuid(body.update_id, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID'),
+      p_service_recovery: false,
+      p_failure_code: null,
+      p_idempotency_key: mutationKey,
+      p_now_utc: new Date().toISOString()
+    });
+    return jsonResponse(200, result);
+  }
+  if (dbAction === 'CREATE_UPDATED_DOCUMENTS') {
+    const result = await rpcCall(
+      deps, 'candidate_expense_paper_update_begin_atomic_v1', {
+        p_session_id: access.session_id,
+        p_environment: access.environment || environmentName(env),
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_category_changes: candidateExpenseCategoryChanges(
+          body.category_changes, { allowRemove: true }
+        ),
+        p_idempotency_key: mutationKey,
+        p_now_utc: new Date().toISOString()
+      }
+    );
+    if (result?.ok === false) {
+      throw new CandidateHttpError(409,
+        text(result.error_code) || 'CANDIDATE_EXPENSE_OPERATION_NOT_COMMITTED');
+    }
+    return jsonResponse(200, result);
+  }
+  if (dbAction === 'RESUBMIT_EXPENSE_CATEGORY') {
+    const result = await rpcCall(deps, 'candidate_expense_category_resubmit_atomic_v1', {
+      p_session_id: access.session_id,
+      p_environment: access.environment || environmentName(env),
+      p_source_workflow_id: workflowId,
+      p_expected_generation: generation,
+      p_expense_component_id: requireUuid(
+        body.expense_component_id, 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_INVALID'
+      ),
+      p_expected_component_generation: requireInteger(
+        body.component_generation, 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_INVALID', 1
+      ),
+      p_idempotency_key: mutationKey,
+      p_now_utc: new Date().toISOString()
+    });
+    if (result?.ok === false) {
+      throw new CandidateHttpError(409,
+        text(result.error_code) || 'CANDIDATE_EXPENSE_OPERATION_NOT_COMMITTED');
+    }
+    return jsonResponse(200, candidateExpenseCategoryResubmissionResult(result));
+  }
+  if (['REMOVE_EXPENSE', 'WITHDRAW_EXPENSE', 'CANCEL_EXPENSE'].includes(dbAction)) {
+    const result = await rpcCall(deps, 'candidate_expense_component_action_atomic_v1', {
+      p_session_id: access.session_id,
+      p_environment: access.environment || environmentName(env),
+      p_workflow_id: workflowId,
+      p_expected_generation: generation,
+      p_expense_component_id: requireUuid(
+        body.expense_component_id, 'CANDIDATE_EXPENSE_COMPONENT_ACTION_INVALID'
+      ),
+      p_expected_component_generation: requireInteger(
+        body.component_generation, 'CANDIDATE_EXPENSE_COMPONENT_ACTION_INVALID', 1
+      ),
+      p_action: dbAction,
+      p_idempotency_key: mutationKey,
+      p_now_utc: new Date().toISOString()
+    });
+    if (result?.ok === false) {
+      throw new CandidateHttpError(409,
+        text(result.error_code) || 'CANDIDATE_EXPENSE_OPERATION_NOT_COMMITTED');
+    }
+    if (result?.automatic_resubmission_required === true) {
+      // The database operation survives a lost HTTP response whereas the
+      // client-generated mutation key may not. Anchor every automatic submit,
+      // render and rebind retry to the durable operation so a refreshed app
+      // resumes the same work instead of creating a competing sequence.
+      const automaticMutationKey = `candidate-expense-operation:${requireUuid(
+        result.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+      )}`;
+      if (upper(result?.state) === 'AWAITING_MANAGER_APPROVAL'
+          && upper(result?.update_state) === 'NONE') {
+        return jsonResponse(200,
+          candidateExpenseCategoryPendingUpdateResult(result, result, dbAction));
+      }
+      const submitted = await submitAutomaticPendingExpenseUpdate(
+        env, deps, access, result, automaticMutationKey
+      );
+      try {
+        if (await queuePendingExpenseDocumentRefresh(env, submitted, result.operation_id)) {
+          return jsonResponse(202,
+            candidateExpenseCategoryPendingUpdateAcceptedResult(result, submitted, dbAction));
+        }
+      } catch (error) {
+        // The database operation is already durable. If queue dispatch is
+        // temporarily unavailable, preserve the existing immediate attempt;
+        // the scheduled recovery remains a second durable wake-up.
+        console.error('[candidate-app] expense document queue dispatch failed', {
+          workflow_id: workflowId,
+          update_id: submitted.update_id,
+          operation_id: result.operation_id,
+          error_code: knownErrorCode(error) || 'CANDIDATE_EXPENSE_RENDER_QUEUE_UNAVAILABLE'
+        });
+      }
+      const work = renderAndRebindPendingExpenseUpdate(
+        env, deps, submitted, automaticMutationKey
+      );
+      const deferred = deferBackground(ctx, work, 'automatic-expense-update-render-rebind', {
+        workflow_id: workflowId,
+        update_id: submitted.update_id,
+        operation_id: result.operation_id,
+        generation: submitted.generation
+      });
+      if (deferred !== true) {
+        const committed = await deferred;
+        return jsonResponse(200,
+          candidateExpenseCategoryPendingUpdateResult(result, committed, dbAction));
+      }
+      return jsonResponse(202,
+        candidateExpenseCategoryPendingUpdateAcceptedResult(result, submitted, dbAction));
+    }
+    // A stale per-category PAPER action is non-mutating guidance, not an API
+    // failure. The server returns the unchanged component receipt with the
+    // one valid next action so the closed client can move to the complete-pack
+    // replacement flow without trying to parse a success-shaped 409 error.
+    return jsonResponse(200, candidateExpenseCategoryActionResult(result));
+  }
+  if (['WITHDRAW_ENTIRE_CLAIM', 'CANCEL_ENTIRE_CLAIM'].includes(dbAction)) {
+    const reasonNote = text(body.reason_note).trim();
+    if (!reasonNote || reasonNote.length > 1000) {
+      throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
+    }
+    const result = await rpcCall(deps, 'candidate_whole_claim_action_atomic_v1', {
+      p_session_id: access.session_id,
+      p_environment: access.environment || environmentName(env),
+      p_workflow_id: workflowId,
+      p_expected_generation: generation,
+      p_timesheet_id: requireUuid(body.timesheet_id, 'TIMESHEET_NOT_FOUND'),
+      p_claim_scope_sha256: (() => {
+        const value = text(body.claim_scope_sha256).trim().toLowerCase();
+        if (!SHA256_RE.test(value)) {
+          throw new CandidateHttpError(409, 'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED');
+        }
+        return value;
+      })(),
+      p_action: dbAction,
+      p_reason_note: reasonNote,
+      p_idempotency_key: mutationKey,
+      p_now_utc: new Date().toISOString()
+    });
+    return jsonResponse(200, candidateWholeClaimActionResult(result));
+  }
+  throw new CandidateHttpError(409, 'CANDIDATE_ACTION_NOT_ELIGIBLE');
+}
+
+async function handleWorkflowAction(request, env, deps, workflowId, action, ctx) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  const mutationKey = requireCandidateIdempotency(body.idempotency_key);
+  body.idempotency_key = mutationKey;
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  let dbAction = upper(action.replace(/-/g, '_'));
+  if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && dbAction !== 'COMPONENT_SUPERSEDE') {
+    throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
+  }
+  if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {
+    await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
+  } else correctionCapability(request);
+  if ([
+    'REMOVE_EXPENSE', 'WITHDRAW_EXPENSE', 'CANCEL_EXPENSE',
+    'WITHDRAW_ENTIRE_CLAIM', 'CANCEL_ENTIRE_CLAIM',
+    'BEGIN_EXPENSE_UPDATE', 'ABORT_EXPENSE_UPDATE',
+    'RESUBMIT_EXPENSE_CATEGORY', 'CREATE_UPDATED_DOCUMENTS'
+  ].includes(dbAction)) {
+    return handleAdvancedExpenseWorkflowAction(
+      request, env, deps, access, workflowId, dbAction, body, mutationKey, ctx
+    );
+  }
+  if (dbAction === 'MILEAGE_FORM_PREPARE' || dbAction === 'MILEAGE_FORM_EMAIL') {
+    if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {
+      throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_GENERIC_ROUTE_REQUIRED');
+    }
+    return jsonResponse(dbAction === 'MILEAGE_FORM_EMAIL' ? 202 : 200,
+      await handleCandidateMileageFormAction(env, access, body, dbAction));
+  }
+  if (dbAction === 'PAPER_EMAIL') {
+    const workflow = await workflowRow(env, workflowId);
+    return jsonResponse(202,
+      await handleCandidatePaperEmailAction(request, env, deps, workflow, access, body));
+  }
+  if (dbAction === 'RETRY_FINALISATION') {
+    const workflow = await workflowRow(env, workflowId);
+    if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
+      throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+    }
+    const finalisation = await withManagerFinalisationLease(
+      env, workflowId, generation,
+      () => finaliseWorkflow(env, deps, workflowId, generation, mutationKey)
+    );
+    return jsonResponse(finalisation?.single_flight_deferred === true ? 202 : 200, finalisation);
+  }
+  let payload = isObject(body.payload) ? structuredClone(body.payload) : {};
+  let pendingManagerRoute = null;
+  let replayResult = null;
+  let pendingExpenseUpdateId = null;
+  delete payload.mutation_replay_probe_only;
+  delete payload.mutation_replay_semantic_payload;
+  if (dbAction === 'WORKER_SUBMIT') {
+    pendingExpenseUpdateId = body.update_id == null
+      ? null
+      : requireUuid(body.update_id, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+    let candidateSignedAtUtc = text(
+      body.candidate_signed_at_utc || payload.candidate_signed_at_utc
+    ).trim();
+    if (!pendingExpenseUpdateId
+        && (!candidateSignedAtUtc || !Number.isFinite(Date.parse(candidateSignedAtUtc)))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_SIGNATURE_TIMESTAMP_REQUIRED');
+    }
+    const requestedApprovalRoute = text(body.approval_route || payload.approval_route)
+      ? upper(body.approval_route || payload.approval_route) : null;
+    let signatureComponentId = body.candidate_signature_component_id
+      || payload.candidate_signature_component_id || null;
+    const submissionFacts = isObject(body.immutable_submission)
+      ? structuredClone(body.immutable_submission) : {};
+    delete submissionFacts.official_presentation;
+    assertCandidateScheduleAliasConsistency(submissionFacts);
+    let submissionRequestIdentity = pendingExpenseUpdateId ? null : {
+      contract_version: 'CANDIDATE_WORKER_SUBMISSION_REQUEST_V1',
+      factual_submission: submissionFacts,
+      candidate_signature_component_id: signatureComponentId,
+      candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
+      approval_route: requestedApprovalRoute
+    };
+    const replay = pendingExpenseUpdateId ? null : await probeWorkflowMutationReplay(
+      env, deps, access, workflowId, dbAction, generation, mutationKey,
+      { submission_request_identity: submissionRequestIdentity }
+    );
+    if (replay) {
+      if (replay.render_contract) {
+        try {
+          if (await queueCandidateReviewDocumentRefresh(env, replay)) {
+            return jsonResponse(202, {
+              ...withoutInternalRenderContracts(replay),
+              review_rendering_accepted: true
+            });
+          }
+        } catch (error) {
+          console.error('[candidate-app] review document queue dispatch failed', {
+            workflow_id: workflowId,
+            generation,
+            error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+          });
+        }
+        const work = renderAndRegister(env, deps, replay.render_contract, 'REVIEW');
+        const deferred = deferBackground(ctx, work, 'review-render-replay', {
+          workflow_id: workflowId, generation
+        });
+        if (deferred !== true) await deferred;
+        return jsonResponse(202, {
+          ...withoutInternalRenderContracts(replay),
+          review_rendering_accepted: true
+        });
+      }
+      return jsonResponse(200, withoutInternalRenderContracts(replay));
+    }
+    const workflow = await workflowRow(env, workflowId);
+    let breakContext = null;
+    let normalisedSubmissionFacts = submissionFacts;
+    if (pendingExpenseUpdateId) {
+      // Expense amendments do not re-attest unchanged hours.  The existing
+      // hours signature and timestamp are server-owned and remain scoped only
+      // to the unchanged hours document; ignore any client copy.
+      signatureComponentId = workflow.candidate_signature_component_id || null;
+      const priorSignedAtUtc = text(workflow.candidate_signed_at_utc).trim();
+      candidateSignedAtUtc = priorSignedAtUtc && Number.isFinite(Date.parse(priorSignedAtUtc))
+        ? new Date(priorSignedAtUtc).toISOString() : null;
+      normalisedSubmissionFacts = mergePendingExpenseUpdateFacts(
+        workflow, normalisedSubmissionFacts
+      );
+    }
+    if (candidateWorkflowRequiresBreakEntry(workflow) && !pendingExpenseUpdateId) {
+      breakContext = await rpcCall(deps, 'candidate_break_entry_context_get_v1',
+        candidateRpcArgs(access, env, { p_workflow_id: workflowId }));
+      normalisedSubmissionFacts = normaliseCandidateBreakSubmission(
+        normalisedSubmissionFacts, breakContext
+      );
+    } else if (pendingExpenseUpdateId
+        && isObject(normalisedSubmissionFacts.break_entry_context)) {
+      breakContext = structuredClone(normalisedSubmissionFacts.break_entry_context);
+    }
+    if (pendingExpenseUpdateId) {
+      // The update receipt is bound to the actual server-merged submission,
+      // not the partial client delta.  This preserves unchanged hours and
+      // categories across removal-only PAPER/combined continuations.
+      submissionRequestIdentity = {
+        contract_version: 'CANDIDATE_WORKER_SUBMISSION_REQUEST_V1',
+        factual_submission: structuredClone(normalisedSubmissionFacts),
+        candidate_signature_component_id: signatureComponentId,
+        candidate_signed_at_utc: candidateSignedAtUtc,
+        approval_route: requestedApprovalRoute
+      };
+    }
+    await assertCandidateMileageEvidenceMatchesSubmission(
+      env,
+      workflow,
+      normalisedSubmissionFacts
+    );
+    const approvalRoute = requestedApprovalRoute || upper(workflow.route);
+    const duplicateExpenseConfirmation = isObject(
+      body.duplicate_expense_confirmation || payload.duplicate_expense_confirmation
+    ) ? (body.duplicate_expense_confirmation || payload.duplicate_expense_confirmation) : null;
+    if (duplicateExpenseConfirmation && (
+      duplicateExpenseConfirmation.confirmed !== true
+      || !/^[0-9a-f]{64}$/i.test(text(duplicateExpenseConfirmation.confirmation_digest))
+    )) {
+      throw new CandidateHttpError(400, 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_INVALID');
+    }
+    payload = {
+      ...payload,
+      immutable_submission: await prepareImmutableSubmission(
+        env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey
+      ),
+      submission_request_identity: submissionRequestIdentity,
+      ...(breakContext ? { break_entry_context: breakContext } : {}),
+      candidate_signature_component_id: signatureComponentId,
+      candidate_signed_at_utc: candidateSignedAtUtc,
+      approval_route: approvalRoute,
+      ...(duplicateExpenseConfirmation ? {
+        duplicate_expense_confirmation: {
+          confirmed: true,
+          confirmation_digest: text(duplicateExpenseConfirmation.confirmation_digest).toLowerCase()
+        }
+      } : {}),
+      renderer_contract_version: RENDERER_CONTRACT_VERSION
+    };
+  } else if (dbAction === 'SELECT_PHONE_APPROVAL') {
+    const brokerBinding = publicPhoneBinding(payload.public_broker_binding);
+    const brokerHandoffKeyVersion = requireInteger(
+      payload.broker_handoff_key_version,
+      'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID', 1
+    );
+    if (brokerHandoffKeyVersion > 65535) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID');
+    }
+    payload = {
+      ...payload,
+      public_broker_binding: brokerBinding,
+      broker_handoff_key_version: brokerHandoffKeyVersion
+    };
+    const replaySemanticPayload = { ...payload };
+    delete replaySemanticPayload.approval_token_hash_hex;
+    delete replaySemanticPayload.expires_at_utc;
+    delete replaySemanticPayload.handoff_token_key_version;
+    delete replaySemanticPayload.broker_handoff_key_version;
+    const replay = await probeWorkflowMutationReplay(
+      env, deps, access, workflowId, dbAction, generation, mutationKey,
+      replaySemanticPayload
+    );
+    if (replay) {
+      return jsonResponse(201, await phoneTokenForWorkflowResult(
+        env, replay, workflowId, generation, mutationKey
+      ));
+    }
+    const handoffTokenKeyVersion = managerTokenKeyVersion(env);
+    const managerToken = await deterministicOpaqueToken(
+      managerTokenSecret(env, handoffTokenKeyVersion),
+      'candidate-phone-handoff-v1', workflowId, generation, mutationKey
+    );
+    payload = {
+      ...payload,
+      approval_token_hash_hex: await sha256Hex(managerToken),
+      expires_at_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      handoff_token_key_version: handoffTokenKeyVersion,
+      public_broker_binding: brokerBinding,
+      broker_handoff_key_version: brokerHandoffKeyVersion
+    };
+  } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {
+    const mailKind = dbAction === 'REMIND' ? 'REMINDER'
+      : dbAction === 'RENEW' ? 'RENEWAL' : 'INITIAL';
+    let managerEmail = body.manager_email || payload.manager_email;
+    let approvalIdentity = 'INITIAL';
+    const approvalRequestId = dbAction === 'RENEW' || dbAction === 'REMIND'
+      ? requireUuid(body.approval_request_id || payload.approval_request_id,
+        'CANDIDATE_REQUEST_GENERATION_STALE') : null;
+    const approvalRequestGeneration = dbAction === 'RENEW' || dbAction === 'REMIND'
+      ? requireInteger(body.approval_request_generation || payload.approval_request_generation,
+        'CANDIDATE_REQUEST_GENERATION_STALE', 1) : null;
+    const replaySemanticPayload = {
+      ...payload,
+      manager_email: managerEmail ? normaliseEmail(managerEmail) : null,
+      ...(approvalRequestId ? {
+        approval_request_id: approvalRequestId,
+        approval_request_generation: approvalRequestGeneration
+      } : {})
+    };
+    delete replaySemanticPayload.mail;
+    delete replaySemanticPayload.approval_token_hash_hex;
+    if (dbAction === 'REMIND' || dbAction === 'RENEW') {
+      delete replaySemanticPayload.manager_email;
+    }
+    const replay = await probeWorkflowMutationReplay(
+      env, deps, access, workflowId, dbAction, generation, mutationKey, replaySemanticPayload
+    );
+    replayResult = replay;
+    if (dbAction === 'RENEW' || dbAction === 'REMIND') {
+      const approval = await restOne(env, 'candidate_approval_requests',
+        `id=eq.${encodeURIComponent(approvalRequestId)}`
+        + `&workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL`
+        + `&request_generation=eq.${approvalRequestGeneration}`
+        + '&select=id,request_generation,manager_email_normalized');
+      if (!approval) throw new CandidateHttpError(409, 'CANDIDATE_REQUEST_GENERATION_STALE');
+      if (managerEmail && normaliseEmail(managerEmail) !== approval.manager_email_normalized) {
+        throw new CandidateHttpError(409, 'CANDIDATE_REQUEST_GENERATION_STALE');
+      }
+      managerEmail = approval.manager_email_normalized;
+      approvalIdentity = `${approval.id}:${Number(approval.request_generation)}`;
+      payload.approval_request_id = approval.id;
+      payload.approval_request_generation = Number(approval.request_generation);
+    }
+    const normalisedManagerEmail = normaliseEmail(managerEmail);
+    const managerToken = await deterministicOpaqueToken(
+      env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+      'candidate-email-handoff-v1', workflowId, generation, dbAction, mutationKey,
+      normalisedManagerEmail, approvalIdentity
+    );
+    if (!replay) {
+      const managerWorkflow = await workflowRow(env, workflowId);
+      payload = {
+        ...payload,
+        ...await candidateManagerMail(
+          env, deps, managerToken, workflowId, normalisedManagerEmail, mailKind,
+          managerWorkflow.workflow_kind
+        ),
+        approval_token_hash_hex: await sha256Hex(managerToken)
+      };
+    }
+    pendingManagerRoute = { managerToken, mailKind };
+  } else if (dbAction === 'CANCEL') {
+    const reasonNote = text(
+      body.reason_note || body.reason || payload.reason_note || payload.reason
+    ).trim();
+    if (!reasonNote) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
+    if (reasonNote.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_INVALID');
+    const managerWorkflow = await workflowRow(env, workflowId);
+    const emailApprovals = await restRows(env, 'candidate_approval_requests',
+      `workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL`
+      + '&state=in.(PENDING,APPROVED)&select=id&limit=1');
+    payload = {
+      ...payload,
+      reason_note: reasonNote,
+      reason_code: text(body.reason_code || payload.reason_code).trim().toUpperCase() || null,
+      ...(emailApprovals.length ? {
+        manager_terminal_mail: await candidateManagerTerminalMail(
+          deps, 'CANCELLATION', managerWorkflow.workflow_kind
+        )
+      } : {})
+    };
+  }
+  if (dbAction === 'PAPER_PREPARE') {
+    const paperWorkflow = await workflowRow(env, workflowId);
+    // A standalone expense claim deliberately has no target Timesheet until
+    // finalisation. Its established PAPER transition binds the printed pack
+    // to the current worked anchor, then moves the accepted return evidence
+    // onto the separate expense carrier created during finalisation.
+    if (paperWorkflow.workflow_kind !== 'CONTRACT_EXPENSE') {
+      const prepared = await rpcCall(deps, 'candidate_weekly_paper_target_prepare_v1',
+        candidateRpcArgs(access, env, {
+          p_workflow_id: workflowId,
+          p_expected_generation: generation,
+          p_now_utc: new Date().toISOString()
+        }));
+      if (prepared?.ok !== true || !UUID_RE.test(text(prepared?.timesheet_id))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+      }
+    }
+  }
+  const managerRoutesToRetire = dbAction === 'CANCEL'
+    ? await currentManagerEmailRouteTickets(env, workflowId) : [];
+  let result = replayResult;
+  if (!result && dbAction === 'PAPER_RETURN') {
+    const paperWorkflow = await workflowRow(env, workflowId);
+    const paperManifest = parseJson(paperWorkflow.paper_return_manifest_json, {}) || {};
+    if (Number(paperManifest.manifest_version) === 2) {
+      const verifiedPages = await candidatePaperReturnPackReceipts(
+        env, access, workflowId, generation, payload.paper_return_receipts
+      );
+      result = await rpcCall(deps, 'candidate_paper_return_pack_complete_v2', {
+        p_session_id: access.session_id,
+        p_environment: access.environment || environmentName(env),
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_verified_pages: verifiedPages,
+        p_idempotency_key: mutationKey,
+        p_now_utc: new Date().toISOString()
+      });
+    }
+  }
+  const transitionRpc = dbAction === 'PAPER_PREPARE'
+    ? 'candidate_weekly_paper_prepare_atomic_v1'
+    : dbAction === 'CANCEL'
+      ? 'candidate_workflow_cancel_atomic_v2'
+      : 'candidate_workflow_transition_atomic_v1';
+  const transitionArgs = dbAction === 'CANCEL'
+    ? workflowCancelArgs(access, env, workflowId, generation, payload, mutationKey)
+    : workflowActionArgs(access, env, workflowId, dbAction, generation, payload, mutationKey);
+  if (!result && dbAction === 'WORKER_SUBMIT' && pendingExpenseUpdateId) {
+    try {
+      result = await rpcCall(deps, 'candidate_expense_update_submit_atomic_v1', {
+        p_session_id: access.session_id,
+        p_environment: access.environment || environmentName(env),
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_update_id: pendingExpenseUpdateId,
+        p_payload: payload,
+        p_idempotency_key: mutationKey,
+        p_now_utc: new Date().toISOString()
+      });
+    } catch (error) {
+      try {
+        await abortPendingExpenseUpdate(
+          env, deps, workflowId, pendingExpenseUpdateId,
+          knownErrorCode(error) === 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED'
+            ? 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED'
+            : 'CANDIDATE_EXPENSE_UPDATE_SUBMIT_FAILED',
+          `${mutationKey}:abort-submit-failure`
+        );
+      } catch (abortError) {
+        console.error('[candidate-app] pending expense submit recovery failed', {
+          workflow_id: workflowId,
+          update_id: pendingExpenseUpdateId,
+          error_code: knownErrorCode(abortError)
+        });
+      }
+      throw error;
+    }
+  }
+  result = result || await rpcCall(deps, transitionRpc, transitionArgs);
+  if (pendingManagerRoute) {
+    const approvalRequestId = requireUuid(result?.approval_request_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const mailOutboxId = requireUuid(result?.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const approval = await restOne(env, 'candidate_approval_requests',
+      `id=eq.${encodeURIComponent(approvalRequestId)}&workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + '&select=id,request_generation,resend_count,expires_at_utc,token_hash');
+    if (!approval) throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const credentialGeneration = pendingManagerRoute.mailKind === 'REMINDER'
+      ? Number(approval.resend_count) + 1 : 1;
+    await registerManagerEmailRoute(env, deps, {
+      workflowId, approvalRequestId, requestGeneration: Number(approval.request_generation),
+      credentialGeneration, mailOutboxId, managerToken: pendingManagerRoute.managerToken,
+      mailKind: pendingManagerRoute.mailKind, expiresAtUtc: approval.expires_at_utc, mutationKey
+    });
+  }
+  if (dbAction === 'CANCEL') retireManagerEmailRoutes(env, deps, managerRoutesToRetire, ctx);
+  if (dbAction === 'SELECT_PHONE_APPROVAL') {
+    return jsonResponse(201, await phoneTokenForWorkflowResult(
+      env, result, workflowId, generation, mutationKey
+    ));
+  }
+  if (dbAction === 'WORKER_SUBMIT' && pendingExpenseUpdateId
+      && result?.contract_version === 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1'
+      && result?.stage === 'COMPLETE') {
+    return jsonResponse(202, candidatePaperDocumentUpdateStoredCompleteResult(result));
+  }
+  if (dbAction === 'WORKER_SUBMIT' && pendingExpenseUpdateId
+      && (result?.paper_prepare_required === true
+        || (result?.paper_pack_replacement === true
+          && result?.update_state === 'NONE'
+          && result?.stage !== 'COMPLETE'))) {
+    const completed = await prepareAndRebindPaperExpenseUpdate(
+      env, deps, access, result, mutationKey, ctx
+    );
+    return jsonResponse(202, completed);
+  }
+  if (dbAction === 'WORKER_SUBMIT' && result?.render_contract) {
+    if (pendingExpenseUpdateId) {
+      try {
+        if (await queuePendingExpenseDocumentRefresh(
+          env, result, result?.operation_id || null
+        )) {
+          return jsonResponse(202, {
+            ...withoutInternalRenderContracts(result),
+            update_id: pendingExpenseUpdateId,
+            update_state: 'UPDATING',
+            manager_link_preserved: true,
+            review_rendering_accepted: true
+          });
+        }
+      } catch (error) {
+        console.error('[candidate-app] expense document queue dispatch failed', {
+          workflow_id: workflowId,
+          update_id: pendingExpenseUpdateId,
+          operation_id: result?.operation_id || null,
+          error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+        });
+      }
+      const work = renderAndRebindPendingExpenseUpdate(env, deps, result, mutationKey);
+      const deferred = deferBackground(ctx, work, 'expense-update-render-rebind', {
+        workflow_id: workflowId,
+        update_id: pendingExpenseUpdateId,
+        generation
+      });
+      if (deferred !== true) await deferred;
+      return jsonResponse(202, {
+        ...withoutInternalRenderContracts(result),
+        update_id: pendingExpenseUpdateId,
+        update_state: 'UPDATING',
+        manager_link_preserved: true,
+        review_rendering_accepted: true
+      });
+    }
+    try {
+      if (await queueCandidateReviewDocumentRefresh(env, result)) {
+        return jsonResponse(202, {
+          ...withoutInternalRenderContracts(result),
+          review_rendering_accepted: true
+        });
+      }
+    } catch (error) {
+      console.error('[candidate-app] review document queue dispatch failed', {
+        workflow_id: workflowId,
+        generation: result.generation,
+        error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+      });
+    }
+    const work = renderAndRegister(env, deps, result.render_contract, 'REVIEW');
+    const deferred = deferBackground(ctx, work, 'review-render', { workflow_id: workflowId, generation });
+    if (deferred !== true) await deferred;
+    return jsonResponse(202, { ...withoutInternalRenderContracts(result), review_rendering_accepted: true });
+  }
+  if (dbAction === 'PAPER_PREPARE' && result?.state === 'AWAITING_PAPER_RETURN') {
+    const promoted = await rpcCall(deps, 'candidate_paper_manifest_v2_promote_v1',
+      candidateRpcArgs(access, env, {
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_expected_v1_manifest_sha256_hex:
+          text(result?.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
+        p_now_utc: new Date().toISOString()
+      }));
+    if (promoted?.ok !== true
+        || Number(promoted?.manifest_version) !== 2
+        || promoted?.qr_contract_version !== PAPER_PAGE_QR_V2
+        || !SHA256_RE.test(text(promoted?.paper_return_manifest_sha256))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const workflow = await workflowRow(env, workflowId);
+    const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+    if (!timesheetId) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+    const paperReturnPages = safePaperReturnPages(
+      parseJson(workflow.paper_return_manifest_json, {})
+    );
+    if (!paperReturnPages.length
+        || paperReturnPages.length !== Number(promoted?.paper_return_page_count)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const pack = result?.paper_pack;
+    const outboxBinding = await bindCandidatePaperOutbox(env, workflow, timesheetId, pack);
+    if (deps.nudgeQrPack) await deps.nudgeQrPack({ pack, timesheetId, ctx });
+    const { paper_pack: _privatePaperPack, ...publicResult } = result;
+    return jsonResponse(202, {
+      ...publicResult,
+      paper_return_manifest_sha256:
+        text(promoted.paper_return_manifest_sha256).toLowerCase(),
+      paper_return_page_count: Number(promoted.paper_return_page_count),
+      paper_return_manifest_version: 2,
+      paper_return_qr_contract_version: PAPER_PAGE_QR_V2,
+      paper_pack_queued: pack?.queued === true,
+      paper_pack: safeQrPackResponse(pack),
+      paper_pack_email_bound: outboxBinding.bound,
+      paper_return_pages: paperReturnPages
+    });
+  }
+  if (dbAction === 'PAPER_RETURN' && result?.state === 'RECEIVED') {
+    const completion = await finaliseReceivedPaperReturn(result, () => withManagerFinalisationLease(
+      env, workflowId, generation,
+      () => finaliseWorkflow(
+        env,
+        deps,
+        workflowId,
+        generation,
+        `${mutationKey}:paper-finalise`
+      )
+    ));
+    return jsonResponse(completion.status, completion.body);
+  }
+  return jsonResponse(200, result);
+}
+
+async function managerTokenContext(request, env) {
+  const token = bearerToken(request);
+  if (!token) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+  return { token, token_hash_hex: await sha256Hex(token), environment: environmentName(env) };
+}
+
+async function managerPendingExpenseUpdateHold(request, env, deps, workflowId) {
+  const auth = await managerTokenContext(request, env);
+  const hold = await managerRpcCall(deps, 'update-hold', 'candidate_expense_update_manager_hold_v1', {
+    p_environment: environmentName(env),
+    p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    p_approval_token_hash_hex: auth.token_hash_hex,
+    p_now_utc: new Date().toISOString()
+  });
+  return hold?.state === 'UPDATING' ? hold : null;
+}
+
+async function managerDocumentReadContextWithHoldRetry(request, env, deps, workflowId) {
+  try {
+    return { context: await managerDocumentReadContext(request, env, workflowId), hold: null };
+  } catch (error) {
+    if (![
+      'MANAGER_APPROVAL_REQUEST_NOT_READY',
+      'MANAGER_APPROVAL_REQUEST_SUPERSEDED'
+    ].includes(knownErrorCode(error))) throw error;
+    const hold = await managerPendingExpenseUpdateHold(request, env, deps, workflowId);
+    if (!hold) throw error;
+    return { context: null, hold };
+  }
+}
+
+async function managerDocumentReadContext(request, env, workflowId) {
+  const auth = await managerTokenContext(request, env);
+  const workflow = await managerRestOne(env, 'workflow-read', 'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'))}&select=*`);
+  if (!workflow) throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  if (upper(workflow.environment) !== auth.environment) {
+    throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+  }
+  const tokenHash = encodeURIComponent(`\\x${auth.token_hash_hex}`);
+  const approval = await managerRestOne(env, 'approval-read', 'candidate_approval_requests',
+    `workflow_id=eq.${encodeURIComponent(workflow.id)}`
+    + `&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+    + '&method=in.(EMAIL,PHONE)&state=eq.PENDING'
+    + `&token_hash=eq.${tokenHash}`
+    + '&select=id,workflow_id,workflow_generation,request_generation,method,state,expires_at_utc,'
+    + 'review_manifest_sha256,required_component_ids,required_component_manifest_json');
+  if (!approval) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+  if (!Number.isFinite(Date.parse(approval.expires_at_utc))
+      || Date.parse(approval.expires_at_utc) <= Date.now()) {
+    throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_EXPIRED');
+  }
+  const approvalManifest = text(approval.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const workflowManifest = text(workflow.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(approvalManifest) || approvalManifest !== workflowManifest) {
+    throw new CandidateHttpError(409, 'MANAGER_APPROVAL_REQUEST_SUPERSEDED');
+  }
+  const allowedIds = (Array.isArray(approval.required_component_ids)
+    ? approval.required_component_ids : [])
+    .map((entry) => text(entry));
+  return { approval, allowedIds };
+}
+
+function managerSubmissionType(workflowKind) {
+  const kind = upper(workflowKind);
+  if (kind === 'CONTRACT_EXPENSE') return 'EXPENSE_CLAIM';
+  if (kind === 'CONTRACT_COMBINED') return 'COMBINED';
+  return 'TIMESHEET';
+}
+
+async function managerStartMutationKey(workflowId, tokenHashHex, managerContext) {
+  const approval = managerContext?.approval;
+  const manifestHash = text(approval?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const workflowGeneration = Number(approval?.workflow_generation);
+  const requestGeneration = Number(approval?.request_generation);
+  if (!UUID_RE.test(text(approval?.id))
+      || !Number.isSafeInteger(workflowGeneration) || workflowGeneration < 1
+      || !Number.isSafeInteger(requestGeneration) || requestGeneration < 1
+      || !SHA256_RE.test(manifestHash)) {
+    return `manager-start:${workflowId}:${tokenHashHex}`;
+  }
+  return `manager-start:${await sha256Hex(canonicalJson({
+    workflow_id: workflowId,
+    workflow_generation: workflowGeneration,
+    approval_request_id: approval.id,
+    approval_request_generation: requestGeneration,
+    review_manifest_sha256: manifestHash,
+    approval_token_sha256: tokenHashHex
+  }))}`;
+}
+
+function managerStartResult(result, routeAuthority) {
+  const components = (Array.isArray(result?.ordered_components) ? result.ordered_components : [])
+    .map((component) => ({
+      component_id: requireUuid(component?.component_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+      ordinal: requireInteger(component?.ordinal, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1),
+      component_kind: text(component?.component_kind),
+      media_type: normaliseMediaType(component?.media_type),
+      byte_size: requireInteger(component?.byte_size, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1),
+      content_sha256: requireSha256(component?.content_sha256, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+      viewed: component?.viewed === true
+    }));
+  const reviewedCount = Number(result?.reviewed_count || 0);
+  if (!components.length || !Number.isSafeInteger(reviewedCount) || reviewedCount < 0
+      || reviewedCount > components.length) {
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_DOCUMENT_NOT_READY');
+  }
+  return {
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+    workflow_generation: requireInteger(
+      result?.workflow_generation, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1
+    ),
+    approval_request_id: requireUuid(
+      result?.approval_request_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'
+    ),
+    authority_kind: routeAuthority?.authority_kind || (upper(result?.method) === 'PHONE'
+      ? 'MANAGER_PHONE' : 'MANAGER_EMAIL'),
+    submission_type: managerSubmissionType(result?.workflow_kind),
+    expires_at_utc: new Date(result?.expires_at_utc).toISOString(),
+    manifest_sha256: requireSha256(result?.manifest_sha256, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+    page_count: components.length,
+    ordered_components: components,
+    reviewed_count: reviewedCount,
+    all_pages_viewed: reviewedCount === components.length,
+    can_approve: result?.can_approve === true,
+    can_refuse: result?.can_refuse === true
+  };
+}
+
+async function enrichManagerCorrection(deps, env, result, request) {
+  let raw;
+  try {
+    raw = await managerRpcCall(deps, 'correction-summary', 'timesheet_correction_manager_summary_v1', {
+      p_workflow_id: result.workflow_id, p_workflow_generation: result.workflow_generation,
+      p_approval_request_id: result.approval_request_id, p_manifest_sha256: result.manifest_sha256
+    });
+  } catch {
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+  }
+  // The SQL owner authenticates the exact approval/render witness; this read
+  // uses that existing manager authority, never a Candidate session/detail API.
+  const owner = await restOne(env, 'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(result.workflow_id)}&generation=eq.${result.workflow_generation}&select=id,generation,immutable_submission_json`);
+  const presentation = owner?.immutable_submission_json?.official_presentation?.correction;
+  if (raw == null) {
+    if (presentation) throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+    return result;
+  }
+  try {
+    const summary = serializeManagerCorrection(raw, result, CORRECTION_CONVERTERS);
+    if (!presentation || presentation.request_id !== summary.request_id || presentation.correction_id !== summary.correction_id
+        || presentation.reason !== summary.reason
+        || canonicalJson(presentation.original_schedule) !== canonicalJson(summary.original_schedule)
+        || canonicalJson(presentation.reviewed_schedule) !== canonicalJson(summary.reviewed_schedule)) {
+      throw new Error('Frozen correction presentation changed');
+    }
+    // Legacy manager clients still see the same authoritative PDF; the optional
+    // phone summary is sent only to a client declaring this exact contract.
+    return correctionCapability(request) ? { ...result, correction: summary } : result;
+  } catch (error) {
+    if (knownErrorCode(error) === 'CANDIDATE_CORRECTION_CLIENT_REQUIRED') throw error;
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+  }
+}
+
+function managerProgressResult(result) {
+  const requiredCount = requireInteger(result?.required_count, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1);
+  const reviewedCount = requireInteger(result?.reviewed_count, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1);
+  return {
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_REVIEW_PROGRESS_CONFLICT'),
+    generation: requireInteger(result?.generation, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1),
+    approval_request_id: requireUuid(
+      result?.approval_request_id, 'MANAGER_REVIEW_PROGRESS_CONFLICT'
+    ),
+    component_id: requireUuid(result?.component_id, 'MANAGER_REVIEW_PROGRESS_CONFLICT'),
+    reviewed_count: reviewedCount,
+    required_count: requiredCount,
+    progress_version: requireInteger(
+      result?.progress_version, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1
+    ),
+    all_pages_viewed: reviewedCount === requiredCount
+  };
+}
+
+function managerTerminalResult(result, action) {
+  const approved = action === 'approve';
+  const completedAt = approved ? result?.approved_at_utc : result?.refused_at_utc;
+  return {
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_APPROVAL_REQUEST_NOT_READY'),
+    generation: requireInteger(result?.generation, 'MANAGER_APPROVAL_REQUEST_NOT_READY', 1),
+    state: approved ? 'APPROVED' : 'REFUSED',
+    completed_at_utc: new Date(completedAt).toISOString(),
+    finalisation_state: approved ? 'FINALISATION_PENDING' : 'NOT_APPLICABLE',
+    idempotent_replay: result?.idempotent_replay === true
+  };
+}
+
+async function handleManagerAction(request, env, deps, workflowId, action, ctx) {
+  const auth = await managerTokenContext(request, env);
+  const updateHold = await managerRpcCall(deps, 'action-hold', 'candidate_expense_update_manager_hold_v1', {
+    p_environment: environmentName(env),
+    p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    p_approval_token_hash_hex: auth.token_hash_hex,
+    p_now_utc: new Date().toISOString()
+  });
+  if (updateHold?.state === 'UPDATING') {
+    return jsonResponse(202, updateHold, {
+      'retry-after': String(Math.max(1, Number(updateHold.retry_after_seconds) || 2))
+    });
+  }
+  const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
+    ? managerRouteAuthority(request) : null;
+  if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
+  const managerRead = routeAuthority
+    ? await managerDocumentReadContextWithHoldRetry(request, env, deps, workflowId)
+    : { context: null, hold: null };
+  if (managerRead.hold) {
+    return jsonResponse(202, managerRead.hold, {
+      'retry-after': String(Math.max(1, Number(managerRead.hold.retry_after_seconds) || 2))
+    });
+  }
+  const managerContext = managerRead.context;
+  if (routeAuthority) {
+    await assertManagerRouteApprovalContext(env, managerContext.approval, routeAuthority);
+  }
+  const body = request.method === 'GET' ? {} : await readJson(request);
+  const mutationKey = request.method === 'GET'
+    ? await managerStartMutationKey(workflowId, auth.token_hash_hex, managerContext)
+    : requireCandidateIdempotency(body.idempotency_key);
+  const generation = body.generation == null ? null : requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  let dbAction = {
+    start: 'BEGIN_MANAGER_REVIEW', progress: 'RECORD_REVIEW_PROGRESS',
+    approve: 'EMAIL_APPROVE', refuse: 'MANAGER_REFUSE'
+  }[action];
+  if (!dbAction) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+  if (action === 'approve') {
+    const context = await managerRpcCall(deps, 'approve-begin', 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+      null, env, workflowId, 'BEGIN_MANAGER_REVIEW', generation,
+      { approval_token_hash_hex: auth.token_hash_hex }, `${mutationKey}:begin-review`
+    ));
+    dbAction = upper(context?.method) === 'PHONE' ? 'PHONE_APPROVE' : 'EMAIL_APPROVE';
+  }
+  const payload = { ...(isObject(body.payload) ? body.payload : body), approval_token_hash_hex: auth.token_hash_hex };
+  const result = await managerRpcCall(deps, `action-${action}`, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+    null, env, workflowId, dbAction, generation, payload, mutationKey
+  ));
+  if (routeAuthority) await assertManagerRouteResult(env, result, routeAuthority);
+  if (['EMAIL_APPROVE', 'PHONE_APPROVE', 'MANAGER_REFUSE'].includes(dbAction)) {
+    completeManagerEmailRoute(env, deps, routeAuthority, ctx);
+  }
+  if (['EMAIL_APPROVE', 'PHONE_APPROVE'].includes(dbAction) && result?.final_render_contract) {
+    try {
+      if (await queueCandidateManagerFinalisation(env, result)) {
+        return jsonResponse(202, managerTerminalResult(result, action));
+      }
+    } catch (error) {
+      console.error('[candidate-app] manager finalisation queue dispatch failed', {
+        workflow_id: workflowId,
+        generation: result.generation,
+        error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+      });
+    }
+    const work = withManagerFinalisationLease(env, workflowId, result.generation, async () => {
+      await renderAndRegister(env, deps, result.final_render_contract, 'FINAL');
+      return finaliseWorkflow(env, deps, workflowId, result.generation, `${mutationKey}:finalise`);
+    });
+    const deferred = deferBackground(ctx, work, 'manager-final-render-and-finalise', {
+      workflow_id: workflowId,
+      generation: result.generation
+    });
+    if (deferred !== true) await deferred;
+    return jsonResponse(202, managerTerminalResult(result, action));
+  }
+  if (action === 'start') return jsonResponse(200, await enrichManagerCorrection(
+    deps, env, managerStartResult(result, routeAuthority), request
+  ));
+  if (action === 'progress') return jsonResponse(200, managerProgressResult(result));
+  if (action === 'approve' || action === 'refuse') {
+    return jsonResponse(200, managerTerminalResult(result, action));
+  }
+  return jsonResponse(200, result);
+}
+
+function documentStreamSource(owner, component) {
+  const candidateExpenseEvidence = owner === 'candidate'
+    && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(upper(component?.component_kind))
+    && text(component?.storage_key)
+    && text(component?.source_content_sha256);
+  if (candidateExpenseEvidence) {
+    return {
+      key: component.storage_key,
+      hash: text(component.source_content_sha256).replace(/^\\x/i, '')
+    };
+  }
+  return {
+    key: owner === 'manager' ? component?.review_storage_key
+      : component?.final_signed_storage_key || component?.review_storage_key || component?.storage_key,
+    hash: text(owner === 'manager' ? component?.review_content_sha256
+      : component?.final_signed_content_sha256 || component?.review_content_sha256 || component?.source_content_sha256).replace(/^\\x/i, '')
+  };
+}
+
+async function handleDocumentStream(request, env, deps, owner, workflowId, componentId) {
+  let component;
+  if (owner === 'candidate') {
+    const access = await verifyCandidateAccess(request, env);
+    const workflow = await workflowRow(env, workflowId);
+    if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
+      throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+    }
+    component = await restOne(env, 'candidate_submission_components',
+      `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}&select=*`);
+  } else if (owner === 'manager') {
+    const updateHold = await managerPendingExpenseUpdateHold(request, env, deps, workflowId);
+    if (updateHold) {
+      return jsonResponse(202, updateHold, {
+        'retry-after': String(Math.max(1, Number(updateHold.retry_after_seconds) || 2))
+      });
+    }
+    const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
+      ? managerRouteAuthority(request) : null;
+    if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
+    const managerRead = await managerDocumentReadContextWithHoldRetry(
+      request, env, deps, workflowId
+    );
+    if (managerRead.hold) {
+      return jsonResponse(202, managerRead.hold, {
+        'retry-after': String(Math.max(1, Number(managerRead.hold.retry_after_seconds) || 2))
+      });
+    }
+    const context = managerRead.context;
+    if (routeAuthority) await assertManagerRouteResult(env, {
+      approval_request_id: context.approval.id,
+      approval_request_generation: context.approval.request_generation
+    }, routeAuthority);
+    if (!context.allowedIds.includes(componentId)) {
+      throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+    }
+    component = await managerRestOne(env, 'component-read', 'candidate_submission_components',
+      `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}&select=*`);
+  } else if (owner === 'office') {
+    await requireOfficeActor(request, deps, 'manage_paper');
+    const generation = requireInteger(
+      new URL(request.url).searchParams.get('generation'), 'WORKFLOW_GENERATION_CONFLICT', 1
+    );
+    const workflow = await workflowRow(env, workflowId);
+    if (Number(workflow.generation) !== generation) {
+      throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+    }
+    component = await restOne(env, 'candidate_submission_components',
+      `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&workflow_generation=eq.${encodeURIComponent(generation)}&state=eq.IMMUTABLE&select=*`);
+  } else {
+    throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+  }
+  if (!component) throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+  const { key, hash } = documentStreamSource(owner, component);
+  const stored = await r2Bytes(env, key, hash || null);
+  return new Response(stored.bytes, {
+    status: 200,
+    headers: {
+      'content-type': stored.media_type,
+      'content-length': String(stored.bytes.byteLength),
+      'cache-control': 'private, no-store',
+      'content-disposition': 'inline; filename="timesheet-document"',
+      'x-content-type-options': 'nosniff',
+      ...(owner === 'manager' ? {
+        'x-cloudtms-component-id': component.id,
+        'x-cloudtms-content-sha256': hash
+      } : {})
+    }
+  });
+}
+
+function ukDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '-';
+}
+
+function londonCalendarDate(value) {
+  const date = new Date(text(value));
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date).reduce((result, part) => {
+    if (part.type !== 'literal') result[part.type] = part.value;
+    return result;
+  }, {});
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
+}
+
+async function appendPdfBytes(target, sourceBytes) {
+  const source = await PDFDocument.load(sourceBytes);
+  const pages = await target.copyPages(source, source.getPageIndices());
+  for (const page of pages) target.addPage(page);
+}
+
+/**
+ * Render the immutable attachment used by the optional Weekly Source
+ * completed-Timesheet informational copy.  This deliberately does not call a
+ * Candidate workflow transition: CHECK_ONLY renders the already signed
+ * Candidate submission as an informational document, while invoice-evidence
+ * mode combines the already-final signed component PDFs byte-for-byte at page
+ * level.  The caller must still commit the returned identity through the
+ * database's atomic completed-pack-copy owner.
+ */
+export async function renderWeeklySourceCompletedPackArtifact(env, rawJob) {
+  const job = isObject(rawJob) ? rawJob : {};
+  const workflowId = requireUuid(job.workflow_id, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+  const generation = requireInteger(
+    job.workflow_generation, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID', 1
+  );
+  const timesheetId = requireUuid(
+    job.timesheet_id, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID'
+  );
+  const renderInputSha256 = text(job.render_input_sha256).toLowerCase();
+  const mode = upper(job.document_mode);
+  if (!SHA256_RE.test(renderInputSha256)
+      || !['CHECK_ONLY', 'INVOICE_EVIDENCE_REQUIRED'].includes(mode)) {
+    throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+  }
+
+  let bytes;
+  let pageCount;
+  if (mode === 'CHECK_ONLY') {
+    const componentId = requireUuid(
+      job.candidate_signature_component_id,
+      'WEEKLY_COMPLETED_PACK_RENDER_INVALID'
+    );
+    const state = await loadRenderState(env, {
+      workflow_id: workflowId,
+      workflow_generation: generation,
+      component_id: componentId
+    });
+    if (text(state.timesheet?.booking_id).trim() !== text(job.timesheet_family).trim()
+        || upper(state.workflow?.state) !== 'WORKER_SUBMITTED'
+        || upper(state.workflow?.route) !== 'ELECTRONIC') {
+      throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_STALE');
+    }
+    const { model, assets } = await buildOfficialCandidateModel(
+      env, {}, state, 'REVIEW'
+    );
+    model.form_variant = 'ELECTRONIC_CANDIDATE_INFORMATIONAL';
+    model.wording = {
+      ...model.wording,
+      header: {
+        lines: ['Completed Timesheet provided for your information.']
+      },
+      client_declaration: {
+        title: 'For information',
+        lines: ['No approval, signature or other action is required.']
+      }
+    };
+    validateFrozenTimesheetPresentationModel(model);
+    const rendered = await renderOfficialTimesheetPdfBytes(model, assets);
+    bytes = rendered.pdf_bytes;
+    pageCount = Number(rendered.page_count);
+  } else {
+    const components = Array.isArray(job.components) ? job.components : [];
+    if (!components.length) {
+      throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+    }
+    const combined = await PDFDocument.create({ updateMetadata: false });
+    let priorOrdinal = 0;
+    for (const component of components) {
+      const ordinal = Number(component?.review_ordinal);
+      const expectedHash = text(component?.content_sha256).toLowerCase();
+      const expectedSize = Number(component?.byte_size);
+      const expectedPages = Number(component?.page_count);
+      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal < priorOrdinal
+          || !SHA256_RE.test(expectedHash)
+          || !Number.isSafeInteger(expectedSize) || expectedSize < 1
+          || !Number.isSafeInteger(expectedPages) || expectedPages < 1
+          || upper(component?.media_type) !== 'APPLICATION/PDF') {
+        throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+      }
+      const source = await r2Bytes(env, component.storage_key, expectedHash);
+      if (source.media_type !== 'application/pdf' || source.bytes.byteLength !== expectedSize) {
+        throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_STALE');
+      }
+      const sourcePdf = await PDFDocument.load(source.bytes, {
+        ignoreEncryption: false, updateMetadata: false
+      });
+      if (sourcePdf.getPageCount() !== expectedPages) {
+        throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_STALE');
+      }
+      await appendPdfBytes(combined, source.bytes);
+      priorOrdinal = ordinal;
+    }
+    pageCount = combined.getPageCount();
+    bytes = new Uint8Array(await combined.save({ useObjectStreams: false }));
+  }
+
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 1
+      || !Number.isSafeInteger(pageCount) || pageCount < 1) {
+    throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INCOMPLETE');
+  }
+  const digest = await sha256Hex(bytes);
+  const environment = environmentName(env).toLowerCase();
+  const storageKey = [
+    'weekly-source', environment, 'completed-pack-copy', workflowId,
+    String(generation), `${renderInputSha256}-${digest}.pdf`
+  ].join('/');
+  const stored = await immutablePut(env, storageKey, bytes, 'application/pdf', {
+    purpose: 'weekly-source-completed-pack-copy',
+    workflow_id: workflowId,
+    workflow_generation: String(generation),
+    timesheet_id: timesheetId,
+    document_mode: mode,
+    render_input_sha256: renderInputSha256,
+    content_policy_version: 'WEEKLY_COMPLETED_PACK_COPY_CONTENT_V1',
+    page_count: String(pageCount)
+  });
+  if (stored.sha256 !== digest) {
+    throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_CONFLICT');
+  }
+  const weekEnding = text(job.week_ending_date).slice(0, 10);
+  return Object.freeze({
+    workflow_id: workflowId,
+    render_input_sha256: renderInputSha256,
+    storage_key: storageKey,
+    final_document_sha256: digest,
+    filename: `Completed_Timesheet_${/^\d{4}-\d{2}-\d{2}$/.test(weekEnding) ? weekEnding : workflowId}.pdf`,
+    media_type: 'application/pdf',
+    byte_size: bytes.byteLength,
+    page_count: pageCount,
+    content_policy_version: 'WEEKLY_COMPLETED_PACK_COPY_CONTENT_V1'
+  });
+}
+
+async function drawCandidatePaperPageQr(page, qrText, {
+  x, y, size, label = 'Page QR'
+}) {
+  const value = text(qrText).trim();
+  if (!value.startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
+  const qr = QRCode.create(value, { errorCorrectionLevel: 'L' });
+  const quiet = 4;
+  const modules = qr.modules.size + quiet * 2;
+  const moduleSize = size / modules;
+  const originX = x + quiet * moduleSize;
+  const originY = y + quiet * moduleSize;
+  page.drawRectangle({
+    x, y, width: size, height: size,
+    color: rgb(1, 1, 1),
+    borderColor: rgb(0.04, 0.12, 0.24),
+    borderWidth: 0.8
+  });
+  for (let row = 0; row < qr.modules.size; row += 1) {
+    for (let column = 0; column < qr.modules.size; column += 1) {
+      if (!qr.modules.get(row, column)) continue;
+      page.drawRectangle({
+        x: originX + column * moduleSize,
+        y: originY + (qr.modules.size - row - 1) * moduleSize,
+        width: moduleSize,
+        height: moduleSize,
+        color: rgb(0, 0, 0)
+      });
+    }
+  }
+  if (label) {
+    const font = await page.doc.embedFont(StandardFonts.HelveticaBold);
+    const fontSize = 7;
+    const labelWidth = font.widthOfTextAtSize(label, fontSize);
+    page.drawRectangle({
+      x, y: y - 13, width: size, height: 13,
+      color: rgb(1, 1, 1)
+    });
+    page.drawText(label, {
+      x: x + Math.max(2, (size - labelWidth) / 2),
+      y: y - 10,
+      size: fontSize,
+      font,
+      color: rgb(0.04, 0.12, 0.24)
+    });
+  }
+}
+
+async function candidatePaperPageQrText(env, workflow, timesheet, page) {
+  const payload = await buildTsq2PagePayload({
+    workflow_id: workflow.id,
+    timesheet_id: timesheet.timesheet_id,
+    workflow_generation: Number(workflow.generation),
+    paper_return_manifest_sha256: text(workflow.paper_return_manifest_sha256)
+      .replace(/^\\x/i, '').toLowerCase(),
+    ordinal: Number(page.ordinal),
+    page_key: page.page_key,
+    page_kind: page.page_kind_code,
+    category_code: page.category_code,
+    category_occurrence: Number(page.category_occurrence)
+  });
+  return buildCandidatePaperPageQrViaAdapter(env, payload);
+}
+
+async function candidatePaperTimesheetRenderState(env, workflow, timesheet) {
+  const timesheetId = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
+  if (!UUID_RE.test(timesheetId) || timesheetId !== text(timesheet?.timesheet_id)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const [financials, contractRow, candidate] = await Promise.all([
+    restOne(env, 'timesheets_financials',
+      `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true`
+      + '&select=client_id,candidate_id,worked_start_iso,worked_end_iso'),
+    workflow.contract_id
+      ? restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=*`)
+      : Promise.resolve(null),
+    restOne(env, 'candidates', `id=eq.${encodeURIComponent(workflow.candidate_id)}&select=*`)
+  ]);
+  const clientId = contractRow?.client_id || financials?.client_id || timesheet?.client_id;
+  const client = clientId
+    ? await restOne(env, 'clients', `id=eq.${encodeURIComponent(clientId)}&select=*`)
+    : null;
+  return {
+    workflow,
+    component: null,
+    timesheet,
+    financials,
+    contract: contractRow,
+    candidate,
+    client
+  };
+}
+
+async function candidatePaperTimesheetPageBytes(env, workflow, timesheet, components, qrText) {
+  if (!text(qrText).startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
+  const hours = components.filter((component) => upper(component.component_kind) === 'HOURS_TIMESHEET');
+  if (hours.length > 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
+  }
+  // PAPER submissions intentionally use the existing current Timesheet as
+  // their factual source.  Unlike the electronic manager-review route, they
+  // do not require a synthetic HOURS_TIMESHEET component merely to render the
+  // page-specific return QR.  Prefer the exact component when one exists, but
+  // reconstruct the same read-only render state from the locked workflow and
+  // current Timesheet when it does not.
+  const state = hours.length === 1
+    ? await loadRenderState(env, {
+      workflow_id: workflow.id,
+      workflow_generation: Number(workflow.generation),
+      component_id: hours[0].id
+    })
+    : await candidatePaperTimesheetRenderState(env, workflow, timesheet);
+  if (state.workflow?.id !== workflow.id
+      || Number(state.workflow?.generation) !== Number(workflow.generation)
+      || state.timesheet?.timesheet_id !== timesheet.timesheet_id) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const { model, assets } = await buildOfficialCandidateModel(
+    env, {}, state, 'REVIEW', { paper_return_qr_text: qrText }
+  );
+  const rendered = await renderOfficialTimesheetPdfBytes(model, assets);
+  if (rendered.page_count !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_PAGE_COUNT_INVALID');
+  }
+  return rendered.pdf_bytes;
+}
+
+async function mileageClaimFormBytes(env, brandingOverride = null) {
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const page = pdf.addPage([595.28, 841.89]);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const branding = brandingOverride || await candidateAppAgencyDocumentBranding(env);
+  page.drawRectangle({ x: 0, y: 785, width: 595.28, height: 56, color: rgb(0.04, 0.12, 0.24) });
+  await drawCandidateBranding(pdf, page, branding, {
+    x: 561, y: 797, maxWidth: 125, maxHeight: 38, align: 'right'
+  });
+  page.drawText(branding.agency_name.slice(0, 55), { x: 34, y: 817, size: 9, font: bold, color: rgb(0.75, 0.9, 1) });
+  page.drawText('Mileage Claim Form', {
+    x: 34, y: 795, size: 16, font: bold, color: rgb(1, 1, 1)
+  });
+  page.drawText('Candidate name', { x: 42, y: 752, size: 9, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  page.drawLine({ start: { x: 130, y: 750 }, end: { x: 350, y: 750 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  page.drawText('Week ending', { x: 370, y: 752, size: 9, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  page.drawLine({ start: { x: 445, y: 750 }, end: { x: 553, y: 750 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  page.drawText('Record each journey below. Use another sheet if required. Declare the combined total in MyTMS when making a claim.', {
+    x: 42, y: 721, size: 8.5, font: regular, color: rgb(0.15, 0.22, 0.3)
+  });
+  const columns = [
+    { label: 'Post Code from', x: 42, width: 180 },
+    { label: 'Post Code To', x: 222, width: 180 },
+    { label: 'Number of miles', x: 402, width: 151 }
+  ];
+  const headerY = 690;
+  for (const column of columns) {
+    page.drawRectangle({ x: column.x, y: headerY, width: column.width, height: 30, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+    page.drawText(column.label, { x: column.x + 8, y: headerY + 10, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  }
+  Array.from({ length: 18 }).forEach((_, index) => {
+    const rowHeight = 32;
+    const y = headerY - ((index + 1) * rowHeight);
+    columns.forEach((column) => {
+      page.drawRectangle({ x: column.x, y, width: column.width, height: rowHeight, borderColor: rgb(0.35, 0.42, 0.5), borderWidth: 0.8 });
+    });
+  });
+  page.drawText('This reusable blank form contains no claim total, QR code or manager approval.', {
+    x: 42, y: 84, size: 8, font: regular, color: rgb(0.3, 0.36, 0.44)
+  });
+  return new Uint8Array(await pdf.save());
+}
+
+async function paperExpensePageBytes(
+  env, workflow, component, expectedPage, ordinal, pageQrText, displayName
+) {
+  const rendered = await renderExpensePage(env, {
+    review_ordinal: ordinal,
+    paper_return_qr_text: pageQrText,
+    paper_return_display_name: displayName,
+    render_input: upper(component.component_kind) === 'EXPENSE_SUMMARY'
+      ? {} : {
+        source_component_id: component.source_component_id || component.id,
+        source_content_sha256: candidateComponentDigest(component.source_content_sha256)
+      }
+  }, { workflow, component }, 'REVIEW');
+  return rendered.pdf_bytes;
+}
+
+function paperPackIdentity(env, workflow, timesheet, version) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const baseHash = text(version?.sha256).replace(/^\\x/i, '').toLowerCase();
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const brandingHash = text(immutable.official_presentation?.branding?.branding_contract_sha256).toLowerCase();
+  const rendererVersion = text(workflow.renderer_contract_version || immutable.official_presentation?.renderer_contract_version);
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const pageCount = Array.isArray(manifest.pages) ? manifest.pages.length : 0;
+  if (!SHA256_RE.test(manifestHash) || !SHA256_RE.test(baseHash) || !SHA256_RE.test(brandingHash)
+      || !Number.isSafeInteger(pageCount) || pageCount < 1
+      || rendererVersion !== RENDERER_CONTRACT_VERSION) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  return {
+    manifest_hash: manifestHash,
+    base_hash: baseHash,
+    branding_hash: brandingHash,
+    renderer_contract_version: rendererVersion,
+    page_count: pageCount,
+    key: `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}-${brandingHash}-${rendererVersion}.pdf`
+  };
+}
+
+async function activePaperWorkflowsForTimesheet(env, timesheetId) {
+  return restRows(env, 'candidate_submission_workflows',
+    `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER`
+    + `&state=eq.AWAITING_PAPER_RETURN&or=(target_timesheet_id.eq.${encodeURIComponent(timesheetId)},anchor_timesheet_id.eq.${encodeURIComponent(timesheetId)})`
+    + '&select=*&order=updated_at_utc.asc,id.asc&limit=2');
+}
+
+async function readyPaperPackReceipt(env, workflow, timesheet, version) {
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  let object;
+  try {
+    object = await env.R2?.head(identity.key);
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  }
+  if (!object) return { ...identity, ready: false };
+  const metadata = object.customMetadata || {};
+  const metadataByteSize = Number(metadata.byte_size);
+  const metadataPageCount = Number(metadata.page_count);
+  const valid = metadata.purpose === 'candidate-complete-paper-pack'
+    && metadata.workflow_id === workflow.id
+    && Number(metadata.workflow_generation) === Number(workflow.generation)
+    && metadata.timesheet_id === timesheet.timesheet_id
+    && text(metadata.manifest_sha256).toLowerCase() === identity.manifest_hash
+    && text(metadata.base_document_sha256).toLowerCase() === identity.base_hash
+    && text(metadata.branding_contract_sha256).toLowerCase() === identity.branding_hash
+    && text(metadata.renderer_contract_version) === identity.renderer_contract_version
+    && text(metadata.media_type).toLowerCase() === 'application/pdf'
+    && SHA256_RE.test(text(metadata.sha256))
+    && Number.isSafeInteger(metadataByteSize) && metadataByteSize > 0
+    && metadataByteSize === Number(object.size)
+    && Number.isSafeInteger(metadataPageCount) && metadataPageCount >= 1
+    && metadataPageCount === identity.page_count;
+  if (!valid) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  return {
+    ...identity,
+    ready: true,
+    sha256: text(metadata.sha256).toLowerCase(),
+    page_count: metadataPageCount,
+    byte_size: metadataByteSize
+  };
+}
+
+function candidateCompletePackAttachmentMatchesScope(row, expectedAuthority = 'CANDIDATE_PAPER_V1') {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  const attachments = parseJson(row?.attachments, []) || [];
+  if (upper(scope.candidate_mail_authority) !== upper(expectedAuthority)
+      || scope.candidate_paper_pack_ready !== true
+      || scope.mail_held_until_pdf_rendered !== false
+      || text(scope.mail_hold_reason)) return false;
+  if (attachments.length !== 1) return false;
+  const attachment = attachments[0] || {};
+  return attachment.r2_key === scope.candidate_complete_pack_storage_key
+    && text(attachment.sha256).toLowerCase() === text(scope.candidate_complete_pack_sha256).toLowerCase()
+    && Number(attachment.size_bytes) === Number(scope.candidate_complete_pack_size_bytes)
+    && Number(attachment.page_count) === Number(scope.candidate_complete_pack_page_count)
+    && text(attachment.content_type).toLowerCase() === 'application/pdf'
+    && Number.isSafeInteger(Number(attachment.size_bytes)) && Number(attachment.size_bytes) > 0
+    && Number.isSafeInteger(Number(attachment.page_count)) && Number(attachment.page_count) > 0
+    && SHA256_RE.test(text(attachment.sha256))
+    && UUID_RE.test(text(attachment.candidate_workflow_id))
+    && attachment.candidate_workflow_id === scope.candidate_workflow_id
+    && Number(attachment.candidate_workflow_generation) === Number(scope.candidate_workflow_generation)
+    && text(attachment.paper_return_manifest_sha256).toLowerCase()
+      === text(scope.paper_return_manifest_sha256).toLowerCase();
+}
+
+function candidatePaperExecutionState(workflow, outbox = null, timesheet = null, complete = null) {
+  const workflowReceipt = parseJson(workflow?.last_mutation_response_json, {}) || {};
+  const workflowTerminal = workflowReceipt.failure_scope === 'WORKFLOW'
+    && workflowReceipt.paper_pack_state === 'FAILED_TERMINAL';
+  const scope = parseJson(outbox?.payment_scope_json, {}) || {};
+  const attemptExpiresAt = Date.parse(text(scope.candidate_paper_pack_attempt_expires_at_utc));
+  const common = {
+    failure_scope: outbox ? 'OUTBOX' : null,
+    failure_code: text(scope.candidate_paper_pack_failure_code) || null,
+    attempt_count: Number(scope.candidate_paper_pack_attempt_count || 0),
+    next_retry_at_utc: scope.candidate_paper_pack_next_retry_at_utc || null,
+    retry_in_progress: !!text(scope.candidate_paper_pack_attempt_token)
+      && Number.isFinite(attemptExpiresAt) && attemptExpiresAt > Date.now(),
+    operation_id: scope.candidate_paper_pack_operation_id || null
+  };
+  // A workflow-level failure records the result of the attempt that created it;
+  // it is not stronger than a later, independently verified immutable receipt
+  // for this exact workflow generation and manifest. This bounded precedence is
+  // required after historical duplicate outbox rows have been reclassified.
+  if (complete?.ready === true && (!workflowTerminal
+      || text(workflowReceipt.failure_code) === 'CANDIDATE_PAPER_OUTBOX_CONFLICT')) {
+    return { ...common, state: 'READY', retryable: false, failure_code: null };
+  }
+  if (workflowTerminal) {
+    return {
+      state: 'FAILED_TERMINAL', failure_scope: 'WORKFLOW', retryable: false,
+      failure_code: text(workflowReceipt.failure_code)
+        || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED',
+      attempt_count: 0, next_retry_at_utc: null, retry_in_progress: false,
+      operation_id: workflowReceipt.paper_pack_operation_id || null
+    };
+  }
+  if (scope.candidate_paper_generation_retired === true) {
+    return { ...common, state: 'RETIRED', retryable: false };
+  }
+  // The outbox attachment proves what was sent, but an active Candidate
+  // download must also prove that the exact pack still matches the current
+  // Timesheet document revision in R2.  A source revision can legitimately
+  // become stale after the mail row was released; never project that older
+  // attachment as the current downloadable pack.
+  if (scope.candidate_paper_pack_retryable === true
+      || upper(scope.candidate_paper_pack_failure_class) === 'RETRYABLE') {
+    const due = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
+    return {
+      ...common,
+      state: Number.isFinite(due) && due > Date.now() ? 'BACKOFF' : 'FAILED_RETRYABLE',
+      retryable: true
+    };
+  }
+  if (upper(scope.candidate_paper_pack_failure_class) === 'TERMINAL'
+      || upper(outbox?.status) === 'FAILED' || upper(timesheet?.document_state) === 'FAILED') {
+    return {
+      ...common, state: 'FAILED_TERMINAL', retryable: false,
+      failure_code: common.failure_code || 'CANDIDATE_PAPER_DOCUMENT_FAILED'
+    };
+  }
+  return { ...common, state: outbox ? 'PREPARING' : 'STALE', retryable: false };
+}
+
+function candidatePaperDeliveryGeneration(workflow) {
+  const generation = requireInteger(workflow?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  return upper(workflow?.state) === 'FINALISED' ? Math.max(generation - 1, 1) : generation;
+}
+
+function candidatePaperReceiptRow(row) {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  if (scope.candidate_paper_generation_retired !== true) return row;
+  const retired = parseJson(scope.candidate_retired_delivery_receipt, {}) || {};
+  return {
+    ...row,
+    attachments: Array.isArray(retired.attachments) ? retired.attachments : [],
+    payment_scope_json: {
+      ...scope,
+      candidate_paper_pack_ready: true,
+      mail_held_until_pdf_rendered: false,
+      mail_hold_reason: null,
+      candidate_complete_pack_storage_key: retired.candidate_complete_pack_storage_key
+        || scope.candidate_complete_pack_storage_key,
+      candidate_complete_pack_sha256: retired.candidate_complete_pack_sha256
+        || scope.candidate_complete_pack_sha256,
+      candidate_complete_pack_size_bytes: retired.candidate_complete_pack_size_bytes
+        || scope.candidate_complete_pack_size_bytes,
+      candidate_complete_pack_page_count: retired.candidate_complete_pack_page_count
+        || scope.candidate_complete_pack_page_count,
+      candidate_complete_pack_media_type: retired.candidate_complete_pack_media_type
+        || scope.candidate_complete_pack_media_type
+    }
+  };
+}
+
+function candidatePaperCompleteReceipt(env, workflow, deliveryGeneration, row) {
+  const receiptRow = candidatePaperReceiptRow(row);
+  const scope = parseJson(receiptRow?.payment_scope_json, {}) || {};
+  if (!candidateCompletePackAttachmentMatchesScope(receiptRow)) return null;
+  const manifestHash = text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const canonicalBaseHash = text(scope.candidate_complete_pack_base_document_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const compatibilityBaseHash = text(scope.base_document_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const canonicalBrandingHash = text(scope.candidate_complete_pack_branding_contract_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const compatibilityBrandingHash = text(scope.branding_contract_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const canonicalRendererVersion = text(scope.candidate_complete_pack_renderer_contract_version);
+  const compatibilityRendererVersion = text(scope.renderer_contract_version);
+  if ((canonicalBaseHash && compatibilityBaseHash && canonicalBaseHash !== compatibilityBaseHash)
+      || (canonicalBrandingHash && compatibilityBrandingHash
+        && canonicalBrandingHash !== compatibilityBrandingHash)
+      || (canonicalRendererVersion && compatibilityRendererVersion
+        && canonicalRendererVersion !== compatibilityRendererVersion)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+  // PAPER_PACK_RELEASE records the immutable completed-pack identity using the
+  // candidate_complete_pack_* keys. The unprefixed keys are retained only for
+  // compatibility with deliveries created before that receipt contract.
+  const baseHash = canonicalBaseHash || compatibilityBaseHash;
+  const brandingHash = canonicalBrandingHash || compatibilityBrandingHash;
+  const rendererVersion = canonicalRendererVersion || compatibilityRendererVersion;
+  const key = text(scope.candidate_complete_pack_storage_key).replace(/^\/+/, '');
+  const sha256 = text(scope.candidate_complete_pack_sha256).toLowerCase();
+  const byteSize = Number(scope.candidate_complete_pack_size_bytes);
+  const pageCount = Number(scope.candidate_complete_pack_page_count);
+  const expectedKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${deliveryGeneration}`
+    + `/paper-pack/${manifestHash}-${baseHash}-${brandingHash}-${rendererVersion}.pdf`;
+  if (!SHA256_RE.test(manifestHash) || !SHA256_RE.test(baseHash) || !SHA256_RE.test(brandingHash)
+      || !SHA256_RE.test(sha256) || rendererVersion !== RENDERER_CONTRACT_VERSION
+      || key !== expectedKey || !Number.isSafeInteger(byteSize) || byteSize < 1
+      || !Number.isSafeInteger(pageCount) || pageCount < 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+  return {
+    key,
+    sha256,
+    byte_size: byteSize,
+    page_count: pageCount,
+    manifest_hash: manifestHash,
+    base_hash: baseHash,
+    branding_hash: brandingHash,
+    renderer_contract_version: rendererVersion,
+    delivery_generation: deliveryGeneration,
+    retired: scope.candidate_paper_generation_retired === true,
+    ready: true
+  };
+}
+
+async function readyPaperPackReceiptFromOutbox(env, workflow, timesheet, row) {
+  const deliveryGeneration = candidatePaperDeliveryGeneration(workflow);
+  const receipt = candidatePaperCompleteReceipt(
+    env, workflow, deliveryGeneration, row
+  );
+  if (!receipt?.ready) return null;
+
+  let object;
+  try {
+    object = await env.R2?.head(receipt.key);
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  }
+  if (!object) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+
+  const metadata = object.customMetadata || {};
+  const metadataByteSize = Number(metadata.byte_size);
+  const metadataPageCount = Number(metadata.page_count);
+  const valid = metadata.purpose === 'candidate-complete-paper-pack'
+    && metadata.workflow_id === workflow.id
+    && Number(metadata.workflow_generation) === deliveryGeneration
+    && metadata.timesheet_id === timesheet.timesheet_id
+    && text(metadata.manifest_sha256).toLowerCase() === receipt.manifest_hash
+    && text(metadata.base_document_sha256).toLowerCase() === receipt.base_hash
+    && text(metadata.branding_contract_sha256).toLowerCase() === receipt.branding_hash
+    && text(metadata.renderer_contract_version) === receipt.renderer_contract_version
+    && text(metadata.media_type).toLowerCase() === 'application/pdf'
+    && text(metadata.sha256).toLowerCase() === receipt.sha256
+    && metadataByteSize === receipt.byte_size
+    && metadataByteSize === Number(object.size)
+    && metadataPageCount === receipt.page_count;
+  if (!valid) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+  return receipt;
+}
+
+async function officeCandidatePaperDelivery(env, workflow) {
+  const deliveryGeneration = candidatePaperDeliveryGeneration(workflow);
+  const manifestHash = text(workflow?.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(manifestHash)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const sourceIds = [...new Set([
+    text(workflow?.target_timesheet_id), text(workflow?.anchor_timesheet_id)
+  ].filter(value => UUID_RE.test(value)))];
+  if (!sourceIds.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+  const rows = await restRows(env, 'mail_outbox',
+    `type=eq.TIMESHEET_QR&context_kind=eq.timesheets&context_id=in.(${sourceIds.map(encodeURIComponent).join(',')})`
+    + '&select=id,context_id,status,payment_scope_json,attachments,attempt_lease_token,'
+    + 'attempt_lease_expires_at_utc,created_at_utc&order=created_at_utc.desc&limit=50');
+  const exact = rows.filter((row) => {
+    const scope = parseJson(row.payment_scope_json, {}) || {};
+    return upper(scope.candidate_mail_authority) === 'CANDIDATE_PAPER_V1'
+      && scope.candidate_workflow_id === workflow.id
+      && Number(scope.candidate_workflow_generation) === deliveryGeneration
+      && text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() === manifestHash;
+  });
+  if (exact.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_CONFLICT');
+  if (exact.length !== 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  const outbox = exact[0];
+  if (!UUID_RE.test(text(outbox.context_id))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+  }
+  return {
+    delivery_generation: deliveryGeneration,
+    source_timesheet_id: outbox.context_id,
+    outbox,
+    complete: candidatePaperCompleteReceipt(env, workflow, deliveryGeneration, outbox)
+  };
+}
+
+function completePaperAttachmentMatches(row, complete) {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  return candidateCompletePackAttachmentMatchesScope(row)
+    && scope.candidate_complete_pack_storage_key === complete.key
+    && text(scope.candidate_complete_pack_sha256).toLowerCase() === complete.sha256
+    && Number(scope.candidate_complete_pack_size_bytes) === complete.byte_size
+    && Number(scope.candidate_complete_pack_page_count) === complete.page_count;
+}
+
+async function requireCandidatePaperOutbox(env, workflow, timesheet) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const outboxRows = await restRows(env, 'mail_outbox',
+    `type=eq.TIMESHEET_QR&context_kind=eq.timesheets&context_id=eq.${encodeURIComponent(timesheet.timesheet_id)}`
+    + '&select=id,status,payment_scope_json,attachments,attempt_lease_token,attempt_lease_expires_at_utc'
+    + '&order=created_at_utc.desc&limit=25');
+  const exact = outboxRows.filter((row) => {
+    const scope = parseJson(row.payment_scope_json, {}) || {};
+    return upper(scope.candidate_mail_authority) === 'CANDIDATE_PAPER_V1'
+      && scope.candidate_workflow_id === workflow.id
+      && Number(scope.candidate_workflow_generation) === Number(workflow.generation)
+      && text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() === manifestHash;
+  });
+  if (exact.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_CONFLICT');
+  if (exact.length !== 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  const row = exact[0];
+  if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
+  if (['QUEUED', 'SENT'].includes(row.status) && candidateCompletePackAttachmentMatchesScope(row)) return row;
+  if (text(row.attempt_lease_token)) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  const scope = parseJson(row.payment_scope_json, {}) || {};
+  const held = row.status === 'QUEUED'
+    && scope.candidate_paper_pack_ready === false
+    && scope.mail_held_until_pdf_rendered === true
+    && scope.mail_hold_reason === 'CANDIDATE_PAPER_PACK_PENDING'
+    && (parseJson(row.attachments, []) || []).length === 0;
+  if (!held) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  return row;
+}
+
+async function claimCandidatePaperPackAttempt(
+  env, deps, workflow, outbox, idempotencyKey, officeActorId = null,
+  operationId = idempotencyKey
+) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const attemptToken = await sha256Hex(
+    `candidate-paper-pack-attempt-v1:${workflow.id}:${workflow.generation}:${idempotencyKey}`
+  );
+  const payload = {
+    service_paper_pack_attempt: true,
+    mail_outbox_id: outbox.id,
+    paper_return_manifest_sha256: manifestHash,
+    paper_pack_attempt_token: attemptToken,
+    paper_pack_operation_id: operationId
+  };
+  const result = officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
+      workflow_id: workflow.id,
+      generation: Number(workflow.generation),
+      workflow_action: 'PAPER_PACK_ATTEMPT_CLAIM',
+      idempotency_key: idempotencyKey,
+      payload
+    })
+    : await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+      p_session_id: null,
+      p_environment: environmentName(env),
+      p_workflow_id: workflow.id,
+      p_action: 'PAPER_PACK_ATTEMPT_CLAIM',
+      p_expected_generation: Number(workflow.generation),
+      p_payload: payload,
+      p_idempotency_key: idempotencyKey,
+      p_now_utc: new Date().toISOString()
+    });
+  return {
+    ...result,
+    attempt_token: attemptToken,
+    claim_acquired_new: result?.paper_pack_attempt_state === 'CLAIMED'
+      && result?.idempotent_replay !== true && result?.claim_acquired_new === true
+  };
+}
+
+async function releaseCandidatePaperPack(
+  env, deps, workflow, timesheet, complete, outbox = null, officeActorId = null,
+  paperPackAttemptToken = null, paperPackOperationId = null
+) {
+  const row = outbox || await requireCandidatePaperOutbox(env, workflow, timesheet);
+  if (!UUID_RE.test(text(row?.id))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  }
+  for (const digest of [
+    complete?.manifest_hash, complete?.sha256, complete?.base_hash, complete?.branding_hash
+  ]) {
+    if (!SHA256_RE.test(text(digest).toLowerCase())) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+  }
+  if (!text(complete?.key)
+      || text(complete?.renderer_contract_version) !== RENDERER_CONTRACT_VERSION
+      || !Number.isSafeInteger(Number(complete?.byte_size)) || Number(complete.byte_size) < 1
+      || !Number.isSafeInteger(Number(complete?.page_count)) || Number(complete.page_count) < 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const releasePayload = {
+      service_paper_pack_release: true,
+      mail_outbox_id: row.id,
+      paper_return_manifest_sha256: text(complete.manifest_hash).toLowerCase(),
+      complete_pack_storage_key: complete.key,
+      complete_pack_sha256: text(complete.sha256).toLowerCase(),
+      complete_pack_byte_size: Number(complete.byte_size),
+      complete_pack_page_count: Number(complete.page_count),
+      complete_pack_media_type: 'application/pdf',
+      base_document_sha256: text(complete.base_hash).toLowerCase(),
+      branding_contract_sha256: text(complete.branding_hash).toLowerCase(),
+      renderer_contract_version: complete.renderer_contract_version,
+      paper_pack_attempt_token: paperPackAttemptToken,
+      paper_pack_operation_id: paperPackOperationId
+    };
+  const releaseKey = `paper-pack-release:${workflow.id}:${workflow.generation}:${complete.manifest_hash}:${complete.sha256}`;
+  if (officeActorId) {
+    return officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
+      workflow_id: workflow.id,
+      generation: Number(workflow.generation),
+      workflow_action: 'PAPER_PACK_RELEASE',
+      idempotency_key: releaseKey,
+      payload: releasePayload
+    });
+  }
+  return rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+    p_session_id: null,
+    p_environment: environmentName(env),
+    p_workflow_id: workflow.id,
+    p_action: 'PAPER_PACK_RELEASE',
+    p_expected_generation: Number(workflow.generation),
+    p_payload: releasePayload,
+    p_idempotency_key: releaseKey,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const pages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
+  if (!pages.length || !workflow.paper_return_manifest_sha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const targetlessExpense = upper(workflow.workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflow.target_timesheet_id);
+  if (targetlessExpense
+      && pages.some((page) => upper(page.component_kind) === 'HOURS_TIMESHEET')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  let base = null;
+  if (!targetlessExpense) {
+    try {
+      base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
+    } catch (error) {
+      if (error instanceof CandidateHttpError) throw error;
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+    }
+    if (base.media_type !== 'application/pdf') {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+    }
+  }
+  let components;
+  try {
+    components = await restRows(env, 'candidate_submission_components',
+      `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+      + '&state=eq.IMMUTABLE&select=*');
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  }
+  const combined = await PDFDocument.create({ updateMetadata: false });
+  for (let index = 0; index < pages.length; index += 1) {
+    const expected = pages[index];
+    const kind = upper(expected.component_kind);
+    const pageQrText = expected.manifest_version === 2
+      ? await candidatePaperPageQrText(env, workflow, timesheet, expected)
+      : null;
+    if (kind === 'HOURS_TIMESHEET') {
+      await appendPdfBytes(combined, pageQrText
+        ? await candidatePaperTimesheetPageBytes(
+          env, workflow, timesheet, components, pageQrText
+        )
+        : base?.bytes);
+      continue;
+    }
+    let component = null;
+    if (kind === 'EXPENSE_SUMMARY') {
+      component = components.find((entry) => upper(entry.component_kind) === 'EXPENSE_SUMMARY') || {
+        id: workflow.id, component_kind: 'EXPENSE_SUMMARY', document_role: 'EXPENSE_APPROVAL_SUMMARY',
+        expense_category: 'OTHER', review_ordinal: index + 1
+      };
+    } else {
+      component = candidatePaperPackComponentForPage(components, expected);
+    }
+    if (!component || upper(component.component_kind) !== kind) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
+    }
+    await appendPdfBytes(combined, await paperExpensePageBytes(
+      env, workflow, component, expected, index + 1, pageQrText, expected.display_name
+    ));
+  }
+  if (combined.getPageCount() !== pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
+  const bytes = new Uint8Array(await combined.save());
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  let receipt;
+  try {
+    receipt = await immutablePut(env, identity.key, bytes, 'application/pdf', {
+      purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+      workflow_generation: String(workflow.generation),
+      timesheet_id: timesheet.timesheet_id, manifest_sha256: identity.manifest_hash,
+      base_document_sha256: identity.base_hash,
+      branding_contract_sha256: identity.branding_hash,
+      renderer_contract_version: identity.renderer_contract_version,
+      page_count: String(combined.getPageCount())
+    });
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_R2_WRITE_TRANSIENT');
+  }
+  const complete = {
+    ...identity, bytes, sha256: receipt.sha256, byte_size: bytes.byteLength,
+    page_count: combined.getPageCount(), ready: true
+  };
+  return complete;
+}
+
+function candidatePaperPackComponentForPage(components, expected) {
+  const kind = upper(expected?.component_kind);
+  const expenseCategory = expected?.expense_category == null
+    ? null : upper(expected.expense_category);
+  const sourceComponentId = text(expected?.source_component_id);
+  const sourceContentSha256 = text(expected?.source_content_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!kind || !sourceComponentId) return null;
+  const matches = (Array.isArray(components) ? components : []).filter((component) => {
+    if (upper(component.component_kind) !== kind) return false;
+    if ((component.expense_category == null ? null : upper(component.expense_category))
+        !== expenseCategory) return false;
+    if (text(component.id) !== sourceComponentId
+        && text(component.source_component_id) !== sourceComponentId) return false;
+    if (!sourceContentSha256) return true;
+    return text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase()
+      === sourceContentSha256;
+  });
+  if (matches.length > 1) {
+    const pageIdentity = (component) => JSON.stringify({
+      component_kind: upper(component.component_kind),
+      expense_category: component.expense_category == null
+        ? null : upper(component.expense_category),
+      document_role: upper(component.document_role),
+      storage_key: text(component.storage_key),
+      media_type: normaliseMediaType(component.media_type),
+      byte_size: Number(component.byte_size),
+      source_component_id: text(component.source_component_id || component.id),
+      source_content_sha256: text(component.source_content_sha256)
+        .replace(/^\\x/i, '').toLowerCase()
+    });
+    const identities = new Set(matches.map(pageIdentity));
+    if (identities.size !== 1) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
+    }
+    matches.sort((left, right) => {
+      const componentOrder = Number(left.component_no || 0) - Number(right.component_no || 0);
+      return componentOrder || text(left.id).localeCompare(text(right.id));
+    });
+  }
+  return matches[0] || null;
+}
+
+async function candidatePaperPackContext(request, env, deps, timesheetId) {
+  const access = await verifyCandidateAccess(request, env);
+  const id = requireUuid(timesheetId, 'CANDIDATE_TIMESHEET_NOT_FOUND');
+
+  // Reuse the Candidate-safe detail authority as the ownership/capability gate.
+  // The subsequent service reads resolve only the already-authorised current row;
+  // neither a raw R2 identity nor a database document identity is exposed.
+  await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+    p_timesheet_id: id,
+    p_contract_week_id: null,
+    p_workflow_id: null
+  }));
+
+  const timesheet = await restOne(env, 'timesheets',
+    `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
+    + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
+    + 'document_revision,document_state,current_document_version_id,'
+    + 'active_document_operation_id,manual_pdf_r2_key');
+  const qrRoute = text(timesheet?.qr_token)
+    && ['PENDING', 'SENT', 'READY'].includes(upper(timesheet?.qr_status));
+  if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY') {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
+  const workflows = await activePaperWorkflowsForTimesheet(env, id);
+  if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+  if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+  const targetlessExpense = upper(workflows[0].workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflows[0].target_timesheet_id);
+  if (!qrRoute && !targetlessExpense) {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
+
+  let version = null;
+  if (targetlessExpense) {
+    const sourceAuthoritySha256 = text(workflows[0].immutable_submission_sha256)
+      .replace(/^\\x/i, '').toLowerCase();
+    if (!SHA256_RE.test(sourceAuthoritySha256)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+    version = {
+      id: null,
+      r2_key: null,
+      sha256: sourceAuthoritySha256,
+      status: 'READY',
+      source_kind: 'WORKFLOW_IMMUTABLE_SUBMISSION'
+    };
+  } else if (upper(timesheet.document_state) === 'READY'
+      && UUID_RE.test(text(timesheet.current_document_version_id))) {
+    version = await restOne(env, 'invoice_document_versions',
+      `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
+      + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
+      + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
+  }
+  let outbox = null;
+  let outboxError = null;
+  try {
+    outbox = await requireCandidatePaperOutbox(env, workflows[0], timesheet);
+  } catch (error) {
+    const code = knownErrorCode(error);
+    if (!['CANDIDATE_PAPER_OUTBOX_FAILED', 'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+      'CANDIDATE_PAPER_OUTBOX_NOT_READY'].includes(code)) throw error;
+    outboxError = code;
+  }
+  let complete = null;
+  // Once released, the immutable complete-pack receipt is the authority for
+  // this exact workflow generation and manifest. Expected QR delivery-state
+  // updates can invalidate the generic Timesheet document pointer; they must
+  // not make status polling manufacture a second pack for the same submission.
+  if (outbox) {
+    complete = await readyPaperPackReceiptFromOutbox(
+      env, workflows[0], timesheet, outbox
+    );
+  }
+  if (!complete && version?.sha256) {
+    const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
+    if (verifiedPack?.ready === true) complete = verifiedPack;
+  }
+  const execution = candidatePaperExecutionState(workflows[0], outbox, timesheet, complete);
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_CONFLICT') execution.state = 'STALE';
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_FAILED') execution.state = 'FAILED_TERMINAL';
+  const ready = execution.state === 'READY' && complete?.ready === true;
+  return {
+    id, workflow: workflows[0], timesheet, version, key: complete?.key || null, ready,
+    state: execution.state, execution, complete, outbox
+  };
+}
+
+async function resumeCandidatePaperPackFromStatus(env, deps, context) {
+  const sourceReady = !!context.version?.r2_key
+    || (context.version?.source_kind === 'WORKFLOW_IMMUTABLE_SUBMISSION'
+      && SHA256_RE.test(text(context.version?.sha256)));
+  if (context.state !== 'PREPARING' || !sourceReady || !context.outbox) {
+    return { ok: true, skipped: true, reason: 'SOURCE_NOT_READY' };
+  }
+  const scope = parseJson(context.outbox.payment_scope_json, {}) || {};
+  if (upper(scope.candidate_paper_pack_failure_class) === 'TERMINAL') {
+    return { ok: false, skipped: true, reason: 'FAILED_TERMINAL' };
+  }
+  const nextRetryAt = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
+  if (scope.candidate_paper_pack_retryable === true
+      && Number.isFinite(nextRetryAt) && nextRetryAt > Date.now()) {
+    return { ok: false, skipped: true, reason: 'RETRY_BACKOFF_ACTIVE' };
+  }
+
+  const operationId = `paper-pack-status:${context.workflow.id}:${context.workflow.generation}:${crypto.randomUUID()}`;
+  let attemptToken = null;
+  try {
+    const claim = await claimCandidatePaperPackAttempt(
+      env, deps, context.workflow, context.outbox, operationId
+    );
+    if (claim.paper_pack_attempt_state === 'READY') {
+      return { ok: true, already_ready: true };
+    }
+    if (claim.claim_acquired_new !== true) {
+      return { ok: true, skipped: true, reason: 'ATTEMPT_IN_PROGRESS' };
+    }
+    attemptToken = claim.attempt_token;
+    let complete = await readyPaperPackReceipt(
+      env, context.workflow, context.timesheet, context.version
+    );
+    if (!complete.ready) {
+      complete = await assembleCandidatePaperPack(
+        env, context.workflow, context.timesheet, context.version
+      );
+    }
+    await releaseCandidatePaperPack(
+      env, deps, context.workflow, context.timesheet, complete,
+      context.outbox, null, attemptToken, operationId
+    );
+    return { ok: true, page_count: complete.page_count };
+  } catch (error) {
+    const observedErrorCode = knownErrorCode(error);
+    const failureCode = canonicalPaperPackFailureCode(error);
+    console.error('[candidate-app] Paper pack status continuation failed', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      ...safeCandidateTransportDiagnostic(error),
+      canonical_failure_code: failureCode
+    });
+    let failureRecorded = false;
+    if (!['CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS',
+      'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+      'CANDIDATE_PAPER_PACK_FAILED_TERMINAL'].includes(observedErrorCode)
+        && SHA256_RE.test(text(context.workflow.paper_return_manifest_sha256)
+          .replace(/^\\x/i, '').toLowerCase())) {
+      try {
+        const receipt = await recordCandidatePaperPackFailure(
+          env, deps, context.workflow, context.outbox, failureCode,
+          attemptToken, null, null, operationId
+        );
+        failureRecorded = receipt?.ok === true;
+      } catch {
+        // The scheduler can safely reconcile an expired claim. Preserve the
+        // original execution error and never start a second unowned attempt.
+      }
+    }
+    return {
+      ok: false,
+      error_code: observedErrorCode,
+      failure_recorded: failureRecorded
+    };
+  }
+}
+
+async function restartCandidatePaperSourceDocumentFromStatus(env, deps, context, ctx) {
+  const documentState = upper(context?.timesheet?.document_state);
+  const activeOperationId = text(context?.timesheet?.active_document_operation_id);
+  if (context?.state !== 'PREPARING' || documentState !== 'STALE'
+      || UUID_RE.test(activeOperationId) || !context?.outbox
+      || typeof deps?.enqueueQrPack !== 'function') {
+    return { ok: true, skipped: true, reason: 'SOURCE_REQUEUE_NOT_REQUIRED' };
+  }
+
+  const generation = requireInteger(
+    context.workflow?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+  );
+  const documentRevision = requireInteger(
+    context.timesheet?.document_revision, 'CANDIDATE_PAPER_DOCUMENT_REVISION_INVALID', 1
+  );
+  const pack = await deps.enqueueQrPack({
+    timesheetId: context.id,
+    expectedTimesheetId: context.id,
+    idempotencyKey: `candidate-paper-status:${context.workflow.id}:g${generation}:r${documentRevision}`,
+    ctx
+  });
+  const operationId = text(pack?.document_operation_id);
+  if (!UUID_RE.test(operationId)
+      || text(pack?.current_timesheet_id || pack?.timesheet_id) !== context.id) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_REQUEUE_INVALID');
+  }
+  return { ok: true, document_operation_id: operationId };
+}
+
+async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null) {
+  const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  const documentOperationId = text(context.timesheet.active_document_operation_id);
+  if (context.state === 'PREPARING'
+      && upper(context.timesheet.document_state) === 'STALE'
+      && !UUID_RE.test(documentOperationId)) {
+    const work = restartCandidatePaperSourceDocumentFromStatus(
+      env, deps, context, ctx
+    ).then((result) => {
+      console.log('[candidate-app] exact Paper source document continuation', {
+        workflow_id: context.workflow.id,
+        generation: Number(context.workflow.generation),
+        timesheet_id: context.id,
+        ok: result?.ok === true,
+        skipped: result?.skipped === true,
+        reason: result?.reason || null,
+        document_operation_id: result?.document_operation_id || null
+      });
+      return result;
+    });
+    const deferred = deferBackground(ctx, work, 'paper-source-status-requeue', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  if (context.state === 'PREPARING' && UUID_RE.test(documentOperationId) && deps.nudgeQrPack) {
+    const work = deps.nudgeQrPack({
+      pack: {
+        document_operation_id: documentOperationId,
+        current_timesheet_id: context.id
+      },
+      timesheetId: context.id,
+      ctx
+    });
+    const deferred = deferBackground(ctx, work, 'paper-pack-status-nudge', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  const sourceReady = !!context.version?.r2_key
+    || (context.version?.source_kind === 'WORKFLOW_IMMUTABLE_SUBMISSION'
+      && SHA256_RE.test(text(context.version?.sha256)));
+  if (context.state === 'PREPARING' && sourceReady && context.outbox) {
+    const work = resumeCandidatePaperPackFromStatus(env, deps, context).then((result) => {
+      console.log('[candidate-app] exact Paper pack continuation', {
+        workflow_id: context.workflow.id,
+        generation: Number(context.workflow.generation),
+        timesheet_id: context.id,
+        ok: result?.ok === true,
+        skipped: result?.skipped === true,
+        reason: result?.reason || null,
+        error_code: result?.error_code || null
+      });
+      return result;
+    });
+    const deferred = deferBackground(ctx, work, 'paper-pack-status-assembly', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  const paperReturnPages = safePaperReturnPages(
+    parseJson(context.workflow.paper_return_manifest_json, {})
+  );
+  const manifestSha256 = text(context.workflow.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!paperReturnPages.length || !SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const paperDelivery = (await candidatePaperEmailDeliveryByWorkflow(
+    env, [context.workflow]
+  )).get(context.workflow.id) || {
+    paper_pack_obtained: false,
+    paper_pack_delivery_methods: [],
+    paper_pack_obtained_at_utc: null
+  };
+  return jsonResponse(200, {
+    ok: true,
+    workflow_id: context.workflow.id,
+    generation: Number(context.workflow.generation),
+    timesheet_id: context.id,
+    timesheet_version: Number(context.timesheet.version || 1),
+    paper_return_manifest_sha256: manifestSha256,
+    paper_return_pages: paperReturnPages,
+    paper_pack_state: context.state,
+    failure_scope: context.execution.failure_scope,
+    failure_code: context.execution.failure_code,
+    retryable: context.execution.retryable,
+    attempt_count: context.execution.attempt_count,
+    next_retry_at_utc: context.execution.next_retry_at_utc,
+    retry_in_progress: context.execution.retry_in_progress,
+    download_available: context.ready,
+    page_count: paperReturnPages.length,
+    ...paperDelivery
+  });
+}
+
+async function handlePaperPackDownload(request, env, deps, timesheetId) {
+  const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  if (!context.ready) {
+    throw new CandidateHttpError(409, context.state.startsWith('FAILED')
+      ? 'CANDIDATE_PAPER_PACK_FAILED' : 'CANDIDATE_PAPER_PACK_PREPARING');
+  }
+
+  const stored = await r2Bytes(env, context.key, context.complete?.sha256 || null);
+  if (stored.media_type !== 'application/pdf') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+  }
+  return new Response(stored.bytes, {
+    status: 200,
+    headers: {
+      'content-type': stored.media_type,
+      'content-length': String(stored.bytes.byteLength),
+      'cache-control': 'private, no-store',
+      'content-disposition': `attachment; filename="Timesheet_${context.id}_v${Number(context.timesheet.version || 1)}.pdf"`,
+      'x-content-type-options': 'nosniff'
+    }
+  });
+}
+
+const TERMINAL_PAPER_PACK_FAILURES = new Set([
+  'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+  'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID',
+  'CANDIDATE_PAPER_PACK_COMPONENT_MISSING',
+  'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT',
+  'CANDIDATE_PAPER_PACK_INCOMPLETE',
+  'CANDIDATE_PAPER_PACK_IDENTITY_INVALID',
+  'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT',
+  'CANDIDATE_PAPER_DOCUMENT_FAILED',
+  'CANDIDATE_PAPER_OUTBOX_NOT_READY',
+  'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+  'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+]);
+
+const RETRYABLE_PAPER_PACK_FAILURES = new Set([
+  'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
+  'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+  'CANDIDATE_PAPER_R2_WRITE_TRANSIENT'
+]);
+
+function canonicalPaperPackFailureCode(error) {
+  const code = knownErrorCode(error);
+  if (RETRYABLE_PAPER_PACK_FAILURES.has(code) || TERMINAL_PAPER_PACK_FAILURES.has(code)) return code;
+  return 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED';
+}
+
+async function recordCandidatePaperPackFailure(
+  env, deps, workflow, outbox, failureCode, attemptToken = null, officeActorId = null,
+  idempotencyKey = null, operationId = null
+) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const failureKey = idempotencyKey || `paper-pack-failure:${workflow.id}:${workflow.generation}`
+    + `:${outbox?.id || 'pre-outbox'}:${attemptToken || 'no-attempt'}:${failureCode}`;
+  const payload = {
+    service_paper_pack_failure: true,
+    mail_outbox_id: outbox?.id || null,
+    paper_return_manifest_sha256: manifestHash,
+    paper_pack_attempt_token: attemptToken,
+    paper_pack_operation_id: operationId,
+    error_code: failureCode
+  };
+  if (officeActorId) {
+    return officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
+      workflow_id: workflow.id,
+      generation: Number(workflow.generation),
+      workflow_action: 'PAPER_PACK_MARK_FAILURE',
+      idempotency_key: failureKey,
+      payload
+    });
+  }
+  return rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+    p_session_id: null,
+    p_environment: environmentName(env),
+    p_workflow_id: workflow.id,
+    p_action: 'PAPER_PACK_MARK_FAILURE',
+    p_expected_generation: Number(workflow.generation),
+    p_payload: payload,
+    p_idempotency_key: failureKey,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
+  const workflows = await restRows(env, 'candidate_submission_workflows',
+    `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER&state=eq.AWAITING_PAPER_RETURN`
+    + `&select=*&order=updated_at_utc.asc&limit=${Math.min(25, Math.max(1, Number(limit) || 10))}`);
+  const results = [];
+  for (const workflow of workflows) {
+    const id = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
+    if (!UUID_RE.test(id)) continue;
+    let outbox = null;
+    let attemptToken = null;
+    let operationId = null;
+    try {
+      const workflowFailure = parseJson(workflow.last_mutation_response_json, {}) || {};
+      if (workflowFailure.failure_scope === 'WORKFLOW'
+          && workflowFailure.paper_pack_state === 'FAILED_TERMINAL') {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false,
+          execution_state: 'FAILED_TERMINAL', failure_scope: 'WORKFLOW',
+          error_code: text(workflowFailure.failure_code)
+            || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+        });
+        continue;
+      }
+      const matchingWorkflows = await activePaperWorkflowsForTimesheet(env, id);
+      if (matchingWorkflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+      if (matchingWorkflows.length !== 1 || matchingWorkflows[0].id !== workflow.id) continue;
+      const timesheet = await restOne(env, 'timesheets',
+        `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
+        + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
+        + 'document_state,current_document_version_id,manual_pdf_r2_key');
+      if (!timesheet) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+      outbox = await requireCandidatePaperOutbox(env, workflow, timesheet);
+      const scope = parseJson(outbox.payment_scope_json, {}) || {};
+      if (upper(scope.candidate_paper_pack_failure_class) === 'TERMINAL') {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false, execution_state: 'FAILED_TERMINAL',
+          error_code: text(scope.candidate_paper_pack_failure_code) || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+        });
+        continue;
+      }
+      const nextRetryAt = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
+      if (scope.candidate_paper_pack_retryable === true && Number.isFinite(nextRetryAt)
+          && nextRetryAt > Date.now()) {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false, execution_state: 'BACKOFF',
+          error_code: 'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+          next_retry_at_utc: new Date(nextRetryAt).toISOString()
+        });
+        continue;
+      }
+      if (upper(timesheet.document_state) !== 'READY'
+          || !UUID_RE.test(text(timesheet.current_document_version_id))) {
+        if (upper(timesheet.document_state) === 'FAILED') {
+          throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
+        }
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false,
+          execution_state: 'PREPARING', error_code: 'CANDIDATE_PAPER_DOCUMENT_PENDING'
+        });
+        continue;
+      }
+      const version = await restOne(env, 'invoice_document_versions',
+        `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
+        + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
+        + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
+      if (!version?.r2_key) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
+      operationId = `paper-pack-scheduler:${workflow.id}:${workflow.generation}:${crypto.randomUUID()}`;
+      const claim = await claimCandidatePaperPackAttempt(
+        env, deps, workflow, outbox, operationId
+      );
+      if (claim.paper_pack_attempt_state === 'READY') {
+        results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, already_ready: true });
+        continue;
+      }
+      if (claim.claim_acquired_new !== true) {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false,
+          execution_state: 'IN_PROGRESS', error_code: 'CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS'
+        });
+        continue;
+      }
+      attemptToken = claim.attempt_token;
+      let complete = await readyPaperPackReceipt(env, workflow, timesheet, version);
+      if (!complete.ready) complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+      await releaseCandidatePaperPack(
+        env, deps, workflow, timesheet, complete, outbox, null, attemptToken, operationId
+      );
+      results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, page_count: complete.page_count });
+    } catch (error) {
+      const observedErrorCode = knownErrorCode(error);
+      const failureCode = canonicalPaperPackFailureCode(error);
+      console.error('[candidate-app] scheduled Paper pack assembly failed', {
+        workflow_id: workflow.id,
+        generation: Number(workflow.generation),
+        ...safeCandidateTransportDiagnostic(error),
+        canonical_failure_code: failureCode
+      });
+      let failureReceipt = null;
+      let failureReceiptError = null;
+      if (!['CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS',
+        'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+        'CANDIDATE_PAPER_PACK_FAILED_TERMINAL'].includes(observedErrorCode)
+          && SHA256_RE.test(text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase())) {
+        try {
+          failureReceipt = await recordCandidatePaperPackFailure(
+            env, deps, workflow, outbox, failureCode, attemptToken,
+            null, null, operationId
+          );
+        } catch (receiptError) {
+          failureReceiptError = knownErrorCode(receiptError);
+        }
+      }
+      results.push({
+        workflow_id: workflow.id,
+        timesheet_id: id,
+        ok: false,
+        error_code: observedErrorCode,
+        failure_recorded: failureReceipt?.ok === true,
+        failure_state: failureReceipt?.paper_pack_state || null,
+        failure_receipt_error: failureReceiptError
+      });
+    }
+  }
+  return { ok: true, inspected: workflows.length, results };
+}
+
+async function handleCandidateNoWork(request, env, deps, contractWeekId) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  return jsonResponse(200, await rpcCall(deps, 'candidate_no_work_atomic_v1', candidateRpcArgs(access, env, {
+    p_contract_week_id: requireUuid(contractWeekId),
+    p_expected_row_signature: text(body.expected_row_signature),
+    p_idempotency_key: requireCandidateIdempotency(body.idempotency_key)
+  })));
+}
+
+const CANDIDATE_NOTIFICATION_COPY = Object.freeze({
+  MANAGER_APPROVED: 'Your submission has been approved by the manager.',
+  MANAGER_REFUSED: 'Your submission was refused by the manager. Open it to review what to do next.',
+  AUTHORISED: 'Your timesheet has been authorised.',
+  SUBMISSION_RECEIVED: 'Your submission has been received.',
+  OFFICE_REJECTED: 'Your submission needs changes. Open it to review what to do next.',
+  EXPENSE_WITHDRAWN: 'An expense was withdrawn. You can add it again as a new expense if needed.',
+  EXPENSE_CANCELLED: 'An expense was cancelled. You can add it again as a new expense if needed.',
+  PAPER_PACK_READY: 'Your printed signing documents are ready.',
+  RESUBMISSION_REQUIRED: 'A timesheet needs to be submitted again.',
+  EXPENSE_CLAIM_CANCELLED: 'Your pending expense claim was cancelled because its Timesheet was deleted.',
+  TIMESHEET_HOURS_UPDATED: 'The approved hours for your Timesheet have changed. Open your Timesheet to review them.'
+});
+
+// WP-44 F3.  The already-agreed hours-only notification
+// (`04_MODAL_POLICY.json interactionPolicies.candidateTimesheetDisplay.approvedHoursChangedPush`)
+// is `The approved hours for your Timesheet at {client}, week ending
+// {week_ending}, have changed. Open your Timesheet to review them.`  The row
+// this renders from is written by the Weekly Source hours push, whose
+// `template_params` carry `week_ending_date` and no Client name, so the Client
+// clause is emitted only when a Client name is actually present.  Nothing here
+// adds a figure, a rate, or any of the internal words the Candidate boundary
+// forbids (HANDOVER 2 addendum R8A section 2): `Approved hours` is the one
+// label that addendum expressly permits.
+function ukDateFromIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text(value));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+function approvedHoursChangedMessage(parameters) {
+  const clientName = text(parameters?.client_name)
+    .replace(/[ -]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const weekEnding = ukDateFromIsoDate(parameters?.week_ending_date);
+  if (clientName && weekEnding) {
+    return `The approved hours for your Timesheet at ${clientName}, week ending ${weekEnding}, `
+      + 'have changed. Open your Timesheet to review them.';
+  }
+  if (weekEnding) {
+    return `The approved hours for your Timesheet for the week ending ${weekEnding} have changed. `
+      + 'Open your Timesheet to review them.';
+  }
+  return CANDIDATE_NOTIFICATION_COPY.TIMESHEET_HOURS_UPDATED;
+}
+
+function candidateNotificationMessage(eventType, parameters = {}) {
+  const expenseCategory = ({
+    MILEAGE: 'Mileage',
+    TRAVEL: 'Travel',
+    ACCOMMODATION: 'Accommodation',
+    OTHER: 'Other expense'
+  })[upper(parameters?.expense_category)] || 'This expense';
+  const reason = typeof parameters?.reason === 'string'
+    ? parameters.reason.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
+    : '';
+  const reasonSentence = reason ? ` Reason: ${reason.replace(/[.!?]+$/g, '')}.` : '';
+  const linkedExpenseRejectedBeforeDelete = (
+    (
+      eventType === 'EXPENSE_CLAIM_CANCELLED'
+      && upper(parameters?.reason_code) === 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+    )
+    || (
+      eventType === 'OFFICE_REJECTED'
+      && upper(parameters?.resubmission_scope) === 'COMPLETE_EXPENSE_CLAIM'
+    )
+  );
+  if (linkedExpenseRejectedBeforeDelete) {
+    return 'Your pending expense claim was cancelled because its linked Timesheet was rejected before deletion.';
+  }
+  if (eventType === 'EXPENSE_WITHDRAWN') {
+    return `${expenseCategory} was withdrawn. You can add it again as a new expense if needed.`;
+  }
+  if (eventType === 'EXPENSE_CANCELLED') {
+    return `${expenseCategory} was cancelled. You can add it again as a new expense if needed.`;
+  }
+  if (eventType === 'OFFICE_REJECTED'
+      && upper(parameters?.resubmission_scope) === 'EXPENSE_CATEGORY') {
+    return `${expenseCategory} was rejected by your agency.${reasonSentence} Start a new expense for this category to resubmit it.`;
+  }
+  if (eventType === 'MANAGER_REFUSED') {
+    return `Your claim was refused by the manager.${reasonSentence} Start a new claim to submit it again.`;
+  }
+  if (eventType === 'OFFICE_REJECTED') {
+    return `Your claim was rejected by your agency.${reasonSentence} Start a new claim to submit it again.`;
+  }
+  if (eventType === 'CLAIM_WITHDRAWN') {
+    return `Your whole claim was withdrawn.${reasonSentence} Start again if you need to submit it.`;
+  }
+  if (eventType === 'CLAIM_CANCELLED') {
+    return `Your whole claim was cancelled.${reasonSentence} Start again if you need to submit it.`;
+  }
+  if (eventType === 'TIMESHEET_HOURS_UPDATED') {
+    return approvedHoursChangedMessage(parameters);
+  }
+  if (eventType === 'WEEKLY_SOURCE_REQUEST'
+      || eventType === 'WEEKLY_SOURCE_REMINDER') {
+    const requestKind = upper(parameters?.request_kind);
+    if (requestKind === 'CHECK_HOURS') {
+      return eventType === 'WEEKLY_SOURCE_REMINDER'
+        ? 'Please check your hours against the client’s hours. Your response is still needed.'
+        : 'Please check your hours against the client’s hours and confirm which are correct.';
+    }
+    if (requestKind === 'SUBMIT_TIMESHEET') {
+      const count = Number(parameters?.timesheet_count);
+      const clientName = text(parameters?.client_name)
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      const weekEnding = text(parameters?.week_ending_label)
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (eventType === 'WEEKLY_SOURCE_REMINDER') {
+        if (Number.isInteger(count) && count > 1 && clientName) {
+          return `${count} Weekly Timesheets at ${clientName} are still waiting to be submitted.`;
+        }
+        if (clientName) return `1 Weekly Timesheet at ${clientName} is still waiting to be submitted.`;
+        return 'Your Weekly Timesheet is still waiting to be submitted.';
+      }
+      if (Number.isInteger(count) && count > 1 && clientName) {
+        return `You have ${count} Weekly Timesheets to submit at ${clientName} so your hours can be checked.`;
+      }
+      if (weekEnding && clientName) {
+        return `Submit your Weekly Timesheet for the week ending ${weekEnding} at ${clientName} so your hours can be checked.`;
+      }
+      return 'Please submit your Weekly Timesheet so your hours can be checked.';
+    }
+  }
+  return CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update.';
+}
+
+function optionalUuid(value) {
+  const candidate = text(value);
+  return UUID_RE.test(candidate) ? candidate : null;
+}
+
+function safeCandidateNotification(row) {
+  const source = isObject(row) ? row : {};
+  const parameters = isObject(source.template_params) ? source.template_params : {};
+  const storedLink = isObject(source.deep_link_json) ? source.deep_link_json : {};
+  const eventType = upper(source.event_type);
+  const storedType = text(storedLink.type).toLowerCase();
+  const storedDestination = upper(storedLink.destination);
+  const workflowId = optionalUuid(source.workflow_id) || optionalUuid(storedLink.workflow_id)
+    || optionalUuid(parameters.workflow_id);
+  const timesheetId = optionalUuid(source.timesheet_id) || optionalUuid(storedLink.timesheet_id)
+    || optionalUuid(parameters.timesheet_id);
+  const contractWeekId = optionalUuid(storedLink.contract_week_id)
+    || optionalUuid(parameters.contract_week_id);
+  const requestId = optionalUuid(storedLink.request_id) || optionalUuid(parameters.request_id);
+  let destination = 'HOME';
+  if (storedDestination === 'WEEKLY_SOURCE_REQUEST' && requestId) {
+    destination = 'WEEKLY_SOURCE_REQUEST';
+  } else if (storedType === 'daily') destination = 'DAILY';
+  else if (storedType === 'account') destination = 'ACCOUNT';
+  else if (storedType === 'workflow' && workflowId) destination = 'WORKFLOW_DETAIL';
+  else if ((storedType === 'timesheet' || storedType === 'paper_pack') && timesheetId) {
+    destination = 'TIMESHEET_DETAIL';
+  } else if (workflowId) destination = 'WORKFLOW_DETAIL';
+  else if (timesheetId || contractWeekId) destination = 'TIMESHEET_DETAIL';
+
+  const payload = {
+    state: eventType || 'UPDATE',
+    candidate_status_code: eventType || 'UPDATE',
+    message: candidateNotificationMessage(eventType, parameters),
+    occurred_at_utc: source.created_at_utc
+  };
+  if (workflowId) payload.workflow_id = workflowId;
+  if (timesheetId) payload.timesheet_id = timesheetId;
+  if (contractWeekId) payload.contract_week_id = contractWeekId;
+
+  const deepLink = { destination };
+  if (workflowId) deepLink.workflow_id = workflowId;
+  if (timesheetId) deepLink.timesheet_id = timesheetId;
+  if (contractWeekId) deepLink.contract_week_id = contractWeekId;
+  if (destination === 'WEEKLY_SOURCE_REQUEST') deepLink.request_id = requestId;
+  return {
+    id: source.id,
+    event_type: eventType || 'UPDATE',
+    template_key: text(source.template_key) || 'candidate-update-v1',
+    payload_json: payload,
+    deep_link_json: deepLink,
+    state: upper(source.state) || 'UNREAD',
+    created_at_utc: source.created_at_utc,
+    read_at_utc: source.read_at_utc || null
+  };
+}
+
+async function handleNotifications(request, env, deps) {
+  const access = await verifyCandidateAccess(request, env);
+  const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const url = new URL(request.url);
+  const limit = Number(url.searchParams.get('limit') || 14);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new CandidateHttpError(400, 'CANDIDATE_PAGE_LIMIT_INVALID');
+  const cursor = text(url.searchParams.get('cursor'));
+  let cursorCreatedAt = null;
+  let cursorId = null;
+  if (cursor) {
+    const [createdAt, id, extra] = cursor.split('|');
+    if (extra !== undefined || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(createdAt || '') || !UUID_RE.test(text(id)) || Number.isNaN(Date.parse(createdAt))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_CURSOR_INVALID');
+    }
+    // PostgreSQL cursors retain microseconds; JavaScript Date would silently
+    // truncate them and skip rows at the original timestamp on the next page.
+    cursorCreatedAt = createdAt;
+    cursorId = id;
+  }
+  const result = await rpcCall(deps, 'candidate_app_notifications_page_v1', {
+    p_session_id: access.session_id, p_environment: access.environment, p_expected_rotation: access.rotation,
+    p_limit: limit, p_cursor_created_at_utc: cursorCreatedAt, p_cursor_id: cursorId
+  });
+  return jsonResponse(200, {
+    ok: true, notifications: result.notifications.map(safeCandidateNotification), next_cursor: result.next_cursor
+  });
+}
+
+async function handleNotificationManagement(request, env, deps, action, deletionId = null) {
+  const access = await verifyCandidateAccess(request, env);
+  requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const body = await readJson(request);
+  requireCandidateIdempotency(body.idempotency_key);
+  const keys = action === 'SNAPSHOT' ? ['action', 'idempotency_key']
+    : action === 'MARK_READ' ? ['snapshot_id', 'idempotency_key']
+    : action === 'DELETE' ? ['notification_id', 'snapshot_id', 'idempotency_key'] : ['idempotency_key'];
+  if (Object.keys(body).some(key => !keys.includes(key))) throw new CandidateHttpError(400, 'CANDIDATE_REQUEST_INVALID');
+  if (action === 'SNAPSHOT' && !['MARK_READ', 'DELETE'].includes(body.action)) throw new CandidateHttpError(400, 'CANDIDATE_REQUEST_INVALID');
+  if (action === 'MARK_READ') requireUuid(body.snapshot_id, 'CANDIDATE_NOTIFICATION_NOT_FOUND');
+  if (action === 'DELETE') {
+    if (Object.hasOwn(body, 'notification_id') === Object.hasOwn(body, 'snapshot_id')) throw new CandidateHttpError(400, 'CANDIDATE_REQUEST_INVALID');
+    requireUuid(body.notification_id ?? body.snapshot_id, 'CANDIDATE_NOTIFICATION_NOT_FOUND');
+  }
+  const payload = action === 'UNDO' ? { ...body, deletion_id: requireUuid(deletionId, 'CANDIDATE_NOTIFICATION_NOT_FOUND') } : body;
+  const result = await rpcCall(deps, 'candidate_app_notifications_manage_v1', {
+    p_session_id: access.session_id, p_environment: access.environment, p_expected_rotation: access.rotation,
+    p_action: action, p_request: payload
+  });
+  return jsonResponse(200, result);
+}
+
+async function requireOfficeActor(request, deps, permission = 'view_candidate_state') {
+  if (!OFFICE_ADMIN_PERMISSIONS.has(permission)) {
+    throw new CandidateHttpError(403, 'CANDIDATE_OFFICE_PERMISSION_DENIED');
+  }
+  const user = await deps.requireOfficeUser(request, ['admin']);
+  if (!user) throw new CandidateHttpError(401, 'OFFICE_AUTH_REQUIRED');
+  return {
+    ...user,
+    id: requireUuid(user.id, 'OFFICE_AUTH_REQUIRED'),
+    office_permission: permission,
+    office_permission_source: 'OFFICE_ADMIN_ROLE_V1'
+  };
+}
+
+async function officeAdapter(deps, env, actorId, action, payload = {}, observedAtUtc = null) {
+  return rpcCall(deps, 'cloudtms_office_candidate_adapter_v1', {
+    p_action: upper(action),
+    p_actor_user_id: requireUuid(actorId, 'OFFICE_AUTH_REQUIRED'),
+    p_environment: environmentName(env),
+    p_payload: isObject(payload) ? payload : {},
+    p_now_utc: observedAtUtc || new Date().toISOString()
+  }, ['FINALISE_EXECUTE', 'FINALISE_REPLAY_LOOKUP'].includes(upper(action))
+    ? { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS } : undefined);
+}
+
+async function officeExpenseCategoryProjection(deps, env, timesheetId) {
+  return rpcCall(deps, 'candidate_office_expense_category_projection_v1', {
+    p_environment: environmentName(env),
+    p_timesheet_id: requireUuid(timesheetId, 'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND'),
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+function withOfficeExpenseClaims(projection, expenseProjection) {
+  if (!isObject(projection)) return projection;
+  const routeFamily = upper(expenseProjection?.route_family);
+  return {
+    ...projection,
+    current_identity: {
+      ...(isObject(projection.current_identity) ? projection.current_identity : {}),
+      ...(['ELECTRONIC', 'QR'].includes(routeFamily)
+        ? { route_family: routeFamily } : {})
+    },
+    expense_claims: Array.isArray(expenseProjection?.expense_claims)
+      ? expenseProjection.expense_claims : []
+  };
+}
+
+async function withOfficeExpenseClaimsBatch(deps, env, batch) {
+  if (!isObject(batch) || !Array.isArray(batch.results)) return batch;
+  const ids = [...new Set(batch.results.flatMap((result) => {
+    const value = text(result?.projection?.current_identity?.timesheet_id);
+    return result?.ok === true && UUID_RE.test(value) ? [value] : [];
+  }))];
+  if (!ids.length) return batch;
+  const projected = await rpcCall(deps, 'candidate_office_expense_category_projection_batch_v1', {
+    p_environment: environmentName(env),
+    p_timesheet_ids: ids,
+    p_now_utc: new Date().toISOString()
+  });
+  const byTimesheet = new Map((Array.isArray(projected?.timesheets) ? projected.timesheets : [])
+    .map((item) => [text(item?.timesheet_id), item]));
+  return {
+    ...batch,
+    results: batch.results.map((result) => {
+      if (result?.ok !== true || !isObject(result.projection)) return result;
+      const timesheetId = text(result.projection?.current_identity?.timesheet_id);
+      return {
+        ...result,
+        projection: withOfficeExpenseClaims(result.projection, byTimesheet.get(timesheetId))
+      };
+    })
+  };
+}
+
+function requireOfficeIdempotency(value) {
+  return requireUuid(value, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+}
+
+function officeProjectionIdentity(value) {
+  const source = isObject(value) ? value : {};
+  const timesheetId = text(source.timesheet_id);
+  const contractWeekId = text(source.contract_week_id);
+  if (timesheetId && !UUID_RE.test(timesheetId)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID');
+  }
+  if (contractWeekId && !UUID_RE.test(contractWeekId)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID');
+  }
+  if (!timesheetId && !contractWeekId) {
+    throw new CandidateHttpError(400, 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID');
+  }
+  return {
+    row_key: text(source.row_key) || timesheetId || contractWeekId,
+    timesheet_id: timesheetId || null,
+    contract_week_id: contractWeekId || null,
+    expected_row_signature: text(source.expected_row_signature) || null
+  };
+}
+
+async function handleOfficeCapabilities(request, env, deps) {
+  const user = await requireOfficeActor(request, deps);
+  return jsonResponse(200, await officeAdapter(deps, env, user.id, 'CAPABILITIES'));
+}
+
+async function handleOfficeDetail(request, env, deps, timesheetId) {
+  const user = await requireOfficeActor(request, deps);
+  const url = new URL(request.url);
+  const currentTimesheetId = requireUuid(timesheetId, 'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND');
+  const [projection, expenseProjection] = await Promise.all([
+    officeAdapter(deps, env, user.id, 'PROJECT_ONE', {
+      timesheet_id: currentTimesheetId,
+      contract_week_id: text(url.searchParams.get('contract_week_id')) || null,
+      row_key: text(url.searchParams.get('row_key')) || null,
+      expected_row_signature: text(url.searchParams.get('expected_row_signature')) || null
+    }),
+    officeExpenseCategoryProjection(deps, env, currentTimesheetId)
+  ]);
+  return jsonResponse(200, withOfficeExpenseClaims(projection, expenseProjection));
+}
+
+async function handleOfficeProjectionBatch(request, env, deps) {
+  const user = await requireOfficeActor(request, deps);
+  const body = await readJson(request);
+  const surface = upper(body.surface);
+  if (!OFFICE_PROJECTION_SURFACES.has(surface)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_OFFICE_PROJECTION_SURFACE_INVALID');
+  }
+  const supplied = Array.isArray(body.identities) ? body.identities
+    : Array.isArray(body.selected_rows) ? body.selected_rows : [];
+  if (supplied.length < 1 || supplied.length > 100) {
+    throw new CandidateHttpError(400, 'CANDIDATE_OFFICE_PROJECTION_BATCH_INVALID');
+  }
+  const batch = await officeAdapter(deps, env, user.id, 'PROJECT_BATCH', {
+    surface,
+    identities: supplied.map(officeProjectionIdentity)
+  });
+  return jsonResponse(200, await withOfficeExpenseClaimsBatch(deps, env, batch));
+}
+
+async function handleOfficeRejectPreview(request, env, deps, timesheetId) {
+  const user = await requireOfficeActor(request, deps, 'reject_submission');
+  return jsonResponse(200, await officeAdapter(deps, env, user.id, 'REJECT_PREVIEW', {
+    timesheet_id: requireUuid(timesheetId, 'TIMESHEET_NOT_FOUND')
+  }));
+}
+
+function requireContractWeekSubmissionDeleteGuard(value, contractWeekId) {
+  const result = isObject(value) ? value : {};
+  const guardedWorkflows = Array.isArray(result.guarded_workflows) ? result.guarded_workflows : null;
+  const relatedWorkflowIds = Array.isArray(result.related_workflow_ids) ? result.related_workflow_ids : null;
+  const contextSha256 = text(result.context_sha256).toLowerCase();
+  const stage = upper(result.candidate_submission_stage) || null;
+  if (result.ok !== true
+      || text(result.contract_version) !== 'CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_V1'
+      || text(result.contract_week_id) !== contractWeekId
+      || !SHA256_RE.test(contextSha256)
+      || typeof result.candidate_submission_rejection_required !== 'boolean'
+      || guardedWorkflows == null || relatedWorkflowIds == null
+      || Number(result.guarded_workflow_count) !== guardedWorkflows.length
+      || result.candidate_submission_rejection_required !== (guardedWorkflows.length > 0)
+      || (stage != null && !['CANDIDATE_SUBMITTED', 'MANAGER_APPROVED'].includes(stage))
+      || (guardedWorkflows.length > 0 && stage == null)
+      || (guardedWorkflows.length === 0 && stage != null)) {
+    throw new CandidateHttpError(503, 'CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  return {
+    ...result,
+    context_sha256: contextSha256,
+    candidate_submission_stage: stage
+  };
+}
+
+async function handleOfficeContractWeekRejectPreview(request, env, deps, contractWeekId) {
+  await requireOfficeActor(request, deps, 'reject_submission');
+  const currentContractWeekId = requireUuid(contractWeekId, 'CONTRACT_WEEK_NOT_FOUND');
+  const result = await rpcCall(deps, 'contract_week_submission_delete_guard_preview_v1', {
+    p_environment: environmentName(env),
+    p_contract_week_id: currentContractWeekId
+  });
+  return jsonResponse(200, requireContractWeekSubmissionDeleteGuard(result, currentContractWeekId));
+}
+
+async function handleOfficeContractWeekReject(request, env, deps, contractWeekId) {
+  const user = await requireOfficeActor(request, deps, 'reject_submission');
+  const currentContractWeekId = requireUuid(contractWeekId, 'CONTRACT_WEEK_NOT_FOUND');
+  const body = await readJson(request);
+  const reason = text(body.reason);
+  if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_REASON_REQUIRED');
+  if (reason.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_REASON_INVALID');
+  const expectedContextSha256 = requireSha256(
+    body.expected_context_sha256,
+    'CONTRACT_WEEK_SUBMISSION_DELETE_CONTEXT_INVALID'
+  );
+  const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
+  const result = await rpcCall(deps, 'contract_week_submission_reject_atomic_v1', {
+    p_actor_user_id: requireUuid(user.id, 'OFFICE_AUTH_REQUIRED'),
+    p_environment: environmentName(env),
+    p_contract_week_id: currentContractWeekId,
+    p_expected_context_sha256: expectedContextSha256,
+    p_reason: reason,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  if (!isObject(result)
+      || result.ok !== true
+      || text(result.contract_version) !== 'CONTRACT_WEEK_SUBMISSION_REJECTION_V1'
+      || text(result.contract_week_id) !== currentContractWeekId
+      || result.candidate_submission_rejected !== true
+      || result.candidate_must_start_new_claim !== true
+      || !Array.isArray(result.rejected_workflow_ids)) {
+    throw new CandidateHttpError(503, 'CONTRACT_WEEK_SUBMISSION_REJECTION_INVALID');
+  }
+  return jsonResponse(200, result);
+}
+
+async function handleOfficeRoute(request, env, deps, action, timesheetId) {
+  const user = await requireOfficeActor(request, deps, 'change_route');
+  if (action === 'preview') {
+    const url = new URL(request.url);
+    const routePreview = await rpcCall(deps, 'timesheet_route_version_preview_v1', {
+      p_current_timesheet_id: requireUuid(timesheetId), p_target_action: upper(url.searchParams.get('action'))
+    });
+    let rejectPreview = null;
+    try {
+      rejectPreview = await officeAdapter(deps, env, user.id, 'REJECT_PREVIEW', {
+        timesheet_id: requireUuid(timesheetId)
+      });
+    } catch (error) {
+      const code = knownErrorCode(error);
+      if (!['CANDIDATE_ACTION_NOT_ELIGIBLE', 'CANDIDATE_REJECTION_SCOPE_CONFLICT'].includes(code)) throw error;
+      rejectPreview = { permitted: false, disabled_reason_code: code, target_workflows: [] };
+    }
+    const hasCandidateScope = Array.isArray(rejectPreview?.target_workflows)
+      && rejectPreview.target_workflows.length > 0;
+    const interventionChoice = hasCandidateScope && rejectPreview?.permitted === true ? {
+      required: true,
+      decision_code: 'REJECT_OR_MANUAL',
+      title: 'Does the candidate need to resubmit instead?',
+      message: 'Use Reject Candidate Submission where the candidate can correct and resubmit the timesheet themselves.\n\n'
+        + 'Convert to Manual only when CloudTMS staff need to enter or process the replacement timesheet on the candidate\'s behalf.',
+      reject_available: rejectPreview?.permitted === true,
+      reject_disabled_reason_code: rejectPreview?.disabled_reason_code || null,
+      reject_disabled_reason: rejectPreview?.disabled_reason || null,
+      reject_action: {
+        code: 'REJECT_CANDIDATE_SUBMISSION',
+        label: 'Use Reject Candidate Submission',
+        method: 'GET',
+        path: `/api/candidate-app/timesheets/${timesheetId}/reject-preview`
+      },
+      continue_action: {
+        code: 'CONTINUE_ROUTE_CHANGE',
+        label: 'Continue to Manual conversion',
+        method: 'POST',
+        path: `/api/candidate-app/timesheets/${timesheetId}/route-confirm`,
+        fixed_body: { action: upper(url.searchParams.get('action')) }
+      }
+    } : null;
+    return jsonResponse(200, {
+      ...routePreview,
+      office_contract_version: OFFICE_CONTRACT_VERSION,
+      intervention_choice: interventionChoice
+    });
+  }
+  const body = await readJson(request);
+  if (!ROUTE_INTERVENTION_REASONS.has(upper(body.reason_code)) && body.reason_code != null) {
+    throw new CandidateHttpError(400, 'ROUTE_CHANGE_REASON_INVALID');
+  }
+  return jsonResponse(200, await officeAdapter(deps, env, user.id, 'ROUTE_CONFIRM', {
+    current_timesheet_id: requireUuid(timesheetId),
+    expected_timesheet_id: requireUuid(body.expected_timesheet_id),
+    expected_row_signature: text(body.expected_row_signature),
+    expected_context_sha256: text(body.expected_context_sha256),
+    target_action: upper(body.action),
+    reason_code: body.reason_code == null ? null : upper(body.reason_code),
+    reason_note: body.reason_note == null ? null : text(body.reason_note),
+    idempotency_key: requireOfficeIdempotency(body.idempotency_key),
+    allow_manual_only: body.allow_manual_only === true
+  }));
+}
+
+async function exactOfficeApproval(env, workflowId, workflowGeneration, requestId, requestGeneration) {
+  const approval = await restOne(env, 'candidate_approval_requests',
+    `id=eq.${encodeURIComponent(requireUuid(requestId, 'CANDIDATE_REQUEST_GENERATION_STALE'))}`
+    + `&workflow_id=eq.${encodeURIComponent(requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'))}`
+    + `&workflow_generation=eq.${encodeURIComponent(requireInteger(workflowGeneration, 'WORKFLOW_GENERATION_CONFLICT', 1))}`
+    + `&request_generation=eq.${encodeURIComponent(requireInteger(requestGeneration, 'CANDIDATE_REQUEST_GENERATION_STALE', 1))}`
+    + '&select=*');
+  if (!approval) throw new CandidateHttpError(409, 'CANDIDATE_REQUEST_GENERATION_STALE');
+  return approval;
+}
+
+async function officeManagerMutationPayload(request, env, deps, action, body, workflow, approval, idempotencyKey) {
+  if (action === 'REMIND' || action === 'RENEW') {
+    if (upper(approval.method) !== 'EMAIL') {
+      throw new CandidateHttpError(409, 'MANAGER_APPROVAL_METHOD_MISMATCH');
+    }
+    const managerToken = await deterministicOpaqueToken(
+      env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+      'cloudtms-office-manager-action-v1', action, workflow.id, workflow.generation,
+      approval.id, approval.request_generation, idempotencyKey
+    );
+    const result = {
+      ...await candidateManagerMail(env, deps, managerToken, workflow.id,
+        approval.manager_email_normalized, action === 'REMIND' ? 'REMINDER' : 'RENEWAL',
+        workflow.workflow_kind),
+      approval_token_hash_hex: await sha256Hex(managerToken)
+    };
+    Object.defineProperty(result, '__managerRouteToken', { value: managerToken, enumerable: false });
+    return result;
+  }
+  if (action === 'MANAGER_REQUEST_CANCEL') {
+    const reason = text(body.reason || body.reason_note);
+    if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
+    if (reason.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_INVALID');
+    return {
+      reason_note: reason, reason_code: upper(body.reason_code) || null,
+      manager_terminal_mail: await candidateManagerTerminalMail(
+        deps, 'WITHDRAWAL', workflow.workflow_kind
+      )
+    };
+  }
+  if (action === 'BEGIN_MANAGER_REVIEW' || action === 'CANCEL_MANAGER_HANDOFF') return {};
+  if (action === 'RECORD_REVIEW_PROGRESS') {
+    const manifestHash = text(body.manifest_sha256_hex).toLowerCase();
+    const componentHash = text(body.component_sha256_hex).toLowerCase();
+    if (!SHA256_RE.test(manifestHash) || !SHA256_RE.test(componentHash)) {
+      throw new CandidateHttpError(400, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+    }
+    return {
+      manifest_sha256_hex: manifestHash,
+      component_id: requireUuid(body.component_id, 'MANAGER_REVIEW_COMPONENT_INVALID'),
+      component_sha256_hex: componentHash,
+      viewed_receipt: isObject(body.viewed_receipt) ? structuredClone(body.viewed_receipt) : {}
+    };
+  }
+  if (action === 'PHONE_APPROVE') {
+    const manifestHash = text(body.manifest_sha256_hex).toLowerCase();
+    const managerName = text(body.manager_name);
+    const managerPosition = text(body.manager_position);
+    if (!SHA256_RE.test(manifestHash)) {
+      throw new CandidateHttpError(400, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+    }
+    if (!managerName || !managerPosition || managerName.length > 200 || managerPosition.length > 200) {
+      throw new CandidateHttpError(400, 'MANAGER_SIGNATURE_REQUIRED');
+    }
+    return {
+      manifest_sha256_hex: manifestHash,
+      manager_name: managerName,
+      manager_position: managerPosition,
+      signature_component_id: requireUuid(body.signature_component_id, 'MANAGER_SIGNATURE_REQUIRED')
+    };
+  }
+  if (action === 'MANAGER_REFUSE') {
+    const reason = text(body.reason);
+    if (!reason) throw new CandidateHttpError(400, 'MANAGER_REFUSAL_REASON_REQUIRED');
+    if (reason.length > 1000) throw new CandidateHttpError(400, 'MANAGER_REFUSAL_REASON_INVALID');
+    return { reason };
+  }
+  throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
+}
+
+async function handleOfficeWorkflowAction(request, env, deps, workflowId, action, ctx) {
+  if (action === 'reject-expense-category') {
+    const user = await requireOfficeActor(request, deps, 'reject_submission');
+    const body = await readJson(request);
+    const reasonNote = text(body.reason_note).trim();
+    const confirmationSha256 = text(body.confirmation_sha256).trim().toLowerCase();
+    if (!reasonNote || reasonNote.length > 1000) {
+      throw new CandidateHttpError(400, 'CANDIDATE_REASON_REQUIRED');
+    }
+    if (!SHA256_RE.test(confirmationSha256)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED');
+    }
+    const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
+    let result = await rpcCall(deps, 'candidate_office_expense_category_adapter_v1', {
+      p_actor_user_id: user.id,
+      p_environment: environmentName(env),
+      p_payload: {
+        workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+        generation: requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+        expense_component_id: requireUuid(
+          body.expense_component_id, 'CANDIDATE_EXPENSE_COMPONENT_ACTION_INVALID'
+        ),
+        component_generation: requireInteger(
+          body.component_generation, 'CANDIDATE_EXPENSE_COMPONENT_ACTION_INVALID', 1
+        ),
+        confirmation_sha256: confirmationSha256,
+        reason_note: reasonNote,
+        idempotency_key: idempotencyKey
+      },
+      p_now_utc: new Date().toISOString()
+    });
+    if (result?.state === 'RENDERING'
+        && (result?.render_contract || result?.paper_prepare_required === true)) {
+      if (result?.paper_prepare_required === true) {
+        await prepareAndRebindOfficePaperExpenseUpdate(
+          env, deps, user.id, result, idempotencyKey, ctx
+        );
+      } else {
+        await renderAndRebindPendingExpenseUpdate(env, deps, result, idempotencyKey);
+      }
+      result = await rpcCall(deps, 'candidate_office_expense_category_reject_commit_v1', {
+        p_environment: environmentName(env),
+        p_operation_id: requireUuid(
+          result.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+        ),
+        p_update_id: requireUuid(
+          result.update_id, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID'
+        ),
+        p_now_utc: new Date().toISOString()
+      });
+      result = {
+        ...result,
+        refresh_hints: {
+          summary: true,
+          simple_timesheet: true,
+          bulk_process: true,
+          bulk_authorise: true,
+          refetch: 'AFFECTED_ROWS'
+        }
+      };
+    }
+    return jsonResponse(200, officeExpenseCategoryRejectionResult(
+      withoutInternalRenderContracts(result)
+    ));
+  }
+  const user = await requireOfficeActor(
+    request,deps,OFFICE_WORKFLOW_ACTION_PERMISSIONS[action] || 'view_candidate_state'
+  );
+  const workflow = await workflowRow(env, workflowId);
+  const body = await readJson(request);
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
+  if (action === 'retry-finalisation') {
+    const replayServiceFinalisation = {
+      contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+      workflow_generation: generation,
+      actor_user_id: user.id
+    };
+    const replay = await probeFinalisationReplay(
+      env, deps, workflow, generation, idempotencyKey, replayServiceFinalisation, user.id
+    );
+    if (replay) return jsonResponse(200, replay);
+    if (generation !== Number(workflow.generation)) {
+      throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+    }
+    const finalisation = await withManagerFinalisationLease(
+      env, workflow.id, generation, async () => {
+        const contract = workflow.last_mutation_response_json?.final_render_contract;
+        if (contract) await renderAndRegister(env, deps, contract, 'FINAL', user.id);
+        return finaliseWorkflow(env, deps, workflow.id, generation, idempotencyKey, user.id);
+      }
+    );
+    return jsonResponse(finalisation?.single_flight_deferred === true ? 202 : 200, finalisation);
+  }
+  if (generation !== Number(workflow.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  const dbAction = OFFICE_MANAGER_ACTIONS[action];
+  if (!dbAction) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+  const approvalId = requireUuid(body.approval_request_id, 'CANDIDATE_REQUEST_GENERATION_STALE');
+  const approvalGeneration = requireInteger(
+    body.approval_request_generation, 'CANDIDATE_REQUEST_GENERATION_STALE', 1
+  );
+  const approval = await exactOfficeApproval(
+    env, workflow.id, generation, approvalId, approvalGeneration
+  );
+  const payload = await officeManagerMutationPayload(
+    request, env, deps, dbAction, body, workflow, approval, idempotencyKey
+  );
+  const managerRoutesToRetire = dbAction === 'MANAGER_REQUEST_CANCEL'
+    ? await currentManagerEmailRouteTickets(env, workflow.id) : [];
+  const result = await officeAdapter(deps, env, user.id, 'WORKFLOW_ACTION_EXECUTE', {
+    workflow_id: workflow.id,
+    generation,
+    workflow_action: dbAction,
+    approval_request_id: approval.id,
+    approval_request_generation: Number(approval.request_generation),
+    idempotency_key: idempotencyKey,
+    payload
+  });
+  if (payload.__managerRouteToken) {
+    const currentApprovalId = requireUuid(result?.approval_request_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const current = await restOne(env, 'candidate_approval_requests',
+      `id=eq.${encodeURIComponent(currentApprovalId)}&workflow_id=eq.${encodeURIComponent(workflow.id)}`
+      + '&select=id,request_generation,resend_count,expires_at_utc');
+    if (!current) throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    await registerManagerEmailRoute(env, deps, {
+      workflowId: workflow.id, approvalRequestId: current.id,
+      requestGeneration: Number(current.request_generation),
+      credentialGeneration: dbAction === 'REMIND' ? Number(current.resend_count) + 1 : 1,
+      mailOutboxId: requireUuid(result?.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED'),
+      managerToken: payload.__managerRouteToken,
+      mailKind: dbAction === 'REMIND' ? 'REMINDER' : 'RENEWAL',
+      expiresAtUtc: current.expires_at_utc, mutationKey: idempotencyKey
+    });
+  }
+  if (dbAction === 'MANAGER_REQUEST_CANCEL') {
+    retireManagerEmailRoutes(env, deps, managerRoutesToRetire, ctx);
+  }
+  if (dbAction === 'PHONE_APPROVE' && result?.final_render_contract) {
+    try {
+      if (await queueCandidateManagerFinalisation(env, result)) {
+        return jsonResponse(202, {
+          ...withoutInternalRenderContracts(result),
+          final_rendering_accepted: true,
+          finalisation_pending: true
+        });
+      }
+    } catch (error) {
+      console.error('[candidate-app] manager finalisation queue dispatch failed', {
+        workflow_id: workflow.id,
+        generation: result.generation,
+        error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+      });
+    }
+    const work = withManagerFinalisationLease(env, workflow.id, result.generation, async () => {
+      await renderAndRegister(env, deps, result.final_render_contract, 'FINAL', user.id);
+      return finaliseWorkflow(env, deps, workflow.id, result.generation,
+        await deterministicOpaqueToken(env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+          'cloudtms-office-phone-finalise-v1', idempotencyKey), user.id);
+    });
+    const deferred = deferBackground(ctx, work, 'office-final-render-and-finalise', {
+      workflow_id: workflow.id,
+      generation: result.generation
+    });
+    if (deferred !== true) await deferred;
+    return jsonResponse(202, {
+      ...withoutInternalRenderContracts(result),
+      final_rendering_accepted: true,
+      finalisation_pending: true
+    });
+  }
+  return jsonResponse(200, result);
+}
+
+async function handleOfficeReject(request, env, deps, timesheetId) {
+  const user = await requireOfficeActor(request, deps, 'reject_submission');
+  const body = await readJson(request);
+  const reason = text(body.reason);
+  if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_REASON_REQUIRED');
+  if (reason.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_REASON_INVALID');
+  return jsonResponse(200, await officeAdapter(deps, env, user.id, 'REJECT_CONFIRM', {
+    timesheet_id: requireUuid(timesheetId),
+    expected_timesheet_id: requireUuid(body.expected_timesheet_id || timesheetId),
+    expected_row_signature: text(body.expected_row_signature),
+    context_sha256: text(body.context_sha256),
+    reason,
+    idempotency_key: requireOfficeIdempotency(body.idempotency_key)
+  }));
+}
+
+function officeReminderChunks(values, size = 100) {
+  const output = [];
+  for (let index = 0; index < values.length; index += size) output.push(values.slice(index, index + size));
+  return output;
+}
+
+function officeReminderCandidateName(candidate) {
+  const display = text(candidate?.display_name);
+  if (display) return display;
+  const joined = [text(candidate?.first_name), text(candidate?.last_name)].filter(Boolean).join(' ');
+  return joined || 'Candidate';
+}
+
+function officeReminderCandidateSurname(candidate) {
+  const surname = text(candidate?.last_name);
+  if (surname) return surname;
+  const display = officeReminderCandidateName(candidate);
+  const parts = display.split(/\s+/).filter(Boolean);
+  return parts.at(-1) || display;
+}
+
+async function loadOfficeManagerReminderCatalogue(env, deps, actorId) {
+  const observedAtUtc = new Date().toISOString();
+  const approvals = await restRowsPaged(env, 'candidate_approval_requests', [
+    'method=eq.EMAIL',
+    'state=eq.PENDING',
+    'select=id,workflow_id,workflow_generation,request_generation',
+    'order=workflow_id.asc,request_generation.desc,id.desc'
+  ].join('&'), {
+    pageSize: 1000,
+    // The product limit applies to rows that are actually reminder-eligible,
+    // not merely to pending requests. Keep the source scan independently
+    // bounded so a damaged or unexpectedly large queue fails closed before
+    // the Worker loads workflow/candidate joins or starts projections.
+    maxRows: MAX_OFFICE_REMINDER_SOURCE_ROWS
+  });
+  if (!approvals.length) {
+    const catalogueRevision = await sha256Hex('OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1:[]');
+    return { observed_at_utc: observedAtUtc, catalogue_revision: catalogueRevision, items: [] };
+  }
+
+  const workflowIds = [...new Set(approvals.map(row => text(row.workflow_id)).filter(value => UUID_RE.test(value)))];
+  const workflows = [];
+  for (const ids of officeReminderChunks(workflowIds)) {
+    workflows.push(...await restRows(env, 'candidate_submission_workflows', [
+      `id=in.(${ids.map(encodeURIComponent).join(',')})`,
+      `environment=eq.${encodeURIComponent(environmentName(env))}`,
+      'select=id,candidate_id,generation,contract_week_id,anchor_timesheet_id,target_timesheet_id,updated_at_utc'
+    ].join('&')));
+  }
+  const workflowById = new Map(workflows.map(row => [text(row.id), row]));
+  const approvalByWorkflow = new Map();
+  for (const approval of approvals) {
+    const workflow = workflowById.get(text(approval.workflow_id));
+    if (!workflow || Number(approval.workflow_generation) !== Number(workflow.generation)) continue;
+    const existing = approvalByWorkflow.get(text(workflow.id));
+    if (!existing || Number(approval.request_generation) > Number(existing.request_generation)) {
+      approvalByWorkflow.set(text(workflow.id), approval);
+    }
+  }
+
+  const candidateIds = [...new Set(workflows.map(row => text(row.candidate_id)).filter(value => UUID_RE.test(value)))];
+  const candidates = [];
+  for (const ids of officeReminderChunks(candidateIds)) {
+    candidates.push(...await restRows(env, 'candidates', [
+      `id=in.(${ids.map(encodeURIComponent).join(',')})`,
+      'select=id,display_name,first_name,last_name'
+    ].join('&')));
+  }
+  const candidateById = new Map(candidates.map(row => [text(row.id), row]));
+
+  const currentByRowKey = new Map();
+  for (const workflow of workflows) {
+    const approval = approvalByWorkflow.get(text(workflow.id));
+    if (!approval) continue;
+    const timesheetId = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
+    const contractWeekId = text(workflow.contract_week_id);
+    if (!UUID_RE.test(timesheetId) && !UUID_RE.test(contractWeekId)) continue;
+    const rowKey = UUID_RE.test(timesheetId) ? timesheetId : contractWeekId;
+    const existing = currentByRowKey.get(rowKey);
+    if (existing && String(existing.workflow.updated_at_utc || '') >= String(workflow.updated_at_utc || '')) continue;
+    currentByRowKey.set(rowKey, {
+      workflow,
+      approval,
+      identity: {
+        row_key: rowKey,
+        timesheet_id: UUID_RE.test(timesheetId) ? timesheetId : null,
+        contract_week_id: UUID_RE.test(contractWeekId) ? contractWeekId : null,
+        expected_row_signature: null
+      }
+    });
+  }
+
+  const candidatesForProjection = [...currentByRowKey.values()];
+  const projectionsByRowKey = new Map();
+  for (const group of officeReminderChunks(candidatesForProjection, 100)) {
+    const response = await officeAdapter(deps, env, actorId, 'PROJECT_BATCH', {
+      surface: 'TIMESHEET_SUMMARY',
+      identities: group.map(item => item.identity)
+    }, observedAtUtc);
+    for (const row of Array.isArray(response?.results) ? response.results : []) {
+      if (row?.ok !== true || !row.projection) {
+        throw new CandidateHttpError(503, 'CANDIDATE_REMINDER_CATALOGUE_UNAVAILABLE');
+      }
+      projectionsByRowKey.set(text(row.correlation_key), row.projection);
+    }
+  }
+
+  const items = [];
+  for (const candidateRow of candidatesForProjection) {
+    const projection = projectionsByRowKey.get(candidateRow.identity.row_key);
+    if (!projection) throw new CandidateHttpError(503, 'CANDIDATE_REMINDER_CATALOGUE_UNAVAILABLE');
+    const action = (Array.isArray(projection.available_actions) ? projection.available_actions : [])
+      .find(item => upper(item?.code) === 'SEND_MANAGER_REMINDER' && item?.enabled === true);
+    const manager = projection.manager_approval;
+    if (!action || text(action?.invocation?.path) !== `/api/candidate-app/workflows/${candidateRow.workflow.id}/actions/remind`
+        || text(manager?.request_id) !== text(candidateRow.approval.id)
+        || Number(manager?.request_generation) !== Number(candidateRow.approval.request_generation)
+        || !manager?.provider_accepted_at_utc) continue;
+    const currentIdentity = officeProjectionIdentity(projection.current_identity);
+    const candidate = candidateById.get(text(candidateRow.workflow.candidate_id));
+    items.push({
+      selection_key: candidateRow.approval.id,
+      candidate_name: officeReminderCandidateName(candidate),
+      candidate_surname: officeReminderCandidateSurname(candidate),
+      last_manager_email_at_utc: manager.provider_accepted_at_utc,
+      identity: currentIdentity
+    });
+  }
+  if (items.length > MAX_OFFICE_REMINDER_BATCH_ROWS) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_CATALOGUE_TOO_LARGE');
+  }
+  items.sort((left, right) => left.candidate_surname.localeCompare(right.candidate_surname, 'en-GB', { sensitivity: 'base' })
+    || left.candidate_name.localeCompare(right.candidate_name, 'en-GB', { sensitivity: 'base' })
+    || String(left.last_manager_email_at_utc).localeCompare(String(right.last_manager_email_at_utc))
+    || left.selection_key.localeCompare(right.selection_key));
+  const revisionFacts = items.map(item => ({
+    selection_key: item.selection_key,
+    candidate_name: item.candidate_name,
+    candidate_surname: item.candidate_surname,
+    identity: item.identity,
+    last_manager_email_at_utc: item.last_manager_email_at_utc
+  }));
+  const catalogueRevision = await sha256Hex(`OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1:${JSON.stringify(revisionFacts)}`);
+  return { observed_at_utc: observedAtUtc, catalogue_revision: catalogueRevision, items };
+}
+
+async function handleOfficeReminderEligibility(request, env, deps) {
+  const user = await requireOfficeActor(request, deps, 'send_manager_reminder_batch');
+  const url = new URL(request.url);
+  const page = Number(url.searchParams.get('page') || 1);
+  const pageSize = Number(url.searchParams.get('page_size') || OFFICE_REMINDER_PAGE_SIZE);
+  const expectedRevision = text(url.searchParams.get('catalogue_revision')).toLowerCase();
+  const surnameQuery = text(url.searchParams.get('surname_query'));
+  const sortBy = upper(url.searchParams.get('sort_by') || 'CANDIDATE_SURNAME');
+  const sortDirection = upper(url.searchParams.get('sort_direction') || 'ASC');
+  if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize)
+      || pageSize < 1 || pageSize > MAX_OFFICE_REMINDER_PAGE_SIZE
+      || surnameQuery.length > 100
+      || !['CANDIDATE_SURNAME', 'LAST_MANAGER_EMAIL'].includes(sortBy)
+      || !['ASC', 'DESC'].includes(sortDirection)
+      || (expectedRevision && !SHA256_RE.test(expectedRevision))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_CATALOGUE_PAGE_INVALID');
+  }
+  const catalogue = await loadOfficeManagerReminderCatalogue(env, deps, user.id);
+  if (expectedRevision && expectedRevision !== catalogue.catalogue_revision) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  }
+  const foldedSurnameQuery = surnameQuery.toLocaleLowerCase('en-GB');
+  const filteredItems = surnameQuery
+    ? catalogue.items.filter(item => item.candidate_surname.toLocaleLowerCase('en-GB').includes(foldedSurnameQuery))
+    : [...catalogue.items];
+  const direction = sortDirection === 'DESC' ? -1 : 1;
+  filteredItems.sort((left, right) => direction * (
+    sortBy === 'LAST_MANAGER_EMAIL'
+      ? String(left.last_manager_email_at_utc).localeCompare(String(right.last_manager_email_at_utc))
+        || left.candidate_surname.localeCompare(right.candidate_surname, 'en-GB', { sensitivity: 'base' })
+      : left.candidate_surname.localeCompare(right.candidate_surname, 'en-GB', { sensitivity: 'base' })
+        || left.candidate_name.localeCompare(right.candidate_name, 'en-GB', { sensitivity: 'base' })
+  ) || left.selection_key.localeCompare(right.selection_key));
+  const totalItems = filteredItems.length;
+  const pageCount = totalItems ? Math.ceil(totalItems / pageSize) : 0;
+  if ((totalItems && page > pageCount) || (!totalItems && page !== 1)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_CATALOGUE_PAGE_INVALID');
+  }
+  const offset = (page - 1) * pageSize;
+  return jsonResponse(200, {
+    ok: true,
+    contract_version: 'OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1',
+    observed_at_utc: catalogue.observed_at_utc,
+    catalogue_revision: catalogue.catalogue_revision,
+    page,
+    page_size: pageSize,
+    page_count: pageCount,
+    total_items: totalItems,
+    catalogue_total_items: catalogue.items.length,
+    surname_query: surnameQuery,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
+    matching_selection_keys: filteredItems.map(item => item.selection_key),
+    items: filteredItems.slice(offset, offset + pageSize)
+  });
+}
+
+function officeReminderSelection(value) {
+  if (!isObject(value)) throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+  const mode = upper(value.mode);
+  const normalizeKeys = (input) => {
+    if (!Array.isArray(input) || input.length > MAX_OFFICE_REMINDER_BATCH_ROWS) {
+      throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+    }
+    const keys = [...new Set(input.map(text))];
+    if (keys.some(key => !UUID_RE.test(key))) throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+    return keys;
+  };
+  const included = normalizeKeys(value.included_row_keys || []);
+  const excluded = normalizeKeys(value.excluded_row_keys || []);
+  if (!['EXPLICIT', 'ALL_ELIGIBLE'].includes(mode)
+      || (mode === 'EXPLICIT' && (!included.length || excluded.length))
+      || (mode === 'ALL_ELIGIBLE' && included.length)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+  }
+  return { mode, included_row_keys: included, excluded_row_keys: excluded };
+}
+
+async function resolveOfficeReminderSelection(env, deps, actorId, body) {
+  const selection = officeReminderSelection(body.selection);
+  const expectedRevision = text(body.catalogue_revision).toLowerCase();
+  if (!SHA256_RE.test(expectedRevision)) throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  const catalogue = await loadOfficeManagerReminderCatalogue(env, deps, actorId);
+  if (expectedRevision !== catalogue.catalogue_revision) throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  const byKey = new Map(catalogue.items.map(item => [item.selection_key, item]));
+  const keys = selection.mode === 'ALL_ELIGIBLE'
+    ? catalogue.items.map(item => item.selection_key).filter(key => !selection.excluded_row_keys.includes(key))
+    : selection.included_row_keys;
+  if (!keys.length || keys.length > MAX_OFFICE_REMINDER_BATCH_ROWS || keys.some(key => !byKey.has(key))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  }
+  return { catalogue, selection, identities: keys.map(key => byKey.get(key).identity) };
+}
+
+async function handleOfficeReminderBatch(request, env, deps, operation, batchId = null) {
+  const user = await requireOfficeActor(request, deps, 'send_manager_reminder_batch');
+  if (operation === 'status') {
+    return jsonResponse(200, await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_STATUS', {
+      batch_id: requireUuid(batchId, 'CANDIDATE_REMINDER_BATCH_NOT_FOUND')
+    }));
+  }
+  const body = await readJson(request);
+  const selectionRequest = isObject(body.selection);
+  let selectionResolution = null;
+  let source = Array.isArray(body.identities) ? body.identities
+    : Array.isArray(body.selected_rows) ? body.selected_rows : [];
+  const maxRows = selectionRequest ? MAX_OFFICE_REMINDER_BATCH_ROWS : 100;
+  if (operation === 'preview' && selectionRequest) {
+    selectionResolution = await resolveOfficeReminderSelection(env, deps, user.id, body);
+    source = selectionResolution.identities;
+  }
+  if (source.length < 1 || source.length > maxRows) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+  }
+  const identities = source.map(officeProjectionIdentity);
+  if (operation === 'preview') {
+    const preview = await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_PREVIEW', {
+      identities
+    });
+    return jsonResponse(200, selectionRequest ? { ...preview, selected_rows: identities } : preview);
+  }
+
+  const batchKey = requireOfficeIdempotency(body.idempotency_key || body.batch_id);
+  const previewContextHash = text(body.preview_context_hash);
+  const selectionFingerprint = text(body.selection_fingerprint);
+  if (!SHA256_RE.test(previewContextHash) || !SHA256_RE.test(selectionFingerprint)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  }
+  const clientRequest = {
+    identities,
+    batch_id: batchKey,
+    idempotency_key: batchKey,
+    preview_context_hash: previewContextHash,
+    selection_fingerprint: selectionFingerprint
+  };
+  const replay = await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_REPLAY', clientRequest);
+  if (replay?.found === true) {
+    return jsonResponse(202, {
+      ...replay,
+      retry_after_ms: 1000,
+      status_url: `/api/candidate-app/manager-reminder-batches/${batchKey}`
+    });
+  }
+  if (selectionRequest) {
+    selectionResolution = await resolveOfficeReminderSelection(env, deps, user.id, body);
+    const resolvedIdentities = selectionResolution.identities.map(officeProjectionIdentity);
+    if (JSON.stringify(resolvedIdentities) !== JSON.stringify(identities)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+    }
+  }
+  const currentPreview = await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_PREVIEW', { identities });
+  if (currentPreview.preview_context_hash !== previewContextHash
+      || currentPreview.selection_fingerprint !== selectionFingerprint) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  }
+  const eligible = (Array.isArray(currentPreview.items) ? currentPreview.items : [])
+    .filter(item => item?.eligible === true);
+  const approvalIds = eligible.map(item => requireUuid(
+    item.approval_request_id, 'CANDIDATE_REQUEST_GENERATION_STALE'
+  ));
+  const approvals = approvalIds.length ? await restRows(env, 'candidate_approval_requests',
+    `id=in.(${approvalIds.map(encodeURIComponent).join(',')})&select=*`) : [];
+  const approvalsById = new Map(approvals.map(row => [text(row.id), row]));
+  const reminders = [];
+  const managerRouteInputs = new Map();
+  for (const item of (Array.isArray(currentPreview.items) ? currentPreview.items : [])) {
+    if (item?.eligible !== true) {
+      reminders.push({ ...item, eligible: false });
+      continue;
+    }
+    const approval = approvalsById.get(text(item.approval_request_id));
+    if (!approval
+        || Number(approval.workflow_generation) !== Number(item.workflow_generation)
+        || Number(approval.request_generation) !== Number(item.approval_request_generation)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+    }
+    const managerToken = await deterministicOpaqueToken(
+      env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+      'cloudtms-office-manager-reminder-batch-v1', batchKey, item.workflow_id,
+      item.workflow_generation, approval.id, approval.request_generation
+    );
+    const managerWorkflow = await workflowRow(env, item.workflow_id);
+    managerRouteInputs.set(text(item.workflow_id), {
+      managerToken,
+      mutationKey: `office-reminder-batch:${batchKey}:${item.workflow_id}:${item.approval_request_generation}`
+    });
+    reminders.push({
+      ...item,
+      eligible: true,
+      payload: {
+        ...await candidateManagerMail(env, deps, managerToken, item.workflow_id,
+          approval.manager_email_normalized, 'REMINDER', managerWorkflow.workflow_kind),
+        approval_token_hash_hex: await sha256Hex(managerToken)
+      }
+    });
+  }
+  const result = await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_EXECUTE', {
+    ...clientRequest,
+    reminders
+  });
+  for (const item of (Array.isArray(result?.items) ? result.items : [])) {
+    if (upper(item?.outcome) !== 'QUEUED') continue;
+    const routeInput = managerRouteInputs.get(text(item.workflow_id));
+    const mutation = item?.result;
+    if (!routeInput || !isObject(mutation)) {
+      throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    }
+    const current = await restOne(env, 'candidate_approval_requests',
+      `id=eq.${encodeURIComponent(item.approval_request_id)}`
+      + `&workflow_id=eq.${encodeURIComponent(item.workflow_id)}`
+      + '&select=id,request_generation,resend_count,expires_at_utc');
+    if (!current) throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    await registerManagerEmailRoute(env, deps, {
+      workflowId: item.workflow_id, approvalRequestId: current.id,
+      requestGeneration: Number(current.request_generation),
+      credentialGeneration: Number(current.resend_count) + 1,
+      mailOutboxId: requireUuid(mutation.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED'),
+      managerToken: routeInput.managerToken, mailKind: 'REMINDER',
+      expiresAtUtc: current.expires_at_utc, mutationKey: routeInput.mutationKey
+    });
+  }
+  return jsonResponse(202, {
+    ...result,
+    retry_after_ms: 1000,
+    status_url: `/api/candidate-app/manager-reminder-batches/${batchKey}`
+  });
+}
+
+async function officePaperContext(request, env, deps, workflowId, generationValue = null) {
+  const user = await requireOfficeActor(request, deps, 'manage_paper');
+  const workflow = await workflowRow(env, workflowId);
+  const expectedGeneration = requireInteger(generationValue, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  if (Number(workflow.generation) !== expectedGeneration || upper(workflow.route) !== 'PAPER') {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  const delivery = await officeCandidatePaperDelivery(env, workflow);
+  const timesheetId = delivery.source_timesheet_id;
+  const timesheet = await restOne(env, 'timesheets',
+    `timesheet_id=eq.${encodeURIComponent(timesheetId)}`
+    + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
+    + 'document_state,current_document_version_id,manual_pdf_r2_key,is_current,archived_at_utc');
+  if (!timesheet) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+  const livePreparation = upper(workflow.state) === 'AWAITING_PAPER_RETURN'
+    && timesheet.is_current === true && !timesheet.archived_at_utc;
+  const version = livePreparation && UUID_RE.test(text(timesheet.current_document_version_id))
+    ? await restOne(env, 'invoice_document_versions',
+      `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
+      + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(timesheetId)}`
+      + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status')
+    : null;
+  return {
+    office_actor_id: user.id,
+    workflow,
+    timesheet,
+    version,
+    outbox: delivery.outbox,
+    complete: delivery.complete,
+    delivery_generation: delivery.delivery_generation,
+    live_preparation: livePreparation
+  };
+}
+
+async function handleOfficePaperPack(request, env, deps, workflowId) {
+  const url = new URL(request.url);
+  const context = await officePaperContext(
+    request, env, deps, workflowId, url.searchParams.get('generation')
+  );
+  if (!context.complete?.ready) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_NOT_READY');
+  }
+  const stored = await r2Bytes(env, context.complete.key, context.complete.sha256);
+  if (stored.media_type !== 'application/pdf') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+  }
+  return new Response(stored.bytes, {
+    status: 200,
+    headers: {
+      'content-type': 'application/pdf',
+      'content-length': String(stored.bytes.byteLength),
+      'cache-control': 'private, no-store',
+      'content-disposition': `inline; filename="Candidate_Paper_Pack_${workflowId}.pdf"`,
+      'x-content-type-options': 'nosniff'
+    }
+  });
+}
+
+async function handleOfficePaperReturnReview(request, env, deps, workflowId) {
+  const url = new URL(request.url);
+  const context = await officePaperContext(
+    request, env, deps, workflowId, url.searchParams.get('generation')
+  );
+  if (upper(context.workflow.state) !== 'RECEIVED') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_NOT_RECEIVED');
+  }
+  const components = await restRows(env, 'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(context.workflow.id)}`
+    + `&workflow_generation=eq.${encodeURIComponent(context.workflow.generation)}`
+    + '&state=eq.IMMUTABLE&select=id,component_kind,document_role,expense_category,'
+    + 'paper_return_page_key,review_ordinal,media_type,byte_size,source_content_sha256&order=review_ordinal.asc,id.asc');
+  return jsonResponse(200, {
+    ok: true,
+    contract_version: 'OFFICE_CANDIDATE_PAPER_RETURN_REVIEW_V1',
+    workflow_id: context.workflow.id,
+    generation: Number(context.workflow.generation),
+    state: context.workflow.state,
+    components: components.map(component => ({
+      component_id: component.id,
+      component_kind: component.component_kind,
+      document_role: component.document_role,
+      expense_category: component.expense_category,
+      paper_return_page_key: component.paper_return_page_key,
+      review_ordinal: component.review_ordinal,
+      media_type: component.media_type,
+      byte_size: Number(component.byte_size || 0),
+      sha256: text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase(),
+      document: {
+        method: 'GET',
+        path: `/api/candidate-app/workflows/${context.workflow.id}/components/${component.id}/document?generation=${context.workflow.generation}`
+      }
+    }))
+  });
+}
+
+async function handleOfficePaperRetry(request, env, deps, workflowId) {
+  const body = await readJson(request);
+  const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const user = await requireOfficeActor(request, deps, 'manage_paper');
+  const operationIdentity = {
+    workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation,
+    idempotency_key: idempotencyKey
+  };
+  const durableReplay = await officeAdapter(
+    deps, env, user.id, 'PAPER_RETRY_REPLAY', operationIdentity
+  );
+  if (durableReplay?.found === true && isObject(durableReplay.result)) {
+    return jsonResponse(Number(durableReplay.http_status || 200), {
+      ...durableReplay.result,
+      idempotent_replay: true
+    });
+  }
+  const durableResult = async (status, result) => {
+    const receipt = await officeAdapter(deps, env, user.id, 'PAPER_RETRY_RECORD', {
+      ...operationIdentity,
+      http_status: status,
+      result
+    });
+    return jsonResponse(Number(receipt?.http_status || status), {
+      ...(receipt?.result || result),
+      idempotent_replay: receipt?.idempotent_replay === true
+    });
+  };
+  const context = await officePaperContext(request, env, deps, workflowId, body.generation);
+  const retryScope = parseJson(context.outbox?.payment_scope_json, {}) || {};
+  const nextRetryAt = Date.parse(text(retryScope.candidate_paper_pack_next_retry_at_utc));
+  if (retryScope.candidate_paper_pack_retryable === true
+      && Number.isFinite(nextRetryAt) && nextRetryAt > Date.now()) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE', {
+      next_retry_at_utc: new Date(nextRetryAt).toISOString()
+    });
+  }
+  if (upper(context.workflow.state) !== 'AWAITING_PAPER_RETURN'
+      || !context.live_preparation || !context.version?.r2_key) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_RETRY_NOT_READY');
+  }
+  const outbox = await requireCandidatePaperOutbox(env, context.workflow, context.timesheet);
+  if (!context.complete?.ready && retryScope.candidate_paper_pack_retryable !== true) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_RETRY_NOT_READY');
+  }
+  const currentOperationMatches = text(retryScope.candidate_paper_pack_operation_id) === idempotencyKey;
+  const currentOperationState = upper(retryScope.candidate_paper_pack_operation_state);
+  const currentLeaseExpiresAt = Date.parse(text(retryScope.candidate_paper_pack_attempt_expires_at_utc));
+  if (currentOperationMatches && currentOperationState === 'CLAIMED'
+      && Number.isFinite(currentLeaseExpiresAt) && currentLeaseExpiresAt > Date.now()) {
+    return jsonResponse(202, {
+      ok: true,
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+      idempotency_key: idempotencyKey,
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      paper_pack_state: 'RETRY_IN_PROGRESS',
+      idempotent_replay: true
+    });
+  }
+  const attemptCount = Number.isSafeInteger(Number(retryScope.candidate_paper_pack_attempt_count))
+    ? Number(retryScope.candidate_paper_pack_attempt_count) : 0;
+  const claimKey = `${idempotencyKey}:attempt:${attemptCount + 1}`;
+  const claim = await claimCandidatePaperPackAttempt(
+    env, deps, context.workflow, outbox, claimKey, context.office_actor_id, idempotencyKey
+  );
+  if (claim.paper_pack_attempt_state === 'READY') {
+    return durableResult(200, {
+      ok: true,
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+      idempotency_key: idempotencyKey,
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      paper_pack_state: 'READY',
+      idempotent_replay: claim.idempotent_replay === true,
+      page_count: Number(context.complete?.page_count || 0)
+    });
+  }
+  if (claim.claim_acquired_new !== true) {
+    const replayContext = await officePaperContext(request, env, deps, workflowId, body.generation);
+    const replayScope = parseJson(replayContext.outbox?.payment_scope_json, {}) || {};
+    const operationMatches = text(replayScope.candidate_paper_pack_operation_id) === idempotencyKey;
+    if (replayContext.complete?.ready || (operationMatches
+        && replayScope.candidate_paper_pack_operation_state === 'READY')) {
+      return durableResult(200, {
+        ok: true,
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+        idempotency_key: idempotencyKey,
+        workflow_id: replayContext.workflow.id,
+        generation: Number(replayContext.workflow.generation),
+        paper_pack_state: 'READY',
+        idempotent_replay: true,
+        page_count: Number(replayContext.complete?.page_count || 0)
+      });
+    }
+    if (operationMatches && ['FAILED_RETRYABLE', 'FAILED_TERMINAL'].includes(
+      upper(replayScope.candidate_paper_pack_operation_state)
+    )) {
+      const paperPackState = upper(replayScope.candidate_paper_pack_operation_state);
+      return durableResult(paperPackState === 'FAILED_RETRYABLE' ? 503 : 409, {
+        ok: false,
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+        idempotency_key: idempotencyKey,
+        workflow_id: replayContext.workflow.id,
+        generation: Number(replayContext.workflow.generation),
+        paper_pack_state: paperPackState,
+        retryable: paperPackState === 'FAILED_RETRYABLE',
+        error_code: text(replayScope.candidate_paper_pack_failure_code)
+          || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED',
+        next_retry_at_utc: replayScope.candidate_paper_pack_next_retry_at_utc || null,
+        idempotent_replay: true
+      });
+    }
+    const leaseExpiresAt = Date.parse(text(replayScope.candidate_paper_pack_attempt_expires_at_utc));
+    if (operationMatches && replayScope.candidate_paper_pack_operation_state === 'CLAIMED'
+        && Number.isFinite(leaseExpiresAt) && leaseExpiresAt > Date.now()) {
+      return jsonResponse(202, {
+        ok: true,
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+        idempotency_key: idempotencyKey,
+        workflow_id: replayContext.workflow.id,
+        generation: Number(replayContext.workflow.generation),
+        paper_pack_state: 'RETRY_IN_PROGRESS',
+        idempotent_replay: true
+      });
+    }
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETRY_OPERATION_STALE');
+  }
+  let complete = context.complete;
+  try {
+    if (!complete?.ready) {
+      complete = await assembleCandidatePaperPack(env, context.workflow, context.timesheet, context.version);
+    }
+    const release = await releaseCandidatePaperPack(
+      env, deps, context.workflow, context.timesheet, complete, outbox, context.office_actor_id,
+      claim.attempt_token, idempotencyKey
+    );
+    const atomicReceipt = release?.office_paper_retry_receipt;
+    if (atomicReceipt?.found !== true || !isObject(atomicReceipt.result)) {
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_RETRY_RECEIPT_MISSING');
+    }
+    return jsonResponse(Number(atomicReceipt.http_status || 200), {
+      ...atomicReceipt.result,
+      idempotent_replay: atomicReceipt.idempotent_replay === true
+    });
+  } catch (error) {
+    const observedErrorCode = knownErrorCode(error);
+    const failureCode = canonicalPaperPackFailureCode(error);
+    console.error('[candidate-app] Office Paper pack retry failed', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      ...safeCandidateTransportDiagnostic(error),
+      observed_error_code: observedErrorCode,
+      canonical_failure_code: failureCode
+    });
+    let failureReceipt = null;
+    try {
+      failureReceipt = await recordCandidatePaperPackFailure(
+        env, deps, context.workflow, outbox, failureCode, claim.attempt_token,
+        context.office_actor_id, `${idempotencyKey}:failure:${failureCode}`, idempotencyKey
+      );
+    } catch {
+      // Preserve the canonical execution error; the scheduler can reconcile an expired attempt lease.
+    }
+    if (!failureReceipt?.ok) throw error;
+    const atomicReceipt = failureReceipt.office_paper_retry_receipt;
+    if (atomicReceipt?.found !== true || !isObject(atomicReceipt.result)) {
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_RETRY_RECEIPT_MISSING');
+    }
+    return jsonResponse(Number(atomicReceipt.http_status || 503), {
+      ...atomicReceipt.result,
+      idempotent_replay: atomicReceipt.idempotent_replay === true
+    });
+  }
+}
+
+function weeklyManagerExactKeys(value, required, optional = []) {
+  if (!isObject(value)) return false;
+  const keys = Object.keys(value).sort();
+  const requiredSet = new Set(required);
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && keys.every((key) => allowed.has(key))
+    && keys.filter((key) => requiredSet.has(key)).length === required.length;
+}
+
+function weeklyManagerHours(start, end, breakMinutes) {
+  const startText = text(start);
+  const endText = text(end);
+  const breakValue = Number(breakMinutes);
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(startText)
+      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(endText)
+      || !Number.isSafeInteger(breakValue) || breakValue < 0 || breakValue > 720) {
+    throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  }
+  return { start: startText, end: endText, break_minutes: breakValue };
+}
+
+async function weeklyManagerRouteBatch(request, env, deps, expectedBatchId) {
+  const authority = managerRouteAuthority(request);
+  if (authority.authority_kind !== 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const batchId = requireUuid(expectedBatchId, 'MANAGER_SECURE_LINK_INVALID').toLowerCase();
+  const expectedBatchHmac = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'weekly-query-manager-review-batch-v1', batchId
+  );
+  if (expectedBatchHmac !== authority.review_batch_route_hmac) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const credential = bearerToken(request);
+  if (!credential) throw new CandidateHttpError(401, 'MANAGER_SECURE_LINK_INVALID');
+  const raw = await deps.rpc('weekly_source_manager_review_get_v1', {
+    p_request: {
+      credential_hash: await sha256Hex(credential),
+      control_plane_ticket_id: authority.manager_route_ticket_id
+    }
+  });
+  if (raw?.ok !== true
+      || requireUuid(raw.review_batch_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase() !== batchId
+      || requireInteger(raw.review_batch_version, 'MANAGER_DEPENDENCY_UNAVAILABLE', 1)
+        !== authority.credential_generation
+      || requireInteger(raw.credential_generation, 'MANAGER_DEPENDENCY_UNAVAILABLE', 1)
+        !== authority.credential_generation
+      || requireSha256(raw.original_membership_hash, 'MANAGER_DEPENDENCY_UNAVAILABLE')
+        !== authority.original_membership_hash) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const recipientGenerationId = requireUuid(
+    raw.recipient_generation_id, 'MANAGER_DEPENDENCY_UNAVAILABLE'
+  ).toLowerCase();
+  const expectedGenerationHmac = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'weekly-query-manager-recipient-generation-v1', recipientGenerationId
+  );
+  if (expectedGenerationHmac !== authority.recipient_generation_route_hmac) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const responseFingerprint = requireSha256(
+    raw.response_fingerprint, 'MANAGER_DEPENDENCY_UNAVAILABLE'
+  );
+  const totalCount = requireInteger(raw.total_count, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  const completedCount = requireInteger(raw.completed_count, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  const expiresAt = new Date(raw.expires_at_utc);
+  if (!Number.isFinite(expiresAt.getTime()) || completedCount > totalCount
+      || !Array.isArray(raw.items) || raw.items.length + completedCount !== totalCount
+      || raw.items.length > 500) {
+    throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  }
+  const clients = [];
+  const clientIndex = new Map();
+  const issueIds = new Set();
+  for (const row of raw.items) {
+    const issueId = requireUuid(row?.review_item_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase();
+    const clientId = requireUuid(row?.client_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase();
+    const candidateId = requireUuid(row?.candidate_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase();
+    const issueFamily = upper(row?.issue_family);
+    const workDate = text(row?.work_date);
+    const sourceStart = text(row?.source_start_instant);
+    if (issueIds.has(issueId)
+        || !['HOURS_DIFFER', 'NHSP_ABSENT', 'SOURCE_ABSENT', 'HEALTHROSTER_NOT_FINALISED'].includes(issueFamily)
+        || !/^\d{4}-\d{2}-\d{2}$/.test(workDate)
+        || !Number.isFinite(Date.parse(sourceStart))) {
+      throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+    }
+    issueIds.add(issueId);
+    const candidateHours = weeklyManagerHours(
+      row.candidate_start, row.candidate_end, row.candidate_break_minutes
+    );
+    const systemHours = issueFamily === 'HOURS_DIFFER'
+      ? weeklyManagerHours(row.system_start, row.system_end, row.system_break_minutes)
+      : null;
+    let client = clientIndex.get(clientId);
+    if (!client) {
+      client = { client_id: clientId, client_name: text(row.client_name), candidates: [] };
+      client.candidateIndex = new Map();
+      clientIndex.set(clientId, client);
+      clients.push(client);
+    }
+    let candidate = client.candidateIndex.get(candidateId);
+    if (!candidate) {
+      candidate = { candidate_id: candidateId, candidate_name: text(row.candidate_name), issues: [] };
+      client.candidateIndex.set(candidateId, candidate);
+      client.candidates.push(candidate);
+    }
+    candidate.issues.push({
+      issue_id: issueId,
+      incident_episode: requireInteger(row.incident_episode, 'MANAGER_DEPENDENCY_UNAVAILABLE', 1),
+      current_fact_version: requireSha256(row.current_fact_version, 'MANAGER_DEPENDENCY_UNAVAILABLE'),
+      issue_family: issueFamily,
+      work_date: workDate,
+      source_start_instant: sourceStart,
+      candidate_hours: candidateHours,
+      system_hours: systemHours,
+      candidate_requested_review: row.candidate_response === 'Candidate requested your review'
+    });
+  }
+  for (const client of clients) delete client.candidateIndex;
+  return {
+    authority,
+    credentialHash: await sha256Hex(credential),
+    publicBatch: {
+      ok: true,
+      review_batch_id: batchId,
+      review_batch_version: authority.credential_generation,
+      response_fingerprint: responseFingerprint,
+      expires_at_utc: expiresAt.toISOString(),
+      total_count: totalCount,
+      completed_count: completedCount,
+      clients
+    }
+  };
+}
+
+function weeklyManagerResponseItems(body) {
+  if (!weeklyManagerExactKeys(body, [
+    'review_batch_version', 'response_fingerprint', 'idempotency_key', 'responses'
+  ]) || !Number.isSafeInteger(Number(body.review_batch_version))
+      || Number(body.review_batch_version) < 1
+      || !SHA256_RE.test(text(body.response_fingerprint))
+      || !UUID_RE.test(text(body.idempotency_key))
+      || !Array.isArray(body.responses) || body.responses.length < 1 || body.responses.length > 500) {
+    throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+  }
+  const seen = new Set();
+  const responses = body.responses.map((response) => {
+    if (!weeklyManagerExactKeys(response, [
+      'issue_id', 'incident_episode', 'current_fact_version', 'response_code'
+    ], ['intended_hours'])) {
+      throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+    }
+    const issueId = requireUuid(response.issue_id, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID').toLowerCase();
+    const responseCode = upper(response.response_code);
+    if (seen.has(issueId)
+        || !['SYSTEM_CORRECT', 'CANDIDATE_DID_NOT_WORK', 'MANAGER_CORRECTED_SOURCE'].includes(responseCode)) {
+      throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+    }
+    seen.add(issueId);
+    const item = {
+      review_item_id: issueId,
+      incident_episode: requireInteger(
+        response.incident_episode, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID', 1
+      ),
+      current_fact_version: requireSha256(
+        response.current_fact_version, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID'
+      ),
+      response_kind: responseCode
+    };
+    if (responseCode === 'MANAGER_CORRECTED_SOURCE') {
+      if (!weeklyManagerExactKeys(response.intended_hours, ['start', 'end', 'break_minutes'])) {
+        throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+      }
+      const hours = weeklyManagerHours(
+        response.intended_hours.start,
+        response.intended_hours.end,
+        response.intended_hours.break_minutes
+      );
+      item.intended_start = hours.start;
+      item.intended_end = hours.end;
+      item.intended_break_minutes = hours.break_minutes;
+    } else if (Object.prototype.hasOwnProperty.call(response, 'intended_hours')) {
+      throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+    }
+    return item;
+  });
+  return {
+    reviewBatchVersion: Number(body.review_batch_version),
+    responseFingerprint: text(body.response_fingerprint).toLowerCase(),
+    idempotencyKey: text(body.idempotency_key).toLowerCase(),
+    responses
+  };
+}
+
+async function handleWeeklyManagerQuery(request, env, deps, reviewBatchId, submit = false) {
+  const current = await weeklyManagerRouteBatch(request, env, deps, reviewBatchId);
+  if (!submit) return jsonResponse(200, current.publicBatch);
+  const input = weeklyManagerResponseItems(await readJson(request));
+  if (input.reviewBatchVersion !== current.publicBatch.review_batch_version
+      || input.responseFingerprint !== current.publicBatch.response_fingerprint) {
+    throw new CandidateHttpError(409, 'MANAGER_WEEKLY_QUERY_BATCH_STALE');
+  }
+  await deps.rpc('weekly_source_manager_review_respond_atomic_v1', {
+    p_request: {
+      credential_hash: current.credentialHash,
+      control_plane_ticket_id: current.authority.manager_route_ticket_id,
+      request_idempotency_key: input.idempotencyKey,
+      review_batch_version: input.reviewBatchVersion,
+      response_fingerprint: input.responseFingerprint,
+      responses: input.responses
+    }
+  });
+  const refreshed = await weeklyManagerRouteBatch(request, env, deps, reviewBatchId);
+  return jsonResponse(200, refreshed.publicBatch);
+}
+
+function routeMatch(path, pattern) {
+  const actual = path.split('/').filter(Boolean);
+  const expected = pattern.split('/').filter(Boolean);
+  if (actual.length !== expected.length) return null;
+  const params = {};
+  for (let index = 0; index < expected.length; index += 1) {
+    if (expected[index].startsWith(':')) params[expected[index].slice(1)] = decodeURIComponent(actual[index]);
+    else if (actual[index] !== expected[index]) return null;
+  }
+  return params;
+}
+
+export async function handleCandidateAppRequest(request, env, ctx, deps) {
+  const path = new URL(request.url).pathname;
+  const correlationId = requestId(request);
+  const routeAudience = upper(deps?.routeAudience);
+  const privateCandidateRoute = path.startsWith(CANDIDATE_PREFIX) || path.startsWith(MANAGER_PREFIX);
+  const officeRoute = path.startsWith('/api/candidate-app/');
+  if (!privateCandidateRoute && !officeRoute) return null;
+  if (privateCandidateRoute && routeAudience !== 'PRIVATE') return null;
+  if (officeRoute && routeAudience !== 'OFFICE') return null;
+  try {
+    if (isCandidateDailyPath(path)) {
+      const access = await verifyCandidateAccess(request, env);
+      return await handleCandidateDailyPhase1bRequest(request, access, env, deps);
+    }
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/start`) return await handleChallengeStart(request, env, deps);
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/resend`) return await handleChallengeStart(request, env, deps, true);
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/verify`) return await handleChallengeVerify(request, env, deps);
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/password/complete`) return await handlePasswordComplete(request, env, deps);
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/login`) return await handleLogin(request, env, deps);
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/refresh`) return await handleRefresh(request, env, deps);
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/logout`) return await handleAccountAction(request, env, deps, 'LOGOUT');
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/account/select-candidate`) return await handleAccountAction(request, env, deps, 'SELECT_TEST_CANDIDATE');
+    if (request.method === 'PATCH' && path === `${CANDIDATE_PREFIX}/account/preferences`) return await handleAccountAction(request, env, deps, 'SET_NOTIFICATION_PREFERENCES');
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/account/push-token`) return await handleAccountAction(request, env, deps, 'REGISTER_PUSH_TOKEN');
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/account/password`) return await handleAccountAction(request, env, deps, 'CHANGE_PASSWORD');
+    if (request.method === 'GET' && path === `${CANDIDATE_PREFIX}/bootstrap`) return await handleCandidateRead(request, env, deps, 'bootstrap');
+    if (request.method === 'GET' && path === `${CANDIDATE_PREFIX}/timesheets`) return await handleCandidateRead(request, env, deps, 'page');
+    if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/workflows`) return await handleWorkflowCreate(request, env, deps);
+    if (request.method === 'GET' && path === `${CANDIDATE_PREFIX}/notifications`) return await handleNotifications(request, env, deps);
+
+    let match = routeMatch(path, `${CANDIDATE_PREFIX}/weekly-source/requests/:requestId`);
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleCandidateWeeklySourceRequest(
+        request, env, deps, match.requestId, 'GET'
+      );
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/weekly-source/requests/:requestId/draft`);
+    if (match) {
+      if (request.method !== 'PUT') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleCandidateWeeklySourceRequest(
+        request, env, deps, match.requestId, 'DRAFT'
+      );
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/weekly-source/requests/:requestId/submit`);
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleCandidateWeeklySourceRequest(
+        request, env, deps, match.requestId, 'SUBMIT'
+      );
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId`);
+    if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/contract-weeks/:contractWeekId/detail`);
+    if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/timesheet-detail`);
+    if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/paper-pack/status`);
+    if (match && request.method === 'GET') {
+      return await handlePaperPackStatus(request, env, deps, match.timesheetId, ctx);
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/paper-pack`);
+    if (match && request.method === 'GET') return await handlePaperPackDownload(request, env, deps, match.timesheetId);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/expense-placement`);
+    if (match && request.method === 'POST') return await handleExpensePlacement(request, env, deps, match.timesheetId, false);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/expense-carrier`);
+    if (match && request.method === 'POST') return await handleExpensePlacement(request, env, deps, match.timesheetId, true);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/contracts/:contractId/missing-weeks`);
+    if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'missing-options', match);
+    if (match && request.method === 'POST') return await handleAddMissingWeek(request, env, deps, match.contractId);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/components/prepare`);
+    if (match && request.method === 'POST') return await handleComponentPrepare(request, env, deps, match.workflowId, 'candidate');
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/resubmit`);
+    if (match && request.method === 'POST') return await handleWorkflowResubmit(request, env, deps, match.workflowId);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/uploads/:ticket`);
+    if (match && request.method === 'PUT') return await handleComponentUpload(request, env, deps, match.ticket);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/actions/:action`);
+    if (match && request.method === 'POST' && match.action === 'self-submit-source-hours') {
+      return await handleCandidateWeeklySourceSelfSubmit(request, env, deps, match.workflowId);
+    }
+    if (match && request.method === 'POST') return await handleWorkflowAction(request, env, deps, match.workflowId, match.action, ctx);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/components/:componentId/document`);
+    if (match && request.method === 'GET') return await handleDocumentStream(request, env, deps, 'candidate', match.workflowId, match.componentId);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/contract-weeks/:contractWeekId/no-work`);
+    if (match && request.method === 'POST') return await handleCandidateNoWork(request, env, deps, match.contractWeekId);
+    if (path === `${CANDIDATE_PREFIX}/notifications/bulk-snapshot` && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'SNAPSHOT');
+    if (path === `${CANDIDATE_PREFIX}/notifications/read-all` && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'MARK_READ');
+    if (path === `${CANDIDATE_PREFIX}/notifications/delete` && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'DELETE');
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/notifications/deletions/:deletionId/undo`);
+    if (match && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'UNDO', match.deletionId);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/notifications/:notificationId/read`);
+    if (match && request.method === 'POST') {
+      return await handleAccountAction(request, env, deps, 'MARK_NOTIFICATION_READ', {
+        notification_id: match.notificationId
+      });
+    }
+
+    match = routeMatch(path, `${MANAGER_PREFIX}/weekly-query-batches/:reviewBatchId`);
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleWeeklyManagerQuery(
+        request, env, deps, match.reviewBatchId, false
+      );
+    }
+    match = routeMatch(path, `${MANAGER_PREFIX}/weekly-query-batches/:reviewBatchId/responses`);
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleWeeklyManagerQuery(
+        request, env, deps, match.reviewBatchId, true
+      );
+    }
+
+    match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/:action`);
+    if (match) {
+      const expectedMethod = MANAGER_ACTION_METHODS[match.action];
+      if (!expectedMethod) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+      if (request.method !== expectedMethod) throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleManagerAction(request, env, deps, match.workflowId, match.action, ctx);
+    }
+    match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/components/:componentId/document`);
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleDocumentStream(request, env, deps, 'manager', match.workflowId, match.componentId);
+    }
+    match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/signature/prepare`);
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleComponentPrepare(request, env, deps, match.workflowId, 'manager');
+    }
+
+    if (path === '/api/candidate-app/office-capabilities') {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeCapabilities(request, env, deps);
+    }
+    if (path === '/api/candidate-app/timesheets/office-projections') {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeProjectionBatch(request, env, deps);
+    }
+    if (path === '/api/candidate-app/manager-reminder-eligibility') {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeReminderEligibility(request, env, deps);
+    }
+    if (path === '/api/candidate-app/manager-reminder-batches/preview') {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeReminderBatch(request, env, deps, 'preview');
+    }
+    if (path === '/api/candidate-app/manager-reminder-batches') {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeReminderBatch(request, env, deps, 'execute');
+    }
+    match = routeMatch(path, '/api/candidate-app/manager-reminder-batches/:batchId');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeReminderBatch(request, env, deps, 'status', match.batchId);
+    }
+    match = routeMatch(path, '/api/candidate-app/timesheets/:timesheetId/office-detail');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeDetail(request, env, deps, match.timesheetId);
+    }
+    match = routeMatch(path, '/api/candidate-app/timesheets/:timesheetId/route-preview');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeRoute(request, env, deps, 'preview', match.timesheetId);
+    }
+    match = routeMatch(path, '/api/candidate-app/timesheets/:timesheetId/route-confirm');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeRoute(request, env, deps, 'confirm', match.timesheetId);
+    }
+    match = routeMatch(path, '/api/candidate-app/timesheets/:timesheetId/reject-preview');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeRejectPreview(request, env, deps, match.timesheetId);
+    }
+    match = routeMatch(path, '/api/candidate-app/timesheets/:timesheetId/reject');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeReject(request, env, deps, match.timesheetId);
+    }
+    match = routeMatch(path, '/api/candidate-app/contract-weeks/:contractWeekId/reject-preview');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeContractWeekRejectPreview(request, env, deps, match.contractWeekId);
+    }
+    match = routeMatch(path, '/api/candidate-app/contract-weeks/:contractWeekId/reject');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeContractWeekReject(request, env, deps, match.contractWeekId);
+    }
+    match = routeMatch(path, '/api/candidate-app/workflows/:workflowId/paper-pack');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficePaperPack(request, env, deps, match.workflowId);
+    }
+    match = routeMatch(path, '/api/candidate-app/workflows/:workflowId/paper-return-review');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficePaperReturnReview(request, env, deps, match.workflowId);
+    }
+    match = routeMatch(path, '/api/candidate-app/workflows/:workflowId/components/:componentId/document');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleDocumentStream(request, env, deps, 'office', match.workflowId, match.componentId);
+    }
+    match = routeMatch(path, '/api/candidate-app/workflows/:workflowId/actions/:action');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      if (match.action === 'retry-paper-preparation') {
+        return await handleOfficePaperRetry(request, env, deps, match.workflowId);
+      }
+      return await handleOfficeWorkflowAction(request, env, deps, match.workflowId, match.action, ctx);
+    }
+    match = routeMatch(path, '/api/candidate-app/workflows/:workflowId/signature/prepare');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleComponentPrepare(request, env, deps, match.workflowId, 'office');
+    }
+    match = routeMatch(path, '/api/candidate-app/uploads/:ticket');
+    if (match) {
+      if (request.method !== 'PUT') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleComponentUpload(request, env, deps, match.ticket);
+    }
+    throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+  } catch (error) {
+    const diagnostic = safeCandidateTransportDiagnostic(error);
+    if (diagnostic.error_code === 'CANDIDATE_REQUEST_FAILED'
+        || diagnostic.database_sqlstate
+        || (diagnostic.transport_function && Number(diagnostic.transport_status) >= 400)) {
+      console.error('[candidate-app] safe transport failure', diagnostic);
+    }
+    return errorResponse(
+      error,
+      correlationId,
+      routeAudience === 'OFFICE',
+      testTransportDiagnosticDetails(env, diagnostic)
+    );
+  }
+}
+
+export const candidateAppBackendInternals = Object.freeze({
+  enrichCandidateCorrection, enrichManagerCorrection, prepareImmutableSubmission,
+  enrichCandidatePageAdvancedExpenses,
+  enrichCandidateDetailAdvancedExpenses,
+  safeCandidateTransportDiagnostic,
+  testTransportDiagnosticDetails,
+  derivePasswordVerifier,
+  passwordVerificationProof,
+  deterministicOpaqueToken,
+  createAccessToken,
+  verifyPassword,
+  forbiddenFinancialKeys,
+  segmentBreak,
+  scheduleLine,
+  explicitNoBreak,
+  normaliseAdaptiveBreakEntry,
+  normaliseCandidateBreakSubmission,
+  candidateWorkflowRequiresBreakEntry,
+  assertCandidateScheduleAliasConsistency,
+  deferBackground,
+  finaliseReceivedPaperReturn,
+  buildOfficialPresentationSnapshot,
+  buildOfficialCandidateModel,
+  officialPresentationFromRows,
+  uploadTicket,
+  verifyUploadTicket,
+  authenticateUploadOwner,
+  withoutInternalRenderContracts,
+  safeFinalisationResult,
+  safeQrPackResponse,
+  safeCandidateWorkflowPolicy,
+  safeExpensePlacement,
+  normaliseCandidateWorkflowCreatePayload,
+  safeCandidateNotificationPreferences,
+  safeCandidateNotification,
+  requireCandidateNotificationPreferences,
+  safePaperReturnPages,
+  candidatePaperReturnPackReceipts,
+  immutablePut,
+  acquireManagerFinalisationLease,
+  releaseManagerFinalisationLease,
+  withManagerFinalisationLease,
+  preparedUploadContract,
+  preparedCandidateComponentReplay,
+  currentCandidateExpenseComponentReplay,
+  reusableCandidateExpenseSource,
+  expenseSummaryDisplayLines,
+  currentSubmittedDisplayWorkflow,
+  candidateSubmittedFactsProjection,
+  londonCalendarDate,
+  officialPeriodWithShiftLines,
+  paperPackIdentity,
+  candidatePaperDeliveryGeneration,
+  candidatePaperExecutionState,
+  candidatePaperCompleteReceipt,
+  readyPaperPackReceiptFromOutbox,
+  readyPaperPackReceipt,
+  readyGeneratedDocumentReceipt,
+  restartCandidatePaperSourceDocumentFromStatus,
+  releaseCandidatePaperPack,
+  requireCandidatePaperOutbox,
+  bindCandidatePaperOutbox,
+  renderHeldPaperPackThenRebind,
+  prepareAndRebindPaperExpenseUpdate,
+  candidateExpenseCategoryActionResult,
+  candidateWholeClaimActionResult,
+  officeExpenseCategoryRejectionResult,
+  candidateExpenseCategoryResubmissionResult,
+  candidatePaperDocumentUpdateCompleteResult,
+  candidatePaperDocumentUpdateStoredCompleteResult,
+  candidateExpenseCategoryPendingUpdateResult,
+  assembleCandidatePaperPack,
+  candidatePaperTimesheetPageBytes,
+  candidatePaperPackComponentForPage,
+  renderAndRegister,
+  candidateDocumentBranding,
+  candidateAppAgencyBranding,
+  candidateAppAgencyDocumentBranding,
+  candidateGenericMileageFormArtifact,
+  submittedMileageUnits,
+  assertCandidateMileageEvidenceMatchesSubmission,
+  mileageClaimFormBytes,
+  queueCandidatePaperPackEmail,
+  candidatePaperEmailDeliveryMatches,
+  candidatePaperEmailDeliveryByWorkflow,
+  enrichCandidatePaperDeliveryState,
+  renderExpensePage,
+  renderCandidateExpenseSummaryPdf,
+  validateComponentBytes,
+  renderContracts,
+  lifecycleSignature,
+  routeMatch,
+  officeErrorCode,
+  knownErrorCode,
+  assertManagerRouteApprovalContext,
+  managerDocumentReadContextWithHoldRetry,
+  managerStartMutationKey,
+  documentStreamSource,
+  managerActionMethods: MANAGER_ACTION_METHODS,
+  environmentName
+});
+
+
+// WP-32.  Exposed so the wired recorder can be DRIVEN against a real refusal
+// raised by the real installed guard, rather than asserted from the source text.
+// Nothing in the shipped route path reads this object.
+export const candidateAppGuardRefusalInternals = Object.freeze({
+  candidateAppGuardRefusalCorrelationId,
+  candidateAppGuardRefusalActor,
+  recordCandidateAppGuardRefusal,
+  rpcCall
+});

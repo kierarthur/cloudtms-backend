@@ -1,0 +1,47 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "entries": [
+    {
+      "path": "before/120_complete_candidate_backend.js",
+      "bytes": 604625,
+      "sha256": "eeb6179fa11219c1cb27d006ba4155c95595ac67cb1eb50df6b28550ff4414b4"
+    },
+    {
+      "path": "COMPLETE_REVERSE.json",
+      "bytes": 8655,
+      "sha256": "f3b7a21012a7bc217a60484bfd7a749b2bf6338cbce1874f163aa8d275b96941"
+    },
+    {
+      "path": "forward/120_complete_candidate_backend.js",
+      "bytes": 604703,
+      "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 3510,
+      "sha256": "11d435c0edd3a2a560cd1bafd10dcfbb56d9fad5e46940a76cfba813e9a517a6"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 1114,
+      "sha256": "2c889a74ab6b9c78a37950da71583d5eba2076762de67b3a290dcd438e36ba44"
+    },
+    {
+      "path": "prepare-source-reference.mjs.txt",
+      "bytes": 3256,
+      "sha256": "3fd3de27f05365302cd1cc8ff8633fc2af5497d905fd91f84689b3b831d59b8a"
+    },
+    {
+      "path": "recovery-result.test.mjs",
+      "bytes": 6650,
+      "sha256": "8338f984a5d98deec47f1d49c09d737e4500c785981b41451e64e0f4b016e614"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 6184,
+      "sha256": "04650c9902c9ba1e67ade7891de2488789c6841d69cfbe4beb94afce850da95d"
+    }
+  ]
+}

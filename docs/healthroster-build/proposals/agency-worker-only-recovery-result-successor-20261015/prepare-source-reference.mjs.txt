@@ -1,0 +1,27 @@
+// Local source successor only. No database, network, deployment or application calls.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..');
+const pin='9320ff3b494c5d105f1e9725aef7071bb724682f';
+const source='docs/healthroster-build/proposals/agency-worker-only-candidate-native-forward-20261015/forward/111_complete_worker_only_candidate_backend.js';
+const out=path.join(here,'worker-only-recovery-result-successor-construction-20261015');
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const before=execFileSync('git',['show',`${pin}:${source}`],{cwd:repo,maxBuffer:32*1024*1024}).toString('utf8');
+assert.equal(fs.readFileSync(path.join(repo,source),'utf8'),before);
+function once(s,a,b){assert.equal(s.split(a).length,2,'Unique source anchor');return s.replace(a,b);}
+const oldGuard=`          if (completion?.ok !== true) {\n            throw new CandidateHttpError(\n              409,\n              knownErrorCode({ code: completion?.error_code })\n                || 'CANDIDATE_MANAGER_FINALISATION_INCOMPLETE'\n            );\n          }\n`;
+const oldCounts=`      if (completion?.single_flight_deferred === true) deferred += 1;\n      else recovered += 1;`;
+const newCounts=`      if (completion?.single_flight_deferred === true) {\n        deferred += 1;\n        continue;\n      }\n      // Both worker-only and manager recovery require genuine completion.\n      if (completion?.ok !== true) {\n        throw new CandidateHttpError(\n          409,\n          knownErrorCode({ code: completion?.error_code })\n            || 'CANDIDATE_MANAGER_FINALISATION_INCOMPLETE'\n        );\n      }\n      recovered += 1;`;
+const forward=once(once(before,oldGuard,''),oldCounts,newCounts);
+fs.mkdirSync(path.join(out,'before'),{recursive:true});fs.mkdirSync(path.join(out,'forward'),{recursive:true});
+fs.writeFileSync(path.join(out,'before/120_complete_candidate_backend.js'),before);
+fs.writeFileSync(path.join(out,'forward/120_complete_candidate_backend.js'),forward);
+const name='export async function recoverPendingCandidateManagerFinalisations(';
+function actual(s){const start=s.indexOf(name),end=s.indexOf('\nexport ',start+name.length);assert.ok(start>=0&&end>start);return s.slice(start,end);}
+const wholeBefore=actual(before),wholeForward=actual(forward);
+assert.equal(forward.replace(wholeForward,wholeBefore),before);
+fs.writeFileSync(path.join(out,'COMPLETE_REVERSE.json'),JSON.stringify({source_only:true,native:false,input:{pin,path:source,bytes:Buffer.byteLength(before),sha256:sha(before)},
+ destination:'broker/src/candidate-app-backend.js',signature:'export async function recoverPendingCandidateManagerFinalisations(env,deps,limit,options)',
+ before_sha256:sha(before),forward_sha256:sha(forward),whole_function_hunks:[{before:wholeBefore,after:wholeForward}],
+ edits:[{before:oldGuard,after:''},{before:oldCounts,after:newCounts}]},null,2)+'\n');
+console.log(JSON.stringify({out,before_sha256:sha(before),forward_sha256:sha(forward),whole_hunks:1}));

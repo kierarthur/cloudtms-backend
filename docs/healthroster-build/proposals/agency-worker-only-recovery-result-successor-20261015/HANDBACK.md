@@ -1,0 +1,5 @@
+# Candidate recovery result successor
+
+This source-only successor fixes P2-WORKER-ONLY-RECOVERY-FALSE-SUCCESS in the immutable 9320 Candidate packet. The actual recovery owner now checks both worker-only and manager results after shared single-flight deferral handling. Only literal ok=true increments recovered; false or malformed results follow existing failure/diagnostic handling. Existing per-workflow leasing, sequential recovery, bounded manager RPC, exact worker-only qualification and target skip rules remain.
+
+The complete backend forward reverses through one entire recovery-function hunk to the exact committed 9320 input. The other backend bytes are identical. The source check and 24 actual extracted JavaScript unit cases pass, including predecessor reproduction, negative/malformed outcomes, PHONE/EMAIL and worker-only success/deferral, busy lease, skipped stale target and sequential leases. No database/network/app call, canonical mount or native qualification occurred. Keep the 9320 freeze unchanged and select this complete backend as its adjacent successor in the final current root union.
