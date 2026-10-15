@@ -1,0 +1,136 @@
+{
+  "source_only": true,
+  "deployable": false,
+  "input_head": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+  "pin": "d48f05205ae9ce066762be8a307d87b304ce71da",
+  "sources": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/06_complete_source_witness_policy_projection.sqlinc",
+      "bytes": 16686,
+      "sha256": "1be247f3656ce583549cbe4456d8ba5c7088a31bb983637df92c53060e5ccfd1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/04_native_source_footprint.sqlinc",
+      "bytes": 11580,
+      "sha256": "7ce58452bf0980476076ad7f5ff9fd9e90ab0d49ddd40b99b37f32e7ddc6d59e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/05_raw_selector_helpers.sqlinc",
+      "bytes": 15713,
+      "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+    }
+  ],
+  "outputs": [
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/06_complete_source_witness_policy_projection.sqlinc",
+      "bytes": 16686,
+      "sha256": "1be247f3656ce583549cbe4456d8ba5c7088a31bb983637df92c53060e5ccfd1"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/04_native_source_footprint.sqlinc",
+      "bytes": 11580,
+      "sha256": "7ce58452bf0980476076ad7f5ff9fd9e90ab0d49ddd40b99b37f32e7ddc6d59e"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/05_raw_selector_helpers.sqlinc",
+      "bytes": 15713,
+      "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql",
+      "bytes": 450,
+      "sha256": "9ce8fc3e062cdeabef859ee323443a13f2de8caf26b7df6c77d272e3d365938f"
+    },
+    {
+      "file": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+      "bytes": 2126,
+      "sha256": "88cd76940fd2f351f3675d969d7c4f4d85e0b1ca1a3ff41ee5f9376b22dec1c1"
+    }
+  ],
+  "expected_helpers": [
+    {
+      "signature": "private.weekly_source_agency_source_dependencies_v1(uuid,uuid[])",
+      "body_sha256": "028407bae355cf1c79de10e374b7232d012faf821c4dd6c37464a46cc5cb13dc",
+      "volatility": "s",
+      "configuration": "search_path=pg_catalog, public, private, pg_temp"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_footprint_v1(uuid,uuid[])",
+      "body_sha256": "00b9edb762a81b2e1e782ca59339c8a2b00078504da3a48d550e92b5c7abfc73",
+      "volatility": "s",
+      "configuration": "search_path=pg_catalog, public, private, pg_temp"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_raw_tokens_v1(text,jsonb)",
+      "body_sha256": "19599b34f465fdeb87f19b49e5af67abd0d533e1b4301b66d142d65d0beb2cb7",
+      "volatility": "i",
+      "configuration": "search_path=pg_catalog, pg_temp"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_revision_tokens_v1(text,jsonb)",
+      "body_sha256": "9cc4a7069fc18a6d5ad3bc45f97fefa3174b454553cbff58d9c15143fb94fcfd",
+      "volatility": "v",
+      "configuration": "search_path=pg_catalog, pg_temp"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_policy_tokens_v1(text,jsonb)",
+      "body_sha256": "6121e93116dc1ecf9936e6ea32fb30b7bc8123768745761b10e2b7e8f8d9f3ea",
+      "volatility": "v",
+      "configuration": "search_path=pg_catalog, pg_temp"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_source_reference_before_v1()",
+      "body_sha256": "c49c00771146d2f366060bcc7c15e78c6ed17586bbccca5d94d0457614450c2d",
+      "volatility": "v",
+      "configuration": "search_path=pg_catalog, pg_temp"
+    }
+  ],
+  "repeatable": "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql",
+  "closure_sha256": "98f062237a053d57dd7d75658d2fba84c5d880c4ed239aeca80f380392906291",
+  "verifier": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+  "exact_13_pending_fields_on_seven_relations": {
+    "compiled": false,
+    "new_columns_invented": 0,
+    "existing_canonical_migration_declarations": [
+      {
+        "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+        "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+      },
+      {
+        "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+        "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+      },
+      {
+        "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+        "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+      }
+    ]
+  },
+  "release": {
+    "before_upgrade": 175,
+    "after_upgrade": 176,
+    "before_new": 176,
+    "after_new": 177,
+    "appended_verifier": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+    "unchanged_prefix": true
+  },
+  "unrun": [
+    "constructor native trial",
+    "actual Source/Agency writer/ACTIVE and immutable claim caller integration",
+    "76 RAW/final registrations and real native transformations",
+    "hidden-RR/phantoms/phased concurrency and actual Source CAS",
+    "final registry/role/generated contract/full verifier refresh/full rehearsal/protected Install2/acceptance"
+  ],
+  "native_observation": {
+    "constructor_and_pure_raw_cases_pass": true,
+    "statements": 28,
+    "production_changed_for_retry": false,
+    "harness_correction": "HARNESS_GENERATION_ASSUMPTION_CORRECTION.json",
+    "initial": "INITIAL_NATIVE_RESULT.json",
+    "retry": "RETRY01_NATIVE_RESULT.json",
+    "fresh_helper_count": 0,
+    "full_business_witness": false,
+    "registered_triggers": false,
+    "full_rehearsal": false
+  }
+}

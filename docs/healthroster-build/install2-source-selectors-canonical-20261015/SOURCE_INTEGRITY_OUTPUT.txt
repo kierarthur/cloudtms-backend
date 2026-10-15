@@ -1,0 +1,1 @@
+Database source integrity passed: 400 migrations, 1063 repeatables.

@@ -1,0 +1,25 @@
+{
+  "source_only_constructor_and_pure_selector_trial": true,
+  "repeatable": "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql",
+  "closure_sha256": "98f062237a053d57dd7d75658d2fba84c5d880c4ed239aeca80f380392906291",
+  "verifier": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+  "verifier_closure_sha256": "39ca55c5307052303a0fc870ff2fd7858b2670801057f41b07f6318cfbdbcc1a",
+  "sql_bytes": 59851,
+  "sql_sha256": "3b31a601c6e8a341a08c507b148e9bb95efada5b80591b101840be5c09605b15",
+  "statement_count": 28,
+  "verification_sha256": "0b808cd236f92847e852b05b81258410ef985db31b74697f77dfd4ba603c55ca",
+  "random_argument_identities": [
+    "817995fd-27b4-4f52-bf8e-9337baddddbf",
+    "ad4016e3-d1dc-48e2-9d49-9a5b873e8d02",
+    "a26fa07c-7767-41ec-8952-d785bda41430",
+    "f82dda3a-47a3-4ed2-aefd-ee92157e8a47",
+    "724fe408-beb0-4137-b27a-fa465f5708de"
+  ],
+  "inserted_business_fixtures": 0,
+  "native_result": "PENDING",
+  "limitations": [
+    "no full witness/Source facts consumer invoked",
+    "no registered trigger/ACTIVE/caller/claim/business flow",
+    "no hidden-RR/concurrency/full rehearsal/financial acceptance"
+  ]
+}

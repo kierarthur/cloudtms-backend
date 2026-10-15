@@ -1,0 +1,71 @@
+{
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "pins": [
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "original_sha256": "b93a73a6e76e3aeda2f53dc82f42e53e0d9e22068fcbb3e300cf691129898e74",
+      "adapted_sha256": "52181a0fdde75093284de5b94c5536de09ddaf1e5ae2dcd92b0281c4b6ceedc6",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "actual_outer_meta_expressions": 0
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "original_sha256": "24a6335214cdaf26c0cc6e74121d9d2afaa88a0ff744e6745a183dadd394c55a",
+      "adapted_sha256": "82ecbf7ed8b615f8d68136366b19736b591899ef1a059daac676ea1183803293",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "actual_outer_meta_expressions": 0
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "tests/healthroster-checklist-source-query-money.test.mjs",
+      "original_sha256": "0e2d0ffd65297edf3eb4d0a01aed269554d6345f17a36744668f8a08cab87e67",
+      "adapted_sha256": "9bd4868cfbd3da7914a484838e26c12624bba8f261b5dd4f27fd502f24c5d46c",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "actual_outer_meta_expressions": 3
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "original_sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b",
+      "adapted_sha256": "aaecbfc1dbe743d6850e3e8a000f625d6ed1a555b90567ca4bce57e0c2f9a916",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "actual_outer_meta_expressions": 2
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "tests/healthroster-checklist-invoice-decision-transport.test.mjs",
+      "original_sha256": "3401197fd596a9fd109cb09a00348b8d8e2f15ce294de4d1ddc5b03f6919ac81",
+      "adapted_sha256": "5d1a6ccfecc551b60cd75b74633e72b591dfc2fa497c97c46ef63f4c58dccbaf",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "actual_outer_meta_expressions": 1
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "tests/healthroster-checklist-ordinary-next-hold.test.mjs",
+      "original_sha256": "44505be98b5415e26e2cc8cb0d5fe0f461bafbfb3afcdd15b5f983420f6bd958",
+      "adapted_sha256": "9a4faa28aabcfcaace754a372cbbaaba477adc0df2c50217e48ad7017354b3d1",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "actual_outer_meta_expressions": 1
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "file": "tests/healthroster-office-paid-native-caller-union.test.mjs",
+      "original_sha256": "dcc7702c6238ca2268bb5aacae5b8bba4d2cd01118531ac9fc6ee4cacd00bfda",
+      "adapted_sha256": "42cf41ac7ff995ab2466657aa753a85d584d5f29cfd1e43a9aaed048852c3312",
+      "loader_changes_only": true,
+      "original_assertions_unchanged": true,
+      "whole_paid_caller_VM_uses_new_complete_successor": true,
+      "actual_outer_meta_expressions": 1
+    }
+  ]
+}

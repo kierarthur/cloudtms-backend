@@ -1,0 +1,26 @@
+{
+  "bounded_source_review": "ACCEPT",
+  "commit": "ea72c1a0e3ae47d17778617753864e43fb493ea3",
+  "artifact_pins": 74,
+  "manifest_pin_additional": 1,
+  "raw_saved_Git_before_after": true,
+  "whole_owners": 6,
+  "unique_full_reverse_hunks": 14,
+  "qualification_callee_bodies": 49,
+  "production_source_cases": 185,
+  "unchanged_predecessor_cases": 110,
+  "predecessor_harness_adaptations_only": [
+    "actual outer script filename",
+    "reviewer-owned metadata output"
+  ],
+  "native_calls": 0,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "confirmed_P0_P1_P2": [],
+  "limits": [
+    "native TRUE parity/FALSE purity and compiled crypto",
+    "actual release idempotency/CAS/first-invoice/concurrency",
+    "browser close/parent return, fullcalendar/Legacy/Daily/process/financial qualification",
+    "final current owner union and protected Install2/full acceptance"
+  ]
+}

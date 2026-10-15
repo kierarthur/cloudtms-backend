@@ -1,0 +1,40 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "INITIAL_HARNESS_REFUSAL.json",
+      "bytes": 154,
+      "sha256": "f52570cfca9bd0bfd3eba79f67153a05aa4419bbffbf728a9ded19278604fa56"
+    },
+    {
+      "file": "PREDECESSOR_110_TEST_OUTPUT.txt",
+      "bytes": 12978,
+      "sha256": "186fbec02c078ee9a78dd9816d2f7af265dc4d6631502063fc088f3fe1bc32d9"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 4545,
+      "sha256": "965924b021a60348f03d3cc603b443186a16c0225dc7a5a4976a1c4dd3a7fb3f"
+    },
+    {
+      "file": "REVIEW_SOURCE.mjs.txt",
+      "bytes": 4515,
+      "sha256": "1a6609ece164c48a9688e583ebdbf7c6f1ba427f1bbef060e63efe2f8bb2892b"
+    },
+    {
+      "file": "SOURCE_185_TEST_OUTPUT.txt",
+      "bytes": 53743,
+      "sha256": "47c29533383eab08dd3aa14f2e3d40e88e2dae30f3db15998ce34b9df5148f63"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 887,
+      "sha256": "4c8ac46cd01de1e162b69eb08b9d023980507fad4e0d3822a944f8e776a9889d"
+    },
+    {
+      "file": "WHOLE_PREDECESSOR_REGRESSION_PINS.json",
+      "bytes": 3318,
+      "sha256": "5c0d9ace037e95c7bfa1e97ad9695aca29f9c91fe8327d7f5196cbbedba463cc"
+    }
+  ]
+}

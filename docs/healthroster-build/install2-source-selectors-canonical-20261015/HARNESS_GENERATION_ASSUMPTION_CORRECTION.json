@@ -1,0 +1,19 @@
+{
+  "production_SQL_changed": false,
+  "source_verifier_changed": false,
+  "initial_completed_statements": 26,
+  "initial_test_failure": "NEGATIVE_GENERATION_NOT_REFUSED",
+  "cause": "Raw BEFORE-frame codec represents signed typed integers; row eligibility remains native CHECK generation>=1. Initial harness incorrectly required the codec itself to impose row eligibility.",
+  "single_harness_hunk": {
+    "before": " ok:=false;begin perform private.timesheet_correction_a0_source_raw_tokens_v1('public.weekly_source_row_resolutions',jsonb_build_object('id',ids[1],'upload_row_id',ids[2],'generation',-1,'client_id',ids[3]));exception when sqlstate '55000' then ok:=true;end;if not ok then raise exception 'NEGATIVE_GENERATION_NOT_REFUSED';end if;",
+    "after": " -- The raw helper encodes the actual typed BEFORE frame, not row eligibility.\n -- Keep the independent native positive-generation constraint unchanged.\n if not exists(select 1 from pg_constraint where conrelid='public.weekly_source_row_resolutions'::regclass and conname='weekly_source_row_resolutions_generation_check' and convalidated and pg_get_constraintdef(oid,true)='CHECK (generation >= 1)') then raise exception 'NATIVE_GENERATION_CONSTRAINT_CHANGED';end if;\n tokens:=private.timesheet_correction_a0_source_raw_tokens_v1('public.weekly_source_row_resolutions',jsonb_build_object('id',ids[1],'upload_row_id',ids[2],'generation',-1,'client_id',ids[3]));if not tokens @> jsonb_build_array(jsonb_build_object('kind','SOURCE_RESOLUTION_SLOT','json',jsonb_build_array(ids[2],-1,ids[3])::text)) then raise exception 'SIGNED_TYPED_GENERATION_NOT_EXACT';end if;\n ok:=false;begin perform private.timesheet_correction_a0_source_raw_tokens_v1('public.weekly_source_row_resolutions',jsonb_build_object('id',ids[1],'upload_row_id',ids[2],'generation',1.5,'client_id',ids[3]));exception when sqlstate '55000' then ok:=true;end;if not ok then raise exception 'NONINTEGER_GENERATION_NOT_REFUSED';end if;"
+  },
+  "entire_trial_otherwise_identical": true,
+  "random_argument_UUIDs_reused": true,
+  "real_native_generation_constraint_readonly_and_reasserted": true,
+  "noninteger_generation_rejection_added": true,
+  "original_other_assertions_preserved": true,
+  "unexecuted_pretty_rendering_prepare": "UNEXECUTED_PRETTY_RENDERING_PREPARE.json",
+  "retry_complete28_pass": true,
+  "full_rehearsal": false
+}
