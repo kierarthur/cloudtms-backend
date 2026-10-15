@@ -1,0 +1,173 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "compiled_contract_sha256": null,
+  "native_seal": null,
+  "pure_unit_cases": 36,
+  "pure_tap": "TAP version 13\n# Subtest: actual production decoder accepts distinct B vs retained NORMAL with native JSON key order\nok 1 - actual production decoder accepts distinct B vs retained NORMAL with native JSON key order\n  ---\n  duration_ms: 3.8222\n  type: 'test'\n  ...\n# Subtest: every full source owner reverses exactly with unique native anchors\nok 2 - every full source owner reverses exactly with unique native anchors\n  ---\n  duration_ms: 9.6966\n  type: 'test'\n  ...\n# Subtest: ordinary strict DTO remains old shape and its current unknown amounts remain unknown\nok 3 - ordinary strict DTO remains old shape and its current unknown amounts remain unknown\n  ---\n  duration_ms: 0.4023\n  type: 'test'\n  ...\n# Subtest: refuses B substituted into compact PAY9\nok 4 - refuses B substituted into compact PAY9\n  ---\n  duration_ms: 0.6312\n  type: 'test'\n  ...\n# Subtest: refuses B pretends NORMAL\nok 5 - refuses B pretends NORMAL\n  ---\n  duration_ms: 0.2642\n  type: 'test'\n  ...\n# Subtest: refuses real PAY snapshot changed to NONE\nok 6 - refuses real PAY snapshot changed to NONE\n  ---\n  duration_ms: 0.2583\n  type: 'test'\n  ...\n# Subtest: refuses foreign event in B\nok 7 - refuses foreign event in B\n  ---\n  duration_ms: 0.2493\n  type: 'test'\n  ...\n# Subtest: refuses foreign Candidate on real PAY\nok 8 - refuses foreign Candidate on real PAY\n  ---\n  duration_ms: 0.3008\n  type: 'test'\n  ...\n# Subtest: refuses foreign Contract resolution\nok 9 - refuses foreign Contract resolution\n  ---\n  duration_ms: 0.2945\n  type: 'test'\n  ...\n# Subtest: refuses current B row absent from retained complete census\nok 10 - refuses current B row absent from retained complete census\n  ---\n  duration_ms: 0.4469\n  type: 'test'\n  ...\n# Subtest: refuses caller changes rederived retained helper bytes\nok 11 - refuses caller changes rederived retained helper bytes\n  ---\n  duration_ms: 0.2942\n  type: 'test'\n  ...\n# Subtest: refuses caller changes rederived current selector bytes\nok 12 - refuses caller changes rederived current selector bytes\n  ---\n  duration_ms: 0.4691\n  type: 'test'\n  ...\n# Subtest: refuses actual transition uses CANCEL\nok 13 - refuses actual transition uses CANCEL\n  ---\n  duration_ms: 0.2152\n  type: 'test'\n  ...\n# Subtest: refuses excluded missing row masquerades as B present\nok 14 - refuses excluded missing row masquerades as B present\n  ---\n  duration_ms: 0.1532\n  type: 'test'\n  ...\n# Subtest: refuses transition chooses B instead of retained basis\nok 15 - refuses transition chooses B instead of retained basis\n  ---\n  duration_ms: 0.1917\n  type: 'test'\n  ...\n# Subtest: refuses current selector is unavailable\nok 16 - refuses current selector is unavailable\n  ---\n  duration_ms: 0.1571\n  type: 'test'\n  ...\n# Subtest: refuses current selector chooses wrong actual revision\nok 17 - refuses current selector chooses wrong actual revision\n  ---\n  duration_ms: 0.1985\n  type: 'test'\n  ...\n# Subtest: refuses old producing S1 substituted for selected retained S2\nok 18 - refuses old producing S1 substituted for selected retained S2\n  ---\n  duration_ms: 0.1257\n  type: 'test'\n  ...\n# Subtest: refuses raw choice identity rotated\nok 19 - refuses raw choice identity rotated\n  ---\n  duration_ms: 0.1132\n  type: 'test'\n  ...\n# Subtest: refuses bound raw export row rotated\nok 20 - refuses bound raw export row rotated\n  ---\n  duration_ms: 0.1062\n  type: 'test'\n  ...\n# Subtest: refuses snapshot hash changed\nok 21 - refuses snapshot hash changed\n  ---\n  duration_ms: 0.1278\n  type: 'test'\n  ...\n# Subtest: refuses unknown prepared amount fabricated zero\nok 22 - refuses unknown prepared amount fabricated zero\n  ---\n  duration_ms: 0.2194\n  type: 'test'\n  ...\n# Subtest: refuses unready native authority labelled invoice ready by caller\nok 23 - refuses unready native authority labelled invoice ready by caller\n  ---\n  duration_ms: 0.1719\n  type: 'test'\n  ...\n# Subtest: refuses extra caller native authority key\nok 24 - refuses extra caller native authority key\n  ---\n  duration_ms: 0.1297\n  type: 'test'\n  ...\n# Subtest: refuses array choice scalar coercion\nok 25 - refuses array choice scalar coercion\n  ---\n  duration_ms: 0.1763\n  type: 'test'\n  ...\n# Subtest: NONE without the fixed actual native observation is refused\nok 26 - NONE without the fixed actual native observation is refused\n  ---\n  duration_ms: 0.1541\n  type: 'test'\n  ...\n# Subtest: native owned complete census retains two B raw rows for the SAME event\nok 27 - native owned complete census retains two B raw rows for the SAME event\n  ---\n  duration_ms: 0.2473\n  type: 'test'\n  ...\n# Subtest: ordinary authority refuses unrelated NONE observations\nok 28 - ordinary authority refuses unrelated NONE observations\n  ---\n  duration_ms: 0.1963\n  type: 'test'\n  ...\n# Subtest: literal native query derives B/raw/true PAY/retained/current selection separately\nok 29 - literal native query derives B/raw/true PAY/retained/current selection separately\n  ---\n  duration_ms: 0.48\n  type: 'test'\n  ...\n# Subtest: actual mapper owner seal must additionally bind both exact native dependency signatures\nok 30 - actual mapper owner seal must additionally bind both exact native dependency signatures\n  ---\n  duration_ms: 0.6284\n  type: 'test'\n  ...\n# Subtest: NONE confirmation cannot bypass the unchanged full receipt/run or head proof\nok 31 - NONE confirmation cannot bypass the unchanged full receipt/run or head proof\n  ---\n  duration_ms: 0.8839\n  type: 'test'\n  ...\n# Subtest: new current head revision does not change historical receipt/run identity\nok 32 - new current head revision does not change historical receipt/run identity\n  ---\n  duration_ms: 0.5224\n  type: 'test'\n  ...\n# Subtest: movement stores only closed B provenance in addition to unchanged PAY9\nok 33 - movement stores only closed B provenance in addition to unchanged PAY9\n  ---\n  duration_ms: 0.4378\n  type: 'test'\n  ...\n# Subtest: Report workspace and three alternative complete admission paths choose B only with exact retained proof\nok 34 - Report workspace and three alternative complete admission paths choose B only with exact retained proof\n  ---\n  duration_ms: 1.6361\n  type: 'test'\n  ...\n# Subtest: actual negative decoder preserves real historical B and independent NORMAL PAY witness\nok 35 - actual negative decoder preserves real historical B and independent NORMAL PAY witness\n  ---\n  duration_ms: 0.7909\n  type: 'test'\n  ...\n# Subtest: actual negative decoder refuses rotated historical B without altering real PAY9\nok 36 - actual negative decoder refuses rotated historical B without altering real PAY9\n  ---\n  duration_ms: 0.251\n  type: 'test'\n  ...\n1..36\n# tests 36\n# suites 0\n# pass 36\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 223.2693\n",
+  "syntax_files": [
+    "build-report-none-native-binding.mjs",
+    "freeze-report-none-native-binding.mjs",
+    "report-none-native-binding-construction-20261015/before/06_complete_native_mapper.mjs",
+    "report-none-native-binding-construction-20261015/forward/06_complete_native_mapper.mjs",
+    "report-none-native-binding-construction-20261015/reference/current_native_mapper.mjs",
+    "report-none-native-binding-construction-20261015/reference/weekly-source-protected-release-qualification.mjs",
+    "report-none-native-binding-construction-20261015/reference/weekly-source-report-fin-native-lock-observation.mjs",
+    "report-none-native-binding-construction-20261015/reference/weekly-source-report-fin-native-seal.mjs",
+    "report-none-native-binding-construction-20261015/report-none.test.mjs"
+  ],
+  "syntax_pass": true,
+  "whole_current_owner_files": 7,
+  "unique_reverse_hunks": 31,
+  "saved_git_input_pins": 17,
+  "input_mismatches": 0,
+  "sql_lexical_pages": [
+    {
+      "path": "forward/01_complete_report_pay_authority.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "forward/02_complete_report_movement.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "forward/03_complete_report_workspace.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "forward/04_complete_root_report_admission.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "forward/05_complete_money_report_none_admission_join.sqlinc",
+      "statements": 4
+    },
+    {
+      "path": "forward/07_complete_money_expense_report_none_admission_join.sqlinc",
+      "statements": 4
+    },
+    {
+      "path": "reference/02_pay_authority.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "reference/actual_source_family_root_census.sqlinc",
+      "statements": 3
+    },
+    {
+      "path": "reference/compact_pay_witness.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "reference/current_pay_snapshot.sqlinc",
+      "statements": 3
+    },
+    {
+      "path": "reference/money_expense_none_admission.sqlinc",
+      "statements": 4
+    },
+    {
+      "path": "reference/money_none_admission.sqlinc",
+      "statements": 4
+    },
+    {
+      "path": "reference/movement_owner.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "reference/projection_receipt.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "reference/report_workspace.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "reference/retained_transition_assert.sqlinc",
+      "statements": 3
+    },
+    {
+      "path": "reference/root_report_admission.sqlinc",
+      "statements": 1
+    },
+    {
+      "path": "reference/same_file_companion_origin.sqlinc",
+      "statements": 3
+    },
+    {
+      "path": "reference/same_file_companion_producer.sqlinc",
+      "statements": 3
+    }
+  ],
+  "sql_lexical_statement_total": 41,
+  "not_postgresql_compilation": true,
+  "preserved_prior_files": 136,
+  "prior_mismatches": 0,
+  "owner_delta_whitespace": [
+    {
+      "file": "01_complete_report_pay_authority.sqlinc",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    },
+    {
+      "file": "02_complete_report_movement.sqlinc",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    },
+    {
+      "file": "03_complete_report_workspace.sqlinc",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    },
+    {
+      "file": "04_complete_root_report_admission.sqlinc",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    },
+    {
+      "file": "05_complete_money_report_none_admission_join.sqlinc",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    },
+    {
+      "file": "06_complete_native_mapper.mjs",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    },
+    {
+      "file": "07_complete_money_expense_report_none_admission_join.sqlinc",
+      "status": 1,
+      "reported_lines": 0,
+      "output": "",
+      "stderr": ""
+    }
+  ],
+  "raw_all_artifact_whitespace_pass": false,
+  "credential_pattern_findings": 0,
+  "credential_scope": "Source patterns only; no credential/environment files accessed",
+  "holds": [
+    "Independent source critique of this exact complete-owner/mapper increment; no mount or native acceptance from unit cases",
+    "Root final current-owner composition: one admission alternative, exact reviewed Native VAT blocker, later selected prepared retention and Money/Report/Bank hooks",
+    "Current native NORMAL receipt/run/task/manifest and complete inventory/publication identity under genuine NONE transition/current selector, including actual old S2 -> M1 retention",
+    "Selected Money retained21 schema/assert/current-selection/capture dependencies, actual Source NONE/B choice and snapshot constraints; no caller-fabricated proofs",
+    "Legacy retained NONE current-selection producer remains separately unqualified: this NEXT construction returns unavailable instead of synthesising a NEXT map",
+    "Actual generated/frozen/rendered Report B/rounding and negative prior lineage, Source B fixed-expense presence and independent true PAY basis",
+    "Final native role/ACL/contract/helper/hook union and literal root seal; managed recorder9/13 and three evidence paths remain unchanged",
+    "Genuine same-installed collection, actual API/UI/phone/NEXT/financial/isolation proof; no DB or native experiment executed by this lane",
+    "Agency fixed preset apply/clear, Candidate transition/finalisation/document and all remaining primary Original/protection/NX-AI-6 engineering remain separate codework"
+  ]
+}

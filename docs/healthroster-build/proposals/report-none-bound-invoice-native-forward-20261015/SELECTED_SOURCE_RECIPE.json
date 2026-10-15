@@ -1,0 +1,43 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "compiled_contract_sha256": null,
+  "source_input_head": "267e0b5b7b535d6eda4bb646ff54b93ad2ecbdda",
+  "root_consumed_authority": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "money_retained_input": "65c82dcc6d8f2748fef7c4209d96a673f7ec8756",
+  "money_writer_input": "b0e5db406b904589bb6aaa9e7531a75ff9674743",
+  "selected_owners": [
+    "forward/01_complete_report_pay_authority.sqlinc",
+    "forward/02_complete_report_movement.sqlinc",
+    "forward/03_complete_report_workspace.sqlinc",
+    "forward/06_complete_native_mapper.mjs"
+  ],
+  "mutually_exclusive_admission_alternatives": {
+    "actual_root_comparison_only": "forward/04_complete_root_report_admission.sqlinc",
+    "Money58_without_expense26": "forward/05_complete_money_report_none_admission_join.sqlinc",
+    "Money58_with_expense26": "forward/07_complete_money_expense_report_none_admission_join.sqlinc"
+  },
+  "admission_rule": "Select exactly one complete current Money union after its review, then preserve the Report two-hunk presentation delta and later reviewed Native VAT blocker. Never install alternatives sequentially or overwrite later native owners with root comparison04.",
+  "compact_pay9": "reference/compact_pay_witness.sqlinc unchanged; only true NORMAL PAY basis/receipt IDs",
+  "detailed_none_authority": "Optional exact eight-key extension; every scalar/tuple is native-derived; ordinary authority shape/hash retained",
+  "mapper_native_seal": "reference/weekly-source-report-fin-native-seal.mjs remains literal null; actual root seal must add the two literal Money native owner definitions and final query hash",
+  "private_sql_additions": [],
+  "public_sql_additions": [],
+  "new_stores": 0,
+  "new_calculators": 0,
+  "recorder_signature_changes": [],
+  "evidence_bundle_exceptions_added": [],
+  "holds": [
+    "Independent source critique of this exact complete-owner/mapper increment; no mount or native acceptance from unit cases",
+    "Root final current-owner composition: one admission alternative, exact reviewed Native VAT blocker, later selected prepared retention and Money/Report/Bank hooks",
+    "Current native NORMAL receipt/run/task/manifest and complete inventory/publication identity under genuine NONE transition/current selector, including actual old S2 -> M1 retention",
+    "Selected Money retained21 schema/assert/current-selection/capture dependencies, actual Source NONE/B choice and snapshot constraints; no caller-fabricated proofs",
+    "Legacy retained NONE current-selection producer remains separately unqualified: this NEXT construction returns unavailable instead of synthesising a NEXT map",
+    "Actual generated/frozen/rendered Report B/rounding and negative prior lineage, Source B fixed-expense presence and independent true PAY basis",
+    "Final native role/ACL/contract/helper/hook union and literal root seal; managed recorder9/13 and three evidence paths remain unchanged",
+    "Genuine same-installed collection, actual API/UI/phone/NEXT/financial/isolation proof; no DB or native experiment executed by this lane",
+    "Agency fixed preset apply/clear, Candidate transition/finalisation/document and all remaining primary Original/protection/NX-AI-6 engineering remain separate codework"
+  ]
+}

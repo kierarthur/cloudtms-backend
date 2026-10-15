@@ -1,0 +1,827 @@
+create or replace function public.weekly_source_invoice_admit_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_keys constant text[]:=array[
+    'actor_user_id','client_manifest_id','expected_manifest_hash'
+  ]::text[];
+  v_unknown text;
+  v_actor uuid;
+  v_manifest_id uuid;
+  v_expected_hash bytea;
+  v_manifest public.weekly_source_client_manifests%rowtype;
+  v_invoice_window public.weekly_source_cycles%rowtype;
+  v_receipt_map jsonb; v_round_authority jsonb; v_round_presentation jsonb;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_client public.clients%rowtype;
+  v_defaults public.settings_defaults%rowtype;
+  v_invoice_id uuid;
+  v_header jsonb;
+  v_group_row record;
+  v_movement public.weekly_source_billing_movements%rowtype;
+  v_snapshot public.weekly_source_final_snapshot_lines%rowtype;
+  v_source_row public.weekly_source_upload_rows%rowtype;
+  v_contract public.contracts%rowtype;
+  v_candidate public.candidates%rowtype;
+  v_ids uuid[];
+  v_member_id uuid;
+  v_member public.weekly_source_billing_movements%rowtype;
+  v_presentation_id uuid;
+  v_invoice_line_id uuid;
+  v_binding_id uuid;
+  v_line_kind text;
+  v_origin_kind text;
+  v_correction_role text;
+  v_old_id uuid;
+  v_new_id uuid;
+  v_work_date date;
+  v_start timestamp without time zone;
+  v_end timestamp without time zone;
+  v_break integer;
+  v_reference text;
+  v_description text;
+  v_hours_day numeric;
+  v_hours_night numeric;
+  v_hours_sat numeric;
+  v_hours_sun numeric;
+  v_hours_bh numeric;
+  v_pay_day numeric;
+  v_pay_night numeric;
+  v_pay_sat numeric;
+  v_pay_sun numeric;
+  v_pay_bh numeric;
+  v_charge_day numeric;
+  v_charge_night numeric;
+  v_charge_sat numeric;
+  v_charge_sun numeric;
+  v_charge_bh numeric;
+  v_total_pay numeric(12,2);
+  v_total_charge numeric(12,2);
+  v_calc_pence bigint;
+  v_source_pence bigint;
+  v_vat_rate numeric(5,2);
+  v_vat numeric(12,2);
+  v_total numeric(12,2);
+  v_price_result text;
+  v_price_fingerprint bytea;
+  v_mapping_fingerprint bytea;
+  v_source_hash bytea;
+  v_presentation_hash bytea;
+  v_materialised_hash bytea;
+  v_placement_hash bytea;
+  v_candidate_display text;
+  v_client_display text;
+  v_is_net boolean;
+  v_is_expense boolean;
+  v_is_rounding boolean;
+  v_release_id uuid;
+  v_release_authority jsonb;
+  v_release_member uuid;
+  v_release_money jsonb;
+  v_identity_movement public.weekly_source_billing_movements%rowtype;
+  v_count integer;
+  v_is_report boolean:=false; v_report_scope public.weekly_source_report_scopes%rowtype;
+  v_report_header public.weekly_source_self_bill_reports%rowtype;
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(pg_catalog.current_setting('request.jwt.claim.role',true),
+       nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role','')
+       <>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADMIT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select key into v_unknown from pg_catalog.jsonb_object_keys(p_request) key
+  where not (key=any(v_allowed_keys)) order by key limit 1;
+  if v_unknown is not null then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADMIT_UNKNOWN_FIELD'
+      using errcode='22023',detail=v_unknown;
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_manifest_id:=(p_request->>'client_manifest_id')::uuid;
+    v_expected_hash:=pg_catalog.decode(p_request->>'expected_manifest_hash','hex');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADMIT_VALUE_INVALID' using errcode='22023';
+  end;
+  if pg_catalog.octet_length(v_expected_hash)<>32 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADMIT_HASH_INVALID' using errcode='22023';
+  end if;
+
+  select * into v_manifest from public.weekly_source_client_manifests where id=v_manifest_id;
+  if not found then raise exception 'WEEKLY_SOURCE_INVOICE_MANIFEST_CHANGED' using errcode='40001'; end if;
+  perform 1 from public.weekly_source_groups where id=v_manifest.source_group_id for update;
+  perform 1 from public.weekly_source_cycles where id in (v_manifest.source_cycle_id,coalesce(v_manifest.invoice_window_cycle_id,v_manifest.source_cycle_id)) order by id for update;
+  select * into v_manifest from public.weekly_source_client_manifests where id=v_manifest_id for update;
+  if not found or v_manifest.manifest_hash is distinct from v_expected_hash then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MANIFEST_CHANGED' using errcode='40001';
+  end if;
+  select * into strict v_revision from public.weekly_source_final_revisions
+  where id=v_manifest.final_revision_id for share;
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_manifest.source_cycle_id for share;
+  v_is_report:=v_revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE';
+  if v_is_report then
+    select * into strict v_report_scope from public.weekly_source_report_scopes where id=v_revision.report_scope_id for share;
+    select * into strict v_report_header from public.weekly_source_self_bill_reports where id=v_report_scope.self_bill_report_id;
+    if v_report_scope.current_final_revision_id is distinct from v_revision.id or v_report_scope.source_cycle_id<>v_cycle.id
+      or v_report_scope.source_group_id<>v_manifest.source_group_id or v_report_scope.client_id<>v_manifest.client_id
+      or v_report_scope.current_complete_upload_id is distinct from v_revision.upload_id or v_report_scope.state<>'FINALISED'
+      or v_report_header.source_cycle_id<>v_cycle.id or v_report_header.source_group_id<>v_manifest.source_group_id
+      or v_report_header.client_id<>v_manifest.client_id or v_revision.reason<>'INITIAL_FINALISATION'
+      or coalesce(v_manifest.invoice_window_cycle_id,v_cycle.id)<>v_cycle.id then
+      raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_FINAL_AUTHORITY_STALE' using errcode='40001'; end if;
+  end if;
+  if v_revision.state<>'CURRENT'
+     or v_revision.source_cycle_id is distinct from v_cycle.id
+     or v_cycle.source_group_id is distinct from v_manifest.source_group_id
+     or (not v_is_report and not exists(
+       select 1 from public.weekly_source_client_cycle_completions completion
+       where completion.source_cycle_id=v_cycle.id
+         and completion.client_id=v_manifest.client_id
+         and completion.final_revision_id=v_revision.id
+         and completion.completion_kind='FINAL_SOURCE' and completion.state='CURRENT'
+     )) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_FINAL_AUTHORITY_STALE' using errcode='40001';
+  end if;
+  select * into strict v_invoice_window from public.weekly_source_cycles
+    where id=coalesce(v_manifest.invoice_window_cycle_id,v_manifest.source_cycle_id);
+  if v_invoice_window.source_group_id<>v_manifest.source_group_id
+    or v_invoice_window.finalisation_week_ending<>v_manifest.finalisation_week_ending
+    or (v_invoice_window.scope_client_id is not null and v_invoice_window.scope_client_id<>v_manifest.client_id) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_SCOPE_INVALID' using errcode='55000'; end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'ADMIT_SOURCE_INVOICE',v_manifest.source_group_id,
+    v_manifest.client_id,v_manifest.finalisation_week_ending
+  );
+
+  if (select pg_catalog.count(*) from public.weekly_source_manifest_movements mm
+      where mm.client_manifest_id=v_manifest.id)<>v_manifest.movement_count
+     or exists(
+       select 1 from public.weekly_source_manifest_movements mm
+       join public.weekly_source_billing_movements movement
+         on movement.id=mm.billing_movement_id
+       where mm.client_manifest_id=v_manifest.id
+         and (mm.movement_hash is distinct from movement.movement_economic_hash
+           or movement.final_revision_id is distinct from v_revision.id
+           or movement.finalisation_cycle_id is distinct from v_cycle.id
+           or movement.actual_client_id is distinct from v_manifest.client_id
+           or private.weekly_source_invoice_movement_window_id_v1(movement.id)<>v_invoice_window.id
+           or (v_invoice_window.id<>v_cycle.id and (movement.source_line_kind not in ('SOURCE_INVOICE_CORRECTION','INVOICE_VAT_ROUNDING')
+             or movement.total_pay_ex_vat<>0 or exists(select 1 from jsonb_each_text(movement.canonical_pay_vector_json->'minutes') v where v.value::numeric<>0)
+             or exists(select 1 from jsonb_each_text(movement.canonical_pay_vector_json->'hours') v where v.value::numeric<>0))))
+     ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MANIFEST_INVALID' using errcode='55000';
+  end if;
+
+  if v_is_report then
+    if exists(select 1 from public.weekly_source_manifest_movements mm
+      join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+      left join public.weekly_source_upload_rows row_value on row_value.id=movement.self_bill_report_row_id
+      where mm.client_manifest_id=v_manifest.id and
+       (movement.source_profile_kind<>'SELF_BILL_REPORT' or movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING')
+        or movement.total_pay_ex_vat<>0 or movement.canonical_pay_vector_json is distinct from private.weekly_source_invoice_only_vector_v1('PAY',0)
+        or (movement.source_line_kind='SELF_BILL_REPORT_LINE' and (row_value.id is null or row_value.upload_id<>v_revision.upload_id
+          or row_value.row_finalisation_state<>'SOURCE_REPORT_LINE'
+          or movement.source_facts_json->>'upload_row_id' is distinct from row_value.id::text
+          or movement.source_facts_json->>'source_row_ordinal' is distinct from row_value.source_row_ordinal::text
+          or movement.source_facts_json->>'request_id' is distinct from row_value.external_source_key
+          or movement.source_facts_json->>'report_scope_id' is distinct from v_report_scope.id::text
+          or movement.source_facts_json->>'self_bill_report_id' is distinct from v_report_header.id::text
+          or movement.source_facts_json->>'rule_set_version_id' is distinct from v_revision.rule_set_version_id::text
+          or movement.invoice_presentation_charge_pence<>row_value.source_shift_charge_pence
+          or movement.vat_amount*100<>row_value.source_vat_pence or movement.total_inc_vat*100<>row_value.source_gross_pence))
+        or (movement.source_line_kind='INVOICE_VAT_ROUNDING' and movement.vat_rounding_revision_id is distinct from v_revision.id)))
+      or exists(select 1 from public.weekly_source_upload_rows row_value where row_value.upload_id=v_revision.upload_id and
+        (select count(*) from public.weekly_source_manifest_movements mm
+          join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+          where mm.client_manifest_id=v_manifest.id and movement.self_bill_report_row_id=row_value.id)<>1)
+      or (select count(*) from public.weekly_source_upload_rows row_value where row_value.upload_id=v_revision.upload_id)<>v_report_header.line_count
+      or (select count(*) from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+        where mm.client_manifest_id=v_manifest.id and movement.source_line_kind='INVOICE_VAT_ROUNDING')>1 then
+      raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_MANIFEST_INVALID' using errcode='55000'; end if;
+  end if;
+  if v_manifest.invoice_state='ADMITTED' then
+    if exists(
+      select 1 from public.weekly_source_manifest_movements mm
+      where mm.client_manifest_id=v_manifest.id
+        and not exists(
+          select 1 from public.weekly_source_invoice_line_bindings binding
+          where binding.billing_movement_id=mm.billing_movement_id
+            and binding.state='CURRENT'
+        )
+    ) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ADMITTED_INCOMPLETE' using errcode='55000';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status',case when v_manifest.movement_count=0 then 'NO_MOVEMENTS' else 'ADMITTED' end,
+      'idempotent',true,'client_manifest_id',v_manifest.id,
+      'invoice_ids',coalesce((
+        select pg_catalog.jsonb_agg(distinct binding.invoice_id)
+        from public.weekly_source_manifest_movements mm
+        join public.weekly_source_invoice_line_bindings binding
+          on binding.billing_movement_id=mm.billing_movement_id and binding.state='CURRENT'
+        where mm.client_manifest_id=v_manifest.id
+      ),'[]'::jsonb)
+    );
+  end if;
+  if v_manifest.invoice_state<>'READY' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MANIFEST_NOT_READY' using errcode='55000';
+  end if;
+  if v_manifest.movement_count=0 then
+    update public.weekly_source_client_manifests set invoice_state='ADMITTED'
+    where id=v_manifest.id and invoice_state='READY';
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status','NO_MOVEMENTS','idempotent',false,
+      'client_manifest_id',v_manifest.id,'invoice_ids','[]'::jsonb
+    );
+  end if;
+  if exists(
+    select 1 from public.weekly_source_manifest_movements mm
+    join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+    where mm.client_manifest_id=v_manifest.id
+      and (movement.placement_state<>'UNPLACED'
+        or exists(select 1 from public.weekly_source_invoice_line_bindings binding
+                  where binding.billing_movement_id=movement.id and binding.state='CURRENT'))
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVEMENT_ALREADY_ADMITTED' using errcode='55000';
+  end if;
+
+  if exists(select 1 from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+    where mm.client_manifest_id=v_manifest.id and m.source_facts_json->>'invoice_hold'='VAT_FIT'
+      and not exists(select 1 from public.weekly_source_invoice_hold_releases receipt where receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT')) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_VAT_FIT_HELD' using errcode='55000'; end if;
+  v_receipt_map:=private.weekly_source_invoice_admission_receipt_map_v1(v_manifest.id);
+  v_round_authority:=private.weekly_source_invoice_rounding_receipt_set_v1(v_manifest.id,v_receipt_map);
+  select * into strict v_client from public.clients where id=v_manifest.client_id for share;
+  select * into strict v_defaults from public.settings_defaults where id=1 for share;
+  v_header:=pg_catalog.jsonb_build_object(
+    'schema_version','WEEKLY_SOURCE_SELF_BILL_INVOICE_V1',
+    'client_id',v_client.id,'client_name',v_client.name,
+    'client_invoice_address',v_client.invoice_address,
+    'client_primary_invoice_email',v_client.primary_invoice_email,
+    'payment_terms_days',coalesce(v_client.payment_terms_days,0),
+    'agency_name',v_defaults.agency_name,'registered_address',v_defaults.registered_address,
+    'company_reg_number',v_defaults.company_reg_number,
+    'vat_registration_number',v_defaults.vat_registration_number,
+    'meta',pg_catalog.jsonb_build_object(
+      'source','WEEKLY_FINAL_SOURCE','self_bill',true,
+      'source_group_id',v_manifest.source_group_id,
+      'source_cycle_id',v_manifest.source_cycle_id,
+      'final_revision_id',v_manifest.final_revision_id,
+      'client_manifest_id',v_manifest.id,
+      'finalisation_week_ending',v_manifest.finalisation_week_ending,
+      'backing_report_numbers',case when v_manifest.backing_report_number is null
+        then '[]'::jsonb else pg_catalog.jsonb_build_array(v_manifest.backing_report_number) end,
+      'automatic_consolidation','ONE_CLIENT_ONE_FINALISED_CYCLE'
+    )||case when not v_is_report then '{}'::jsonb else jsonb_build_object('self_bill_report_id',v_report_header.id,
+      'report_scope_id',v_report_scope.id,'report_invoice_date',v_report_header.invoice_date) end||case when v_manifest.invoice_window_cycle_id is null then '{}'::jsonb else jsonb_build_object(
+      'invoice_window_cycle_id',v_invoice_window.id,'source_finalisation_week_ending',v_cycle.finalisation_week_ending
+    ) end
+  );
+  insert into public.invoices(
+    type,client_id,status,status_date_utc,subtotal_ex_vat,vat_amount,total_inc_vat,
+    notes,header_snapshot_json,do_not_send,document_revision,document_state,issue_state
+  ) values (
+    'INVOICE',v_manifest.client_id,'DRAFT',pg_catalog.transaction_timestamp(),0,0,0,
+    case when v_manifest.backing_report_number is null then null
+      else 'Backing report '||v_manifest.backing_report_number end,
+    v_header,false,1,'STALE','NOT_STARTED'
+  ) returning id into v_invoice_id;
+
+  perform pg_catalog.set_config(
+    'cloudtms.weekly_source_invoice_owner','ADMIT_SOURCE_INVOICE',true
+  );
+
+  for v_group_row in
+    with member as (
+      select movement.*,
+             movement.source_facts_json->>'correction_presentation' as presentation_policy,
+             case
+               when movement.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT'
+                and movement.correction_unit_id is not null
+                and movement.source_facts_json->>'correction_presentation'='NET_DIFFERENCE_PRESENTATION'
+               then movement.correction_unit_id else movement.id
+             end as presentation_group
+      from public.weekly_source_manifest_movements mm
+      join public.weekly_source_billing_movements movement
+        on movement.id=mm.billing_movement_id
+      where mm.client_manifest_id=v_manifest.id
+    )
+    select presentation_group,
+           pg_catalog.array_agg(id order by movement_role,id) as movement_ids,
+           pg_catalog.count(*)::integer as member_count,
+           pg_catalog.bool_and(source_line_kind='SOURCE_FIXED_EXPENSE') as is_expense,
+           pg_catalog.bool_and(presentation_policy='NET_DIFFERENCE_PRESENTATION') as requested_net
+    from member
+    group by presentation_group
+    -- 24 section 12 requires a source-fixed expense presentation to declare the
+    -- shift presentation it follows.  weekly_source_invoice_presentation_lines
+    -- is IMMUTABLE_APPEND_ONLY, so that declaration has to be written at birth;
+    -- every non-expense group is therefore materialised first and the expense
+    -- group can then name its companion.  Within each of the two blocks the
+    -- established creation order is unchanged.
+    order by pg_catalog.bool_and(source_line_kind='SOURCE_FIXED_EXPENSE'),
+             pg_catalog.min(created_at_utc),presentation_group
+  loop
+    v_ids:=v_group_row.movement_ids;
+    v_count:=v_group_row.member_count;
+    v_is_expense:=v_group_row.is_expense;
+    v_is_net:=v_group_row.requested_net and v_count=2;
+    if v_count>2
+       or (v_count=2 and not v_is_net)
+       or (v_is_net and exists(
+         select 1 from public.weekly_source_billing_movements movement
+         where movement.id=any(v_ids)
+           and movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+       ))
+       or (v_is_net and (
+         select pg_catalog.array_agg(movement.movement_role order by movement.movement_role)
+         from public.weekly_source_billing_movements movement where movement.id=any(v_ids)
+       ) not in (
+         array['REPLACEMENT','REVERSAL']::text[],
+         array['EXPENSE_REPLACEMENT','EXPENSE_REVERSAL']::text[]
+       ))
+       or (v_count=2 and (select pg_catalog.count(distinct movement.correction_unit_id)
+           from public.weekly_source_billing_movements movement where movement.id=any(v_ids))<>1)
+       or ((select pg_catalog.count(distinct movement.work_event_id)
+           from public.weekly_source_billing_movements movement where movement.id=any(v_ids))<>1 and not(v_is_report and v_count=1))
+       or (select pg_catalog.count(distinct movement.final_revision_id)
+           from public.weekly_source_billing_movements movement where movement.id=any(v_ids))<>1
+       or (select pg_catalog.count(distinct movement.actual_client_id)
+           from public.weekly_source_billing_movements movement where movement.id=any(v_ids))<>1 then
+      raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_GROUP_INVALID' using errcode='55000';
+    end if;
+
+    select * into strict v_movement
+    from public.weekly_source_billing_movements movement
+    where movement.id=case when v_is_net then (
+      select candidate.id from public.weekly_source_billing_movements candidate
+      where candidate.id=any(v_ids)
+        and candidate.movement_role in ('REPLACEMENT','EXPENSE_REPLACEMENT')
+      limit 1
+    ) else v_ids[1] end;
+    v_round_presentation:=null;
+    v_is_rounding:=v_movement.source_line_kind='INVOICE_VAT_ROUNDING';
+    v_release_id:=null; v_release_authority:=null; v_release_member:=null;
+    if not ((v_is_rounding or (v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE'
+      and v_movement.movement_role='STANDALONE_NEGATIVE')) and v_movement.candidate_id is null) then
+    select * into strict v_contract from public.contracts
+    where id=v_movement.contract_id and client_id=v_manifest.client_id
+      and candidate_id=v_movement.candidate_id for share;
+    select * into strict v_candidate from public.candidates
+    where id=v_movement.candidate_id for share;
+    v_candidate_display:=coalesce(nullif(pg_catalog.btrim(v_candidate.display_name),''),
+      nullif(pg_catalog.btrim(pg_catalog.concat_ws(' ',v_candidate.first_name,v_candidate.last_name)),''),
+      v_candidate.tms_ref,v_candidate.id::text);
+    else v_contract:=null; v_candidate:=null; v_candidate_display:=null; end if;
+    v_client_display:=coalesce(nullif(pg_catalog.btrim(v_client.name),''),v_client.id::text);
+
+    if v_is_rounding then
+      v_work_date:=null; v_start:=null; v_end:=null; v_break:=null; v_reference:=null;
+      if v_movement.prior_movement_id is not null then
+        select * into strict v_identity_movement from public.weekly_source_billing_movements where id=v_movement.prior_movement_id;
+        if v_is_report and v_identity_movement.source_line_kind='SELF_BILL_REPORT_LINE' then
+          if v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id' is not null then
+            select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot
+              where snapshot.id=coalesce((v_identity_movement.source_facts_json->>'bound_export_snapshot_line_id')::uuid,
+                (v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid)
+              and snapshot.final_revision_id=coalesce((v_identity_movement.source_facts_json->>'bound_export_final_revision_id')::uuid,
+                (v_identity_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid)
+              and (not (v_identity_movement.source_facts_json ? 'bound_export_snapshot_line_id') or (
+                snapshot.pay_effect='NONE'
+                and snapshot.row_resolution_id=(v_identity_movement.source_facts_json->>'bound_row_resolution_id')::uuid
+                and snapshot.upload_row_id=(v_identity_movement.source_facts_json->>'bound_export_upload_row_id')::uuid
+                and encode(snapshot.snapshot_line_hash,'hex')=v_identity_movement.source_facts_json->>'bound_export_snapshot_line_hash'
+                and snapshot.paid_overlap_choice_id=(v_identity_movement.source_facts_json->>'bound_export_paid_overlap_choice_id')::bigint
+                and v_identity_movement.source_facts_json->>'bound_export_pay_effect'='NONE'
+                and v_identity_movement.source_facts_json#>>'{retained_pay_basis,snapshot_line_id}'=v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id'
+                and v_identity_movement.source_facts_json#>>'{retained_pay_basis,final_revision_id}'=snapshot.final_revision_id::text
+                and v_identity_movement.source_facts_json#>>'{retained_pay_basis,work_event_id}'=snapshot.work_event_id::text
+                and exists(select 1 from jsonb_array_elements(v_identity_movement.source_facts_json#>'{retained_pay_basis,actual_present_invoice_rows}') item
+                  where item=jsonb_build_object('snapshot_line_id',snapshot.id,'upload_row_id',snapshot.upload_row_id,
+                    'paid_overlap_choice_id',snapshot.paid_overlap_choice_id,'snapshot_line_hash',encode(snapshot.snapshot_line_hash,'hex')))))
+                and snapshot.client_id=v_manifest.client_id and snapshot.contract_id=v_identity_movement.contract_id
+                and snapshot.work_event_id=v_identity_movement.work_event_id;
+          else
+            if v_identity_movement.movement_role<>'STANDALONE_NEGATIVE' then
+              raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_BOUND_PRESENTATION_REQUIRED' using errcode='55000'; end if;
+            select * into strict v_source_row from public.weekly_source_upload_rows where id=v_identity_movement.self_bill_report_row_id and upload_id=v_revision.upload_id;
+            v_snapshot.work_date:=v_source_row.work_date;v_snapshot.start_at_local:=v_source_row.start_at_local;
+            v_snapshot.end_at_local:=v_source_row.end_at_local;v_snapshot.break_minutes:=null;v_snapshot.external_event_identity:=v_source_row.external_source_key;
+          end if;
+        else
+        select snapshot.* into strict v_snapshot from public.weekly_source_state_transitions transition_row
+          join public.weekly_source_final_snapshot_lines snapshot on snapshot.id=coalesce(transition_row.new_snapshot_line_id,transition_row.previous_snapshot_line_id)
+          where transition_row.id=v_identity_movement.transition_id;
+        end if;
+        v_work_date:=v_snapshot.work_date; v_start:=v_snapshot.start_at_local; v_end:=v_snapshot.end_at_local;
+        v_break:=v_snapshot.break_minutes; v_reference:=v_snapshot.external_event_identity;
+      end if;
+    elsif v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE' then
+      if v_movement.source_facts_json->>'bound_pay_snapshot_line_id' is not null then
+        select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot
+          where snapshot.id=coalesce((v_movement.source_facts_json->>'bound_export_snapshot_line_id')::uuid,
+                (v_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid)
+              and snapshot.final_revision_id=coalesce((v_movement.source_facts_json->>'bound_export_final_revision_id')::uuid,
+                (v_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid)
+              and (not (v_movement.source_facts_json ? 'bound_export_snapshot_line_id') or (
+                snapshot.pay_effect='NONE'
+                and snapshot.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid
+                and snapshot.upload_row_id=(v_movement.source_facts_json->>'bound_export_upload_row_id')::uuid
+                and encode(snapshot.snapshot_line_hash,'hex')=v_movement.source_facts_json->>'bound_export_snapshot_line_hash'
+                and snapshot.paid_overlap_choice_id=(v_movement.source_facts_json->>'bound_export_paid_overlap_choice_id')::bigint
+                and v_movement.source_facts_json->>'bound_export_pay_effect'='NONE'
+                and v_movement.source_facts_json#>>'{retained_pay_basis,snapshot_line_id}'=v_movement.source_facts_json->>'bound_pay_snapshot_line_id'
+                and v_movement.source_facts_json#>>'{retained_pay_basis,final_revision_id}'=snapshot.final_revision_id::text
+                and v_movement.source_facts_json#>>'{retained_pay_basis,work_event_id}'=snapshot.work_event_id::text
+                and exists(select 1 from jsonb_array_elements(v_movement.source_facts_json#>'{retained_pay_basis,actual_present_invoice_rows}') item
+                  where item=jsonb_build_object('snapshot_line_id',snapshot.id,'upload_row_id',snapshot.upload_row_id,
+                    'paid_overlap_choice_id',snapshot.paid_overlap_choice_id,'snapshot_line_hash',encode(snapshot.snapshot_line_hash,'hex')))))
+            and snapshot.client_id=v_manifest.client_id and snapshot.contract_id=v_movement.contract_id and snapshot.work_event_id=v_movement.work_event_id;
+        v_work_date:=v_snapshot.work_date;v_start:=v_snapshot.start_at_local;v_end:=v_snapshot.end_at_local;
+        v_break:=v_snapshot.break_minutes;v_reference:=v_snapshot.external_event_identity;
+      else
+        if v_movement.movement_role<>'STANDALONE_NEGATIVE' then
+          raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_BOUND_PRESENTATION_REQUIRED' using errcode='55000'; end if;
+        select * into strict v_source_row from public.weekly_source_upload_rows where id=v_movement.self_bill_report_row_id and upload_id=v_revision.upload_id;
+        v_work_date:=v_source_row.work_date;v_start:=v_source_row.start_at_local;v_end:=v_source_row.end_at_local;
+        v_break:=null;v_reference:=v_source_row.external_source_key;
+      end if;
+    elsif v_movement.invoice_only_snapshot_line_id is not null then
+      perform private.weekly_source_paid_match_invoice_origin_assert_v1(v_movement.id);
+      if v_count<>1 or v_is_net then raise exception 'WEEKLY_SOURCE_PAID_MATCH_INVOICE_GROUP_INVALID' using errcode='55000';end if;
+      select snapshot.* into strict v_snapshot from public.weekly_source_final_snapshot_lines snapshot
+        where snapshot.id=v_movement.invoice_only_snapshot_line_id and snapshot.final_revision_id=v_revision.id;
+      v_work_date:=v_snapshot.work_date;v_start:=v_snapshot.start_at_local;v_end:=v_snapshot.end_at_local;
+      v_break:=v_snapshot.break_minutes;v_reference:=v_snapshot.external_event_identity;
+      -- Genuine Source hours are presentation evidence. Native pay rates and
+      -- total remain zero; no payable position is minted from these hours.
+      v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric;
+      v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric;
+      v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric;
+      v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric;
+      v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric;
+    elsif v_is_expense then
+      select source_row.* into strict v_source_row
+      from public.weekly_expense_authority_generations expense_authority
+      join public.weekly_source_row_expense_policy_snapshots expense_policy
+        on expense_policy.id=expense_authority.row_expense_policy_snapshot_id
+      join public.weekly_source_upload_rows source_row
+        on source_row.id=expense_policy.upload_row_id
+      where expense_authority.id=case
+        when v_movement.movement_role='EXPENSE_REVERSAL' then (
+          select prior_movement.expense_authority_generation_id
+          from public.weekly_source_billing_movements prior_movement
+          where prior_movement.id=v_movement.prior_movement_id
+        ) else v_movement.expense_authority_generation_id end;
+      v_work_date:=v_source_row.work_date;
+      v_start:=v_source_row.start_at_local;
+      v_end:=v_source_row.end_at_local;
+      v_break:=coalesce(v_source_row.break_minutes,0);
+      v_reference:=v_source_row.external_source_key;
+    elsif v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then
+      select * into strict v_source_row from public.weekly_source_upload_rows
+      where id=v_movement.nhsp_upload_row_id;
+      v_work_date:=v_source_row.work_date;
+      v_start:=v_source_row.start_at_local;
+      v_end:=v_source_row.end_at_local;
+      v_break:=v_source_row.break_minutes;
+      v_reference:=v_source_row.external_source_key;
+    else
+      select snapshot.* into strict v_snapshot
+      from public.weekly_source_state_transitions transition_row
+      join public.weekly_source_final_snapshot_lines snapshot
+        on snapshot.id=case
+          when v_is_net or v_movement.movement_role in (
+            'POSITIVE','REPLACEMENT','EXPENSE_POSITIVE','EXPENSE_REPLACEMENT'
+          ) then transition_row.new_snapshot_line_id
+          else transition_row.previous_snapshot_line_id end
+      where transition_row.final_revision_id=v_manifest.final_revision_id
+        and transition_row.work_event_id=v_movement.work_event_id;
+      v_work_date:=v_snapshot.work_date;
+      v_start:=v_snapshot.start_at_local;
+      v_end:=v_snapshot.end_at_local;
+      v_break:=v_snapshot.break_minutes;
+      v_reference:=v_snapshot.external_event_identity;
+    end if;
+
+    v_mapping_fingerprint:=v_movement.mapping_rate_policy_fingerprint;
+    v_price_fingerprint:=case when v_count=1 then v_movement.price_check_fingerprint end;
+
+    select
+      coalesce(pg_catalog.sum((movement.canonical_pay_vector_json#>>'{hours,day}')::numeric),0),
+      coalesce(pg_catalog.sum((movement.canonical_pay_vector_json#>>'{hours,night}')::numeric),0),
+      coalesce(pg_catalog.sum((movement.canonical_pay_vector_json#>>'{hours,sat}')::numeric),0),
+      coalesce(pg_catalog.sum((movement.canonical_pay_vector_json#>>'{hours,sun}')::numeric),0),
+      coalesce(pg_catalog.sum((movement.canonical_pay_vector_json#>>'{hours,bh}')::numeric),0),
+      pg_catalog.sum(movement.total_pay_ex_vat),
+      pg_catalog.sum(movement.invoice_presentation_charge_pence)::numeric/100,
+      pg_catalog.sum(movement.calculated_comparison_charge_pence),
+      case when pg_catalog.count(movement.source_validation_charge_pence)=pg_catalog.count(*)
+        then pg_catalog.sum(movement.source_validation_charge_pence) end,
+      pg_catalog.sum(movement.vat_amount),pg_catalog.sum(movement.total_inc_vat),
+      pg_catalog.min(movement.vat_rate_pct),
+      case when pg_catalog.count(distinct movement.price_check_result)=1
+        then pg_catalog.min(movement.price_check_result) else 'NOT_APPLICABLE' end,
+      private.weekly_source_invoice_presentation_source_hash_v1(v_ids,null)
+    into v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh,
+         v_total_pay,v_total_charge,v_calc_pence,v_source_pence,v_vat,v_total,
+         v_vat_rate,v_price_result,v_source_hash
+    from public.weekly_source_billing_movements movement where movement.id=any(v_ids);
+    select receipt.id,m.id into v_release_id,v_release_member from public.weekly_source_billing_movements m
+      join public.weekly_source_invoice_hold_releases receipt on receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT'
+      where m.id=any(v_ids) and m.movement_role in ('POSITIVE','REPLACEMENT')
+        and m.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION');
+    if found then
+      v_release_money:=private.weekly_source_invoice_movement_money_v1(v_release_member,v_release_id);
+      v_release_authority:=v_release_money->'release_authority';
+      select v_vat-m.vat_amount+(v_release_money->>'vat_pence')::numeric/100,
+        v_total-m.total_inc_vat+(v_release_money->>'gross_pence')::numeric/100 into v_vat,v_total
+        from public.weekly_source_billing_movements m where m.id=v_release_member;
+      v_source_hash:=private.weekly_source_invoice_presentation_source_hash_v1(v_ids,v_release_id);
+    end if;
+    if v_is_rounding and v_round_authority is not null then
+      if v_ids<>array[(v_round_authority->>'rounding_movement_id')::uuid] then
+        raise exception 'WEEKLY_SOURCE_ROUNDING_PRESENTATION_MEMBER_INVALID' using errcode='55000'; end if;
+      v_round_presentation:=v_round_authority;
+      v_vat:=(v_round_authority->>'admitted_rounding_vat_pence')::numeric/100;
+      v_total:=v_vat;
+      v_source_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_ROUNDING_PRESENTATION_V1',
+        jsonb_build_object('original_movement_source_hash',encode(v_source_hash,'hex'),
+          'rounding_authority_sha256',v_round_authority->>'authority_sha256'));
+      -- New authority hash is reproducible from exact stored native typmods.
+      -- Retained ordinary/NULL-rule presentation hash inputs remain untouched.
+      v_hours_day:=v_hours_day::numeric(7,2);v_hours_night:=v_hours_night::numeric(7,2);
+      v_hours_sat:=v_hours_sat::numeric(7,2);v_hours_sun:=v_hours_sun::numeric(7,2);v_hours_bh:=v_hours_bh::numeric(7,2);
+      v_total_pay:=v_total_pay::numeric(12,2);v_total_charge:=v_total_charge::numeric(12,2);
+      v_vat_rate:=v_vat_rate::numeric(5,2);v_vat:=v_vat::numeric(12,2);v_total:=v_total::numeric(12,2);
+    end if;
+    if v_is_expense then
+      v_hours_day:=0;v_hours_night:=0;v_hours_sat:=0;v_hours_sun:=0;v_hours_bh:=0;
+      v_pay_day:=null;v_pay_night:=null;v_pay_sat:=null;v_pay_sun:=null;v_pay_bh:=null;
+      v_charge_day:=null;v_charge_night:=null;v_charge_sat:=null;v_charge_sun:=null;v_charge_bh:=null;
+    else
+      v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric;
+      v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric;
+      v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric;
+      v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric;
+      v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric;
+      v_charge_day:=(v_movement.canonical_charge_vector_json#>>'{rates,day}')::numeric;
+      v_charge_night:=(v_movement.canonical_charge_vector_json#>>'{rates,night}')::numeric;
+      v_charge_sat:=(v_movement.canonical_charge_vector_json#>>'{rates,sat}')::numeric;
+      v_charge_sun:=(v_movement.canonical_charge_vector_json#>>'{rates,sun}')::numeric;
+      v_charge_bh:=(v_movement.canonical_charge_vector_json#>>'{rates,bh}')::numeric;
+    end if;
+    v_line_kind:=case
+      when v_movement.source_line_kind in ('INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION','SELF_BILL_REPORT_LINE') then v_movement.source_line_kind
+      when v_is_expense then 'SOURCE_FIXED_EXPENSE'
+      when v_is_net then 'NON_NHSP_DIFFERENCE'
+      when v_movement.movement_role='REPLACEMENT' then 'SOURCE_REPLACEMENT'
+      when v_movement.movement_role='REVERSAL' then 'GENERATED_HISTORICAL_REVERSAL'
+      else 'SOURCE_ORDINARY' end;
+    v_origin_kind:=case
+      when v_movement.invoice_only_snapshot_line_id is not null then 'SOURCE_INVOICE_ONLY_SNAPSHOT'
+      when v_is_rounding then 'INVOICE_VAT_ROUNDING'
+      when v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE' then
+        case when v_movement.movement_role='STANDALONE_NEGATIVE' then 'SELF_BILL_REPORT_STANDALONE_CREDIT' else 'SELF_BILL_REPORT_LINE' end
+      when v_is_expense then 'SOURCE_FIXED_EXPENSE'
+      when v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then 'NHSP_PHYSICAL_ROW'
+      when v_movement.source_profile_kind='HEALTHROSTER_ACTUAL_ROWS' then 'HEALTHROSTER_TRANSITION'
+      else 'GENERIC_TRANSITION' end;
+    v_correction_role:=case
+      when v_is_net then 'NET_DIFFERENCE'
+      when v_movement.movement_role in ('REVERSAL','EXPENSE_REVERSAL') then 'REVERSAL'
+      when v_movement.movement_role in ('REPLACEMENT','EXPENSE_REPLACEMENT') then 'REPLACEMENT'
+      else null end;
+    v_old_id:=null;v_new_id:=null;
+    select id into v_old_id from public.weekly_source_billing_movements
+      where id=any(v_ids) and movement_role in ('REVERSAL','EXPENSE_REVERSAL') limit 1;
+    select id into v_new_id from public.weekly_source_billing_movements
+      where id=any(v_ids) and movement_role in ('REPLACEMENT','EXPENSE_REPLACEMENT') limit 1;
+    v_description:=case when v_is_rounding then 'VAT rounding (matches the client''s self-bill)'
+      when v_movement.source_line_kind='SOURCE_INVOICE_CORRECTION' then 'Source invoice correction'
+      when v_is_expense then 'Source expense'
+      else pg_catalog.concat_ws(' · ',coalesce(v_contract.role,'Shift'),
+        pg_catalog.to_char(v_work_date,'Dy DD Mon YYYY'),
+        pg_catalog.to_char(v_start,'HH24:MI')||'–'||pg_catalog.to_char(v_end,'HH24:MI'),
+        case when v_break>0 then v_break::text||' min break' end) end;
+    v_presentation_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_INVOICE_PRESENTATION_V1',
+      pg_catalog.jsonb_build_object(
+        'client_manifest_id',v_manifest.id,'movement_ids',pg_catalog.to_jsonb(v_ids),
+        'line_kind',v_line_kind,'source_shift_group_id',v_movement.work_event_id,
+        'work_date',v_work_date,'start_at_local',v_start,'end_at_local',v_end,
+        'break_minutes',v_break,'hours',pg_catalog.jsonb_build_array(
+          v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh),
+        'total_pay',v_total_pay,'total_charge',v_total_charge,
+        'vat_rate',v_vat_rate,'vat',v_vat,'total',v_total,
+        'charge_acceptance_id',v_movement.charge_acceptance_id,
+        'source_hash',pg_catalog.encode(v_source_hash,'hex')
+      )||case when v_release_authority is null then '{}'::jsonb else jsonb_build_object('invoice_hold_release_authority',v_release_authority) end||case when v_round_presentation is null then '{}'::jsonb else jsonb_build_object('weekly_source_rounding_authority',v_round_presentation) end
+    );
+    insert into public.weekly_source_invoice_presentation_lines(
+      billing_movement_id,client_manifest_id,final_revision_id,
+      original_finalisation_cycle_id,line_kind,origin_kind,correction_root_id,
+      correction_role,old_internal_movement_id,new_internal_movement_id,
+      client_id,candidate_id,contract_id,work_event_id,source_shift_group_id,
+      role_snapshot,band_snapshot,candidate_display_snapshot,client_display_snapshot,
+      work_date,start_at_local,end_at_local,break_minutes,booking_reference_snapshot,
+      description_snapshot,hours_day,hours_night,hours_sat,hours_sun,hours_bh,
+      pay_day,pay_night,pay_sat,pay_sun,pay_bh,
+      charge_day,charge_night,charge_sat,charge_sun,charge_bh,
+      total_pay_ex_vat,total_charge_ex_vat,calculated_comparison_charge_pence,
+      source_validation_charge_pence,invoice_presentation_charge_pence,
+      margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,price_check_result,
+      price_check_profile,charge_acceptance_id,mapping_rate_policy_fingerprint,source_hash,
+      amount_authority,presentation_hash,invoice_hold_release_id,invoice_rounding_authority_json,companion_presentation_line_id
+    ) values (
+      v_movement.id,v_manifest.id,v_manifest.final_revision_id,v_manifest.source_cycle_id,
+      v_line_kind,v_origin_kind,v_movement.correction_unit_id,v_correction_role,
+      v_old_id,v_new_id,v_manifest.client_id,v_movement.candidate_id,v_movement.contract_id,
+      v_movement.work_event_id,v_movement.work_event_id,v_contract.role,v_contract.band,
+      v_candidate_display,v_client_display,v_work_date,v_start,v_end,v_break,v_reference,
+      v_description,v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh,
+      v_pay_day,v_pay_night,v_pay_sat,v_pay_sun,v_pay_bh,
+      v_charge_day,v_charge_night,v_charge_sat,v_charge_sun,v_charge_bh,
+      v_total_pay,v_total_charge,v_calc_pence,v_source_pence,(v_total_charge*100)::bigint,
+      v_total_charge-v_total_pay,v_vat_rate,v_vat,v_total,v_price_result,
+      case when v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+        then 'NHSP_TWO_COMPONENT_PENCE_V1' when v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE' then 'SOURCE_INVOICE_MONEY_PENCE_V1' when private.weekly_source_invoice_source_amount_movement_valid_v1(v_movement.id) then 'SOURCE_INVOICE_MONEY_PENCE_V1' else null end,
+      v_movement.charge_acceptance_id,
+      v_mapping_fingerprint,v_source_hash,
+      case when v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' or v_is_expense
+        or (v_is_report and v_movement.source_line_kind='SELF_BILL_REPORT_LINE')
+        or private.weekly_source_invoice_source_amount_movement_valid_v1(v_movement.id)
+        then 'VALIDATED_SOURCE_PENCE' else 'CLOUDTMS_CALCULATION' end,
+      v_presentation_hash,v_release_id,v_round_presentation,
+      -- 24 section 12: "a source-fixed expense declared as part of the same
+      -- source presentation follows its defined companion relationship; no
+      -- unrelated expense or work-event line moves accidentally."  Declared
+      -- only when exactly one shift presentation of the same work event and the
+      -- same correction role exists in this manifest, so the relationship is
+      -- never guessed; null otherwise and the expense then moves on its own.
+      -- PostgreSQL has no min(uuid), so the text form is aggregated and cast
+      -- back after the having clause has proved the single-value cardinality.
+      case when v_is_expense then (
+        select pg_catalog.min(shift_line.id::text)::uuid
+        from public.weekly_source_invoice_presentation_lines shift_line
+        where shift_line.client_manifest_id=v_manifest.id
+          and shift_line.work_event_id=v_movement.work_event_id
+          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'
+          and shift_line.correction_role is not distinct from v_correction_role
+        having pg_catalog.count(*)=1
+      ) end
+    ) returning id into v_presentation_id;
+
+    insert into public.invoice_lines(
+      invoice_id,timesheet_id,booking_id,description,
+      hours_day,hours_night,hours_sat,hours_sun,hours_bh,
+      pay_day,pay_night,pay_sat,pay_sun,pay_bh,
+      charge_day,charge_night,charge_sat,charge_sun,charge_bh,
+      total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,
+      vat_amount,total_inc_vat,meta_json,source_key
+    ) values (
+      v_invoice_id,v_movement.invoice_timesheet_id,v_reference,v_description,
+      v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh,
+      v_pay_day,v_pay_night,v_pay_sat,v_pay_sun,v_pay_bh,
+      v_charge_day,v_charge_night,v_charge_sat,v_charge_sun,v_charge_bh,
+      v_total_pay,v_total_charge,v_total_charge-v_total_pay,v_vat_rate,v_vat,v_total,
+      pg_catalog.jsonb_build_object(
+        'line_type','WEEKLY_FINAL_SOURCE','presentation_line_id',v_presentation_id,
+        'source_shift_group_id',v_movement.work_event_id,
+        'client_manifest_id',v_manifest.id,'movement_ids',pg_catalog.to_jsonb(v_ids)
+      )||case when v_release_authority is null then '{}'::jsonb else jsonb_build_object('invoice_hold_release_authority',v_release_authority) end||case when v_round_presentation is null then '{}'::jsonb else jsonb_build_object(
+        'weekly_source_rounding_authority',v_round_presentation,
+        'presentation_disposition',case when (v_round_presentation->>'suppress_visible_rounding_line')::boolean
+          then 'SUPPRESS_ZERO_ROUNDING_AUTHORITY' else 'VISIBLE' end) end,'WEEKLY_SOURCE:'||v_presentation_id::text
+    ) returning id into v_invoice_line_id;
+
+    foreach v_member_id in array v_ids loop
+      select * into strict v_member from public.weekly_source_billing_movements
+      where id=v_member_id;
+      v_materialised_hash:=private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_INVOICE_BINDING_V1',pg_catalog.jsonb_build_object(
+          'movement_id',v_member.id,'presentation_line_id',v_presentation_id,
+          'invoice_line_id',v_invoice_line_id,'invoice_id',v_invoice_id,
+          'manifest_hash',pg_catalog.encode(v_manifest.manifest_hash,'hex'),'binding_version',1
+        )
+      );
+      insert into public.weekly_source_invoice_line_bindings(
+        billing_movement_id,presentation_line_id,invoice_line_id,invoice_id,
+        original_final_revision_id,original_cycle_id,client_id,correction_root_id,
+        correction_role,manifest_hash,materialised_line_hash,binding_version,state
+      ) values (
+        v_member.id,v_presentation_id,v_invoice_line_id,v_invoice_id,
+        v_manifest.final_revision_id,v_manifest.source_cycle_id,v_manifest.client_id,
+        v_member.correction_unit_id,v_correction_role,v_manifest.manifest_hash,
+        v_materialised_hash,1,'CURRENT'
+      ) returning id into v_binding_id;
+      v_placement_hash:=private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_INVOICE_PLACEMENT_V1',pg_catalog.jsonb_build_object(
+          'movement_id',v_member.id,'invoice_id',v_invoice_id,
+          'invoice_line_id',v_invoice_line_id,'placement_revision',1,
+          'placement_reason','AUTOMATIC_SOURCE_BATCH'
+        )
+      );
+      insert into public.weekly_source_invoice_placements(
+        billing_movement_id,source_shift_group_id,invoice_id,invoice_line_id,
+        placement_revision,placement_state,is_current,original_automatic_cycle_id,
+        current_target_cycle_id,placement_reason,actor_user_id,placement_hash
+      ) values (
+        v_member.id,v_member.work_event_id,v_invoice_id,v_invoice_line_id,1,
+        'PLACED',true,v_invoice_window.id,v_invoice_window.id,
+        'AUTOMATIC_SOURCE_BATCH',v_actor,v_placement_hash
+      );
+      update public.weekly_source_billing_movements
+      set placement_state='PLACED' where id=v_member.id and placement_state='UNPLACED';
+      if not found then
+        raise exception 'WEEKLY_SOURCE_INVOICE_MOVEMENT_CAS_LOST' using errcode='40001';
+      end if;
+    end loop;
+  end loop;
+
+  insert into public.weekly_source_expense_materialisations(
+    expense_authority_generation_id,billing_movement_id,
+    invoice_presentation_line_id,expense_lineage_hash,state
+  )
+  select movement.expense_authority_generation_id,
+         (pg_catalog.array_agg(
+           movement.id
+           order by (movement.movement_role not in (
+             'EXPENSE_POSITIVE','EXPENSE_REPLACEMENT'
+           )),movement.id
+         ))[1],
+         (pg_catalog.array_agg(
+           binding.presentation_line_id
+           order by (movement.movement_role not in (
+             'EXPENSE_POSITIVE','EXPENSE_REPLACEMENT'
+           )),movement.id
+         ))[1],
+         private.weekly_source_sha256_jsonb_v1(
+           'WEEKLY_SOURCE_EXPENSE_INVOICE_MATERIALISATION_V1',
+           pg_catalog.jsonb_build_object(
+             'expense_authority_generation_id',movement.expense_authority_generation_id,
+             'movement_ids',pg_catalog.jsonb_agg(movement.id order by movement.id),
+             'presentation_ids',pg_catalog.jsonb_agg(binding.presentation_line_id order by movement.id)
+           )
+         ),'MATERIALISED'
+  from public.weekly_source_manifest_movements mm
+  join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+  join public.weekly_source_invoice_line_bindings binding
+    on binding.billing_movement_id=movement.id and binding.state='CURRENT'
+  where mm.client_manifest_id=v_manifest.id
+    and movement.expense_authority_generation_id is not null
+  group by movement.expense_authority_generation_id;
+
+  perform private.weekly_source_invoice_header_refresh_v1(v_invoice_id);
+  perform public.invoice_recompute_totals(v_invoice_id);
+  perform private.weekly_source_invoice_allocation_assert_v1(v_invoice_id);
+  if exists(
+    select 1 from public.weekly_source_manifest_movements mm
+    where mm.client_manifest_id=v_manifest.id
+      and not exists(
+        select 1 from public.weekly_source_invoice_line_bindings binding
+        where binding.billing_movement_id=mm.billing_movement_id and binding.state='CURRENT'
+      )
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MANIFEST_NOT_FULLY_ADMITTED' using errcode='55000';
+  end if;
+  update public.weekly_source_client_manifests set invoice_state='ADMITTED'
+  where id=v_manifest.id and invoice_state='READY';
+  if not found then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MANIFEST_CAS_LOST' using errcode='40001';
+  end if;
+  perform pg_catalog.set_config('cloudtms.weekly_source_invoice_owner','',true);
+
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'invoices',v_invoice_id::text,'WEEKLY_SOURCE_INVOICE_ADMITTED',null,
+         pg_catalog.jsonb_build_object(
+           'client_manifest_id',v_manifest.id,'source_cycle_id',v_manifest.source_cycle_id,
+           'client_id',v_manifest.client_id,'movement_count',v_manifest.movement_count,
+           'backing_report_number',v_manifest.backing_report_number
+         ),'FINAL_SOURCE_MANIFEST'
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','ADMITTED','idempotent',false,
+    'client_manifest_id',v_manifest.id,'invoice_ids',pg_catalog.jsonb_build_array(v_invoice_id),
+    'movement_count',v_manifest.movement_count
+  );
+end;
+$function$;
+ALTER FUNCTION public.weekly_source_invoice_admit_atomic_v1(jsonb) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.weekly_source_invoice_admit_atomic_v1(jsonb) FROM public,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.weekly_source_invoice_admit_atomic_v1(jsonb) TO service_role;

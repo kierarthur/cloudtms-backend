@@ -1,0 +1,296 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url));
+const own=path.resolve(here,'../../../..'),root=path.resolve(own,'../healthroster-install2-14102026'),money=path.resolve(own,'../healthroster-v2-money-build-13102026');
+const dir=path.join(here,'report-none-native-binding-construction-20261015');
+const rootPin='fa66183f01913e86651e82816f5e88f97e07123c';
+const moneyPin='65c82dcc6d8f2748fef7c4209d96a673f7ec8756';
+const invoicePin='b0e5db406b904589bb6aaa9e7531a75ff9674743';
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const save=(p,b)=>{fs.mkdirSync(path.dirname(path.join(dir,p)),{recursive:true});fs.writeFileSync(path.join(dir,p),b);};
+const inputs=[];const owners=[];
+function read(repo,p,pin,name,extract=null){
+ const raw=fs.readFileSync(path.join(repo,p)),git=execFileSync('git',['cat-file','blob',pin+':'+p],{cwd:repo,maxBuffer:96e6});
+ assert.ok(raw.equals(git),'Saved/Git input changed: '+p);
+ let text=raw.toString();if(extract){const start=text.indexOf('create or replace function '+extract+'(');assert.ok(start>=0);const end=text.indexOf('$function$;',text.indexOf('as $function$',start));assert.ok(end>start);text=text.slice(start,end+11);}
+ save('reference/'+name,extract?text:raw);inputs.push({repository:repo,pin,path:p,raw_bytes:raw.length,raw_sha256:sha(raw),reference:'reference/'+name,selected_definition_sha256:sha(text)});return text;
+}
+function forward(name,before,hunks){let after=before;for(const h of hunks){assert.equal(after.split(h.before).length,2,'Unique anchor '+name+' '+h.purpose);after=after.replace(h.before,()=>h.after);assert.equal(after.split(h.after).length,2,'Unique forward '+h.purpose);}
+ let reversed=after;for(const h of [...hunks].reverse())reversed=reversed.replace(h.after,()=>h.before);assert.equal(reversed,before);
+ save('before/'+name,before);save('forward/'+name,after);owners.push({file:name,before_sha256:sha(before),after_sha256:sha(after),hunks});return after;
+}
+const ap='supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc';
+const authority=read(root,ap,rootPin,'02_pay_authority.sqlinc');const nl=authority.includes('\r\n')?'\r\n':'\n',L=s=>s.replaceAll('\n',nl);
+const retained=read(money,'docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/01_retained_paid_transition_assert.sqlinc',moneyPin,'retained_transition_assert.sqlinc');
+read(money,'docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/00_current_pay_snapshot.sqlinc',moneyPin,'current_pay_snapshot.sqlinc');
+read(money,'docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/01_work_event_payment_facts.sqlinc',moneyPin,'actual_source_family_root_census.sqlinc');
+read(root,'supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc',rootPin,'compact_pay_witness.sqlinc');
+read(root,'supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc',rootPin,'projection_receipt.sqlinc');
+read(money,'docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/08_paid_match_invoice_producer.sqlinc',invoicePin,'same_file_companion_producer.sqlinc');
+read(money,'docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/09_paid_match_invoice_origin_assert.sqlinc',invoicePin,'same_file_companion_origin.sqlinc');
+const authorityHunks=[
+ {purpose:'Separate actual bound invoice snapshot and retained PAY revision identities',before:L('  fr public.weekly_source_final_revisions%rowtype; fs public.weekly_source_final_snapshot_lines%rowtype;'),after:L(`  fr public.weekly_source_final_revisions%rowtype; fs public.weekly_source_final_snapshot_lines%rowtype;
+  export_fr public.weekly_source_final_revisions%rowtype; export_fs public.weekly_source_final_snapshot_lines%rowtype;
+  pay_origin_revision public.weekly_source_final_revisions%rowtype;
+  retained_transition public.weekly_source_state_transitions%rowtype;
+  retained_basis jsonb; current_pay_selection jsonb; export_facts jsonb:='{}'::jsonb;`)},
+ {purpose:'Re-derive genuine current B membership and true NORMAL basis before any receipt read',before:L('  select count(*) into count_rows from public.weekly_source_row_timesheet_lineages l\n    where l.row_resolution_id=rr.id and l.work_event_id=b.work_event_id and l.client_id=rr.client_id and l.contract_id=rr.contract_id;'),after:L(`  -- B is the exact bound CURRENT export row. It never becomes a PAY
+  -- snapshot merely because its native raw calculator result is positive.
+  export_fr:=fr; export_fs:=fs;
+  if fs.pay_effect='NONE' then
+    select count(*) into count_rows from public.weekly_source_state_transitions t
+      where t.final_revision_id=export_fr.id and t.work_event_id=b.work_event_id;
+    if count_rows<>1 then raise exception 'WEEKLY_SOURCE_REPORT_NONE_TRANSITION_AMBIGUOUS' using errcode='55000';end if;
+    select * into strict retained_transition from public.weekly_source_state_transitions t
+      where t.final_revision_id=export_fr.id and t.work_event_id=b.work_event_id;
+    retained_basis:=private.weekly_source_paid_match_retained_transition_assert_v1(retained_transition.id);
+    if retained_basis->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_MATCH_RETAINED_PAY_BASIS_V1'
+      or retained_basis->>'transition_id' is distinct from retained_transition.id::text
+      or retained_basis->>'final_revision_id' is distinct from export_fr.id::text
+      or retained_basis->>'work_event_id' is distinct from b.work_event_id::text
+      or jsonb_typeof(retained_basis->'actual_present_invoice_rows') is distinct from 'array'
+      or (select count(*) from jsonb_array_elements(retained_basis->'actual_present_invoice_rows') item
+        where item=jsonb_build_object('snapshot_line_id',export_fs.id,'upload_row_id',er.id,
+          'paid_overlap_choice_id',export_fs.paid_overlap_choice_id,'snapshot_line_hash',encode(export_fs.snapshot_line_hash,'hex')))<>1 then
+      raise exception 'WEEKLY_SOURCE_REPORT_NONE_EXPORT_UNBOUND' using errcode='55000';end if;
+    select * into strict fs from public.weekly_source_final_snapshot_lines s
+      where s.id=(retained_basis->>'snapshot_line_id')::uuid;
+    select * into strict fr from public.weekly_source_final_revisions r where r.id=fs.final_revision_id;
+    if fs.pay_effect is distinct from 'NORMAL' or fs.id=export_fs.id
+      or fr.id=export_fr.id or fr.state not in ('CURRENT','SUPERSEDED')
+      or fr.authority_scope_kind<>'CYCLE' or fr.report_scope_id is not null
+      or (fs.work_event_id,fs.candidate_id,fs.client_id,fs.contract_id) is distinct from
+        (export_fs.work_event_id,export_fs.candidate_id,export_fs.client_id,export_fs.contract_id)
+      or fs.row_resolution_id::text is distinct from retained_basis->>'row_resolution_id' then
+      raise exception 'WEEKLY_SOURCE_REPORT_NONE_PAY_BASIS_UNBOUND' using errcode='55000';end if;
+    select * into strict ec from public.weekly_source_cycles c where c.id=fr.source_cycle_id;
+    if ec.source_group_id is distinct from (select source_group_id from public.weekly_source_cycles where id=export_fr.source_cycle_id) then
+      raise exception 'WEEKLY_SOURCE_REPORT_NONE_PAY_GROUP_UNBOUND' using errcode='55000';end if;
+    export_facts:=jsonb_build_object('bound_export_snapshot_line_id',export_fs.id,
+      'bound_export_final_revision_id',export_fr.id,'bound_export_upload_row_id',er.id,
+      'bound_export_snapshot_line_hash',encode(export_fs.snapshot_line_hash,'hex'),
+      'bound_export_pay_effect','NONE','bound_export_paid_overlap_choice_id',export_fs.paid_overlap_choice_id,
+      'retained_pay_basis',retained_basis);
+  elsif fs.pay_effect is distinct from 'NORMAL' then
+    return null;
+  end if;
+  pay_origin_revision:=fr;
+  select count(*) into count_rows from public.weekly_source_row_timesheet_lineages l
+    where l.row_resolution_id=fs.row_resolution_id and l.work_event_id=b.work_event_id and l.client_id=rr.client_id and l.contract_id=rr.contract_id;`)},
+ {purpose:'Read true PAY lineage rather than B lineage',before:L('  select * into strict lineage from public.weekly_source_row_timesheet_lineages l\n    where l.row_resolution_id=rr.id and l.work_event_id=b.work_event_id and l.client_id=rr.client_id and l.contract_id=rr.contract_id;'),after:L('  select * into strict lineage from public.weekly_source_row_timesheet_lineages l\n    where l.row_resolution_id=fs.row_resolution_id and l.work_event_id=b.work_event_id and l.client_id=rr.client_id and l.contract_id=rr.contract_id;')},
+ {purpose:'Current NEXT selector must still name this exact retained basis and B transition',before:L('  identity:=jsonb_build_object(\'bound_pay_snapshot_line_id\',fs.id,\'bound_pay_final_revision_id\',fr.id,'),after:L(`  if retained_basis is not null then
+    if lineage.id::text is distinct from retained_basis->>'lineage_id' then
+      raise exception 'WEEKLY_SOURCE_REPORT_NONE_PAY_LINEAGE_UNBOUND' using errcode='55000';end if;
+    current_pay_selection:=private.weekly_source_paid_overlap_current_snapshot_v1(b.work_event_id,
+      (retained_basis->>'movement_id')::uuid,fs.candidate_id,fs.client_id,fs.contract_id,ec.source_group_id,
+      array(select distinct scope.canonical_timesheet_id
+        from public.weekly_source_row_timesheet_lineages event_lineage
+        cross join lateral public._pay_timesheet_rotation_scope(array[event_lineage.timesheet_id]) scope
+        where event_lineage.work_event_id=b.work_event_id and event_lineage.candidate_id=fs.candidate_id
+          and event_lineage.client_id=fs.client_id and event_lineage.contract_id=fs.contract_id
+        order by scope.canonical_timesheet_id));
+    if current_pay_selection->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_PAY_SNAPSHOT_V1'
+      or current_pay_selection->>'state' is distinct from 'CURRENT'
+      or current_pay_selection->>'snapshot_line_id' is distinct from fs.id::text
+      or current_pay_selection->>'work_event_id' is distinct from b.work_event_id::text
+      or current_pay_selection->>'movement_id' is distinct from retained_basis->>'movement_id'
+      or jsonb_typeof(current_pay_selection->'native_current_selections') is distinct from 'array'
+      or jsonb_array_length(current_pay_selection->'native_current_selections')=0
+      or exists(select 1 from jsonb_array_elements(current_pay_selection->'native_current_selections') item
+        where item->>'selected_transition_id' is distinct from retained_transition.id::text
+          or item->>'selected_final_revision_id' is distinct from export_fr.id::text
+          or item->>'snapshot_line_id' is distinct from fs.id::text
+          or item->'source_export_present' is distinct from 'true'::jsonb
+          or item->'exclude_cancel' is distinct from 'false'::jsonb) then
+      raise exception 'WEEKLY_SOURCE_REPORT_NONE_CURRENT_PAY_SELECTION_UNPROVED' using errcode='55000';end if;
+    export_facts:=export_facts||jsonb_build_object('retained_native_current_pay_selection',current_pay_selection);
+  end if;
+  identity:=jsonb_build_object('bound_pay_snapshot_line_id',fs.id,'bound_pay_final_revision_id',fr.id,`)},
+ {purpose:'Current head may lawfully seal the exact current retained transition revision',before:L('            native_origin:=head.source_origin_json;\n            if bundle.state='),after:L(`            native_origin:=head.source_origin_json;
+            -- Receipt/run above still belong to the true NORMAL PAY revision.
+            -- A current retained capture may publish that same PAY basis under
+            -- B's actual revision. Only these two native revisions are eligible.
+            if retained_basis is not null and native_origin->>'final_revision_id'=export_fr.id::text then
+              pay_origin_revision:=export_fr;
+            end if;
+            if bundle.state=`)},
+ ...[
+  ["native_origin->>'final_revision_id'=fr.id::text and native_origin->>'source_cycle_id'=ec.id::text","native_origin->>'final_revision_id'=pay_origin_revision.id::text and native_origin->>'source_cycle_id'=pay_origin_revision.source_cycle_id::text"],
+  ["native_origin->>'revision_number'=fr.revision_number::text","native_origin->>'revision_number'=pay_origin_revision.revision_number::text"],
+  ["native_origin->>'manifest_hash'=encode(fr.manifest_hash,'hex')","native_origin->>'manifest_hash'=encode(pay_origin_revision.manifest_hash,'hex')"],
+  ["native_origin->>'policy_fingerprint'=encode(fr.policy_fingerprint,'hex')","native_origin->>'policy_fingerprint'=encode(pay_origin_revision.policy_fingerprint,'hex')"],
+  ["'WEEKLY_SOURCE_DECISION_BUNDLE_V1',btrim(root.booking_id)||'|'||fr.id::text)","'WEEKLY_SOURCE_DECISION_BUNDLE_V1',btrim(root.booking_id)||'|'||pay_origin_revision.id::text)"]
+ ].map(([before,after])=>({purpose:'Bind all native head fields to the same actual PAY origin revision: '+before,before,after})),
+ {purpose:'Seal the separate current B evidence only for NONE; ordinary DTO/hash stay exact',before:L('  result:=identity||jsonb_build_object(\'published_timesheet_financial_id\',publication_fin,'),after:L("  result:=identity||export_facts||jsonb_build_object('published_timesheet_financial_id',publication_fin,")}
+];
+forward('01_complete_report_pay_authority.sqlinc',authority,authorityHunks);
+const movement=read(root,'supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc',rootPin,'movement_owner.sqlinc','private.weekly_source_self_bill_report_movement_insert_v1');
+const keys="array['bound_export_snapshot_line_id','bound_export_final_revision_id','bound_export_upload_row_id','bound_export_snapshot_line_hash','bound_export_pay_effect','bound_export_paid_overlap_choice_id','retained_pay_basis']";
+const factsFrom=a=>`(select coalesce(jsonb_object_agg(key,value),'{}'::jsonb) from jsonb_each(${a}) where key=any(${keys}))`;
+forward('02_complete_report_movement.sqlinc',movement,[
+ {purpose:'Keep invoice-export facts separate from compact PAY9',before:'  v_pay_witness jsonb; v_prior_binding jsonb;',after:"  v_pay_witness jsonb; v_pay_authority jsonb; v_export_facts jsonb:='{}'::jsonb; v_prior_binding jsonb;"},
+ {purpose:'Read detailed native authority once and retain actual current B provenance',before:'    v_pay_witness:=private.weekly_source_self_bill_report_pay_witness_v1(binding.id);',after:L(`    v_pay_witness:=private.weekly_source_self_bill_report_pay_witness_v1(binding.id);
+    v_pay_authority:=private.weekly_source_self_bill_report_pay_authority_v1(binding.id);
+    if v_pay_witness is not null then v_export_facts:=${factsFrom('v_pay_authority')};end if;`)},
+ {purpose:'Prior Report credit preserves its real historical invoice-export origin',before:"      v_pay_witness:=jsonb_build_object('bound_pay_snapshot_line_id',prior.source_facts_json->'bound_pay_snapshot_line_id',",after:L(`      v_export_facts:=${factsFrom('prior.source_facts_json')};
+      v_pay_witness:=jsonb_build_object('bound_pay_snapshot_line_id',prior.source_facts_json->'bound_pay_snapshot_line_id',`)},
+ {purpose:'Movement economic hash seals B provenance without replacing PAY origin',before:"'rule_set_version_id',revision.rule_set_version_id)||coalesce(v_pay_witness,'{}'::jsonb);",after:"'rule_set_version_id',revision.rule_set_version_id)||coalesce(v_pay_witness,'{}'::jsonb)||v_export_facts;"}
+]);
+const workspace=read(root,'supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc',rootPin,'report_workspace.sqlinc');
+forward('03_complete_report_workspace.sqlinc',workspace,[
+ {purpose:'Detailed authority is the native export-vs-PAY provenance source',before:'  v_pay_witness jsonb; v_pay_line public.weekly_source_final_snapshot_lines%rowtype;',after:'  v_pay_witness jsonb; v_pay_authority jsonb; v_pay_line public.weekly_source_final_snapshot_lines%rowtype;'},
+ {purpose:'Render exact B schedule while preserving real NORMAL PAY compact witness',before:L(`      if v_pay_witness is not null then
+        select * into strict v_pay_line from public.weekly_source_final_snapshot_lines
+          where id=(v_pay_witness->>'bound_pay_snapshot_line_id')::uuid
+            and row_resolution_id=row_fact.bound_row_resolution_id and work_event_id=row_fact.work_event_id;
+      end if;`),after:L(`      v_pay_authority:=case when row_fact.binding_id is null then null
+        else private.weekly_source_self_bill_report_pay_authority_v1(row_fact.binding_id) end;
+      if v_pay_witness is not null then
+        select * into strict v_pay_line from public.weekly_source_final_snapshot_lines
+          where id=coalesce((v_pay_authority->>'bound_export_snapshot_line_id')::uuid,
+              (v_pay_witness->>'bound_pay_snapshot_line_id')::uuid)
+            and final_revision_id=coalesce((v_pay_authority->>'bound_export_final_revision_id')::uuid,
+              (v_pay_witness->>'bound_pay_final_revision_id')::uuid)
+            and row_resolution_id=row_fact.bound_row_resolution_id and work_event_id=row_fact.work_event_id;
+      end if;`)},
+ {purpose:'B raw calculator vector is not presented as a PAY entitlement',before:L(`        'system_hours_provenance',case when v_pay_line.id is null then null else jsonb_build_object(
+          'final_snapshot_line_id',v_pay_line.id,'snapshot_line_hash',encode(v_pay_line.snapshot_line_hash,'hex'),
+          'final_revision_id',v_pay_line.final_revision_id,'pay_vector',v_pay_line.pay_vector_json) end,`),after:L(`        'system_hours_provenance',case when v_pay_line.id is null then null
+          when v_pay_authority->>'bound_export_pay_effect'='NONE' then jsonb_build_object(
+            'export_snapshot',jsonb_build_object('final_snapshot_line_id',v_pay_line.id,
+              'snapshot_line_hash',encode(v_pay_line.snapshot_line_hash,'hex'),'final_revision_id',v_pay_line.final_revision_id,'pay_effect','NONE'),
+            'pay_snapshot',jsonb_build_object('final_snapshot_line_id',v_pay_witness->'bound_pay_snapshot_line_id',
+              'final_revision_id',v_pay_witness->'bound_pay_final_revision_id','pay_effect','NORMAL'))
+          else jsonb_build_object(
+            'final_snapshot_line_id',v_pay_line.id,'snapshot_line_hash',encode(v_pay_line.snapshot_line_hash,'hex'),
+            'final_revision_id',v_pay_line.final_revision_id,'pay_vector',v_pay_line.pay_vector_json) end,`)}
+]);
+const nativeAdmissionPath='supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc';
+const admission=read(root,nativeAdmissionPath,rootPin,'root_report_admission.sqlinc');
+const moneyAdmission=read(money,'docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/13_complete_invoice_admission.sqlinc',invoicePin,'money_none_admission.sqlinc');
+function admissionHunks(input){const e=input.includes('\r\n')?'\r\n':'\n',line=s=>s.replaceAll('\n',e);return ['v_identity_movement','v_movement'].map(m=>({
+ purpose:'Report presentation uses actual B export snapshot; PAY9 continues true NORMAL: '+m,
+ before:line(`snapshot.id=(${m}.source_facts_json->>'bound_pay_snapshot_line_id')::uuid
+${m==='v_identity_movement'?'                ':'            '}and snapshot.final_revision_id=(${m}.source_facts_json->>'bound_pay_final_revision_id')::uuid`),
+ after:line(`snapshot.id=coalesce((${m}.source_facts_json->>'bound_export_snapshot_line_id')::uuid,
+                (${m}.source_facts_json->>'bound_pay_snapshot_line_id')::uuid)
+              and snapshot.final_revision_id=coalesce((${m}.source_facts_json->>'bound_export_final_revision_id')::uuid,
+                (${m}.source_facts_json->>'bound_pay_final_revision_id')::uuid)
+              and (not (${m}.source_facts_json ? 'bound_export_snapshot_line_id') or (
+                snapshot.pay_effect='NONE'
+                and snapshot.row_resolution_id=(${m}.source_facts_json->>'bound_row_resolution_id')::uuid
+                and snapshot.upload_row_id=(${m}.source_facts_json->>'bound_export_upload_row_id')::uuid
+                and encode(snapshot.snapshot_line_hash,'hex')=${m}.source_facts_json->>'bound_export_snapshot_line_hash'
+                and snapshot.paid_overlap_choice_id=(${m}.source_facts_json->>'bound_export_paid_overlap_choice_id')::bigint
+                and ${m}.source_facts_json->>'bound_export_pay_effect'='NONE'
+                and ${m}.source_facts_json#>>'{retained_pay_basis,snapshot_line_id}'=${m}.source_facts_json->>'bound_pay_snapshot_line_id'
+                and ${m}.source_facts_json#>>'{retained_pay_basis,final_revision_id}'=snapshot.final_revision_id::text
+                and ${m}.source_facts_json#>>'{retained_pay_basis,work_event_id}'=snapshot.work_event_id::text
+                and exists(select 1 from jsonb_array_elements(${m}.source_facts_json#>'{retained_pay_basis,actual_present_invoice_rows}') item
+                  where item=jsonb_build_object('snapshot_line_id',snapshot.id,'upload_row_id',snapshot.upload_row_id,
+                    'paid_overlap_choice_id',snapshot.paid_overlap_choice_id,'snapshot_line_hash',encode(snapshot.snapshot_line_hash,'hex')))))`)
+}));}
+forward('04_complete_root_report_admission.sqlinc',admission,admissionHunks(admission));
+forward('05_complete_money_report_none_admission_join.sqlinc',moneyAdmission,admissionHunks(moneyAdmission));
+const mapper=read(root,'scripts/weekly-source-report-fin-native-mapper.mjs',rootPin,'current_native_mapper.mjs');
+for(const p of ['weekly-source-protected-release-qualification.mjs','weekly-source-report-fin-native-lock-observation.mjs','weekly-source-report-fin-native-seal.mjs'])
+ read(root,'scripts/'+p,rootPin,p);
+const mn=mapper.includes('\r\n')?'\r\n':'\n',M=s=>s.replaceAll('\n',mn);
+const noneKeys="['bound_export_snapshot_line_id','bound_export_final_revision_id','bound_export_upload_row_id','bound_export_snapshot_line_hash','bound_export_pay_effect','bound_export_paid_overlap_choice_id','retained_pay_basis','retained_native_current_pay_selection']";
+const queryStart=mapper.indexOf('  pay_authorities:`');const queryEnd=mapper.indexOf('  priors:`',queryStart);assert.ok(queryStart>0&&queryEnd>queryStart);
+const oldQuery=mapper.slice(queryStart,queryEnd);
+const newQuery=M("  pay_authorities:`select coalesce(jsonb_agg((jsonb_build_object('binding',to_jsonb(b),'authority_bytes',a.value::text,\n"+
+ "    'authority_base_bytes',(a.value-'authority_sha256')::text,'pay_witness_bytes',private.weekly_source_self_bill_report_pay_witness_v1(b.id)::text)\n"+
+ "    ||case when a.value->>'bound_export_pay_effect'='NONE' then jsonb_build_object('none_observation',jsonb_build_object(\n"+
+ "      'export_snapshot',to_jsonb(es),'pay_snapshot',to_jsonb(ps),'transition',to_jsonb(t),'export_row',to_jsonb(er),\n"+
+ "      'export_resolution',to_jsonb(rr),'retained_basis_bytes',private.weekly_source_paid_match_retained_transition_assert_v1(t.id)::text,\n"+
+ "      'current_selection_bytes',private.weekly_source_paid_overlap_current_snapshot_v1(t.work_event_id,\n"+
+ "        (a.value#>>'{retained_pay_basis,movement_id}')::uuid,ps.candidate_id,ps.client_id,ps.contract_id,c.source_group_id,\n"+
+ "        array(select distinct scope.canonical_timesheet_id from public.weekly_source_row_timesheet_lineages lineage\n"+
+ "          cross join lateral public._pay_timesheet_rotation_scope(array[lineage.timesheet_id]) scope\n"+
+ "          where lineage.work_event_id=t.work_event_id and lineage.candidate_id=ps.candidate_id\n"+
+ "            and lineage.client_id=ps.client_id and lineage.contract_id=ps.contract_id order by scope.canonical_timesheet_id))::text))\n"+
+ "      else '{}'::jsonb end) order by b.id),'[]'::jsonb)::text\n"+
+ "   from public.weekly_source_self_bill_report_line_bindings b cross join lateral (select private.weekly_source_self_bill_report_pay_authority_v1(b.id) value) a\n"+
+ "   left join public.weekly_source_final_snapshot_lines es on es.id=(a.value->>'bound_export_snapshot_line_id')::uuid\n"+
+ "   left join public.weekly_source_final_snapshot_lines ps on ps.id=(a.value->>'bound_pay_snapshot_line_id')::uuid\n"+
+ "   left join public.weekly_source_state_transitions t on t.id=(a.value#>>'{retained_pay_basis,transition_id}')::uuid\n"+
+ "   left join public.weekly_source_final_revisions revision on revision.id=es.final_revision_id\n"+
+ "   left join public.weekly_source_cycles c on c.id=revision.source_cycle_id\n"+
+ "   left join public.weekly_source_upload_rows er on er.id=es.upload_row_id\n"+
+ "   left join public.weekly_source_row_resolutions rr on rr.id=es.row_resolution_id\n"+
+ "   where b.self_bill_report_id=(select self_bill_report_id from public.weekly_source_report_scopes where id=${q(r.report_scope_id)}::uuid) and b.state='CURRENT';`,\n");
+const validateNone=`const reportNoneAuthorityKeys=Object.freeze(${noneKeys});
+// Concrete table/helper observations come from the literal sealed query below.
+// A caller label or confirmation alone is never a native receipt authority.
+export function assertReportNoneAuthority(raw,binding,observed){
+ exact(observed,['export_snapshot','pay_snapshot','transition','export_row','export_resolution','retained_basis_bytes','current_selection_bytes'],'REPORT_NATIVE_NONE_OBSERVATION_INVALID');
+ const s=observed.export_snapshot,p=observed.pay_snapshot,t=observed.transition,r=observed.export_row,rr=observed.export_resolution,
+  basis=raw.retained_pay_basis,current=raw.retained_native_current_pay_selection;
+ exact(basis,['schema_version','transition_id','final_revision_id','work_event_id','snapshot_line_id','movement_id','row_resolution_id','lineage_id','economic_snapshot_id','actual_present_invoice_rows'],'REPORT_NATIVE_NONE_BASIS_INVALID');
+ exact(current,['schema_version','state','snapshot_line_id','work_event_id','movement_id','native_current_selections'],'REPORT_NATIVE_NONE_SELECTION_INVALID');
+ if(!same(decode(observed.retained_basis_bytes),basis)||!same(decode(observed.current_selection_bytes),current)
+  ||basis.schema_version!=='WEEKLY_SOURCE_PAID_MATCH_RETAINED_PAY_BASIS_V1'||current.schema_version!=='WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_PAY_SNAPSHOT_V1'
+  ||raw.bound_export_pay_effect!=='NONE'||!uuid.test(raw.bound_export_snapshot_line_id)||!uuid.test(raw.bound_export_final_revision_id)
+  ||!uuid.test(raw.bound_export_upload_row_id)||!hex.test(raw.bound_export_snapshot_line_hash)
+  ||!Number.isSafeInteger(raw.bound_export_paid_overlap_choice_id)||raw.bound_export_paid_overlap_choice_id<1
+  ||s?.id!==raw.bound_export_snapshot_line_id||s.id===p?.id||p?.id!==raw.bound_pay_snapshot_line_id
+  ||s.final_revision_id!==raw.bound_export_final_revision_id||p.final_revision_id!==raw.bound_pay_final_revision_id
+  ||s.final_revision_id===p.final_revision_id||s.pay_effect!=='NONE'||p.pay_effect!=='NORMAL'
+  ||s.upload_row_id!==binding.export_upload_row_id||s.row_resolution_id!==binding.bound_row_resolution_id
+  ||s.upload_row_id!==raw.bound_export_upload_row_id||String(s.snapshot_line_hash).replace(/^\\\\x/,'')!==raw.bound_export_snapshot_line_hash
+  ||s.paid_overlap_choice_id!==raw.bound_export_paid_overlap_choice_id
+  ||t?.id!==basis.transition_id||t.final_revision_id!==s.final_revision_id||t.work_event_id!==binding.work_event_id
+  ||t.pay_basis_kind!=='RETAINED_PAID_MATCH'||t.outcome!=='NO_CHANGE'||t.previous_present!==true||t.new_present!==true||t.exclude_cancel!==false
+  ||t.previous_snapshot_line_id!==p.id||t.new_snapshot_line_id!==p.id
+  ||!same(t.prior_state_fingerprint,t.new_state_fingerprint)||!same(t.paid_match_source_rows,basis.actual_present_invoice_rows)
+  ||r?.id!==s.upload_row_id||r.row_finalisation_state!=='SOURCE_WORKED'||rr?.id!==s.row_resolution_id||rr.mapping_state!=='RESOLVED'
+  ||rr.upload_row_id!==r.id||rr.pay_effect!=='NONE'||rr.paid_overlap_choice_id!==s.paid_overlap_choice_id
+  ||basis.final_revision_id!==s.final_revision_id||basis.snapshot_line_id!==p.id||basis.row_resolution_id!==p.row_resolution_id
+  ||basis.work_event_id!==binding.work_event_id||!['movement_id','lineage_id','economic_snapshot_id'].every(k=>uuid.test(basis[k]))
+  ||current.state!=='CURRENT'||current.snapshot_line_id!==p.id||current.movement_id!==basis.movement_id||current.work_event_id!==basis.work_event_id
+  ||!Array.isArray(basis.actual_present_invoice_rows)||!basis.actual_present_invoice_rows.length
+  ||!Array.isArray(current.native_current_selections)||!current.native_current_selections.length)
+  fail('REPORT_NATIVE_NONE_PROVENANCE_UNPROVED');
+ for(const k of ['work_event_id','candidate_id','client_id','contract_id'])
+  if(!uuid.test(s[k])||s[k]!==p[k]||s[k]!==rr[k]||s[k]!==raw[k])fail('REPORT_NATIVE_NONE_IDENTITY_CHANGED');
+ const ownRow={snapshot_line_id:s.id,upload_row_id:s.upload_row_id,paid_overlap_choice_id:s.paid_overlap_choice_id,snapshot_line_hash:raw.bound_export_snapshot_line_hash};
+ if(basis.actual_present_invoice_rows.filter(item=>Object.keys(ownRow).every(k=>item[k]===ownRow[k])).length!==1)fail('REPORT_NATIVE_NONE_EXPORT_CENSUS_INVALID');
+ for(const row of basis.actual_present_invoice_rows){exact(row,['snapshot_line_id','upload_row_id','paid_overlap_choice_id','snapshot_line_hash'],'REPORT_NATIVE_NONE_EXPORT_CENSUS_INVALID');
+  if(!uuid.test(row.snapshot_line_id)||!uuid.test(row.upload_row_id)||!hex.test(row.snapshot_line_hash)||!Number.isSafeInteger(row.paid_overlap_choice_id)||row.paid_overlap_choice_id<1)fail('REPORT_NATIVE_NONE_EXPORT_CENSUS_INVALID');}
+ if(new Set(basis.actual_present_invoice_rows.map(item=>item.snapshot_line_id)).size!==basis.actual_present_invoice_rows.length
+  ||new Set(basis.actual_present_invoice_rows.map(item=>item.upload_row_id)).size!==basis.actual_present_invoice_rows.length)fail('REPORT_NATIVE_NONE_EXPORT_CENSUS_INVALID');
+ for(const row of current.native_current_selections){exact(row,['snapshot_line_id','scope_id','root_timesheet_id','selected_transition_id','selected_order_key','source_hash','selected_final_revision_id','source_export_present','exclude_cancel'],'REPORT_NATIVE_NONE_SELECTION_INVALID');
+  if(row.snapshot_line_id!==p.id||row.selected_transition_id!==t.id||row.selected_final_revision_id!==s.final_revision_id
+   ||row.source_export_present!==true||row.exclude_cancel!==false||!uuid.test(row.scope_id)||!uuid.test(row.root_timesheet_id)
+   ||typeof row.selected_order_key!=='string'||!row.selected_order_key.length||!hex.test(row.source_hash)
+   ||row.source_hash!==String(t.transition_fingerprint).replace(/^\\\\x/,''))fail('REPORT_NATIVE_NONE_SELECTION_UNPROVED');}
+ return true;
+}
+`;
+forward('06_complete_native_mapper.mjs',mapper,[
+ {purpose:'Pin both literal native retained selection authorities in final seal',before:" 'private.weekly_source_self_bill_report_pay_witness_v1(uuid)',",after:M(" 'private.weekly_source_self_bill_report_pay_witness_v1(uuid)',\n 'private.weekly_source_paid_match_retained_transition_assert_v1(uuid)',\n 'private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])',")},
+ {purpose:'Closed actual NONE fact rederivation while ordinary authority shape stays exact',before:'export function assertReportPayAuthority(raw,baseBytes,binding){',after:M(validateNone+'export function assertReportPayAuthority(raw,baseBytes,binding,noneObservation){')},
+ {purpose:'Accept only the literal optional NONE tuple; no open authority shape',before:" exact(raw,reportPayAuthorityKeys,'REPORT_NATIVE_PAY_AUTHORITY_SHAPE_INVALID');",after:M(" exact(raw,[...reportPayAuthorityKeys,...(raw.bound_export_pay_effect==='NONE'?reportNoneAuthorityKeys:[])],'REPORT_NATIVE_PAY_AUTHORITY_SHAPE_INVALID');\n if(raw.bound_export_pay_effect==='NONE')assertReportNoneAuthority(raw,binding,noneObservation);\n else if(noneObservation!==undefined)fail('REPORT_NATIVE_NONE_OBSERVATION_UNEXPECTED');")},
+ {purpose:'Observe literal actual B and true NORMAL rows plus rederived native owners',before:oldQuery,after:newQuery},
+ {purpose:'Reject an unobserved NONE authority at the actual mapper caller',before:"exact(entry,['binding','authority_bytes','authority_base_bytes','pay_witness_bytes'],'REPORT_NATIVE_PAY_ENTRY_INVALID');",after:"exact(entry,['binding','authority_bytes','authority_base_bytes','pay_witness_bytes',...(entry.none_observation===undefined?[]:['none_observation'])],'REPORT_NATIVE_PAY_ENTRY_INVALID');"},
+ {purpose:'Pass only actual fixed-query raw observations to the closed decoder',before:'assertReportPayAuthority(authority,entry.authority_base_bytes,binding);',after:'assertReportPayAuthority(authority,entry.authority_base_bytes,binding,entry.none_observation);'}
+ ,{purpose:'A reversal retains the prior real invoice-export evidence independently of PAY9',before:M("  const identity=e.pay_financial_identity;exact(identity,['id','timesheet_id','client_id','candidate_id'],'REPORT_NATIVE_PRIOR_FINANCIAL_IDENTITY_INVALID');\n  if(facts.published_timesheet_financial_id===null)"),after:M(`  if(facts.bound_export_pay_effect==='NONE'){
+   for(const k of ${noneKeys}.filter(k=>k!=='retained_native_current_pay_selection'))
+    if(!same(movement.source_facts_json[k],facts[k]))fail('REPORT_NATIVE_REVERSAL_EXPORT_WITNESS_CHANGED');
+  }
+  const identity=e.pay_financial_identity;exact(identity,['id','timesheet_id','client_id','candidate_id'],'REPORT_NATIVE_PRIOR_FINANCIAL_IDENTITY_INVALID');
+  if(facts.published_timesheet_financial_id===null)`)}
+]);
+const expenseAdmission=read(money,'docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/09_complete_invoice_admission.sqlinc',moneyPin,'money_expense_none_admission.sqlinc');
+forward('07_complete_money_expense_report_none_admission_join.sqlinc',expenseAdmission,admissionHunks(expenseAdmission));
+save('FULL_REVERSES.json',JSON.stringify({source_only:true,native:false,mount_ready:false,inputs,owners,
+ existing_signatures_unchanged:true,new_public_signatures:[],new_private_signatures:[],new_tables:[],new_calculators:0,
+ current_compact_pay9_unchanged:true,confirmation_alone_cannot_set_invoice_ready:true,
+ final_admission_selection:'07 complete expense26+Money58+Report2-hunk join if expense26 selected after independent review; 05 is the no-expense Money58 join; 04 is exact current-root comparison only. These are alternatives, never sequential overwrites. Root must compose any later independently reviewed native VAT blocker hunk.',
+ legacy_none_current_selector:'Unavailable until selected genuine Legacy current-selection authority is reviewed; no fabricated NEXT map or status fallback.'},null,2)+'\n');
+console.log(JSON.stringify({source_only:true,native:false,owners:owners.length,hunks:owners.reduce((n,o)=>n+o.hunks.length,0),inputs:inputs.length,outputs:owners.map(o=>({file:o.file,sha256:o.after_sha256}))}));

@@ -1,0 +1,143 @@
+-- Same Office workspace shape. The integrator inserts one exact report-scope
+-- delegation into its complete current Office owner after native actor checks.
+create or replace function private.weekly_source_self_bill_report_workspace_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare s public.weekly_source_report_scopes%rowtype; c public.weekly_source_cycles%rowtype;
+  r public.weekly_source_self_bill_reports%rowtype; u public.weekly_source_uploads%rowtype;
+  p public.weekly_source_projection_publications%rowtype; actor uuid; row_fact record; facts jsonb;
+  ready jsonb:='[]'::jsonb; blocked jsonb:='[]'::jsonb; row_json jsonb; v_gate jsonb; v_hash text;
+  v_payload jsonb:='{}'::jsonb; v_prepare jsonb:='{}'::jsonb; v_prepared boolean:=false; v_accepted boolean:=false;
+  v_pay_witness jsonb; v_pay_line public.weekly_source_final_snapshot_lines%rowtype;
+  v_ready_count integer; v_blocked_count integer; v_limit integer; v_offset integer:=0; v_cursor text;
+  v_sort text; v_direction text; v_candidate_filter text; v_status_filter text; v_issue_filter text;
+  v_lists jsonb; v_pages jsonb:='{}'::jsonb; v_list record; v_filtered_count integer; v_page_rows jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  actor:=(p_request->>'actor_user_id')::uuid;
+  select * into strict s from public.weekly_source_report_scopes where id=(p_request->>'report_scope_id')::uuid and self_bill_report_id is not null;
+  select * into strict c from public.weekly_source_cycles where id=s.source_cycle_id;
+  select * into strict r from public.weekly_source_self_bill_reports where id=s.self_bill_report_id;
+  if (nullif(p_request->>'source_cycle_id','') is not null and p_request->>'source_cycle_id'<>c.id::text)
+    or (nullif(p_request->>'source_group_id','') is not null and p_request->>'source_group_id'<>s.source_group_id::text)
+    or (nullif(p_request->>'client_id','') is not null and p_request->>'client_id'<>s.client_id::text) then
+    raise exception 'WEEKLY_SOURCE_REPORT_WORKSPACE_SCOPE_MISMATCH' using errcode='22023'; end if;
+  perform private.weekly_source_office_authority_v1(actor,'FINALISE_WEEK',s.source_group_id,s.client_id,c.finalisation_week_ending);
+  v_limit:=coalesce(nullif(p_request->>'limit','')::integer,50);
+  if v_limit not between 1 and 100 then raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023'; end if;
+  v_sort:=coalesce(nullif(lower(btrim(p_request->>'sort_key')),''),'candidate');
+  v_direction:=coalesce(nullif(lower(btrim(p_request->>'sort_direction')),''),'asc');
+  if v_direction not in ('asc','desc') then raise exception 'WEEKLY_SOURCE_WORKSPACE_SORT_INVALID' using errcode='22023'; end if;
+  v_candidate_filter:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'candidate',''));
+  v_status_filter:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'status',''));
+  v_issue_filter:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'issue',''));
+  select * into u from public.weekly_source_uploads where id=s.current_complete_upload_id;
+  select * into p from public.weekly_source_projection_publications where id=s.current_projection_publication_id;
+  v_accepted:=p.id is not null and p.state='CURRENT' and p.authority_scope_kind='SELF_BILL_REPORT_SCOPE'
+    and p.upload_id=u.id and p.authority_scope_version=s.version and u.state='CURRENT' and s.projection_state='CURRENT';
+  if v_accepted and s.current_final_revision_id is null then
+    v_gate:=private.weekly_source_final_upload_gate_v1(u.id);
+    v_prepared:=private.weekly_source_import_is_prepared_v1(u.id);
+    for row_fact in select rr.*,b.id as binding_id,b.work_event_id,b.bound_row_resolution_id from public.weekly_source_upload_rows rr
+      left join public.weekly_source_self_bill_report_line_bindings b on b.report_row_id=rr.id and b.state='CURRENT'
+      where rr.upload_id=u.id and rr.row_finalisation_state='SOURCE_REPORT_LINE' order by rr.source_row_ordinal loop
+      facts:=case when row_fact.work_event_id is null then jsonb_build_object('invoice_ready',false)
+        else private.weekly_source_report_shift_facts_v1(row_fact.work_event_id,s.id) end;
+      -- Report clocks have no break/worked-hours authority. Read only the exact
+      -- immutable pay snapshot proved by the retained export binding.
+      v_pay_line:=null;
+      v_pay_witness:=case when row_fact.binding_id is null then null
+        else private.weekly_source_self_bill_report_pay_witness_v1(row_fact.binding_id) end;
+      if v_pay_witness is not null then
+        select * into strict v_pay_line from public.weekly_source_final_snapshot_lines
+          where id=(v_pay_witness->>'bound_pay_snapshot_line_id')::uuid
+            and row_resolution_id=row_fact.bound_row_resolution_id and work_event_id=row_fact.work_event_id;
+      end if;
+      row_json:=jsonb_build_object('row_key','report-'||row_fact.id::text,'upload_row_id',row_fact.id,'work_event_id',row_fact.work_event_id,
+        'candidate',row_fact.source_candidate_identity,'candidate_sort',row_fact.source_candidate_identity,'work_date',row_fact.work_date,
+        'day_date',to_char(row_fact.work_date,'Dy FMDD Mon YYYY'),'system_hours',case when v_pay_line.id is null then 'Pay hours unavailable'
+          else to_char(v_pay_line.start_at_local,'HH24:MI')||'–'||to_char(v_pay_line.end_at_local,'HH24:MI')
+            ||' ('||v_pay_line.break_minutes::text||' min break)' end,
+        'system_hours_provenance',case when v_pay_line.id is null then null else jsonb_build_object(
+          'final_snapshot_line_id',v_pay_line.id,'snapshot_line_hash',encode(v_pay_line.snapshot_line_hash,'hex'),
+          'final_revision_id',v_pay_line.final_revision_id,'pay_vector',v_pay_line.pay_vector_json) end,
+        '_sort_start',v_pay_line.start_at_local,'_sort_end',v_pay_line.end_at_local,'_sort_ordinal',row_fact.source_row_ordinal,
+        'invoice_charge',row_fact.source_shift_charge_pence::numeric/100,'movement',case when row_fact.source_shift_charge_pence<0 then 'Trust credit' else 'Report line' end,
+        'status',jsonb_build_object('text',case when row_fact.source_shift_charge_pence<0 or facts->'invoice_ready'='true'::jsonb
+          then 'Ready to invoice' else 'Holds invoice' end,'tone',case when row_fact.source_shift_charge_pence<0 or facts->'invoice_ready'='true'::jsonb then 'positive' else 'warning' end),
+        'actions','[]'::jsonb);
+      if row_fact.source_gross_pence::numeric is distinct from row_fact.source_shift_charge_pence::numeric+row_fact.source_vat_pence::numeric then
+        row_json:=row_json||jsonb_build_object('reason','Report net, VAT and total do not reconcile.'); blocked:=blocked||jsonb_build_array(row_json);
+      elsif private.weekly_source_self_bill_report_duplicate_hold_v1(row_fact.id) then
+        blocked:=blocked||jsonb_build_array(row_json||jsonb_build_object('reason','This Request Id was already invoiced on an earlier report.'));
+      elsif row_fact.source_shift_charge_pence<0 or facts->'invoice_ready'='true'::jsonb then ready:=ready||jsonb_build_array(row_json);
+      else blocked:=blocked||jsonb_build_array(row_json||jsonb_build_object('reason','The matching export must be finalised for pay first.')); end if;
+    end loop;
+    v_prepare:=jsonb_build_object('upload_id',u.id,'projection_publication_id',p.id,'expected_authority_scope_version',s.version,
+      'expected_row_manifest_hash',encode(u.row_manifest_hash,'hex'));
+    if v_prepared and jsonb_array_length(blocked)=0 and v_gate->'allowed'='true'::jsonb and s.current_final_revision_id is null then
+      v_payload:=v_prepare||jsonb_build_object('source_cycle_id',c.id,'authority_scope_kind','SELF_BILL_REPORT_SCOPE','report_scope_id',s.id,
+        'expected_comparison_manifest_hash',encode(p.comparison_manifest_hash,'hex'),'expected_issue_set_hash',encode(p.issue_set_hash,'hex'));
+    end if;
+  end if;
+  v_hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_WORKSPACE_V1',jsonb_build_object(
+    'report_scope_id',s.id,'scope_version',s.version,'upload_id',u.id,'publication_id',p.id,'final_revision_id',s.current_final_revision_id,
+    'ready',ready,'blocked',blocked,'file_admission',v_gate,'actor_user_id',actor,
+    'sort_key',v_sort,'sort_direction',v_direction,'candidate',v_candidate_filter,'status',v_status_filter,'issue',v_issue_filter)),'hex');
+  v_ready_count:=jsonb_array_length(ready);v_blocked_count:=jsonb_array_length(blocked);
+  v_cursor:=coalesce(p_request->>'cursor','');
+  if v_cursor<>'' then
+    if v_cursor!~'^[0-9a-f]{64}:[0-9]{1,6}$' or split_part(v_cursor,':',1) is distinct from v_hash then
+      raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001'; end if;
+    v_offset:=split_part(v_cursor,':',2)::integer;
+  end if;
+  -- Keep the existing Office version/offset cursor contract. Checklist has its
+  -- separate keyset contract. Counts/admission above always include all rows;
+  -- filters and pagination cannot hide a finalisation blocker.
+  v_lists:=jsonb_build_object('ready',ready,'blocked',blocked);
+  for v_list in select key,value from jsonb_each(v_lists) loop
+    with filtered as (
+      select value as item from jsonb_array_elements(v_list.value)
+      where (v_candidate_filter='' or strpos(private.weekly_source_query_ascii_fold_v1(value->>'candidate'),v_candidate_filter)>0)
+        and (v_status_filter='' or private.weekly_source_query_ascii_fold_v1(value#>>'{status,text}')=v_status_filter)
+        and (v_issue_filter='' or strpos(private.weekly_source_query_ascii_fold_v1(coalesce(value->>'reason','')),v_issue_filter)>0)
+    ), page as (
+      select item from filtered order by
+        case when v_sort='invoice_charge' and v_direction='asc' then (item->>'invoice_charge')::numeric end asc,
+        case when v_sort='invoice_charge' and v_direction='desc' then (item->>'invoice_charge')::numeric end desc,
+        case when v_sort in ('system_hours','actual_hours') and v_direction='asc' then item->>'_sort_start' end asc nulls last,
+        case when v_sort in ('system_hours','actual_hours') and v_direction='desc' then item->>'_sort_start' end desc nulls last,
+        case when v_sort='day_date' and v_direction='asc' then item->>'work_date' end asc,
+        case when v_sort='day_date' and v_direction='desc' then item->>'work_date' end desc,
+        case when v_direction='asc' then private.weekly_source_query_ascii_fold_v1(case v_sort
+          when 'status' then item#>>'{status,text}' when 'problem' then item->>'reason' when 'movement' then item->>'movement'
+          else item->>'candidate' end) end collate "C" asc nulls last,
+        case when v_direction='desc' then private.weekly_source_query_ascii_fold_v1(case v_sort
+          when 'status' then item#>>'{status,text}' when 'problem' then item->>'reason' when 'movement' then item->>'movement'
+          else item->>'candidate' end) end collate "C" desc nulls last,
+        item->>'work_date',(item->>'_sort_ordinal')::integer,item->>'row_key'
+      offset v_offset limit v_limit
+    ) select (select count(*) from filtered),coalesce(jsonb_agg(item-array['_sort_start','_sort_end','_sort_ordinal']),'[]'::jsonb)
+      into v_filtered_count,v_page_rows from page;
+    v_pages:=v_pages||jsonb_build_object(v_list.key,jsonb_build_object('rows',v_page_rows,'total_count',v_filtered_count,
+      'has_more',v_offset+v_limit<v_filtered_count,'next_cursor',case when v_offset+v_limit<v_filtered_count
+        then v_hash||':'||(v_offset+v_limit)::text else '' end,'record_version',v_hash,'stale',false));
+  end loop;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_IMPORT_WORKSPACE_V1','workspace_version',v_hash,'combined_source_workspace',true,
+    'profile',jsonb_build_object('id','ACACIUM_SELF_BILL_REPORT_V1','label','Acacium self-bill','finalise_label','Finalise invoice for report'),
+    'context',jsonb_build_object('subtitle',r.report_number||' · '||to_char(r.invoice_date,'DD/MM/YYYY'),'cycle_state',s.state,'cycle_tone','warning','controls','{}'::jsonb),
+    'selected',jsonb_build_object('source_group_id',s.source_group_id,'source_cycle_id',c.id,'client_id',s.client_id,'report_scope_id',s.id,'projection_publication_id',p.id),
+    'counts',jsonb_build_object('queries',0,'blockers',v_blocked_count,'paid_unresolved',0),
+    'imports','{}'::jsonb,'queries','{}'::jsonb,
+    'finalise',jsonb_build_object('prepared',v_prepared,'prepare_action',case when v_accepted and v_gate->'allowed'='true'::jsonb then v_prepare else '{}'::jsonb end,
+      'unfinalised_count',0,'excluded_rows','[]'::jsonb,'ready',v_pages->'ready','blocked',v_pages->'blocked',
+      'complete',private.weekly_source_completed_rows_v1(c.id,s.client_id,s.id),'active_list',case when s.current_final_revision_id is not null then 'complete'
+        when v_blocked_count>0 then 'blocked' else 'ready' end,
+      'confirmation_text','I confirm this is the final self-bill report.','confirmation_required',true,'finalise_enabled',v_payload<>'{}'::jsonb,
+      'finalise_payload',v_payload,'file_admission',v_gate,'source_summary',coalesce(u.original_filename,r.report_number),'rate_warnings','[]'::jsonb,
+      'approved_hours_follow_up','{}'::jsonb,'tracker',jsonb_build_object('rows','[]'::jsonb,'total_count',0)),
+    'history','{}'::jsonb,'notices','[]'::jsonb,'lifecycle_policy',private.weekly_source_office_lifecycle_policy_v1()
+      ||jsonb_build_object('per_timesheet_owner','public.weekly_source_office_timesheet_presentation_v1',
+        'per_timesheet_member','lifecycle','browser_may_infer_phase',false));
+end;
+$function$;

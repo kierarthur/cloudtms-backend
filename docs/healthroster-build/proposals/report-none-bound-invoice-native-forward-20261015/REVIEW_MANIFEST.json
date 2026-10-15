@@ -1,0 +1,202 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "entries": [
+    {
+      "path": "FULL_REVERSES.json",
+      "bytes": 56124,
+      "sha256": "1562bce87cd0cb0f3e9ec9b5b682aab3b04e2d2a8c48c6b0cd2277dde85632b3"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 4364,
+      "sha256": "a3c6b4a9519041c25b7285eb43160c35ac085b3631002544e21f36aaa6a1c7e6"
+    },
+    {
+      "path": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 3339,
+      "sha256": "8cad0d2f830d38dd4a1310051099b38c778849a9cbd2c31d34589e9ff960bc2b"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 12815,
+      "sha256": "cb86f1ee5fcd8bfcb1a4e7c778f63d10178eef75e5ca72a836888be8773887dd"
+    },
+    {
+      "path": "before/01_complete_report_pay_authority.sqlinc",
+      "bytes": 23242,
+      "sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9"
+    },
+    {
+      "path": "before/02_complete_report_movement.sqlinc",
+      "bytes": 9196,
+      "sha256": "e114e9c0d4f1c9dfa27819330503b97b60679e970ac7999e8b0a02e0adc89124"
+    },
+    {
+      "path": "before/03_complete_report_workspace.sqlinc",
+      "bytes": 13636,
+      "sha256": "0f1b080ca21de14d911bb0233db6648fca3fb8c0af77a5236ae4a422c76ee7a3"
+    },
+    {
+      "path": "before/04_complete_root_report_admission.sqlinc",
+      "bytes": 47770,
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "path": "before/05_complete_money_report_none_admission_join.sqlinc",
+      "bytes": 49310,
+      "sha256": "8fddbb729fe54854038288afc988df8463f2908569230f4893f433878bed0145"
+    },
+    {
+      "path": "before/06_complete_native_mapper.mjs",
+      "bytes": 47129,
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426"
+    },
+    {
+      "path": "before/07_complete_money_expense_report_none_admission_join.sqlinc",
+      "bytes": 50147,
+      "sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 34909,
+      "sha256": "d3cdb058f2f77475859d20a4d17f47351ee88ed48edad0352c22c5ede3cfe30c"
+    },
+    {
+      "path": "forward/01_complete_report_pay_authority.sqlinc",
+      "bytes": 29780,
+      "sha256": "ca272a693c032c77931edaaea738471850d29c79aa356a9550abd6a0742c784e"
+    },
+    {
+      "path": "forward/02_complete_report_movement.sqlinc",
+      "bytes": 10107,
+      "sha256": "f4cc267249d4fd0e05fa0a52526e5d02edbc94acd3710cd006c8cd55fd41b48f"
+    },
+    {
+      "path": "forward/03_complete_report_workspace.sqlinc",
+      "bytes": 14643,
+      "sha256": "ca930d9279388c1d59e5d5e1dcb68d7d5cf2b651e8a60118f51dda8f0962cf66"
+    },
+    {
+      "path": "forward/04_complete_root_report_admission.sqlinc",
+      "bytes": 51293,
+      "sha256": "df021ce752299ffd8725d9352739af2b7ccf0bc4bddc858672d7752d7727e22a"
+    },
+    {
+      "path": "forward/05_complete_money_report_none_admission_join.sqlinc",
+      "bytes": 52833,
+      "sha256": "42629efcac57002c40ede6530aa905e4e8b7a8c3bdcf26bfe7ceae7f0f0d13ae"
+    },
+    {
+      "path": "forward/06_complete_native_mapper.mjs",
+      "bytes": 55849,
+      "sha256": "c907a6edc38a06c05649bb2eae5211916fee05690292c3786059c6c3f617875a"
+    },
+    {
+      "path": "forward/07_complete_money_expense_report_none_admission_join.sqlinc",
+      "bytes": 53670,
+      "sha256": "78a90e88ce4bbf58a8f2cd6add67ac7301b796157accf4b740513c343efc7ad8"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 12075,
+      "sha256": "dab61c20cf5efc8e45c924101e22f189c6d23540675358797fb6592f68d44ba3"
+    },
+    {
+      "path": "reference/02_pay_authority.sqlinc",
+      "bytes": 23242,
+      "sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9"
+    },
+    {
+      "path": "reference/actual_source_family_root_census.sqlinc",
+      "bytes": 12479,
+      "sha256": "19619923daac1059be9d4ac719cbcf42b5721a08d4b39e82a79e187a537cc2d5"
+    },
+    {
+      "path": "reference/compact_pay_witness.sqlinc",
+      "bytes": 1071,
+      "sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11"
+    },
+    {
+      "path": "reference/current_native_mapper.mjs",
+      "bytes": 47129,
+      "sha256": "7fa85a1547b12ccce57e7e78424f1391191fee436cf8acf776807c6799e06426"
+    },
+    {
+      "path": "reference/current_pay_snapshot.sqlinc",
+      "bytes": 5302,
+      "sha256": "25dae4e5188c7942aefecbc4383a8a8e942d427834ad7d71b86728e22934ee2c"
+    },
+    {
+      "path": "reference/money_expense_none_admission.sqlinc",
+      "bytes": 50147,
+      "sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e"
+    },
+    {
+      "path": "reference/money_none_admission.sqlinc",
+      "bytes": 49310,
+      "sha256": "8fddbb729fe54854038288afc988df8463f2908569230f4893f433878bed0145"
+    },
+    {
+      "path": "reference/movement_owner.sqlinc",
+      "bytes": 9196,
+      "sha256": "e114e9c0d4f1c9dfa27819330503b97b60679e970ac7999e8b0a02e0adc89124"
+    },
+    {
+      "path": "reference/packaging-parser.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "reference/projection_receipt.sqlinc",
+      "bytes": 2340,
+      "sha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20"
+    },
+    {
+      "path": "reference/report_workspace.sqlinc",
+      "bytes": 13636,
+      "sha256": "0f1b080ca21de14d911bb0233db6648fca3fb8c0af77a5236ae4a422c76ee7a3"
+    },
+    {
+      "path": "reference/retained_transition_assert.sqlinc",
+      "bytes": 11373,
+      "sha256": "704ca55c8009a28b008be3a6ce87de5cd39f39b2fe24bbb6a712a28da65623d2"
+    },
+    {
+      "path": "reference/root_report_admission.sqlinc",
+      "bytes": 47770,
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "path": "reference/same_file_companion_origin.sqlinc",
+      "bytes": 11216,
+      "sha256": "8e94bbaa234cdf5d6a9b4652b8e923b0f0fedda7d31094080ff7c381a52f023a"
+    },
+    {
+      "path": "reference/same_file_companion_producer.sqlinc",
+      "bytes": 9224,
+      "sha256": "b139b1d3cb52670a88848292da34db24a15fef6d35c254a5c76616f586c3dd59"
+    },
+    {
+      "path": "reference/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "path": "reference/weekly-source-report-fin-native-lock-observation.mjs",
+      "bytes": 12142,
+      "sha256": "34a0093ee48aa74a949ed7600ee187913f30e8d7a4d1591167e3863db20f2c77"
+    },
+    {
+      "path": "reference/weekly-source-report-fin-native-seal.mjs",
+      "bytes": 258,
+      "sha256": "4dfe6b4d389ba72b3688cffbf87df99966956c1d272173571a3f4cf645c538d5"
+    },
+    {
+      "path": "report-none.test.mjs",
+      "bytes": 16587,
+      "sha256": "e8ab6bdfc79053d129e0611e4ced1b65f59d0ecf2645580790829c08a85c26d8"
+    }
+  ]
+}
