@@ -1,0 +1,41 @@
+{
+  "status": "BOUNDED_INDEPENDENT_SOURCE_ACCEPT",
+  "revision_commit": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+  "policy_commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+  "source_cases": 60,
+  "revision_cases_including_predecessors": 49,
+  "new_policy_cases": 11,
+  "exact_git_inputs": 151,
+  "saved_git_files": 47,
+  "native_executed": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "full_feature_accepted": false,
+  "artifacts": [
+    {
+      "file": "review-frozen-source.mjs",
+      "bytes": 11313,
+      "sha256": "275feece1a88f7fb0c987428bba6ee6b93acac86584edbabb3b4e68fb20252f2"
+    },
+    {
+      "file": "REVISION_REVIEW.md",
+      "bytes": 3657,
+      "sha256": "ba86c94acc850dfdba58f1d202188adb7ecedf9daa24f72c15f9f87395e60b0d"
+    },
+    {
+      "file": "POLICY_REVIEW.md",
+      "bytes": 4485,
+      "sha256": "cb611ae62a5f97738fed03f4926261d633491f74d9598db527407896f3232949"
+    },
+    {
+      "file": "FROZEN_REVIEW_INPUT_PINS.json",
+      "bytes": 86732,
+      "sha256": "249465b44b2a9be00cb999b4efbd6bf9e80cc0a6ab53e767699efd4eb8378da3"
+    },
+    {
+      "file": "SOURCE_REVIEW_OUTPUT.txt",
+      "bytes": 6916,
+      "sha256": "e6ff0322f185a6d954ecef92332b1beb7d65b4e1d28cef0f8013786705b0d710"
+    }
+  ]
+}
