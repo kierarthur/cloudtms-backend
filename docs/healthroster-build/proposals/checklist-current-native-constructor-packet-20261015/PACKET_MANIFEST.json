@@ -1,0 +1,31 @@
+{
+  "source_only": true,
+  "SQL_executed": false,
+  "files": [
+    {
+      "file": "CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "bytes": 848273,
+      "sha256": "5e3dd99c71aa207d4c8996847a207ca439922c4da30c1a60fc1d2b430650c3b2"
+    },
+    {
+      "file": "CONSTRUCTOR_SOURCE_MANIFEST.json",
+      "bytes": 36809,
+      "sha256": "fe70c43169c9e48771e89e49a30138842e1d9bade33d430b167ab8c9dad7c1a7"
+    },
+    {
+      "file": "FRESH_ROUTINE_TRIGGER_FINGERPRINT.sql",
+      "bytes": 4980,
+      "sha256": "a5c608c4097d3c9061e99c92e23e2b0d31a4b4906c04923d1dce157d5fb88b83"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 2575,
+      "sha256": "907568ca23fce81d04cb1f9fa7356599e25bc347b8c7a0e47a63f3cda080c5ac"
+    },
+    {
+      "file": "build-and-check.mjs",
+      "bytes": 7214,
+      "sha256": "cc9a9b6248ea4cca0a13a892df2e32558597a78f2cb91a5fc49495d8c8765179"
+    }
+  ]
+}

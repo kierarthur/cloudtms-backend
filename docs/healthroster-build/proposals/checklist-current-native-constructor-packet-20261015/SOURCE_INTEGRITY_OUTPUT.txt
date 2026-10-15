@@ -1,0 +1,1 @@
+{"source_only":true,"raw_saved_Git_inputs":50,"complete_function_constructors":50,"statements":159,"bytes":848273,"metadata_only_catalog_assertions":50,"fresh_fingerprint_query_statements":1,"SQL_executed":false,"native_acceptance":false}
