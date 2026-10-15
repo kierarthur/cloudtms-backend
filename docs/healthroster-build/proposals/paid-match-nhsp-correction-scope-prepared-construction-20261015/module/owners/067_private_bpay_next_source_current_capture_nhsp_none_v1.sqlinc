@@ -1,0 +1,79 @@
+create or replace function private.bpay_next_source_current_capture_nhsp_none_v1(p_movement uuid)
+returns jsonb language plpgsql security definer set search_path='pg_catalog','private','public','pg_temp' as $function$
+declare invoice public.weekly_source_billing_movements%rowtype;normal public.weekly_source_billing_movements%rowtype;
+  revision public.weekly_source_final_revisions%rowtype;session public.weekly_final_source_correction_sessions%rowtype;
+  old_origin private.bpay_next_source_current_origins%rowtype;existing private.bpay_next_source_current_origins%rowtype;
+  lineage public.weekly_source_row_timesheet_lineages%rowtype;authority record;basis jsonb;economic uuid;
+  magnitude jsonb;hash bytea;resolution uuid;scope uuid;counted integer;inserted boolean;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict invoice from public.weekly_source_billing_movements where id=p_movement;
+  basis:=private.weekly_source_nhsp_none_invoice_origin_assert_v1(invoice.id);
+  if basis->>'normal_pay_report_scope_id' is distinct from basis->>'report_scope_id' then
+    return jsonb_build_object('origin_id',invoice.id,'active',false,'pay_origin_present',false,
+      'reason','NORMAL_POSITION_HAS_DISTINCT_REPORT_AUTHORITY');end if;
+  select * into strict revision from public.weekly_source_final_revisions where id=invoice.final_revision_id;
+  select * into strict authority from private.bpay_next_source_current_revision_v1(revision.id);
+  select * into strict session from public.weekly_final_source_correction_sessions
+    where prepared_final_revision_id=revision.id and replacement_correction_upload_id=revision.upload_id;
+  if revision.state<>'CURRENT' or revision.reason<>'CORRECT_FINAL_SOURCE' or not authority.is_current
+    or session.state not in ('COMMITTING','APPLIED') or session.authority_scope_kind<>'NHSP_REPORT_SCOPE'
+    or session.report_scope_id is distinct from revision.report_scope_id
+    or session.source_cycle_id is distinct from revision.source_cycle_id
+    or session.expected_current_final_revision_id is distinct from revision.predecessor_revision_id
+    or (session.state='APPLIED' and session.applied_final_revision_id is distinct from revision.id)
+    or not exists(select 1 from public.weekly_source_final_revisions old_revision
+      where old_revision.id=revision.predecessor_revision_id and old_revision.state='SUPERSEDED'
+        and old_revision.manifest_hash=session.expected_final_manifest_hash) then
+    raise exception 'BPAY_NEXT_SOURCE_NHSP_NONE_RETAINED_SCOPE_UNBOUND' using errcode='55000';end if;
+  select * into strict normal from public.weekly_source_billing_movements where id=(basis->>'normal_pay_movement_id')::uuid;
+  resolution:=(normal.source_facts_json->>'row_resolution_id')::uuid;
+  select * into strict lineage from public.weekly_source_row_timesheet_lineages where row_resolution_id=resolution;
+  select id into strict economic from public.weekly_source_row_economic_snapshots where row_resolution_id=resolution;
+  scope:=private.bpay_next_source_current_scope_v1(resolution,authority.source_group_id,normal.work_event_id,normal.contract_id);
+  magnitude:=private.bpay_next_source_nhsp_magnitude_v1(normal.source_facts_json,
+    normal.canonical_pay_vector_json,normal.canonical_charge_vector_json);
+  hash:=private.weekly_source_sha256_jsonb_v1('BPAY_NEXT_SOURCE_NHSP_MAGNITUDE_V1',magnitude);
+  select count(*) into counted from private.bpay_next_source_current_origins origin
+    where origin.origin_kind='MOVEMENT' and origin.final_revision_id=revision.predecessor_revision_id
+      and origin.scope_id=scope and origin.work_event_id=normal.work_event_id and origin.contribution=1
+      and coalesce(origin.selected_movement_id,origin.movement_id)=normal.id
+      and origin.retracted_by_session_id=session.id and not origin.active;
+  if counted<>1 then raise exception 'BPAY_NEXT_SOURCE_NHSP_NONE_PRIOR_ORIGIN_UNBOUND' using errcode='55000';end if;
+  select * into strict old_origin from private.bpay_next_source_current_origins origin
+    where origin.origin_kind='MOVEMENT' and origin.final_revision_id=revision.predecessor_revision_id
+      and origin.scope_id=scope and origin.work_event_id=normal.work_event_id and origin.contribution=1
+      and coalesce(origin.selected_movement_id,origin.movement_id)=normal.id
+      and origin.retracted_by_session_id=session.id and not origin.active;
+  if old_origin.magnitude_hash is distinct from hash or old_origin.row_resolution_id is distinct from resolution
+    or old_origin.lineage_id is distinct from lineage.id or old_origin.economic_snapshot_id is distinct from economic
+    or not exists(select 1 from public.weekly_source_billing_movements prior_invoice
+      where prior_invoice.id=old_origin.movement_id and prior_invoice.id=old_origin.origin_id
+        and prior_invoice.final_revision_id=old_origin.final_revision_id
+        and prior_invoice.movement_economic_hash=old_origin.source_hash
+        and ((prior_invoice.id=normal.id and prior_invoice.pay_effect='NORMAL' and old_origin.selected_movement_id is null)
+          or (prior_invoice.pay_effect='NONE' and old_origin.selected_movement_id=normal.id
+            and private.weekly_source_nhsp_none_invoice_origin_assert_v1(prior_invoice.id)->>'normal_pay_movement_id'=normal.id::text)))
+    or not exists(select 1 from private.bpay_next_source_current_magnitudes m where m.scope_id=scope
+      and m.work_event_id=normal.work_event_id and m.magnitude_hash=hash and m.economic_magnitude=magnitude) then
+    raise exception 'BPAY_NEXT_SOURCE_NHSP_NONE_NORMAL_PROVENANCE_UNBOUND' using errcode='55000';end if;
+  select * into existing from private.bpay_next_source_current_origins where origin_kind='MOVEMENT' and origin_id=invoice.id;
+  if found and (existing.movement_id,existing.scope_id,existing.work_event_id,existing.final_revision_id,
+      existing.order_key,existing.source_hash,existing.row_resolution_id,existing.lineage_id,existing.economic_snapshot_id,
+      existing.selected_movement_id,existing.magnitude_hash,existing.contribution,existing.representative_created_at)
+    is distinct from (invoice.id,scope,normal.work_event_id,revision.id,authority.order_key,invoice.movement_economic_hash,
+      resolution,lineage.id,economic,normal.id,hash,1::smallint,invoice.created_at_utc) then
+    raise exception 'BPAY_NEXT_SOURCE_ORIGIN_CHANGED' using errcode='55000';end if;
+  if found and (existing.active or existing.retracted_by_session_id is not null) then
+    return jsonb_build_object('origin_id',invoice.id,'active',existing.active,'pay_origin_present',true,'idempotent',true);end if;
+  insert into private.bpay_next_source_current_origins(origin_kind,origin_id,movement_id,scope_id,work_event_id,
+    final_revision_id,order_key,source_hash,row_resolution_id,lineage_id,economic_snapshot_id,
+    selected_movement_id,magnitude_hash,contribution,representative_created_at)
+    values('MOVEMENT',invoice.id,invoice.id,scope,normal.work_event_id,revision.id,authority.order_key,
+      invoice.movement_economic_hash,resolution,lineage.id,economic,normal.id,hash,1,invoice.created_at_utc) on conflict do nothing;
+  inserted:=found;
+  perform private.bpay_next_source_current_toggle_v1('MOVEMENT',invoice.id,true);
+  return jsonb_build_object('origin_id',invoice.id,'active',true,'pay_origin_present',true,
+    'normal_pay_movement_id',normal.id,'idempotent',not inserted);
+end;
+$function$;

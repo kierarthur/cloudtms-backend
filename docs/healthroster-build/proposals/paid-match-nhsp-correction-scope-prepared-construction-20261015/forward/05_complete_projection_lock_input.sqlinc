@@ -1,0 +1,91 @@
+-- Read-only discovery for the actual native projection's pre-business I1
+-- phase. This is never a CURRENT choice/no-reversal or write certificate.
+create or replace function private.weekly_source_nhsp_projection_lock_input_v1(
+  p_upload_row_id uuid,p_actor_user_id uuid,p_projection_publication_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp' as $function$
+declare data jsonb;choice private.weekly_source_office_row_choices%rowtype;
+  row public.weekly_source_upload_rows%rowtype;upload public.weekly_source_uploads%rowtype;
+  cycle public.weekly_source_cycles%rowtype;scope public.weekly_source_report_scopes%rowtype;
+  publication public.weekly_source_projection_publications%rowtype;saved jsonb;item jsonb;basis jsonb;raw_negative jsonb;
+  correction public.weekly_final_source_correction_sessions%rowtype;
+  result jsonb;counted integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_actor_user_id is null then raise exception 'WEEKLY_SOURCE_ACTOR_REQUIRED' using errcode='42501';end if;
+  data:=private.weekly_source_paid_choice_immutable_v1(p_upload_row_id);
+  if data is null then return null;end if;
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+  select * into strict row from public.weekly_source_upload_rows where id=p_upload_row_id;
+  select * into strict upload from public.weekly_source_uploads where id=row.upload_id;
+  select * into strict cycle from public.weekly_source_cycles where id=upload.source_cycle_id;
+  select * into strict scope from public.weekly_source_report_scopes where id=upload.report_scope_id;
+  select * into strict publication from public.weekly_source_projection_publications where id=p_projection_publication_id;
+  if upload.purpose='FINAL_SOURCE_CORRECTION' then
+    perform private.weekly_source_paid_match_correction_scope_v1(upload.id,p_actor_user_id,false);
+    select * into strict correction from public.weekly_final_source_correction_sessions where id=upload.correction_session_id;
+  end if;
+  if upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')
+    or (upload.purpose='ORDINARY' and (upload.state<>'CURRENT' or upload.correction_session_id is not null
+      or scope.current_complete_upload_id is distinct from upload.id))
+    or (upload.purpose='FINAL_SOURCE_CORRECTION' and (upload.state<>'CORRECTION_READY'
+      or publication.id is distinct from correction.replacement_projection_publication_id)) or scope.source_cycle_id is distinct from cycle.id
+    or scope.source_group_id is distinct from cycle.source_group_id or scope.self_bill_report_id is not null
+    or publication.upload_id is distinct from upload.id or publication.source_cycle_id is distinct from cycle.id
+    or publication.report_scope_id is distinct from scope.id or publication.authority_scope_kind<>'NHSP_REPORT_SCOPE'
+    or publication.authority_scope_version is distinct from scope.version or publication.state<>'BUILDING'
+    or publication.correction_session_id is distinct from upload.correction_session_id
+    or not exists(select 1 from public.weekly_source_groups g where g.id=cycle.source_group_id and g.active and g.source_family='NHSP')
+    or not exists(select 1 from public.weekly_source_format_profiles profile
+      where profile.id=upload.source_format_profile_id and profile.profile_code='NHSP_FINAL_BACKING_V1') then
+    raise exception 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_SCOPE_UNBOUND' using errcode='55000';end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',cycle.source_group_id,scope.client_id,cycle.finalisation_week_ending);
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'APPROVE_PROTECTED_PAY',cycle.source_group_id,scope.client_id,cycle.finalisation_week_ending);
+  choice:=pg_catalog.jsonb_populate_record(null::private.weekly_source_office_row_choices,data->'choice');
+  saved:=data#>'{admission,inputs}';
+  if choice.client_id is distinct from scope.client_id or saved->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1'
+    or saved->>'candidate_id' is distinct from choice.candidate_id::text
+    or saved->>'client_id' is distinct from choice.client_id::text
+    or saved->>'source_cycle_id' is distinct from cycle.id::text
+    or saved->>'source_group_id' is distinct from cycle.source_group_id::text
+    or saved->>'upload_id' is distinct from upload.id::text or saved->>'upload_row_id' is distinct from row.id::text
+    or saved->>'actor_user_id' is distinct from choice.actor_user_id::text
+    or saved->>'normalised_row_hash' is distinct from encode(row.normalised_row_hash,'hex')
+    or saved->>'row_manifest_hash' is distinct from encode(upload.row_manifest_hash,'hex')
+    or saved->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1',saved-'inputs_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_CHOICE_UNBOUND' using errcode='55000';end if;
+  if upload.purpose='FINAL_SOURCE_CORRECTION' and saved->'correction_scope' is distinct from
+    private.weekly_source_paid_match_correction_scope_v1(upload.id,p_actor_user_id,false) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FACTS_CHANGED' using errcode='40001';end if;
+  -- The saved incoming negative records are HISTORICAL input provenance only.
+  -- Current Source position/cash/roots are independently re-read for every
+  -- member before I1. Fresh current-generation negative proof follows native
+  -- negative row application and must be rechecked before any positive write.
+  for item in select value from jsonb_array_elements(saved->'overlaps') loop
+    if item->>'candidate_id' is distinct from choice.candidate_id::text or item->>'client_id' is distinct from choice.client_id::text then
+      raise exception 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_CHOICE_UNBOUND' using errcode='55000';end if;
+    raw_negative:=item->'nhsp_negative_population';
+    perform private.weekly_source_nhsp_negative_comparison_v1(raw_negative);
+    basis:=private.weekly_source_nhsp_paid_overlap_basis_v1((item->>'work_event_id')::uuid,p_actor_user_id,cycle.id);
+    if basis is distinct from raw_negative->'native_current_basis'
+      or item->'native_payment_facts' is distinct from basis->'native_payment_facts'
+      or basis->>'state' is distinct from 'NATIVE_POSITION_INPUTS' then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FACTS_CHANGED' using errcode='40001';end if;
+    counted:=counted+1;
+  end loop;
+  if counted=0 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_ROOT_UNAVAILABLE' using errcode='55000';end if;
+  result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1',
+    'choice_id',choice.id,'upload_row_id',row.id,'upload_id',upload.id,'candidate_id',choice.candidate_id,
+    'client_id',choice.client_id,'contract_id',choice.contract_id,'pay_effect',choice.pay_effect,
+    'paid_overlap_target_work_event_id',choice.paid_overlap_target_work_event_id,
+    'viewer_actor_user_id',p_actor_user_id,'projection_publication_id',publication.id,
+    'native_backend_pid',pg_backend_pid(),'native_transaction_id',pg_current_xact_id()::text,
+    'inputs',saved,'fresh_choice_admission',false);
+  return result||jsonb_build_object('lock_input_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1',result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

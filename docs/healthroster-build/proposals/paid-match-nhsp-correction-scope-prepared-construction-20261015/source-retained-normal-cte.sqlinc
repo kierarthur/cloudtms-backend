@@ -1,0 +1,30 @@
+  ), retained_invoice_candidates as materialized (
+    -- This is explicit immutable invoice-to-NORMAL provenance. A superseded
+    -- NORMAL row is included only because an actual current/target NONE row
+    -- retains it. Neither the old revision nor the NONE invoice is PAY authority.
+    select invoice.id
+    from public.weekly_source_billing_movements invoice
+    join public.weekly_source_final_revisions invoice_revision on invoice_revision.id=invoice.final_revision_id
+    join public.weekly_source_cycles invoice_cycle on invoice_cycle.id=invoice_revision.source_cycle_id
+    cross join target
+    cross join family
+    where invoice.pay_effect='NONE' and invoice.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+      and invoice.source_line_kind='NHSP_PHYSICAL_POSITIVE' and invoice.movement_role='POSITIVE'
+      and invoice.candidate_id=family.candidate_id and invoice.actual_client_id=family.client_id
+      and invoice.contract_id=family.contract_id
+      and ((not family.use_next and invoice.invoice_timesheet_id=any(family.timesheet_ids))
+        or (family.use_next and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage
+          where lineage.row_resolution_id=(invoice.source_facts_json->>'bound_row_resolution_id')::uuid
+            and lineage.work_event_id=invoice.work_event_id and lineage.family_booking_id=family.booking_id
+            and (lineage.candidate_id,lineage.client_id,lineage.contract_id,lineage.week_ending_date)
+              is not distinct from (family.candidate_id,family.client_id,family.contract_id,family.week_ending_date))))
+      and (invoice_revision.state='CURRENT' or invoice_revision.id=target.id)
+      and (target.state<>'PREPARED' or invoice_revision.id is distinct from target.predecessor_revision_id)
+      and (invoice_cycle.finalisation_week_ending<target.finalisation_week_ending
+        or (invoice_cycle.finalisation_week_ending=target.finalisation_week_ending
+          and (invoice_revision.finalised_at_utc,invoice_revision.revision_number,invoice_revision.id::text)
+            <=(target.finalised_at_utc,target.revision_number,target.id::text)))
+  ), retained_normal as materialized (
+    select distinct (private.weekly_source_nhsp_none_invoice_origin_assert_v1(invoice.id)->>'normal_pay_movement_id')::uuid as movement_id
+    from retained_invoice_candidates invoice
+  ), scoped as (

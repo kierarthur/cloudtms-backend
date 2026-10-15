@@ -1,0 +1,297 @@
+create or replace function private.weekly_source_finalisation_insert_current_movement_v1(
+  p_transition_id uuid,
+  p_nhsp_upload_row_id uuid,
+  p_final_revision_id uuid,
+  p_finalisation_cycle_id uuid,
+  p_source_profile_kind text,
+  p_movement_role text,
+  p_source_line_kind text,
+  p_row_resolution_id uuid,
+  p_economic_snapshot_id uuid,
+  p_invoice_timesheet_id uuid,
+  p_source_validation_charge_pence bigint,
+  p_invoice_presentation_charge_pence bigint,
+  p_price_check_result text,
+  p_price_check_fingerprint bytea,
+  p_charge_acceptance_id uuid,
+  p_source_facts_json jsonb,
+  p_correction_unit_id uuid default null,
+  p_prior_movement_id uuid default null
+) returns uuid
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_source_row public.weekly_source_upload_rows%rowtype;
+  v_economic public.weekly_source_row_economic_snapshots%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_invoice_rules jsonb;
+  v_invoice_amounts jsonb;
+  v_source_amount boolean:=false;
+  v_source_facts jsonb:=p_source_facts_json;
+  v_pay_vector jsonb;
+  v_charge_vector jsonb;
+  v_mapping_fingerprint bytea;
+  v_vat_values jsonb;
+  v_vat_rate numeric(5,2);
+  v_vat numeric(12,2);
+  v_total numeric(12,2);
+  v_hash bytea;
+  v_id uuid;v_pay_effect text:='NORMAL';v_total_pay_pence bigint;v_nhsp_none_basis jsonb;
+begin
+  if (p_transition_id is null)::integer+(p_nhsp_upload_row_id is null)::integer<>1
+     or p_final_revision_id is null or p_finalisation_cycle_id is null
+     or p_source_profile_kind not in (
+       'GENERIC_COMPLETE_SNAPSHOT','NHSP_TRUST_BACKING_REPORT','HEALTHROSTER_ACTUAL_ROWS'
+     )
+     or p_movement_role not in ('POSITIVE','REPLACEMENT','REVERSAL')
+     or p_source_line_kind not in (
+       'SOURCE_ORDINARY','SOURCE_REPLACEMENT','NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE'
+     )
+     or pg_catalog.jsonb_typeof(p_source_facts_json)<>'object' then
+    raise exception 'WEEKLY_SOURCE_MOVEMENT_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_resolution
+  from public.weekly_source_row_resolutions where id=p_row_resolution_id;
+  select * into strict v_source_row
+  from public.weekly_source_upload_rows where id=v_resolution.upload_row_id;
+  select * into strict v_upload
+  from public.weekly_source_uploads where id=v_source_row.upload_id;
+  select * into strict v_economic
+  from public.weekly_source_row_economic_snapshots where id=p_economic_snapshot_id;
+  v_invoice_rules:=private.weekly_source_frozen_rule_values_v1(p_final_revision_id);
+  v_source_amount:=v_invoice_rules is not null and v_invoice_rules->>'invoice_sender'='CLIENT_SELF_BILL' and v_invoice_rules->>'invoice_amount_basis'='SOURCE_AMOUNT' and v_invoice_rules->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY';
+  if v_economic.row_resolution_id is distinct from v_resolution.id
+     or v_resolution.mapping_state<>'RESOLVED'
+     or p_invoice_timesheet_id is null
+     or not exists(
+       select 1
+       from public.weekly_source_final_revisions revision
+       where revision.id=p_final_revision_id
+         and revision.source_cycle_id=p_finalisation_cycle_id
+         and (
+           revision.state='CURRENT'
+           or (
+             revision.state='PREPARED'
+             and revision.reason='CORRECT_FINAL_SOURCE'
+             and exists(
+               select 1
+               from public.weekly_final_source_correction_sessions correction
+               join public.weekly_source_uploads replacement_upload
+                 on replacement_upload.id=correction.replacement_correction_upload_id
+                and replacement_upload.id=revision.upload_id
+                and replacement_upload.source_cycle_id=revision.source_cycle_id
+                and replacement_upload.state='CORRECTION_READY'
+               join public.weekly_source_projection_publications replacement_publication
+                 on replacement_publication.id=correction.replacement_projection_publication_id
+                and replacement_publication.upload_id=replacement_upload.id
+                and replacement_publication.source_cycle_id=revision.source_cycle_id
+                and replacement_publication.state='CORRECTION_READY'
+               where correction.source_cycle_id=revision.source_cycle_id
+                 and correction.authority_scope_kind=revision.authority_scope_kind
+                 and correction.report_scope_id is not distinct from revision.report_scope_id
+                 and correction.state='PREPARING'
+                 and correction.expected_current_final_revision_id=revision.predecessor_revision_id
+             )
+           )
+         )
+     )
+     or private.weekly_source_finalisation_economic_assert_v1(
+          p_row_resolution_id,p_finalisation_cycle_id,
+          case when p_source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+            then 'NHSP_WEEKLY' else 'HEALTHROSTER_WEEKLY' end
+        ) is distinct from p_economic_snapshot_id
+     or private.weekly_source_finalisation_lineage_assert_v1(
+          p_row_resolution_id,p_finalisation_cycle_id
+        ) is distinct from p_invoice_timesheet_id
+     or (p_source_profile_kind='NHSP_TRUST_BACKING_REPORT') is distinct from
+        (p_nhsp_upload_row_id is not null)
+     or (p_source_profile_kind='NHSP_TRUST_BACKING_REPORT' and (
+       p_nhsp_upload_row_id is distinct from v_source_row.id
+       or p_source_validation_charge_pence is null
+       or p_source_validation_charge_pence is distinct from v_source_row.source_shift_charge_pence
+       or p_source_validation_charge_pence is distinct from p_invoice_presentation_charge_pence
+       or p_price_check_result not in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','ACCEPTED_DISPARITY','ACCEPTED_ZERO')
+       or p_price_check_fingerprint is distinct from v_economic.calculation_fingerprint
+       or (p_price_check_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT')) is distinct from
+          (p_charge_acceptance_id is null)
+       or (p_price_check_result in ('ACCEPTED_DISPARITY','ACCEPTED_ZERO') and not exists(
+         select 1
+         from public.weekly_source_charge_acceptances acceptance
+         join public.weekly_source_charge_checks charge_check
+           on charge_check.id=acceptance.charge_check_id
+         where acceptance.id=p_charge_acceptance_id
+           and acceptance.upload_row_id=v_source_row.id
+           and acceptance.row_resolution_id=v_resolution.id
+           and acceptance.source_upload_id=v_upload.id
+           and acceptance.contract_id=v_resolution.contract_id
+           and acceptance.acceptance_kind=p_price_check_result
+           and acceptance.source_upload_hash=v_upload.content_sha256
+           and acceptance.source_row_fingerprint=v_resolution.source_row_fingerprint
+           and acceptance.contract_and_rate_fingerprint=v_economic.contract_and_rate_fingerprint
+           and acceptance.effective_policy_fingerprint=v_economic.effective_policy_fingerprint
+           and acceptance.charge_calculation_fingerprint=v_economic.calculation_fingerprint
+           and acceptance.acceptance_policy_fingerprint=
+             private.weekly_source_charge_acceptance_policy_fingerprint_v1()
+           and charge_check.upload_row_id=v_source_row.id
+           and charge_check.row_resolution_id=v_resolution.id
+           and charge_check.charge_calculation_fingerprint=v_economic.calculation_fingerprint
+           and charge_check.comparison_result=case p_price_check_result
+             when 'ACCEPTED_ZERO' then 'ZERO_SOURCE_CHARGE' else 'MISMATCH' end
+       ))
+       or p_correction_unit_id is not null
+       or p_prior_movement_id is not null
+       or not (
+         (v_economic.row_sign=1 and p_movement_role='POSITIVE'
+           and p_source_line_kind='NHSP_PHYSICAL_POSITIVE'
+           and v_source_row.source_shift_charge_pence>=0)
+         or (v_economic.row_sign=-1 and p_movement_role='REVERSAL'
+           and p_source_line_kind='NHSP_PHYSICAL_FULL_NEGATIVE'
+           and v_source_row.source_shift_charge_pence<0)
+       )
+     ))
+     or (p_source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' and (
+       (not v_source_amount and (p_source_validation_charge_pence is not null
+         or p_invoice_presentation_charge_pence is distinct from v_economic.calculated_charge_pence
+         or p_price_check_result<>'NOT_APPLICABLE' or p_price_check_fingerprint is not null or p_charge_acceptance_id is not null))
+       or (v_source_amount and (p_source_validation_charge_pence is distinct from v_source_row.source_shift_charge_pence
+         or p_invoice_presentation_charge_pence is distinct from v_source_row.source_shift_charge_pence
+         or p_price_check_result not in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY')
+         or p_price_check_fingerprint is distinct from v_economic.calculation_fingerprint
+         or ((p_price_check_result='ACCEPTED_DISPARITY') is distinct from (p_charge_acceptance_id is not null))))
+       or v_economic.row_sign<>1
+       or not (
+         (p_movement_role='POSITIVE' and p_source_line_kind='SOURCE_ORDINARY'
+           and p_correction_unit_id is null and p_prior_movement_id is null)
+         or (p_movement_role='REPLACEMENT' and p_source_line_kind='SOURCE_REPLACEMENT'
+           and p_correction_unit_id is not null and p_prior_movement_id is not null)
+       )
+     )) then
+    raise exception 'WEEKLY_SOURCE_MOVEMENT_AUTHORITY_INVALID' using errcode='55000';
+  end if;
+  if p_source_profile_kind='NHSP_TRUST_BACKING_REPORT' then
+    if not exists(
+      select 1
+      from public.weekly_source_final_revisions revision
+      where revision.id=p_final_revision_id
+        and revision.authority_scope_kind='NHSP_REPORT_SCOPE'
+    ) then
+      raise exception 'WEEKLY_SOURCE_MOVEMENT_SCOPE_INVALID' using errcode='55000';
+    end if;
+  elsif not exists(
+    select 1
+    from public.weekly_source_state_transitions transition_row
+    where transition_row.id=p_transition_id
+      and transition_row.final_revision_id=p_final_revision_id
+      and transition_row.finalisation_cycle_id=p_finalisation_cycle_id
+      and transition_row.work_event_id=v_resolution.work_event_id
+      and transition_row.outcome=case when p_movement_role='POSITIVE' then 'ADD' else 'AMEND' end
+  ) then
+    raise exception 'WEEKLY_SOURCE_MOVEMENT_TRANSITION_INVALID' using errcode='55000';
+  end if;
+
+  if p_source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' and v_invoice_rules is not null and v_invoice_rules->>'invoice_sender'='CLIENT_SELF_BILL' then
+    v_invoice_amounts:=private.weekly_source_invoice_line_amounts_v1(v_resolution.id,p_final_revision_id);
+    if (v_invoice_amounts->>'net_pence')::bigint is distinct from p_invoice_presentation_charge_pence
+      or v_invoice_amounts->>'price_check_result' is distinct from p_price_check_result
+      or nullif(v_invoice_amounts->>'charge_acceptance_id','')::uuid is distinct from p_charge_acceptance_id then raise exception 'WEEKLY_SOURCE_INVOICE_MONEY_NOT_REDERIVED' using errcode='55000'; end if;
+    v_source_facts:=v_source_facts||jsonb_build_object('rule_set_version_id',v_invoice_amounts->'rule_set_version_id',
+      'rule_set_values_sha256',(select version.values_sha256 from public.weekly_source_rule_set_versions version where version.id=(v_invoice_amounts->>'rule_set_version_id')::uuid),
+      'invoice_hold',v_invoice_amounts->'invoice_hold','hold_release_id',v_invoice_amounts->'hold_release_id');
+  end if;
+  v_total_pay_pence:=v_economic.total_pay_pence;
+  if v_resolution.pay_effect='NONE' then
+    if p_source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or p_source_line_kind<>'NHSP_PHYSICAL_POSITIVE'
+      or p_movement_role<>'POSITIVE' or p_nhsp_upload_row_id is distinct from v_source_row.id
+      or p_transition_id is not null or p_correction_unit_id is not null or p_prior_movement_id is not null
+      or v_economic.row_sign<>1 then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_MOVEMENT_SCOPE_UNBOUND' using errcode='55000';end if;
+    v_nhsp_none_basis:=private.weekly_source_nhsp_none_invoice_basis_v1(v_resolution.id,p_final_revision_id);
+    if not exists(select 1 from public.weekly_source_final_revisions target_revision
+      join public.weekly_source_report_scopes target_scope on target_scope.id=target_revision.report_scope_id
+      where target_revision.id=(v_nhsp_none_basis->>'normal_pay_final_revision_id')::uuid
+        and target_revision.state='CURRENT' and target_scope.current_final_revision_id=target_revision.id)
+      or not exists(select 1 from public.weekly_source_final_revisions revision
+        where revision.id=p_final_revision_id and revision.state='CURRENT' and revision.reason='INITIAL_FINALISATION'
+          and revision.predecessor_revision_id is null)
+      or v_nhsp_none_basis->>'invoice_timesheet_id' is distinct from p_invoice_timesheet_id::text
+      or v_nhsp_none_basis#>>'{native_invoice_values,source_shift_charge_pence}' is distinct from p_invoice_presentation_charge_pence::text then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_NOT_CURRENT' using errcode='55000';end if;
+    -- The raw physical B source remains this origin. Removing only its generic
+    -- pay-lineage key cannot mint a replacement of A's genuine NORMAL origin.
+    v_source_facts:=(v_source_facts-'row_resolution_id')||jsonb_build_object(
+      'bound_row_resolution_id',v_resolution.id,'pay_effect','NONE','nhsp_none_invoice_basis',v_nhsp_none_basis);
+    v_pay_effect:='NONE';v_total_pay_pence:=0;
+  end if;
+  v_pay_vector:=case when v_pay_effect='NONE' then private.weekly_source_nhsp_invoice_only_vector_v1('PAY',0)
+    else private.weekly_source_finalisation_vector_v1(v_economic.id,'PAY',1::smallint) end;
+  v_charge_vector:=case when v_pay_effect='NONE' then private.weekly_source_nhsp_invoice_only_vector_v1('CHARGE',p_invoice_presentation_charge_pence)
+    else private.weekly_source_finalisation_vector_v1(v_economic.id,'CHARGE',1::smallint) end;
+  v_mapping_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MAPPING_RATE_POLICY_V1',
+    pg_catalog.jsonb_build_object(
+      'row_resolution_id',v_resolution.id,
+      'work_event_id',v_resolution.work_event_id,
+      'candidate_id',v_resolution.candidate_id,
+      'client_id',v_resolution.client_id,
+      'contract_id',v_resolution.contract_id,
+      'contract_and_rate_fingerprint',pg_catalog.encode(v_economic.contract_and_rate_fingerprint,'hex'),
+      'effective_policy_fingerprint',pg_catalog.encode(v_economic.effective_policy_fingerprint,'hex'),
+      'invoice_vat_policy_fingerprint',pg_catalog.encode(v_economic.invoice_vat_policy_fingerprint,'hex'),
+      'calculation_fingerprint',pg_catalog.encode(v_economic.calculation_fingerprint,'hex')
+    )
+  );
+  v_vat_values:=private.weekly_source_native_line_vat_v1(p_invoice_presentation_charge_pence,v_economic.invoice_vat_chargeable,v_economic.invoice_vat_rate_pct);
+  v_vat_rate:=(v_vat_values->>'vat_rate_pct')::numeric;
+  v_vat:=(v_vat_values->>'vat_amount')::numeric;
+  v_total:=(v_vat_values->>'total_inc_vat')::numeric;
+  if v_invoice_amounts is not null then v_vat:=(v_invoice_amounts->>'vat_pence')::numeric/100; v_total:=(v_invoice_amounts->>'gross_pence')::numeric/100; end if;
+  v_hash:=private.weekly_source_billing_movement_hash_v1(
+    pg_catalog.jsonb_build_object(
+      'transition_id',p_transition_id,'nhsp_upload_row_id',p_nhsp_upload_row_id,
+      'final_revision_id',p_final_revision_id,'finalisation_cycle_id',p_finalisation_cycle_id,
+      'actual_client_id',v_resolution.client_id,'candidate_id',v_resolution.candidate_id,
+      'contract_id',v_resolution.contract_id,'work_event_id',v_resolution.work_event_id,
+      'movement_role',p_movement_role,'correction_unit_id',p_correction_unit_id,
+      'prior_movement_id',p_prior_movement_id,'source_profile_kind',p_source_profile_kind,
+      'source_line_kind',p_source_line_kind,'source_facts',v_source_facts,
+      'pay_vector',v_pay_vector,'charge_vector',v_charge_vector,
+      'total_pay_pence',v_total_pay_pence,
+      'calculated_comparison_charge_pence',v_economic.calculated_charge_pence,
+      'source_validation_charge_pence',p_source_validation_charge_pence,
+      'invoice_presentation_charge_pence',p_invoice_presentation_charge_pence,
+      'vat_rate_pct',v_vat_rate,'vat_amount',v_vat,'total_inc_vat',v_total,
+      'price_check_result',p_price_check_result,
+      'price_check_fingerprint',case when p_price_check_fingerprint is null then null
+        else pg_catalog.encode(p_price_check_fingerprint,'hex') end,
+      'charge_acceptance_id',p_charge_acceptance_id,
+      'mapping_rate_policy_fingerprint',pg_catalog.encode(v_mapping_fingerprint,'hex'),
+      'invoice_timesheet_id',p_invoice_timesheet_id
+    )||case when v_pay_effect='NONE' then jsonb_build_object('pay_effect','NONE') else '{}'::jsonb end
+  );
+  insert into public.weekly_source_billing_movements(
+    transition_id,nhsp_upload_row_id,pay_effect,final_revision_id,finalisation_cycle_id,
+    actual_client_id,candidate_id,contract_id,work_event_id,movement_role,
+    correction_unit_id,prior_movement_id,source_profile_kind,source_line_kind,
+    source_facts_json,canonical_pay_vector_json,canonical_charge_vector_json,
+    total_pay_ex_vat,calculated_comparison_charge_pence,
+    source_validation_charge_pence,invoice_presentation_charge_pence,
+    vat_rate_pct,vat_amount,total_inc_vat,price_check_result,price_check_fingerprint,
+    charge_acceptance_id,mapping_rate_policy_fingerprint,invoice_timesheet_id,original_cycle_key,
+    movement_economic_hash,placement_state
+  ) values (
+    p_transition_id,p_nhsp_upload_row_id,v_pay_effect,p_final_revision_id,p_finalisation_cycle_id,
+    v_resolution.client_id,v_resolution.candidate_id,v_resolution.contract_id,
+    v_resolution.work_event_id,p_movement_role,p_correction_unit_id,p_prior_movement_id,
+    p_source_profile_kind,p_source_line_kind,v_source_facts,v_pay_vector,v_charge_vector,
+    v_total_pay_pence::numeric/100,v_economic.calculated_charge_pence,
+    p_source_validation_charge_pence,p_invoice_presentation_charge_pence,
+    v_vat_rate,v_vat,v_total,p_price_check_result,p_price_check_fingerprint,
+    p_charge_acceptance_id,v_mapping_fingerprint,p_invoice_timesheet_id,p_finalisation_cycle_id::text,
+    v_hash,'UNPLACED'
+  ) returning id into v_id;
+  if v_pay_effect='NONE' then perform private.weekly_source_nhsp_none_invoice_origin_assert_v1(v_id);end if;
+  return v_id;
+end;
+$function$;

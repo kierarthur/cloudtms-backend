@@ -1,0 +1,153 @@
+create or replace function private.weekly_source_paid_match_correction_scope_v1(
+  p_upload_id uuid,p_actor_user_id uuid,p_confirm boolean default false
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_prior_upload public.weekly_source_uploads%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_client uuid;v_result jsonb;v_scope public.weekly_source_report_scopes%rowtype;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_upload_id is null or p_actor_user_id is null or p_confirm is null then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_INVALID' using errcode='22023';end if;
+  select * into strict v_upload from public.weekly_source_uploads where id=p_upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  select * into v_session from public.weekly_final_source_correction_sessions where id=v_upload.correction_session_id;
+  if v_upload.report_scope_id is not null then
+    select * into strict v_scope from public.weekly_source_report_scopes where id=v_upload.report_scope_id;
+    if not found or v_upload.purpose is distinct from 'FINAL_SOURCE_CORRECTION'
+      or v_upload.state is distinct from 'CORRECTION_READY'
+      or v_session.id is null or v_session.source_cycle_id is distinct from v_cycle.id
+      or v_session.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'
+      or v_session.report_scope_id is distinct from v_scope.id
+      or v_session.replacement_correction_upload_id is distinct from v_upload.id
+      or v_session.actor_user_id is distinct from p_actor_user_id
+      or v_session.state not in ('READY','REVIEWED','PREPARING','PREPARED','COMMITTING')
+      or (p_confirm and v_session.state is distinct from 'REVIEWED')
+      or v_scope.state not in ('FINALISED','CORRECTION_IN_PROGRESS')
+      or v_scope.source_cycle_id is distinct from v_cycle.id
+      or v_scope.source_group_id is distinct from v_cycle.source_group_id or v_scope.self_bill_report_id is not null
+      or v_scope.current_final_revision_id is distinct from v_session.expected_current_final_revision_id
+      or not exists(select 1 from public.weekly_source_groups g
+        where g.id=v_cycle.source_group_id and g.active and g.source_family='NHSP')
+      or not exists(select 1 from public.weekly_source_format_profiles profile
+        where profile.id=v_upload.source_format_profile_id and profile.active and profile.profile_code='NHSP_FINAL_BACKING_V1') then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    select * into strict v_revision from public.weekly_source_final_revisions where id=v_session.expected_current_final_revision_id;
+    select * into strict v_prior_upload from public.weekly_source_uploads where id=v_revision.upload_id;
+    if v_revision.state is distinct from 'CURRENT' or v_revision.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'
+      or v_revision.report_scope_id is distinct from v_scope.id or v_revision.source_cycle_id is distinct from v_cycle.id
+      or v_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash
+      or v_prior_upload.state is distinct from 'CURRENT' or v_prior_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')
+      or v_prior_upload.report_scope_id is distinct from v_scope.id
+      or v_prior_upload.source_format_profile_id is distinct from v_upload.source_format_profile_id
+      or v_scope.current_complete_upload_id is distinct from v_prior_upload.id
+      or v_prior_upload.declared_scope_fingerprint is distinct from v_upload.declared_scope_fingerprint then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    select * into strict v_publication from public.weekly_source_projection_publications where id=v_scope.current_projection_publication_id;
+    if v_publication.state is distinct from 'CURRENT' or v_publication.upload_id is distinct from v_prior_upload.id
+      or v_publication.source_cycle_id is distinct from v_cycle.id or v_publication.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'
+      or v_publication.report_scope_id is distinct from v_scope.id
+      or (v_prior_upload.purpose='ORDINARY' and v_publication.correction_session_id is not null)
+      or (v_prior_upload.purpose='FINAL_SOURCE_CORRECTION' and not exists(
+        select 1 from public.weekly_final_source_correction_sessions prior_session
+        where prior_session.id=v_prior_upload.correction_session_id and prior_session.id=v_publication.correction_session_id
+          and prior_session.applied_final_revision_id=v_revision.id and prior_session.state='APPLIED')) then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    v_client:=v_scope.client_id;
+    if nullif(v_upload.file_metadata_json->>'client_id','')::uuid is distinct from v_client then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'CORRECT_FINAL_SOURCE',
+      v_cycle.source_group_id,v_client,v_cycle.finalisation_week_ending);
+    if v_session.replacement_projection_publication_id is not null then
+      select * into strict v_publication from public.weekly_source_projection_publications where id=v_session.replacement_projection_publication_id;
+      if v_publication.state not in ('BUILDING','CORRECTION_READY')
+        or (p_confirm and v_publication.state<>'CORRECTION_READY')
+        or (v_publication.state='BUILDING' and v_session.state<>'READY')
+        or v_publication.upload_id is distinct from v_upload.id or v_publication.source_cycle_id is distinct from v_cycle.id
+        or v_publication.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'
+        or v_publication.report_scope_id is distinct from v_scope.id
+        or v_publication.correction_session_id is distinct from v_session.id
+        or v_publication.authority_scope_version is distinct from v_scope.version then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    elsif v_session.state is distinct from 'READY' then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    if v_session.state='REVIEWED' and (v_session.review_result_json is null
+      or v_session.review_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',v_session.review_result_json)) then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+    -- Stable subject identity only. Every mutable session/publication/scope
+    -- gate above is re-read; none is relabelled as immutable financial facts.
+    v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',
+      'correction_session_id',v_session.id,'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,
+      'client_id',v_client,'upload_id',v_upload.id,'actor_user_id',p_actor_user_id,
+      'prior_final_revision_id',v_revision.id,'prior_final_manifest_hash',encode(v_revision.manifest_hash,'hex'),
+      'prior_upload_id',v_prior_upload.id,'source_format_profile_id',v_upload.source_format_profile_id,
+      'row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'),'report_scope_id',v_scope.id,
+      'authority_scope_kind','NHSP_REPORT_SCOPE');
+    return v_result||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',v_result),'hex'));
+  end if;
+  if not found or v_upload.purpose is distinct from 'FINAL_SOURCE_CORRECTION'
+    or v_upload.state is distinct from 'CORRECTION_READY' or v_upload.report_scope_id is not null
+    or v_session.source_cycle_id is distinct from v_cycle.id
+    or v_session.authority_scope_kind is distinct from 'CYCLE' or v_session.report_scope_id is not null
+    or v_session.replacement_correction_upload_id is distinct from v_upload.id
+    or v_session.actor_user_id is distinct from p_actor_user_id
+    or v_session.state not in ('READY','REVIEWED','PREPARING','PREPARED','COMMITTING')
+    or (p_confirm and v_session.state is distinct from 'REVIEWED')
+    or v_cycle.state is distinct from 'FINALISED'
+    or v_cycle.current_final_revision_id is distinct from v_session.expected_current_final_revision_id then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  select * into strict v_revision from public.weekly_source_final_revisions where id=v_session.expected_current_final_revision_id;
+  select * into strict v_prior_upload from public.weekly_source_uploads where id=v_revision.upload_id;
+  if v_revision.state is distinct from 'CURRENT' or v_revision.authority_scope_kind is distinct from 'CYCLE'
+    or v_revision.report_scope_id is not null or v_revision.source_cycle_id is distinct from v_cycle.id
+    or v_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash
+    or v_prior_upload.state is distinct from 'CURRENT'
+    or v_cycle.current_complete_upload_id is distinct from v_prior_upload.id
+    or v_prior_upload.declared_scope_fingerprint is distinct from v_upload.declared_scope_fingerprint then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=v_cycle.current_projection_publication_id;
+  if v_publication.state is distinct from 'CURRENT' or v_publication.upload_id is distinct from v_prior_upload.id
+    or v_publication.source_cycle_id is distinct from v_cycle.id or v_publication.authority_scope_kind is distinct from 'CYCLE'
+    or v_publication.report_scope_id is not null or v_publication.correction_session_id is not null then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  select manifest.client_id into strict v_client from public.weekly_source_client_manifests manifest
+    where manifest.final_revision_id=v_revision.id and coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)=manifest.source_cycle_id;
+  if nullif(v_upload.file_metadata_json->>'client_id','')::uuid is distinct from v_client then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'CORRECT_FINAL_SOURCE',
+    v_cycle.source_group_id,v_client,v_cycle.finalisation_week_ending);
+  if v_session.replacement_projection_publication_id is not null then
+    select * into strict v_publication from public.weekly_source_projection_publications where id=v_session.replacement_projection_publication_id;
+    if v_publication.state is distinct from 'CORRECTION_READY'
+      or v_publication.upload_id is distinct from v_upload.id or v_publication.source_cycle_id is distinct from v_cycle.id
+      or v_publication.authority_scope_kind is distinct from 'CYCLE' or v_publication.report_scope_id is not null
+      or v_publication.correction_session_id is distinct from v_session.id
+      or v_publication.authority_scope_version is distinct from v_cycle.version then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  elsif v_session.state is distinct from 'READY' then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  if v_session.state='REVIEWED' and (v_session.review_result_json is null
+    or v_session.review_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',v_session.review_result_json)) then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+  -- Session state/version and the replacement comparison pointer legitimately
+  -- advance at native rebuild/prepare. They are validated above, but are not
+  -- invented economic changes in the immutable choice's facts fingerprint.
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',
+    'correction_session_id',v_session.id,'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,
+    'client_id',v_client,'upload_id',v_upload.id,'actor_user_id',p_actor_user_id,
+    'prior_final_revision_id',v_revision.id,'prior_final_manifest_hash',encode(v_revision.manifest_hash,'hex'),
+    'prior_upload_id',v_prior_upload.id,'source_format_profile_id',v_upload.source_format_profile_id,
+    'row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'));
+  return v_result||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',v_result),'hex'));
+end;
+$function$;

@@ -1,0 +1,76 @@
+create or replace function private.bpay_next_source_current_publish_revision_v1(p_revision uuid)
+returns void language plpgsql security definer set search_path=pg_catalog,private,public as $f$
+declare v_authority record;v_row record;v_after uuid;v_count integer;v_scope uuid;v_capture jsonb;
+  v_upload uuid;v_generation integer;v_after_row integer;
+begin
+  perform 1 from private.bpay_next_module_control where id=1 and active_owner='NEXT' for share;
+  if not found then return;end if;
+  select * into strict v_authority from private.bpay_next_source_current_revision_v1(p_revision);
+  if not v_authority.is_current then raise exception 'BPAY_NEXT_SOURCE_PUBLISH_NOT_CURRENT' using errcode='55000';end if;
+  -- Each loop reads <=100 NEW payload IDs through its exact emission index.
+  -- It does not drain an asynchronous job or rebuild a Candidate/history.
+  loop
+    v_count:=0;
+    for v_row in select m.id from public.weekly_source_billing_movements m where m.final_revision_id=p_revision
+      and m.pay_effect='NORMAL' and m.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+      and m.source_line_kind in ('NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE')
+      and m.id>=coalesce(v_after,'00000000-0000-0000-0000-000000000000'::uuid) and (v_after is null or m.id<>v_after)
+      order by m.id limit 100 loop
+      perform private.bpay_next_source_current_capture_movement_v1(v_row.id);
+      select o.scope_id into strict v_scope from private.bpay_next_source_current_origins o where o.origin_kind='MOVEMENT' and o.origin_id=v_row.id;
+      perform private.bpay_next_source_current_observe_v1(v_scope,p_revision,null);
+      v_after:=v_row.id;v_count:=v_count+1;
+    end loop;
+    exit when v_count<100;
+  end loop;
+  v_after:=null;
+  loop
+    v_count:=0;
+    for v_row in select t.id from public.weekly_source_state_transitions t where t.final_revision_id=p_revision
+      and t.id>=coalesce(v_after,'00000000-0000-0000-0000-000000000000'::uuid) and (v_after is null or t.id<>v_after)
+      order by t.id limit 100 loop
+      perform private.bpay_next_source_current_capture_transition_v1(v_row.id);
+      select o.scope_id into strict v_scope from private.bpay_next_source_current_origins o where o.origin_kind='TRANSITION' and o.origin_id=v_row.id;
+      perform private.bpay_next_source_current_observe_v1(v_scope,p_revision,null);
+      v_after:=v_row.id;v_count:=v_count+1;
+    end loop;
+    exit when v_count<100;
+  end loop;
+  v_after:=null;
+  loop
+    v_count:=0;
+    for v_row in select a.id from public.weekly_expense_authority_generations a where a.final_revision_id=p_revision and a.state='CURRENT'
+      and a.id>=coalesce(v_after,'00000000-0000-0000-0000-000000000000'::uuid) and (v_after is null or a.id<>v_after)
+      order by a.id limit 100 loop
+      v_capture:=private.bpay_next_source_current_capture_expense_v1(v_row.id);
+      if (v_capture->>'root_bound')::boolean then
+        select o.scope_id into strict v_scope from private.bpay_next_source_current_origins o where o.origin_kind='EXPENSE' and o.origin_id=v_row.id;
+        perform private.bpay_next_source_current_observe_v1(v_scope,p_revision,null);
+      end if;
+      v_after:=v_row.id;v_count:=v_count+1;
+    end loop;
+    exit when v_count<100;
+  end loop;
+  -- Current upload payload only. The old authority may legitimately remain
+  -- CURRENT with its ORIGINAL revision when expense money is unchanged.
+  select r.upload_id,coalesce(p.projection_generation,p.authority_scope_version::integer)
+    into strict v_upload,v_generation from public.weekly_source_final_revisions r
+    join public.weekly_source_cycles c on c.id=r.source_cycle_id
+    left join public.weekly_source_report_scopes s on s.id=r.report_scope_id
+    join public.weekly_source_projection_publications p on p.id=case when r.authority_scope_kind='CYCLE'
+      then c.current_projection_publication_id else s.current_projection_publication_id end
+    where r.id=p_revision and p.upload_id=r.upload_id and p.state='CURRENT';
+  loop
+    v_count:=0;
+    for v_row in select u.source_row_ordinal,p.id as policy_id
+      from public.weekly_source_upload_rows u
+      join public.weekly_source_row_resolutions r on r.upload_row_id=u.id and r.generation=v_generation
+      join public.weekly_source_row_expense_policy_snapshots p on p.row_resolution_id=r.id
+      where u.upload_id=v_upload and (v_after_row is null or u.source_row_ordinal>v_after_row)
+      order by u.source_row_ordinal limit 100 loop
+      perform private.bpay_next_source_current_observe_expense_row_v1(p_revision,v_row.policy_id);
+      v_after_row:=v_row.source_row_ordinal;v_count:=v_count+1;
+    end loop;
+    exit when v_count<100;
+  end loop;
+end $f$;

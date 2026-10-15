@@ -1,0 +1,77 @@
+create or replace function private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(
+  p_work_event_id uuid,p_movement_id uuid,p_candidate_id uuid,p_client_id uuid,p_contract_id uuid,
+  p_source_group_id uuid,p_native_root_ids uuid[],p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  event public.weekly_work_events%rowtype;cycle public.weekly_source_cycles%rowtype;
+  profile public.weekly_source_format_profiles%rowtype;line public.weekly_source_final_snapshot_lines%rowtype;
+  transition public.weekly_source_state_transitions%rowtype;revision public.weekly_source_final_revisions%rowtype;
+  selected record;root uuid;member_roots uuid[];rows jsonb:='[]'::jsonb;v_count integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict event from public.weekly_work_events where id=p_work_event_id;
+  select * into strict cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  select * into strict profile from public.weekly_source_format_profiles where id=event.source_format_profile_id;
+  if (event.candidate_id,event.client_id,event.first_source_group_id) is distinct from
+      (p_candidate_id,p_client_id,p_source_group_id) or cycle.source_group_id is distinct from p_source_group_id
+    or (cycle.scope_client_id is not null and cycle.scope_client_id is distinct from p_client_id)
+    or not exists(select 1 from public.contracts c where c.id=p_contract_id
+      and (c.candidate_id,c.client_id)=(p_candidate_id,p_client_id))
+    or cardinality(p_native_root_ids) is null or cardinality(p_native_root_ids)=0 or cardinality(p_native_root_ids)>200 then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SNAPSHOT_SCOPE_INVALID' using errcode='22023';end if;
+  if private.weekly_source_office_next_owner_v1() then
+    return private.weekly_source_paid_overlap_current_snapshot_v1(p_work_event_id,p_movement_id,
+      p_candidate_id,p_client_id,p_contract_id,p_source_group_id,p_native_root_ids);
+  end if;
+  if (select m.active_owner from private.bpay_next_module_control m where m.id=1) is distinct from 'LEGACY'
+    or profile.final_authority_kind not in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS') then
+    return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_PAY_SNAPSHOT_V1',
+      'state','UNAVAILABLE','snapshot_line_id',null,'work_event_id',p_work_event_id,
+      'movement_id',p_movement_id,'native_current_selections','[]'::jsonb);end if;
+  select * into selected from private.weekly_source_roster_prior_states_v1(
+    p_source_group_id,p_client_id,profile.final_authority_kind,cycle.finalisation_week_ending) prior
+    where prior.work_event_id=p_work_event_id;
+  if found and selected.snapshot_line_id is not null then
+    select * into strict line from public.weekly_source_final_snapshot_lines where id=selected.snapshot_line_id;
+    select * into strict transition from public.weekly_source_state_transitions where id=selected.transition_id;
+    select * into strict revision from public.weekly_source_final_revisions where id=selected.final_revision_id;
+    if line.pay_effect='NORMAL' and (line.work_event_id,line.candidate_id,line.client_id,line.contract_id,line.work_date)
+      =(event.id,p_candidate_id,p_client_id,p_contract_id,event.work_date)
+      and revision.state='CURRENT' and revision.authority_scope_kind='CYCLE' and revision.report_scope_id is null
+      and exists(select 1 from public.weekly_source_cycles c where c.id=revision.source_cycle_id
+        and c.source_group_id=p_source_group_id and c.current_final_revision_id=revision.id)
+      and (transition.new_snapshot_line_id=line.id or (transition.outcome='CANCEL' and transition.exclude_cancel
+        and transition.previous_snapshot_line_id=line.id and not transition.new_present
+        and transition.new_snapshot_line_id is null
+        and (case when transition.outcome='CANCEL' and transition.exclude_cancel
+          then private.weekly_source_missing_cancel_transition_assert_v1(transition.id) end)#>>'{original_basis,movement_id}'=p_movement_id::text)) then
+      foreach root in array p_native_root_ids loop
+        member_roots:=private.weekly_source_invoice_family_timesheet_ids_v1(root);
+        if exists(select 1 from public.weekly_source_row_timesheet_lineages l
+          where l.row_resolution_id=line.row_resolution_id and l.work_event_id=event.id
+            and (l.candidate_id,l.client_id,l.contract_id)=(p_candidate_id,p_client_id,p_contract_id)
+            and l.timesheet_id=any(member_roots))
+          and exists(select 1 from private.weekly_source_ordinary_projection_active_movements_v1(root,revision.id) m
+            where m.id=p_movement_id and m.work_event_id=event.id and m.pay_effect='NORMAL'
+              and (m.candidate_id,m.actual_client_id,m.contract_id)=(p_candidate_id,p_client_id,p_contract_id)) then
+          v_count:=v_count+1;
+          rows:=rows||jsonb_build_array(jsonb_build_object('selection_owner','SOURCE_FIN4_PRIOR_STATE',
+            'root_timesheet_id',root,'member_timesheet_ids',to_jsonb(member_roots),
+            'snapshot_line_id',line.id,'snapshot_line_hash',encode(line.snapshot_line_hash,'hex'),
+            'selected_transition_id',transition.id,'selected_final_revision_id',revision.id,
+            'source_hash',encode(transition.transition_fingerprint,'hex'),
+            'selected_manifest_hash',encode(revision.manifest_hash,'hex'),
+            'before_week_ending',cycle.finalisation_week_ending,'source_export_present',transition.new_present,
+            'exclude_cancel',transition.exclude_cancel));
+        end if;
+      end loop;
+    end if;
+  end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_PAY_SNAPSHOT_V1',
+    'state',case when v_count>0 then 'CURRENT' else 'UNAVAILABLE' end,
+    'snapshot_line_id',case when v_count>0 then line.id end,'work_event_id',p_work_event_id,
+    'movement_id',p_movement_id,'native_current_selections',rows);
+end;
+$function$;

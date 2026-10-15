@@ -1,0 +1,36 @@
+create or replace function private.weekly_source_nhsp_projection_choice_recheck_v1(
+  p_lock_input jsonb,p_current_choice jsonb,p_actor_user_id uuid,p_publication_id uuid
+) returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp' as $function$
+declare key text;old_roots uuid[];new_roots uuid[];
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_actor_user_id is null or p_publication_id is null then
+    raise exception 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_FRAME_UNBOUND' using errcode='55000';end if;
+  if p_lock_input->>'schema_version' is distinct from 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1'
+    or p_lock_input->'fresh_choice_admission' is distinct from 'false'::jsonb
+    or p_lock_input->>'viewer_actor_user_id' is distinct from p_actor_user_id::text
+    or p_lock_input->>'projection_publication_id' is distinct from p_publication_id::text
+    or p_lock_input->>'native_backend_pid' is distinct from pg_backend_pid()::text
+    or p_lock_input->>'native_transaction_id' is distinct from pg_current_xact_id()::text
+    or p_lock_input->>'lock_input_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1',p_lock_input-'lock_input_sha256'),'hex')
+    or p_current_choice->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'
+    or p_current_choice->>'viewer_actor_user_id' is distinct from p_actor_user_id::text
+    or p_current_choice->>'choice_proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',p_current_choice-'choice_proof_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_FRAME_UNBOUND' using errcode='55000';end if;
+  foreach key in array array['choice_id','upload_row_id','candidate_id','client_id','contract_id','pay_effect','paid_overlap_target_work_event_id'] loop
+    if p_current_choice->key is distinct from p_lock_input->key then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_CHANGED' using errcode='40001';end if;
+  end loop;
+  select array_agg(distinct root::uuid order by root::uuid) into old_roots
+    from jsonb_array_elements(p_lock_input#>'{inputs,overlaps}') item
+    cross join lateral jsonb_array_elements_text(item#>'{native_payment_facts,root_timesheet_ids}') root;
+  select array_agg(distinct root::uuid order by root::uuid) into new_roots
+    from jsonb_array_elements(p_current_choice#>'{inputs,overlaps}') item
+    cross join lateral jsonb_array_elements_text(item#>'{native_payment_facts,root_timesheet_ids}') root;
+  if coalesce(cardinality(old_roots),0)=0 or new_roots is distinct from old_roots then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SCOPE_CHANGED' using errcode='40001';end if;
+end;
+$function$;

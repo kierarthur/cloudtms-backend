@@ -1,0 +1,1017 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "native_calls": 0,
+  "SQL_compiled": false,
+  "whole_primary_complete": false,
+  "layer_chain_is_provenance_NOT_install_order": true,
+  "one_time_sources_once_only": [
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/one-time/00_complete_paid_choice_fields.sqlinc",
+      "selected_file": "module/one-time/00_complete_paid_choice_fields.sqlinc",
+      "bytes": 5890,
+      "sha256": "f86d0e45fd15513229e95f443ba25c3e6aefc0e59f311337e353662c1689ed65"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/one-time/08_complete_snapshot_origin_constraints.sqlinc",
+      "selected_file": "module/one-time/01_complete_snapshot_origin_constraints.sqlinc",
+      "bytes": 6509,
+      "sha256": "4a1ffa698e0277589e29a1fc028e80e5ed78cffd263f5f5779f3775a5c00afb6"
+    }
+  ],
+  "one_time_upgrade_if_predecessor_already_installed": "Root must choose a separately reviewed additive upgrade; these complete initial constraint/column pages cannot be replayed over an already installed predecessor.",
+  "selected_complete_owners_once_only": [
+    {
+      "id": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_work_event_payment_facts_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427",
+      "input_index": 59,
+      "literal_selected_dependencies": [
+        "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/001_private_weekly_source_work_event_payment_facts_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_kept_as_paid_context_for_publication_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "af606e111da8b6232890cc3b04b16367085ef1e11deee33855d476ce9ed1ab7e",
+      "input_index": 1,
+      "literal_selected_dependencies": [
+        "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "name": "private.weekly_source_kept_as_paid_context_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4",
+      "input_index": 1,
+      "literal_selected_dependencies": [
+        "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/003_private_weekly_source_kept_as_paid_context_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_paid_overlap_candidates_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891",
+      "input_index": 103,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+        "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+        "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "name": "private.weekly_source_paid_overlap_choice_admit_v1",
+      "inputTypes": "jsonb,jsonb",
+      "definition_sha256": "94ced00a3c96bf194075e75804e176b8a1fc37360a32e2014708b187963a6775",
+      "input_index": 88,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "080f545a2d854f0e63fa04da6bb4becb12889bffccb26626a1863c0b1a60a78b",
+      "input_index": 107,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/006_public_weekly_source_office_recheck_begin_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_overlap_choice_current_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "7c4dd3806fe515ac7ac55b4282aaea5d5b80f9333d4876f9747b1b06605c044a",
+      "input_index": 87,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_choice_immutable_v1(uuid)",
+        "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+        "private.weekly_source_nhsp_negative_comparison_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_paid_overlap_projection_lock_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de",
+      "input_index": 87,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+        "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "name": "public.weekly_source_upload_context_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "43668bb2f85b3a0f9102fe3439bcdc0cbb91beb207eb691a25d3ecc821320008",
+      "input_index": 106,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+        "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+        "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/009_public_weekly_source_upload_context_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "inputTypes": "uuid,uuid,jsonb",
+      "definition_sha256": "af0dcb77e2ae4abe0a62ad6f5c474f72be21e7d32f7be886db5994e95d2ae19d",
+      "input_index": 105,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+        "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+        "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+        "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "name": "private.weekly_source_finalise_engine_v1",
+      "inputTypes": "jsonb,uuid,boolean,text",
+      "definition_sha256": "f8b82163a56af483e30e4d1a03f31df124bb97abc6073fe473374ee632035e45",
+      "input_index": 78,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+        "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+        "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+        "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+        "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+        "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+        "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+        "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+        "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+        "private.bpay_next_source_current_publish_revision_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/011_private_weekly_source_finalise_engine_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "name": "private.weekly_source_paid_choice_revision_guard_v1",
+      "inputTypes": "",
+      "definition_sha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31",
+      "input_index": 9,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_match_invoice_movement_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "51db47d57c908e6da251e7d457dc5e30a833dbb2371626455ea4c969c2e55bac",
+      "input_index": 31,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "name": "private.weekly_source_paid_match_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "68045b8b6b0323b2ce115ee510e4b67b6c4feb1f0bf0f70e5e1ce33fe1a4c37c",
+      "input_index": 94,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "name": "private.weekly_source_billing_movement_hash_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306",
+      "input_index": 12,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/015_private_weekly_source_billing_movement_hash_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "name": "private.weekly_source_invoice_movement_window_id_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7",
+      "input_index": 13,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "name": "private.weekly_source_invoice_source_amount_movement_valid_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580",
+      "input_index": 14,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "name": "public.weekly_source_invoice_admit_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "98ed85cdacec920cc52830d1abb54880ebc0c4e554076f8b00a2a2bdc2e43b94",
+      "input_index": 118,
+      "literal_selected_dependencies": [
+        "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+        "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+        "private.weekly_source_invoice_allocation_assert_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "name": "private.weekly_source_shift_on_self_bill_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669",
+      "input_index": 16,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/019_private_weekly_source_shift_on_self_bill_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "name": "private.weekly_source_ordinary_projection_source_units_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5",
+      "input_index": 18,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_selected_source_witness_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6",
+      "input_index": 19,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/021_private_weekly_source_selected_source_witness_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "name": "public.weekly_source_finalisation_pay_open_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804",
+      "input_index": 20,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be",
+      "input_index": 21,
+      "literal_selected_dependencies": [
+        "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+        "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "name": "private.weekly_source_paid_overlap_current_snapshot_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,uuid,uuid[]",
+      "definition_sha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2",
+      "input_index": 22,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "name": "private.weekly_source_paid_match_retained_transition_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "66f4f50a76855da26d87ae0c6087dd5c964bc06a7fa1c3884148195e01fcdd0c",
+      "input_index": 65,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_paid_match_question_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "7246cae44d4a67b904efc12c08702d437b55583e3b341755b6df9c1070461c1b",
+      "input_index": 89,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/026_private_weekly_source_paid_match_question_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "name": "private.bpay_next_source_current_capture_transition_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "1bc3d3b8a544d2360e4f2619b264fe5afc68656cd07a1237c9fb8e2adbfadca8",
+      "input_index": 28,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+        "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/027_private_bpay_next_source_current_capture_transition_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "name": "private.weekly_source_fixed_expense_invoice_values_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d",
+      "input_index": 29,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "name": "private.weekly_source_finalisation_materialise_expense_invoice_v1",
+      "inputTypes": "uuid,uuid,text,uuid,uuid,uuid,uuid,text",
+      "definition_sha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1",
+      "input_index": 30,
+      "literal_selected_dependencies": [
+        "private.weekly_source_billing_movement_hash_v1(jsonb)",
+        "private.weekly_source_fixed_expense_invoice_values_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "name": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "eed3f2fa8ec6bbf829019fab4fcf4c0cf0b7a862c6cdf5161639ea40816e745b",
+      "input_index": 32,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_match_expense_invoice_insert_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "90ab0047ebf8ed86f2588da1bb69cb506ef3214661424c8a2e5a4faf00f6f8ab",
+      "input_index": 34,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+        "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "name": "private.weekly_source_paid_match_prepared_census_recheck_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434",
+      "input_index": 101,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "name": "private.weekly_source_correct_final_prepared_context_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1",
+      "input_index": 119,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+        "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+        "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9",
+      "input_index": 39,
+      "literal_selected_dependencies": [
+        "private.weekly_source_correct_final_office_preview_v1(uuid)",
+        "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+        "private.weekly_source_correct_final_prepared_context_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55",
+      "input_index": 120,
+      "literal_selected_dependencies": [
+        "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+        "private.weekly_source_correct_final_office_preview_v1(uuid)",
+        "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "name": "private.weekly_source_ordinary_projection_current_expenses_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4",
+      "input_index": 41,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "name": "public.weekly_source_office_workspace_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2",
+      "input_index": 98,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/037_public_weekly_source_office_workspace_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "name": "private.weekly_source_paid_match_correction_scope_v1",
+      "inputTypes": "uuid,uuid,boolean",
+      "definition_sha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0",
+      "input_index": 100,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e",
+      "input_index": 53,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/039_private_weekly_source_correct_final_office_preview_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+      "name": "private.weekly_source_roster_prior_states_v1",
+      "inputTypes": "uuid,uuid,text,date",
+      "definition_sha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36",
+      "input_index": 55,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/040_private_weekly_source_roster_prior_states_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_legacy_signed_source_membership_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f",
+      "input_index": 56,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "name": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid",
+      "definition_sha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912",
+      "input_index": 57,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+        "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+        "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "name": "private.weekly_source_off_rule_setup_shape_assert_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "2ebf0bf8cae7761af01c6c880b3dd358da98d84ec6f0adda10699b56c15c0955",
+      "input_index": 66,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "name": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "inputTypes": "jsonb,uuid,jsonb",
+      "definition_sha256": "fd4983528597470c6f05b3e977365f0089a39a1dc5fa195df92f79d2954a3dc1",
+      "input_index": 70,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "name": "private.weekly_source_rule_qualification_setup_atomic_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
+      "input_index": 68,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "name": "private.weekly_source_rule_qualification_execute_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "66602d9cbed9162a55fa6aa26d624eaac312e37795c7375947b3465918e075f5",
+      "input_index": 68,
+      "literal_selected_dependencies": [
+        "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+        "public.weekly_source_office_recheck_begin_v1(jsonb)",
+        "public.weekly_source_upload_context_v1(jsonb)",
+        "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+        "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/046_private_weekly_source_rule_qualification_execute_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "name": "private.weekly_source_rule_qualification_transport_status_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "909ef470437e334daee44d6b09fdea2ef9d8a812741898be5e25a9d4c45f3ede",
+      "input_index": 69,
+      "literal_selected_dependencies": [
+        "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_paid_overlap_basis_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552",
+      "input_index": 112,
+      "literal_selected_dependencies": [
+        "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+        "private.bpay_next_source_current_event_v1(uuid,uuid)",
+        "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+      "name": "private.bpay_next_source_nhsp_magnitude_v1",
+      "inputTypes": "jsonb,jsonb,jsonb",
+      "definition_sha256": "64841d3b64a0ba320486c2e0ba24acd45f0868851f56c72248a55ef098b7b4cc",
+      "input_index": 72,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/049_private_bpay_next_source_nhsp_magnitude_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "name": "private.bpay_next_source_current_capture_movement_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "2a556a35454ad88eede73ec65a59567b10c1967d77fee916e77cc861cca2b68c",
+      "input_index": 110,
+      "literal_selected_dependencies": [
+        "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+        "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+        "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/050_private_bpay_next_source_current_capture_movement_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_negative_population_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid",
+      "definition_sha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a",
+      "input_index": 102,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+        "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+        "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/051_private_weekly_source_nhsp_negative_population_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+      "name": "private.weekly_source_native_line_vat_v1",
+      "inputTypes": "bigint,boolean,numeric",
+      "definition_sha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd",
+      "input_index": 75,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/052_private_weekly_source_native_line_vat_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "name": "private.weekly_source_finalisation_insert_current_movement_v1",
+      "inputTypes": "uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid",
+      "definition_sha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658",
+      "input_index": 109,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+        "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+        "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+        "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "name": "private.weekly_source_nhsp_price_admission_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5",
+      "input_index": 77,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/054_private_weekly_source_nhsp_price_admission_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "name": "private.weekly_source_nhsp_invoice_values_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc",
+      "input_index": 79,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+        "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+      "name": "private.weekly_source_nhsp_negative_comparison_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886",
+      "input_index": 80,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "name": "private.weekly_source_paid_choice_immutable_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "6f7aaf19538756f693219af349babe1fd09f578996cb8009454dfac54f9462d0",
+      "input_index": 82,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/057_private_weekly_source_paid_choice_immutable_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_projection_lock_input_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "4127a77d0e86c76563c5a749c4a67fe05da33fb0a42fc7c9ad358454045fb4a2",
+      "input_index": 104,
+      "literal_selected_dependencies": [
+        "private.weekly_source_paid_choice_immutable_v1(uuid)",
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+        "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+        "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_projection_choice_recheck_v1",
+      "inputTypes": "jsonb,jsonb,uuid,uuid",
+      "definition_sha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df",
+      "input_index": 84,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+      "name": "private.weekly_source_nhsp_invoice_only_vector_v1",
+      "inputTypes": "text,bigint",
+      "definition_sha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7",
+      "input_index": 90,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "name": "private.weekly_source_nhsp_none_invoice_basis_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "b181f1b63458db135d44fa0fe17d751be36b07ef0514fa80bb6c72355d08e5a2",
+      "input_index": 108,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+        "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "name": "private.weekly_source_nhsp_none_invoice_origin_assert_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7",
+      "input_index": 92,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+        "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "name": "private.bpay_next_source_current_publish_revision_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "74c1dd652a4a703a38913ff89bd62c13288d3de3c7b32c2da5db667847beea23",
+      "input_index": 111,
+      "literal_selected_dependencies": [
+        "private.bpay_next_source_current_capture_movement_v1(uuid)",
+        "private.bpay_next_source_current_capture_transition_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/063_private_bpay_next_source_current_publish_revision_v1.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "inputTypes": "jsonb",
+      "definition_sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac",
+      "input_index": 99,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/064_public_weekly_source_workspace_scopes_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "name": "private.bpay_next_source_current_toggle_v1",
+      "inputTypes": "text,uuid,boolean",
+      "definition_sha256": "f7f2917f10469a2b422e17d40d696366f42a3fac705af2e71368287ea05bb30d",
+      "input_index": 113,
+      "literal_selected_dependencies": [],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/065_private_bpay_next_source_current_toggle_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "name": "private.weekly_source_nhsp_none_write_admit_v1",
+      "inputTypes": "jsonb,uuid",
+      "definition_sha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9",
+      "input_index": 114,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+        "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+        "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+      "name": "private.bpay_next_source_current_capture_nhsp_none_v1",
+      "inputTypes": "uuid",
+      "definition_sha256": "6356f2864e7ae442ac68c08e4bcd58da44fbceed4cf766db898107e4c192ff77",
+      "input_index": 115,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+        "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+        "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/067_private_bpay_next_source_current_capture_nhsp_none_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_nhsp_selected_pay_origin_v1",
+      "inputTypes": "uuid,uuid,uuid",
+      "definition_sha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554",
+      "input_index": 116,
+      "literal_selected_dependencies": [
+        "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc"
+    },
+    {
+      "id": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "name": "private.bpay_next_source_current_event_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "895443cbb1efa841154cb53a50f1c56c17d70404a423a6fbf1a93ef384f72ad8",
+      "input_index": 117,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)"
+      ],
+      "SQL_constructor_dependencies": [],
+      "file": "module/owners/069_private_bpay_next_source_current_event_v1.sqlinc"
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "name": "private.weekly_source_ordinary_projection_active_movements_v1",
+      "inputTypes": "uuid,uuid",
+      "definition_sha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04",
+      "input_index": 121,
+      "literal_selected_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)"
+      ],
+      "SQL_constructor_dependencies": [
+        "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)"
+      ],
+      "file": "module/owners/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc"
+    }
+  ],
+  "selected_final_trigger_file": "module/98_paid_choice_revision_triggers.sqlinc",
+  "selected_final_ACL_and_schema_reload": "module/99_selected_owner_acl_and_schema_reload.sqlinc",
+  "actual_current_service_signatures": [
+    "public.weekly_source_office_recheck_begin_v1(jsonb)",
+    "public.weekly_source_upload_context_v1(jsonb)",
+    "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+    "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+    "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+    "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+    "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+    "public.weekly_source_office_workspace_v1(jsonb)",
+    "public.weekly_source_workspace_scopes_v1(jsonb)"
+  ],
+  "owner_only_private_signatures": [
+    "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+    "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+    "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+    "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+    "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+    "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+    "private.weekly_source_paid_choice_revision_guard_v1()",
+    "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+    "private.weekly_source_billing_movement_hash_v1(jsonb)",
+    "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+    "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+    "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+    "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+    "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+    "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+    "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+    "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+    "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+    "private.bpay_next_source_current_capture_transition_v1(uuid)",
+    "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+    "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+    "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+    "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+    "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+    "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+    "private.weekly_source_correct_final_office_preview_v1(uuid)",
+    "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+    "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+    "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+    "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+    "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+    "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+    "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+    "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+    "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+    "private.bpay_next_source_current_capture_movement_v1(uuid)",
+    "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+    "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+    "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+    "private.weekly_source_paid_choice_immutable_v1(uuid)",
+    "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+    "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+    "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+    "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+    "private.bpay_next_source_current_publish_revision_v1(uuid)",
+    "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+    "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+    "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+    "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+    "private.bpay_next_source_current_event_v1(uuid,uuid)",
+    "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)"
+  ],
+  "final_literal_classification_and_service_registry": "Root must compose these exact selected signature sets with the final current registry/ACL verifier before mount; this packet does not overwrite the global classification owner.",
+  "mutually_exclusive_admission_alternatives_excluded": [
+    "Report04",
+    "Report05",
+    "Report07 whole predecessor",
+    "writer58 admission",
+    "expense26 admission",
+    "NHSP32 admission",
+    "older Native invoice-admission predecessor extraction"
+  ],
+  "selected_admission": "module owner public.weekly_source_invoice_admit_atomic_v1(jsonb): actual expense+Money58+physical NHSP NONE+Report07 two exact hunks; existing WEEKLY_SOURCE_INVOICE_VAT_FIT_HELD retained",
+  "latest_prepared_empty_census_successor_consumed": true,
+  "qualified_CASE_fix_commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+  "Office_wrapper_order": "Define complete Report/D10+Money public workspace exactly once from this module; then root mounts its reviewed Native outer wrapper exactly once after it. Never reapply this inner public owner after the outer wrapper. Runtime Office/Native finite hunks require root union, not replacement of newer whole files.",
+  "runtime_proposals": [
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "destination": "broker/src/weekly-source/upload-publication-owner.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "destination": "broker/src/weekly-source/correct-final-source-orchestrator.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "destination": "broker/src/weekly-source/off-rule-native-proxy.mjs"
+    }
+  ],
+  "root_shared_owner_reconciliation_required": [
+    "Source physical tuple/A0 hooks on exact current root FIN4 and shared capture",
+    "Agency17 shared native tsfin/OFF owners by Report lane",
+    "Native latest Checklist/Office/runtime finite hunks after Report/Money union",
+    "global private classification/service registry/ACL/catalogue/contract"
+  ],
+  "remaining_native_gates": [
+    "all complete constructors and current actor/root/header/C1/cash proofs",
+    "same-scope successive corrections and full negatives before positives",
+    "full final financial rehearsal and rollback/fresh absence",
+    "Source39/recorder9-13/three receipt exceptions/Policy X",
+    "API schema reload and service/browser role negatives",
+    "Office OFF/support/Report lifecycle/documents/browser/phone"
+  ],
+  "unsupported_current_selection": "Genuine Legacy/current-NORMAL authority remains unavailable where native owner cannot prove it; no fabricated NEXT/current/header/receipt fallback."
+}

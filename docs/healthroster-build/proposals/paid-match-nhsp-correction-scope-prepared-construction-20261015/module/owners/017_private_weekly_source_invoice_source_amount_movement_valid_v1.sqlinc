@@ -1,0 +1,72 @@
+create or replace function private.weekly_source_invoice_source_amount_movement_valid_v1(p_movement_id uuid)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare m public.weekly_source_billing_movements%rowtype; t public.weekly_source_state_transitions%rowtype;
+  sn public.weekly_source_final_snapshot_lines%rowtype; source_row public.weekly_source_upload_rows%rowtype; resolution public.weekly_source_row_resolutions%rowtype;
+  economic public.weekly_source_row_economic_snapshots%rowtype; charge public.weekly_source_charge_checks%rowtype;
+  upload public.weekly_source_uploads%rowtype; rules jsonb; expected_price text;
+begin
+  select * into m from public.weekly_source_billing_movements where weekly_source_billing_movements.id=p_movement_id;
+  if not found or m.source_profile_kind<>'HEALTHROSTER_ACTUAL_ROWS' or (m.transition_id is null and m.invoice_only_snapshot_line_id is null)
+    or m.source_validation_charge_pence is null or m.invoice_presentation_charge_pence is distinct from m.source_validation_charge_pence then return false; end if;
+  if m.invoice_only_snapshot_line_id is not null then
+    perform private.weekly_source_paid_match_invoice_origin_assert_v1(m.id);
+  else
+    select * into t from public.weekly_source_state_transitions where weekly_source_state_transitions.id=m.transition_id;
+    if not found or t.final_revision_id<>m.final_revision_id or t.work_event_id<>m.work_event_id then return false; end if;
+  end if;
+  rules:=private.weekly_source_frozen_rule_values_v1(m.final_revision_id);
+  if rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or rules->>'invoice_amount_basis' is distinct from 'SOURCE_AMOUNT'
+    or rules->>'source_amount_basis' is distinct from 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY' then return false; end if;
+  if m.source_line_kind='SOURCE_INVOICE_CORRECTION' then
+    return m.total_pay_ex_vat=0 and m.canonical_pay_vector_json->>'total_pence'='0'
+      and m.source_facts_json->>'schema_version' in ('WEEKLY_SOURCE_INVOICE_CORRECTION_FACTS_V1','WEEKLY_SOURCE_INVOICE_CORRECTION_UNWIND_V1')
+      and ((m.movement_role in ('REVERSAL','REPLACEMENT') and t.outcome='NO_CHANGE')
+        or (m.movement_role='CORRECTION_UNWIND' and t.outcome in ('AMEND','CANCEL')))
+      and m.price_check_result='NOT_APPLICABLE' and m.price_check_fingerprint is null and m.charge_acceptance_id is null;
+  end if;
+  if not ((m.source_line_kind='SOURCE_ORDINARY' and t.outcome='ADD' and m.movement_role='POSITIVE')
+    or (m.source_line_kind='SOURCE_REPLACEMENT' and t.outcome='AMEND' and m.movement_role='REPLACEMENT')
+    or (m.source_line_kind='SOURCE_REBILL_LINE' and t.outcome='NO_CHANGE' and m.movement_role='POSITIVE' and m.total_pay_ex_vat=0)
+    or (m.source_line_kind='SOURCE_REBILL_LINE' and m.pay_effect='NONE' and m.invoice_only_snapshot_line_id is not null
+      and m.movement_role='POSITIVE' and m.total_pay_ex_vat=0)) then return false; end if;
+  select * into sn from public.weekly_source_final_snapshot_lines where weekly_source_final_snapshot_lines.id=
+    case when m.pay_effect='NONE' then m.invoice_only_snapshot_line_id else t.new_snapshot_line_id end;
+  if not found or sn.final_revision_id<>m.final_revision_id or sn.client_id<>m.actual_client_id
+    or sn.candidate_id<>m.candidate_id or sn.contract_id<>m.contract_id or sn.work_event_id<>m.work_event_id
+    or sn.upload_row_id::text is distinct from m.source_facts_json->>'upload_row_id' then return false; end if;
+  -- Historical admission validates the frozen producer facts, not today's
+  -- Client policy/rates or a later Ignore receipt for this old movement.
+  select * into resolution from public.weekly_source_row_resolutions where weekly_source_row_resolutions.id=sn.row_resolution_id;
+  select * into source_row from public.weekly_source_upload_rows where weekly_source_upload_rows.id=sn.upload_row_id;
+  select * into upload from public.weekly_source_uploads where weekly_source_uploads.id=source_row.upload_id;
+  select * into economic from public.weekly_source_row_economic_snapshots where row_resolution_id=resolution.id;
+  select * into charge from public.weekly_source_charge_checks where upload_row_id=source_row.id and row_resolution_id=resolution.id
+    and generation=resolution.generation and comparison_profile_version='SOURCE_INVOICE_MONEY_PENCE_V1';
+  if resolution.id is null or source_row.id is null or economic.id is null or charge.id is null
+    or resolution.work_event_id is distinct from m.work_event_id or resolution.client_id is distinct from m.actual_client_id
+    or resolution.candidate_id is distinct from m.candidate_id or resolution.contract_id is distinct from m.contract_id
+    or source_row.source_money_parse_state<>'VALID' or source_row.source_qualification_profile_version<>'SOURCE_INVOICE_MONEY_PENCE_V1'
+    or source_row.source_shift_charge_pence is null or source_row.source_gross_pence is null or source_row.source_vat_pence is null
+    or source_row.source_shift_charge_pence+source_row.source_vat_pence<>source_row.source_gross_pence
+    or m.invoice_presentation_charge_pence is distinct from source_row.source_shift_charge_pence
+    or m.calculated_comparison_charge_pence is distinct from economic.calculated_charge_pence
+    or m.price_check_fingerprint is distinct from economic.calculation_fingerprint
+    or charge.charge_calculation_fingerprint is distinct from economic.calculation_fingerprint
+    or charge.source_shift_charge_pence is distinct from source_row.source_shift_charge_pence
+    or charge.calculated_segment_charge_pence is distinct from economic.calculated_charge_pence then return false; end if;
+  expected_price:=case when source_row.source_shift_charge_pence=economic.calculated_charge_pence then 'EXACT'
+    when abs(source_row.source_shift_charge_pence-economic.calculated_charge_pence)=1 then 'SOURCE_ROUNDING_EQUIVALENT' else 'SOURCE_AMOUNT_DIFFERS' end;
+  if charge.comparison_result<>expected_price then return false; end if;
+  if m.price_check_result=expected_price and m.charge_acceptance_id is null then return true; end if;
+  return expected_price='SOURCE_AMOUNT_DIFFERS' and m.price_check_result='ACCEPTED_DISPARITY' and exists(
+    select 1 from public.weekly_source_charge_acceptances acceptance where acceptance.id=m.charge_acceptance_id
+      and acceptance.acceptance_kind='ACCEPTED_DISPARITY' and acceptance.charge_check_id=charge.id
+      and acceptance.source_upload_id=upload.id and acceptance.source_upload_hash=upload.content_sha256
+      and acceptance.upload_row_id=source_row.id and acceptance.row_resolution_id=resolution.id and acceptance.contract_id=resolution.contract_id
+      and acceptance.source_row_fingerprint=resolution.source_row_fingerprint and acceptance.contract_and_rate_fingerprint=economic.contract_and_rate_fingerprint
+      and acceptance.effective_policy_fingerprint=economic.effective_policy_fingerprint and acceptance.charge_calculation_fingerprint=economic.calculation_fingerprint
+      and acceptance.acceptance_policy_fingerprint=private.weekly_source_source_amount_acceptance_policy_fingerprint_v1());
+end;
+$function$;

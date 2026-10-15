@@ -1,0 +1,79 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "new_cases": 23,
+  "predecessor_cases": 37,
+  "actual_worker_constructor_cases": 8,
+  "total_cases": 60,
+  "pass": 60,
+  "fail": 0,
+  "syntax_pass": 4,
+  "complete_owner_reverses": 19,
+  "unique_hunks": 41,
+  "current_raw_input_pins": 7,
+  "converged_complete_owner_count": 70,
+  "converged_service_signatures": 9,
+  "converged_owner_private_signatures": 61,
+  "converged_source_inputs": 122,
+  "new_private_signatures": 3,
+  "new_public_signatures": 0,
+  "new_table_column_calculator": 0,
+  "selected_schema_pages_once": 2,
+  "selected_revision_triggers_once": 3,
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-phased-projection-consumer-20261015",
+      "artifacts": 43,
+      "manifest_sha256": "96fe710ee94b765fe945bab01236cae2b0989838cf9e425650ab2c7f86ea8b48"
+    },
+    {
+      "packet": "paid-match-nhsp-physical-none-materialisation-construction-20261015",
+      "artifacts": 31,
+      "manifest_sha256": "de178e593dd131036e99e5e3e33dfc32154fdb620b91fcd99b67a95bccfbc577"
+    },
+    {
+      "packet": "paid-match-prepared-empty-census-successor-20261014",
+      "artifacts": 16,
+      "manifest_sha256": "21d298531038df238de4fd6fadd534459052c1d07598454f50c0475dc40056a5"
+    },
+    {
+      "packet": "paid-match-nhsp-negative-population-construction-20261015",
+      "artifacts": 21,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    },
+    {
+      "packet": "paid-match-nhsp-native-invoice-values-construction-20261015",
+      "artifacts": 17,
+      "manifest_sha256": "cbae56a4c479d7d53660ea93de981f7c01e03ac24d228fea2779ac555aeb1296"
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "artifacts": 26,
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e"
+    },
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "artifacts": 58,
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453"
+    }
+  ],
+  "preserved_artifacts": 212,
+  "credential_findings": 0,
+  "whitespace_disposition": "EXACT INPUT EXCEPTIONS RETAINED",
+  "whitespace_exceptions": [
+    {
+      "file": "before/08_complete_office_recheck.sqlinc",
+      "kind": "EXACT INPUT EOF BLANK"
+    },
+    {
+      "file": "forward/08_complete_office_recheck.sqlinc",
+      "kind": "EXACT INPUT EOF BLANK"
+    }
+  ],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

@@ -1,0 +1,21 @@
+  if u.purpose='FINAL_SOURCE_CORRECTION' then
+    select * into strict session from public.weekly_final_source_correction_sessions where id=u.correction_session_id;
+    if revision.reason<>'CORRECT_FINAL_SOURCE' or revision.predecessor_revision_id is null
+      or session.authority_scope_kind<>'NHSP_REPORT_SCOPE' or session.report_scope_id is distinct from scope.id
+      or session.source_cycle_id is distinct from cycle.id or session.replacement_correction_upload_id is distinct from u.id
+      or session.actor_user_id is distinct from revision.finalised_by_user_id
+      or session.expected_current_final_revision_id is distinct from revision.predecessor_revision_id
+      or session.state not in ('PREPARING','PREPARED','COMMITTING','APPLIED')
+      or (session.state<>'PREPARING' and session.prepared_final_revision_id is distinct from revision.id)
+      or (session.state='APPLIED' and session.applied_final_revision_id is distinct from revision.id)
+      or proof#>>'{inputs,correction_scope,schema_version}' is distinct from 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1'
+      or proof#>>'{inputs,correction_scope,correction_session_id}' is distinct from session.id::text
+      or proof#>>'{inputs,correction_scope,prior_final_revision_id}' is distinct from revision.predecessor_revision_id::text
+      or proof#>>'{inputs,correction_scope,prior_final_manifest_hash}' is distinct from encode(session.expected_final_manifest_hash,'hex')
+      or proof#>>'{inputs,correction_scope,upload_id}' is distinct from u.id::text
+      or proof#>>'{inputs,correction_scope,report_scope_id}' is distinct from scope.id::text
+      or proof#>>'{inputs,correction_scope,authority_scope_kind}' is distinct from 'NHSP_REPORT_SCOPE'
+      or proof#>>'{inputs,correction_scope,scope_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',(proof#>'{inputs,correction_scope}')-'scope_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_CORRECTION_PROVENANCE_UNBOUND' using errcode='55000';end if;
+  end if;

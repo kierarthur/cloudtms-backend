@@ -1,0 +1,18 @@
+create or replace function private.weekly_source_invoice_movement_window_id_v1(p_movement_id uuid)
+returns uuid language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare m public.weekly_source_billing_movements%rowtype; target uuid;
+begin
+  select * into strict m from public.weekly_source_billing_movements where id=p_movement_id;
+  target:=case when m.source_line_kind='INVOICE_VAT_ROUNDING' then coalesce(m.invoice_window_cycle_id,m.finalisation_cycle_id)
+    when m.source_line_kind='SOURCE_INVOICE_CORRECTION' and m.movement_role in ('REVERSAL','REPLACEMENT')
+      then nullif(m.source_facts_json->>'invoice_window_cycle_id','')::uuid
+    when m.pay_effect='NONE' and m.invoice_only_snapshot_line_id is not null
+      then nullif(m.source_facts_json->>'invoice_window_cycle_id','')::uuid else m.finalisation_cycle_id end;
+  if target is null or not exists(select 1 from public.weekly_source_cycles actual join public.weekly_source_cycles original
+    on original.id=m.finalisation_cycle_id and actual.source_group_id=original.source_group_id
+    where actual.id=target and (actual.scope_client_id is null or actual.scope_client_id=m.actual_client_id)) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVEMENT_WINDOW_INVALID' using errcode='55000'; end if;
+  return target;
+end;
+$function$;

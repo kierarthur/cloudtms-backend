@@ -1,0 +1,84 @@
+create or replace function private.weekly_source_ordinary_projection_source_units_v1(
+  p_final_revision_id uuid,
+  p_root_timesheet_id uuid
+) returns jsonb
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  select coalesce(pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'manifest_ordinal',manifest_movement.manifest_ordinal,
+      'movement_id',movement.id,
+      'work_event_id',movement.work_event_id,
+      'movement_role',movement.movement_role,
+      'source_profile_kind',movement.source_profile_kind,
+      'source_line_kind',movement.source_line_kind,
+      'movement_economic_hash',pg_catalog.encode(movement.movement_economic_hash,'hex'),
+      'mapping_rate_policy_fingerprint',
+        pg_catalog.encode(movement.mapping_rate_policy_fingerprint,'hex'),
+      'source_facts_hash',pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_ORDINARY_UNIT_FACTS_V1',movement.source_facts_json
+      ),'hex'),
+      'first_plan6_negative',(
+        movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+        and movement.movement_role='REVERSAL'
+        and not exists(
+          select 1
+          from public.weekly_source_billing_movements prior_movement
+          join public.weekly_source_final_revisions prior_revision
+            on prior_revision.id=prior_movement.final_revision_id
+          join public.weekly_source_cycles prior_cycle
+            on prior_cycle.id=prior_movement.finalisation_cycle_id
+          -- WP-62 (executed on a rotated family): the outstanding positive may
+          -- sit on ANOTHER physical member of the Timesheet family, because a
+          -- movement keeps the member that was current when its report was
+          -- finalised.  Keyed on the physical root alone, a reversal landing
+          -- after a rotation was flagged as a first-activation negative, the
+          -- projection returned NO_OP_FIRST_NEGATIVE and the Candidate stayed
+          -- paid for a shift the Trust had withdrawn.  The search is therefore
+          -- keyed on the FAMILY through the established adapter (standing
+          -- rule 3); for an unrotated family the adapter returns exactly
+          -- {invoice_timesheet_id}, so nothing changes there.
+          where prior_movement.source_profile_kind<>'SELF_BILL_REPORT' and prior_movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and prior_movement.pay_effect='NORMAL'
+      and prior_movement.invoice_timesheet_id=any(
+            private.weekly_source_invoice_family_timesheet_ids_v1(
+              movement.invoice_timesheet_id))
+            and prior_movement.work_event_id=movement.work_event_id
+            and prior_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+            and prior_movement.movement_role in ('POSITIVE','REPLACEMENT')
+            and (
+              revision.state<>'PREPARED'
+              or prior_revision.id is distinct from revision.predecessor_revision_id
+            )
+            -- The positive must not stand LATER than this negative on the
+            -- revision ladder.  A positive in the SAME revision counts,
+            -- whatever physical row it occupied: 14 s4.2.5 says row order has
+            -- no financial meaning, so this limb must not read
+            -- `source_row_ordinal`, which is what it used to compare.
+            and (
+              prior_cycle.finalisation_week_ending<source_cycle.finalisation_week_ending
+              or (
+                prior_cycle.finalisation_week_ending=source_cycle.finalisation_week_ending
+                and prior_revision.finalised_at_utc<=revision.finalised_at_utc
+              )
+            )
+        )
+      )
+    ) order by manifest_movement.manifest_ordinal
+  ),'[]'::jsonb)
+  from public.weekly_source_billing_movements movement
+  join public.weekly_source_manifest_movements manifest_movement
+    on manifest_movement.billing_movement_id=movement.id
+  join public.weekly_source_client_manifests client_manifest on coalesce(client_manifest.invoice_window_cycle_id,client_manifest.source_cycle_id)=client_manifest.source_cycle_id and client_manifest.id=manifest_movement.client_manifest_id
+   and client_manifest.final_revision_id=movement.final_revision_id
+   and client_manifest.client_id=movement.actual_client_id
+  join public.weekly_source_final_revisions revision
+    on revision.id=movement.final_revision_id
+  join public.weekly_source_cycles source_cycle
+    on source_cycle.id=movement.finalisation_cycle_id
+  where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'
+      and movement.final_revision_id=p_final_revision_id
+    and movement.invoice_timesheet_id=p_root_timesheet_id
+    and movement.expense_authority_generation_id is null
+    and movement.source_line_kind<>'SOURCE_FIXED_EXPENSE';
+$function$;

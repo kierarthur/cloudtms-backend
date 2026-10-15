@@ -1,0 +1,38 @@
+create or replace function private.bpay_next_source_current_toggle_v1(p_kind text,p_id uuid,p_active boolean)
+returns void language plpgsql security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_origin private.bpay_next_source_current_origins%rowtype;v_delta integer;v_key bit(128);v_movement uuid;
+begin
+  if p_active is null then raise exception 'BPAY_NEXT_SOURCE_ACTIVE_NULL' using errcode='22023';end if;
+  select o.* into strict v_origin from private.bpay_next_source_current_origins o where o.origin_kind=p_kind and o.origin_id=p_id for update;
+  if v_origin.active=p_active then return;end if;
+  v_delta:=case when p_active then 1 else -1 end;
+  insert into private.bpay_next_source_current_revisions(scope_id,final_revision_id,order_key,active_origin_count)
+    values(v_origin.scope_id,v_origin.final_revision_id,v_origin.order_key,greatest(v_delta,0))
+    on conflict(scope_id,final_revision_id) do update
+      set active_origin_count=bpay_next_source_current_revisions.active_origin_count+v_delta;
+  update private.bpay_next_source_current_origins o set active=p_active where o.origin_kind=p_kind and o.origin_id=p_id;
+  if p_kind='MOVEMENT' then
+    perform 1 from private.bpay_next_source_current_magnitudes m where m.scope_id=v_origin.scope_id
+      and m.work_event_id=v_origin.work_event_id and m.magnitude_hash=v_origin.magnitude_hash for update;
+    perform private.bpay_next_source_nhsp_delta_v1(v_origin.scope_id,v_origin.work_event_id,v_origin.magnitude_hash,
+      v_origin.order_key,case when v_origin.contribution=1 then v_delta else 0 end,case when v_origin.contribution=-1 then v_delta else 0 end);
+    v_key:=private.bpay_next_source_nhsp_head_v1(v_origin.scope_id,v_origin.work_event_id,v_origin.magnitude_hash);
+    if v_key is not null then
+      select o.movement_id into v_movement from private.bpay_next_source_current_origins o
+        where o.scope_id=v_origin.scope_id and o.work_event_id=v_origin.work_event_id
+          and o.magnitude_hash=v_origin.magnitude_hash and o.order_key=v_key and o.active
+          and o.origin_kind='MOVEMENT' and o.contribution=1
+        order by o.representative_created_at desc,o.origin_id::text desc limit 1;
+      if v_movement is null then raise exception 'BPAY_NEXT_SOURCE_REPRESENTATIVE_MISSING' using errcode='55000';end if;
+    end if;
+    update private.bpay_next_source_current_magnitudes m set surviving_order_key=v_key,selected_movement_id=v_movement
+      where m.scope_id=v_origin.scope_id and m.work_event_id=v_origin.work_event_id and m.magnitude_hash=v_origin.magnitude_hash;
+    perform private.bpay_next_source_current_refresh_v1(v_origin.scope_id,v_origin.work_event_id);
+  elsif p_kind='TRANSITION' then
+    perform private.bpay_next_source_current_refresh_v1(v_origin.scope_id,v_origin.work_event_id);
+  elsif p_kind='EXPENSE' and not p_active then
+    delete from private.bpay_next_source_current_expenses e where e.scope_id=v_origin.scope_id
+      and e.work_event_id=v_origin.work_event_id and e.authority_id=p_id;
+  end if;
+end $f$;

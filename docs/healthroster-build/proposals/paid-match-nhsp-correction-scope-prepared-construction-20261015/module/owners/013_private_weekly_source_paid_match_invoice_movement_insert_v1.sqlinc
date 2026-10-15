@@ -1,0 +1,94 @@
+create or replace function private.weekly_source_paid_match_invoice_movement_insert_v1(
+  p_snapshot_line_id uuid,p_final_revision_id uuid
+) returns uuid language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  s public.weekly_source_final_snapshot_lines%rowtype;r public.weekly_source_row_resolutions%rowtype;
+  e public.weekly_source_row_economic_snapshots%rowtype;revision public.weekly_source_final_revisions%rowtype;
+  choice private.weekly_source_office_row_choices%rowtype;cycle public.weekly_source_cycles%rowtype;
+  proof jsonb;rules jsonb;amounts jsonb;facts jsonb;pay jsonb;charge jsonb;state jsonb;
+  mapping bytea;h bytea;id uuid;ts uuid;net bigint;vat bigint;window_id uuid;window_scope jsonb;
+begin
+  select * into strict revision from public.weekly_source_final_revisions where weekly_source_final_revisions.id=p_final_revision_id;
+  select * into strict s from public.weekly_source_final_snapshot_lines where weekly_source_final_snapshot_lines.id=p_snapshot_line_id;
+  select * into strict r from public.weekly_source_row_resolutions where weekly_source_row_resolutions.id=s.row_resolution_id;
+  select * into strict choice from private.weekly_source_office_row_choices where weekly_source_office_row_choices.id=s.paid_overlap_choice_id;
+  select * into strict cycle from public.weekly_source_cycles where weekly_source_cycles.id=revision.source_cycle_id;
+  proof:=revision.paid_overlap_choice_census->s.upload_row_id::text;
+  if revision.state not in ('CURRENT','PREPARED') or revision.authority_scope_kind<>'CYCLE' or revision.report_scope_id is not null
+    or s.final_revision_id is distinct from revision.id or s.pay_effect<>'NONE' or r.pay_effect<>'NONE'
+    or r.mapping_state<>'RESOLVED' or r.upload_row_id is distinct from s.upload_row_id
+    or r.work_event_id is distinct from s.work_event_id or r.candidate_id is distinct from s.candidate_id
+    or r.client_id is distinct from s.client_id or r.contract_id is distinct from s.contract_id
+    or r.paid_overlap_choice_id is distinct from choice.id or choice.pay_effect<>'NONE'
+    or choice.work_event_id is distinct from s.work_event_id or choice.paid_overlap_target_work_event_id is distinct from s.work_event_id
+    or choice.upload_row_id is distinct from s.upload_row_id or choice.candidate_id is distinct from s.candidate_id
+    or choice.client_id is distinct from s.client_id or choice.contract_id is distinct from s.contract_id
+    or proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'
+    or proof->>'choice_id' is distinct from choice.id::text or proof->>'pay_effect' is distinct from 'NONE'
+    or proof->>'choice_proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',proof-'choice_proof_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_INVOICE_ORIGIN_UNBOUND' using errcode='55000';end if;
+  if not exists(select 1 from public.weekly_source_upload_rows row where row.id=s.upload_row_id
+    and row.upload_id=revision.upload_id and row.row_finalisation_state='SOURCE_WORKED'
+    and row.normalised_row_hash=s.source_fingerprint and row.work_date=s.work_date
+    and row.start_at_local=s.start_at_local and row.end_at_local=s.end_at_local and row.break_minutes=s.break_minutes) then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_INVOICE_SOURCE_UNBOUND' using errcode='55000';end if;
+  rules:=private.weekly_source_frozen_rule_values_v1(revision.id);
+  -- Report membership is handled by its actual Report row/binding owner.
+  -- A companion never supplies a fabricated Report line or pay witness.
+  if rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or rules->>'self_bill_source' is distinct from 'SAME_FILE' then return null;end if;
+  window_id:=revision.source_cycle_id;
+  if rules->>'invoice_membership'='FINALISED_IN_CYCLE_WINDOW' then
+    window_id:=private.weekly_source_invoice_window_cycle_v1(s.upload_row_id,cycle.source_group_id);
+    if window_id is null then return null;end if;
+    window_scope:=private.weekly_source_invoice_window_scope_v1(revision.source_cycle_id,s.client_id,s.upload_row_id,window_id);
+  end if;
+  select m.id into id from public.weekly_source_billing_movements m where m.invoice_only_snapshot_line_id=s.id and m.source_line_kind='SOURCE_REBILL_LINE';
+  if found then
+    perform private.weekly_source_paid_match_invoice_origin_assert_v1(id);
+    return id;
+  end if;
+  select * into strict e from public.weekly_source_row_economic_snapshots where row_resolution_id=r.id;
+  ts:=private.weekly_source_finalisation_lineage_assert_v1(r.id,revision.source_cycle_id);
+  amounts:=private.weekly_source_invoice_line_amounts_v1(r.id,revision.id);
+  net:=(amounts->>'net_pence')::bigint;vat:=(amounts->>'vat_pence')::bigint;
+  pay:=private.weekly_source_invoice_only_vector_v1('PAY',0);
+  charge:=private.weekly_source_invoice_only_vector_v1('CHARGE',net);
+  mapping:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_MAPPING_RATE_POLICY_V1',jsonb_build_object(
+    'row_resolution_id',r.id,'work_event_id',r.work_event_id,'candidate_id',r.candidate_id,'client_id',r.client_id,'contract_id',r.contract_id,
+    'contract_and_rate_fingerprint',encode(e.contract_and_rate_fingerprint,'hex'),'effective_policy_fingerprint',encode(e.effective_policy_fingerprint,'hex'),
+    'invoice_vat_policy_fingerprint',encode(e.invoice_vat_policy_fingerprint,'hex'),'calculation_fingerprint',encode(e.calculation_fingerprint,'hex')));
+  facts:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_INVOICE_FACTS_V1',
+    'snapshot_line_id',s.id,'snapshot_line_hash',encode(s.snapshot_line_hash,'hex'),'upload_row_id',s.upload_row_id,
+    'bound_row_resolution_id',r.id,'paid_overlap_choice_id',choice.id,'paid_overlap_choice_proof',proof,
+    'rule_set_version_id',revision.rule_set_version_id,'pay_effect','NONE',
+    'invoice_hold',amounts->'invoice_hold','hold_release_id',amounts->'hold_release_id',
+    'invoice_window_cycle_id',window_id,'invoice_window_scope',window_scope);
+  state:=jsonb_build_object('invoice_only_snapshot_line_id',s.id,'pay_effect','NONE','final_revision_id',revision.id,
+    'finalisation_cycle_id',revision.source_cycle_id,'actual_client_id',r.client_id,'candidate_id',r.candidate_id,
+    'contract_id',r.contract_id,'work_event_id',r.work_event_id,'movement_role','POSITIVE','source_profile_kind',s.source_profile_kind,
+    'source_line_kind','SOURCE_REBILL_LINE','source_facts',facts,'pay_vector',pay,'charge_vector',charge,'total_pay_pence',0,
+    'calculated_comparison_charge_pence',e.calculated_charge_pence,'source_validation_charge_pence',case when (amounts->>'source_amount')::boolean then net else null end,
+    'invoice_presentation_charge_pence',net,'vat_rate_pct',(amounts->>'vat_rate_pct')::numeric(5,2),'vat_amount',(vat::numeric/100)::numeric(12,2),
+    'total_inc_vat',((net+vat)::numeric/100)::numeric(12,2),'price_check_result',amounts->>'price_check_result',
+    'price_check_fingerprint',case when (amounts->>'source_amount')::boolean then encode(e.calculation_fingerprint,'hex') else null end,
+    'charge_acceptance_id',amounts->'charge_acceptance_id','mapping_rate_policy_fingerprint',encode(mapping,'hex'),'invoice_timesheet_id',ts);
+  h:=private.weekly_source_billing_movement_hash_v1(state);
+  insert into public.weekly_source_billing_movements(invoice_only_snapshot_line_id,pay_effect,final_revision_id,finalisation_cycle_id,
+    actual_client_id,candidate_id,contract_id,work_event_id,movement_role,source_profile_kind,source_line_kind,
+    source_facts_json,canonical_pay_vector_json,canonical_charge_vector_json,total_pay_ex_vat,calculated_comparison_charge_pence,
+    source_validation_charge_pence,invoice_presentation_charge_pence,vat_rate_pct,vat_amount,total_inc_vat,price_check_result,
+    price_check_fingerprint,charge_acceptance_id,mapping_rate_policy_fingerprint,invoice_timesheet_id,original_cycle_key,movement_economic_hash)
+  values(s.id,'NONE',revision.id,revision.source_cycle_id,r.client_id,r.candidate_id,r.contract_id,r.work_event_id,'POSITIVE',s.source_profile_kind,
+    'SOURCE_REBILL_LINE',facts,pay,charge,0,e.calculated_charge_pence,case when (amounts->>'source_amount')::boolean then net else null end,
+    net,(amounts->>'vat_rate_pct')::numeric,vat::numeric/100,(net+vat)::numeric/100,amounts->>'price_check_result',
+    case when (amounts->>'source_amount')::boolean then e.calculation_fingerprint else null end,
+    nullif(amounts->>'charge_acceptance_id','')::uuid,mapping,ts,revision.source_cycle_id::text,h)
+  returning public.weekly_source_billing_movements.id into id;
+  perform private.weekly_source_paid_match_invoice_origin_assert_v1(id);
+  return id;
+end;
+$function$;

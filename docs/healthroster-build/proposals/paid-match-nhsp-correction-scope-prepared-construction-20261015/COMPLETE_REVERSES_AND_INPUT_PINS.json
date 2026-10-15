@@ -1,0 +1,477 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+  "fixCommit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+  "owners": [
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/00_correction_choice_scope.sqlinc",
+      "before_file": "before/01_complete_correction_scope.sqlinc",
+      "after_file": "forward/01_complete_correction_scope.sqlinc",
+      "before_sha256": "3ebe08aee1bd9f375d01f67d7ca8e7cef65a5f056979fdde6b41be80c1d6baaa",
+      "after_sha256": "ad7fc4f635c1cdbf90de2dbef621e725db1b13c4e222682559568e1e1d9a89c9",
+      "hunks": [
+        {
+          "name": "one existing-store NHSP scope record local",
+          "before": "  v_client uuid;v_result jsonb;",
+          "after": "  v_client uuid;v_result jsonb;v_scope public.weekly_source_report_scopes%rowtype;"
+        },
+        {
+          "name": "finite native NHSP correction scope admission; entire existing Roster branch remains unchanged after return",
+          "before": "  if not found or v_upload.purpose is distinct from 'FINAL_SOURCE_CORRECTION'",
+          "after": "  if v_upload.report_scope_id is not null then\n    select * into strict v_scope from public.weekly_source_report_scopes where id=v_upload.report_scope_id;\n    if not found or v_upload.purpose is distinct from 'FINAL_SOURCE_CORRECTION'\n      or v_upload.state is distinct from 'CORRECTION_READY'\n      or v_session.id is null or v_session.source_cycle_id is distinct from v_cycle.id\n      or v_session.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'\n      or v_session.report_scope_id is distinct from v_scope.id\n      or v_session.replacement_correction_upload_id is distinct from v_upload.id\n      or v_session.actor_user_id is distinct from p_actor_user_id\n      or v_session.state not in ('READY','REVIEWED','PREPARING','PREPARED','COMMITTING')\n      or (p_confirm and v_session.state is distinct from 'REVIEWED')\n      or v_scope.state not in ('FINALISED','CORRECTION_IN_PROGRESS')\n      or v_scope.source_cycle_id is distinct from v_cycle.id\n      or v_scope.source_group_id is distinct from v_cycle.source_group_id or v_scope.self_bill_report_id is not null\n      or v_scope.current_final_revision_id is distinct from v_session.expected_current_final_revision_id\n      or not exists(select 1 from public.weekly_source_groups g\n        where g.id=v_cycle.source_group_id and g.active and g.source_family='NHSP')\n      or not exists(select 1 from public.weekly_source_format_profiles profile\n        where profile.id=v_upload.source_format_profile_id and profile.active and profile.profile_code='NHSP_FINAL_BACKING_V1') then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    select * into strict v_revision from public.weekly_source_final_revisions where id=v_session.expected_current_final_revision_id;\n    select * into strict v_prior_upload from public.weekly_source_uploads where id=v_revision.upload_id;\n    if v_revision.state is distinct from 'CURRENT' or v_revision.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'\n      or v_revision.report_scope_id is distinct from v_scope.id or v_revision.source_cycle_id is distinct from v_cycle.id\n      or v_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash\n      or v_prior_upload.state is distinct from 'CURRENT' or v_prior_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')\n      or v_prior_upload.report_scope_id is distinct from v_scope.id\n      or v_prior_upload.source_format_profile_id is distinct from v_upload.source_format_profile_id\n      or v_scope.current_complete_upload_id is distinct from v_prior_upload.id\n      or v_prior_upload.declared_scope_fingerprint is distinct from v_upload.declared_scope_fingerprint then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    select * into strict v_publication from public.weekly_source_projection_publications where id=v_scope.current_projection_publication_id;\n    if v_publication.state is distinct from 'CURRENT' or v_publication.upload_id is distinct from v_prior_upload.id\n      or v_publication.source_cycle_id is distinct from v_cycle.id or v_publication.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'\n      or v_publication.report_scope_id is distinct from v_scope.id\n      or (v_prior_upload.purpose='ORDINARY' and v_publication.correction_session_id is not null)\n      or (v_prior_upload.purpose='FINAL_SOURCE_CORRECTION' and not exists(\n        select 1 from public.weekly_final_source_correction_sessions prior_session\n        where prior_session.id=v_prior_upload.correction_session_id and prior_session.id=v_publication.correction_session_id\n          and prior_session.applied_final_revision_id=v_revision.id and prior_session.state='APPLIED')) then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    v_client:=v_scope.client_id;\n    if nullif(v_upload.file_metadata_json->>'client_id','')::uuid is distinct from v_client then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    perform private.weekly_source_office_authority_v1(p_actor_user_id,'CORRECT_FINAL_SOURCE',\n      v_cycle.source_group_id,v_client,v_cycle.finalisation_week_ending);\n    if v_session.replacement_projection_publication_id is not null then\n      select * into strict v_publication from public.weekly_source_projection_publications where id=v_session.replacement_projection_publication_id;\n      if v_publication.state not in ('BUILDING','CORRECTION_READY')\n        or (p_confirm and v_publication.state<>'CORRECTION_READY')\n        or (v_publication.state='BUILDING' and v_session.state<>'READY')\n        or v_publication.upload_id is distinct from v_upload.id or v_publication.source_cycle_id is distinct from v_cycle.id\n        or v_publication.authority_scope_kind is distinct from 'NHSP_REPORT_SCOPE'\n        or v_publication.report_scope_id is distinct from v_scope.id\n        or v_publication.correction_session_id is distinct from v_session.id\n        or v_publication.authority_scope_version is distinct from v_scope.version then\n        raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    elsif v_session.state is distinct from 'READY' then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    if v_session.state='REVIEWED' and (v_session.review_result_json is null\n      or v_session.review_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',v_session.review_result_json)) then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;\n    -- Stable subject identity only. Every mutable session/publication/scope\n    -- gate above is re-read; none is relabelled as immutable financial facts.\n    v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',\n      'correction_session_id',v_session.id,'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,\n      'client_id',v_client,'upload_id',v_upload.id,'actor_user_id',p_actor_user_id,\n      'prior_final_revision_id',v_revision.id,'prior_final_manifest_hash',encode(v_revision.manifest_hash,'hex'),\n      'prior_upload_id',v_prior_upload.id,'source_format_profile_id',v_upload.source_format_profile_id,\n      'row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'),'report_scope_id',v_scope.id,\n      'authority_scope_kind','NHSP_REPORT_SCOPE');\n    return v_result||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1(\n      'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',v_result),'hex'));\n  end if;\n  if not found or v_upload.purpose is distinct from 'FINAL_SOURCE_CORRECTION'"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-prepared-empty-census-successor-20261014/forward/01_prepared_paid_choice_census.sqlinc",
+      "before_file": "before/02_complete_prepared_choice_census.sqlinc",
+      "after_file": "forward/02_complete_prepared_choice_census.sqlinc",
+      "before_sha256": "836e2576b547dd2a1eb28cf6b1133e64187ca079caaef046dd2ea2f86a0d8aca",
+      "after_sha256": "b3aee0bf34aa2c17269c89bca533f196c1c535daa7b426693e3e4c69867d505a",
+      "hunks": [
+        {
+          "name": "scope shape accepts only existing cycle/NHSP correction families",
+          "before": "or revision.authority_scope_kind is distinct from 'CYCLE'\n    or revision.report_scope_id is not null",
+          "after": "or revision.authority_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE')\n    or (revision.authority_scope_kind='NHSP_REPORT_SCOPE') is distinct from (revision.report_scope_id is not null)"
+        },
+        {
+          "name": "exact session family/scope equality replaces cycle-only assumption",
+          "before": "      and authority_scope_kind='CYCLE' and report_scope_id is null and state in ('PREPARING','PREPARED','COMMITTING');",
+          "after": "      and authority_scope_kind=revision.authority_scope_kind and report_scope_id is not distinct from revision.report_scope_id\n      and state in ('PREPARING','PREPARED','COMMITTING');"
+        },
+        {
+          "name": "exact prepared projection family and scope equality; no fake cycle",
+          "before": "      and authority_scope_kind='CYCLE' and report_scope_id is null and state='CORRECTION_READY';",
+          "after": "      and authority_scope_kind=revision.authority_scope_kind and report_scope_id is not distinct from revision.report_scope_id\n      and state='CORRECTION_READY';\n  if revision.authority_scope_kind='NHSP_REPORT_SCOPE' then\n    perform private.weekly_source_paid_match_correction_scope_v1(revision.upload_id,p_actor_user_id,false);\n  end if;"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/03_nhsp_negative_population.sqlinc",
+      "before_file": "before/03_complete_negative_population.sqlinc",
+      "after_file": "forward/03_complete_negative_population.sqlinc",
+      "before_sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa",
+      "after_sha256": "6d314c5da6c42dec505ff917da67314f98cb7f4a9e3d97d340f1d7a651625da0",
+      "hunks": [
+        {
+          "name": "actual correction session local",
+          "before": "  generation integer;counted integer;",
+          "after": "  correction public.weekly_final_source_correction_sessions%rowtype;\n  generation integer;counted integer;"
+        },
+        {
+          "name": "native correction scope rechecked before native cash and population reads",
+          "before": "  if u.source_cycle_id is distinct from c.id or u.purpose<>'ORDINARY' or u.correction_session_id is not null\n    or u.state<>'CURRENT'",
+          "after": "  if u.purpose='FINAL_SOURCE_CORRECTION' then\n    perform private.weekly_source_paid_match_correction_scope_v1(u.id,p_actor_user_id,false);\n    select * into strict correction from public.weekly_final_source_correction_sessions where id=u.correction_session_id;\n  end if;\n  if u.source_cycle_id is distinct from c.id or u.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')\n    or (u.purpose='ORDINARY' and (u.state<>'CURRENT' or u.correction_session_id is not null))\n    or (u.purpose='FINAL_SOURCE_CORRECTION' and u.state<>'CORRECTION_READY')"
+        },
+        {
+          "name": "ordinary complete pointer remains mandatory; correction helper proves prior current head",
+          "before": "    or scope.current_complete_upload_id is distinct from u.id",
+          "after": "    or (u.purpose='ORDINARY' and scope.current_complete_upload_id is distinct from u.id)"
+        },
+        {
+          "name": "actual correction generation owns its replacement publication",
+          "before": "      and x.correction_session_id is null and x.state in ('BUILDING','CURRENT');",
+          "after": "      and ((u.purpose='ORDINARY' and x.correction_session_id is null and x.state in ('BUILDING','CURRENT'))\n        or (u.purpose='FINAL_SOURCE_CORRECTION' and x.correction_session_id=correction.id\n          and x.id=correction.replacement_projection_publication_id and x.state in ('BUILDING','CORRECTION_READY')));"
+        },
+        {
+          "name": "select real native representative; selected NORMAL provenance remains A for retained correction",
+          "before": "        where o.origin_kind='MOVEMENT' and o.origin_id=m.id and o.active and o.contribution=1;",
+          "after": "        where o.origin_kind='MOVEMENT' and o.origin_id=private.weekly_source_nhsp_selected_pay_origin_v1(\n          (select current_scope.id from private.bpay_next_source_current_scopes current_scope\n            where current_scope.root_timesheet_id=(position->>'root_timesheet_id')::uuid\n              and current_scope.source_group_id=c.source_group_id),w.id,m.id) and o.active and o.contribution=1;"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/00_complete_overlap_inputs.sqlinc",
+      "before_file": "before/04_complete_overlap_inputs.sqlinc",
+      "after_file": "forward/04_complete_overlap_inputs.sqlinc",
+      "before_sha256": "a63a548c927100df862abd3da45cd35c7944a21d094d775ef9d1a4a7ca8d2654",
+      "after_sha256": "ea1150d0d4fe0cfceff1dd9644c24a24a1eba9ff0df4b008714f7a52aa103b28",
+      "hunks": [
+        {
+          "name": "qualified NHSP correction participates in genuine current overlap census",
+          "before": "    if v_upload.report_scope_id is null or v_upload.purpose<>'ORDINARY' or v_upload.correction_session_id is not null\n      or v_upload.state<>'CURRENT'",
+          "after": "    if v_upload.report_scope_id is null or v_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')\n      or (v_upload.purpose='ORDINARY' and (v_upload.correction_session_id is not null or v_upload.state<>'CURRENT'))\n      or (v_upload.purpose='FINAL_SOURCE_CORRECTION' and v_upload.state<>'CORRECTION_READY')"
+        },
+        {
+          "name": "new correction input never replaces the prior current complete pointer",
+          "before": "          and scope.self_bill_report_id is null and scope.current_complete_upload_id=v_upload.id)",
+          "after": "          and scope.self_bill_report_id is null\n          and (v_upload.purpose='FINAL_SOURCE_CORRECTION' or scope.current_complete_upload_id=v_upload.id))"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/03_nhsp_projection_lock_input.sqlinc",
+      "before_file": "before/05_complete_projection_lock_input.sqlinc",
+      "after_file": "forward/05_complete_projection_lock_input.sqlinc",
+      "before_sha256": "7a857d68434a7cb8b1a09abe9b4442187094b0e6b6f56fc1d8f277172a0671fb",
+      "after_sha256": "0259a9aa83408bb55f3fa44416d186a31b81510c2a40b8b8eeeb181911453621",
+      "hunks": [
+        {
+          "name": "genuine correction local",
+          "before": "  result jsonb;counted integer:=0;",
+          "after": "  correction public.weekly_final_source_correction_sessions%rowtype;\n  result jsonb;counted integer:=0;"
+        },
+        {
+          "name": "exact correction session before pre-business I1 discovery",
+          "before": "  if upload.purpose<>'ORDINARY' or upload.state<>'CURRENT' or upload.correction_session_id is not null\n    or scope.current_complete_upload_id is distinct from upload.id",
+          "after": "  if upload.purpose='FINAL_SOURCE_CORRECTION' then\n    perform private.weekly_source_paid_match_correction_scope_v1(upload.id,p_actor_user_id,false);\n    select * into strict correction from public.weekly_final_source_correction_sessions where id=upload.correction_session_id;\n  end if;\n  if upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')\n    or (upload.purpose='ORDINARY' and (upload.state<>'CURRENT' or upload.correction_session_id is not null\n      or scope.current_complete_upload_id is distinct from upload.id))\n    or (upload.purpose='FINAL_SOURCE_CORRECTION' and (upload.state<>'CORRECTION_READY'\n      or publication.id is distinct from correction.replacement_projection_publication_id))"
+        },
+        {
+          "name": "exact correction publication session binding",
+          "before": "    or publication.correction_session_id is not null",
+          "after": "    or publication.correction_session_id is distinct from upload.correction_session_id"
+        },
+        {
+          "name": "saved correction identity independently rederived before I1",
+          "before": "  -- The saved incoming negative records are HISTORICAL input provenance only.",
+          "after": "  if upload.purpose='FINAL_SOURCE_CORRECTION' and saved->'correction_scope' is distinct from\n    private.weekly_source_paid_match_correction_scope_v1(upload.id,p_actor_user_id,false) then\n    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FACTS_CHANGED' using errcode='40001';end if;\n  -- The saved incoming negative records are HISTORICAL input provenance only."
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/05_complete_projection_rows.sqlinc",
+      "before_file": "before/06_complete_projection_rows.sqlinc",
+      "after_file": "forward/06_complete_projection_rows.sqlinc",
+      "before_sha256": "e51a9d46d0c27838e7dfce4506a6fa25625922acbdd5ba9ec67aadb53d1e41c0",
+      "after_sha256": "1fededa8f39494a786a82a3dd47058b7ca983620ae88ce952221359c0fb024aa",
+      "hunks": [
+        {
+          "name": "native negative-first blocker applies to actual admitted correction upload",
+          "before": "    if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose='ORDINARY'",
+          "after": "    if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose in ('ORDINARY','FINAL_SOURCE_CORRECTION')"
+        },
+        {
+          "name": "Separate genuine C1 event participates under already verified correction session",
+          "before": "              or v_upload.purpose<>'ORDINARY' or v_group.source_family<>'NHSP'",
+          "after": "              or v_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION') or v_group.source_family<>'NHSP'"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/06_complete_upload_context.sqlinc",
+      "before_file": "before/07_complete_upload_context.sqlinc",
+      "after_file": "forward/07_complete_upload_context.sqlinc",
+      "before_sha256": "c63cc2c68cb8fff77c16ecf25f3682c824b21465f62cfdc703072a17baf5234c",
+      "after_sha256": "1a059e07f2d2e44245b6625290df1ccd3ca29e48cd549acd582413b0b5e15824",
+      "hunks": [
+        {
+          "name": "read exact correction publication before rows, preserving original ordinary lookup",
+          "before": "  if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose='ORDINARY' then",
+          "after": "  if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose='FINAL_SOURCE_CORRECTION' then\n    perform private.weekly_source_paid_match_correction_scope_v1(v_upload.id,v_actor,false);\n    select publication.* into strict v_publication\n      from public.weekly_final_source_correction_sessions correction\n      join public.weekly_source_projection_publications publication on publication.id=correction.replacement_projection_publication_id\n      where correction.id=v_upload.correction_session_id and correction.replacement_correction_upload_id=v_upload.id\n        and publication.upload_id=v_upload.id and publication.source_cycle_id=v_cycle.id\n        and publication.report_scope_id=v_scope.id and publication.authority_scope_kind='NHSP_REPORT_SCOPE'\n        and publication.authority_scope_version=v_scope.version and publication.correction_session_id=correction.id\n        and publication.state in ('BUILDING','CORRECTION_READY');\n  elsif v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose='ORDINARY' then"
+        },
+        {
+          "name": "actual correction positive rows receive current paid overlap context",
+          "before": "or (v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose='ORDINARY'",
+          "after": "or (v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_upload.purpose in ('ORDINARY','FINAL_SOURCE_CORRECTION')"
+        },
+        {
+          "name": "late fallback retained only for unhandled families/purposes",
+          "before": "  if v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' or v_upload.purpose<>'ORDINARY' then",
+          "after": "  if v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' or v_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION') then"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/04_complete_office_recheck.sqlinc",
+      "before_file": "before/08_complete_office_recheck.sqlinc",
+      "after_file": "forward/08_complete_office_recheck.sqlinc",
+      "before_sha256": "4064405738cb2723b9f93a1026a6b875fd824feaec2ab8e2e99bef851019d6eb",
+      "after_sha256": "90257bcec2730fec4f1dea777f28e1c17635ca7f4d0b41b7e7a761430c052ffb",
+      "hunks": [
+        {
+          "name": "lock the real NHSP correction scope and use its version",
+          "before": "    v_version:=v_cycle.version;v_current_upload:=v_upload.id;",
+          "after": "    if v_upload.report_scope_id is null then v_version:=v_cycle.version;\n    else\n      select * into strict v_scope from public.weekly_source_report_scopes where id=v_upload.report_scope_id for update;\n      v_version:=v_scope.version;\n    end if;\n    v_current_upload:=v_upload.id;"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/01_nhsp_none_invoice_basis.sqlinc",
+      "before_file": "before/09_complete_none_invoice_basis.sqlinc",
+      "after_file": "forward/09_complete_none_invoice_basis.sqlinc",
+      "before_sha256": "996985692726199709c835921efba3e8e274bdceb712c95c0d7ce1de68ebd13e",
+      "after_sha256": "446dd0840743e10b0a453e2fdcbd5db5fd39e37e3d7f07decae2aca6039c205b",
+      "hunks": [
+        {
+          "name": "genuine correction provenance local",
+          "before": "  side integer;comparison jsonb;",
+          "after": "  session public.weekly_final_source_correction_sessions%rowtype;\n  side integer;comparison jsonb;"
+        },
+        {
+          "name": "historical physical correction invoice family; no mutable current proof",
+          "before": "    or u.purpose<>'ORDINARY' or u.correction_session_id is not null or scope.self_bill_report_id is not null",
+          "after": "    or u.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')\n    or (u.purpose='ORDINARY' and u.correction_session_id is not null)\n    or (u.purpose='FINAL_SOURCE_CORRECTION' and u.correction_session_id is null) or scope.self_bill_report_id is not null"
+        },
+        {
+          "name": "immutable correction subject linked to actual predecessor and session",
+          "before": "  select * into strict journal from private.weekly_source_office_rechecks",
+          "after": "  if u.purpose='FINAL_SOURCE_CORRECTION' then\n    select * into strict session from public.weekly_final_source_correction_sessions where id=u.correction_session_id;\n    if revision.reason<>'CORRECT_FINAL_SOURCE' or revision.predecessor_revision_id is null\n      or session.authority_scope_kind<>'NHSP_REPORT_SCOPE' or session.report_scope_id is distinct from scope.id\n      or session.source_cycle_id is distinct from cycle.id or session.replacement_correction_upload_id is distinct from u.id\n      or session.actor_user_id is distinct from revision.finalised_by_user_id\n      or session.expected_current_final_revision_id is distinct from revision.predecessor_revision_id\n      or session.state not in ('PREPARING','PREPARED','COMMITTING','APPLIED')\n      or (session.state<>'PREPARING' and session.prepared_final_revision_id is distinct from revision.id)\n      or (session.state='APPLIED' and session.applied_final_revision_id is distinct from revision.id)\n      or proof#>>'{inputs,correction_scope,schema_version}' is distinct from 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1'\n      or proof#>>'{inputs,correction_scope,correction_session_id}' is distinct from session.id::text\n      or proof#>>'{inputs,correction_scope,prior_final_revision_id}' is distinct from revision.predecessor_revision_id::text\n      or proof#>>'{inputs,correction_scope,prior_final_manifest_hash}' is distinct from encode(session.expected_final_manifest_hash,'hex')\n      or proof#>>'{inputs,correction_scope,upload_id}' is distinct from u.id::text\n      or proof#>>'{inputs,correction_scope,report_scope_id}' is distinct from scope.id::text\n      or proof#>>'{inputs,correction_scope,authority_scope_kind}' is distinct from 'NHSP_REPORT_SCOPE'\n      or proof#>>'{inputs,correction_scope,scope_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',(proof#>'{inputs,correction_scope}')-'scope_sha256'),'hex') then\n      raise exception 'WEEKLY_SOURCE_NHSP_NONE_CORRECTION_PROVENANCE_UNBOUND' using errcode='55000';end if;\n  end if;\n  select * into strict journal from private.weekly_source_office_rechecks"
+        },
+        {
+          "name": "same-scope NORMAL witness is allowed only under genuine correction provenance",
+          "before": "    or target_revision.authority_scope_kind<>'NHSP_REPORT_SCOPE' or target_revision.report_scope_id=scope.id",
+          "after": "    or target_revision.authority_scope_kind<>'NHSP_REPORT_SCOPE'\n    or (target_revision.report_scope_id=scope.id and (u.purpose<>'FINAL_SOURCE_CORRECTION'\n      or revision.reason<>'CORRECT_FINAL_SOURCE' or revision.predecessor_revision_id is null))"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/02_complete_native_movement_factory.sqlinc",
+      "before_file": "before/10_complete_native_movement_factory.sqlinc",
+      "after_file": "forward/10_complete_native_movement_factory.sqlinc",
+      "before_sha256": "44ccecac8f84859dd2006a88d1ee5c8e2c5355b2395826b68c7ce5fba78f4322",
+      "after_sha256": "3b4cf69d26a09ba31155c1abcad4c51d0609a4743c4740cf5aadccd8874a0cce",
+      "hunks": [
+        {
+          "name": "current cash/native origin bound admission accepts genuine PREPARING correction only",
+          "before": "    if not exists(select 1 from public.weekly_source_final_revisions target_revision\n      join public.weekly_source_report_scopes target_scope on target_scope.id=target_revision.report_scope_id\n      where target_revision.id=(v_nhsp_none_basis->>'normal_pay_final_revision_id')::uuid\n        and target_revision.state='CURRENT' and target_scope.current_final_revision_id=target_revision.id)\n      or not exists(select 1 from public.weekly_source_final_revisions revision\n        where revision.id=p_final_revision_id and revision.state='CURRENT' and revision.reason='INITIAL_FINALISATION'\n          and revision.predecessor_revision_id is null)\n      or v_nhsp_none_basis->>'invoice_timesheet_id' is distinct from p_invoice_timesheet_id::text\n      or v_nhsp_none_basis#>>'{native_invoice_values,source_shift_charge_pence}' is distinct from p_invoice_presentation_charge_pence::text then\n      raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_NOT_CURRENT' using errcode='55000';end if;\n",
+          "after": "    perform private.weekly_source_nhsp_none_write_admit_v1(v_nhsp_none_basis,p_final_revision_id);\n    if v_nhsp_none_basis->>'invoice_timesheet_id' is distinct from p_invoice_timesheet_id::text\n      or v_nhsp_none_basis#>>'{native_invoice_values,source_shift_charge_pence}' is distinct from p_invoice_presentation_charge_pence::text then\n      raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_NOT_CURRENT' using errcode='55000';end if;\n"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/05_complete_native_capture_movement.sqlinc",
+      "before_file": "before/11_complete_native_capture_movement.sqlinc",
+      "after_file": "forward/11_complete_native_capture_movement.sqlinc",
+      "before_sha256": "ffd11a3279d91ac24cc565dd928ce4edb78a2e133fccf9b0cf4f7d3666be9e00",
+      "after_sha256": "c72599bbc591ed184f7c2b7a38686623473d4e086886d010e8d7657242723a1d",
+      "hunks": [
+        {
+          "name": "NONE is delegated only to the native retained-origin constructor and never NORMAL movement capture",
+          "before": "  if not found or v_m.pay_effect<>'NORMAL'",
+          "after": "  if found and v_m.pay_effect='NONE' and v_m.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then\n    return private.bpay_next_source_current_capture_nhsp_none_v1(p_movement);end if;\n  if not found or v_m.pay_effect<>'NORMAL'"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/06_complete_native_publish_revision.sqlinc",
+      "before_file": "before/12_complete_native_publish_revision.sqlinc",
+      "after_file": "forward/12_complete_native_publish_revision.sqlinc",
+      "before_sha256": "b0da248a04380cf8f04628a0ae3645ef29fc98d5f93c45226d313dc823956f71",
+      "after_sha256": "581777dcee196113fdd722598235a56c08f5c5aff50415770f015fa1b9af40ef",
+      "hunks": [
+        {
+          "name": "genuine NONE invoice origin is classified by exact native constructor",
+          "before": "      and m.pay_effect='NORMAL'",
+          "after": "      and m.pay_effect in ('NORMAL','NONE')"
+        },
+        {
+          "name": "ordinary distinct-scope NONE has no pay origin; genuine same-scope correction observes B authority and selects A",
+          "before": "      perform private.bpay_next_source_current_capture_movement_v1(v_row.id);\n      select o.scope_id into strict v_scope from private.bpay_next_source_current_origins o where o.origin_kind='MOVEMENT' and o.origin_id=v_row.id;\n      perform private.bpay_next_source_current_observe_v1(v_scope,p_revision,null);",
+          "after": "      v_capture:=private.bpay_next_source_current_capture_movement_v1(v_row.id);\n      if v_capture->'pay_origin_present' is distinct from 'false'::jsonb then\n        select o.scope_id into strict v_scope from private.bpay_next_source_current_origins o where o.origin_kind='MOVEMENT' and o.origin_id=v_row.id;\n        perform private.bpay_next_source_current_observe_v1(v_scope,p_revision,null);\n      end if;"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "before_file": "before/13_complete_current_native_basis.sqlinc",
+      "after_file": "forward/13_complete_current_native_basis.sqlinc",
+      "before_sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6",
+      "after_sha256": "dde1890112ac9b8a93f29396aa2706384f3a303ee4ec76bf3e9d7ddd9ed0d956",
+      "hunks": [
+        {
+          "name": "native selector representative preserves genuine NORMAL and exact separate invoice provenance",
+          "before": "        or not exists(select 1 from private.bpay_next_source_current_origins origin\n          where origin.origin_kind='MOVEMENT' and origin.origin_id=v_movement.id and origin.movement_id=v_movement.id\n            and origin.scope_id=v_scope and origin.work_event_id=v_event.id and origin.active\n            and origin.final_revision_id=v_movement.final_revision_id and origin.row_resolution_id=v_resolution.id\n            and origin.source_hash=v_movement.movement_economic_hash and origin.contribution=1)",
+          "after": "        or private.weekly_source_nhsp_selected_pay_origin_v1(v_scope,v_event.id,v_movement.id) is null"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "input_file_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "extracted_function": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "before_file": "before/14_complete_native_toggle.sqlinc",
+      "after_file": "forward/14_complete_native_toggle.sqlinc",
+      "before_sha256": "21cbe71d6330ac0998641a30a4e9d75c1b125862e4aa8767f22d167a3c4eca84",
+      "after_sha256": "12b90bb2f3f5591475c3790e77d1c31c2b5abfb5965d1180796d82f917b07ffd",
+      "hunks": [
+        {
+          "name": "retained origin selects genuine NORMAL provenance; original NORMAL origins retain original behavior",
+          "before": "      select o.movement_id into v_movement from private.bpay_next_source_current_origins o",
+          "after": "      select coalesce(o.selected_movement_id,o.movement_id) into v_movement from private.bpay_next_source_current_origins o"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "input_file_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "extracted_function": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "before_file": "before/18_complete_native_current_event.sqlinc",
+      "after_file": "forward/18_complete_native_current_event.sqlinc",
+      "before_sha256": "69ecad949f55a0bfb57baf4419955bc03f704db93ff9f7f1f19d875a63b59490",
+      "after_sha256": "ab61bcf6a05fc400d9e28dcdafa906283be3733e4280ae78ee85cc7e8b5d1fd3",
+      "hunks": [
+        {
+          "name": "historical VOIDED invoice placement remains immutable; only exact new retained current origin may select its NORMAL pay provenance",
+          "before": "    if v_m.placement_state='VOIDED_BY_CORRECT_FINAL' then raise exception 'BPAY_NEXT_SOURCE_MOVEMENT_CACHE_STALE' using errcode='55000';end if;",
+          "after": "    if v_m.placement_state='VOIDED_BY_CORRECT_FINAL' and not exists(\n      select 1 from private.bpay_next_source_current_origins origin\n      where origin.origin_kind='MOVEMENT' and origin.origin_id=private.weekly_source_nhsp_selected_pay_origin_v1(v_scope.id,p_event,v_m.id)\n        and origin.selected_movement_id=v_m.id and origin.movement_id<>v_m.id and origin.active) then\n      raise exception 'BPAY_NEXT_SOURCE_MOVEMENT_CACHE_STALE' using errcode='55000';end if;"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/07_complete_expense_nhsp_none_invoice_admission.sqlinc",
+      "before_file": "before/19_complete_money_expense_nhsp_report_none_admission.sqlinc",
+      "after_file": "forward/19_complete_money_expense_nhsp_report_none_admission.sqlinc",
+      "before_sha256": "6786db6d67e9037cf0652927ebca4306404b36ab773d7420f00be9175aa70bda",
+      "after_sha256": "0a71485e1110795abf2465c113428c1dc7807e4da9500c111e55a83db04eccc3",
+      "hunks": [
+        {
+          "name": "Report presentation uses actual B export snapshot; PAY9 continues true NORMAL: v_identity_movement",
+          "before": "snapshot.id=(v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid\n                and snapshot.final_revision_id=(v_identity_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid",
+          "after": "snapshot.id=coalesce((v_identity_movement.source_facts_json->>'bound_export_snapshot_line_id')::uuid,\n                (v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid)\n              and snapshot.final_revision_id=coalesce((v_identity_movement.source_facts_json->>'bound_export_final_revision_id')::uuid,\n                (v_identity_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid)\n              and (not (v_identity_movement.source_facts_json ? 'bound_export_snapshot_line_id') or (\n                snapshot.pay_effect='NONE'\n                and snapshot.row_resolution_id=(v_identity_movement.source_facts_json->>'bound_row_resolution_id')::uuid\n                and snapshot.upload_row_id=(v_identity_movement.source_facts_json->>'bound_export_upload_row_id')::uuid\n                and encode(snapshot.snapshot_line_hash,'hex')=v_identity_movement.source_facts_json->>'bound_export_snapshot_line_hash'\n                and snapshot.paid_overlap_choice_id=(v_identity_movement.source_facts_json->>'bound_export_paid_overlap_choice_id')::bigint\n                and v_identity_movement.source_facts_json->>'bound_export_pay_effect'='NONE'\n                and v_identity_movement.source_facts_json#>>'{retained_pay_basis,snapshot_line_id}'=v_identity_movement.source_facts_json->>'bound_pay_snapshot_line_id'\n                and v_identity_movement.source_facts_json#>>'{retained_pay_basis,final_revision_id}'=snapshot.final_revision_id::text\n                and v_identity_movement.source_facts_json#>>'{retained_pay_basis,work_event_id}'=snapshot.work_event_id::text\n                and exists(select 1 from jsonb_array_elements(v_identity_movement.source_facts_json#>'{retained_pay_basis,actual_present_invoice_rows}') item\n                  where item=jsonb_build_object('snapshot_line_id',snapshot.id,'upload_row_id',snapshot.upload_row_id,\n                    'paid_overlap_choice_id',snapshot.paid_overlap_choice_id,'snapshot_line_hash',encode(snapshot.snapshot_line_hash,'hex')))))"
+        },
+        {
+          "name": "Report presentation uses actual B export snapshot; PAY9 continues true NORMAL: v_movement",
+          "before": "snapshot.id=(v_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid\n            and snapshot.final_revision_id=(v_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid",
+          "after": "snapshot.id=coalesce((v_movement.source_facts_json->>'bound_export_snapshot_line_id')::uuid,\n                (v_movement.source_facts_json->>'bound_pay_snapshot_line_id')::uuid)\n              and snapshot.final_revision_id=coalesce((v_movement.source_facts_json->>'bound_export_final_revision_id')::uuid,\n                (v_movement.source_facts_json->>'bound_pay_final_revision_id')::uuid)\n              and (not (v_movement.source_facts_json ? 'bound_export_snapshot_line_id') or (\n                snapshot.pay_effect='NONE'\n                and snapshot.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid\n                and snapshot.upload_row_id=(v_movement.source_facts_json->>'bound_export_upload_row_id')::uuid\n                and encode(snapshot.snapshot_line_hash,'hex')=v_movement.source_facts_json->>'bound_export_snapshot_line_hash'\n                and snapshot.paid_overlap_choice_id=(v_movement.source_facts_json->>'bound_export_paid_overlap_choice_id')::bigint\n                and v_movement.source_facts_json->>'bound_export_pay_effect'='NONE'\n                and v_movement.source_facts_json#>>'{retained_pay_basis,snapshot_line_id}'=v_movement.source_facts_json->>'bound_pay_snapshot_line_id'\n                and v_movement.source_facts_json#>>'{retained_pay_basis,final_revision_id}'=snapshot.final_revision_id::text\n                and v_movement.source_facts_json#>>'{retained_pay_basis,work_event_id}'=snapshot.work_event_id::text\n                and exists(select 1 from jsonb_array_elements(v_movement.source_facts_json#>'{retained_pay_basis,actual_present_invoice_rows}') item\n                  where item=jsonb_build_object('snapshot_line_id',snapshot.id,'upload_row_id',snapshot.upload_row_id,\n                    'paid_overlap_choice_id',snapshot.paid_overlap_choice_id,'snapshot_line_hash',encode(snapshot.snapshot_line_hash,'hex')))))"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-prepared-empty-census-successor-20261014/forward/02_complete_prepared_context.sqlinc",
+      "before_file": "before/20_complete_prepared_context.sqlinc",
+      "after_file": "forward/20_complete_prepared_context.sqlinc",
+      "before_sha256": "77030d9c8a457a512b923fd17af7921b92a8ba8d914c8527b2a3c438a0df7ce4",
+      "after_sha256": "9463a5529c7a58a30c50bbf2a59ebc4e76571dd2ce7bac56db912cc89b022d42",
+      "hunks": [
+        {
+          "name": "latest empty-census late-choice recheck also covers the newly engineered NHSP correction family",
+          "before": "  if v_revision.authority_scope_kind='CYCLE' or v_revision.paid_overlap_choice_census<>'{}'::jsonb then",
+          "after": "  if v_revision.authority_scope_kind in ('CYCLE','NHSP_REPORT_SCOPE') or v_revision.paid_overlap_choice_census<>'{}'::jsonb then"
+        },
+        {
+          "name": "prepared root union includes genuine invoice-only NHSP roots while money selection stays NORMAL",
+          "before": "      where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and movement.pay_effect='NORMAL'\n      and movement.final_revision_id=v_revision.id",
+          "after": "      where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        and (movement.pay_effect='NORMAL' or (movement.pay_effect='NONE'\n          and movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' and movement.source_line_kind='NHSP_PHYSICAL_POSITIVE'\n          and private.weekly_source_nhsp_none_invoice_origin_assert_v1(movement.id)->>'final_revision_id'=v_revision.id::text))\n      and movement.final_revision_id=v_revision.id"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-match-prepared-empty-census-successor-20261014/forward/04_complete_apply_census_recheck.sqlinc",
+      "before_file": "before/21_complete_apply_census_recheck.sqlinc",
+      "after_file": "forward/21_complete_apply_census_recheck.sqlinc",
+      "before_sha256": "c70dd6c8c15b5bf8642a38661a894994e9a561ca77637c05bf7c7116d7deefd6",
+      "after_sha256": "5f98bda968f0f5d4c505ccac19688857d6ef7a6e6e495c7f5b410ba1070e111e",
+      "hunks": [
+        {
+          "name": "latest apply empty-census check prevents a late NHSP choice from bypassing the prepared identity",
+          "before": "  if v_prepared_revision.authority_scope_kind='CYCLE' or v_prepared_revision.paid_overlap_choice_census<>'{}'::jsonb then",
+          "after": "  if v_prepared_revision.authority_scope_kind in ('CYCLE','NHSP_REPORT_SCOPE') or v_prepared_revision.paid_overlap_choice_census<>'{}'::jsonb then"
+        }
+      ]
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "input_file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/15_complete_active_pay_movements.sqlinc",
+      "before_file": "before/22_complete_active_pay_movements.sqlinc",
+      "after_file": "forward/22_complete_active_pay_movements.sqlinc",
+      "before_sha256": "8ae42edd3532702ad991db837d12294270f50bf5a468c2d6f41aaf244c4a1c58",
+      "after_sha256": "e00e71a5ff6b2a5188e1d3db1152c576f804f40833b66026f25c02d99f7e0f21",
+      "hunks": [
+        {
+          "name": "actual current/target physical NONE invoice binds explicit NORMAL provenance, never historical-current fallback",
+          "before": "  ), scoped as (\n",
+          "after": "  ), retained_invoice_candidates as materialized (\n    -- This is explicit immutable invoice-to-NORMAL provenance. A superseded\n    -- NORMAL row is included only because an actual current/target NONE row\n    -- retains it. Neither the old revision nor the NONE invoice is PAY authority.\n    select invoice.id\n    from public.weekly_source_billing_movements invoice\n    join public.weekly_source_final_revisions invoice_revision on invoice_revision.id=invoice.final_revision_id\n    join public.weekly_source_cycles invoice_cycle on invoice_cycle.id=invoice_revision.source_cycle_id\n    cross join target\n    cross join family\n    where invoice.pay_effect='NONE' and invoice.source_profile_kind='NHSP_TRUST_BACKING_REPORT'\n      and invoice.source_line_kind='NHSP_PHYSICAL_POSITIVE' and invoice.movement_role='POSITIVE'\n      and invoice.candidate_id=family.candidate_id and invoice.actual_client_id=family.client_id\n      and invoice.contract_id=family.contract_id\n      and ((not family.use_next and invoice.invoice_timesheet_id=any(family.timesheet_ids))\n        or (family.use_next and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage\n          where lineage.row_resolution_id=(invoice.source_facts_json->>'bound_row_resolution_id')::uuid\n            and lineage.work_event_id=invoice.work_event_id and lineage.family_booking_id=family.booking_id\n            and (lineage.candidate_id,lineage.client_id,lineage.contract_id,lineage.week_ending_date)\n              is not distinct from (family.candidate_id,family.client_id,family.contract_id,family.week_ending_date))))\n      and (invoice_revision.state='CURRENT' or invoice_revision.id=target.id)\n      and (target.state<>'PREPARED' or invoice_revision.id is distinct from target.predecessor_revision_id)\n      and (invoice_cycle.finalisation_week_ending<target.finalisation_week_ending\n        or (invoice_cycle.finalisation_week_ending=target.finalisation_week_ending\n          and (invoice_revision.finalised_at_utc,invoice_revision.revision_number,invoice_revision.id::text)\n            <=(target.finalised_at_utc,target.revision_number,target.id::text)))\n  ), retained_normal as materialized (\n    select distinct (private.weekly_source_nhsp_none_invoice_origin_assert_v1(invoice.id)->>'normal_pay_movement_id')::uuid as movement_id\n    from retained_invoice_candidates invoice\n  ), scoped as (\n"
+        },
+        {
+          "name": "a historical NORMAL row enters only through exact active NONE provenance",
+          "before": "      and (revision.state='CURRENT' or revision.id=target.id)",
+          "after": "      and (revision.state='CURRENT' or revision.id=target.id\n        or exists(select 1 from retained_normal retained where retained.movement_id=movement.id))"
+        },
+        {
+          "name": "prepared predecessor exclusion preserves only the explicit genuine retained NORMAL row",
+          "before": "        target.state<>'PREPARED'\n        or revision.id is distinct from target.predecessor_revision_id",
+          "after": "        target.state<>'PREPARED'\n        or revision.id is distinct from target.predecessor_revision_id\n        or exists(select 1 from retained_normal retained where retained.movement_id=movement.id)"
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "commit": "61a1c64ac14d0f8fe60b721983fadf21f5459429",
+      "file": "docs/healthroster-build/proposals/report-none-bound-invoice-native-forward-20261015/FULL_REVERSES.json",
+      "saved": "input/report_qualified_FULL_REVERSES.json",
+      "bytes": 56124,
+      "sha256": "1562bce87cd0cb0f3e9ec9b5b682aab3b04e2d2a8c48c6b0cd2277dde85632b3",
+      "selection": "07 delta ONLY; mutually exclusive 04/05 not selected"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/nhsp-phased-if-case-compilation-fix-20261015/forward/02_complete_choice_current_and_lock.sqlinc",
+      "saved": "input/qualified_case_fix_02_complete_choice_current_and_lock.sqlinc",
+      "bytes": 15002,
+      "sha256": "b092481deb1d931a5358b985f3eec1b9c6332f12d6c679f18d5da7411cef1e96",
+      "qualified_by_root": "3 exact constructor IF expressions after 6 parentheses only; separate from business acceptance"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/nhsp-phased-if-case-compilation-fix-20261015/forward/07_complete_choice_admit.sqlinc",
+      "saved": "input/qualified_case_fix_07_complete_choice_admit.sqlinc",
+      "bytes": 11690,
+      "sha256": "0a6d7fb2f8948743c456feb7a4de6400b55762e6c6964ef3cfb0eef85f195797",
+      "qualified_by_root": "3 exact constructor IF expressions after 6 parentheses only; separate from business acceptance"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/nhsp-phased-if-case-compilation-fix-20261015/forward/08_complete_match_question.sqlinc",
+      "saved": "input/qualified_case_fix_08_complete_match_question.sqlinc",
+      "bytes": 9827,
+      "sha256": "a6bd5e49842ff59882fa3e3d4dbbdb8e058daffd1e91e5ce39573c4d12007e04",
+      "qualified_by_root": "3 exact constructor IF expressions after 6 parentheses only; separate from business acceptance"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "saved": "input/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd",
+      "purpose": "existing native schema/selector/correction lifecycle provenance, no canonical mutation"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "saved": "input/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "purpose": "existing native schema/selector/correction lifecycle provenance, no canonical mutation"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "saved": "input/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "bytes": 32206,
+      "sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51",
+      "purpose": "existing native schema/selector/correction lifecycle provenance, no canonical mutation"
+    }
+  ],
+  "same_scope_NHSP_retained_normal_source_constructed": true,
+  "new_private_signatures": [
+    "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+    "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+    "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)"
+  ],
+  "new_public_signatures": [],
+  "new_table_column_calculator": 0,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

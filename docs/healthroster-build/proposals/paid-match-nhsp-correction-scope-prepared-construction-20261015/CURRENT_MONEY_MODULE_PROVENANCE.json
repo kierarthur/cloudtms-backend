@@ -1,0 +1,1374 @@
+{
+  "source_only": true,
+  "inputs": [
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/01_work_event_payment_facts.sqlinc",
+      "bytes": 12479,
+      "sha256": "19619923daac1059be9d4ac719cbcf42b5721a08d4b39e82a79e187a537cc2d5"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/02_complete_keep_context.sqlinc",
+      "bytes": 21427,
+      "sha256": "ea04c89d2854f9733bf52dda908a1e4887703f118288ee8411f421a0457630b4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/forward/03_paid_overlap_source_inputs.sqlinc",
+      "bytes": 6755,
+      "sha256": "4a0fb36b169fd35db727c152175979fe9ec1b5d4724a90e0202e8323513a1ac4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/01_paid_overlap_choice_admit.sqlinc",
+      "bytes": 10196,
+      "sha256": "c82a96bb8ad6bb51589e39f31f675a146eab99b6ba47877a8d31a2072f80642a"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/02_complete_office_recheck.sqlinc",
+      "bytes": 15808,
+      "sha256": "792dcd8b37007a6002ccd9b9d796d1c54c5b681dd0acec03e73d34dfdccd68ea"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/03_paid_overlap_choice_current.sqlinc",
+      "bytes": 11558,
+      "sha256": "710a1a9a0036ae1cc1e58b44835cbe4c27e3c2538e53bd8c0e3532749411afa5"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/04_complete_upload_context.sqlinc",
+      "bytes": 30127,
+      "sha256": "38e4ca8773cec6cd90f2012b834336461d7d1846538b91179886c3cedc235e04"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/05_complete_projection_rows.sqlinc",
+      "bytes": 72586,
+      "sha256": "bac2c386c5fcd246a788ce412b3de46bafaf821f386f51b8f6dec72bb4cac6e4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/06_complete_fin4.sqlinc",
+      "bytes": 121748,
+      "sha256": "1e5d0bbfbbe8fe9e4af2449c5413fa416d791e820742ec52730b684fc6182b67"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/07_paid_choice_revision_guard.sqlinc",
+      "bytes": 2316,
+      "sha256": "7d8f569c872cd3546bc3054645ed83a772dc3036ba4081ff961ac0ce95f5b98a"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/08_paid_match_invoice_producer.sqlinc",
+      "bytes": 9224,
+      "sha256": "b139b1d3cb52670a88848292da34db24a15fef6d35c254a5c76616f586c3dd59"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/09_paid_match_invoice_origin_assert.sqlinc",
+      "bytes": 11216,
+      "sha256": "8e94bbaa234cdf5d6a9b4652b8e923b0f0fedda7d31094080ff7c381a52f023a"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/10_complete_billing_hash.sqlinc",
+      "bytes": 1700,
+      "sha256": "68489f1f09e1375c144072816067c67e76cec45c7bbe48339fdd9920580d55d0"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/11_complete_movement_window.sqlinc",
+      "bytes": 1561,
+      "sha256": "f7d8e809b966cec0acc0561276af1ad2d5fafec4a3e2c4b402ef12fb8c08ccee"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/12_complete_source_amount_valid.sqlinc",
+      "bytes": 7413,
+      "sha256": "4926a91e434bfde5c650a45e3559f81dc3ea309c86aaf399f1c4f16fda84cd6e"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/13_complete_invoice_admission.sqlinc",
+      "bytes": 49310,
+      "sha256": "8fddbb729fe54854038288afc988df8463f2908569230f4893f433878bed0145"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/14_complete_self_bill_shift_facts.sqlinc",
+      "bytes": 12775,
+      "sha256": "eac92cc2e6d35394a0162a39a0ed75086514e70f776718ae86ea7a46615ddf64"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/15_complete_active_pay_movements.sqlinc",
+      "bytes": 12671,
+      "sha256": "8ae42edd3532702ad991db837d12294270f50bf5a468c2d6f41aaf244c4a1c58"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/16_complete_source_pay_units.sqlinc",
+      "bytes": 5308,
+      "sha256": "5bdfe420c541b432591015ca67006746c685ff24e66ee42654ef54ee611b1705"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/17_complete_selected_source_witness.sqlinc",
+      "bytes": 38205,
+      "sha256": "4a55fa7191dcc71e1d0a3fc9a6d071618bb1f716a5cc6d1aa1b2d16216f441f6"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/18_complete_finalisation_pay_open.sqlinc",
+      "bytes": 8548,
+      "sha256": "499ebc59fd4f328311d619431fe03eaa1fd48fe6e28a142dba6cadd410df3a5d"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/19_complete_invoice_allocation.sqlinc",
+      "bytes": 10246,
+      "sha256": "d8b87af710d0a61f12eb8b5087ca2b61fa549aca79830cbb2e6861f22b50649b"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/00_current_pay_snapshot.sqlinc",
+      "bytes": 5302,
+      "sha256": "25dae4e5188c7942aefecbc4383a8a8e942d427834ad7d71b86728e22934ee2c"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/01_retained_paid_transition_assert.sqlinc",
+      "bytes": 11373,
+      "sha256": "704ca55c8009a28b008be3a6ce87de5cd39f39b2fe24bbb6a712a28da65623d2"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/02_complete_overlap_inputs.sqlinc",
+      "bytes": 7753,
+      "sha256": "cac377125532997d5e050cb3ff0bb98a202546f363b9145c135296baf53d53a3"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/03_complete_choice_admit.sqlinc",
+      "bytes": 10488,
+      "sha256": "7ffc41d4965ddba8b4184d5b4b80844e6fc71f05ec4ab3cfc758bea9ff4c41dd"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/04_complete_choice_current.sqlinc",
+      "bytes": 11850,
+      "sha256": "fb6b93bf0dcd7b5c7a5611778e5815e67d884b0556b9656874bfa4f365cacc7b"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/05_complete_office_question.sqlinc",
+      "bytes": 6681,
+      "sha256": "4e8320e0179565d406455226a4bea70b852c9418a2492d50fae6d05d7d4aa3ba"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-retained-current-capture-construction-20261014/forward/06_complete_shared_capture_proposal.sqlinc",
+      "bytes": 8618,
+      "sha256": "821e08d343725ff5ed4fb56f54c908c51ff28036b78fff4012c41389dc9a8fbf"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/01_native_expense_invoice_values.sqlinc",
+      "bytes": 2731,
+      "sha256": "c759bc4094ceeca3cc923d08b82fb57a384877b2d592505fa3e33834ba80a584"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/02_complete_native_expense_materialiser.sqlinc",
+      "bytes": 17153,
+      "sha256": "aa1c112c2863fa70051b6aa308caf6edc963cefcd99d21be29f0018b847c24f2"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/05_complete_hours_companion.sqlinc",
+      "bytes": 9268,
+      "sha256": "4196885e47db4ad21e4dcc583118d61dffe26433a1e7bdbf1e84857a32f2df05"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/04_expense_invoice_origin_assert.sqlinc",
+      "bytes": 7749,
+      "sha256": "89a63355d8cd7401ecc5684b049eecaefe024a7b64f243ef5b02e738bbb1f400"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/06_complete_origin_dispatch.sqlinc",
+      "bytes": 11410,
+      "sha256": "55084c0f3421b1afc729b12181bef3d3dc81489f28c128225bb66fce5b80e7a4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/03_expense_invoice_companion.sqlinc",
+      "bytes": 6445,
+      "sha256": "d94046dd1b625d3382beee8ab47b1b1c660f0392d838273cb05372d6029cf360"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/07_complete_fin4_expense.sqlinc",
+      "bytes": 122604,
+      "sha256": "3e9693b1c001c0af06dc7915705ebea9cf2eb16991f16aca2d1986e5b085aa26"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-source-expense-native-construction-20261014/forward/09_complete_invoice_admission.sqlinc",
+      "bytes": 50147,
+      "sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/01_prepared_paid_choice_census.sqlinc",
+      "bytes": 4397,
+      "sha256": "ff81ee489028a0616a97ccf6fc452c659d8e9adb4551a8fb0d91cc40a63093f7"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/02_complete_prepared_context.sqlinc",
+      "bytes": 8012,
+      "sha256": "0d566c0a1bed1ce8f0b60d6edc2a14db0b8c7e78cf5ff5c80a0db4a37068cdb4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/03_complete_prepare_result.sqlinc",
+      "bytes": 17073,
+      "sha256": "1065bbe0f7d302ca83a40d0fe06b1df12b13cedb0bd90d66c7de19d9e024a043"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/04_complete_apply_census_recheck.sqlinc",
+      "bytes": 37114,
+      "sha256": "b3a09495e226fccc6320c9a1bdd9e58c170145c40a3e31e24a6dc62eaea70753"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-pay-consumer-construction-20261014/forward/05_complete_current_pay_expenses.sqlinc",
+      "bytes": 4517,
+      "sha256": "5efdf54cb8bad539e0259e77fc34dfd5046496310463ca21b6e706f16d61df49"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-empty-census-successor-20261014/forward/01_prepared_paid_choice_census.sqlinc",
+      "bytes": 4312,
+      "sha256": "836e2576b547dd2a1eb28cf6b1133e64187ca079caaef046dd2ea2f86a0d8aca"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-empty-census-successor-20261014/forward/02_complete_prepared_context.sqlinc",
+      "bytes": 8204,
+      "sha256": "77030d9c8a457a512b923fd17af7921b92a8ba8d914c8527b2a3c438a0df7ce4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-prepared-empty-census-successor-20261014/forward/04_complete_apply_census_recheck.sqlinc",
+      "bytes": 37166,
+      "sha256": "c70dd6c8c15b5bf8642a38661a894994e9a561ca77637c05bf7c7116d7deefd6"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014/forward/01_paid_match_question.sqlinc",
+      "bytes": 6388,
+      "sha256": "4ea6f553ce20082f9f941a303869643c0cc2011cdcf97f03c7b34a629ce87aa2"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014/forward/02_complete_office_workspace.sqlinc",
+      "bytes": 119453,
+      "sha256": "572c5ab504598a73de572987d07f56f48636d56a3d239dd475d6147c8bd59a51"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-office-confirm-consumer-construction-20261014/forward/03_office_workspace_acl.sqlinc",
+      "bytes": 307,
+      "sha256": "b224a8cab75c1b57e86702f4f0440f998d7674c53237a134d09172beefc96661"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/00_correction_choice_scope.sqlinc",
+      "bytes": 6845,
+      "sha256": "3ebe08aee1bd9f375d01f67d7ca8e7cef65a5f056979fdde6b41be80c1d6baaa"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/01_complete_overlap_inputs.sqlinc",
+      "bytes": 8194,
+      "sha256": "752a4b5afb469af41b9f144c59e35764f8b439f4c33c21ef7b4b5a3c65f95f7e"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/02_complete_upload_context.sqlinc",
+      "bytes": 30158,
+      "sha256": "bd14093c6c9e52fe532878bc0c68d8d50437c71870170fcc289233954bbd4388"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/03_complete_paid_match_question.sqlinc",
+      "bytes": 7664,
+      "sha256": "cc23b4feca41c2852f5c4d9a41f7040d70fa220995fb1b523f3c7082d4c565f6"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/04_complete_office_recheck.sqlinc",
+      "bytes": 21127,
+      "sha256": "4064405738cb2723b9f93a1026a6b875fd824feaec2ab8e2e99bef851019d6eb"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/05_complete_correct_final_office_preview.sqlinc",
+      "bytes": 19083,
+      "sha256": "954a8288e2fed8880e7df06d427cf34646b263250fa1ff4c75d181ad991d4f71"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/06_existing_preview_acl.sqlinc",
+      "bytes": 302,
+      "sha256": "5136641f19174b8d587f52481e63f14cea39c1cd31096cd2a3d2a9c374f822d5"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/00_roster_prior_states.sqlinc",
+      "bytes": 2277,
+      "sha256": "be7b89291c84f7332af666b93fb5c45d4909c4f778d29379d59e7cf5d1058ca9"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/02_legacy_signed_source_membership.sqlinc",
+      "bytes": 13825,
+      "sha256": "60fe932ecc18a0d5ac0acfb0e56a2c09e2888ee9a5d59bab412f35667164a3df"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/03_current_snapshot_for_cycle.sqlinc",
+      "bytes": 6537,
+      "sha256": "77e8480af0105129ed717abc821faeb0c54113c820ae3a1a2a9e2d8a3b892ce9"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/01_complete_fin4_prior_selector.sqlinc",
+      "bytes": 120060,
+      "sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/04_complete_payment_facts.sqlinc",
+      "bytes": 14686,
+      "sha256": "1773bd2b9da8eb9ece206ac1228c92e4a106b1f645252dd59193339a2604f33f"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/05_complete_overlap_inputs.sqlinc",
+      "bytes": 7774,
+      "sha256": "ce5d7f6de4bd9e6db021ca9d74c3291ad087c9454450623e680a760ea53f17b1"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/06_complete_choice_admit.sqlinc",
+      "bytes": 10567,
+      "sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/07_complete_choice_current.sqlinc",
+      "bytes": 11946,
+      "sha256": "6c1d9cc6990666228a61f993f58c46267d5bc045da30653ba61fc2160b90fc52"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/08_complete_office_question.sqlinc",
+      "bytes": 6776,
+      "sha256": "ea7024cd4ba2cd52c01dd41a567d7b5dbad1fd0b14e407e3fbd8b6124d28f232"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/09_complete_retained_transition_assert.sqlinc",
+      "bytes": 11466,
+      "sha256": "376a27e2fa0a1648557699f7b9fd5bd422f4fe113f06bf93f8541706e9986e5f"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-retained-basis-consumer-20261015/forward/01_complete_retained_transition_assert.sqlinc",
+      "bytes": 16142,
+      "sha256": "5a16d86655e5913b9014f0afa19e0909d96eebcd54df735db1c0981f5888f542"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/03_complete_off_setup_shape.sqlinc",
+      "bytes": 6040,
+      "sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/04_complete_off_parent_scope.sqlinc",
+      "bytes": 26539,
+      "sha256": "cd5501b7cb2940add1e1b38b345a6a45733a0f8c0269a1b893c302647d43eff4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/01_complete_off_command.sqlinc",
+      "bytes": 19812,
+      "sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/02_complete_off_transport.sqlinc",
+      "bytes": 4106,
+      "sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-off-physical-contract-current-owner-20261015/forward/01_complete_off_parent_scope.sqlinc",
+      "bytes": 26495,
+      "sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/01_native_magnitude_core.sqlinc",
+      "bytes": 1334,
+      "sha256": "f3816cce0f413c6bb02b2f5eb5be8a093fab2e388d0addfc1cebdd1e03cefccb"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/02_complete_native_capture_movement.sqlinc",
+      "bytes": 4470,
+      "sha256": "47795eac894fc766d764ae6bdd8ee681d7766a1ccebc9a450161efcae3e57727"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/03_nhsp_negative_population.sqlinc",
+      "bytes": 11997,
+      "sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/01_native_line_vat.sqlinc",
+      "bytes": 1125,
+      "sha256": "9d9f36f53d66ac88ccd38872d8ce14881a13b41ecedb59b4bb10a7e890af616c"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/02_complete_native_movement_factory.sqlinc",
+      "bytes": 15963,
+      "sha256": "c52293ad192309fdfc49d040df02621187c2316c483f4eff85cda8a9e0f2ca63"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/03_nhsp_price_admission.sqlinc",
+      "bytes": 7001,
+      "sha256": "f84627e8c6878cc745834925ccf796f77b2887cb78a4d70a0a31a0450e84ff90"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/04_complete_fin4.sqlinc",
+      "bytes": 115756,
+      "sha256": "10ed70cdb810dd79513569910ddbd8c193336cb24bf6140c6f360fc694a7ba4e"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-native-invoice-values-construction-20261015/forward/05_nhsp_native_invoice_values.sqlinc",
+      "bytes": 3260,
+      "sha256": "4046f609cf4df621d4c8ee3159a7f9de18ba6abed6ddd7b10a77d3752f2f79f5"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-choice-comparison-consumer-20261015/forward/01_nhsp_negative_comparison.sqlinc",
+      "bytes": 9957,
+      "sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/00_complete_overlap_inputs.sqlinc",
+      "bytes": 14700,
+      "sha256": "a63a548c927100df862abd3da45cd35c7944a21d094d775ef9d1a4a7ca8d2654"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/01_immutable_choice_input.sqlinc",
+      "bytes": 4055,
+      "sha256": "41ea3fa6c5f96391243fae87b0453afe3e2d29aa2a543e7026824d226a295872"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/03_nhsp_projection_lock_input.sqlinc",
+      "bytes": 6879,
+      "sha256": "7a857d68434a7cb8b1a09abe9b4442187094b0e6b6f56fc1d8f277172a0671fb"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/04_nhsp_projection_choice_recheck.sqlinc",
+      "bytes": 3310,
+      "sha256": "1f8392febcc545ad9984b6224d24f30a230a17a49b59c80e1cdf745337f4cb1b"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/05_complete_projection_rows.sqlinc",
+      "bytes": 78237,
+      "sha256": "e51a9d46d0c27838e7dfce4506a6fa25625922acbdd5ba9ec67aadb53d1e41c0"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/06_complete_upload_context.sqlinc",
+      "bytes": 31212,
+      "sha256": "c63cc2c68cb8fff77c16ecf25f3682c824b21465f62cfdc703072a17baf5234c"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/nhsp-phased-if-case-compilation-fix-20261015/forward/02_complete_choice_current_and_lock.sqlinc",
+      "bytes": 15002,
+      "sha256": "b092481deb1d931a5358b985f3eec1b9c6332f12d6c679f18d5da7411cef1e96"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/nhsp-phased-if-case-compilation-fix-20261015/forward/07_complete_choice_admit.sqlinc",
+      "bytes": 11690,
+      "sha256": "0a6d7fb2f8948743c456feb7a4de6400b55762e6c6964ef3cfb0eef85f195797"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/nhsp-phased-if-case-compilation-fix-20261015/forward/08_complete_match_question.sqlinc",
+      "bytes": 9827,
+      "sha256": "a6bd5e49842ff59882fa3e3d4dbbdb8e058daffd1e91e5ce39573c4d12007e04"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/00_nhsp_invoice_only_vector.sqlinc",
+      "bytes": 809,
+      "sha256": "bc54662f670f83c13dc092beecbeac367e3ae88c93bb0ec43f4efd1f900cdc5d"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/01_nhsp_none_invoice_basis.sqlinc",
+      "bytes": 12094,
+      "sha256": "996985692726199709c835921efba3e8e274bdceb712c95c0d7ce1de68ebd13e"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/03_nhsp_none_invoice_origin.sqlinc",
+      "bytes": 7336,
+      "sha256": "ac223c50ef3db363aee807bc85806e99e6d919eb948f2db4dcb8e0e6c78553c6"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/02_complete_native_movement_factory.sqlinc",
+      "bytes": 18551,
+      "sha256": "44ccecac8f84859dd2006a88d1ee5c8e2c5355b2395826b68c7ce5fba78f4322"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/04_complete_origin_dispatch.sqlinc",
+      "bytes": 11616,
+      "sha256": "b1b577e1549a34c1ee92ed5e5c1a190f21977575fb6a8e0cc53b5256d7b58595"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/05_complete_native_capture_movement.sqlinc",
+      "bytes": 4498,
+      "sha256": "ffd11a3279d91ac24cc565dd928ce4edb78a2e133fccf9b0cf4f7d3666be9e00"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/06_complete_native_publish_revision.sqlinc",
+      "bytes": 4691,
+      "sha256": "b0da248a04380cf8f04628a0ae3645ef29fc98d5f93c45226d313dc823956f71"
+    },
+    {
+      "commit": "ff9ce8d2715e354f9d58ab178f0189a233e9206b",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-physical-none-materialisation-construction-20261015/forward/07_complete_expense_nhsp_none_invoice_admission.sqlinc",
+      "bytes": 50805,
+      "sha256": "6786db6d67e9037cf0652927ebca4306404b36ab773d7420f00be9175aa70bda"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/forward/workspace.report-d10-paid-match.sqlinc",
+      "bytes": 130958,
+      "sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2"
+    },
+    {
+      "commit": "b46eed23eb97a595cd15ab4a8b2d0f950bec3f84",
+      "file": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/forward/scopes.report-d10.sqlinc",
+      "bytes": 18701,
+      "sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/01_complete_correction_scope.sqlinc",
+      "bytes": 13651,
+      "sha256": "ad7fc4f635c1cdbf90de2dbef621e725db1b13c4e222682559568e1e1d9a89c9"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/02_complete_prepared_choice_census.sqlinc",
+      "bytes": 4705,
+      "sha256": "b3aee0bf34aa2c17269c89bca533f196c1c535daa7b426693e3e4c69867d505a"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/03_complete_negative_population.sqlinc",
+      "bytes": 13047,
+      "sha256": "6d314c5da6c42dec505ff917da67314f98cb7f4a9e3d97d340f1d7a651625da0"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/04_complete_overlap_inputs.sqlinc",
+      "bytes": 14921,
+      "sha256": "ea1150d0d4fe0cfceff1dd9644c24a24a1eba9ff0df4b008714f7a52aa103b28"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/05_complete_projection_lock_input.sqlinc",
+      "bytes": 7803,
+      "sha256": "0259a9aa83408bb55f3fa44416d186a31b81510c2a40b8b8eeeb181911453621"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/06_complete_projection_rows.sqlinc",
+      "bytes": 78302,
+      "sha256": "1fededa8f39494a786a82a3dd47058b7ca983620ae88ce952221359c0fb024aa"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/07_complete_upload_context.sqlinc",
+      "bytes": 32228,
+      "sha256": "1a059e07f2d2e44245b6625290df1ccd3ca29e48cd549acd582413b0b5e15824"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/08_complete_office_recheck.sqlinc",
+      "bytes": 21349,
+      "sha256": "90257bcec2730fec4f1dea777f28e1c17635ca7f4d0b41b7e7a761430c052ffb"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/09_complete_none_invoice_basis.sqlinc",
+      "bytes": 14534,
+      "sha256": "446dd0840743e10b0a453e2fdcbd5db5fd39e37e3d7f07decae2aca6039c205b"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/10_complete_native_movement_factory.sqlinc",
+      "bytes": 18002,
+      "sha256": "3b4cf69d26a09ba31155c1abcad4c51d0609a4743c4740cf5aadccd8874a0cce"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/11_complete_native_capture_movement.sqlinc",
+      "bytes": 4681,
+      "sha256": "c72599bbc591ed184f7c2b7a38686623473d4e086886d010e8d7657242723a1d"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/12_complete_native_publish_revision.sqlinc",
+      "bytes": 4802,
+      "sha256": "581777dcee196113fdd722598235a56c08f5c5aff50415770f015fa1b9af40ef"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/13_complete_current_native_basis.sqlinc",
+      "bytes": 11703,
+      "sha256": "dde1890112ac9b8a93f29396aa2706384f3a303ee4ec76bf3e9d7ddd9ed0d956"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/14_complete_native_toggle.sqlinc",
+      "bytes": 3099,
+      "sha256": "12b90bb2f3f5591475c3790e77d1c31c2b5abfb5965d1180796d82f917b07ffd"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/15_none_write_admission.sqlinc",
+      "bytes": 4569,
+      "sha256": "26eb87b0b60a51e95def7d0afbd7bb740043f95f4b3bc401bce28b0a46e55a61"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/16_retained_normal_capture.sqlinc",
+      "bytes": 7884,
+      "sha256": "b364088e71b25ad4083bf62610e5aa4908c450f904ea5e6178f76d9b1eb4457b"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/17_selected_pay_origin.sqlinc",
+      "bytes": 4897,
+      "sha256": "7f3042e3a1a8e339b8db38b4c779dfc601d5dbcf7332410d16682bd3d78dada8"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/18_complete_native_current_event.sqlinc",
+      "bytes": 5858,
+      "sha256": "ab61bcf6a05fc400d9e28dcdafa906283be3733e4280ae78ee85cc7e8b5d1fd3"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/19_complete_money_expense_nhsp_report_none_admission.sqlinc",
+      "bytes": 54328,
+      "sha256": "0a71485e1110795abf2465c113428c1dc7807e4da9500c111e55a83db04eccc3"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/20_complete_prepared_context.sqlinc",
+      "bytes": 8523,
+      "sha256": "9463a5529c7a58a30c50bbf2a59ebc4e76571dd2ce7bac56db912cc89b022d42"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/21_complete_apply_census_recheck.sqlinc",
+      "bytes": 37191,
+      "sha256": "5f98bda968f0f5d4c505ccac19688857d6ef7a6e6e495c7f5b410ba1070e111e"
+    },
+    {
+      "commit": "THIS_PACKET",
+      "file": "forward/22_complete_active_pay_movements.sqlinc",
+      "bytes": 15225,
+      "sha256": "e00e71a5ff6b2a5188e1d3db1152c576f804f40833b66026f25c02d99f7e0f21"
+    }
+  ],
+  "selection_history": [
+    {
+      "id": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "input_index": 0,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "input_index": 1,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "input_index": 1,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 2,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "input_index": 3,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "input_index": 4,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "input_index": 5,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "input_index": 5,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "input_index": 6,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "input_index": 7,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "input_index": 8,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "input_index": 9,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "input_index": 10,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "input_index": 11,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "input_index": 12,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "input_index": 13,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "input_index": 14,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "input_index": 15,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "input_index": 16,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "input_index": 17,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "input_index": 18,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "input_index": 19,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "input_index": 20,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "input_index": 21,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "input_index": 22,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "input_index": 23,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 24,
+      "replaces_input_index": 2
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "input_index": 25,
+      "replaces_input_index": 3
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "input_index": 26,
+      "replaces_input_index": 5
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "input_index": 26,
+      "replaces_input_index": 5
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "input_index": 27,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "input_index": 28,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "input_index": 29,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "input_index": 30,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "input_index": 31,
+      "replaces_input_index": 10
+    },
+    {
+      "id": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "input_index": 32,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "input_index": 33,
+      "replaces_input_index": 11
+    },
+    {
+      "id": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "input_index": 34,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "input_index": 35,
+      "replaces_input_index": 8
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "input_index": 36,
+      "replaces_input_index": 15
+    },
+    {
+      "id": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "input_index": 37,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "input_index": 38,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "input_index": 39,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "input_index": 40,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "input_index": 41,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "input_index": 42,
+      "replaces_input_index": 37
+    },
+    {
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "input_index": 43,
+      "replaces_input_index": 38
+    },
+    {
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "input_index": 44,
+      "replaces_input_index": 40
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "input_index": 45,
+      "replaces_input_index": 27
+    },
+    {
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "input_index": 46,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "input_index": 48,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 49,
+      "replaces_input_index": 24
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "input_index": 50,
+      "replaces_input_index": 6
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "input_index": 51,
+      "replaces_input_index": 45
+    },
+    {
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "input_index": 52,
+      "replaces_input_index": 4
+    },
+    {
+      "id": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "input_index": 53,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+      "input_index": 55,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 56,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "input_index": 57,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "input_index": 58,
+      "replaces_input_index": 35
+    },
+    {
+      "id": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "input_index": 59,
+      "replaces_input_index": 0
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 60,
+      "replaces_input_index": 49
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "input_index": 61,
+      "replaces_input_index": 25
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "input_index": 62,
+      "replaces_input_index": 26
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "input_index": 62,
+      "replaces_input_index": 26
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "input_index": 63,
+      "replaces_input_index": 51
+    },
+    {
+      "id": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "input_index": 64,
+      "replaces_input_index": 23
+    },
+    {
+      "id": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "input_index": 65,
+      "replaces_input_index": 64
+    },
+    {
+      "id": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "input_index": 66,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "input_index": 67,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "input_index": 68,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "input_index": 68,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "input_index": 69,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "input_index": 70,
+      "replaces_input_index": 67
+    },
+    {
+      "id": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "input_index": 71,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+      "input_index": 72,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "input_index": 73,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 74,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+      "input_index": 75,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "input_index": 76,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "input_index": 77,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "input_index": 78,
+      "replaces_input_index": 58
+    },
+    {
+      "id": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "input_index": 79,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+      "input_index": 80,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 81,
+      "replaces_input_index": 60
+    },
+    {
+      "id": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "input_index": 82,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "input_index": 83,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+      "input_index": 84,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "input_index": 85,
+      "replaces_input_index": 7
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "input_index": 86,
+      "replaces_input_index": 50
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "input_index": 87,
+      "replaces_input_index": 62
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "input_index": 87,
+      "replaces_input_index": 62
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "input_index": 88,
+      "replaces_input_index": 61
+    },
+    {
+      "id": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "input_index": 89,
+      "replaces_input_index": 63
+    },
+    {
+      "id": "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+      "input_index": 90,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "input_index": 91,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "input_index": 92,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "input_index": 93,
+      "replaces_input_index": 76
+    },
+    {
+      "id": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "input_index": 94,
+      "replaces_input_index": 33
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "input_index": 95,
+      "replaces_input_index": 73
+    },
+    {
+      "id": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "input_index": 96,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "input_index": 97,
+      "replaces_input_index": 36
+    },
+    {
+      "id": "public.weekly_source_office_workspace_v1(jsonb)",
+      "input_index": 98,
+      "replaces_input_index": 46
+    },
+    {
+      "id": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "input_index": 99,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "input_index": 100,
+      "replaces_input_index": 48
+    },
+    {
+      "id": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "input_index": 101,
+      "replaces_input_index": 42
+    },
+    {
+      "id": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 102,
+      "replaces_input_index": 74
+    },
+    {
+      "id": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "input_index": 103,
+      "replaces_input_index": 81
+    },
+    {
+      "id": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "input_index": 104,
+      "replaces_input_index": 83
+    },
+    {
+      "id": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "input_index": 105,
+      "replaces_input_index": 85
+    },
+    {
+      "id": "public.weekly_source_upload_context_v1(jsonb)",
+      "input_index": 106,
+      "replaces_input_index": 86
+    },
+    {
+      "id": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "input_index": 107,
+      "replaces_input_index": 52
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "input_index": 108,
+      "replaces_input_index": 91
+    },
+    {
+      "id": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "input_index": 109,
+      "replaces_input_index": 93
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "input_index": 110,
+      "replaces_input_index": 95
+    },
+    {
+      "id": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "input_index": 111,
+      "replaces_input_index": 96
+    },
+    {
+      "id": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "input_index": 112,
+      "replaces_input_index": 71
+    },
+    {
+      "id": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "input_index": 113,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "input_index": 114,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+      "input_index": 115,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "input_index": 116,
+      "replaces_input_index": null
+    },
+    {
+      "id": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "input_index": 117,
+      "replaces_input_index": null
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "input_index": 118,
+      "replaces_input_index": 97
+    },
+    {
+      "id": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "input_index": 119,
+      "replaces_input_index": 43
+    },
+    {
+      "id": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "input_index": 120,
+      "replaces_input_index": 44
+    },
+    {
+      "id": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "input_index": 121,
+      "replaces_input_index": 17
+    }
+  ],
+  "selected_owner_count": 70,
+  "selected_public_count": 9,
+  "selected_private_count": 61,
+  "selected_trigger_count": 3,
+  "duplicate_final_signatures": 0
+}

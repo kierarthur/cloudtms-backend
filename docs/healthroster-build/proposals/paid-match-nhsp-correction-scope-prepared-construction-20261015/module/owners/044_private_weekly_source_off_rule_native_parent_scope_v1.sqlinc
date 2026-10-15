@@ -1,0 +1,269 @@
+create or replace function private.weekly_source_off_rule_native_parent_scope_v1(p_request jsonb,p_actor uuid,p_auth jsonb default null)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare subjects jsonb:=jsonb_build_array(p_request); subject jsonb; field text; selector uuid; parent jsonb;
+  cycles uuid[]:='{}'::uuid[]; bindings jsonb:='[]'::jsonb; observed uuid; expected uuid; qualified boolean:=p_auth is not null; ambiguous boolean:=false;
+  run_row public.weekly_exceptional_orchestration_runs%rowtype; family public.weekly_exceptional_pay_target_families%rowtype;
+  proof jsonb; proof_result jsonb; prepare_request jsonb; command_frame jsonb; n integer; key text;
+  decision_bundle public.weekly_source_entitlement_decision_bundles%rowtype;missing_audit public.audit_events%rowtype;
+  root public.timesheets%rowtype; contract public.contracts%rowtype; fixture_week date; client_id uuid; candidate_id uuid; contract_id uuid;
+begin
+  if jsonb_typeof(p_request) is distinct from 'object' or p_actor is null then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_INVALID' using errcode='22023'; end if;
+  if qualified then expected:=(p_auth->>'source_cycle_id')::uuid; fixture_week:=(p_auth->>'week_ending')::date; end if;
+  -- Only declared native subject payloads, not arbitrary uploaded raw columns.
+  foreach key in array array['c1_request','service_snapshot','target_snapshot'] loop
+    if jsonb_typeof(p_request->key)='object' then subjects:=subjects||jsonb_build_array(p_request->key); end if;
+  end loop;
+  foreach key in array array['p_rows','c1_sources','c1_components'] loop
+    if jsonb_typeof(p_request->key)='array' then subjects:=subjects||(p_request->key); end if;
+  end loop;
+  for subject in select value from jsonb_array_elements(subjects) value loop
+    if jsonb_typeof(subject) is distinct from 'object' then
+      if qualified then raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_INVALID' using errcode='22023'; end if;
+      ambiguous:=true;continue;end if;
+    if qualified and ((subject ? 'source_cycle_id' and nullif(subject->>'source_cycle_id','') is not null and (subject->>'source_cycle_id')::uuid<>expected)
+      or (subject ? 'source_group_id' and nullif(subject->>'source_group_id','') is not null and subject->>'source_group_id' is distinct from p_auth->>'source_group_id')
+      or (subject ? 'agency_id' and nullif(subject->>'agency_id','') is not null and subject->>'agency_id' is distinct from p_auth->>'agency_id')
+      or (subject ? 'actor_user_id' and nullif(subject->>'actor_user_id','') is not null and (subject->>'actor_user_id')::uuid<>p_actor)
+      or (subject ? 'p_actor_user_id' and nullif(subject->>'p_actor_user_id','') is not null and (subject->>'p_actor_user_id')::uuid<>p_actor)) then
+      raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+    if nullif(subject->>'source_cycle_id','') is not null then
+      begin cycles:=array_append(cycles,(subject->>'source_cycle_id')::uuid);
+      exception when others then if qualified then raise; end if;ambiguous:=true;end;
+    end if;
+    foreach field in array array['upload_id','expected_current_upload_id','projection_publication_id','p_publication_id','publication_id','expected_projection_publication_id',
+      'final_revision_id','current_final_revision_id','expected_source_revision','current_comparison_revision_id','report_scope_id','correction_session_id',
+      'run_id','task_id','projection_receipt_id','orchestration_run_id','publication_request_id','family_id','work_event_id','prior_work_event_id','paid_overlap_target_work_event_id',
+      'root_timesheet_id','evidence_timesheet_id','upload_row_id','client_id','candidate_id','contract_id','decision_bundle_id'] loop
+      if nullif(subject->>field,'') is null then continue; end if;
+      parent:=null;observed:=null;client_id:=null;candidate_id:=null;contract_id:=null;
+      begin
+      selector:=(subject->>field)::uuid;
+      case field
+        when 'upload_id','expected_current_upload_id' then
+          select jsonb_build_object('source_cycle_id',u.source_cycle_id,'upload_id',u.id,'report_scope_id',u.report_scope_id,
+            'client_id',nullif(u.file_metadata_json->>'client_id','')::uuid) into strict parent from public.weekly_source_uploads u where u.id=selector;
+        when 'projection_publication_id','p_publication_id','publication_id','expected_projection_publication_id' then
+          select jsonb_build_object('source_cycle_id',p.source_cycle_id,'upload_id',p.upload_id,'publication_id',p.id,'report_scope_id',p.report_scope_id)
+            into strict parent from public.weekly_source_projection_publications p where p.id=selector;
+          if nullif(subject->>'upload_id','') is not null and parent->>'upload_id' is distinct from (subject->>'upload_id')::uuid::text then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+        when 'final_revision_id','current_final_revision_id','expected_source_revision' then
+          select jsonb_build_object('source_cycle_id',r.source_cycle_id,'final_revision_id',r.id,'upload_id',r.upload_id,'report_scope_id',r.report_scope_id)
+            into strict parent from public.weekly_source_final_revisions r where r.id=selector;
+        when 'current_comparison_revision_id' then
+          select jsonb_build_object('source_cycle_id',i.source_cycle_id,'work_event_id',i.work_event_id,'client_id',i.client_id,
+            'candidate_id',i.candidate_id,'contract_id',r.contract_id,'comparison_revision_id',r.id)
+            into strict parent from public.weekly_issue_comparison_revisions r join public.weekly_discrepancy_incidents i on i.id=r.incident_id where r.id=selector;
+        when 'report_scope_id' then
+          select jsonb_build_object('source_cycle_id',s.source_cycle_id,'client_id',s.client_id,'report_scope_id',s.id)
+            into strict parent from public.weekly_source_report_scopes s where s.id=selector;
+        when 'correction_session_id' then
+          select jsonb_build_object('source_cycle_id',s.source_cycle_id,'report_scope_id',s.report_scope_id)
+            into strict parent from public.weekly_final_source_correction_sessions s where s.id=selector;
+        when 'run_id' then
+          select jsonb_build_object('source_cycle_id',r.source_cycle_id,'final_revision_id',r.final_revision_id,'run_id',r.id,'actor_user_id',r.requested_by_user_id)
+            into strict parent from public.weekly_source_finalisation_pay_runs r where r.id=selector;
+          if (parent->>'actor_user_id')::uuid<>p_actor or (nullif(subject->>'final_revision_id','') is not null
+            and parent->>'final_revision_id' is distinct from (subject->>'final_revision_id')::uuid::text) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+        when 'task_id' then
+          select jsonb_build_object('source_cycle_id',r.source_cycle_id,'final_revision_id',r.final_revision_id,'run_id',r.id,'root_timesheet_id',t.root_timesheet_id,
+            'client_id',m.client_id,'contract_id',sheet.contract_id,'candidate_id',k.candidate_id,'task_id',t.id)
+            into strict parent from public.weekly_source_finalisation_pay_tasks t join public.weekly_source_finalisation_pay_runs r on r.id=t.run_id
+            join public.weekly_source_client_manifests m on m.id=t.client_manifest_id join public.timesheets sheet on sheet.timesheet_id=t.root_timesheet_id
+            join public.contracts k on k.id=sheet.contract_id where t.id=selector and m.final_revision_id=r.final_revision_id;
+          if nullif(subject->>'run_id','') is null or parent->>'run_id' is distinct from (subject->>'run_id')::uuid::text then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+        when 'projection_receipt_id' then
+          select jsonb_build_object('source_cycle_id',r.source_cycle_id,'final_revision_id',r.final_revision_id,'root_timesheet_id',r.root_timesheet_id,'client_id',r.client_id,'actor_user_id',r.actor_user_id)
+            into strict parent from public.weekly_source_ordinary_pay_projection_receipts r where r.id=selector;
+          if nullif(subject->>'task_id','') is not null and not exists(select 1 from public.weekly_source_finalisation_pay_tasks t
+            join public.weekly_source_finalisation_pay_runs r on r.id=t.run_id where t.id=(subject->>'task_id')::uuid
+              and r.id=(subject->>'run_id')::uuid and r.final_revision_id=(parent->>'final_revision_id')::uuid
+              and t.root_timesheet_id=(parent->>'root_timesheet_id')::uuid) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+        when 'family_id' then
+          select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=selector;
+          select k.* into strict contract from public.contracts k where k.id=family.contract_id;
+          parent:=jsonb_build_object('family_id',family.id,'root_timesheet_id',family.root_timesheet_id,'contract_id',contract.id,'candidate_id',family.candidate_id,'client_id',contract.client_id);
+          if qualified and family.agency_id::text is distinct from p_auth->>'agency_id' then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+        when 'orchestration_run_id' then
+          select r.* into strict run_row from public.weekly_exceptional_orchestration_runs r where r.id=selector;
+          select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=run_row.family_id;
+          select k.* into strict contract from public.contracts k where k.id=family.contract_id;
+          if run_row.requested_by_user_id<>p_actor or nullif(subject->>'family_id','') is not null and (subject->>'family_id')::uuid<>family.id then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+          parent:=jsonb_build_object('family_id',family.id,'root_timesheet_id',family.root_timesheet_id,'contract_id',contract.id,'candidate_id',family.candidate_id,'client_id',contract.client_id);
+          -- No source_cycle_id exists on this native run. Resolve a real
+          -- completed OFF prepare command's exact request/result, or the
+          -- original native approval. Never infer a cycle from group/week.
+          n:=0;
+          for proof in select jsonb_build_object('frame',admitted.after_json,'completion',done.after_json)
+            from public.audit_events admitted join public.audit_events done on done.object_type=admitted.object_type and done.object_id_text=admitted.object_id_text
+              and done.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED' and done.event_sequence_is_authoritative and done.before_json=admitted.after_json
+            where admitted.object_type='weekly_source_off_rule_command' and admitted.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED'
+              and admitted.event_sequence_is_authoritative and admitted.after_json->>'native_operation'='weekly_exceptional_pay_prepare_action_v1'
+              and admitted.after_json->>'actor_user_id'=p_actor::text and done.after_json#>>'{native_prepare_result,orchestration_run_id}'=run_row.id::text
+              and (not qualified or admitted.after_json#>>'{authorization,scope_id}'=p_auth->>'scope_id')
+          loop
+            n:=n+1;command_frame:=proof->'frame';proof_result:=proof#>'{completion,native_prepare_result}';
+            prepare_request:=command_frame->'native_prepare_request';
+            if command_frame->>'command_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_COMMAND_V1',command_frame-'command_sha256'),'hex')
+              or proof#>>'{completion,command_sha256}' is distinct from command_frame->>'command_sha256'
+              or proof#>>'{completion,native_result_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_NATIVE_RESULT_V1',proof_result),'hex')
+              or command_frame->>'native_request_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_NATIVE_REQUEST_V1',prepare_request),'hex')
+              or run_row.request_fingerprint is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',prepare_request)
+              or prepare_request->>'family_id' is distinct from family.id::text or prepare_request->>'actor_user_id' is distinct from p_actor::text
+              or proof_result->>'family_id' is distinct from family.id::text or proof_result->>'source_cycle_id' is distinct from prepare_request->>'source_cycle_id'
+              or proof_result->>'work_event_id' is distinct from prepare_request->>'work_event_id'
+              or command_frame->>'source_cycle_id' is distinct from prepare_request->>'source_cycle_id' then
+              raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+          end loop;
+          if n>0 then
+            observed:=(prepare_request->>'source_cycle_id')::uuid;
+            parent:=parent||jsonb_build_object('source_cycle_id',observed,'work_event_id',prepare_request->>'work_event_id');
+          else
+            select count(distinct a.source_cycle_id),(array_agg(a.source_cycle_id))[1] into n,observed from public.weekly_exceptional_payment_approvals a
+              where a.creation_orchestration_run_id=run_row.id and a.pay_target_family_id=family.id;
+            if n>1 or (qualified and n<>1) then raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+            if n=1 then parent:=parent||jsonb_build_object('source_cycle_id',observed); end if;
+            -- An ordinary unstaged run may have neither proof. Discovery
+            -- returns no OFF cycle and leaves native staged=false unchanged.
+          end if;
+          if qualified and family.agency_id::text is distinct from p_auth->>'agency_id' then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+        when 'publication_request_id' then
+          select jsonb_build_object('family_id',r.family_id,'orchestration_run_id',r.orchestration_run_id,'root_timesheet_id',r.root_timesheet_id,
+            'candidate_id',r.candidate_id,'contract_id',r.contract_id,'client_id',k.client_id) into strict parent
+            from public.weekly_exceptional_c1_publication_requests r join public.contracts k on k.id=r.contract_id where r.id=selector;
+          if qualified and not exists(select 1 from public.weekly_exceptional_payment_approvals a where a.creation_orchestration_run_id=(parent->>'orchestration_run_id')::uuid
+            and a.pay_target_family_id=(parent->>'family_id')::uuid and a.source_cycle_id=expected) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+        when 'work_event_id','prior_work_event_id','paid_overlap_target_work_event_id' then
+          select jsonb_build_object('source_group_id',w.first_source_group_id,'client_id',w.client_id,'candidate_id',w.candidate_id,'work_date',w.work_date)
+            into strict parent from public.weekly_work_events w where w.id=selector;
+          if qualified and parent->>'source_group_id' is distinct from p_auth->>'source_group_id' then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+        when 'root_timesheet_id','evidence_timesheet_id' then
+          select sheet.* into strict root from public.timesheets sheet where sheet.timesheet_id=selector;
+          select k.* into strict contract from public.contracts k where k.id=root.contract_id;
+          parent:=jsonb_build_object('root_timesheet_id',root.timesheet_id,'contract_id',contract.id,'candidate_id',contract.candidate_id,'client_id',contract.client_id);
+          if qualified and (contract.client_id is null or contract.candidate_id is null) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+          if qualified and nullif(subject->>'final_revision_id','') is not null and not exists(select 1 from public.weekly_source_billing_movements m
+            where m.final_revision_id=(subject->>'final_revision_id')::uuid and m.invoice_timesheet_id=root.timesheet_id and m.actual_client_id=contract.client_id)
+            and not exists(select 1 from public.audit_events missing
+            where missing.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and missing.object_type='weekly_source_entitlement_decision_bundles'
+              and missing.object_id_text=subject->>'decision_bundle_id'
+              and missing.after_json->>'bundle_revision'=subject->>'bundle_revision'
+              and missing.after_json#>>'{inputs,target_final_revision_id}'=subject->>'final_revision_id'
+              and missing.after_json#>>'{inputs,root_timesheet_id}'=root.timesheet_id::text
+              and missing.after_json#>>'{inputs,client_id}'=contract.client_id::text
+              and missing.after_json#>>'{inputs,candidate_id}'=contract.candidate_id::text
+              and missing.after_json#>>'{inputs,contract_id}'=contract.id::text
+              and missing.after_json->>'proof_sha256'=encode(private.weekly_source_sha256_jsonb_v1(
+                'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',missing.after_json-'proof_sha256'),'hex')) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+        when 'upload_row_id' then
+          select jsonb_build_object('source_cycle_id',u.source_cycle_id,'upload_id',u.id) into strict parent
+            from public.weekly_source_upload_rows r join public.weekly_source_uploads u on u.id=r.upload_id where r.id=selector;
+        when 'decision_bundle_id' then
+          select * into strict decision_bundle from public.weekly_source_entitlement_decision_bundles
+            where decision_bundle_id=selector and bundle_revision=(subject->>'bundle_revision')::bigint;
+          parent:=jsonb_build_object('decision_bundle_id',selector,'bundle_revision',decision_bundle.bundle_revision,
+            'root_timesheet_id',decision_bundle.source_root_timesheet_id,'contract_id',decision_bundle.source_contract_id,
+            'candidate_id',decision_bundle.candidate_id);
+          select count(*) into n from public.audit_events audit
+            where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.object_type='weekly_source_entitlement_decision_bundles'
+              and audit.object_id_text=selector::text and audit.after_json->>'bundle_revision'=decision_bundle.bundle_revision::text;
+          if n>1 or (qualified and n<>1) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501';end if;
+          if n=1 then
+            select * into strict missing_audit from public.audit_events audit
+              where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.object_type='weekly_source_entitlement_decision_bundles'
+                and audit.object_id_text=selector::text and audit.after_json->>'bundle_revision'=decision_bundle.bundle_revision::text;
+            proof:=missing_audit.after_json;
+            if proof->>'proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+                'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',proof-'proof_sha256'),'hex')
+              or proof->>'actor_user_id' is distinct from missing_audit.actor_user_id::text
+              or decision_bundle.decided_by_user_id is distinct from missing_audit.actor_user_id
+              or proof#>>'{inputs,root_timesheet_id}' is distinct from decision_bundle.source_root_timesheet_id::text
+              or proof#>>'{inputs,contract_id}' is distinct from decision_bundle.source_contract_id::text
+              or proof#>>'{inputs,candidate_id}' is distinct from decision_bundle.candidate_id::text
+              or proof#>>'{inputs,target_final_revision_id}' is distinct from subject->>'final_revision_id' then
+              raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501';end if;
+            parent:=parent||jsonb_build_object('source_cycle_id',proof#>'{inputs,source_cycle_id}',
+              'final_revision_id',proof#>'{inputs,target_final_revision_id}',
+              'work_event_id',proof#>'{inputs,work_event_id}','client_id',proof#>'{inputs,client_id}');
+          end if;
+        when 'client_id' then parent:=jsonb_build_object('client_id',selector);
+        when 'candidate_id' then parent:=jsonb_build_object('candidate_id',selector);
+        when 'contract_id' then
+          select jsonb_build_object('contract_id',k.id,'client_id',k.client_id,'candidate_id',k.candidate_id) into strict parent from public.contracts k where k.id=selector;
+      end case;
+      observed:=nullif(parent->>'source_cycle_id','')::uuid;
+      if observed is not null then cycles:=array_append(cycles,observed); end if;
+      foreach key in array array['family_id','work_event_id','root_timesheet_id','contract_id','candidate_id','client_id','final_revision_id','report_scope_id','upload_id'] loop
+        if nullif(parent->>key,'') is not null and nullif(subject->>key,'') is not null
+          and (parent->>key)::uuid is distinct from (subject->>key)::uuid then
+          raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+      end loop;
+      if nullif(parent->>'actor_user_id','') is not null and (parent->>'actor_user_id')::uuid is distinct from p_actor then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+      if qualified then
+        client_id:=nullif(parent->>'client_id','')::uuid;candidate_id:=nullif(parent->>'candidate_id','')::uuid;contract_id:=nullif(parent->>'contract_id','')::uuid;
+        if nullif(parent->>'root_timesheet_id','') is not null then
+          select sheet.* into strict root from public.timesheets sheet where sheet.timesheet_id=(parent->>'root_timesheet_id')::uuid;
+          select k.* into strict contract from public.contracts k where k.id=root.contract_id;
+          if contract.client_id is null or contract.candidate_id is null
+            or (contract_id is not null and contract_id is distinct from contract.id)
+            or (candidate_id is not null and candidate_id is distinct from contract.candidate_id)
+            or (client_id is not null and client_id is distinct from contract.client_id) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_LINK_CHANGED' using errcode='42501'; end if;
+          client_id:=contract.client_id;candidate_id:=contract.candidate_id;contract_id:=contract.id;
+          -- Bind the physical root to actual Source membership or the
+          -- immutable OPEN signed-evidence union. Source coverage may include
+          -- older work; never infer root membership from calendar equality.
+          if not exists(select 1 from public.weekly_source_billing_movements m
+            join public.weekly_source_final_revisions r on r.id=m.final_revision_id
+            where r.source_cycle_id=expected and m.invoice_timesheet_id=root.timesheet_id and m.actual_client_id=contract.client_id)
+            and not exists(select 1 from public.weekly_source_finalisation_pay_tasks t
+              join public.weekly_source_finalisation_pay_runs r on r.id=t.run_id
+              where r.source_cycle_id=expected and t.root_timesheet_id=root.timesheet_id)
+            and not exists(select 1 from public.audit_events opened,
+              lateral jsonb_array_elements(opened.after_json#>'{original_census,original_root_identities}') original_root
+              where opened.object_type='weekly_source_off_rule_test_journey' and opened.object_id_text=p_auth->>'scope_id'
+                and opened.action='WEEKLY_SOURCE_OFF_RULE_TEST_OPENED' and opened.event_sequence_is_authoritative
+                and original_root->>'timesheet_id'=root.timesheet_id::text) then
+            raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+        end if;
+        if (observed is not null and observed<>expected)
+          or (client_id is not null and not(p_auth#>'{fixture_manifest,client_ids}' @> jsonb_build_array(client_id)))
+          or (candidate_id is not null and not(p_auth#>'{fixture_manifest,candidate_ids}' @> jsonb_build_array(candidate_id)))
+          or (contract_id is not null and not(p_auth#>'{fixture_manifest,contract_ids}' @> jsonb_build_array(contract_id))) then
+          raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+      end if;
+      bindings:=bindings||jsonb_build_array(jsonb_build_object('selector',field,'id',selector,'parent',parent));
+      exception when others then
+        if qualified then raise; end if;
+        -- Retain actual parent provenance even when a sibling link is bad,
+        -- then discover remaining parents. A matching OFF claim must refuse.
+        observed:=nullif(parent->>'source_cycle_id','')::uuid;
+        if observed is not null then cycles:=array_append(cycles,observed); end if;
+        ambiguous:=true;
+      end;
+    end loop;
+  end loop;
+  if qualified and exists(select 1 from unnest(cycles) value where value is distinct from expected) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_FOREIGN' using errcode='42501'; end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_SCOPE_V1',
+    'source_cycle_id',case when (select count(distinct value) from unnest(cycles) value)=1 then cycles[1] else null end,
+    'observed_cycle_ids',to_jsonb(cycles),'bindings',bindings,'ambiguous',ambiguous or (select count(distinct value) from unnest(cycles) value)>1);
+exception when others then
+  if qualified then raise; end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_NATIVE_PARENT_SCOPE_V1','source_cycle_id',null,'observed_cycle_ids',to_jsonb(cycles),'bindings',bindings,'ambiguous',true);
+end;
+$function$;

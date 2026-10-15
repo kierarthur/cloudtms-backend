@@ -1,0 +1,48 @@
+create or replace function private.weekly_source_paid_choice_immutable_v1(p_upload_row_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp' as $function$
+declare v_choice private.weekly_source_office_row_choices%rowtype;
+  v_journal private.weekly_source_office_rechecks%rowtype;v_audit public.audit_events%rowtype;v_count integer;v_saved jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into v_choice from private.weekly_source_office_row_choices
+    where upload_row_id=p_upload_row_id order by id desc limit 1;
+  if v_choice.paid_overlap_target_work_event_id is null then return null;end if;
+  v_saved:=v_choice.paid_overlap_inputs_json;
+  if v_saved->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_ADMISSION_V1'
+    or v_saved->>'upload_row_id' is distinct from v_choice.upload_row_id::text
+    or v_saved->>'candidate_id' is distinct from v_choice.candidate_id::text
+    or v_saved->>'client_id' is distinct from v_choice.client_id::text
+    or v_saved->>'contract_id' is distinct from v_choice.contract_id::text
+    or v_saved->>'actor_user_id' is distinct from v_choice.actor_user_id::text
+    or v_saved->>'paid_overlap_target_work_event_id' is distinct from v_choice.paid_overlap_target_work_event_id::text
+    or v_saved->>'pay_effect' is distinct from v_choice.pay_effect
+    or v_saved->>'reason' is distinct from v_choice.match_reason
+    or v_saved->>'inputs_sha256' is distinct from encode(v_choice.paid_overlap_inputs_sha256,'hex') then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;
+  select * into strict v_journal from private.weekly_source_office_rechecks
+    where request_id=(v_saved->>'request_id')::uuid;
+  if v_journal.actor_user_id is distinct from v_choice.actor_user_id
+    or v_journal.upload_id::text is distinct from v_saved->>'upload_id'
+    or encode(v_journal.request_hash,'hex') is distinct from v_saved->>'request_sha256'
+    or v_journal.request_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_OFFICE_RECHECK_V1',v_journal.request_json) then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;
+  select count(*) into v_count from public.audit_events a
+    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text
+      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;
+  select * into strict v_audit from public.audit_events a
+    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=v_choice.id::text
+      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';
+  if v_audit.actor_user_id is distinct from v_choice.actor_user_id
+    or v_audit.after_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMATION_V1'
+    or v_audit.after_json->'choice' is distinct from to_jsonb(v_choice)
+    or v_audit.after_json->'admission' is distinct from v_saved
+    or v_audit.after_json->'request' is distinct from v_journal.request_json
+    or v_audit.after_json->>'request_sha256' is distinct from encode(v_journal.request_hash,'hex') then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_CHOICE_IMMUTABLE_INPUT_V1',
+    'choice',to_jsonb(v_choice),'journal',to_jsonb(v_journal),'audit',to_jsonb(v_audit),'admission',v_saved);
+end;
+$function$;

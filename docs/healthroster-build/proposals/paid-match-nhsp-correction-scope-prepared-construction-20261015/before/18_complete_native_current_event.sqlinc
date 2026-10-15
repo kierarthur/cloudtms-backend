@@ -1,0 +1,53 @@
+create or replace function private.bpay_next_source_current_event_v1(p_root uuid,p_event uuid)
+returns jsonb language plpgsql stable security definer
+set search_path='pg_catalog','private','public','pg_temp' as $f$
+declare v_scope private.bpay_next_source_current_scopes%rowtype;v_ids uuid[];
+  v_event private.bpay_next_source_current_events%rowtype;v_m public.weekly_source_billing_movements%rowtype;
+  v_resolution uuid;v_lineage public.weekly_source_row_timesheet_lineages%rowtype;
+  v_e public.weekly_source_row_economic_snapshots%rowtype;v_exp public.weekly_expense_authority_generations%rowtype;
+  v_result jsonb;v_observation jsonb;v_family uuid;v_decision private.bpay_next_protected_current_decisions%rowtype;
+begin
+  if p_root is null or p_event is null then raise exception 'BPAY_NEXT_SOURCE_READ_INPUT_INVALID' using errcode='22023';end if;
+  select array_agg(x.id) into v_ids from (select s.id from private.bpay_next_source_current_scopes s where s.root_timesheet_id=p_root limit 2) x;
+  if coalesce(array_length(v_ids,1),0)<>1 then raise exception 'BPAY_NEXT_SOURCE_SCOPE_UNCAPTURED_OR_AMBIGUOUS' using errcode='55000';end if;
+  select s.* into strict v_scope from private.bpay_next_source_current_scopes s where s.id=v_ids[1];
+  if not exists(select 1 from public.weekly_work_events w where w.id=p_event and w.candidate_id=v_scope.candidate_id
+    and w.client_id=v_scope.client_id and w.first_source_group_id=v_scope.source_group_id
+    and w.work_date between v_scope.week_ending_date-6 and v_scope.week_ending_date) then
+    raise exception 'BPAY_NEXT_SOURCE_EVENT_OUTSIDE_SCOPE' using errcode='55000';end if;
+  -- Latest genuine root observation is NOT selected money provenance. In
+  -- particular an empty CorrectFinal has a CURRENT observation but no new
+  -- origin and may restore an older immutable surviving positive movement.
+  v_observation:=private.bpay_next_source_current_observation_v1(p_root);
+  select e.* into v_event from private.bpay_next_source_current_events e where e.scope_id=v_scope.id and e.work_event_id=p_event;
+  if coalesce(v_event.ambiguous,false) then raise exception 'BPAY_NEXT_SOURCE_CURRENT_MAGNITUDE_AMBIGUOUS' using errcode='55000';end if;
+  select a.* into v_exp from private.bpay_next_source_current_expenses c join public.weekly_expense_authority_generations a on a.id=c.authority_id
+    where c.scope_id=v_scope.id and c.work_event_id=p_event;
+  if v_exp.id is not null and v_exp.state<>'CURRENT' then raise exception 'BPAY_NEXT_SOURCE_EXPENSE_CACHE_STALE' using errcode='55000';end if;
+  select f.id into v_family from public.weekly_exceptional_pay_target_families f
+    where btrim(f.root_family_booking_id)=btrim(v_scope.family_booking_id) and f.root_family_booking_id=v_scope.family_booking_id;
+  if v_family is not null then select d.* into v_decision from private.bpay_next_protected_current_decisions d where d.family_id=v_family and d.work_event_id=p_event;end if;
+  v_result:=jsonb_build_object('schema_version','BPAY_NEXT_SOURCE_CURRENT_EVENT_V1','root_timesheet_id',p_root,'work_event_id',p_event,
+    'source_present',coalesce(v_event.source_present,false),'movement_id',v_event.selected_movement_id,
+    'transition_id',v_event.selected_transition_id,'source_kind',v_event.source_kind,'protected_decision_id',v_decision.event_id,
+    'protected_state',v_decision.state,'expense_authority_id',v_exp.id,
+    'source_expense_pence',v_exp.source_expense_pence::text,
+    'candidate_reimbursement_ex_vat',v_exp.candidate_reimbursement_ex_vat::text,'client_charge_ex_vat',v_exp.client_charge_ex_vat::text)||v_observation;
+  if coalesce(v_event.source_present,false) then
+    select m.* into strict v_m from public.weekly_source_billing_movements m where m.id=v_event.selected_movement_id;
+    if v_m.placement_state='VOIDED_BY_CORRECT_FINAL' then raise exception 'BPAY_NEXT_SOURCE_MOVEMENT_CACHE_STALE' using errcode='55000';end if;
+    v_resolution:=(v_m.source_facts_json->>'row_resolution_id')::uuid;
+    select l.* into strict v_lineage from public.weekly_source_row_timesheet_lineages l where l.row_resolution_id=v_resolution;
+    select e.* into strict v_e from public.weekly_source_row_economic_snapshots e where e.row_resolution_id=v_resolution;
+    v_result:=v_result||jsonb_build_object('final_revision_id',v_m.final_revision_id,'row_resolution_id',v_resolution,
+      'lineage_id',v_lineage.id,'economic_snapshot_id',v_e.id,'original_invoice_timesheet_id',v_m.invoice_timesheet_id,
+      'source_facts',jsonb_build_object('work_date',v_m.source_facts_json->>'work_date','start_at_local',v_m.source_facts_json->>'start_at_local',
+        'end_at_local',v_m.source_facts_json->>'end_at_local','break_minutes',v_m.source_facts_json->>'break_minutes'),
+      'hours',jsonb_build_object('day',v_e.hours_day::text,'night',v_e.hours_night::text,'sat',v_e.hours_sat::text,'sun',v_e.hours_sun::text,'bh',v_e.hours_bh::text),
+      'pay_rates',jsonb_build_object('day',v_e.pay_day::text,'night',v_e.pay_night::text,'sat',v_e.pay_sat::text,'sun',v_e.pay_sun::text,'bh',v_e.pay_bh::text),
+      'charge_rates',jsonb_build_object('day',v_e.charge_day::text,'night',v_e.charge_night::text,'sat',v_e.charge_sat::text,'sun',v_e.charge_sun::text,'bh',v_e.charge_bh::text),
+      'pay_pence',v_m.canonical_pay_vector_json->>'total_pence','charge_pence',v_m.canonical_charge_vector_json->>'total_pence');
+  end if;
+  if octet_length(v_result::text)>122880 then raise exception 'BPAY_NEXT_SOURCE_CURRENT_BYTE_BOUND' using errcode='54000';end if;
+  return v_result;
+end $f$;

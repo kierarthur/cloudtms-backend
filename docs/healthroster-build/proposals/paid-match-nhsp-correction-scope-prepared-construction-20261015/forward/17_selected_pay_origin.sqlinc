@@ -1,0 +1,59 @@
+-- Select the exact native representative origin, retaining the selected NORMAL
+-- movement's original identity separately from a correcting invoice origin.
+create or replace function private.weekly_source_nhsp_selected_pay_origin_v1(p_scope uuid,p_event uuid,p_normal uuid)
+returns uuid language plpgsql stable security definer set search_path='pg_catalog','pg_temp' as $function$
+declare origin private.bpay_next_source_current_origins%rowtype;normal public.weekly_source_billing_movements%rowtype;
+  invoice public.weekly_source_billing_movements%rowtype;authority record;basis jsonb;magnitude jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict normal from public.weekly_source_billing_movements where id=p_normal;
+  if normal.pay_effect<>'NORMAL' or normal.work_event_id is distinct from p_event
+    or normal.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or normal.source_line_kind<>'NHSP_PHYSICAL_POSITIVE'
+    or normal.movement_role not in ('POSITIVE','REPLACEMENT') then
+    raise exception 'WEEKLY_SOURCE_NHSP_SELECTED_NORMAL_UNBOUND' using errcode='55000';end if;
+  magnitude:=private.bpay_next_source_nhsp_magnitude_v1(normal.source_facts_json,
+    normal.canonical_pay_vector_json,normal.canonical_charge_vector_json);
+  select o.* into strict origin from private.bpay_next_source_current_origins o
+    join private.bpay_next_source_current_magnitudes m on m.scope_id=o.scope_id and m.work_event_id=o.work_event_id
+      and m.magnitude_hash=o.magnitude_hash and m.surviving_order_key=o.order_key
+    where o.origin_kind='MOVEMENT' and o.scope_id=p_scope and o.work_event_id=p_event and o.active and o.contribution=1
+      and m.selected_movement_id=normal.id and coalesce(o.selected_movement_id,o.movement_id)=normal.id
+      and m.economic_magnitude=magnitude
+    order by o.representative_created_at desc,o.origin_id::text desc limit 1;
+  select * into strict authority from private.bpay_next_source_current_revision_v1(origin.final_revision_id);
+  select * into strict invoice from public.weekly_source_billing_movements where id=origin.movement_id;
+  if not authority.is_current or origin.origin_id is distinct from invoice.id
+    or origin.final_revision_id is distinct from invoice.final_revision_id
+    or origin.source_hash is distinct from invoice.movement_economic_hash
+    or origin.row_resolution_id::text is distinct from normal.source_facts_json->>'row_resolution_id'
+    or origin.magnitude_hash is distinct from private.weekly_source_sha256_jsonb_v1('BPAY_NEXT_SOURCE_NHSP_MAGNITUDE_V1',magnitude)
+    or not exists(select 1 from public.weekly_source_row_timesheet_lineages l
+      join public.weekly_source_row_economic_snapshots e on e.row_resolution_id=l.row_resolution_id
+      where l.id=origin.lineage_id and l.row_resolution_id=origin.row_resolution_id
+        and e.id=origin.economic_snapshot_id and l.work_event_id=p_event and e.work_event_id=p_event
+        and (l.candidate_id,l.client_id,l.contract_id) is not distinct from
+          (normal.candidate_id,normal.actual_client_id,normal.contract_id)) then
+    raise exception 'WEEKLY_SOURCE_NHSP_SELECTED_ORIGIN_UNBOUND' using errcode='55000';end if;
+  if invoice.id=normal.id then
+    if origin.selected_movement_id is not null then
+      raise exception 'WEEKLY_SOURCE_NHSP_SELECTED_ORIGIN_UNBOUND' using errcode='55000';end if;
+  else
+    basis:=private.weekly_source_nhsp_none_invoice_origin_assert_v1(invoice.id);
+    if invoice.pay_effect<>'NONE' or origin.selected_movement_id is distinct from normal.id
+      or basis->>'normal_pay_movement_id' is distinct from normal.id::text
+      or basis->>'normal_pay_movement_sha256' is distinct from encode(normal.movement_economic_hash,'hex')
+      or basis->>'normal_pay_report_scope_id' is distinct from basis->>'report_scope_id'
+      or not exists(select 1 from public.weekly_final_source_correction_sessions session
+        join public.weekly_source_final_revisions revision on revision.id=session.prepared_final_revision_id
+        where revision.id=origin.final_revision_id and revision.state='CURRENT' and revision.reason='CORRECT_FINAL_SOURCE'
+          and revision.predecessor_revision_id=session.expected_current_final_revision_id
+          and session.authority_scope_kind='NHSP_REPORT_SCOPE' and session.report_scope_id=revision.report_scope_id
+          and session.state in ('COMMITTING','APPLIED')
+          and (session.state='COMMITTING' or session.applied_final_revision_id=revision.id)) then
+      raise exception 'WEEKLY_SOURCE_NHSP_SELECTED_RETAINED_ORIGIN_UNBOUND' using errcode='55000';end if;
+  end if;
+  return origin.origin_id;
+end;
+$function$;
+alter function private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
