@@ -1,0 +1,5 @@
+# Schema-complete constructor packaging refusal
+
+The second bounded constructor trial used the four genuine schema pages,53 selected complete functions and original ACL statements. Its250 statements/916063bytes stopped at statement70 with42883 for private._weekly_source_rule_values_v1(jsonb). The original grouped REVOKE from1134 names nine functions, but this finite packet constructed only one of them. This is a source packaging error, not a passing constructor or business check. No production function needs a code change to explain this result.
+
+Rollback and a fresh connection were confirmed on cloudtms_test_clone. All53 routine records,862 trigger records and35 complete table-schema frames equal the initial catalogue frame. The shared lock was explicitly released and its connection closed. The next finite constructor groups must carry their genuine complete constructor/ACL dependencies, all selected assertions and the same complete fresh proof. Function-body checks and the2MB/250statement envelope remain unchanged. No full rehearsal, durable installation, business writer or external effect ran.

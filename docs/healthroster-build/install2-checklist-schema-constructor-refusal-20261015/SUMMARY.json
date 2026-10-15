@@ -1,0 +1,146 @@
+{
+  "verdict": "FAIL_GROUPED_ACL_REFERENCES_UNSELECTED_HELPER",
+  "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+  "preparation": {
+    "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+    "source_packet": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/",
+    "source_sql_sha256": "4fa7f3156575d6b6ea400f4cc1c1f03f14f842ab672cb917def539b1226bee64",
+    "source_statements": 248,
+    "prepared_sql_bytes": 916063,
+    "prepared_sql_characters": 916012,
+    "prepared_sql_sha256": "601027db3720dc3f9568f22a4f96f6c109b0023f4dce74b50c61c6bdacb66e2a",
+    "prepared_statements": 250,
+    "session_preparation_statements": 2,
+    "original_catalogue_assertions_unchanged": true,
+    "check_function_bodies": "Original complete assertion requires on; never disabled",
+    "fresh_fingerprint_sha256": "34ac926f127160ec40268630896738151c0380c94876ee7638ecc62fb0da22cf",
+    "scope": "50 current Checklist/Candidate plus3 actual prerequisite guard constructors and4 genuine schema pages; no native business writer/financial/role/full-release acceptance"
+  },
+  "statement_records": 70,
+  "error": {
+    "statement": 70,
+    "error": {
+      "message": "function private._weekly_source_rule_values_v1(jsonb) does not exist",
+      "code": "42883",
+      "routine": "LookupFuncWithArgs"
+    }
+  },
+  "diagnosis": "Actual1134 grouped REVOKE names9 signatures, while the bounded packet constructed only the selected final-rule-version guard.8 other referenced functions were absent. Complete actual four schema pages compiled before this ACL packaging error.",
+  "rolledBack": true,
+  "connectedFresh": true,
+  "entire_frame_identical": true,
+  "frame_counts": {
+    "routines": 53,
+    "triggers": 862,
+    "tables": 35
+  },
+  "exact_current_existing_names": 11,
+  "current_definition_pins": [
+    {
+      "schema": "private",
+      "name": "_weekly_source_immutable_record_guard_v1",
+      "identity_arguments": "",
+      "sha256": "d3e1aa9615840cf1b7377b0359bfaf3e02bf6005c39a6d99a584f323049dfd4e"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_append_work_skip_v1",
+      "identity_arguments": "p_run_id uuid, p_work_id uuid, p_revision_id uuid",
+      "sha256": "b9e8377877193139bd16b8658e50bf54eb2f8ee94639ca699949a3b41858436d"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_bound_source_snapshot_v1",
+      "identity_arguments": "p_binding_version_id uuid, p_expected_book_revision bigint",
+      "sha256": "03bb2fb0d6272ee08a4d3fa865afb6c65c53180503b21f49b9c07f1a817bf52e"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_create_preparation_v1",
+      "identity_arguments": "p_run_id uuid, p_actor_user_id uuid, p_pay_date date",
+      "sha256": "f584c335a6f44739c60c695924054535bdc887f71a8a14420aa2ba09c7db37c4"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_create_preparation_v1",
+      "identity_arguments": "p_run_id uuid, p_actor_user_id uuid, p_pay_date date, p_descriptor jsonb, p_command_id uuid",
+      "sha256": "a31a58767a51e66591a983d3810277a466be775a8916ba8fd08dc4eeb9a979b6"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_create_preparation_v1",
+      "identity_arguments": "p_run_id uuid, p_actor_user_id uuid, p_pay_date date, p_descriptor jsonb, p_command_id uuid, p_guard jsonb",
+      "sha256": "7ceadad6737802ec7e0a5c93eb73f3d1d0a4f220b0689141c1c989c269e522d9"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_initial_tsfin_bound_assert_v1",
+      "identity_arguments": "p_binding_version_id uuid",
+      "sha256": "f852c52c3780c9120f1c94088eb8ef82fa5169d4fe712cb14f1489bca3bbb8f3"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_initial_tsfin_certificate_v1",
+      "identity_arguments": "p_root_authorisation_id uuid",
+      "sha256": "3218ca5e8c7acf95f2a5c72da8fc2c4ee04692e5b5da272d67a4e5579fa188f1"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_workbench_refresh_work_core_v1",
+      "identity_arguments": "p_work_id uuid",
+      "sha256": "a03d6ee4c7605fcc8c57e18bfa99975c4c5ef4b1623e1c005f4d42e8160e019b"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_workbench_work_members_v1",
+      "identity_arguments": "p_work_id uuid, p_revision_id uuid",
+      "sha256": "09f71c958036f56cb4815b1ed115d630dbe6b10314e2c997064ede81096d63ad"
+    },
+    {
+      "schema": "private",
+      "name": "candidate_notification_visible_v1",
+      "identity_arguments": "p_notification candidate_notifications, p_now_utc timestamp with time zone, p_restored_state text",
+      "sha256": "1cb77387e5a11bc91e8317d887d3d735eb6df4daccd6862da773f57bc8a892ff"
+    },
+    {
+      "schema": "public",
+      "name": "candidate_submission_finalize_atomic_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb",
+      "sha256": "2ea7d395959ec5cb93e70097eb117e4ddfcee0a4d0388c79a4ccf82d9be04fc5"
+    },
+    {
+      "schema": "public",
+      "name": "candidate_workflow_transition_atomic_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone",
+      "sha256": "0ff12be5ae3cb04cb3447552af1e76dd8a18b25fe7a5afad5f0be87c566863df"
+    }
+  ],
+  "shared_turn": [
+    {
+      "chat": "HealthRoster",
+      "task": "checklist-schema-53-constructors-20261015",
+      "status": "TAKEN",
+      "takenAt": "2026-10-15T08:23:42.277Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "checklist-schema-53-constructors-20261015",
+      "status": "RELEASED",
+      "takenAt": "2026-10-15T08:23:42.277Z",
+      "releasedAt": "2026-10-15T08:24:15.987Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "next": "Publish complete independently scoped constructor groups with genuine helper/ACL dependency closure, all selected assertions and fresh whole-frame restoration. Keep250statement/2MBcap; do not split the final full release rehearsal.",
+  "business_full_release_acceptance": false
+}
