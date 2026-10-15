@@ -1,0 +1,20 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "CHECKS.json",
+      "bytes": 749,
+      "sha256": "90c7e302356307f2a090c395ae44d0397d2aa6dfa5c5b81a78c935732d0e15af"
+    },
+    {
+      "file": "NATIVE_SELECTOR_LITERAL_OWNERS.json",
+      "bytes": 3446,
+      "sha256": "b2d13eaaaf39cc103b1a051103e128708f6608bb0992c3b557b4a6e7fd6a3170"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 939,
+      "sha256": "e9e30f6225f8810bea26d11691cf255fcd044192babc18c20c4407de68475128"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "initial_error": "BPAY_NEXT_SIGNATURE_UNQUALIFIED_TYPE_UNCLASSIFIED: supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc (daterange)",
+  "root_cause": "Existing fixed built-in type inventory omitted daterange required by new Source helper signatures",
+  "source_fix": "Add only daterange to the existing native built-ins; preserve unknown/catalog-char rejection",
+  "targeted_tests": {
+    "file": "tests/healthroster-final-definer-daterange.test.js",
+    "pass": 3,
+    "fail": 0
+  },
+  "db_check": {
+    "pass": true,
+    "migrations": 400,
+    "repeatables": 1063
+  },
+  "complete_literal_inventory": true,
+  "final_definer_registry_gate": false,
+  "native_or_SQL_execution": false
+}

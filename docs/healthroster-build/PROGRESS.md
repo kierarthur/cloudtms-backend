@@ -515,3 +515,12 @@ Root found and reproduced P2-WORKER-ONLY-RECOVERY-FALSE-SUCCESS: the original ne
 Report NONE 61a1c64a passed bounded root review: 40 exact raw pins, seven whole owners / 31 reversals, 17 inputs and 36 actual mapper cases. True retained NORMAL pay basis remains distinct from B invoice presentation. Native current selection/receipt/publication, Legacy/NHSP, final mutually exclusive admission/VAT/Prepared composition and actual financial/API/Office/app gates remain.
 
 Evidence is in install2-worker-only-runtime-20261015, root-worker-only-source-review-20261015 and root-report-none-source-review-20261015. Reviewer harness launch failures are retained; only file-URL and test-name selection were corrected. No database connection/SQL, release, feature switch-on, app upload, external action, Banking message or cleanup occurred. Canonical counts remain 400 migrations / 1063 repeatables / 176 UPGRADE and 177 NEW mandatory verifiers. Install 1 is complete; Install 2 and both final Part B verdicts remain pending.
+
+
+## Native calendar review and final-owner source scanner — 15 October 2026
+
+Calendar 696bf40c passed bounded root review: 93 exact raw pins, five whole owners / 17 reversals, four native captured-settings inputs and 211 source cases. Actual native non-Sunday/Sunday/selection/current-cut/compiled purity/parity/financial/race/API proof remains required; the package is not yet canonically mounted.
+
+A complete literal owner scan exposed the fixed native-type parser omission for daterange in the new Source coverage signatures. Added only that known built-in type. Three targeted native named/unnamed/qualified/array and fail-closed unknown-type tests pass; db:check passes 400 migrations / 1063 repeatables; complete literal inventory now runs. Final registry and compiled contract gates remain separate and pending. No SQL or native call was needed.
+
+Current Money selectors still have their sole literal definitions in original 0475/0505; fresh path/hash receipts were supplied to Money. Native confirmed no additional late invoice-admission VAT blocker: retain the existing VAT_FIT_HELD guard, and exclude stale predecessor admission bodies from its reader recipe. Source/Agency delivered its current module; the 17 shared writer/issue/ModeA/OFF unions, prospective Contract persistence and complete Money/Checklist composition continue. No install, feature activation, app upload, external action, Banking message or cleanup occurred.

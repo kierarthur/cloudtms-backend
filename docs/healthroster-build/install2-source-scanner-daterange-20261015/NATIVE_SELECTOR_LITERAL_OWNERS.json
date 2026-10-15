@@ -1,0 +1,66 @@
+{
+  "sourceCommit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "sourceOnly": true,
+  "dynamicCompiledProof": false,
+  "owners": [
+    {
+      "signature": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "finalLiteralOwner": {
+        "signature": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+        "physical": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "root": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "closureSha256": "66c17182c8d143036eceb0cf36e5e80ba55c72624a1d145653f299351d63410c"
+      },
+      "definitions": 1,
+      "rawFileSha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "signature": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "finalLiteralOwner": {
+        "signature": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+        "physical": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "root": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "closureSha256": "66c17182c8d143036eceb0cf36e5e80ba55c72624a1d145653f299351d63410c"
+      },
+      "definitions": 1,
+      "rawFileSha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "signature": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "finalLiteralOwner": {
+        "signature": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+        "physical": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "root": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "closureSha256": "66c17182c8d143036eceb0cf36e5e80ba55c72624a1d145653f299351d63410c"
+      },
+      "definitions": 1,
+      "rawFileSha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "signature": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "finalLiteralOwner": {
+        "signature": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+        "physical": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "root": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "closureSha256": "66c17182c8d143036eceb0cf36e5e80ba55c72624a1d145653f299351d63410c"
+      },
+      "definitions": 1,
+      "rawFileSha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "signature": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "finalLiteralOwner": {
+        "signature": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+        "physical": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+        "root": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+        "closureSha256": "fdb8c0fd1f2eddfebfe31df02191a612bb85c280fea5d20db91d2a128a2a5441"
+      },
+      "definitions": 1,
+      "rawFileSha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51"
+    }
+  ],
+  "scannerWorkingTreeChange": {
+    "file": "scripts/bpay-next-final-definers.mjs",
+    "change": "Recognise only the native daterange type; no new SQL owner or dynamic proof"
+  }
+}

@@ -13,7 +13,7 @@ const aliases = new Map([['int', 'integer'], ['int4', 'integer'], ['int8', 'bigi
   ['time', 'time without time zone'], ['timetz', 'time with time zone'],
   ['varbit', 'bit varying']]);
 const builtins = new Set(['integer', 'bigint', 'smallint', 'int', 'int2', 'int4', 'int8',
-  'boolean', 'bool', 'numeric', 'decimal', 'real', 'double', 'float8', 'float4', 'text',
+  'boolean', 'bool', 'numeric', 'decimal', 'real', 'double', 'float8', 'float4', 'text', 'daterange',
   'character', 'varchar', 'char', 'uuid', 'json', 'jsonb', 'date', 'time', 'timestamp',
   'timestamptz', 'interval', 'bytea', 'record', 'anyelement', 'anyarray', 'anycompatible',
   'anycompatiblearray', 'regclass', 'regprocedure', 'oid', 'citext', 'void', 'bit', 'varbit', 'bpchar', 'timetz']);
