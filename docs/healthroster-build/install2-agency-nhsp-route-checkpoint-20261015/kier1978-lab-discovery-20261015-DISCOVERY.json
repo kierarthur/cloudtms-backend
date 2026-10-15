@@ -1,0 +1,23 @@
+{
+  "checked_at_utc": "2026-10-15T00:46:41.775Z",
+  "discovery_only": true,
+  "sql_sent": false,
+  "tools_call_sent": false,
+  "endpoint": "https://codex-kier1978-miget-transaction-lab.kier-88a.workers.dev/mcp",
+  "server": {
+    "name": "CloudTMS Miget Transaction Lab",
+    "version": "0.1.0"
+  },
+  "tool_names": [
+    "miget_db_transaction_rollback"
+  ],
+  "exact_tool_present": true,
+  "sql_character_limit": 2000000,
+  "verification_character_limit": 1000000,
+  "main_codex_process_bearer_present": false,
+  "windows_user_bearer_present": true,
+  "native_task_tool_available": false,
+  "registration_enabled": true,
+  "required_next": "Fully quit and reopen Codex; start a fresh task and verify native lab tool under the shared lock before any rollback trial.",
+  "no_credential_or_registration_changes": true
+}

@@ -1,0 +1,18 @@
+{
+  "created_at_utc": "2026-10-15T00:50:11.534Z",
+  "account": "kierarthur1978@gmail.com",
+  "exact_native_tool": "cloudtms-miget-transaction-lab-kier1978/miget_db_transaction_rollback",
+  "agency_test_only": true,
+  "shared_key": [
+    20261013,
+    1
+  ],
+  "table": "private.hr_k1978_native_20261015_450040bab9a9518c",
+  "function": "private.hr_k1978_native_20261015_450040bab9a9518c_fn()",
+  "trial_bytes": 1086,
+  "verification_bytes": 509,
+  "trial_sha256": "b3f90eeb22728bd8781a666970bbcfd6e566fcad5798493dc74d85874a17300a",
+  "verification_sha256": "03c6699ff802c0d521e5673423be3cd2e2a2e2060519f6e39b8559159fcc4047",
+  "native_result": "PENDING",
+  "application_fixture_or_external_effect": false
+}

@@ -1,0 +1,185 @@
+{
+  "source_only_artifacts_and_fixed_readonly_receipts": true,
+  "artifacts": [
+    {
+      "file": "ACCOUNT_AGENTS_SECTION_NATIVE_PROVED.md",
+      "bytes": 3716,
+      "sha256": "92b826f93257ef9f82827c5cf6d0ea5c5feb88237ba7b17f1eab7689474d8c92"
+    },
+    {
+      "file": "agency-oneclick-off-review-20261015-business-inline.test.mjs.tap.txt",
+      "bytes": 12702,
+      "sha256": "2ef5b25fa2b6a6bb8488dd100ce5c2358e3a8ea84ed67e8220861a65990e852f"
+    },
+    {
+      "file": "agency-oneclick-off-review-20261015-CHECKS.json",
+      "bytes": 2322,
+      "sha256": "b7e0a4ff018b9b6a16c5780c099cad17e814b1ad7a62e5284dc84fce3931fb1c"
+    },
+    {
+      "file": "agency-oneclick-off-review-20261015-INITIAL_HARNESS_REFUSAL.json",
+      "bytes": 432,
+      "sha256": "a1f737e08e5a9e5c538ec25a9ee64704102860d07030382aef991a29ca84ed77"
+    },
+    {
+      "file": "agency-oneclick-off-review-20261015-off-agency-transport.test.mjs.tap.txt",
+      "bytes": 20108,
+      "sha256": "483047aaa63715f13e07860bc5dd0b8d870c9208c4c7851ce296939c91e40518"
+    },
+    {
+      "file": "agency-policy-codec-review-20261015-CHECKS.json",
+      "bytes": 2726,
+      "sha256": "2e20f6471f97bb855ed51028dcfaf6af9776ab0f5317de3c78399e3fb3a1809f"
+    },
+    {
+      "file": "agency-policy-codec-review-20261015-fixed-approval-policy.test.mjs.tap.txt",
+      "bytes": 2396,
+      "sha256": "3cfd80401822fa1ce1a1f6d32d9cd698f6c0fcad959f41a8e279b93df1556bfb"
+    },
+    {
+      "file": "agency-policy-codec-review-20261015-policy-source-phase.test.mjs.tap.txt",
+      "bytes": 2946,
+      "sha256": "e7bf9c7cf3b1b0e17f64e4e5b982631053a4fd82c58935bbf071bb718dcf5d6c"
+    },
+    {
+      "file": "agency-policy-codec-review-20261015-text-count.test.mjs.tap.txt",
+      "bytes": 1640,
+      "sha256": "dd06f676d836872a71d2e0e0b5a86cfb28b808e24cb8b5bca8cd005d85a46536"
+    },
+    {
+      "file": "BUILD_A0_SOURCE_REGISTRATION_TGATTR_CLOSURE_SOURCE_CRITIC_15102026.md",
+      "bytes": 1740,
+      "sha256": "f41f1560669379ac6e75120a879ff02388272ecdf97fa7f3e1405e5aac37315e"
+    },
+    {
+      "file": "BUILD_AGENCY_ONECLICK_OFF_SOURCE_CRITIC_15102026.md",
+      "bytes": 2532,
+      "sha256": "832262a61b30a641f1f9325d650507809b99c8976e83d18724d83ed4c4a65985"
+    },
+    {
+      "file": "BUILD_AGENCY_POLICY_APPROVAL_TEXT_SOURCE_CRITIC_15102026.md",
+      "bytes": 1879,
+      "sha256": "98a45b0fa0b1012ba42c76f7ec303407046756415cca5ed1e714fa17ff42a9ee"
+    },
+    {
+      "file": "BUILD_CURRENT_173_VERIFIER_SAFETY_SOURCE_REVIEW_15102026.md",
+      "bytes": 7470,
+      "sha256": "d84edb1990f87f7155ada7599eaf96896a4cfb8a9ec5d748cdbaedd5f4e2c5ce"
+    },
+    {
+      "file": "BUILD_MONEY_NHSP_NATIVE_INPUTS_SOURCE_CRITIC_15102026.md",
+      "bytes": 3065,
+      "sha256": "97febe3b251d0166de5c89b776ddc0d8795bfbb37e0887fee3942999bc6e5cd0"
+    },
+    {
+      "file": "checklist-a0-registration-tgattr-closure-20261015-SOURCE_MANIFEST.json",
+      "bytes": 1002,
+      "sha256": "81939dca1eaf403fa09193d060a54050c2432ab22014158fff197dea0638e3f9"
+    },
+    {
+      "file": "checklist-install2-verifier173-safety-review-20261015-SOURCE_MANIFEST.json",
+      "bytes": 3241,
+      "sha256": "d3c18d83ec47b37d588cdb098ba18b8a169e51416b1060f745c2da0766552362"
+    },
+    {
+      "file": "discover-kier1978-lab-20261015.mjs",
+      "bytes": 2328,
+      "sha256": "7d8769062f50661a9e3969a41efef0aca32ad04ba157fb8f3bb9aa0bb927326b"
+    },
+    {
+      "file": "install2-lab-envelope-20261015-MEASUREMENT.json",
+      "bytes": 24586,
+      "sha256": "a38fe427a7879ce3fecf0a508a021fc137f0cb837c92e8b65c50e9f05a56500f"
+    },
+    {
+      "file": "kier1978-lab-discovery-20261015-DISCOVERY.json",
+      "bytes": 818,
+      "sha256": "556d9ba649cb2e0d931b9a1c3437251fa15fe66bbb3f21d29fae5b42deb7b157"
+    },
+    {
+      "file": "kier1978-readonly-probes-20261015-ROUTE_PROBES.json",
+      "bytes": 11846,
+      "sha256": "ae55c6450f4432d7397c75d8febe7e2af64a3e768f750b07e974f670d1b7f049"
+    },
+    {
+      "file": "measure-install2-lab-envelope-20261015.mjs",
+      "bytes": 2892,
+      "sha256": "e54d0190db8e89d9707aff3090c30b52bbf6f02ec61f1254c0a93222ae366a53"
+    },
+    {
+      "file": "money-nhsp-native-review-20261015-basis-source.test.mjs.tap.txt",
+      "bytes": 3151,
+      "sha256": "99008ac41fc1d5b2c131756d0f6967c927c1fdad1f7110fcd11e60ae8270f540"
+    },
+    {
+      "file": "money-nhsp-native-review-20261015-CHECKS.json",
+      "bytes": 2887,
+      "sha256": "c7adbebf533341446f74903ad2e65475c38a370e40124dfd47cb629fe072cdcc"
+    },
+    {
+      "file": "money-nhsp-native-review-20261015-negative-population-source.test.mjs.tap.txt",
+      "bytes": 4361,
+      "sha256": "4e09fc333948b70e598b91dd9d6ccc61fd9b29f3c44a36d350bf783d4faf01af"
+    },
+    {
+      "file": "money-nhsp-native-review-20261015-nhsp-event-source.test.mjs.tap.txt",
+      "bytes": 3855,
+      "sha256": "71f8f3129c6f564c6266e48381913c044ee69fa3e9a2b3733ded086a1d77e67a"
+    },
+    {
+      "file": "NATIVE_PICKUP_SHARED_TURN_JOURNAL.txt",
+      "bytes": 848,
+      "sha256": "bf02818095138a7371c8bafab4a9f27b73025de3ec526f9c75155194b88b3b21"
+    },
+    {
+      "file": "NATIVE_PICKUP_STATUS.json",
+      "bytes": 881,
+      "sha256": "5067486c3cce97cc7b933477fa60f5cf7b6b1ee47fb86d271ae6ab56eb774de1"
+    },
+    {
+      "file": "native-pickup-ABSENCE.sql",
+      "bytes": 509,
+      "sha256": "03c6699ff802c0d521e5673423be3cd2e2a2e2060519f6e39b8559159fcc4047"
+    },
+    {
+      "file": "native-pickup-MANIFEST.json",
+      "bytes": 707,
+      "sha256": "30fce44781f1c9a7887577b5ac7c7d3606496381578155c49da7eb77e2aaa9ce"
+    },
+    {
+      "file": "native-pickup-NATIVE_ACCEPTANCE.json",
+      "bytes": 4866,
+      "sha256": "743e10e6d2f6445dc000d1a47c3a37f0e6ddf3fb63835922203bf7c3a4149214"
+    },
+    {
+      "file": "native-pickup-TRIAL.sql",
+      "bytes": 1086,
+      "sha256": "b3f90eeb22728bd8781a666970bbcfd6e566fcad5798493dc74d85874a17300a"
+    },
+    {
+      "file": "prepare-kier1978-native-probe-20261015.mjs",
+      "bytes": 2289,
+      "sha256": "e52a453864a823a2096e99ef4628976912a9782decb5bdaf2e3563e75aad2b68"
+    },
+    {
+      "file": "review-agency-oneclick-off-20261015.mjs",
+      "bytes": 4945,
+      "sha256": "f3767f2580ee7f13d9ef9bf7502d8587aae16c0e42d76218a952c94b348a0291"
+    },
+    {
+      "file": "review-agency-policy-codec-20261015.mjs",
+      "bytes": 5248,
+      "sha256": "8b1a6443a2b88a526ad4701b5010e5eb274293f26f0cafd1a6ec4f579d95b50e"
+    },
+    {
+      "file": "review-money-nhsp-native-20261015.mjs",
+      "bytes": 4899,
+      "sha256": "7461bbfdc5aa15e7a1f5aea629831d112e1534919e685e4e77080ca2dce172f8"
+    },
+    {
+      "file": "SOURCE_COMMITS.json",
+      "bytes": 1053,
+      "sha256": "c97eceb4848b0ace141d49e22610a3fef97d8ebf840724832d60aadd9f201aff"
+    }
+  ]
+}

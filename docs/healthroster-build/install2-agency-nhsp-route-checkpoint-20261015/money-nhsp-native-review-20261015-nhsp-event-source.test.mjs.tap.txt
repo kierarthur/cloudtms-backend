@@ -1,0 +1,100 @@
+TAP version 13
+# Subtest: complete current selected native writer reverses five unique hunks to exact backed writer58
+ok 1 - complete current selected native writer reverses five unique hunks to exact backed writer58
+  ---
+  duration_ms: 87.2567
+  type: 'test'
+  ...
+# Subtest: five full schema current selector staging and actual choice inputs match raw Git
+ok 2 - five full schema current selector staging and actual choice inputs match raw Git
+  ---
+  duration_ms: 360.5607
+  type: 'test'
+  ...
+# Subtest: native event unique hash supports distinct events without a new table field or old update
+ok 3 - native event unique hash supports distinct events without a new table field or old update
+  ---
+  duration_ms: 1.7075
+  type: 'test'
+  ...
+# Subtest: existing SCHEDULE_TUPLE and NHSP MOVEMENT magnitude owners remain separate real grains
+ok 4 - existing SCHEDULE_TUPLE and NHSP MOVEMENT magnitude owners remain separate real grains
+  ---
+  duration_ms: 0.7749
+  type: 'test'
+  ...
+# Subtest: row intent resets and only actual owner-read paid choice can derive it
+ok 5 - row intent resets and only actual owner-read paid choice can derive it
+  ---
+  duration_ms: 1.632
+  type: 'test'
+  ...
+# Subtest: real native I-1 then scope/group/cycle and per-day schedule lock graph is preserved
+ok 6 - real native I-1 then scope/group/cycle and per-day schedule lock graph is preserved
+  ---
+  duration_ms: 0.3127
+  type: 'test'
+  ...
+# Subtest: complete C1 economic price charge lineage and publication suffix remains byte exact
+ok 7 - complete C1 economic price charge lineage and publication suffix remains byte exact
+  ---
+  duration_ms: 2.5996
+  type: 'test'
+  ...
+# Subtest: finite intent gate refuses negative unknown price prefinal nonordinary and wrong group/scope
+ok 8 - finite intent gate refuses negative unknown price prefinal nonordinary and wrong group/scope
+  ---
+  duration_ms: 0.2461
+  type: 'test'
+  ...
+# Subtest: the required no-reversal and report-scope paid basis admission is explicitly unimplemented not fake enabled
+ok 9 - the required no-reversal and report-scope paid basis admission is explicitly unimplemented not fake enabled
+  ---
+  duration_ms: 0.6254
+  type: 'test'
+  ...
+# Subtest: actual same-actor immutable choice and whole projection lock remain prerequisites not caller flags
+ok 10 - actual same-actor immutable choice and whole projection lock remain prerequisites not caller flags
+  ---
+  duration_ms: 0.6373
+  type: 'test'
+  ...
+# Subtest: actual stable separate discriminator is a persisted immutable choice never Ref Num or an economic key
+ok 11 - actual stable separate discriminator is a persisted immutable choice never Ref Num or an economic key
+  ---
+  duration_ms: 0.2391
+  type: 'test'
+  ...
+# Subtest: explicit genuine Separate avoids existing paid compatible event while ordinary still reuses it
+ok 12 - explicit genuine Separate avoids existing paid compatible event while ordinary still reuses it
+  ---
+  duration_ms: 0.2379
+  type: 'test'
+  ...
+# Subtest: same actual immutable choice replays one distinct identity even with two compatible events
+ok 13 - same actual immutable choice replays one distinct identity even with two compatible events
+  ---
+  duration_ms: 0.1141
+  type: 'test'
+  ...
+# Subtest: nonmatching purpose profile scope group sign and missing real choice never admits separate token
+ok 14 - nonmatching purpose profile scope group sign and missing real choice never admits separate token
+  ---
+  duration_ms: 0.1138
+  type: 'test'
+  ...
+# Subtest: ordinary native token values and every original schedule tuple field remain meaningful
+ok 15 - ordinary native token values and every original schedule tuple field remain meaningful
+  ---
+  duration_ms: 0.1099
+  type: 'test'
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 626.8095

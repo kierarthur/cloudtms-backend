@@ -1,0 +1,21 @@
+{
+  "source_only": true,
+  "native_full_qualification": false,
+  "root_current": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+  "root_backend_before": "144b3c56965c4c3d32c2819a0ef9f921e6d11003",
+  "registration_fix_critic": "96cf25c21dd751e05dc99c7b8a52ce99e1cf6213",
+  "current173_ledger": "2b833a70b52d7cdae0696f7dabc3c36ca7eb1e61",
+  "agency_oneclick": "4c26565f68521fa868b211ce36ba22a9471053c0",
+  "agency_policy": "aeeac1f4f64a4d0639a5e9f826c76ebe55a56268",
+  "agency_off_approval": "fee53465a85b6c8fa7ac059d225429022db7260a",
+  "agency_text": "267e0b5b7b535d6eda4bb646ff54b93ad2ecbdda",
+  "nhsp_separate": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+  "nhsp_current_basis": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+  "nhsp_negative": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+  "nhsp_price_pending_review": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+  "rollback_native_available": false,
+  "rollback_hosted_discovery": true,
+  "rollback_process_bearer": false,
+  "rollback_windows_user_bearer": true,
+  "no_rollback_trial_or_release": true
+}

@@ -1,0 +1,347 @@
+{
+  "checked_at_utc": "2026-10-15 00:42:03 UTC",
+  "source_only_evidence": false,
+  "read_only": true,
+  "caller_sql": false,
+  "business_rows": false,
+  "native_lab_available": false,
+  "parity": [
+    {
+      "accepted": true,
+      "authenticated": true,
+      "read_only": true,
+      "route": "ChatGPT web -> read-only MCP -> Miget REST API",
+      "resource_count": 1,
+      "secrets_returned": false
+    }
+  ],
+  "infrastructure": [
+    [
+      {
+        "authenticated": true,
+        "read_only": true,
+        "database": "agency_test",
+        "service": {
+          "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+          "name": "postgres-service-p0qoe",
+          "label": "cloudtms-codex-poc-pg17",
+          "service_type": "postgres",
+          "state": "healthy",
+          "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+          "created_at": "2026-08-23T16:00:33.774Z",
+          "updated_at": "2026-09-30T19:16:42.824Z"
+        }
+      }
+    ],
+    [
+      {
+        "authenticated": true,
+        "read_only": true,
+        "database": "mytms_test",
+        "service": {
+          "uuid": "01a03045-5d5a-7892-b555-704ba6edc733",
+          "name": "postgres-service-kpqwi",
+          "label": "mytms-control-plane-pg17",
+          "service_type": "postgres",
+          "state": "healthy",
+          "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+          "created_at": "2026-08-23T20:17:27.386Z",
+          "updated_at": "2026-08-24T20:44:30.793Z"
+        }
+      }
+    ]
+  ],
+  "catalogue": [
+    [
+      {
+        "authenticated": true,
+        "read_only": true,
+        "database": "agency_test",
+        "summary": {
+          "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+          "function_count": 2694,
+          "trigger_count": 862,
+          "policy_count": 353,
+          "relation_count": 595,
+          "extension_count": 5
+        }
+      }
+    ],
+    [
+      {
+        "authenticated": true,
+        "read_only": true,
+        "database": "mytms_test",
+        "summary": {
+          "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+          "function_count": 753,
+          "trigger_count": 1,
+          "policy_count": 44,
+          "relation_count": 44,
+          "extension_count": 11
+        }
+      }
+    ]
+  ],
+  "planned_delete_definition": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "matched": 1,
+      "definitions": [
+        {
+          "schema_name": "private",
+          "function_name": "contract_week_delete_planned_base_v1",
+          "identity_arguments": "p_contract_week_id uuid, p_actor_user_id uuid",
+          "definition": "CREATE OR REPLACE FUNCTION private.contract_week_delete_planned_base_v1(p_contract_week_id uuid, p_actor_user_id uuid)\n RETURNS TABLE(deleted boolean, contract_week_id uuid)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_now timestamptz := now();\r\n  v_cw public.contract_weeks%rowtype;\r\nbegin\r\n  if p_contract_week_id is null then\r\n    raise exception 'contract_week_id is required';\r\n  end if;\r\n\r\n  select *\r\n  into v_cw\r\n  from public.contract_weeks\r\n  where id = p_contract_week_id\r\n  for update;\r\n\r\n  if not found then\r\n    raise exception 'contract_week not found';\r\n  end if;\r\n\r\n  if v_cw.timesheet_id is not null then\r\n    raise exception 'Not a planned-only week: timesheet_id is present';\r\n  end if;\r\n\r\n  delete from public.contract_weeks\r\n  where id = p_contract_week_id;\r\n\r\n  insert into public.audit_events(\r\n    object_type, object_id_text, action, before_json, after_json, reason, actor_user_id, ts_utc\r\n  )\r\n  values(\r\n    'contract_week',\r\n    p_contract_week_id::text,\r\n    'CONTRACT_WEEK_DELETED_PLANNED',\r\n    jsonb_build_object('contract_id', v_cw.contract_id, 'week_ending_date', v_cw.week_ending_date, 'additional_seq', v_cw.additional_seq),\r\n    null,\r\n    null,\r\n    p_actor_user_id,\r\n    v_now\r\n  );\r\n\r\n  deleted := true;\r\n  contract_week_id := p_contract_week_id;\r\n  return next;\r\nend;\r\n$function$\n"
+        }
+      ]
+    }
+  ],
+  "planned_delete_metadata_initial_types_only_identity": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "live_access_allowed": false,
+      "secrets_returned": false,
+      "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+      "requested_routine_count": 1,
+      "requested_role_count": 3,
+      "total": 1,
+      "limit": 10,
+      "offset": 0,
+      "returned": 1,
+      "eof": true,
+      "next_offset": null,
+      "truncated": false,
+      "business_rows_returned": 0,
+      "caller_supplied_sql_accepted": false,
+      "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+      "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+      "roles": [
+        {
+          "role": "anon",
+          "role_present": true,
+          "can_login": false,
+          "superuser": false,
+          "inherits_by_default": false,
+          "bypass_rls": false
+        },
+        {
+          "role": "authenticated",
+          "role_present": true,
+          "can_login": false,
+          "superuser": false,
+          "inherits_by_default": false,
+          "bypass_rls": false
+        },
+        {
+          "role": "service_role",
+          "role_present": true,
+          "can_login": false,
+          "superuser": false,
+          "inherits_by_default": false,
+          "bypass_rls": false
+        }
+      ],
+      "effective_membership_paths": [
+        {
+          "requested_role": "anon",
+          "inherited_role": "anon",
+          "depth": 0,
+          "path": "{anon}",
+          "admin_option": null,
+          "inherit_option": null,
+          "set_option": null
+        },
+        {
+          "requested_role": "authenticated",
+          "inherited_role": "authenticated",
+          "depth": 0,
+          "path": "{authenticated}",
+          "admin_option": null,
+          "inherit_option": null,
+          "set_option": null
+        },
+        {
+          "requested_role": "service_role",
+          "inherited_role": "service_role",
+          "depth": 0,
+          "path": "{service_role}",
+          "admin_option": null,
+          "inherit_option": null,
+          "set_option": null
+        }
+      ],
+      "items": [
+        {
+          "requested_ordinal": 0,
+          "schema": "private",
+          "name": "contract_week_delete_planned_base_v1",
+          "identity_arguments": "uuid, uuid",
+          "present": false,
+          "routine_oid": null,
+          "kind": "function",
+          "owner": null,
+          "language": null,
+          "security_definer": null,
+          "volatility": "volatile",
+          "result_type": null,
+          "acl_uses_postgresql_default": true,
+          "direct_or_default_execute_acl": [],
+          "effective_roles": []
+        }
+      ]
+    }
+  ],
+  "planned_delete_metadata_actual_named_identity": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "live_access_allowed": false,
+      "secrets_returned": false,
+      "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+      "requested_routine_count": 1,
+      "requested_role_count": 3,
+      "total": 1,
+      "limit": 10,
+      "offset": 0,
+      "returned": 1,
+      "eof": true,
+      "next_offset": null,
+      "truncated": false,
+      "business_rows_returned": 0,
+      "caller_supplied_sql_accepted": false,
+      "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+      "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+      "roles": [
+        {
+          "role": "anon",
+          "role_present": true,
+          "can_login": false,
+          "superuser": false,
+          "inherits_by_default": false,
+          "bypass_rls": false
+        },
+        {
+          "role": "authenticated",
+          "role_present": true,
+          "can_login": false,
+          "superuser": false,
+          "inherits_by_default": false,
+          "bypass_rls": false
+        },
+        {
+          "role": "service_role",
+          "role_present": true,
+          "can_login": false,
+          "superuser": false,
+          "inherits_by_default": false,
+          "bypass_rls": false
+        }
+      ],
+      "effective_membership_paths": [
+        {
+          "requested_role": "anon",
+          "inherited_role": "anon",
+          "depth": 0,
+          "path": "{anon}",
+          "admin_option": null,
+          "inherit_option": null,
+          "set_option": null
+        },
+        {
+          "requested_role": "authenticated",
+          "inherited_role": "authenticated",
+          "depth": 0,
+          "path": "{authenticated}",
+          "admin_option": null,
+          "inherit_option": null,
+          "set_option": null
+        },
+        {
+          "requested_role": "service_role",
+          "inherited_role": "service_role",
+          "depth": 0,
+          "path": "{service_role}",
+          "admin_option": null,
+          "inherit_option": null,
+          "set_option": null
+        }
+      ],
+      "items": [
+        {
+          "requested_ordinal": 0,
+          "schema": "private",
+          "name": "contract_week_delete_planned_base_v1",
+          "identity_arguments": "p_contract_week_id uuid, p_actor_user_id uuid",
+          "present": true,
+          "routine_oid": "326079",
+          "kind": "function",
+          "owner": "dee50tht",
+          "language": "plpgsql",
+          "security_definer": true,
+          "volatility": "volatile",
+          "result_type": "TABLE(deleted boolean, contract_week_id uuid)",
+          "acl_uses_postgresql_default": false,
+          "direct_or_default_execute_acl": [
+            {
+              "routine_oid": "326079",
+              "grantee": "dee50tht",
+              "grantor": "dee50tht",
+              "privilege_type": "EXECUTE",
+              "is_grantable": false,
+              "derived_from_postgresql_default_acl": false
+            },
+            {
+              "routine_oid": "326079",
+              "grantee": "service_role",
+              "grantor": "dee50tht",
+              "privilege_type": "EXECUTE",
+              "is_grantable": false,
+              "derived_from_postgresql_default_acl": false
+            }
+          ],
+          "effective_roles": [
+            {
+              "routine_oid": "326079",
+              "role": "anon",
+              "role_present": true,
+              "effective_execute": false,
+              "effective_schema_usage": false,
+              "effective_callable": false
+            },
+            {
+              "routine_oid": "326079",
+              "role": "authenticated",
+              "role_present": true,
+              "effective_execute": false,
+              "effective_schema_usage": false,
+              "effective_callable": false
+            },
+            {
+              "routine_oid": "326079",
+              "role": "service_role",
+              "role_present": true,
+              "effective_execute": true,
+              "effective_schema_usage": true,
+              "effective_callable": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "anonymous_status": {
+    "operations": 401,
+    "lab": 401
+  },
+  "limitations": [
+    "Infrastructure healthy is not fresh physical current_database proof.",
+    "Initial metadata types-only identity returned absent; actual pg_get_function_identity_arguments named identity returns present. This is an input mismatch, not an absent database routine.",
+    "Installed routine proof does not close final uncompiled candidate effect/trigger/security/rehearsal gates."
+  ]
+}

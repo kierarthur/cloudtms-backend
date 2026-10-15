@@ -1,0 +1,7 @@
+{
+  "source_only": true,
+  "first_harness_result": "AssertionError before any tests",
+  "cause": "Review harness incorrectly normalised one-click raw predecessor to LF; creator actually preserves raw mixed endings. OFF successor separately declares LF conversion.",
+  "correction": "Compare one-click whole reverses directly to exact raw Git; retain declared OFF conversion only.",
+  "implementation_or_assertions_changed": false
+}

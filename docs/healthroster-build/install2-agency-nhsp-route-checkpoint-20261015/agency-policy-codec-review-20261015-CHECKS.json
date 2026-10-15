@@ -1,0 +1,71 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "before": [
+    {
+      "dir": "agency-policy-source-phase-successor-20261015",
+      "commit": "aeeac1f4f64a4d0639a5e9f826c76ebe55a56268",
+      "files": 18,
+      "manifest_sha256": "ed856fb87f728b954d61dfd53a429cc58ef9d4ca098e92ff14a46c7fc3dd1491"
+    },
+    {
+      "dir": "agency-fixed-approval-policy-support-20261015",
+      "commit": "fee53465a85b6c8fa7ac059d225429022db7260a",
+      "files": 15,
+      "manifest_sha256": "f54b9fd0ea57b183cc0785780fbcbc2e0c18bd73d401cbb429b674d74edec0b9"
+    },
+    {
+      "dir": "agency-off-native-text-count-successor-20261015",
+      "commit": "267e0b5b7b535d6eda4bb646ff54b93ad2ecbdda",
+      "files": 10,
+      "manifest_sha256": "a2cf3f2f3bf796ff167dbc85307ffdb88106c6e7d8f189428716019f064e17b3"
+    }
+  ],
+  "after": [
+    {
+      "dir": "agency-policy-source-phase-successor-20261015",
+      "commit": "aeeac1f4f64a4d0639a5e9f826c76ebe55a56268",
+      "files": 18,
+      "manifest_sha256": "ed856fb87f728b954d61dfd53a429cc58ef9d4ca098e92ff14a46c7fc3dd1491"
+    },
+    {
+      "dir": "agency-fixed-approval-policy-support-20261015",
+      "commit": "fee53465a85b6c8fa7ac059d225429022db7260a",
+      "files": 15,
+      "manifest_sha256": "f54b9fd0ea57b183cc0785780fbcbc2e0c18bd73d401cbb429b674d74edec0b9"
+    },
+    {
+      "dir": "agency-off-native-text-count-successor-20261015",
+      "commit": "267e0b5b7b535d6eda4bb646ff54b93ad2ecbdda",
+      "files": 10,
+      "manifest_sha256": "a2cf3f2f3bf796ff167dbc85307ffdb88106c6e7d8f189428716019f064e17b3"
+    }
+  ],
+  "whole_owner_reverses": 6,
+  "unique_hunks": 14,
+  "actual_input_pins": 17,
+  "tests": [
+    {
+      "file": "docs/healthroster-build/proposals/agency-policy-source-phase-successor-20261015/policy-source-phase.test.mjs",
+      "cases": 13,
+      "output_sha256": "e7bf9c7cf3b1b0e17f64e4e5b982631053a4fd82c58935bbf071bb718dcf5d6c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/agency-fixed-approval-policy-support-20261015/fixed-approval-policy.test.mjs",
+      "cases": 8,
+      "output_sha256": "3cfd80401822fa1ce1a1f6d32d9cd698f6c0fcad959f41a8e279b93df1556bfb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/agency-off-native-text-count-successor-20261015/text-count.test.mjs",
+      "cases": 8,
+      "output_sha256": "dd06f676d836872a71d2e0e0b5a86cfb28b808e24cb8b5bca8cd005d85a46536"
+    }
+  ],
+  "actual_raw_nested_union_order_matches_final_before": true,
+  "unrun": [
+    "complete current owner/role/registry/contract union",
+    "native current financial and API/Office/application acceptance",
+    "preset apply/clear and native weekly transition/finalise/document consumers remain engineering"
+  ]
+}

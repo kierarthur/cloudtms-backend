@@ -1,0 +1,358 @@
+TAP version 13
+# Subtest: UNIT_ONLY primary positional request preserves real business input and only server actor
+ok 1 - UNIT_ONLY primary positional request preserves real business input and only server actor
+  ---
+  duration_ms: 1.3574
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select actor_user_id
+ok 2 - UNIT_ONLY caller cannot select actor_user_id
+  ---
+  duration_ms: 0.3467
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select timesheet_id
+ok 3 - UNIT_ONLY caller cannot select timesheet_id
+  ---
+  duration_ms: 0.0943
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select source_cycle_id
+ok 4 - UNIT_ONLY caller cannot select source_cycle_id
+  ---
+  duration_ms: 0.0611
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select source_cas
+ok 5 - UNIT_ONLY caller cannot select source_cas
+  ---
+  duration_ms: 0.0627
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select original_draft_invoice_id
+ok 6 - UNIT_ONLY caller cannot select original_draft_invoice_id
+  ---
+  duration_ms: 0.0678
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select schedule
+ok 7 - UNIT_ONLY caller cannot select schedule
+  ---
+  duration_ms: 0.0522
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select phase
+ok 8 - UNIT_ONLY caller cannot select phase
+  ---
+  duration_ms: 0.0757
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY caller cannot select qualified
+ok 9 - UNIT_ONLY caller cannot select qualified
+  ---
+  duration_ms: 0.0868
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY scalar input refuses array contract_week_id
+ok 10 - UNIT_ONLY scalar input refuses array contract_week_id
+  ---
+  duration_ms: 0.17
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY scalar input refuses array reason
+ok 11 - UNIT_ONLY scalar input refuses array reason
+  ---
+  duration_ms: 0.0828
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY scalar input refuses array expected_signature
+ok 12 - UNIT_ONLY scalar input refuses array expected_signature
+  ---
+  duration_ms: 0.084
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY scalar input refuses array request_key
+ok 13 - UNIT_ONLY scalar input refuses array request_key
+  ---
+  duration_ms: 0.09
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual native btrim admits tabs/NBSP without changing raw business bytes
+ok 14 - UNIT_ONLY actual native btrim admits tabs/NBSP without changing raw business bytes
+  ---
+  duration_ms: 0.1341
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native character limit permits bounded Unicode input without UTF16 drift
+ok 15 - UNIT_ONLY native character limit permits bounded Unicode input without UTF16 drift
+  ---
+  duration_ms: 0.2008
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY PostgreSQL UUID identity is not restricted to generated version bits
+ok 16 - UNIT_ONLY PostgreSQL UUID identity is not restricted to generated version bits
+  ---
+  duration_ms: 0.0813
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses foreign viewer
+ok 17 - UNIT_ONLY native response refuses foreign viewer
+  ---
+  duration_ms: 0.2548
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses foreign week
+ok 18 - UNIT_ONLY native response refuses foreign week
+  ---
+  duration_ms: 0.062
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses changed key
+ok 19 - UNIT_ONLY native response refuses changed key
+  ---
+  duration_ms: 0.0713
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses caller receipt field
+ok 20 - UNIT_ONLY native response refuses caller receipt field
+  ---
+  duration_ms: 0.0437
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses completed phase only
+ok 21 - UNIT_ONLY native response refuses completed phase only
+  ---
+  duration_ms: 0.0795
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses completed flag only
+ok 22 - UNIT_ONLY native response refuses completed flag only
+  ---
+  duration_ms: 0.0813
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses fake queue success
+ok 23 - UNIT_ONLY native response refuses fake queue success
+  ---
+  duration_ms: 0.0528
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses array continuation
+ok 24 - UNIT_ONLY native response refuses array continuation
+  ---
+  duration_ms: 0.0604
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses missing current signature
+ok 25 - UNIT_ONLY native response refuses missing current signature
+  ---
+  duration_ms: 0.0537
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses unsafe version
+ok 26 - UNIT_ONLY native response refuses unsafe version
+  ---
+  duration_ms: 0.0719
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses fake invoice descriptor
+ok 27 - UNIT_ONLY native response refuses fake invoice descriptor
+  ---
+  duration_ms: 0.0594
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native response refuses actor completion before native finish
+ok 28 - UNIT_ONLY native response refuses actor completion before native finish
+  ---
+  duration_ms: 0.0571
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY completed source result retains actual earlier phase actor on permitted replay
+ok 29 - UNIT_ONLY completed source result retains actual earlier phase actor on permitted replay
+  ---
+  duration_ms: 0.122
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native target/hash cannot rotate between inline observations
+ok 30 - UNIT_ONLY native target/hash cannot rotate between inline observations
+  ---
+  duration_ms: 0.1823
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY increasing request version cannot conceal regressed native phase
+ok 31 - UNIT_ONLY increasing request version cannot conceal regressed native phase
+  ---
+  duration_ms: 0.0833
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual runtime completes only after fresh native manual/queued/authorised/Return observations
+ok 32 - UNIT_ONLY actual runtime completes only after fresh native manual/queued/authorised/Return observations
+  ---
+  duration_ms: 0.6325
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY stored completed replay causes no calculator or Worker mutation
+ok 33 - UNIT_ONLY stored completed replay causes no calculator or Worker mutation
+  ---
+  duration_ms: 0.166
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY queue success and completed target counts cannot mint business completion
+ok 34 - UNIT_ONLY queue success and completed target counts cannot mint business completion
+  ---
+  duration_ms: 0.1718
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY an existing live lease remains pending without forced enqueue
+ok 35 - UNIT_ONLY an existing live lease remains pending without forced enqueue
+  ---
+  duration_ms: 0.173
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY manual transport loss keeps the actual stored phase and closed causal code
+ok 36 - UNIT_ONLY manual transport loss keeps the actual stored phase and closed causal code
+  ---
+  duration_ms: 0.2358
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY transport failure after a native COMMIT does not relabel stored completion
+ok 37 - UNIT_ONLY transport failure after a native COMMIT does not relabel stored completion
+  ---
+  duration_ms: 0.6632
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native genuine held reason and return hold remain truthful
+ok 38 - UNIT_ONLY native genuine held reason and return hold remain truthful
+  ---
+  duration_ms: 0.1909
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY arbitrarily increasing pending versions do not create an unbounded Worker loop
+ok 39 - UNIT_ONLY arbitrarily increasing pending versions do not create an unbounded Worker loop
+  ---
+  duration_ms: 0.1885
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY route projection rejects bare callback success and raw private context
+ok 40 - UNIT_ONLY route projection rejects bare callback success and raw private context
+  ---
+  duration_ms: 0.1492
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY full current owner reverse 81_complete_worker_index_with_one_click_agency_continuation.js
+ok 41 - UNIT_ONLY full current owner reverse 81_complete_worker_index_with_one_click_agency_continuation.js
+  ---
+  duration_ms: 105.4761
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY full current owner reverse 82_complete_current_routes_with_one_click_agency_command.js
+ok 42 - UNIT_ONLY full current owner reverse 82_complete_current_routes_with_one_click_agency_command.js
+  ---
+  duration_ms: 1.64
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY full current owner reverse 83_complete_canonical_worker_with_manual_typed_validation.mjs
+ok 43 - UNIT_ONLY full current owner reverse 83_complete_canonical_worker_with_manual_typed_validation.mjs
+  ---
+  duration_ms: 0.62
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY full current owner reverse 84_complete_native_worker_context_with_manual_typed_validation.sqlinc
+ok 44 - UNIT_ONLY full current owner reverse 84_complete_native_worker_context_with_manual_typed_validation.sqlinc
+  ---
+  duration_ms: 0.5056
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual production mount executes correct named args and one physical target
+ok 45 - UNIT_ONLY actual production mount executes correct named args and one physical target
+  ---
+  duration_ms: 25.0596
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native business owner retains exact one request and actual receipt phases
+ok 46 - UNIT_ONLY native business owner retains exact one request and actual receipt phases
+  ---
+  duration_ms: 0.7021
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command/actor caller permits admin only through native entry
+ok 47 - UNIT_ONLY actual whole command/actor caller permits admin only through native entry
+  ---
+  duration_ms: 37.6171
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command/actor caller permits current pay authoriser only through native entry
+ok 48 - UNIT_ONLY actual whole command/actor caller permits current pay authoriser only through native entry
+  ---
+  duration_ms: 2.0778
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command/actor caller permits current golden key only through native entry
+ok 49 - UNIT_ONLY actual whole command/actor caller permits current golden key only through native entry
+  ---
+  duration_ms: 1.7993
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command denies inactive/unscoped actor before native mutation {"id":"00000000-0000-4000-8000-000000000001","is_active":false,"role":"admin"}
+ok 50 - UNIT_ONLY actual whole command denies inactive/unscoped actor before native mutation {"id":"00000000-0000-4000-8000-000000000001","is_active":false,"role":"admin"}
+  ---
+  duration_ms: 1.6997
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command denies inactive/unscoped actor before native mutation {"id":"00000000-0000-4000-8000-000000000001","is_active":true,"role":"staff","payment_authoriser":false,"payment_golden_key":false}
+ok 51 - UNIT_ONLY actual whole command denies inactive/unscoped actor before native mutation {"id":"00000000-0000-4000-8000-000000000001","is_active":true,"role":"staff","payment_authoriser":false,"payment_golden_key":false}
+  ---
+  duration_ms: 1.5544
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command preserves unfinished native phase with HTTP409
+ok 52 - UNIT_ONLY actual whole command preserves unfinished native phase with HTTP409
+  ---
+  duration_ms: 1.5842
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command rejects fake native completion and private callback frames
+ok 53 - UNIT_ONLY actual whole command rejects fake native completion and private callback frames
+  ---
+  duration_ms: 1.7046
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command refuses LIVE deployment before action
+ok 54 - UNIT_ONLY actual whole command refuses LIVE deployment before action
+  ---
+  duration_ms: 1.7214
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual whole command rejects browser actor replacement before action
+ok 55 - UNIT_ONLY actual whole command rejects browser actor replacement before action
+  ---
+  duration_ms: 1.8603
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual MANUAL context/codec/options carries stored LEGACY marker
+ok 56 - UNIT_ONLY actual MANUAL context/codec/options carries stored LEGACY marker
+  ---
+  duration_ms: 1.0613
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual MANUAL context/codec/options carries stored AGENCY_INVOICE_WEEK marker
+ok 57 - UNIT_ONLY actual MANUAL context/codec/options carries stored AGENCY_INVOICE_WEEK marker
+  ---
+  duration_ms: 0.2021
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual MANUAL context refuses an absent or malformed typed marker before calculator
+ok 58 - UNIT_ONLY actual MANUAL context refuses an absent or malformed typed marker before calculator
+  ---
+  duration_ms: 0.4786
+  type: 'test'
+  ...
+1..58
+# tests 58
+# suites 0
+# pass 58
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 354.4922

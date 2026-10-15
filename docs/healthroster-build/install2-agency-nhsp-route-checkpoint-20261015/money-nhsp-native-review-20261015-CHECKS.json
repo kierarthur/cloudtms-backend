@@ -1,0 +1,72 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "before": [
+    {
+      "dir": "paid-match-nhsp-separate-event-writer-construction-20261015",
+      "commit": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+      "files": 15,
+      "manifest_sha256": "2e5864cb22b9e1a86525b1c430b048b0613f9cab278c189f23df9f061c1fa89f"
+    },
+    {
+      "dir": "paid-match-nhsp-current-native-basis-construction-20261015",
+      "commit": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+      "files": 17,
+      "manifest_sha256": "67c33d965c537452c16ab52313ced8801429eb30f7f16a654e5b1bb35519f75c"
+    },
+    {
+      "dir": "paid-match-nhsp-negative-population-construction-20261015",
+      "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+      "files": 22,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    }
+  ],
+  "after": [
+    {
+      "dir": "paid-match-nhsp-separate-event-writer-construction-20261015",
+      "commit": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+      "files": 15,
+      "manifest_sha256": "2e5864cb22b9e1a86525b1c430b048b0613f9cab278c189f23df9f061c1fa89f"
+    },
+    {
+      "dir": "paid-match-nhsp-current-native-basis-construction-20261015",
+      "commit": "5f79c0d2d810295f25415443c94eaf72b4a92eb9",
+      "files": 17,
+      "manifest_sha256": "67c33d965c537452c16ab52313ced8801429eb30f7f16a654e5b1bb35519f75c"
+    },
+    {
+      "dir": "paid-match-nhsp-negative-population-construction-20261015",
+      "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+      "files": 22,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    }
+  ],
+  "actual_native_input_pins": 24,
+  "whole_owner_reverses": 2,
+  "unique_hunks": 7,
+  "exact_shared_magnitude_extraction": true,
+  "tests": [
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-separate-event-writer-construction-20261015/nhsp-event-source.test.mjs",
+      "cases": 15,
+      "output_sha256": "71f8f3129c6f564c6266e48381913c044ee69fa3e9a2b3733ded086a1d77e67a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/basis-source.test.mjs",
+      "cases": 12,
+      "output_sha256": "99008ac41fc1d5b2c131756d0f6967c927c1fdad1f7110fcd11e60ae8270f540"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/negative-population-source.test.mjs",
+      "cases": 16,
+      "output_sha256": "4e09fc333948b70e598b91dd9d6ccc61fd9b29f3c44a36d350bf783d4faf01af"
+    }
+  ],
+  "no_native_calls": true,
+  "remaining": [
+    "actual NHSP paid choice/NONE capture/prepared/report/Office consumers",
+    "negative-population resolution availability and order in full native projection",
+    "complete current root union/role/contract/registry/native financial/API acceptance"
+  ]
+}

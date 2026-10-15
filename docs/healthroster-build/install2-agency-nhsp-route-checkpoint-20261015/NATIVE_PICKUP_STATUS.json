@@ -1,0 +1,17 @@
+{
+  "checked_at_utc": "2026-10-15T00:50:43.765Z",
+  "native_tool_available": true,
+  "accepted": true,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "table_absent": true,
+  "function_absent": true,
+  "shared_lock_released": true,
+  "connection_closed": true,
+  "connector_source_backup": "539e8fb761f2b2b2ee6cbe640e095e9136afdf28",
+  "diagnosis_correction": "Earlier missing bearer observation applied only to a shell child, not direct proof about the native MCP process. Added namespace and successful exact-account native call supersede the missing-tool hold.",
+  "first_trial_preparation_command": "SyntaxError before any file write or DB action; corrected source file prepared exact trial once.",
+  "first_noninteractive_holder": "stdin EOF: no trial; released, then PTY holder spanned actual trial.",
+  "full_rehearsal": false,
+  "no_runtime_or_credential_change": true
+}

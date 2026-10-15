@@ -1,0 +1,16 @@
+import fs from'node:fs';import{randomBytes,createHash}from'node:crypto';
+const dir='.codex-tmp/kier1978-native-lab-acceptance-20261015';if(fs.existsSync(dir))throw Error('EXISTING_TRIAL_REFUSED');
+const table='hr_k1978_native_20261015_'+randomBytes(8).toString('hex'),fn=table+'_fn';
+const sql=`do $vacancy$ begin if to_regclass('private.${table}') is not null or to_regprocedure('private.${fn}()') is not null then raise exception 'KIER1978_NATIVE_PROBE_NOT_VACANT';end if;end $vacancy$;
+create table private.${table}(id integer primary key,probe_value integer not null);
+insert into private.${table} values(1,7);
+create function private.${fn}() returns integer language sql immutable set search_path='' as $probe$ select 7 $probe$;
+revoke all on function private.${fn}() from public,anon,authenticated,service_role;
+do $assert$ begin if (select count(*) from private.${table} where id=1 and probe_value=private.${fn}())<>1 then raise exception 'KIER1978_NATIVE_PROBE_FAILED';end if;end $assert$;
+select current_database() as physical_database,true as temporary_table_and_function_exercised;
+`;
+const verification=`do $absence$ begin if to_regclass('private.${table}') is not null or to_regprocedure('private.${fn}()') is not null then raise exception 'KIER1978_NATIVE_PROBE_ROLLBACK_FAILED';end if;end $absence$;
+select current_database() as physical_database,to_regclass('private.${table}') is null as table_absent,to_regprocedure('private.${fn}()') is null as function_absent;
+`;
+fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(dir+'/TRIAL.sql',sql);fs.writeFileSync(dir+'/ABSENCE.sql',verification);
+const sha=b=>createHash('sha256').update(b).digest('hex'),manifest={created_at_utc:new Date().toISOString(),account:'kierarthur1978@gmail.com',exact_native_tool:'cloudtms-miget-transaction-lab-kier1978/miget_db_transaction_rollback',agency_test_only:true,shared_key:[20261013,1],table:'private.'+table,function:'private.'+fn+'()',trial_bytes:Buffer.byteLength(sql),verification_bytes:Buffer.byteLength(verification),trial_sha256:sha(sql),verification_sha256:sha(verification),native_result:'PENDING',application_fixture_or_external_effect:false};fs.writeFileSync(dir+'/MANIFEST.json',JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify({manifest,sql,verification}));

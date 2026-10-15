@@ -1,0 +1,508 @@
+TAP version 13
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_timesheet_change_v1
+ok 1 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_timesheet_change_v1
+  ---
+  duration_ms: 2.1059
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_worker_context_v1
+ok 2 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_worker_context_v1
+  ---
+  duration_ms: 0.2741
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_worker_apply_v1
+ok 3 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_worker_apply_v1
+  ---
+  duration_ms: 0.1573
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_validation_context_v1
+ok 4 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_validation_context_v1
+  ---
+  duration_ms: 0.1219
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_validation_apply_v1
+ok 5 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_validation_apply_v1
+  ---
+  duration_ms: 0.1196
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_authorise_step_v1
+ok 6 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_authorise_step_v1
+  ---
+  duration_ms: 0.0968
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_return_step_v1
+ok 7 - UNIT_ONLY actual transport dispatch preserves positional weekly_source_agency_change_return_step_v1
+  ---
+  duration_ms: 0.0999
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actorless scheduled weekly_source_agency_change_worker_context_v1 uses ONLY native phase actor
+ok 8 - UNIT_ONLY actorless scheduled weekly_source_agency_change_worker_context_v1 uses ONLY native phase actor
+  ---
+  duration_ms: 0.2127
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actorless scheduled weekly_source_agency_change_worker_apply_v1 uses ONLY native phase actor
+ok 9 - UNIT_ONLY actorless scheduled weekly_source_agency_change_worker_apply_v1 uses ONLY native phase actor
+  ---
+  duration_ms: 0.1068
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actorless scheduled weekly_source_agency_validation_context_v1 uses ONLY native phase actor
+ok 10 - UNIT_ONLY actorless scheduled weekly_source_agency_validation_context_v1 uses ONLY native phase actor
+  ---
+  duration_ms: 0.15
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actorless scheduled weekly_source_agency_validation_apply_v1 uses ONLY native phase actor
+ok 11 - UNIT_ONLY actorless scheduled weekly_source_agency_validation_apply_v1 uses ONLY native phase actor
+  ---
+  duration_ms: 0.0969
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actorless scheduled weekly_source_agency_change_authorise_step_v1 uses ONLY native phase actor
+ok 12 - UNIT_ONLY actorless scheduled weekly_source_agency_change_authorise_step_v1 uses ONLY native phase actor
+  ---
+  duration_ms: 0.0729
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actorless scheduled weekly_source_agency_change_return_step_v1 uses ONLY native phase actor
+ok 13 - UNIT_ONLY actorless scheduled weekly_source_agency_change_return_step_v1 uses ONLY native phase actor
+  ---
+  duration_ms: 0.0574
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY direct business request cannot use actorless discovery
+ok 14 - UNIT_ONLY direct business request cannot use actorless discovery
+  ---
+  duration_ms: 0.4068
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_timesheet_change_v1
+ok 15 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_timesheet_change_v1
+  ---
+  duration_ms: 0.1029
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_worker_context_v1
+ok 16 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_worker_context_v1
+  ---
+  duration_ms: 0.0526
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_worker_apply_v1
+ok 17 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_worker_apply_v1
+  ---
+  duration_ms: 0.0471
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_validation_context_v1
+ok 18 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_validation_context_v1
+  ---
+  duration_ms: 0.0402
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_validation_apply_v1
+ok 19 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_validation_apply_v1
+  ---
+  duration_ms: 0.0657
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_authorise_step_v1
+ok 20 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_authorise_step_v1
+  ---
+  duration_ms: 0.0778
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_return_step_v1
+ok 21 - UNIT_ONLY no matching OFF fixture retains exact ordinary weekly_source_agency_change_return_step_v1
+  ---
+  duration_ms: 0.0603
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY ordinary native error remains same object and no fabricated success
+ok 22 - UNIT_ONLY ordinary native error remains same object and no fabricated success
+  ---
+  duration_ms: 0.1454
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY LIVE bypass remains original RPC without OFF observations
+ok 23 - UNIT_ONLY LIVE bypass remains original RPC without OFF observations
+  ---
+  duration_ms: 0.075
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY unlisted C1/calculator RPC remains exact ordinary call
+ok 24 - UNIT_ONLY unlisted C1/calculator RPC remains exact ordinary call
+  ---
+  duration_ms: 0.0609
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses foreign actor
+ok 25 - UNIT_ONLY actual admission refuses foreign actor
+  ---
+  duration_ms: 0.0899
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses scope boolean
+ok 26 - UNIT_ONLY actual admission refuses scope boolean
+  ---
+  duration_ms: 0.05
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses cycle array
+ok 27 - UNIT_ONLY actual admission refuses cycle array
+  ---
+  duration_ms: 0.0514
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses actor array
+ok 28 - UNIT_ONLY actual admission refuses actor array
+  ---
+  duration_ms: 0.0749
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses hash array
+ok 29 - UNIT_ONLY actual admission refuses hash array
+  ---
+  duration_ms: 0.0802
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses unknown operation
+ok 30 - UNIT_ONLY actual admission refuses unknown operation
+  ---
+  duration_ms: 0.0638
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses duplicate operation
+ok 31 - UNIT_ONLY actual admission refuses duplicate operation
+  ---
+  duration_ms: 0.0835
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual admission refuses extra authority flag
+ok 32 - UNIT_ONLY actual admission refuses extra authority flag
+  ---
+  duration_ms: 0.0566
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY supplied token actor cannot be swapped by native status
+ok 33 - UNIT_ONLY supplied token actor cannot be swapped by native status
+  ---
+  duration_ms: 0.1275
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_contract_week_id
+ok 34 - UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_contract_week_id
+  ---
+  duration_ms: 0.1717
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_reason
+ok 35 - UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_reason
+  ---
+  duration_ms: 0.0843
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_expected_signature
+ok 36 - UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_expected_signature
+  ---
+  duration_ms: 0.6829
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_request_key
+ok 37 - UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_request_key
+  ---
+  duration_ms: 0.0739
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_actor_user_id
+ok 38 - UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects scalar coercion p_actor_user_id
+  ---
+  duration_ms: 0.0503
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects invented keys
+ok 39 - UNIT_ONLY positional weekly_source_agency_timesheet_change_v1 rejects invented keys
+  ---
+  duration_ms: 0.1162
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_worker_context_v1 rejects scalar coercion p_request_id
+ok 40 - UNIT_ONLY positional weekly_source_agency_change_worker_context_v1 rejects scalar coercion p_request_id
+  ---
+  duration_ms: 0.0492
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_worker_context_v1 rejects invented keys
+ok 41 - UNIT_ONLY positional weekly_source_agency_change_worker_context_v1 rejects invented keys
+  ---
+  duration_ms: 0.049
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects scalar coercion p_request_id
+ok 42 - UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects scalar coercion p_request_id
+  ---
+  duration_ms: 0.0464
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects scalar coercion p_expected_request_version
+ok 43 - UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects scalar coercion p_expected_request_version
+  ---
+  duration_ms: 0.0418
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects scalar coercion p_expected_context_sha256
+ok 44 - UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects scalar coercion p_expected_context_sha256
+  ---
+  duration_ms: 0.0423
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects invented keys
+ok 45 - UNIT_ONLY positional weekly_source_agency_change_worker_apply_v1 rejects invented keys
+  ---
+  duration_ms: 0.0777
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_validation_context_v1 rejects scalar coercion p_request_id
+ok 46 - UNIT_ONLY positional weekly_source_agency_validation_context_v1 rejects scalar coercion p_request_id
+  ---
+  duration_ms: 0.0511
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_validation_context_v1 rejects invented keys
+ok 47 - UNIT_ONLY positional weekly_source_agency_validation_context_v1 rejects invented keys
+  ---
+  duration_ms: 0.0395
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects scalar coercion p_request_id
+ok 48 - UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects scalar coercion p_request_id
+  ---
+  duration_ms: 0.0627
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects scalar coercion p_expected_request_version
+ok 49 - UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects scalar coercion p_expected_request_version
+  ---
+  duration_ms: 0.0447
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects scalar coercion p_expected_context_sha256
+ok 50 - UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects scalar coercion p_expected_context_sha256
+  ---
+  duration_ms: 0.0425
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects invented keys
+ok 51 - UNIT_ONLY positional weekly_source_agency_validation_apply_v1 rejects invented keys
+  ---
+  duration_ms: 0.0383
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_authorise_step_v1 rejects scalar coercion p_request_id
+ok 52 - UNIT_ONLY positional weekly_source_agency_change_authorise_step_v1 rejects scalar coercion p_request_id
+  ---
+  duration_ms: 0.0391
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_authorise_step_v1 rejects scalar coercion p_actor_user_id
+ok 53 - UNIT_ONLY positional weekly_source_agency_change_authorise_step_v1 rejects scalar coercion p_actor_user_id
+  ---
+  duration_ms: 0.0366
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_authorise_step_v1 rejects invented keys
+ok 54 - UNIT_ONLY positional weekly_source_agency_change_authorise_step_v1 rejects invented keys
+  ---
+  duration_ms: 0.0408
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_return_step_v1 rejects scalar coercion p_request_id
+ok 55 - UNIT_ONLY positional weekly_source_agency_change_return_step_v1 rejects scalar coercion p_request_id
+  ---
+  duration_ms: 0.0363
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_return_step_v1 rejects scalar coercion p_actor_user_id
+ok 56 - UNIT_ONLY positional weekly_source_agency_change_return_step_v1 rejects scalar coercion p_actor_user_id
+  ---
+  duration_ms: 0.0349
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY positional weekly_source_agency_change_return_step_v1 rejects invented keys
+ok 57 - UNIT_ONLY positional weekly_source_agency_change_return_step_v1 rejects invented keys
+  ---
+  duration_ms: 0.0369
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker version is a positive exact safe integer 0
+ok 58 - UNIT_ONLY Worker version is a positive exact safe integer 0
+  ---
+  duration_ms: 0.1148
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker version is a positive exact safe integer -1
+ok 59 - UNIT_ONLY Worker version is a positive exact safe integer -1
+  ---
+  duration_ms: 0.053
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker version is a positive exact safe integer 1.5
+ok 60 - UNIT_ONLY Worker version is a positive exact safe integer 1.5
+  ---
+  duration_ms: 0.0455
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker version is a positive exact safe integer 9007199254740992
+ok 61 - UNIT_ONLY Worker version is a positive exact safe integer 9007199254740992
+  ---
+  duration_ms: 0.031
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker version is a positive exact safe integer "12"
+ok 62 - UNIT_ONLY Worker version is a positive exact safe integer "12"
+  ---
+  duration_ms: 0.0305
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker version is a positive exact safe integer null
+ok 63 - UNIT_ONLY Worker version is a positive exact safe integer null
+  ---
+  duration_ms: 0.0386
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker snapshot refuses nonobject/byte overflow array
+ok 64 - UNIT_ONLY Worker snapshot refuses nonobject/byte overflow array
+  ---
+  duration_ms: 0.0597
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker snapshot refuses nonobject/byte overflow null
+ok 65 - UNIT_ONLY Worker snapshot refuses nonobject/byte overflow null
+  ---
+  duration_ms: 0.0447
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker snapshot refuses nonobject/byte overflow boolean
+ok 66 - UNIT_ONLY Worker snapshot refuses nonobject/byte overflow boolean
+  ---
+  duration_ms: 0.0424
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY Worker snapshot refuses nonobject/byte overflow object
+ok 67 - UNIT_ONLY Worker snapshot refuses nonobject/byte overflow object
+  ---
+  duration_ms: 3.1189
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY dependency proxy preserves five positional inputs inside existing command envelope
+ok 68 - UNIT_ONLY dependency proxy preserves five positional inputs inside existing command envelope
+  ---
+  duration_ms: 0.3181
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY setup operation census adds exactly seven existing names and no automatic widening
+ok 69 - UNIT_ONLY setup operation census adds exactly seven existing names and no automatic widening
+  ---
+  duration_ms: 0.1034
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal 97_complete_off_scope_assert_with_finite_agency.sqlinc
+ok 70 - SOURCE_ONLY full before/after reversal 97_complete_off_scope_assert_with_finite_agency.sqlinc
+  ---
+  duration_ms: 1.1663
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal 98_complete_off_parent_with_actual_agency.sqlinc
+ok 71 - SOURCE_ONLY full before/after reversal 98_complete_off_parent_with_actual_agency.sqlinc
+  ---
+  duration_ms: 0.6266
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal 99_complete_off_command_with_literal_agency.sqlinc
+ok 72 - SOURCE_ONLY full before/after reversal 99_complete_off_command_with_literal_agency.sqlinc
+  ---
+  duration_ms: 0.6347
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal 100_complete_off_transport_with_native_phase_actor.sqlinc
+ok 73 - SOURCE_ONLY full before/after reversal 100_complete_off_transport_with_native_phase_actor.sqlinc
+  ---
+  duration_ms: 0.4805
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal 101_complete_off_setup_shape_with_finite_agency.sqlinc
+ok 74 - SOURCE_ONLY full before/after reversal 101_complete_off_setup_shape_with_finite_agency.sqlinc
+  ---
+  duration_ms: 0.4802
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal runtime/off-rule-native-proxy.mjs
+ok 75 - SOURCE_ONLY full before/after reversal runtime/off-rule-native-proxy.mjs
+  ---
+  duration_ms: 0.5365
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal runtime/off-rule-transport-rpc.mjs
+ok 76 - SOURCE_ONLY full before/after reversal runtime/off-rule-transport-rpc.mjs
+  ---
+  duration_ms: 0.5323
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full before/after reversal 102_complete_current_index_with_actual_off_agency.js
+ok 77 - SOURCE_ONLY full before/after reversal 102_complete_current_index_with_actual_off_agency.js
+  ---
+  duration_ms: 169.7508
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY SQL retains literal native dispatch/frame/audit and independent real request authority
+ok 78 - SOURCE_ONLY SQL retains literal native dispatch/frame/audit and independent real request authority
+  ---
+  duration_ms: 0.7915
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete actual Worker and route seams use existing canonical calculator/native writer
+ok 79 - SOURCE_ONLY complete actual Worker and route seams use existing canonical calculator/native writer
+  ---
+  duration_ms: 34.9451
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY whole current queued Agency caller UNAUTHORISED qualified=false
+ok 80 - UNIT_ONLY whole current queued Agency caller UNAUTHORISED qualified=false
+  ---
+  duration_ms: 26.7145
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY whole current queued Agency caller UNAUTHORISED qualified=true
+ok 81 - UNIT_ONLY whole current queued Agency caller UNAUTHORISED qualified=true
+  ---
+  duration_ms: 26.3425
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY whole current queued Agency caller AUTHORISED qualified=false
+ok 82 - UNIT_ONLY whole current queued Agency caller AUTHORISED qualified=false
+  ---
+  duration_ms: 29.6555
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY whole current queued Agency caller AUTHORISED qualified=true
+ok 83 - UNIT_ONLY whole current queued Agency caller AUTHORISED qualified=true
+  ---
+  duration_ms: 25.2341
+  type: 'test'
+  ...
+1..83
+# tests 83
+# suites 0
+# pass 83
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 491.5204

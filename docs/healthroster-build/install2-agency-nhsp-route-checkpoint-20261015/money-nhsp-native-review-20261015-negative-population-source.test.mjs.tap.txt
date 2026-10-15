@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: one full native capture successor uniquely reverses all two hunks to exact Git input
+ok 1 - one full native capture successor uniquely reverses all two hunks to exact Git input
+  ---
+  duration_ms: 1.6562
+  type: 'test'
+  ...
+# Subtest: all eleven actual current source inputs retain complete raw or full declaration pins
+ok 2 - all eleven actual current source inputs retain complete raw or full declaration pins
+  ---
+  duration_ms: 709.8722
+  type: 'test'
+  ...
+# Subtest: the one extracted native magnitude block is byte-exact after only its three parameter substitutions
+ok 3 - the one extracted native magnitude block is byte-exact after only its three parameter substitutions
+  ---
+  duration_ms: 0.3261
+  type: 'test'
+  ...
+# Subtest: native capture preserves admission/idempotency/scope/lineage/economic order and entire downstream cache
+ok 4 - native capture preserves admission/idempotency/scope/lineage/economic order and entire downstream cache
+  ---
+  duration_ms: 0.2227
+  type: 'test'
+  ...
+# Subtest: only two new owner-private signatures are added; no public table column grants or selectors
+ok 5 - only two new owner-private signatures are added; no public table column grants or selectors
+  ---
+  duration_ms: 351.7857
+  type: 'test'
+  ...
+# Subtest: whole sealed genuine ordinary NHSP report/population and manifest are required without Client fallback
+ok 6 - whole sealed genuine ordinary NHSP report/population and manifest are required without Client fallback
+  ---
+  duration_ms: 0.4999
+  type: 'test'
+  ...
+# Subtest: the same real actor and single payment/current classifier remain inside the existing basis owner
+ok 7 - the same real actor and single payment/current classifier remain inside the existing basis owner
+  ---
+  duration_ms: 1.044
+  type: 'test'
+  ...
+# Subtest: selected current native magnitude must equal actual cache hash and native selected movement
+ok 8 - selected current native magnitude must equal actual cache hash and native selected movement
+  ---
+  duration_ms: 0.1961
+  type: 'test'
+  ...
+# Subtest: full negative rows use genuine generation/raw row fingerprint and exactly one native economic assertion
+ok 9 - full negative rows use genuine generation/raw row fingerprint and exactly one native economic assertion
+  ---
+  duration_ms: 0.1535
+  type: 'test'
+  ...
+# Subtest: incoming negative magnitude reuses both native C1 vector owners and one exact native magnitude owner
+ok 10 - incoming negative magnitude reuses both native C1 vector owners and one exact native magnitude owner
+  ---
+  duration_ms: 0.6959
+  type: 'test'
+  ...
+# Subtest: source-selected predicate proves a genuine resolved negative for the exact native event/magnitude
+ok 11 - source-selected predicate proves a genuine resolved negative for the exact native event/magnitude
+  ---
+  duration_ms: 0.34
+  type: 'test'
+  ...
+# Subtest: all actual identity dimensions must match; foreign event/Candidate/Client/Contract negatives cannot cancel
+ok 12 - all actual identity dimensions must match; foreign event/Candidate/Client/Contract negatives cannot cancel
+  ---
+  duration_ms: 0.12
+  type: 'test'
+  ...
+# Subtest: full native clock/break/five-hours/PAY/charge grain is retained, never Ref Num or charge-only matching
+ok 13 - full native clock/break/five-hours/PAY/charge grain is retained, never Ref Num or charge-only matching
+  ---
+  duration_ms: 0.2856
+  type: 'test'
+  ...
+# Subtest: jsonb magnitude identity and complete negative set are order-independent while missing members stay unknown
+ok 14 - jsonb magnitude identity and complete negative set are order-independent while missing members stay unknown
+  ---
+  duration_ms: 0.5817
+  type: 'test'
+  ...
+# Subtest: no-reversal unknown/false/true follows actual completeness and current native position, including zero-negative
+ok 15 - no-reversal unknown/false/true follows actual completeness and current native position, including zero-negative
+  ---
+  duration_ms: 0.1216
+  type: 'test'
+  ...
+# Subtest: read-only witness has no lock/refresh/DML/new current basis or implicit feature admission
+ok 16 - read-only witness has no lock/refresh/DML/new current basis or implicit feature admission
+  ---
+  duration_ms: 0.2512
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1207.5059

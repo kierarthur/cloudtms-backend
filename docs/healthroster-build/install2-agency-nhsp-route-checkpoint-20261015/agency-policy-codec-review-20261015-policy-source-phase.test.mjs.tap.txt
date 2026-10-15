@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: SOURCE_ONLY full current reversal 103_complete_active_source_guard_with_native_policy_union.sqlinc
+ok 1 - SOURCE_ONLY full current reversal 103_complete_active_source_guard_with_native_policy_union.sqlinc
+  ---
+  duration_ms: 1.5413
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY full current reversal 104_complete_same_source_before_policy_and_active_union.sqlinc
+ok 2 - SOURCE_ONLY full current reversal 104_complete_same_source_before_policy_and_active_union.sqlinc
+  ---
+  duration_ms: 1.1777
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact OLD/NEW raw + revision + policy union is rederived before ACTIVE lookup
+ok 3 - SOURCE_ONLY exact OLD/NEW raw + revision + policy union is rederived before ACTIVE lookup
+  ---
+  duration_ms: 0.1929
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY both range domains require identical kind and real Client UUID
+ok 4 - SOURCE_ONLY both range domains require identical kind and real Client UUID
+  ---
+  duration_ms: 0.0952
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation other-group membership same actual date
+ok 5 - UNIT_ONLY actual range relation other-group membership same actual date
+  ---
+  duration_ms: 0.096
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation inactive group future activation same date
+ok 6 - UNIT_ONLY actual range relation inactive group future activation same date
+  ---
+  duration_ms: 0.0505
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation prior disjoint date
+ok 7 - UNIT_ONLY actual range relation prior disjoint date
+  ---
+  duration_ms: 0.0413
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation next disjoint date
+ok 8 - UNIT_ONLY actual range relation next disjoint date
+  ---
+  duration_ms: 0.0551
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation other Client
+ok 9 - UNIT_ONLY actual range relation other Client
+  ---
+  duration_ms: 0.0694
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation Contract coverage cannot collide across domain
+ok 10 - UNIT_ONLY actual range relation Contract coverage cannot collide across domain
+  ---
+  duration_ms: 0.0955
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY actual range relation lower unbounded membership
+ok 11 - UNIT_ONLY actual range relation lower unbounded membership
+  ---
+  duration_ms: 0.0525
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY persisted capture business hash and original creator are unchanged
+ok 12 - SOURCE_ONLY persisted capture business hash and original creator are unchanged
+  ---
+  duration_ms: 0.0909
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY underlying all-group/date projection and nested group activation are the exact root owners
+ok 13 - SOURCE_ONLY underlying all-group/date projection and nested group activation are the exact root owners
+  ---
+  duration_ms: 0.7478
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 122.5693

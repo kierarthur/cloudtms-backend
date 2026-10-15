@@ -1,0 +1,500 @@
+{
+  "source_only": true,
+  "native": false,
+  "final_install2_candidate": false,
+  "candidate_commit": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+  "installed_source_reference": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "installed_database_rechecked": false,
+  "current_migrations": 399,
+  "current_repeatables": 1060,
+  "pending_migrations": 10,
+  "pending_repeatables": 41,
+  "expanded_pending_source_bytes": 7941411,
+  "packaging_lexical_statements": 1986,
+  "exact_tool_sql_byte_limit": 2000000,
+  "exact_tool_statement_limit": 250,
+  "source_closure_exceeds_byte_limit": true,
+  "source_closure_exceeds_statement_limit": true,
+  "largest_units": [
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+      "closure_sha256": "952def63ad9b8224913bef51dff233f4fae2f09728b13341db9405e1979abeba",
+      "expanded_sha256": "347b92d51a842a880a83cfbf40d9b41928ef9310383fcdbb607c920afc3cdee8",
+      "expanded_bytes": 1258421,
+      "packaging_lexical_statements": 116
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "closure_sha256": "72092595af3f3d46f8bc5b71be646243cf3782205ce40d5d72a377510307dadc",
+      "expanded_sha256": "7f7019cd02c4c9840bfd7902cc9a4cc4ca4a705e678b815586f754c1a27352e7",
+      "expanded_bytes": 717348,
+      "packaging_lexical_statements": 168
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+      "closure_sha256": "5c780cce735f845e8be48f3149a0444febdd6c4862045cb7161feffa6cd4f2a8",
+      "expanded_sha256": "28a73f09ec50a0d015bebcd3c119d979c57d68675d0757fbef3fbbd2af0d233d",
+      "expanded_bytes": 675121,
+      "packaging_lexical_statements": 181
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit_authority_v1.sql",
+      "closure_sha256": "136cf8b2ea8110449cfb76b9573d1bc72cb7eb17112e4a07ebf27686bcc0217d",
+      "expanded_sha256": "c08a175cf37fc5e2c49ba24b0f3bb53066b1c757b8853ed6b02b630b5a2273f2",
+      "expanded_bytes": 450102,
+      "packaging_lexical_statements": 30
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+      "closure_sha256": "7078f5280e09afb24a2bc893371fdc6a113b55ee4d3fdc05fa26bb84393b4ddf",
+      "expanded_sha256": "2f0f16442c4e14e5975f2a1d7c4f262697ce8d36193f7f537c81e3adc06814fd",
+      "expanded_bytes": 446879,
+      "packaging_lexical_statements": 61
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "closure_sha256": "faaa9c74ebc7128b0afe46035e53c3e7de0f699a55072ac8c501fc1dacab8b3d",
+      "expanded_sha256": "6d5cc998be4415d464627e5b14fc006779ef399b550bb3f993f4d160b18bac49",
+      "expanded_bytes": 392530,
+      "packaging_lexical_statements": 151
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "closure_sha256": "fefc51941ebb29609bcd71fbd22893f7ace769927571e21978443d3613853903",
+      "expanded_sha256": "3e6f23a496ef0abeacb4fedf201d9ee74ee23e5833f9fdd9a9f11bd93af77f01",
+      "expanded_bytes": 344299,
+      "packaging_lexical_statements": 224
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "closure_sha256": "8fa4122d574e4938e839d2d858b3f8f34320b3ace876fcea4d7eeebfd2e3cf28",
+      "expanded_sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae",
+      "expanded_bytes": 313314,
+      "packaging_lexical_statements": 67
+    }
+  ],
+  "units": [
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "closure_sha256": "cfb8231c665f03059edd9cd92c1523d3bc6f5bf4b17d189c30f7259bac518c49",
+      "expanded_sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+      "expanded_bytes": 788,
+      "packaging_lexical_statements": 5
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "closure_sha256": "5f58b5a1748d86c26cd0bc8cdb0c1bf91ced5056cb0b053b2ca94e4c63b11084",
+      "expanded_sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "expanded_bytes": 4481,
+      "packaging_lexical_statements": 12
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "closure_sha256": "a23a8e7559cb008c1f31fa83ebb5839f561919005c790a100ffe64067759159e",
+      "expanded_sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "expanded_bytes": 14951,
+      "packaging_lexical_statements": 13
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+      "closure_sha256": "ea59c44bf8d63a35ba5fa4e3d03c5ea8ae6cc1e9140edbbfe80568804e536374",
+      "expanded_sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+      "expanded_bytes": 2683,
+      "packaging_lexical_statements": 6
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "closure_sha256": "86eeea6a2e4934ba3fb8b434c9ac77102abfd14a443eeb790998644e77be5274",
+      "expanded_sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "expanded_bytes": 8400,
+      "packaging_lexical_statements": 20
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "closure_sha256": "ab41e992a869943bff423239b9fe53f0e08b43a6c693e517cf489790a87d6154",
+      "expanded_sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "expanded_bytes": 16112,
+      "packaging_lexical_statements": 20
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "closure_sha256": "fd41dc5111b5ad41535c4dff0634558085fef2a26f57f818755f574e86739729",
+      "expanded_sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+      "expanded_bytes": 1006,
+      "packaging_lexical_statements": 5
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "closure_sha256": "1fd6425e6070d0950ef23cbb24a481de0073193408794d8ccd4cdfcc20aec21e",
+      "expanded_sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+      "expanded_bytes": 428,
+      "packaging_lexical_statements": 3
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "closure_sha256": "61606dd228f082a80d61139b9f975421141758859565dcf6996350ca71720ac8",
+      "expanded_sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "expanded_bytes": 3770,
+      "packaging_lexical_statements": 10
+    },
+    {
+      "kind": "migration",
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "closure_sha256": "601493c1cda73cc21a177dfc834c6c68db36bc1f0b6cd185e5d7b96e241023c4",
+      "expanded_sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "expanded_bytes": 1960,
+      "packaging_lexical_statements": 3
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime_authority_v1.sql",
+      "closure_sha256": "50b463b04976f3f5dc221395782346a1f69de7ce09c5925a6f55cd1bcb5bd522",
+      "expanded_sha256": "1295862ea0cea321d60f136f99635d9d6389708ba8a50d5beda5a29cb892d91c",
+      "expanded_bytes": 238739,
+      "packaging_lexical_statements": 26
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "closure_sha256": "8fa4122d574e4938e839d2d858b3f8f34320b3ace876fcea4d7eeebfd2e3cf28",
+      "expanded_sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae",
+      "expanded_bytes": 313314,
+      "packaging_lexical_statements": 67
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "closure_sha256": "356c7a0e6dd8cdcad65c4864b8185602ef4bf05d9881b8cef4928d7836419a27",
+      "expanded_sha256": "0cfbe201547b865f54da859476cd7c89fc2fc3e3d9beb6222e2b2cf9b89f0cb2",
+      "expanded_bytes": 275432,
+      "packaging_lexical_statements": 108
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "closure_sha256": "cf5ff77ce1c866205b9b29c4f51e8c820d8990d13f18bd88bc4a977b480ca6f4",
+      "expanded_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "expanded_bytes": 101268,
+      "packaging_lexical_statements": 45
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit_authority_v1.sql",
+      "closure_sha256": "136cf8b2ea8110449cfb76b9573d1bc72cb7eb17112e4a07ebf27686bcc0217d",
+      "expanded_sha256": "c08a175cf37fc5e2c49ba24b0f3bb53066b1c757b8853ed6b02b630b5a2273f2",
+      "expanded_bytes": 450102,
+      "packaging_lexical_statements": 30
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "closure_sha256": "9b14ea9fd3120f49a12d269b8dbefb405882241d497ff81b2d9dfb25d4514b34",
+      "expanded_sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c",
+      "expanded_bytes": 128188,
+      "packaging_lexical_statements": 13
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+      "closure_sha256": "1ff9a4e86fbe95b0eb39c3cdafc623ef28c0424908d34addcafcc7153b50662d",
+      "expanded_sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1",
+      "expanded_bytes": 15819,
+      "packaging_lexical_statements": 18
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+      "closure_sha256": "c6450fa2297aa7a53e46143b0f562b2d078bc8484eb997b555e1d5817354ebfb",
+      "expanded_sha256": "5735a198756a1c47104a2d18f184ff5d944edab49904d70e4f51850a97e3b197",
+      "expanded_bytes": 104527,
+      "packaging_lexical_statements": 24
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+      "closure_sha256": "4e134ac1392e3d87a713ed8411d2eb3c3ac111dd7560f3fa67b1b9a93780b308",
+      "expanded_sha256": "a59d938b7403608103aa747be95dd202e5d7f0dd6a40d09dbdf0177e0e14a50a",
+      "expanded_bytes": 120059,
+      "packaging_lexical_statements": 10
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+      "closure_sha256": "6f660dcc7c5ee5f784b1f64f346a9bc89dcea0d3023ab0bcd24075b7dde606b3",
+      "expanded_sha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3",
+      "expanded_bytes": 16849,
+      "packaging_lexical_statements": 15
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+      "closure_sha256": "07947a4d783581d745b77a265d7c0bfe223f99cb72b8ed611c70e2bb29d682d7",
+      "expanded_sha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b",
+      "expanded_bytes": 19824,
+      "packaging_lexical_statements": 7
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1404_weekly_source_import_preparation_timing_guard_v1.sql",
+      "closure_sha256": "18596a3dd3beef2b81a986d7d23e4e1c59a00871f612cc55e512905ba576aebf",
+      "expanded_sha256": "39ca3506b77ed6f70ac7ec5c7d57f66ce314b5977ce2baa6aa2ee96d88dd0b66",
+      "expanded_bytes": 3760,
+      "packaging_lexical_statements": 7
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+      "closure_sha256": "158b4bffa8c2efb083de2d1c81dc2a437d34228273f7f4e89de473f763606e11",
+      "expanded_sha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e",
+      "expanded_bytes": 25356,
+      "packaging_lexical_statements": 7
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1412_weekly_source_upload_stage_coverage_floor_v1.sql",
+      "closure_sha256": "b06e68d55745443dee096ddf5ac9b66231b74dcfba94170be23e3170e35b0f83",
+      "expanded_sha256": "ee33fbe66c4f9beb9cd136c3207d5a7eebc7986e718b2e0a25972b61cdb27c96",
+      "expanded_bytes": 32766,
+      "packaging_lexical_statements": 7
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "closure_sha256": "73a4737b1004a4260155b920a63c031c0fba412a11b33fd37904aa3233fb066b",
+      "expanded_sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "expanded_bytes": 83915,
+      "packaging_lexical_statements": 54
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+      "closure_sha256": "61e4263cc5614e20c719611e29618c5f594f7883e7f1c2895a7c32005f02a0b9",
+      "expanded_sha256": "a20938845a21d9510ca9f574799742a83c875f7f0a8a7126f2a34a24ddd21d11",
+      "expanded_bytes": 168561,
+      "packaging_lexical_statements": 22
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "closure_sha256": "96f1f03c9d30a659950b45f12be689eb71cd80bdb153d37a5b31981a9667c905",
+      "expanded_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "expanded_bytes": 206075,
+      "packaging_lexical_statements": 22
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "closure_sha256": "5538dfd65c12369443f4cd7756525b05c77cd61f9a06ee759590ea753a823fc3",
+      "expanded_sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+      "expanded_bytes": 110745,
+      "packaging_lexical_statements": 17
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "closure_sha256": "db53cbe3bbe01ed228e0a8f2a537c89df06ed0d184b5115a4994b9f5c0c9d7de",
+      "expanded_sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190",
+      "expanded_bytes": 164237,
+      "packaging_lexical_statements": 40
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "closure_sha256": "6a44b757f1b04432b5c02c4711ddfc1b5aa887d490fbb257ee89132b74fd2ff7",
+      "expanded_sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7",
+      "expanded_bytes": 34870,
+      "packaging_lexical_statements": 11
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "closure_sha256": "faaa9c74ebc7128b0afe46035e53c3e7de0f699a55072ac8c501fc1dacab8b3d",
+      "expanded_sha256": "6d5cc998be4415d464627e5b14fc006779ef399b550bb3f993f4d160b18bac49",
+      "expanded_bytes": 392530,
+      "packaging_lexical_statements": 151
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+      "closure_sha256": "5c780cce735f845e8be48f3149a0444febdd6c4862045cb7161feffa6cd4f2a8",
+      "expanded_sha256": "28a73f09ec50a0d015bebcd3c119d979c57d68675d0757fbef3fbbd2af0d233d",
+      "expanded_bytes": 675121,
+      "packaging_lexical_statements": 181
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "closure_sha256": "fb2fb8d89a9f19c54d08020765871313d37bd9652b54f837d69258b623134cdf",
+      "expanded_sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "expanded_bytes": 93531,
+      "packaging_lexical_statements": 19
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+      "closure_sha256": "2e66daec6d4cc1995b4f34b7a19691c9c57802b64668fdda6aa9969b15765c9e",
+      "expanded_sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94",
+      "expanded_bytes": 1668,
+      "packaging_lexical_statements": 7
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+      "closure_sha256": "952def63ad9b8224913bef51dff233f4fae2f09728b13341db9405e1979abeba",
+      "expanded_sha256": "347b92d51a842a880a83cfbf40d9b41928ef9310383fcdbb607c920afc3cdee8",
+      "expanded_bytes": 1258421,
+      "packaging_lexical_statements": 116
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "closure_sha256": "82aa9f9694944bb5117486079c2a4016ed05c63b66eb695f3442fe9b3f1721b4",
+      "expanded_sha256": "a6f8c341a3fd8fc7139b5c85e6eebb1c841105d08b527717e98f11d66938cc1f",
+      "expanded_bytes": 253544,
+      "packaging_lexical_statements": 37
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "closure_sha256": "e2a2011d2455bfd081eb4b9e83544c6874522c88a6afeb3869b3863e23037052",
+      "expanded_sha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca",
+      "expanded_bytes": 8417,
+      "packaging_lexical_statements": 6
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+      "closure_sha256": "4671156183622ed97fecb9ad7d85673295254e2e623e569bde109c247824be33",
+      "expanded_sha256": "10ff3ac4d4d9e97f9d16fcec73aab74a2b8bc790237cebfc826f995a6184b5b9",
+      "expanded_bytes": 54581,
+      "packaging_lexical_statements": 17
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1745_weekly_source_owned_stage_self_bill_facts_v1.sql",
+      "closure_sha256": "3a93ca9b154e2282e723228cd1698bd0545b1f4e7db1d811aa67d933f385de11",
+      "expanded_sha256": "63c8329ea9455fa1eb984e964349296dfcc6c2e7bf24eca4dd1516e97e64c7ba",
+      "expanded_bytes": 11373,
+      "packaging_lexical_statements": 14
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "closure_sha256": "858ba7c5d1b8edc52f448d2795a00f9974c08f3d60b478fa0aadbfb08ac70863",
+      "expanded_sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061",
+      "expanded_bytes": 74335,
+      "packaging_lexical_statements": 16
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root_v1.sql",
+      "closure_sha256": "c4d367625acb5dd0d8512b7784793c986686be2cafb2fc17fecf2579952eaa99",
+      "expanded_sha256": "7da3729d5fe5249ed04cb1664cffb788d1bc330d41cbbe5499a659b21a017ec1",
+      "expanded_bytes": 48503,
+      "packaging_lexical_statements": 7
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+      "closure_sha256": "1da172c41e20dfaba3cf48eb9d7815d0d8a391cd2bc45364636c1152028688cb",
+      "expanded_sha256": "936ba89990ccd781a7bf3d2cbb6578401f627e20eb2253034ec6a0669bc0f7a3",
+      "expanded_bytes": 160528,
+      "packaging_lexical_statements": 28
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+      "closure_sha256": "e369749a1ceb474ce03ca0d52203b00016345ccab25afc2c1d0704a4852d488b",
+      "expanded_sha256": "2de3fa336ab343485b91888e51a1509534ceae1279c565bfceb52199d69606cf",
+      "expanded_bytes": 261018,
+      "packaging_lexical_statements": 101
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "closure_sha256": "72092595af3f3d46f8bc5b71be646243cf3782205ce40d5d72a377510307dadc",
+      "expanded_sha256": "7f7019cd02c4c9840bfd7902cc9a4cc4ca4a705e678b815586f754c1a27352e7",
+      "expanded_bytes": 717348,
+      "packaging_lexical_statements": 168
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+      "closure_sha256": "87387bd2ae8e5510ce06ac2ad21d13209eaea4b8f481743f2741049fb5c5888b",
+      "expanded_sha256": "99f1b8fca74ffb9a601260da5490224d98a86de6259ef2d5cad4dce5d20ab1c6",
+      "expanded_bytes": 148936,
+      "packaging_lexical_statements": 21
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "closure_sha256": "fefc51941ebb29609bcd71fbd22893f7ace769927571e21978443d3613853903",
+      "expanded_sha256": "3e6f23a496ef0abeacb4fedf201d9ee74ee23e5833f9fdd9a9f11bd93af77f01",
+      "expanded_bytes": 344299,
+      "packaging_lexical_statements": 224
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+      "closure_sha256": "3a32d4f53b0eb466e96e451466a90b45d4bf85c669be54d33f11fcbd04854962",
+      "expanded_sha256": "9693aa10688bf83a03dfc73671fa179891621a389565e775a66480faaca862d4",
+      "expanded_bytes": 118620,
+      "packaging_lexical_statements": 109
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+      "closure_sha256": "7078f5280e09afb24a2bc893371fdc6a113b55ee4d3fdc05fa26bb84393b4ddf",
+      "expanded_sha256": "2f0f16442c4e14e5975f2a1d7c4f262697ce8d36193f7f537c81e3adc06814fd",
+      "expanded_bytes": 446879,
+      "packaging_lexical_statements": 61
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+      "closure_sha256": "890c04721cca58f3ca325303242b55ec0f6090cbed80ddb3a93d4c48014fb2c1",
+      "expanded_sha256": "49d52d595370f16ae2cf5160bc5d534bc93505c3a19549dc7e61677e030b099c",
+      "expanded_bytes": 84946,
+      "packaging_lexical_statements": 43
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+      "closure_sha256": "155061e4626109906dd53899834dd180afa82f04610cc0f3317a34d008516acb",
+      "expanded_sha256": "cda3513641ee72ad69023c3813dd7066f42a4c5472ee817cf9e644fbc2ce31ad",
+      "expanded_bytes": 110284,
+      "packaging_lexical_statements": 6
+    },
+    {
+      "kind": "repeatable",
+      "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo_v1.sql",
+      "closure_sha256": "a78540ed15daafae4991bf4384bcc584bbae317123121142bea003ac0295849a",
+      "expanded_sha256": "22c2eb921af1662984a3b48f4cb8d24a361ab5d6db05e3f5fe9869f54e6c4b19",
+      "expanded_bytes": 7544,
+      "packaging_lexical_statements": 7
+    }
+  ],
+  "limitations": [
+    "Source-only size observation, not a compiled or approved rehearsal. No SQL sent.",
+    "Final pending union, audited dependency closure, executable owner mapping, verifier envelopes, fixtures, ledger/contract/marker and restoration assertions are not yet included.",
+    "Packaging statements include source transaction envelope commands. Exact server parser acceptance must be measured on the final compiled rollback batch.",
+    "No truncation, splitting across transactions, changed checks, widened tool envelope or alternate route is authorised by this observation."
+  ]
+}

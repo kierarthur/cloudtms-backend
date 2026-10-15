@@ -1,0 +1,15 @@
+# NHSP Separate event and actual native input source review
+
+Verdict: bounded SOURCE ACCEPT for ea7fe7b0f3cb3d566e0b95a0927916539d6035ba (Separate writer15),5f79c0d2d810295f25415443c94eaf72b4a92eb9 (current native basis17),b326d7033c0916217d16fde6c3b839f94a1f9ce9 (negative population22). No confirmed P0/P1/P2 in these finite components. This is not NHSP feature completion, native, mount, full financial or Part B sign-off.
+
+54 manifest-inclusive files match exact saved/published Git before/after. Twenty-four actual native inputs match full raw SQL or independently extracted complete definition/body pins. Two whole owners reverse seven unique hunks to their actual predecessors. All43 inspected source/predicate cases pass (15 Separate,12 basis,16 negative).
+
+Separate derives its finite ordinary NHSP final-backing intent from the actual immutable paid choice under existing I1/scope/group/cycle checks. Its uniqueness supplements the real schedule only with that persisted choice and target; old event keys remain untouched. Ordinary, Same, ROSTER and C1/economic suffixes remain exact. Current admission is still ROSTER-only, so this component alone enables no NHSP paid-choice writer. Final assembly must retain its existing public service-only owner/ACL explicitly.
+
+Current basis reuses the real native current event/observation/magnitude selection separately from Original paid cash facts. Physical Contract Client/Candidate, current root/family/date and exact final movement/resolution/economic/lineage/origin are bound. Inactive or uncaptured positions remain unavailable; no fabricated ROSTER snapshot, latest-clock head, monetary classifier or writer permission is returned.
+
+The negative witness binds the complete genuine ordinary report manifest/population and all actual negative row resolutions/generation/C1 economics. Both native PAY and calculated-charge vectors feed one extracted native magnitude core. The shared capture successor substitutes only the same three parameter names in the original exact magnitude block and delegates after unchanged native admission, replay, scope, lineage and economic checks. No canonical Banking owner was edited. Matching requires real event/Candidate/Client/Contract and complete clock/break/five-bucket/PAY/charge magnitude. Missing resolution/current position stays unknown; no negative is certified absent from partial input.
+
+Actual negative-first resolution/recheck order, NHSP choice/admission/NONE invoice and capture/prepared/report/Office companions remain engineering. The source witness does not certify that the full projection can yet reach those states. PostgreSQL current compiled source/ACL/registry/contracts, real isolation/financial/API/Office acceptance and remaining Legacy NHSP are unrun. Source39, Policy X and immutable history remain controlling.
+
+Evidence: I2 .codex-tmp/money-nhsp-native-review-20261015 and review-money-nhsp-native-20261015.mjs. No SQL, lab, lock, fixture, install, provider/payment/email action, Banking message or credential use occurred in this review.

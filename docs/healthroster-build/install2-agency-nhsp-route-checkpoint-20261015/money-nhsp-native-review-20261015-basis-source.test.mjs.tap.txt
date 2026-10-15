@@ -1,0 +1,82 @@
+TAP version 13
+# Subtest: new owner-private addition has exact saved hash and no actual prior declaration
+ok 1 - new owner-private addition has exact saved hash and no actual prior declaration
+  ---
+  duration_ms: 242.7519
+  type: 'test'
+  ...
+# Subtest: all eight exact native dependencies match full or literal definition Git bytes
+ok 2 - all eight exact native dependencies match full or literal definition Git bytes
+  ---
+  duration_ms: 560.1391
+  type: 'test'
+  ...
+# Subtest: native current cache schema contains every directly referenced scope origin and event field
+ok 3 - native current cache schema contains every directly referenced scope origin and event field
+  ---
+  duration_ms: 0.8779
+  type: 'test'
+  ...
+# Subtest: actual viewer service WP-PP and dated cycle/root permissions precede native reads
+ok 4 - actual viewer service WP-PP and dated cycle/root permissions precede native reads
+  ---
+  duration_ms: 0.16
+  type: 'test'
+  ...
+# Subtest: pure native current event observation/revision owners are reused without mutations locks refresh or own selection
+ok 5 - pure native current event observation/revision owners are reused without mutations locks refresh or own selection
+  ---
+  duration_ms: 1.2276
+  type: 'test'
+  ...
+# Subtest: one real classifier and root union stay exact with NHSP movement provenance kept separate
+ok 6 - one real classifier and root union stay exact with NHSP movement provenance kept separate
+  ---
+  duration_ms: 1.5678
+  type: 'test'
+  ...
+# Subtest: uncaptured position remains unavailable while native absence requires actual event plus observation
+ok 7 - uncaptured position remains unavailable while native absence requires actual event plus observation
+  ---
+  duration_ms: 0.1794
+  type: 'test'
+  ...
+# Subtest: real final report movement/resolution/economic/lineage and origin hash are point-bound
+ok 8 - real final report movement/resolution/economic/lineage and origin hash are point-bound
+  ---
+  duration_ms: 0.1803
+  type: 'test'
+  ...
+# Subtest: root Client/Candidate currentness/Contract/date/raw booking and native scope are not erased
+ok 9 - root Client/Candidate currentness/Contract/date/raw booking and native scope are not erased
+  ---
+  duration_ms: 0.1819
+  type: 'test'
+  ...
+# Subtest: closed top-level DTO keys stay identical across inactive and actual-current branches with unknown native fields
+ok 10 - closed top-level DTO keys stay identical across inactive and actual-current branches with unknown native fields
+  ---
+  duration_ms: 1.5311
+  type: 'test'
+  ...
+# Subtest: finite root/byte bounds refuse without truncating a supposedly complete certificate
+ok 11 - finite root/byte bounds refuse without truncating a supposedly complete certificate
+  ---
+  duration_ms: 0.1738
+  type: 'test'
+  ...
+# Subtest: native financial UNKNOWN and unfinished no-reversal/writer permission remain explicit input fields
+ok 12 - native financial UNKNOWN and unfinished no-reversal/writer permission remain explicit input fields
+  ---
+  duration_ms: 0.4559
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 963.0204

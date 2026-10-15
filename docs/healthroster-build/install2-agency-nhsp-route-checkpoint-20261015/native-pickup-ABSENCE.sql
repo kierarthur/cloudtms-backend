@@ -1,0 +1,2 @@
+do $absence$ begin if to_regclass('private.hr_k1978_native_20261015_450040bab9a9518c') is not null or to_regprocedure('private.hr_k1978_native_20261015_450040bab9a9518c_fn()') is not null then raise exception 'KIER1978_NATIVE_PROBE_ROLLBACK_FAILED';end if;end $absence$;
+select current_database() as physical_database,to_regclass('private.hr_k1978_native_20261015_450040bab9a9518c') is null as table_absent,to_regprocedure('private.hr_k1978_native_20261015_450040bab9a9518c_fn()') is null as function_absent;

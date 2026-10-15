@@ -1,0 +1,95 @@
+{
+  "status": "CURRENT173_FINITE_SOURCE_LEDGER_NOT_EXECUTION_APPROVAL",
+  "source_commit": "f8c7830b22805339b205afe74fe3fc163f96381c",
+  "upgrade_verifiers": 173,
+  "new_verifiers": 174,
+  "unsupported_in_rollback_rehearsal": 16,
+  "additional_guarded_alias_holds": 12,
+  "complete_control_renders": 173,
+  "unchanged_original_restoration_cases": 31,
+  "canonical_roots": 1484,
+  "canonical_inputs": 1745,
+  "canonical_include_occurrences": 2160,
+  "saved_git_observations": 1939,
+  "native_executed": false,
+  "SQL_executed": false,
+  "Banking_verifier_mutated": false,
+  "execution_authorised": false,
+  "artifacts": [
+    {
+      "file": "build-frozen-census.mjs",
+      "bytes": 12940,
+      "sha256": "a511286fa81158b5141438170594d1de6d0237b848f181852c2272f5a98e83e2"
+    },
+    {
+      "file": "build-safety-ledger.mjs",
+      "bytes": 14419,
+      "sha256": "cced8e1056b7bd9af9689917e22f206a50d3777e8bead71098ece822d37f98a2"
+    },
+    {
+      "file": "CENSUS_SOURCE_OUTPUT.txt",
+      "bytes": 265039,
+      "sha256": "c7ff7963354c1be09bf3e6a6ae3f04e05f18a15e265ef629f87de82434a10a80"
+    },
+    {
+      "file": "check-frozen-restoration-source.mjs",
+      "bytes": 3706,
+      "sha256": "f076e09f5c792a87b3ceec4ad058516191f612d72bdbade9c748df82587385a4"
+    },
+    {
+      "file": "check-frozen-verifier-controls.mjs",
+      "bytes": 4103,
+      "sha256": "a5ab60b4b25f2e181c3f43d314a2cb55ef71ef776307fbc8d1fc4d26c33a550e"
+    },
+    {
+      "file": "CURRENT173_LITERAL_SOURCE_CENSUS.json",
+      "bytes": 17346911,
+      "sha256": "d33c453aebe97cebe939df18812e02fb951f05db067ea0bb8eeba368bfdbdf5f"
+    },
+    {
+      "file": "CURRENT173_PER_FILE_SAFETY_LEDGER.json",
+      "bytes": 15262981,
+      "sha256": "1702aa77ae6d00eb57b113e2df55433089b3938210f786f51d81059dfdd2d7d3"
+    },
+    {
+      "file": "CURRENT173_TRANSACTION_CONTROL_LEDGER.json",
+      "bytes": 206155,
+      "sha256": "9346efbddc001184bdae122f63183e69121a9d8b9f0603c49baf942004bc56b0"
+    },
+    {
+      "file": "FROZEN_RESTORATION_SOURCE_PINS.json",
+      "bytes": 2712,
+      "sha256": "09725272f98b53b16f871b8c9a1092677a0edcdb028b953f6262579f523d727b"
+    },
+    {
+      "file": "INITIAL_HARNESS_ROOT_INVENTORY_REFUSAL.txt",
+      "bytes": 580,
+      "sha256": "a542e8756ce74a9dfc8ef75b4336fcbe6e08f3c9c4d3bd4091ee8ec180dabf1e"
+    },
+    {
+      "file": "INITIAL_HARNESS_STALE_ACL_HASH_REFUSAL.txt",
+      "bytes": 1078,
+      "sha256": "7ed4fab8e338715e5946287f42e0f41b7f74063205514b9a7ba958b3095ef6cd"
+    },
+    {
+      "file": "LEDGER_SOURCE_CHECK_OUTPUT.txt",
+      "bytes": 935,
+      "sha256": "df685b831959c32b433aa32e27d1e15a0663b53af17c6ffd28870720fe7e2782"
+    },
+    {
+      "file": "RESTORATION_SOURCE_TEST_OUTPUT.txt",
+      "bytes": 3213,
+      "sha256": "4e2093f1aa1041f60ccb21307772fea59ba0ec29df2a87a53a35fd22c93156dc"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 7470,
+      "sha256": "d84edb1990f87f7155ada7599eaf96896a4cfb8a9ec5d748cdbaedd5f4e2c5ce"
+    },
+    {
+      "file": "TRANSACTION_CONTROL_SOURCE_OUTPUT.txt",
+      "bytes": 157,
+      "sha256": "a6eeeed81550644cc10ebc1340ca1a73df3c014a348f955464b0662fd6c37804"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "before": [
+    {
+      "dir": "agency-business-entry-inline-source-forward-20261014",
+      "commit": "4c26565f68521fa868b211ce36ba22a9471053c0",
+      "files": 30,
+      "manifest_sha256": "2440a8c130ffc85f872f0e3f6ae1818d3b4e3b7693c8a8c0b72421a4a955f5d4"
+    },
+    {
+      "dir": "agency-off-native-transport-forward-20261015",
+      "commit": "fee53465a85b6c8fa7ac059d225429022db7260a",
+      "files": 34,
+      "manifest_sha256": "20d11a7119e20dafb17330582e912349b186abe5953c6b3ba5960537ef74786b"
+    }
+  ],
+  "after": [
+    {
+      "dir": "agency-business-entry-inline-source-forward-20261014",
+      "commit": "4c26565f68521fa868b211ce36ba22a9471053c0",
+      "files": 30,
+      "manifest_sha256": "2440a8c130ffc85f872f0e3f6ae1818d3b4e3b7693c8a8c0b72421a4a955f5d4"
+    },
+    {
+      "dir": "agency-off-native-transport-forward-20261015",
+      "commit": "fee53465a85b6c8fa7ac059d225429022db7260a",
+      "files": 34,
+      "manifest_sha256": "20d11a7119e20dafb17330582e912349b186abe5953c6b3ba5960537ef74786b"
+    }
+  ],
+  "whole_owner_reverses": 12,
+  "unique_hunks": 42,
+  "actual_source_pins": 27,
+  "declared_crlf_to_lf_owner_predecessors": 1,
+  "raw_saved_git_artifacts_exact": true,
+  "actual_public_signatures": 7,
+  "tests": [
+    {
+      "file": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/business-inline.test.mjs",
+      "cases": 58,
+      "output_sha256": "2ef5b25fa2b6a6bb8488dd100ce5c2358e3a8ea84ed67e8220861a65990e852f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/off-agency-transport.test.mjs",
+      "cases": 83,
+      "output_sha256": "483047aaa63715f13e07860bc5dd0b8d870c9208c4c7851ce296939c91e40518"
+    }
+  ],
+  "raw_whitespace_pass": false,
+  "inherited_whitespace_findings": 528,
+  "text_codec_final_successor_required": "267e0b5b7b535d6eda4bb646ff54b93ad2ecbdda",
+  "unrun": [
+    "current whole root owner/caller/ACL/registry/contract union",
+    "real private OFF scope/admission/PID/XID/audit/native-result proof",
+    "actual MANUAL/targeted worker/native Authorise/Return and protected history/Original/NX-AI-6/Report NONE",
+    "complete native financial/API/Office/app/phone acceptance"
+  ]
+}
