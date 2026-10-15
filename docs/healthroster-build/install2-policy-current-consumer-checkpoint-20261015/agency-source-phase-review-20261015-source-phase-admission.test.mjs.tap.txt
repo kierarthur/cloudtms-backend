@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: all five complete current-owner reverses restore pinned raw inputs without modifying old capture or public ABI
+ok 1 - all five complete current-owner reverses restore pinned raw inputs without modifying old capture or public ABI
+  ---
+  duration_ms: 5.2357
+  type: 'test'
+  ...
+# Subtest: literal actual Candidate admission precedes invoice/family, with no later Candidate reacquisition or browser gate
+ok 2 - literal actual Candidate admission precedes invoice/family, with no later Candidate reacquisition or browser gate
+  ---
+  duration_ms: 1.2017
+  type: 'test'
+  ...
+# Subtest: actual PHYSICAL/native family dependencies precede Source dependencies and full retained reread
+ok 3 - actual PHYSICAL/native family dependencies precede Source dependencies and full retained reread
+  ---
+  duration_ms: 0.5827
+  type: 'test'
+  ...
+# Subtest: one original immutable token set and current monotonic tokens use the SAME planned request
+ok 4 - one original immutable token set and current monotonic tokens use the SAME planned request
+  ---
+  duration_ms: 0.5254
+  type: 'test'
+  ...
+# Subtest: full token capture is moved to same row before small capture bound and original input digest
+ok 5 - full token capture is moved to same row before small capture bound and original input digest
+  ---
+  duration_ms: 0.432
+  type: 'test'
+  ...
+# Subtest: current actor resume derives full Source scope without digest regeneration or stored gate replay
+ok 6 - current actor resume derives full Source scope without digest regeneration or stored gate replay
+  ---
+  duration_ms: 0.456
+  type: 'test'
+  ...
+# Subtest: source before guard has a single exact ordinary arbiter before any ACTIVE lookup and no AFTER reader
+ok 7 - source before guard has a single exact ordinary arbiter before any ACTIVE lookup and no AFTER reader
+  ---
+  duration_ms: 1.014
+  type: 'test'
+  ...
+# Subtest: native original actor/target/CAS/replay and actual Authorise/Return continuations stay required
+ok 8 - native original actor/target/CAS/replay and actual Authorise/Return continuations stay required
+  ---
+  duration_ms: 1.0124
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY persisted CAPTURED refuses selected foreign publication/config in a later RPC
+ok 9 - UNIT_ONLY persisted CAPTURED refuses selected foreign publication/config in a later RPC
+  ---
+  duration_ms: 0.5068
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY persisted DRAFT_REMOVED refuses selected foreign publication/config in a later RPC
+ok 10 - UNIT_ONLY persisted DRAFT_REMOVED refuses selected foreign publication/config in a later RPC
+  ---
+  duration_ms: 0.3067
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY persisted UNAUTHORISED refuses selected foreign publication/config in a later RPC
+ok 11 - UNIT_ONLY persisted UNAUTHORISED refuses selected foreign publication/config in a later RPC
+  ---
+  duration_ms: 0.1248
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY persisted RECOMPUTE_PENDING refuses selected foreign publication/config in a later RPC
+ok 12 - UNIT_ONLY persisted RECOMPUTE_PENDING refuses selected foreign publication/config in a later RPC
+  ---
+  duration_ms: 0.0522
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY persisted FINANCIAL_CURRENT refuses selected foreign publication/config in a later RPC
+ok 13 - UNIT_ONLY persisted FINANCIAL_CURRENT refuses selected foreign publication/config in a later RPC
+  ---
+  duration_ms: 0.0479
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY persisted AUTHORISED refuses selected foreign publication/config in a later RPC
+ok 14 - UNIT_ONLY persisted AUTHORISED refuses selected foreign publication/config in a later RPC
+  ---
+  duration_ms: 0.034
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native processing/audit fields do not become Source identity locks
+ok 15 - UNIT_ONLY native processing/audit fields do not become Source identity locks
+  ---
+  duration_ms: 0.2156
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native query closure/new comparison wording retains SAME referenced Contract, foreign dependency refuses
+ok 16 - UNIT_ONLY native query closure/new comparison wording retains SAME referenced Contract, foreign dependency refuses
+  ---
+  duration_ms: 0.1217
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY resolution conjunction excludes unrelated Client and generation without broad raw-parent locking
+ok 17 - UNIT_ONLY resolution conjunction excludes unrelated Client and generation without broad raw-parent locking
+  ---
+  duration_ms: 0.0751
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY native coverage overlaps/open bounds and selected object IDs remain distinct from all-Client aliases
+ok 18 - UNIT_ONLY native coverage overlaps/open bounds and selected object IDs remain distinct from all-Client aliases
+  ---
+  duration_ms: 0.1151
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY foreign-Client snapshot still selects genuine group/event revision through NESTED union
+ok 19 - UNIT_ONLY foreign-Client snapshot still selects genuine group/event revision through NESTED union
+  ---
+  duration_ms: 0.0828
+  type: 'test'
+  ...
+# Subtest: all seven native pages are packaging-parseable and expose no new public helper/SQL/callback
+ok 20 - all seven native pages are packaging-parseable and expose no new public helper/SQL/callback
+  ---
+  duration_ms: 4.3547
+  type: 'test'
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 164.6652

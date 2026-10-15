@@ -1,0 +1,256 @@
+TAP version 13
+# Subtest: native lineage OR has two separate Client-conjoined positive arms
+ok 1 - native lineage OR has two separate Client-conjoined positive arms
+  ---
+  duration_ms: 0.8251
+  type: 'test'
+  ...
+# Subtest: foreign Client sharing a selected resolution or event remains disjoint
+ok 2 - foreign Client sharing a selected resolution or event remains disjoint
+  ---
+  duration_ms: 0.1826
+  type: 'test'
+  ...
+# Subtest: OLD selected lineage remains in the union when NEW leaves both parents and Client
+ok 3 - OLD selected lineage remains in the union when NEW leaves both parents and Client
+  ---
+  duration_ms: 0.5506
+  type: 'test'
+  ...
+# Subtest: complete lineage products preserve the final parent without a sample or new count cap
+ok 4 - complete lineage products preserve the final parent without a sample or new count cap
+  ---
+  duration_ms: 11.0878
+  type: 'test'
+  ...
+# Subtest: all six complete owners reverse exactly through eight unique hunks to committed aad0 inputs
+ok 5 - all six complete owners reverse exactly through eight unique hunks to committed aad0 inputs
+  ---
+  duration_ms: 414.0837
+  type: 'test'
+  ...
+# Subtest: literal constructor aggregates complete pairs and raw helper needs no parent lookup or broad object fallback
+ok 6 - literal constructor aggregates complete pairs and raw helper needs no parent lookup or broad object fallback
+  ---
+  duration_ms: 0.8179
+  type: 'test'
+  ...
+# Subtest: closed original grammar, one arbiter and dependency order accept the two actual lineage domains
+ok 7 - closed original grammar, one arbiter and dependency order accept the two actual lineage domains
+  ---
+  duration_ms: 1.6149
+  type: 'test'
+  ...
+# Subtest: native-source column evidence and complete bytes are sealed; SQL remains unmounted lexical only
+ok 8 - native-source column evidence and complete bytes are sealed; SQL remains unmounted lexical only
+  ---
+  duration_ms: 81.0552
+  type: 'test'
+  ...
+# Subtest: selected primary row identity cannot be replaced by a shared economic event or arbitrary parent
+ok 9 - selected primary row identity cannot be replaced by a shared economic event or arbitrary parent
+  ---
+  duration_ms: 0.8354
+  type: 'test'
+  ...
+# Subtest: generation, Client and typed conjunction remain distinct even for the same native raw row
+ok 10 - generation, Client and typed conjunction remain distinct even for the same native raw row
+  ---
+  duration_ms: 0.1544
+  type: 'test'
+  ...
+# Subtest: complete large selected population preserves the last real row without count or sample equality
+ok 11 - complete large selected population preserves the last real row without count or sample equality
+  ---
+  duration_ms: 6.9605
+  type: 'test'
+  ...
+# Subtest: exact witness and current facts are committed raw inputs; all construction bytes are sealed
+ok 12 - exact witness and current facts are committed raw inputs; all construction bytes are sealed
+  ---
+  duration_ms: 169.5793
+  type: 'test'
+  ...
+# Subtest: literal primary mapping covers exactly the actual thirty-two arrays, using physical Timesheet key
+ok 13 - literal primary mapping covers exactly the actual thirty-two arrays, using physical Timesheet key
+  ---
+  duration_ms: 0.5052
+  type: 'test'
+  ...
+# Subtest: one native reader preserves genuine Source CAS and carries actual family evidence without inventing authority
+ok 14 - one native reader preserves genuine Source CAS and carries actual family evidence without inventing authority
+  ---
+  duration_ms: 0.3357
+  type: 'test'
+  ...
+# Subtest: large object/tuple populations aggregate once per native selector rather than copying an array per row
+ok 15 - large object/tuple populations aggregate once per native selector rather than copying an array per row
+  ---
+  duration_ms: 0.3594
+  type: 'test'
+  ...
+# Subtest: every tuple is asserted before return; coverage/global and exact report binding use genuine native selectors
+ok 16 - every tuple is asserted before return; coverage/global and exact report binding use genuine native selectors
+  ---
+  duration_ms: 0.1813
+  type: 'test'
+  ...
+# Subtest: unmounted SQL is lexical only and remaining raw guards, nested phantoms and ACTIVE recovery are explicit
+ok 17 - unmounted SQL is lexical only and remaining raw guards, nested phantoms and ACTIVE recovery are explicit
+  ---
+  duration_ms: 1.2511
+  type: 'test'
+  ...
+# Subtest: OLD selected slot is preserved when NEW moves to excluded generation and Client
+ok 18 - OLD selected slot is preserved when NEW moves to excluded generation and Client
+  ---
+  duration_ms: 0.7759
+  type: 'test'
+  ...
+# Subtest: foreign generation and Client cannot collide through a broad raw upload-row token
+ok 19 - foreign generation and Client cannot collide through a broad raw upload-row token
+  ---
+  duration_ms: 0.2294
+  type: 'test'
+  ...
+# Subtest: exact selected Report-bound resolution still conflicts by its primary identity outside the current slot
+ok 20 - exact selected Report-bound resolution still conflicts by its primary identity outside the current slot
+  ---
+  duration_ms: 0.1323
+  type: 'test'
+  ...
+# Subtest: NULL Client in a real resolution does not become a fictional Client or an unconditional row slot
+ok 21 - NULL Client in a real resolution does not become a fictional Client or an unconditional row slot
+  ---
+  duration_ms: 0.632
+  type: 'test'
+  ...
+# Subtest: revision/Client and revision/event preserve both conjuncts for snapshot, PAY and expense transition children
+ok 22 - revision/Client and revision/event preserve both conjuncts for snapshot, PAY and expense transition children
+  ---
+  duration_ms: 0.1383
+  type: 'test'
+  ...
+# Subtest: whole OLD/NEW extraction occurs before the only same-arbiter acquire, without parent/request reads
+ok 23 - whole OLD/NEW extraction occurs before the only same-arbiter acquire, without parent/request reads
+  ---
+  duration_ms: 0.3911
+  type: 'test'
+  ...
+# Subtest: only literal ALL-child predicates create parent object tokens; resolution never broadens to a raw parent
+ok 24 - only literal ALL-child predicates create parent object tokens; resolution never broadens to a raw parent
+  ---
+  duration_ms: 0.3057
+  type: 'test'
+  ...
+# Subtest: closed raw table context and every actual declared column are source-pinned without compiled catalogue claims
+ok 25 - closed raw table context and every actual declared column are source-pinned without compiled catalogue claims
+  ---
+  duration_ms: 227.0567
+  type: 'test'
+  ...
+# Subtest: raw helper manifest is sealed and owner-only SQL has no trigger installation or native acceptance claim
+ok 26 - raw helper manifest is sealed and owner-only SQL has no trigger installation or native acceptance claim
+  ---
+  duration_ms: 3.9952
+  type: 'test'
+  ...
+# Subtest: two complete proposed owners reverse exactly to current A0 Git inputs
+ok 27 - two complete proposed owners reverse exactly to current A0 Git inputs
+  ---
+  duration_ms: 155.303
+  type: 'test'
+  ...
+# Subtest: source manifest retains every raw construction byte
+ok 28 - source manifest retains every raw construction byte
+  ---
+  duration_ms: 4.1724
+  type: 'test'
+  ...
+# Subtest: closed new identities are typed actual objects/pairs/singleton and native date coverage
+ok 29 - closed new identities are typed actual objects/pairs/singleton and native date coverage
+  ---
+  duration_ms: 0.6073
+  type: 'test'
+  ...
+# Subtest: original eight-domain path delegates once with original ABI and no Source selector
+ok 30 - original eight-domain path delegates once with original ABI and no Source selector
+  ---
+  duration_ms: 0.8051
+  type: 'test'
+  ...
+# Subtest: coverage schema uses one arbiter, opposite intent classes and exact retained uniqueness
+ok 31 - coverage schema uses one arbiter, opposite intent classes and exact retained uniqueness
+  ---
+  duration_ms: 0.5136
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY selected exclusion predicates distinguish disjoint dates and do not merge retained scopes
+ok 32 - UNIT_ONLY selected exclusion predicates distinguish disjoint dates and do not merge retained scopes
+  ---
+  duration_ms: 0.283
+  type: 'test'
+  ...
+# Subtest: ordinary coverage deletes only own actual transaction range; timeout restores on either exit
+ok 33 - ordinary coverage deletes only own actual transaction range; timeout restores on either exit
+  ---
+  duration_ms: 0.4409
+  type: 'test'
+  ...
+# Subtest: new Source shape validates before scalar acquisition and range phases follow scalar identities
+ok 34 - new Source shape validates before scalar acquisition and range phases follow scalar identities
+  ---
+  duration_ms: 0.3723
+  type: 'test'
+  ...
+# Subtest: four construction leaves scan with no client SQL or executable database harness
+ok 35 - four construction leaves scan with no client SQL or executable database harness
+  ---
+  duration_ms: 2.6907
+  type: 'test'
+  ...
+# Subtest: four exact complete owners reverse eight unique hunks to independently reviewed Source core
+ok 36 - four exact complete owners reverse eight unique hunks to independently reviewed Source core
+  ---
+  duration_ms: 297.5034
+  type: 'test'
+  ...
+# Subtest: new domains distinguish real revision/client and revision/event from actual cycle pairs
+ok 37 - new domains distinguish real revision/client and revision/event from actual cycle pairs
+  ---
+  duration_ms: 0.6094
+  type: 'test'
+  ...
+# Subtest: resolution slot has a strict native integer between genuine raw row and Client UUIDs
+ok 38 - resolution slot has a strict native integer between genuine raw row and Client UUIDs
+  ---
+  duration_ms: 0.3876
+  type: 'test'
+  ...
+# Subtest: native selector counterexample: generation and Client cannot be collapsed into a raw-row-only identity
+ok 39 - native selector counterexample: generation and Client cannot be collapsed into a raw-row-only identity
+  ---
+  duration_ms: 0.172
+  type: 'test'
+  ...
+# Subtest: schema, scalar validation/dependency order and compatibility wrapper recognise every exact domain
+ok 40 - schema, scalar validation/dependency order and compatibility wrapper recognise every exact domain
+  ---
+  duration_ms: 1.1182
+  type: 'test'
+  ...
+# Subtest: every tuple-successor source artifact is byte sealed; SQL remains lexical and unmounted
+ok 41 - every tuple-successor source artifact is byte sealed; SQL remains lexical and unmounted
+  ---
+  duration_ms: 5.0439
+  type: 'test'
+  ...
+1..41
+# tests 41
+# suites 0
+# pass 41
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 646.7528

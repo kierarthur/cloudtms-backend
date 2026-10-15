@@ -1,0 +1,12 @@
+{
+  "package": "@cloudflare/workers-types",
+  "version": "5.20261014.1",
+  "registry": "https://registry.npmjs.org/@cloudflare%2fworkers-types/latest",
+  "tarball_sha256": "27bc6c1b99217e1db54d649a6adf2bad25e85e79d4feded9b7421e9af666e3a9",
+  "types_bytes": 623312,
+  "types_sha256": "c939798427a9ca2fcfa281ad2f675eb8446499785785978c20a00d5a22f96d2d",
+  "purpose": "Read-only platform reference; no dependency/configuration/install or application source change",
+  "needed_api_types": [
+    "TextEncoder"
+  ]
+}

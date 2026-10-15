@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: complete FIN4 reverses both uniquely anchored identical selectors without other edits
+ok 1 - complete FIN4 reverses both uniquely anchored identical selectors without other edits
+  ---
+  duration_ms: 4.4048
+  type: 'test'
+  ...
+# Subtest: single helper exactly reconstitutes the original native selector after only parameter and identity projection substitutions
+ok 2 - single helper exactly reconstitutes the original native selector after only parameter and identity projection substitutions
+  ---
+  duration_ms: 0.7813
+  type: 'test'
+  ...
+# Subtest: signed component reader does not use the unsupported allocation signature DTO or top-level fallback segments
+ok 3 - signed component reader does not use the unsupported allocation signature DTO or top-level fallback segments
+  ---
+  duration_ms: 0.6483
+  type: 'test'
+  ...
+# Subtest: membership retains exact actual Source subject and delegates existing terminal and economic kernels
+ok 4 - membership retains exact actual Source subject and delegates existing terminal and economic kernels
+  ---
+  duration_ms: 0.5459
+  type: 'test'
+  ...
+# Subtest: no single-member restriction or cash-authority claim is hidden in input reader
+ok 5 - no single-member restriction or cash-authority claim is hidden in input reader
+  ---
+  duration_ms: 0.4895
+  type: 'test'
+  ...
+# Subtest: Legacy current snapshot delegates actual prior and active owners, NEXT retains old exact call
+ok 6 - Legacy current snapshot delegates actual prior and active owners, NEXT retains old exact call
+  ---
+  duration_ms: 0.5096
+  type: 'test'
+  ...
+# Subtest: all new read leaves retain service-free owner ACL with no business DML
+ok 7 - all new read leaves retain service-free owner ACL with no business DML
+  ---
+  duration_ms: 1.0068
+  type: 'test'
+  ...
+# Subtest: finite parser and source flags keep unfinished financial/correction/native boundaries explicit
+ok 8 - finite parser and source flags keep unfinished financial/correction/native boundaries explicit
+  ---
+  duration_ms: 4.8927
+  type: 'test'
+  ...
+# Subtest: six full actual consumers reverse seven unique Legacy coupling hunks with literal SQL dollar regex preserved
+ok 9 - six full actual consumers reverse seven unique Legacy coupling hunks with literal SQL dollar regex preserved
+  ---
+  duration_ms: 4.6861
+  type: 'test'
+  ...
+# Subtest: one payment-fact producer requires full native day target funding and positive actual signed member
+ok 10 - one payment-fact producer requires full native day target funding and positive actual signed member
+  ---
+  duration_ms: 0.6201
+  type: 'test'
+  ...
+# Subtest: native-shaped complete day witness may include two Source members without splitting money
+ok 11 - native-shaped complete day witness may include two Source members without splitting money
+  ---
+  duration_ms: 0.5138
+  type: 'test'
+  ...
+# Subtest: partial, recovered, absent, duplicate and foreign native funding cannot become paid certificate
+ok 12 - partial, recovered, absent, duplicate and foreign native funding cannot become paid certificate
+  ---
+  duration_ms: 0.4618
+  type: 'test'
+  ...
+# Subtest: actual locked admission fresh read question and retained assertion accept only the two literal certified states
+ok 13 - actual locked admission fresh read question and retained assertion accept only the two literal certified states
+  ---
+  duration_ms: 1.2482
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 165.287

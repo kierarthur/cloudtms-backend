@@ -1,0 +1,9 @@
+# Legacy current-viewer source review
+
+Verdict: ACCEPT the finite fix at `7351816ce8cfecd29fcf7dbdffbee60ca46c1791`. No new P0/P1/P2 was found within this increment. This is not native, release, final financial, acceptance or Part B sign-off.
+
+All 15 manifested files match immutable Git and saved bytes before and after independent review. Manifest SHA-256: `c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9`. The complete owner reverses two unique hunks to its actual published predecessor. All 18 inspected source cases pass, including reproduction of the predecessor mismatch and rejection of corrupt actor/hash and changed financial/member facts.
+
+The predecessor removed only the outer reader actor/hash before comparing saved and current facts. The Legacy native membership producer also embeds its reader actor and actor-bound hash, so another genuinely authorised viewer was refused despite unchanged economic facts. The fix validates both whole raw input hashes and each recognised Legacy membership-domain hash with its respective actual reader. It omits only those two literal Legacy reader fields for local equality. It preserves all other nested fields, complete native membership and financial facts, NEXT payloads, current viewer authority, original confirmer, immutable journal/audit and original raw proofs. There is no recursive scrub, actor substitution or paid classifier change.
+
+The recorded finalisation branch, projection-lock owner, same-target cash/paid predicate, existing signatures and private ACL remain exact. The separate Keep-as-paid decision fingerprint and A-to-B-to-A acknowledgement history are unchanged. Full current-owner integration, compiled contract/roles, real authorised actor calls and native financial/acceptance gates remain required. No database call, lock, rollback trial, release or external effect occurred.

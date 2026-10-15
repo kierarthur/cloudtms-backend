@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "commit": "7351816ce8cfecd29fcf7dbdffbee60ca46c1791",
+  "before": {
+    "artifacts": 15,
+    "manifest_sha256": "c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9"
+  },
+  "after": {
+    "artifacts": 15,
+    "manifest_sha256": "c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9"
+  },
+  "source_cases": 18,
+  "whole_owners": 1,
+  "unique_hunks": 2,
+  "output_sha256": "6004810b514199b13f9abf72d9a46ec485d9847f738c47a7316880e9468e2826",
+  "original_confirmation_immutable": true,
+  "actual_current_viewer_authority_preserved": true,
+  "literal_legacy_reader_actor_fields_only": true,
+  "native_financial_classification_unchanged": true,
+  "compiled_contract_native_full_acceptance": false
+}

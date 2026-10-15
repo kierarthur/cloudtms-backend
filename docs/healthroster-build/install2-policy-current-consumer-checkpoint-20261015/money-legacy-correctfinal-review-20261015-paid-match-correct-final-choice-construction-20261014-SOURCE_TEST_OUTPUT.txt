@@ -1,0 +1,124 @@
+TAP version 13
+# Subtest: seven native reverses are exact whole files and unique, preserving literal SQL regex text
+ok 1 - seven native reverses are exact whole files and unique, preserving literal SQL regex text
+  ---
+  duration_ms: 7.9909
+  type: 'test'
+  ...
+# Subtest: native eight-key money/Boolean change passes current complete decoder; predecessor refuses
+ok 2 - native eight-key money/Boolean change passes current complete decoder; predecessor refuses
+  ---
+  duration_ms: 3.6881
+  type: 'test'
+  ...
+# Subtest: amount_changed must be actual Boolean and no native amount field is silently lost
+ok 3 - amount_changed must be actual Boolean and no native amount field is silently lost
+  ---
+  duration_ms: 4.6106
+  type: 'test'
+  ...
+# Subtest: native question decoder retains NULL break and rejects extra/duplicate or wrong same-contract permission
+ok 4 - native question decoder retains NULL break and rejects extra/duplicate or wrong same-contract permission
+  ---
+  duration_ms: 1.7827
+  type: 'test'
+  ...
+# Subtest: actual saved publish is reviewed once through unchanged public native review DTO and same actor
+ok 5 - actual saved publish is reviewed once through unchanged public native review DTO and same actor
+  ---
+  duration_ms: 1.5773
+  type: 'test'
+  ...
+# Subtest: completed replay uses same review key and native version, never appends another choice/rebuild
+ok 6 - completed replay uses same review key and native version, never appends another choice/rebuild
+  ---
+  duration_ms: 1.8718
+  type: 'test'
+  ...
+# Subtest: wrong session/upload/publication or native mode refuses before native review
+ok 7 - wrong session/upload/publication or native mode refuses before native review
+  ---
+  duration_ms: 3.7356
+  type: 'test'
+  ...
+# Subtest: native blocked review remains blocked and carries genuine questions without apply authority
+ok 8 - native blocked review remains blocked and carries genuine questions without apply authority
+  ---
+  duration_ms: 1.2688
+  type: 'test'
+  ...
+# Subtest: scope proof pins real old CURRENT revision/manifest/heads/actor and contains no mutable version in facts result
+ok 9 - scope proof pins real old CURRENT revision/manifest/heads/actor and contains no mutable version in facts result
+  ---
+  duration_ms: 0.6458
+  type: 'test'
+  ...
+# Subtest: fresh correction delegates native rebuild before ordinary head mutations and retains I1 lock order
+ok 10 - fresh correction delegates native rebuild before ordinary head mutations and retains I1 lock order
+  ---
+  duration_ms: 0.598
+  type: 'test'
+  ...
+# Subtest: actual native projection publish owns READY/review invalidation; no Source replacement of that owner
+ok 11 - actual native projection publish owns READY/review invalidation; no Source replacement of that owner
+  ---
+  duration_ms: 0.6773
+  type: 'test'
+  ...
+# Subtest: Correct-Final native paid/invoice/protected/Draft/DIRECT_AMEND guards are retained as input, not changed by choice admission
+ok 12 - Correct-Final native paid/invoice/protected/Draft/DIRECT_AMEND guards are retained as input, not changed by choice admission
+  ---
+  duration_ms: 1.0346
+  type: 'test'
+  ...
+# Subtest: all native input pins and frozen unpublished Legacy dependency remain exact
+ok 13 - all native input pins and frozen unpublished Legacy dependency remain exact
+  ---
+  duration_ms: 1.9353
+  type: 'test'
+  ...
+# Subtest: Office full owner reverse preserves its source; no matching-hash Kept history or amount calculation added
+ok 14 - Office full owner reverse preserves its source; no matching-hash Kept history or amount calculation added
+  ---
+  duration_ms: 4.226
+  type: 'test'
+  ...
+# Subtest: actual whole upload-owner method performs native BEGIN→context→rows→publish→review in order
+ok 15 - actual whole upload-owner method performs native BEGIN→context→rows→publish→review in order
+  ---
+  duration_ms: 3.6923
+  type: 'test'
+  ...
+# Subtest: same claimed correction cannot be relabelled as ordinary CURRENT; refusal precedes further calls
+ok 16 - same claimed correction cannot be relabelled as ordinary CURRENT; refusal precedes further calls
+  ---
+  duration_ms: 2.1381
+  type: 'test'
+  ...
+# Subtest: wrong actual sealed context leaves saved choice retryable and cannot reach rows/publish/review
+ok 17 - wrong actual sealed context leaves saved choice retryable and cannot reach rows/publish/review
+  ---
+  duration_ms: 1.9699
+  type: 'test'
+  ...
+# Subtest: ordinary completed recheck retains existing result and never calls correction reviewer
+ok 18 - ordinary completed recheck retains existing result and never calls correction reviewer
+  ---
+  duration_ms: 2.38
+  type: 'test'
+  ...
+# Subtest: actual whole Office normalisers preserve native amount labels and finite corrected request CAS
+ok 19 - actual whole Office normalisers preserve native amount labels and finite corrected request CAS
+  ---
+  duration_ms: 3.3528
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 189.3767

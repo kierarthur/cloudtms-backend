@@ -1,0 +1,82 @@
+TAP version 13
+# Subtest: whole existing owner uniquely reverses two hunks to exact published Legacy30 bytes
+ok 1 - whole existing owner uniquely reverses two hunks to exact published Legacy30 bytes
+  ---
+  duration_ms: 67.7072
+  type: 'test'
+  ...
+# Subtest: exact actual native hook excludes Legacy capture without creating a fake map
+ok 2 - exact actual native hook excludes Legacy capture without creating a fake map
+  ---
+  duration_ms: 0.7654
+  type: 'test'
+  ...
+# Subtest: NEXT mapping remains the exact predicate and error from the predecessor
+ok 3 - NEXT mapping remains the exact predicate and error from the predecessor
+  ---
+  duration_ms: 0.2389
+  type: 'test'
+  ...
+# Subtest: Legacy calls the one existing Source selection owner and compares the entire genuine result
+ok 4 - Legacy calls the one existing Source selection owner and compares the entire genuine result
+  ---
+  duration_ms: 0.1668
+  type: 'test'
+  ...
+# Subtest: immutable Source event/group/actor/Contract and native root certificate hashes remain closed
+ok 5 - immutable Source event/group/actor/Contract and native root certificate hashes remain closed
+  ---
+  duration_ms: 0.1438
+  type: 'test'
+  ...
+# Subtest: actual present B rows and old NORMAL S2 to M1 identities remain byte exact outside hunks
+ok 6 - actual present B rows and old NORMAL S2 to M1 identities remain byte exact outside hunks
+  ---
+  duration_ms: 0.1164
+  type: 'test'
+  ...
+# Subtest: all dependency kernels match immutable Git and are delegated without new money classification
+ok 7 - all dependency kernels match immutable Git and are delegated without new money classification
+  ---
+  duration_ms: 210.648
+  type: 'test'
+  ...
+# Subtest: schema parser retains one same-signature owner and owner-only ACL
+ok 8 - schema parser retains one same-signature owner and owner-only ACL
+  ---
+  duration_ms: 0.5111
+  type: 'test'
+  ...
+# Subtest: native-shaped multi-root Legacy retained source witness admits S2 to M1 without NEXT mapping
+ok 9 - native-shaped multi-root Legacy retained source witness admits S2 to M1 without NEXT mapping
+  ---
+  duration_ms: 0.236
+  type: 'test'
+  ...
+# Subtest: foreign missing or duplicate native roots refuse before Source selection
+ok 10 - foreign missing or duplicate native roots refuse before Source selection
+  ---
+  duration_ms: 0.2047
+  type: 'test'
+  ...
+# Subtest: changed manifest selected transition or export presence refuses whole Source witness
+ok 11 - changed manifest selected transition or export presence refuses whole Source witness
+  ---
+  duration_ms: 0.1403
+  type: 'test'
+  ...
+# Subtest: module switch and fake S1 selection cannot reuse Legacy current evidence
+ok 12 - module switch and fake S1 selection cannot reuse Legacy current evidence
+  ---
+  duration_ms: 0.0847
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 408.7307

@@ -1,0 +1,118 @@
+TAP version 13
+# Subtest: current fa661 public owner is exact and reverses through one whole suffix hunk
+ok 1 - current fa661 public owner is exact and reverses through one whole suffix hunk
+  ---
+  duration_ms: 1.5635
+  type: 'test'
+  ...
+# Subtest: both original public admin checks and prior request/cursor/module/physical error order stay exact
+ok 2 - both original public admin checks and prior request/cursor/module/physical error order stay exact
+  ---
+  duration_ms: 0.1824
+  type: 'test'
+  ...
+# Subtest: single kernel wholly reverses native name and exactly two removed Office calls
+ok 3 - single kernel wholly reverses native name and exactly two removed Office calls
+  ---
+  duration_ms: 0.2309
+  type: 'test'
+  ...
+# Subtest: all three native financial queries, Original cash, header, assembly and cursor remain one byte-exact suffix
+ok 4 - all three native financial queries, Original cash, header, assembly and cursor remain one byte-exact suffix
+  ---
+  duration_ms: 0.2656
+  type: 'test'
+  ...
+# Subtest: Native77 four extracted cores are exact input and cannot substitute capital for Original cash
+ok 5 - Native77 four extracted cores are exact input and cannot substitute capital for Original cash
+  ---
+  duration_ms: 2.9031
+  type: 'test'
+  ...
+# Subtest: Source purpose whole two-hunk reverse preserves original native identity/component reader
+ok 6 - Source purpose whole two-hunk reverse preserves original native identity/component reader
+  ---
+  duration_ms: 0.5894
+  type: 'test'
+  ...
+# Subtest: Source role and genuine dated VIEW_PAY_WORK are checked before native financial page
+ok 7 - Source role and genuine dated VIEW_PAY_WORK are checked before native financial page
+  ---
+  duration_ms: 0.2589
+  type: 'test'
+  ...
+# Subtest: actor root work revision and component are derived without caller-supplied purpose or paid flag
+ok 8 - actor root work revision and component are derived without caller-supplied purpose or paid flag
+  ---
+  duration_ms: 0.1581
+  type: 'test'
+  ...
+# Subtest: page and complete header binding remain the exact native closed shapes
+ok 9 - page and complete header binding remain the exact native closed shapes
+  ---
+  duration_ms: 0.1407
+  type: 'test'
+  ...
+# Subtest: payment facts wholly reverses only admin/head gate and exact page call
+ok 10 - payment facts wholly reverses only admin/head gate and exact page call
+  ---
+  duration_ms: 0.6604
+  type: 'test'
+  ...
+# Subtest: entire native cash paid predicate and every complete-page/header/member/UNKNOWN control is exact
+ok 11 - entire native cash paid predicate and every complete-page/header/member/UNKNOWN control is exact
+  ---
+  duration_ms: 1.0416
+  type: 'test'
+  ...
+# Subtest: Legacy and invoice facts body and final ABI remain exact
+ok 12 - Legacy and invoice facts body and final ABI remain exact
+  ---
+  duration_ms: 0.4419
+  type: 'test'
+  ...
+# Subtest: public service-only and both private owner-only ACLs remain closed
+ok 13 - public service-only and both private owner-only ACLs remain closed
+  ---
+  duration_ms: 1.3046
+  type: 'test'
+  ...
+# Subtest: actual current WP-PP permits only active own admin/authoriser/golden and keeps public VIEW_SOURCE_PROGRESS admin-only
+ok 14 - actual current WP-PP permits only active own admin/authoriser/golden and keeps public VIEW_SOURCE_PROGRESS admin-only
+  ---
+  duration_ms: 0.5389
+  type: 'test'
+  ...
+# Subtest: all exact native dependency definitions are saved and file pins match fa661
+ok 15 - all exact native dependency definitions are saved and file pins match fa661
+  ---
+  duration_ms: 513.4586
+  type: 'test'
+  ...
+# Subtest: four full forward owners remain STABLE SECURITY DEFINER finite SQL without an amount classifier
+ok 16 - four full forward owners remain STABLE SECURITY DEFINER finite SQL without an amount classifier
+  ---
+  duration_ms: 1.5885
+  type: 'test'
+  ...
+# Subtest: source-selected original paid predicate accepts exact ready positive posted Original input
+ok 17 - source-selected original paid predicate accepts exact ready positive posted Original input
+  ---
+  duration_ms: 1.506
+  type: 'test'
+  ...
+# Subtest: same predicate refuses incomplete posting absence non-Original unknown or zero dispositions
+ok 18 - same predicate refuses incomplete posting absence non-Original unknown or zero dispositions
+  ---
+  duration_ms: 0.2994
+  type: 'test'
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 665.436

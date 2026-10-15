@@ -1,0 +1,74 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "before": [
+    {
+      "dir": "paid-match-legacy-retained-basis-consumer-20261015",
+      "commit": "3f3ff2401baf271face606ad2feef8a8bdea663d",
+      "artifacts": 11,
+      "manifest_sha256": "13957cc01181a536023467ebba66a60193eb8032119a55dd964cc580ee840dd3"
+    },
+    {
+      "dir": "paid-match-off-physical-contract-current-owner-20261015",
+      "commit": "c7b5cc496cac29e9680aa56892dfb24aa2b56ec1",
+      "artifacts": 12,
+      "manifest_sha256": "1374a8f0b70667cec2b7e260da9469ab897dc3e7764c9a594f77262b03968efd"
+    },
+    {
+      "dir": "source-next-paid-purpose-current-consumer-20261015",
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "artifacts": 24,
+      "manifest_sha256": "eca309accc589dea4b40dfa09c5c50f06e68d85373128bd68ef4633245b64928"
+    }
+  ],
+  "after": [
+    {
+      "dir": "paid-match-legacy-retained-basis-consumer-20261015",
+      "commit": "3f3ff2401baf271face606ad2feef8a8bdea663d",
+      "artifacts": 11,
+      "manifest_sha256": "13957cc01181a536023467ebba66a60193eb8032119a55dd964cc580ee840dd3"
+    },
+    {
+      "dir": "paid-match-off-physical-contract-current-owner-20261015",
+      "commit": "c7b5cc496cac29e9680aa56892dfb24aa2b56ec1",
+      "artifacts": 12,
+      "manifest_sha256": "1374a8f0b70667cec2b7e260da9469ab897dc3e7764c9a594f77262b03968efd"
+    },
+    {
+      "dir": "source-next-paid-purpose-current-consumer-20261015",
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "artifacts": 24,
+      "manifest_sha256": "eca309accc589dea4b40dfa09c5c50f06e68d85373128bd68ef4633245b64928"
+    }
+  ],
+  "tests": [
+    {
+      "dir": "paid-match-legacy-retained-basis-consumer-20261015",
+      "commit": "3f3ff2401baf271face606ad2feef8a8bdea663d",
+      "cases": 12,
+      "output_sha256": "12cb70e7352a83f9e32552ea415b29b699564a5aca0590f9f96ee7e51b751af7"
+    },
+    {
+      "dir": "paid-match-off-physical-contract-current-owner-20261015",
+      "commit": "c7b5cc496cac29e9680aa56892dfb24aa2b56ec1",
+      "cases": 8,
+      "output_sha256": "7bbf59516378caf16013a1e9efb9f6ea8224661772fb7a91a5cb17c06fdb9b29"
+    },
+    {
+      "dir": "source-next-paid-purpose-current-consumer-20261015",
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "cases": 18,
+      "output_sha256": "6c5ed1d89e25297a8e1195f1260e2b5ee0f38bc75d73bd5138515b30338c67d3"
+    }
+  ],
+  "whole_reverses": 6,
+  "unique_hunks_or_kernel_changes": 12,
+  "complete_native_public_owner_reverse": true,
+  "actual_paid_cash_classification_unchanged": true,
+  "remaining": [
+    "complete final current shared-owner/native/security/financial/acceptance union",
+    "genuine NHSP magnitude/reversal/NONE companion path",
+    "ordinary Legacy withheld amount remains unproved"
+  ]
+}

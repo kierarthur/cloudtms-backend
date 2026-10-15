@@ -1,0 +1,21 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "tests_pass": 41,
+  "new_cases": 8,
+  "whole_owner_reverses": 6,
+  "unique_hunks": 8,
+  "forward_lexical_statements": 40,
+  "new_private_signatures": 0,
+  "new_tables": 0,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "unfinished": [
+    "nested revision phantoms",
+    "transitive policy/claim dependencies",
+    "raw trigger registration/source order",
+    "actual phase/CAS and durable ACTIVE refusal/recovery",
+    "native/registry/verifier/contract/acceptance"
+  ]
+}

@@ -1,0 +1,118 @@
+TAP version 13
+# Subtest: one complete existing current owner uniquely reverses both hunks to actual published Legacy30 bytes
+ok 1 - one complete existing current owner uniquely reverses both hunks to actual published Legacy30 bytes
+  ---
+  duration_ms: 90.0616
+  type: 'test'
+  ...
+# Subtest: all actual producer and consumer inputs match immutable Git and saved byte hashes
+ok 2 - all actual producer and consumer inputs match immutable Git and saved byte hashes
+  ---
+  duration_ms: 351.0423
+  type: 'test'
+  ...
+# Subtest: actual Legacy raw input producer embeds the genuine reader and rederived full domain hash
+ok 3 - actual Legacy raw input producer embeds the genuine reader and rederived full domain hash
+  ---
+  duration_ms: 0.7754
+  type: 'test'
+  ...
+# Subtest: only existing two same signatures and owner-private ACL remain with no new persistent write
+ok 4 - only existing two same signatures and owner-private ACL remain with no new persistent write
+  ---
+  duration_ms: 2.7773
+  type: 'test'
+  ...
+# Subtest: recorded finalisation branch original audit and same-target writer suffix remain exact
+ok 5 - recorded finalisation branch original audit and same-target writer suffix remain exact
+  ---
+  duration_ms: 1.4155
+  type: 'test'
+  ...
+# Subtest: current native facts call uses the actual viewer never the immutable confirmer
+ok 6 - current native facts call uses the actual viewer never the immutable confirmer
+  ---
+  duration_ms: 0.1273
+  type: 'test'
+  ...
+# Subtest: both raw full input hashes and respective Legacy actor hashes are checked before the finite omission
+ok 7 - both raw full input hashes and respective Legacy actor hashes are checked before the finite omission
+  ---
+  duration_ms: 0.2661
+  type: 'test'
+  ...
+# Subtest: predecessor actual outer-only comparison reproduces different genuine Legacy viewer mismatch
+ok 8 - predecessor actual outer-only comparison reproduces different genuine Legacy viewer mismatch
+  ---
+  duration_ms: 1.2607
+  type: 'test'
+  ...
+# Subtest: different genuine Legacy viewer retains equal full facts while raw original proof stays immutable
+ok 9 - different genuine Legacy viewer retains equal full facts while raw original proof stays immutable
+  ---
+  duration_ms: 1.7547
+  type: 'test'
+  ...
+# Subtest: NEXT native header and component basis is unchanged and exact across legitimate viewers
+ok 10 - NEXT native header and component basis is unchanged and exact across legitimate viewers
+  ---
+  duration_ms: 0.4478
+  type: 'test'
+  ...
+# Subtest: current actor mismatch and immutable confirmer impersonation refuse before comparison
+ok 11 - current actor mismatch and immutable confirmer impersonation refuse before comparison
+  ---
+  duration_ms: 2.3617
+  type: 'test'
+  ...
+# Subtest: outer raw digest mismatch refuses even when every native basis is unchanged
+ok 12 - outer raw digest mismatch refuses even when every native basis is unchanged
+  ---
+  duration_ms: 0.2313
+  type: 'test'
+  ...
+# Subtest: actor-bound native digest mismatch refuses even with a re-sealed outer input
+ok 13 - actor-bound native digest mismatch refuses even with a re-sealed outer input
+  ---
+  duration_ms: 0.2223
+  type: 'test'
+  ...
+# Subtest: genuine economic root membership module or unknown data changes still fail full equality
+ok 14 - genuine economic root membership module or unknown data changes still fail full equality
+  ---
+  duration_ms: 2.0122
+  type: 'test'
+  ...
+# Subtest: unrecognised schema actor and hash fields are not recursively erased
+ok 15 - unrecognised schema actor and hash fields are not recursively erased
+  ---
+  duration_ms: 0.2103
+  type: 'test'
+  ...
+# Subtest: nested actor or hash inside genuine native financial data remains part of facts equality
+ok 16 - nested actor or hash inside genuine native financial data remains part of facts equality
+  ---
+  duration_ms: 0.8317
+  type: 'test'
+  ...
+# Subtest: native basis ordering and missing membership cannot be converted to equal facts
+ok 17 - native basis ordering and missing membership cannot be converted to equal facts
+  ---
+  duration_ms: 0.4729
+  type: 'test'
+  ...
+# Subtest: malformed complete current native basis refuses rather than being erased or marked paid
+ok 18 - malformed complete current native basis refuses rather than being erased or marked paid
+  ---
+  duration_ms: 0.297
+  type: 'test'
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 618.8322

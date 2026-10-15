@@ -1,0 +1,97 @@
+{
+  "source_only": true,
+  "native": false,
+  "commit": "638b38642f8905b3ceae0fb45ebaa119e7311734",
+  "results": [
+    {
+      "package": "paid-match-legacy-native-consumer-construction-20261014",
+      "before": {
+        "artifacts": 31,
+        "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+      },
+      "after": {
+        "artifacts": 31,
+        "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+      },
+      "pass": 13,
+      "output_sha256": "9482086d5e8ea101cb503c7ad50dcc12021f4b095dc8868d2a67edd3608c2e63"
+    },
+    {
+      "package": "paid-match-correct-final-choice-construction-20261014",
+      "before": {
+        "artifacts": 34,
+        "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5"
+      },
+      "after": {
+        "artifacts": 34,
+        "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5"
+      },
+      "pass": 19,
+      "output_sha256": "1066cfc5e5dfd0026b9cce06c4b150cac4021f159598aea0f273dc5e8259e52c"
+    }
+  ],
+  "whole_reverse_owners": 15,
+  "unique_reverse_hunks": 53,
+  "reverses": [
+    {
+      "file": "01_complete_fin4_prior_selector.sqlinc",
+      "hunks": 2
+    },
+    {
+      "file": "04_complete_payment_facts.sqlinc",
+      "hunks": 2
+    },
+    {
+      "file": "05_complete_overlap_inputs.sqlinc",
+      "hunks": 1
+    },
+    {
+      "file": "06_complete_choice_admit.sqlinc",
+      "hunks": 1
+    },
+    {
+      "file": "07_complete_choice_current.sqlinc",
+      "hunks": 1
+    },
+    {
+      "file": "08_complete_office_question.sqlinc",
+      "hunks": 1
+    },
+    {
+      "file": "09_complete_retained_transition_assert.sqlinc",
+      "hunks": 1
+    },
+    {
+      "file": "01_complete_overlap_inputs.sqlinc",
+      "hunks": 2
+    },
+    {
+      "file": "02_complete_upload_context.sqlinc",
+      "hunks": 1
+    },
+    {
+      "file": "03_complete_paid_match_question.sqlinc",
+      "hunks": 2
+    },
+    {
+      "file": "04_complete_office_recheck.sqlinc",
+      "hunks": 12
+    },
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "hunks": 8
+    },
+    {
+      "file": "05_complete_correct_final_office_preview.sqlinc",
+      "hunks": 3
+    },
+    {
+      "file": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "hunks": 4
+    },
+    {
+      "file": "frontend/js/weekly-source/workspace-actions.js",
+      "hunks": 12
+    }
+  ]
+}

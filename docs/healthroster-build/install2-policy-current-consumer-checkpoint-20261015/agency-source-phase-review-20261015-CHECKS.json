@@ -1,0 +1,38 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "commit": "ecbd37def2626b109c5cf609835e682667e96e3c",
+  "before": {
+    "artifacts": 29,
+    "manifest_sha256": "f20c66ebe63043035e86f191385044b54bc50577d45b1e8c86878d04085086ac"
+  },
+  "after": {
+    "artifacts": 29,
+    "manifest_sha256": "f20c66ebe63043035e86f191385044b54bc50577d45b1e8c86878d04085086ac"
+  },
+  "whole_owner_reverses": 5,
+  "unique_hunks": 16,
+  "tests": [
+    {
+      "file": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/source-phase-admission.test.mjs",
+      "count": 20,
+      "output_sha256": "8d03655003c091ddc6f6c055ef862df6357b19ce9d0934173f2b261ae8e252aa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/business-inline.test.mjs",
+      "count": 58,
+      "output_sha256": "4db199fa30cbc06ffb9cbdbc2da05861fd7b976d92729c6a928a0f99fdc6e8ca"
+    }
+  ],
+  "confirmed_native_rotation_field": "booking_id",
+  "comparison_and_lineage_update_counterexamples": "withdrawn: actual immutable append-only contract",
+  "remaining_implementation": [
+    "precise cross-group policy-date membership and actual resolved-policy transitive parents",
+    "raw/nested trigger registration and complete current owner integration"
+  ],
+  "unrun": [
+    "PostgreSQL current compiled roles/contract/registry",
+    "actual Candidate/I1/Source/order/concurrency/hidden-RR/native phase and complete financial acceptance"
+  ]
+}

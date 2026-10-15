@@ -1,0 +1,27 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "source_cases": 60,
+  "new_cases": 11,
+  "whole_selected_owners": 7,
+  "changed_owners": 6,
+  "unique_hunks": 17,
+  "forward_lexical_statements": 52,
+  "unchanged_scalar_core": true,
+  "new_private_signatures": [
+    "private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean)",
+    "private.timesheet_correction_a0_source_policy_tokens_v1(text,jsonb)"
+  ],
+  "preserved_original_coverage_abi": true,
+  "new_tables": 0,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "new_policy_case": "ALL active groups per actual Client/work date, including conservative precise-date inactive membership phantoms for concurrent activation/insertion",
+  "unfinished": [
+    "Agency ACTIVE exact policy nested union and matching-kind range overlap",
+    "transitive immutable claim fields",
+    "raw source trigger registration/order and current full owner integration",
+    "actual concurrency/hidden-RR/engine/native phases/roles/contract/registry/verifier/full acceptance"
+  ]
+}

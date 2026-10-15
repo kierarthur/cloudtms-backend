@@ -1,0 +1,175 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "agency-source-phase-review-20261015-business-inline.test.mjs.tap.txt",
+      "bytes": 12708,
+      "sha256": "4db199fa30cbc06ffb9cbdbc2da05861fd7b976d92729c6a928a0f99fdc6e8ca"
+    },
+    {
+      "file": "agency-source-phase-review-20261015-CHECKS.json",
+      "bytes": 1522,
+      "sha256": "dc42ec2fd6672154d1881672f49f107195139c8035d2b1b7ba58385f33afacb2"
+    },
+    {
+      "file": "agency-source-phase-review-20261015-source-phase-admission.test.mjs.tap.txt",
+      "bytes": 5379,
+      "sha256": "8d03655003c091ddc6f6c055ef862df6357b19ce9d0934173f2b261ae8e252aa"
+    },
+    {
+      "file": "BUILD_A0_SOURCE_FOOTPRINT_LINEAGE_SOURCE_CRITIC_15102026.md",
+      "bytes": 4200,
+      "sha256": "df3889899ccfdfa0502df6aeedffac561f81fdbcfb3e76e2536b211147ddc8e2"
+    },
+    {
+      "file": "BUILD_AGENCY_SOURCE_PHASE_ACTIVE_SOURCE_CRITIC_15102026.md",
+      "bytes": 3129,
+      "sha256": "d4cc6bafcc8ba26bc3e8b4b54de14681efa026433165776f908f2dd999189dc1"
+    },
+    {
+      "file": "BUILD_MONEY_CURRENT_CONSUMERS_SOURCE_CRITIC_15102026.md",
+      "bytes": 3192,
+      "sha256": "676d737a351cde4e33376db23e0c2fbda51b8ca1342da6eada96accbb6bc2688"
+    },
+    {
+      "file": "BUILD_MONEY_LEGACY_CORRECT_FINAL_SOURCE_CRITIC_15102026.md",
+      "bytes": 3644,
+      "sha256": "f69e25bd4dc69acadbc44870a3f7f578ad63e29451cd896a69731693546081da"
+    },
+    {
+      "file": "BUILD_MONEY_LEGACY_CURRENT_VIEWER_SOURCE_CRITIC_15102026.md",
+      "bytes": 1877,
+      "sha256": "c73346bc901ccfbe08c5c80bd17f4ba838ab58023379bf23f446af740e62b1c1"
+    },
+    {
+      "file": "BUILD_MONEY_PHYSICAL_CONTRACT_IDENTITY_SOURCE_CRITIC_15102026.md",
+      "bytes": 4198,
+      "sha256": "c4bbeb7fe3578a3a94c21565e496c80c252239c324e0dd864b2446ccf3597c4b"
+    },
+    {
+      "file": "cloudflare-reference-types-20261015-RETRIEVAL.json",
+      "bytes": 510,
+      "sha256": "a933681839de4d9e1c081d06cc32f0f7a49114732ae4b34c385b112b8f3b5e56"
+    },
+    {
+      "file": "money-current-consumers-review-20261015-CHECKS.json",
+      "bytes": 2798,
+      "sha256": "ddca6100ded4170ef233aaf3154a6b6320cc0f15c66d43e99d298b167f95d2be"
+    },
+    {
+      "file": "money-current-consumers-review-20261015-join-source.test.mjs.tap.txt",
+      "bytes": 1929,
+      "sha256": "7bbf59516378caf16013a1e9efb9f6ea8224661772fb7a91a5cb17c06fdb9b29"
+    },
+    {
+      "file": "money-current-consumers-review-20261015-purpose-source.test.mjs.tap.txt",
+      "bytes": 4465,
+      "sha256": "6c5ed1d89e25297a8e1195f1260e2b5ee0f38bc75d73bd5138515b30338c67d3"
+    },
+    {
+      "file": "money-current-consumers-review-20261015-retained-legacy-source.test.mjs.tap.txt",
+      "bytes": 2908,
+      "sha256": "12cb70e7352a83f9e32552ea415b29b699564a5aca0590f9f96ee7e51b751af7"
+    },
+    {
+      "file": "money-legacy-correctfinal-review-20261015-CHECKS.json",
+      "bytes": 2487,
+      "sha256": "b42323d0eec335b2b518be5d7f62224ed3360b54df6533b8f9b43dafe4061bff"
+    },
+    {
+      "file": "money-legacy-correctfinal-review-20261015-paid-match-correct-final-choice-construction-20261014-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 5041,
+      "sha256": "1066cfc5e5dfd0026b9cce06c4b150cac4021f159598aea0f273dc5e8259e52c"
+    },
+    {
+      "file": "money-legacy-correctfinal-review-20261015-paid-match-legacy-native-consumer-construction-20261014-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 3524,
+      "sha256": "9482086d5e8ea101cb503c7ad50dcc12021f4b095dc8868d2a67edd3608c2e63"
+    },
+    {
+      "file": "money-legacy-viewer-review-20261015-CHECKS.json",
+      "bytes": 788,
+      "sha256": "909d4b37a17caaa510345091991905913cae3c7135e17381d1c7a761f8aab933"
+    },
+    {
+      "file": "money-legacy-viewer-review-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 4465,
+      "sha256": "6004810b514199b13f9abf72d9a46ec485d9847f738c47a7316880e9468e2826"
+    },
+    {
+      "file": "review-agency-source-phase-20261015.mjs",
+      "bytes": 3169,
+      "sha256": "a796a938e8e1f9ded3e6c3ad988246d89a013c1d06953db4f72c1d1cba721564"
+    },
+    {
+      "file": "review-money-current-consumers-20261015.mjs",
+      "bytes": 4365,
+      "sha256": "64cce247f5ff551167656dcea44e0b051bc00a83c24530a1b5399b9fde5f8b72"
+    },
+    {
+      "file": "review-money-legacy-viewer-20261015.mjs",
+      "bytes": 2199,
+      "sha256": "6ef9bff2104a0ac50cc439c890f51234c5657a01cad8175e50b46d5c9d9b8a48"
+    },
+    {
+      "file": "root-a0-source-lineage-source-20261015-SOURCE_CHECKS.json",
+      "bytes": 562,
+      "sha256": "ca70215642f301891c5c6bf4b5d5744492e7b2574b0fb1f15b1c3addeebd5f12"
+    },
+    {
+      "file": "root-a0-source-lineage-source-20261015-SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "root-a0-source-lineage-source-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 10487,
+      "sha256": "b22891ff9bd2e139d1c030d3edf82ac5e353e8ba8d763006fa9063d3363a8f5c"
+    },
+    {
+      "file": "root-a0-source-policy-source-20261015-SOURCE_CHECKS.json",
+      "bytes": 1089,
+      "sha256": "a4f2b9542c3da3eb18c28d8987ad8b046008f149af579ac9d473ea97a0fda539"
+    },
+    {
+      "file": "root-a0-source-policy-source-20261015-SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "root-a0-source-policy-source-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 15870,
+      "sha256": "6e6d716d80b5b18f637662f8078e58941037eb87a901d47f6b5b7e9a754bb235"
+    },
+    {
+      "file": "root-a0-source-revision-source-20261015-SOURCE_CHECKS.json",
+      "bytes": 895,
+      "sha256": "4fffc87fdc5e414d8fd25994f02a20c0b1b80d1c92b83ca59425088462d7afae"
+    },
+    {
+      "file": "root-a0-source-revision-source-20261015-SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "root-a0-source-revision-source-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 12769,
+      "sha256": "31282708f7e9123dc77cd1988eafa175bcaf636077ef9b93ac2fa51fd37e3bbf"
+    },
+    {
+      "file": "SOURCE_COMMITS.json",
+      "bytes": 1276,
+      "sha256": "47aeab45e16677382e8da9694033c300053de22404df995bb750454f06f9db76"
+    },
+    {
+      "file": "typed-physical-field-source-audit-20261014-audit.mjs",
+      "bytes": 5152,
+      "sha256": "17b11e44b2e11a01f34211684d0f0b295698a5e4b46d6016c7336494bbeb8201"
+    },
+    {
+      "file": "typed-physical-field-source-audit-20261014-CANDIDATES.json",
+      "bytes": 6018,
+      "sha256": "629e318da4da651266511d57836970bc760e16c554a73397266d4d52c8f0be0e"
+    }
+  ]
+}
