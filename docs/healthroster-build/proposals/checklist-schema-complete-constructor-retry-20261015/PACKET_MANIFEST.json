@@ -1,0 +1,80 @@
+{
+  "source_only": true,
+  "files": [
+    {
+      "file": "CONSTRUCTOR_SOURCE_MANIFEST.json",
+      "bytes": 61345,
+      "sha256": "01abffe3b3c9090f375262d1fdc71bfee1f5d6f35cc378f43ed62e2ea3848178"
+    },
+    {
+      "file": "CURRENT_ONCE_ONLY_MOUNT_PLAN.json",
+      "bytes": 53220,
+      "sha256": "279842f81efaca5a6dab0539bc30fcc6565b13f163a528a1605fbab376433235"
+    },
+    {
+      "file": "FRESH_SCHEMA_ROUTINE_TRIGGER_FINGERPRINT.sql",
+      "bytes": 8199,
+      "sha256": "34ac926f127160ec40268630896738151c0380c94876ee7638ecc62fb0da22cf"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 3966,
+      "sha256": "785756d257931e8e5ab96fb3de9c09b73d767d9462bfb10ea4381d17c12a44c5"
+    },
+    {
+      "file": "INITIAL_TRIGGER_COUNT_HARNESS_REFUSAL.txt",
+      "bytes": 774,
+      "sha256": "9a5627e4e16fa4ae5d5d9e105034ef88e134e8ccd224b78d166f09a818dfdd0d"
+    },
+    {
+      "file": "SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "bytes": 915760,
+      "sha256": "4fa7f3156575d6b6ea400f4cc1c1f03f14f842ab672cb917def539b1226bee64"
+    },
+    {
+      "file": "build-and-check.mjs",
+      "bytes": 15979,
+      "sha256": "cc0c689e6014a00e6edb8e7161e51ed597cd010e973a8172dcc143d7b92d289e"
+    },
+    {
+      "file": "input/01_13102026_1133_weekly_source_rule_sets_schema.sql",
+      "bytes": 14951,
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "file": "input/02_13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "bytes": 8400,
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+    },
+    {
+      "file": "input/03_13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16112,
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "file": "input/04_03_complete_once_only_agency_schemas.sqlinc",
+      "bytes": 9512,
+      "sha256": "b015fa623bc51f4f751dfd2cf1d0c852506e31398a8b377d4a7b5ae1f49c6283"
+    },
+    {
+      "file": "prepared/01_13102026_1133_weekly_source_rule_sets_schema.sql",
+      "bytes": 14917,
+      "sha256": "03866ee59284377a0021defc77fb40d984e8e8127e5f3aced7bf223f99c90791"
+    },
+    {
+      "file": "prepared/02_13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "bytes": 8366,
+      "sha256": "aff89758a2c6033c9c5dd8d330a62bda0e3ba4f8be9d0aa2576fd44f4884f348"
+    },
+    {
+      "file": "prepared/03_13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16078,
+      "sha256": "faca7a0392015a812bf7e1aea9089387ee38030f7e2994fe5b4cc46da01695b5"
+    },
+    {
+      "file": "prepared/04_03_complete_once_only_agency_schemas.sqlinc",
+      "bytes": 9512,
+      "sha256": "b015fa623bc51f4f751dfd2cf1d0c852506e31398a8b377d4a7b5ae1f49c6283"
+    }
+  ]
+}

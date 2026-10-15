@@ -1,0 +1,1 @@
+{"source_only":true,"SQL_executed":false,"raw_saved_Git_pins":76,"before_after":true,"complete_schema_pages":4,"complete_Native_functions":50,"actual_guard_functions":3,"actual_trigger_statements":18,"whole_Candidate_reversals":2,"statements":248,"bytes":915760,"fresh_schema_frames":35,"actual_retry_result":null}
