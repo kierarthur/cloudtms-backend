@@ -1,0 +1,417 @@
+{
+  "verdict": "PASS_BOUNDED_SOURCE_REVIEW",
+  "reviewed_commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+  "checks": [
+    "25 archive files, nine canonical outputs and ten exact raw Git/saved input pins",
+    "four entire physical page forward/reverse proofs (16 hunks), original0519 closure untouched",
+    "four unchanged d48 helpers, exact nine-child guard, six-page order and complete original ACL tail; current Source dispatcher retained",
+    "complete physical verifier reconstruction, exact two-hunk reverse, all14 raw/31 native/41 body checks, both mandatory constructors and release prefixes",
+    "31 recorded native bindings agree exactly after representation fix; the sole Bank ALWAYS state is immutable source line173",
+    "whole177-statement trial rebuilt exactly; initial failure, diagnostic, retry PASS, fresh restoration fingerprints and three released shared turns reconciled",
+    "all65 raw Git/saved pins and reviewed HEAD checked again after assertions"
+  ],
+  "raw_saved_pins": 65,
+  "physical_page_hunks": 16,
+  "artifacts": 25,
+  "canonical_outputs": 9,
+  "raw_guards": 14,
+  "native_bindings": 31,
+  "body_expectations": 41,
+  "recorded_retry_statements": 177,
+  "recorded_retry_bytes": 214864,
+  "fresh_database_calls": 0,
+  "full_rehearsal": false,
+  "final_part_b_verdict": false,
+  "source_pins": [
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/COMPOSITION.json",
+      "bytes": 11484,
+      "sha256": "b4e370b92f94a6fb5c3eeac3e6d3747d48d4ecd25bd33de6e20f93bc41c4c54c"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/SHA256_MANIFEST.json",
+      "bytes": 3966,
+      "sha256": "bc429f5df9c65cd47ec88c1c749ef303f0e49496f9d7a325071b3199bb9f9be9"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/ABSENCE.sql",
+      "bytes": 3109,
+      "sha256": "28ed74b2718b1b54a2f33a09ebdea12b63a1cdd416b5020f761d464270123361"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/CASE_REVIEW_REVIEW.md",
+      "bytes": 2288,
+      "sha256": "efb8c47b2bfdfdc857ea401a148ce6af2eeb00afd1710bd7e821150e3433536b"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/CASE_REVIEW_SOURCE_CHECK_OUTPUT.txt",
+      "bytes": 279,
+      "sha256": "ed8f7b990e4bbc45098e052b34e9791f0485ce5d2477ee99ac78712c86331c28"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/CASE_REVIEW_SOURCE_PINS.json",
+      "bytes": 4767,
+      "sha256": "81ca81a2d42b6fe0edce988b8d9f308d528492badf402800f68e6b93d09452b7"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/CASE_REVIEW_check-source.mjs.txt",
+      "bytes": 4713,
+      "sha256": "4a8bae352c184fbfd4ee0853a16d767b4e556c8bacbc10b6e9186b12ce26442c"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/CHECKPOINT.mjs.txt",
+      "bytes": 8901,
+      "sha256": "105d1b444bce761f091e87e81e2719b311268abe83806d9170c50f84b9c76477"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/CURRENT_RELEASE_BEFORE.json",
+      "bytes": 35336,
+      "sha256": "def592ae7624b8e9a7bce5e7f0f4f1d2011e0c942c35d5fdb0d61a66f433e5cd"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/FIX_NATIVE_BINDING_VERIFIER.mjs.txt",
+      "bytes": 4257,
+      "sha256": "ab6809591a3677483281598acc983d70591497a8cfc28041a2b980a321880b35"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/INITIAL_NATIVE_RESULT.json",
+      "bytes": 29167,
+      "sha256": "f3be88103b7eace9da4ff4d3d9c05d5e0996af251c58a75f188e94a53e8454d5"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/INITIAL_PHYSICAL_VERIFIER.sql.txt",
+      "bytes": 26246,
+      "sha256": "43fcec056ef19bc29317ce01b438e7f678f9008fd3861abb850b60baa7f3313f"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/INITIAL_TRIAL.sql",
+      "bytes": 214641,
+      "sha256": "dbd2b1619a8ef54f85ba612f1f5ad1bcfb133a0ec1c2c83ac70a090ff322ec27"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/INITIAL_TRIAL_MANIFEST.json",
+      "bytes": 7087,
+      "sha256": "b86e5721741bbca0005355e745ec3dfaee223c098066d079f791cb9035cf23a3"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/MOUNT_SOURCE_UNION.mjs.txt",
+      "bytes": 9465,
+      "sha256": "ee5cf15e0479735b090a653da41b431ce6b014e016a12f315b7f3c5af7adc112"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/NATIVE_BINDING_VERIFIER_FIX.json",
+      "bytes": 1805,
+      "sha256": "ece9125ac1f234b7dbf8303fc0a6d662438b7cc234daed0115039bd2d5daf7ed"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/PREPARE_NATIVE_TRIAL.mjs.txt",
+      "bytes": 6417,
+      "sha256": "cd90cb1675c6b1574303dd02b040a63f6a628d3d4a4fd8870cabed7ea8b744b7"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/READONLY_BINDING_DIAG.sql",
+      "bytes": 10249,
+      "sha256": "d8e13de1e7e90aba99a6423389acf43ca13536aae02223f8769c4ccf95da6a76"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/READONLY_BINDING_DIAG_RESULT.json",
+      "bytes": 22680,
+      "sha256": "42cbb5cac2d69723dc25d2ce10a1a01a2401d097ed0b16606e7c377f79f0437a"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/RETRY01_NATIVE_RESULT.json",
+      "bytes": 29328,
+      "sha256": "fe71102ec2701fc1bbc505b130143d92af53f978e407213b9c114f99b0bfc6ff"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/RETRY01_TRIAL.sql",
+      "bytes": 214864,
+      "sha256": "6a060426e48f6f36c05c50405d79e87b6d75a0a9da71d5e382387fb746470e5a"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/RETRY01_TRIAL_MANIFEST.json",
+      "bytes": 7087,
+      "sha256": "05417fe4d779cd67c9c08f8f8ef468bb1444e4277cccb17223c3ccd04c381d70"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/SHARED_TURN_JOURNAL.txt",
+      "bytes": 1310,
+      "sha256": "a2f2ff3001385dac31f11ec82e082e14f1e1010e2819d56dad3a87b674c07e77"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "a16b66e1b7c0942ce5fc9a8b6d1216928ab9fdf7d0b0aaa108f0c0394ca0f3b5"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/install2-a0-physical-source-canonical-20261015/UNEXECUTED_INITIAL_PREPARE_MANIFEST.json",
+      "bytes": 3741,
+      "sha256": "ac4ce059119478fe3b2e98e3ce0975c655ea60c00f8f7646f79248cb39f55bbf"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc",
+      "bytes": 14965,
+      "sha256": "5ff8eea6905813e1b2964d47497f23e46d2ba0eccdd8669ada202e0bc2a1d3c8"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/05_native_creator_intents_and_triggers.sqlinc",
+      "bytes": 21519,
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/06_send_family_fence.sqlinc",
+      "bytes": 7165,
+      "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/08_complete_current_request.sqlinc",
+      "bytes": 24480,
+      "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/04_complete_native_lock_fence.sqlinc",
+      "bytes": 12634,
+      "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/09_native_child_raw_intents.sqlinc",
+      "bytes": 6123,
+      "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+      "bytes": 7143,
+      "sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "bytes": 26469,
+      "sha256": "ab9888f7a593039183162ceec4b5bd41d398b9fc469d9354f11d522052b30f0b"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union/02_reviewed_bodies.sqlinc",
+      "bytes": 5867,
+      "sha256": "4439a9df0239a538ae075cdf4b048af42d43c0ac796fe41c1ac192894d649a9c"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/COMPLETE_CURRENT_FORWARD_AND_REVERSE.json",
+      "bytes": 25751,
+      "sha256": "bc250abfaa9a0f4208549ffbdff6bf174149f552e35fd30201ad7eda0d489426"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_05_native_creator_intents_and_triggers.complete-proposed.sqlinc",
+      "bytes": 21519,
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_06_send_family_fence.complete-proposed.sqlinc",
+      "bytes": 7165,
+      "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_08_complete_current_request.complete-proposed.sqlinc",
+      "bytes": 24480,
+      "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_04_complete_native_lock_fence.complete-proposed.sqlinc",
+      "bytes": 12634,
+      "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_helpers.sqlinc",
+      "bytes": 22486,
+      "sha256": "e2c00e0d87bd7e9e52d98c9a45441101ce6495831c93d0d55909482c00660c8e"
+    },
+    {
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "bytes": 23386,
+      "sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_native_child_raw_intents.sqlinc",
+      "bytes": 6123,
+      "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_source_contract.sql",
+      "bytes": 25895,
+      "sha256": "c6b2ad962c62cbfe24b6c25bc2cfa9d2a1af79cadc30712fd6b50af573112783"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_reviewed_bodies.sqlinc",
+      "bytes": 5867,
+      "sha256": "b4de17478597aa4dee40e847fe1de8a54236a40441e50c45f20acdf8d032db22"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "bytes": 19166,
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "bytes": 5935,
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "bytes": 23160,
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "bytes": 12314,
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+      "bytes": 7368,
+      "sha256": "6199a03d706976e2166eddaaa230e87326568c6a0cce2de876067bd8afad17bc"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/01_canonical_input_assert.sqlinc",
+      "bytes": 1528,
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+      "bytes": 9527,
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/03_native_input_witness.sqlinc",
+      "bytes": 4526,
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+      "bytes": 35853,
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+      "bytes": 390,
+      "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+      "bytes": 8168,
+      "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+      "bytes": 7703,
+      "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "bytes": 3867,
+      "sha256": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/release/current-release.json",
+      "bytes": 35532,
+      "sha256": "5dfdd37d9cd9d8075d7295e5621658028a6a61699339d58cf80899bc1e84f167"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+      "bytes": 6517,
+      "sha256": "f348f0b6849a40a58124c992128edd78ac95d886f764baed8bb70a4c341b82b7"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "bytes": 20361,
+      "sha256": "77204ec97aaea6bae5e02dd63c68321435c15bf780a3c89a16ad6af1d620a316"
+    },
+    {
+      "commit": "bdc1b7cb2a9b2f0067ed0ba6dc0c96d4b0858690",
+      "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "bytes": 4481,
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    }
+  ]
+}
