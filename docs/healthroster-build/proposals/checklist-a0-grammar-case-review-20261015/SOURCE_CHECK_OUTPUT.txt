@@ -1,0 +1,1 @@
+{"checks":8,"source_fix_accept":true,"full_owner_reverse_exact":true,"trial_only_two_parentheses":true,"initial_failure_preserved":true,"recorded_native_28_statement_kernel_pass":true,"recorded_fresh_absence":true,"reviewer_SQL_executed":false,"full_rehearsal":false,"pins":14}

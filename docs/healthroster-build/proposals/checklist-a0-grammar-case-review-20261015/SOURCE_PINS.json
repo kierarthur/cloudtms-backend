@@ -1,0 +1,106 @@
+{
+  "status": "FINITE_SOURCE_FIX_AND_RECORDED_NATIVE_SCOPE_ACCEPT",
+  "reviewer_SQL_executed": false,
+  "reviewed_commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+  "checks": 8,
+  "pins": [
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/SOURCE_MANIFEST.json",
+      "bytes": 701,
+      "sha256": "08efc3b27189dc83742ee413c60e7f88d5b58fb66814760bc2b00e04fc63e443",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/forward/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/before/00_source_token_grammar.sqlinc",
+      "bytes": 5578,
+      "sha256": "bccccd390cd6d5e70b3fb6b0f0b7e0fa3dfc1e31a99fc784bd7dea13b95a26ff",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/COMPLETE_CURRENT_REVERSE.json",
+      "bytes": 1170,
+      "sha256": "f5750d8a9febc63b7cb95839bf482308cf72a6e010ee6bd86e4262492f66b147",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/BOUNDARY.md",
+      "bytes": 571,
+      "sha256": "aa67af876cb72f7c98ea3f3ae28010a524aafbf8db3b902ef185f0681e3a48aa",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/before/00_source_token_grammar.sqlinc",
+      "bytes": 5578,
+      "sha256": "bccccd390cd6d5e70b3fb6b0f0b7e0fa3dfc1e31a99fc784bd7dea13b95a26ff",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/forward/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/proposals/a0-source-grammar-case-compilation-fix-20261015/COMPLETE_CURRENT_REVERSE.json",
+      "bytes": 1170,
+      "sha256": "f5750d8a9febc63b7cb95839bf482308cf72a6e010ee6bd86e4262492f66b147",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/TRIAL.sql",
+      "bytes": 33972,
+      "sha256": "b6e73e99cc047276f987ac44c42ed3e5c8c6be6993c9b0fadd3dacd993e669ad",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/RETRY_01.sql",
+      "bytes": 33974,
+      "sha256": "e1ffc8921a246c09c11b35233a3d812e50f699cd5adca1c9c4c90af6c60a3479",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/INITIAL_NATIVE_RESULT.json",
+      "bytes": 3821,
+      "sha256": "6841432c8814310ba4f186e52d169a41de25e599b863700fa26532cdbc521c85",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/RETRY_01_NATIVE_RESULT.json",
+      "bytes": 7029,
+      "sha256": "723ce1d144824e74457a21c24bb1403f404567a786a3cca3ee8fa487d43c12f7",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/ABSENCE.sql",
+      "bytes": 743,
+      "sha256": "638aa7355ed65e387a6455a4456ec61bea19427ad63dc54e774ed2fa2ce221ae",
+      "saved_git_equal": true
+    },
+    {
+      "commit": "a7bb9f54214a0c2ee539f9efb2f7444084953799",
+      "path": "docs/healthroster-build/root-source-arbiter-native-kernel-20261015/SHARED_TURN_JOURNAL.txt",
+      "bytes": 1724,
+      "sha256": "fd32b9fc288f653e6a4f11876c222f100496f7c7f0344ee83e96856bb6ec593f",
+      "saved_git_equal": true
+    }
+  ]
+}
