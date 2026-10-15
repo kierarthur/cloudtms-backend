@@ -1,0 +1,37 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "artifacts": [
+    {
+      "file": "COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 2420,
+      "sha256": "1de03bd77e6726573071505a15dff20550af5a231e30c8bf81b7bf3c346e96aa"
+    },
+    {
+      "file": "SOURCE_BOUNDARY.md",
+      "bytes": 1214,
+      "sha256": "173365ac6e1746e665c3f7d56e87e883507c0400bf83bf889426967c3fa35037"
+    },
+    {
+      "file": "before/02_source_raw_final_registration.sqlinc",
+      "bytes": 31891,
+      "sha256": "11c8f1b4d7fd8c51add82740a9888d4f11d256085ec1f789022cf6d4bcd839c3"
+    },
+    {
+      "file": "before/03_source_raw_final_verifier.sqlinc",
+      "bytes": 14075,
+      "sha256": "20e168b6358692b552ff657dd6b4304a731f37b1c4a2d53ebea3cc66b3955d5b"
+    },
+    {
+      "file": "forward/02_source_raw_final_registration.sqlinc",
+      "bytes": 31947,
+      "sha256": "834e4134f5bc306810f627d38cad84d12fc3d8c5c6f79dddb88b26e839d50043"
+    },
+    {
+      "file": "forward/03_source_raw_final_verifier.sqlinc",
+      "bytes": 14131,
+      "sha256": "64af6d58494f0bcec8d7c6022f9a7274b144cc296892d18aa5eb1b430708e2ef"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "source_only": true,
+  "native": false,
+  "finding": "UPDATE OF column list is tgattr, not tgtype; same-name/type/function/owner restricted guard passed predecessor verification",
+  "finding_priority": "P2",
+  "records": [
+    {
+      "file": "02_source_raw_final_registration.sqlinc",
+      "source_commit": "f8c7830b22805339b205afe74fe3fc163f96381c",
+      "source_path": "docs/healthroster-build/proposals/a0-source-raw-final-registration-20261015/02_source_raw_final_registration.sqlinc",
+      "before_sha256": "11c8f1b4d7fd8c51add82740a9888d4f11d256085ec1f789022cf6d4bcd839c3",
+      "after_sha256": "834e4134f5bc306810f627d38cad84d12fc3d8c5c6f79dddb88b26e839d50043",
+      "hunks": [
+        {
+          "before": "or trigger.tgtype::integer<>31 or trigger.tgnargs<>0 or trigger.tgqual is not null or trigger.tgenabled<>'O'",
+          "after": "or trigger.tgtype::integer<>31 or trigger.tgnargs<>0 or trigger.tgattr::text<>'' or trigger.tgqual is not null or trigger.tgenabled<>'O'"
+        },
+        {
+          "before": "and trigger.tgtype::integer=31 and trigger.tgnargs=0 and trigger.tgqual is null and trigger.tgenabled='O'",
+          "after": "and trigger.tgtype::integer=31 and trigger.tgnargs=0 and trigger.tgattr::text='' and trigger.tgqual is null and trigger.tgenabled='O'"
+        }
+      ]
+    },
+    {
+      "file": "03_source_raw_final_verifier.sqlinc",
+      "source_commit": "f8c7830b22805339b205afe74fe3fc163f96381c",
+      "source_path": "docs/healthroster-build/proposals/a0-source-raw-final-registration-20261015/03_source_raw_final_verifier.sqlinc",
+      "before_sha256": "20e168b6358692b552ff657dd6b4304a731f37b1c4a2d53ebea3cc66b3955d5b",
+      "after_sha256": "64af6d58494f0bcec8d7c6022f9a7274b144cc296892d18aa5eb1b430708e2ef",
+      "hunks": [
+        {
+          "before": "or trigger.tgtype::integer<>31 or trigger.tgnargs<>0 or trigger.tgqual is not null or trigger.tgenabled<>'O'",
+          "after": "or trigger.tgtype::integer<>31 or trigger.tgnargs<>0 or trigger.tgattr::text<>'' or trigger.tgqual is not null or trigger.tgenabled<>'O'"
+        },
+        {
+          "before": "and trigger.tgtype::integer=31 and trigger.tgnargs=0 and trigger.tgqual is null and trigger.tgenabled='O'",
+          "after": "and trigger.tgtype::integer=31 and trigger.tgnargs=0 and trigger.tgattr::text='' and trigger.tgqual is null and trigger.tgenabled='O'"
+        }
+      ]
+    }
+  ]
+}

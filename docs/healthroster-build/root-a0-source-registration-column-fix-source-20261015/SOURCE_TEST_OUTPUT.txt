@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: two complete actual f8 owners reverse four unique hunks without rewriting the rejected freeze
+ok 1 - two complete actual f8 owners reverse four unique hunks without rewriting the rejected freeze
+  ---
+  duration_ms: 114.4748
+  type: 'test'
+  ...
+# Subtest: both collision refusal and exact final inventory require empty actual tgattr independently of event flags
+ok 2 - both collision refusal and exact final inventory require empty actual tgattr independently of event flags
+  ---
+  duration_ms: 0.859
+  type: 'test'
+  ...
+# Subtest: same-name/type/function/owner UPDATE OF replacement passes old shape and is refused by the selected successor
+ok 3 - same-name/type/function/owner UPDATE OF replacement passes old shape and is refused by the selected successor
+  ---
+  duration_ms: 0.5479
+  type: 'test'
+  ...
+# Subtest: existing mode WHEN argument and owner refusals stay closed alongside the column filter
+ok 4 - existing mode WHEN argument and owner refusals stay closed alongside the column filter
+  ---
+  duration_ms: 0.4398
+  type: 'test'
+  ...
+# Subtest: literal 76 registrations are untouched and all80 packaging statements and raw artifact seals pass with native gates open
+ok 5 - literal 76 registrations are untouched and all80 packaging statements and raw artifact seals pass with native gates open
+  ---
+  duration_ms: 4.9966
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 238.1143
