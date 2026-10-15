@@ -1,0 +1,327 @@
+create or replace function private.weekly_source_publication_request_canonical_v1(
+  p_request jsonb,
+  p_publication_mode text,
+  p_pending_bundle_id uuid
+) returns jsonb
+language plpgsql
+immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_mode text:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_publication_mode,'')));
+  v_financial jsonb;
+  v_source_revision jsonb;
+  v_contract_choices jsonb;
+  v_member_entitlements jsonb;
+  v_member_count integer;
+  v_entry jsonb;
+  v_components jsonb;
+  v_component_count integer;
+  v_certified_zero boolean;
+  v_ordinal integer;
+  v_index integer;
+  v_seen integer;
+begin
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field','request','reason','EXPECTED_OBJECT')::text;
+  end if;
+  if v_mode not in ('IMMEDIATE','DEFERRED') then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field','publication_mode','reason','EXPECTED_IMMEDIATE_OR_DEFERRED')::text;
+  end if;
+  if (v_mode='DEFERRED')<>(p_pending_bundle_id is not null) then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field','pending_bundle_id',
+              'reason','DEFERRED_REQUIRES_PENDING_BUNDLE')::text;
+  end if;
+
+  -- The four aligned arrays (H2-032).
+  for v_index in 1..4 loop
+    if pg_catalog.jsonb_typeof(p_request->(array['member_root_ids','member_family_booking_ids',
+                                                 'member_root_versions','head_ids'])[v_index])<>'array' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',(array['member_root_ids','member_family_booking_ids',
+                               'member_root_versions','head_ids'])[v_index],
+                'reason','EXPECTED_ARRAY')::text;
+    end if;
+  end loop;
+
+  v_member_count:=pg_catalog.jsonb_array_length(p_request->'member_root_ids');
+  if v_member_count<1
+     or v_member_count<>pg_catalog.jsonb_array_length(p_request->'member_family_booking_ids')
+     or v_member_count<>pg_catalog.jsonb_array_length(p_request->'member_root_versions')
+     or v_member_count<>pg_catalog.jsonb_array_length(p_request->'head_ids') then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field','member_root_ids','reason','ARRAYS_NOT_ALIGNED',
+              'member_root_ids',v_member_count)::text;
+  end if;
+
+  -- 24 section 4.5: this approval is the BOUNDED old-Contract/new-Contract A/B
+  -- amendment.  "A larger member set requires staged keyset work and a
+  -- constant-size bundle activation pointer", which does not exist, so three
+  -- roots are refused rather than silently attempted.
+  if v_member_count>2 then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_BUNDLE_UNBOUNDED'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_BUNDLE_UNBOUNDED',
+              'member_count',v_member_count)::text;
+  end if;
+
+  -- financial_request (I-3 section 4).
+  v_financial:=p_request->'financial_request';
+  perform private.weekly_source_publication_require_keys_v1(
+    v_financial,
+    array['source_revision','contract_choices','member_entitlements'],
+    'financial_request');
+
+  -- Encoding only: the closed Local producer has no fabricated nullable Final.
+  -- Its factual receipt/whole-vector authority remains the publisher's job.
+  if v_financial#>>'{source_revision,origin_kind}'='PROTECTED_LOCAL_DECISION_V1' then
+    v_source_revision:=private.weekly_source_local_origin_canonical_v2(
+      v_financial->'source_revision');
+  else
+  perform private.weekly_source_publication_require_keys_v1(
+    v_financial->'source_revision',
+    case when v_financial#>>'{source_revision,origin_kind}'='CURRENT_FINAL_SOURCE_V1'
+      then array['final_revision_id','source_cycle_id','revision_number','manifest_hash',
+                 'policy_fingerprint','origin_kind','accepted_action_id']
+      else array['final_revision_id','source_cycle_id','revision_number','manifest_hash',
+                 'policy_fingerprint'] end,
+    'financial_request.source_revision');
+  v_source_revision:=pg_catalog.jsonb_build_object(
+    'final_revision_id',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'final_revision_id','financial_request.source_revision.final_revision_id','UUID'),
+    'source_cycle_id',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'source_cycle_id','financial_request.source_revision.source_cycle_id','UUID'),
+    'revision_number',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'revision_number','financial_request.source_revision.revision_number','INT'),
+    'manifest_hash',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'manifest_hash','financial_request.source_revision.manifest_hash','HEX32'),
+    'policy_fingerprint',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'policy_fingerprint','financial_request.source_revision.policy_fingerprint','HEX32'));
+  -- Closed accepted-Final provenance. This only encodes the exact fact; it
+  -- grants no retained-content exception. The integrated publisher must verify
+  -- the immutable acceptance and complete before/vector through both guards.
+  if v_financial#>>'{source_revision,origin_kind}'='CURRENT_FINAL_SOURCE_V1' then
+    v_source_revision:=v_source_revision||pg_catalog.jsonb_build_object(
+      'origin_kind','CURRENT_FINAL_SOURCE_V1',
+      'accepted_action_id',private.weekly_source_publication_scalar_v1(
+        v_financial#>'{source_revision,accepted_action_id}',
+        'financial_request.source_revision.accepted_action_id','UUID'));
+  end if;
+  end if;
+
+  if pg_catalog.jsonb_typeof(v_financial->'contract_choices')<>'array'
+     or pg_catalog.jsonb_array_length(v_financial->'contract_choices')<>v_member_count then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field','financial_request.contract_choices',
+              'reason','NOT_ALIGNED_WITH_MEMBERS')::text;
+  end if;
+  if pg_catalog.jsonb_typeof(v_financial->'member_entitlements')<>'array'
+     or pg_catalog.jsonb_array_length(v_financial->'member_entitlements')<>v_member_count then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field','financial_request.member_entitlements',
+              'reason','NOT_ALIGNED_WITH_MEMBERS')::text;
+  end if;
+
+  -- Contract choices, re-ordered by root_ordinal so caller order cannot change
+  -- the digest.  Each ordinal must appear exactly once.
+  v_contract_choices:='[]'::jsonb;
+  for v_index in 1..v_member_count loop
+    select choice_element.value into v_entry
+      from pg_catalog.jsonb_array_elements(v_financial->'contract_choices') as choice_element(value)
+     where (choice_element.value->>'root_ordinal')::text=v_index::text;
+    if v_entry is null then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.contract_choices',
+                'reason','MISSING_ROOT_ORDINAL','root_ordinal',v_index)::text;
+    end if;
+    perform private.weekly_source_publication_require_keys_v1(
+      v_entry,
+      array['root_ordinal','contract_id','week_ending_date','selection_method'],
+      'financial_request.contract_choices['||v_index::text||']');
+    if (v_entry->>'selection_method') not in
+       ('AUTO_UNIQUE','OFFICE_SELECTED','DURABLE_LINEAGE','UNCHANGED') then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.contract_choices['||v_index::text||'].selection_method',
+                'reason','UNKNOWN_SELECTION_METHOD',
+                'selection_method',v_entry->'selection_method')::text;
+    end if;
+    v_contract_choices:=v_contract_choices||pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'root_ordinal',private.weekly_source_publication_scalar_v1(v_entry->'root_ordinal','financial_request.contract_choices.root_ordinal','INT'),
+        'contract_id',private.weekly_source_publication_scalar_v1(v_entry->'contract_id','financial_request.contract_choices.contract_id','UUID'),
+        'week_ending_date',private.weekly_source_publication_scalar_v1(v_entry->'week_ending_date','financial_request.contract_choices.week_ending_date','DATE'),
+        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT')));
+    v_entry:=null;
+  end loop;
+
+  -- Every root's complete entitlement vector.
+  v_member_entitlements:='[]'::jsonb;
+  for v_index in 1..v_member_count loop
+    select entitlement_element.value into v_entry
+      from pg_catalog.jsonb_array_elements(v_financial->'member_entitlements') as entitlement_element(value)
+     where (entitlement_element.value->>'root_ordinal')::text=v_index::text;
+    if v_entry is null then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.member_entitlements',
+                'reason','MISSING_ROOT_ORDINAL','root_ordinal',v_index)::text;
+    end if;
+    perform private.weekly_source_publication_require_keys_v1(
+      v_entry,
+      array['root_ordinal','authority_kind','certified_zero','component_count','components'],
+      'financial_request.member_entitlements['||v_index::text||']');
+
+    -- 24 section 4.3: one common interface for both authority kinds.
+    if (v_entry->>'authority_kind') not in ('PROTECTED','LOCKED_FINAL_SOURCE') then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.member_entitlements['||v_index::text||'].authority_kind',
+                'reason','EXPECTED_PROTECTED_OR_LOCKED_FINAL_SOURCE')::text;
+    end if;
+    if pg_catalog.jsonb_typeof(v_entry->'components')<>'array' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.member_entitlements['||v_index::text||'].components',
+                'reason','EXPECTED_ARRAY')::text;
+    end if;
+    v_component_count:=pg_catalog.jsonb_array_length(v_entry->'components');
+    if (v_entry->'component_count')::text<>v_component_count::text then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.member_entitlements['||v_index::text||'].component_count',
+                'reason','COMPONENT_COUNT_MISMATCH',
+                'declared',v_entry->'component_count','actual',v_component_count)::text;
+    end if;
+    -- WB-009 and 24 section 4.5 step 3: certified zero is an EXPLICIT head and
+    -- exists only when no component remains.
+    v_certified_zero:=(private.weekly_source_publication_scalar_v1(
+      v_entry->'certified_zero',
+      'financial_request.member_entitlements['||v_index::text||'].certified_zero','BOOL'))::boolean;
+    if v_certified_zero<>(v_component_count=0) then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_CERTIFIED_ZERO_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_CERTIFIED_ZERO_INVALID',
+                'root_ordinal',v_index,'certified_zero',v_certified_zero,
+                'component_count',v_component_count)::text;
+    end if;
+
+    -- Components re-ordered by component_ordinal; ordinals are 1..n exactly
+    -- once each, so the inventory is complete and has no gap or repeat.
+    v_components:='[]'::jsonb;
+    for v_ordinal in 1..v_component_count loop
+      select pg_catalog.count(*)::integer into v_seen
+        from pg_catalog.jsonb_array_elements(v_entry->'components') as component_element(value)
+       where (component_element.value->>'component_ordinal')::text=v_ordinal::text;
+      if v_seen<>1 then
+        raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+          using errcode='22023',
+                detail=pg_catalog.jsonb_build_object(
+                  'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                  'field','financial_request.member_entitlements['||v_index::text||'].components',
+                  'reason','COMPONENT_ORDINAL_NOT_UNIQUE',
+                  'component_ordinal',v_ordinal,'occurrences',v_seen)::text;
+      end if;
+      v_components:=v_components||pg_catalog.jsonb_build_array(
+        private.weekly_source_publication_component_canonical_v1(
+          (select component_element.value
+             from pg_catalog.jsonb_array_elements(v_entry->'components') as component_element(value)
+            where (component_element.value->>'component_ordinal')::text=v_ordinal::text),
+          'financial_request.member_entitlements['||v_index::text||'].components['||v_ordinal::text||']'));
+    end loop;
+
+    -- One component_id may not appear twice inside one head.
+    select pg_catalog.count(distinct canonical_component.value->>'component_id')::integer
+      into v_seen
+      from pg_catalog.jsonb_array_elements(v_components) as canonical_component(value);
+    if v_seen<>v_component_count then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field','financial_request.member_entitlements['||v_index::text||'].components',
+                'reason','DUPLICATE_COMPONENT_ID')::text;
+    end if;
+
+    v_member_entitlements:=v_member_entitlements||pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'root_ordinal',private.weekly_source_publication_scalar_v1(v_entry->'root_ordinal','financial_request.member_entitlements.root_ordinal','INT'),
+        'authority_kind',private.weekly_source_publication_scalar_v1(v_entry->'authority_kind','financial_request.member_entitlements.authority_kind','TEXT'),
+        'certified_zero',pg_catalog.to_jsonb(v_certified_zero),
+        'component_count',pg_catalog.to_jsonb(v_component_count),
+        'components',v_components));
+    v_entry:=null;
+  end loop;
+
+  return pg_catalog.jsonb_build_object(
+    'decision_bundle_id',private.weekly_source_publication_scalar_v1(p_request->'decision_bundle_id','decision_bundle_id','UUID'),
+    'pending_bundle_id',case when p_pending_bundle_id is null then 'null'::jsonb
+                             else pg_catalog.to_jsonb(p_pending_bundle_id::text) end,
+    'bundle_revision',private.weekly_source_publication_scalar_v1(p_request->'bundle_revision','bundle_revision','INT'),
+    'candidate_id',private.weekly_source_publication_scalar_v1(p_request->'candidate_id','candidate_id','UUID'),
+    'member_root_ids',(
+      select coalesce(pg_catalog.jsonb_agg(
+               private.weekly_source_publication_scalar_v1(root_element.value,'member_root_ids','UUID')
+               order by root_element.ordinality),'[]'::jsonb)
+        from pg_catalog.jsonb_array_elements(p_request->'member_root_ids')
+             with ordinality as root_element(value,ordinality)),
+    'member_family_booking_ids',(
+      select coalesce(pg_catalog.jsonb_agg(
+               private.weekly_source_publication_scalar_v1(booking_element.value,'member_family_booking_ids','RAWTEXT')
+               order by booking_element.ordinality),'[]'::jsonb)
+        from pg_catalog.jsonb_array_elements(p_request->'member_family_booking_ids')
+             with ordinality as booking_element(value,ordinality)),
+    'member_root_versions',(
+      select coalesce(pg_catalog.jsonb_agg(
+               private.weekly_source_publication_scalar_v1(version_element.value,'member_root_versions','INT')
+               order by version_element.ordinality),'[]'::jsonb)
+        from pg_catalog.jsonb_array_elements(p_request->'member_root_versions')
+             with ordinality as version_element(value,ordinality)),
+    'head_ids',(
+      select coalesce(pg_catalog.jsonb_agg(
+               private.weekly_source_publication_scalar_v1(head_element.value,'head_ids','UUID')
+               order by head_element.ordinality),'[]'::jsonb)
+        from pg_catalog.jsonb_array_elements(p_request->'head_ids')
+             with ordinality as head_element(value,ordinality)),
+    'decision_id',private.weekly_source_publication_scalar_v1(p_request->'decision_id','decision_id','UUID'),
+    'publication_mode',pg_catalog.to_jsonb(v_mode),
+    'financial_request',pg_catalog.jsonb_build_object(
+      'source_revision',v_source_revision,
+      'contract_choices',v_contract_choices,
+      'member_entitlements',v_member_entitlements));
+end;
+$function$;

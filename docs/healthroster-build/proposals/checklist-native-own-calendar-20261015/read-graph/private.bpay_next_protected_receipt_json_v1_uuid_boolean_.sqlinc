@@ -1,0 +1,16 @@
+create or replace function private.bpay_next_protected_receipt_json_v1(
+  p_run_id uuid,p_replay boolean
+) returns jsonb language sql stable security definer
+set search_path=pg_catalog,private,public
+as $function$
+  select pg_catalog.jsonb_build_object('ok',true,'outcome','PUBLISHED_NEXT',
+    'idempotent_replay',p_replay,'family_id',r.family_id,
+    'orchestration_run_id',r.orchestration_run_id,'approval_id',r.approval_id,
+    'generation_id',r.generation_id,'work_id',r.work_id,'revision_id',r.revision_id,
+    'command_id',r.command_id,'agency_sequence',r.agency_sequence::text,
+    'new_family_bound_version',r.accepted_family_bound_version::text,
+    'approved_pay_ex_vat',a.approved_target_gross::text,'state','NEXT_PUBLISHED')
+  from private.bpay_next_protected_source_receipt r
+  join public.weekly_exceptional_payment_approvals a on a.id=r.approval_id
+  where r.orchestration_run_id=p_run_id
+$function$;

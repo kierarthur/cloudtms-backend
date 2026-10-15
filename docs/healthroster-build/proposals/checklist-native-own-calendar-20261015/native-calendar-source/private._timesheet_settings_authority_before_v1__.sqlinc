@@ -1,0 +1,74 @@
+create or replace function private._timesheet_settings_authority_before_v1()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_contract public.contracts%rowtype;
+  v_snapshot jsonb;
+  v_client_id uuid;
+  v_relevant_date date;
+begin
+  if tg_op='UPDATE' and old.settings_authority_json<>'{}'::jsonb then
+    new.settings_authority_json:=old.settings_authority_json;
+    new.settings_authority_version:=old.settings_authority_version;
+    new.settings_authority_fingerprint:=old.settings_authority_fingerprint;
+    new.settings_authority_resolved_at:=old.settings_authority_resolved_at;
+    return new;
+  end if;
+  if new.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+    if tg_op='INSERT' then
+      new.settings_authority_json:='{}'::jsonb;
+      new.settings_authority_version:=null;
+      new.settings_authority_fingerprint:=null;
+      new.settings_authority_resolved_at:=null;
+      return new;
+    end if;
+    select tf.client_id into v_client_id
+    from public.timesheets_financials tf
+    where tf.timesheet_id=new.timesheet_id and tf.is_current=true
+      and tf.processed_at_utc is not null
+    order by tf.computed_at_utc desc nulls last,tf.updated_at desc,tf.id desc
+    limit 1;
+    if not found then
+      new.settings_authority_json:='{}'::jsonb;
+      new.settings_authority_version:=null;
+      new.settings_authority_fingerprint:=null;
+      new.settings_authority_resolved_at:=null;
+      return new;
+    end if;
+    v_relevant_date:=coalesce(
+      (new.worked_start_iso at time zone 'Europe/London')::date,
+      (new.scheduled_start_iso at time zone 'Europe/London')::date,
+      new.week_ending_date
+    );
+    v_snapshot:=private._contract_settings_effective_core_v1(
+      v_client_id,new.contract_id,v_relevant_date,'DAILY',null
+    );
+    new.settings_authority_json:=v_snapshot;
+    new.settings_authority_version:='CONTRACT_SETTINGS_AUTHORITY_V1';
+    new.settings_authority_fingerprint:=v_snapshot->>'authority_fingerprint';
+    new.settings_authority_resolved_at:=(v_snapshot->>'resolved_at_utc')::timestamptz;
+    return new;
+  end if;
+  if new.contract_id is null then
+    new.settings_authority_json:='{}'::jsonb;
+    new.settings_authority_version:=null;
+    new.settings_authority_fingerprint:=null;
+    new.settings_authority_resolved_at:=null;
+    return new;
+  end if;
+  select * into v_contract from public.contracts c where c.id=new.contract_id;
+  if not found then return new; end if;
+  v_snapshot:=private._contract_settings_effective_core_v1(
+    v_contract.client_id,v_contract.id,new.week_ending_date,'WEEKLY',null
+  );
+  new.settings_authority_json:=v_snapshot;
+  new.settings_authority_version:='CONTRACT_SETTINGS_AUTHORITY_V1';
+  new.settings_authority_fingerprint:=v_snapshot->>'authority_fingerprint';
+  new.settings_authority_resolved_at:=(v_snapshot->>'resolved_at_utc')::timestamptz;
+  return new;
+end
+$function$;

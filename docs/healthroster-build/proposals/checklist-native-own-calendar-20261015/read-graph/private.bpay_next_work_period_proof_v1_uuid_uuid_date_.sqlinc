@@ -1,0 +1,59 @@
+create or replace function private.bpay_next_work_period_proof_v1(
+ p_work_id uuid,p_revision_id uuid,p_business_date date
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $native_period$
+declare w private.bpay_next_work%rowtype;r private.bpay_next_work_revision%rowtype;
+ t public.timesheets%rowtype;c public.contracts%rowtype;s jsonb;weekday integer;
+begin
+ if p_work_id is null or p_business_date is null or not isfinite(p_business_date) then
+  return jsonb_build_object('valid',false,'reason','NATIVE_WORK_PERIOD_UNPROVED');end if;
+ select a.* into w from private.bpay_next_work a where a.id=p_work_id;
+ if w.id is null or w.week_ending_date is null or not isfinite(w.week_ending_date) then
+  return jsonb_build_object('valid',false,'reason','NATIVE_WORK_PERIOD_UNPROVED');end if;
+ -- Preserve every pre-existing native Sunday admission and its later native
+ -- approval/current/physical/member guards. This helper adds no new approval.
+ if extract(isodow from w.week_ending_date)=7 then
+  return jsonb_build_object('valid',true,'basis','NATIVE_SUNDAY_PERIOD',
+   'work_id',w.id,'revision_id',p_revision_id,'week_ending',w.week_ending_date,
+   'period_start',w.week_ending_date-6,'business_date',p_business_date,
+   'future',w.week_ending_date-6>p_business_date);end if;
+ -- Only a genuine contracted Weekly physical period extends the old native
+ -- calendar domain. Daily, missing snapshots, Cases and invented dates do not.
+ select a.* into r from private.bpay_next_work_revision a where a.id=p_revision_id and a.work_id=w.id;
+ select a.* into t from public.timesheets a where a.timesheet_id=r.physical_timesheet_id;
+ select a.* into c from public.contracts a where a.id=w.contract_id;
+ s:=t.settings_authority_json;
+ if r.id is null or c.id is null or c.client_id is null or c.candidate_id is null
+  or t.timesheet_id is null or w.origin_kind is distinct from 'CONTRACT'
+  or w.work_kind not in('ORDINARY','SOURCE','EXPENSE')
+  or r.source_kind not in('ORDINARY','SOURCE','PROTECTED','EXPENSE')
+  or r.week_ending_date is distinct from w.week_ending_date
+  or t.week_ending_date is distinct from w.week_ending_date
+  or t.sheet_scope::text is distinct from 'WEEKLY' or t.contract_id is distinct from c.id
+  or t.booking_id is distinct from w.booking_id or t.version is distinct from r.physical_timesheet_version
+  or t.is_current is distinct from true or t.revoked_at is not null or t.archived_at_utc is not null
+  or c.candidate_id is distinct from w.candidate_id
+  or t.settings_authority_version is distinct from 'CONTRACT_SETTINGS_AUTHORITY_V1'
+  or jsonb_typeof(s) is distinct from 'object' or s->>'authority_version' is distinct from 'CONTRACT_SETTINGS_AUTHORITY_V1'
+  or s->>'client_id' is distinct from c.client_id::text or s->>'contract_id' is distinct from c.id::text
+  or s->>'relevant_date' is distinct from t.week_ending_date::text
+  or s->>'workflow' is null or s->>'workflow' not in('WEEKLY','IMPORT')
+  or s->>'authority_fingerprint' is distinct from t.settings_authority_fingerprint
+  or t.settings_authority_fingerprint is null
+  or encode(sha256(convert_to((s-'authority_fingerprint'-'resolved_at_utc')::text,'UTF8')),'hex')
+    is distinct from t.settings_authority_fingerprint
+  or pg_input_is_valid(s#>>'{values,week_ending_weekday}','integer') is distinct from true
+  or (select count(*) from public.timesheets a where a.booking_id=w.booking_id and a.is_current)<>1 then
+  return jsonb_build_object('valid',false,'reason','NATIVE_CAPTURED_WORK_PERIOD_UNPROVED');end if;
+ weekday:=(s#>>'{values,week_ending_weekday}')::integer;
+ if weekday not between 0 and 6 or extract(dow from w.week_ending_date)::integer<>weekday then
+  return jsonb_build_object('valid',false,'reason','NATIVE_CAPTURED_WORK_PERIOD_UNPROVED');end if;
+ return jsonb_build_object('valid',true,'basis','NATIVE_CAPTURED_CONTRACT_PERIOD',
+  'work_id',w.id,'revision_id',r.id,'timesheet_id',t.timesheet_id,'timesheet_version',t.version,
+  'contract_id',c.id,'candidate_id',c.candidate_id,'client_id',c.client_id,
+  'settings_authority_fingerprint',t.settings_authority_fingerprint,'week_ending_weekday',weekday,
+  'week_ending',w.week_ending_date,'period_start',w.week_ending_date-6,
+  'business_date',p_business_date,'future',w.week_ending_date-6>p_business_date);
+end;
+$native_period$;

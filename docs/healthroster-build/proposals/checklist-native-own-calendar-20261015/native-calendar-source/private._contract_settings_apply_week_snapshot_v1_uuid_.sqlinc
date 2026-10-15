@@ -1,0 +1,44 @@
+create or replace function private._contract_settings_apply_week_snapshot_v1(
+  p_week_id uuid
+)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_week public.contract_weeks%rowtype;
+  v_contract public.contracts%rowtype;
+  v_snapshot jsonb;
+  v_fingerprint text;
+begin
+  select * into v_week from public.contract_weeks where id=p_week_id for update;
+  if not found or v_week.timesheet_id is not null then return false; end if;
+  select * into v_contract from public.contracts where id=v_week.contract_id;
+  if not found then raise exception 'CONTRACT_SETTINGS_CONTRACT_NOT_FOUND' using errcode='P0002'; end if;
+  v_snapshot:=private._contract_settings_effective_core_v1(
+    v_contract.client_id,v_contract.id,v_week.week_ending_date,'WEEKLY',null
+  );
+  v_fingerprint:=v_snapshot->>'authority_fingerprint';
+  if v_week.settings_authority_fingerprint is not distinct from v_fingerprint then
+    return false;
+  end if;
+  update public.contract_weeks set
+    submission_mode_snapshot=case
+      when coalesce(v_week.is_adjustment,false) or coalesce(v_week.additional_seq,0)>0
+        then v_week.submission_mode_snapshot
+      else coalesce(
+        v_snapshot#>>'{values,default_submission_mode}',
+        'ELECTRONIC'
+      )::public.submission_mode_enum
+    end,
+    settings_authority_json=v_snapshot,
+    settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1',
+    settings_authority_fingerprint=v_fingerprint,
+    settings_authority_resolved_at=(v_snapshot->>'resolved_at_utc')::timestamptz,
+    updated_at=statement_timestamp()
+  where id=v_week.id and timesheet_id is null;
+  return found;
+end
+$function$;

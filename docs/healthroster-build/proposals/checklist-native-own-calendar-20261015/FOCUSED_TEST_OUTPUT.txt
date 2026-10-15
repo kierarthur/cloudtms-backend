@@ -1,0 +1,82 @@
+TAP version 13
+# Subtest: every prior Sunday writer and retained append cut is unchanged across twenty years and past/current/future periods
+ok 1 - every prior Sunday writer and retained append cut is unchanged across twenty years and past/current/future periods
+  ---
+  duration_ms: 19.0468
+  type: 'test'
+  ...
+# Subtest: own Weekly start-date rule crosses each Client weekday without inventing Sunday or pay date
+ok 2 - own Weekly start-date rule crosses each Client weekday without inventing Sunday or pay date
+  ---
+  duration_ms: 5.6096
+  type: 'test'
+  ...
+# Subtest: all five complete owner files reverse seventeen finite hunks to exact Git inputs
+ok 3 - all five complete owner files reverse seventeen finite hunks to exact Git inputs
+  ---
+  duration_ms: 511.4733
+  type: 'test'
+  ...
+# Subtest: new native period helper has exact owner-private ABI and no mutation pricing fresh-settings or guessed root
+ok 4 - new native period helper has exact owner-private ABI and no mutation pricing fresh-settings or guessed root
+  ---
+  duration_ms: 5.107
+  type: 'test'
+  ...
+# Subtest: period proof preserves old Sunday admission before new contracted Weekly lookup
+ok 5 - period proof preserves old Sunday admission before new contracted Weekly lookup
+  ---
+  duration_ms: 1.5702
+  type: 'test'
+  ...
+# Subtest: new Weekly domain requires exact immutable native capture and actual physical Contract identity
+ok 6 - new Weekly domain requires exact immutable native capture and actual physical Contract identity
+  ---
+  duration_ms: 0.7582
+  type: 'test'
+  ...
+# Subtest: native workbench retains complete classifier and all money, priority, accepted/reserved/recovery and ACL boundaries
+ok 7 - native workbench retains complete classifier and all money, priority, accepted/reserved/recovery and ACL boundaries
+  ---
+  duration_ms: 1.9959
+  type: 'test'
+  ...
+# Subtest: append accepted descriptor and cached skip return stay byte-identical before new calendar proof
+ok 8 - append accepted descriptor and cached skip return stay byte-identical before new calendar proof
+  ---
+  duration_ms: 4.7446
+  type: 'test'
+  ...
+# Subtest: preparation replay and all monetary/frozen writes remain byte-identical around one actual cut amendment
+ok 9 - preparation replay and all monetary/frozen writes remain byte-identical around one actual cut amendment
+  ---
+  duration_ms: 2.4294
+  type: 'test'
+  ...
+# Subtest: Source and ordinary reads share native period proof and final frame, without running native writer
+ok 10 - Source and ordinary reads share native period proof and final frame, without running native writer
+  ---
+  duration_ms: 6.9931
+  type: 'test'
+  ...
+# Subtest: ordinary new Calendar consumes actual writer proof before conserved positive hold and retains Daily Sunday binding
+ok 11 - ordinary new Calendar consumes actual writer proof before conserved positive hold and retains Daily Sunday binding
+  ---
+  duration_ms: 0.8746
+  type: 'test'
+  ...
+# Subtest: Source actual query exclusion and AVAILABLE split conservation remain under unchanged native reason owner
+ok 12 - Source actual query exclusion and AVAILABLE split conservation remain under unchanged native reason owner
+  ---
+  duration_ms: 0.7599
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 760.2914

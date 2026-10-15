@@ -1,0 +1,21 @@
+create or replace function private.weekly_source_is_import_authoritative_v1(p_client_id uuid,p_contract_id uuid,p_work_date date)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_policy jsonb;
+begin
+  if p_client_id is null or p_work_date is null or not exists(select 1
+    from public.weekly_source_group_clients gc join public.weekly_source_groups g on g.id=gc.source_group_id
+    where gc.client_id=p_client_id and g.active and g.source_family='ROSTER'
+      and p_work_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)) then return false; end if;
+  if p_contract_id is not null and not exists(select 1 from public.contracts c
+    where c.id=p_contract_id and c.client_id=p_client_id) then return false; end if;
+  if not exists(select 1 from public.weekly_source_client_policies cp join public.weekly_source_groups g on g.id=cp.source_group_id
+    join public.weekly_source_group_clients gc on gc.source_group_id=g.id and gc.client_id=cp.client_id
+    where cp.client_id=p_client_id and g.active and g.source_family='ROSTER'
+      and p_work_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+      and p_work_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date)) then return false; end if;
+  v_policy:=private._weekly_source_effective_policy_v1(p_client_id,p_contract_id,p_work_date);
+  return v_policy->>'source_family'='ROSTER' and v_policy->>'authority_mode'='SOURCE_AUTHORITY'
+    and v_policy->>'document_mode'='CHECK_ONLY';
+end;
+$function$;

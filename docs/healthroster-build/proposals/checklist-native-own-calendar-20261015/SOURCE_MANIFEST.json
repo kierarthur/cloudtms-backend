@@ -1,0 +1,528 @@
+{
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "predecessor": "29b95b027a53c7d1a16fa444ef8f4b834dbdbe3a",
+  "unchanged_predecessor_raw_saved_pins": 71,
+  "whole_owners": 5,
+  "reversible_hunks": 17,
+  "new_private_period_proof": 1,
+  "native_snapshot_source_pins": 4,
+  "source_cases": 211,
+  "focused_cases": 12,
+  "read_graph_routines": 66,
+  "conditional_TRUE_lock_sites": 5,
+  "compiled_FALSE_purity": false,
+  "TRUE_parity": false,
+  "actual_native_calendar": false,
+  "Legacy": false,
+  "treatment": false,
+  "whole_process_completion": false,
+  "syntax": [
+    "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/build-read-graph.mjs",
+    "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/build-source.mjs",
+    "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/check-source.mjs"
+  ],
+  "lexical": [
+    {
+      "file": "forward/15102026_0405_native_append_calendar.sql",
+      "statements": 37,
+      "psql_controls": [
+        "\\set ON_ERROR_STOP on"
+      ]
+    },
+    {
+      "file": "forward/15102026_0405_native_preparation_calendar.sql",
+      "statements": 20,
+      "psql_controls": [
+        "\\set ON_ERROR_STOP on"
+      ]
+    },
+    {
+      "file": "forward/15102026_0405_native_workbench_calendar.sql",
+      "statements": 5,
+      "psql_controls": [
+        "\\set ON_ERROR_STOP on"
+      ]
+    },
+    {
+      "file": "forward/15102026_0405_native_work_period_proof.sqlinc",
+      "statements": 3,
+      "psql_controls": []
+    },
+    {
+      "file": "forward/wp_u3_ordinary_next_hold.sqlinc",
+      "statements": 3,
+      "psql_controls": []
+    },
+    {
+      "file": "forward/wp_u3_source_shift_query_money.sqlinc",
+      "statements": 3,
+      "psql_controls": []
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/COMPLETE_FORWARD_AND_REVERSE.json",
+      "bytes": 10426,
+      "sha256": "9709daa9357b7f01d80deb56362a3d4d2096489b23a0ad54ce63171f61102ef1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/FOCUSED_TEST_OUTPUT.txt",
+      "bytes": 3345,
+      "sha256": "87e51139d5c390ad774adcced7632a5a29f4c7d145e027fa0be64235c0aad28a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/HANDOFF.md",
+      "bytes": 3654,
+      "sha256": "af6f528638ea0e00d655218691f95c10230ef0f457963fa9872f9dd05ca47e5f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/NATIVE_CALENDAR_SOURCE_PINS.json",
+      "bytes": 2269,
+      "sha256": "ca4eb5bc15aacd49de2f0ed2e0a703e9a145c04da884b7bd2595878f3a221b2f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/NATIVE_READ_GRAPH.json",
+      "bytes": 44256,
+      "sha256": "a3fe57c19079996f8d7ed9af9edb20fbc4517b741faa50ad94e80360e2fb023d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 69,
+      "sha256": "32faffffab22867df51ffff1cf21f6a676a62485eb406359eef0ea4bf240a535"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/SOURCE_TEST_OUTPUT.txt",
+      "bytes": 26452,
+      "sha256": "4ffb3100d9affdfe7db239ba1fad2ab3529a47e222f39ea99bfe6f0291fc5eb9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/build-read-graph.mjs",
+      "bytes": 3880,
+      "sha256": "41314bd1cfd4c8617f6303905ffe5de952ffcbbc5ab4ed769ac19e318c27437a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/build-source.mjs",
+      "bytes": 9039,
+      "sha256": "7df7e3d3ddc56fd0ffe4a18cc9767bb569b3e6d3e009bf0eca2a213a43ed3f24"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/check-source.mjs",
+      "bytes": 4746,
+      "sha256": "203bed25a1beb8694eb357eb82d0faaa66a1c84c7c3d3a3f7570ff8d32eb5712"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/15102026_0405_native_append_calendar.sql",
+      "bytes": 196404,
+      "sha256": "6adf7a00a83916fb79fdf6b5f917991960eafc24b0193127794e8684c610cdad"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/15102026_0405_native_preparation_calendar.sql",
+      "bytes": 78552,
+      "sha256": "441715244970c3420a3664b67ed97838c9920248f6bb75d0400b2655dffc073c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/15102026_0405_native_work_period_proof.sqlinc",
+      "bytes": 4698,
+      "sha256": "ff3b97a92e006a1f5323b7b033b12b7e80a12d11ed4ee8b488cb4af4f72cd967"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/15102026_0405_native_workbench_calendar.sql",
+      "bytes": 45029,
+      "sha256": "917013132652cf03af4f03b2f158d9cb0292915d41a4b86e36eccf8d5bddfe9b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 26792,
+      "sha256": "6a3d30a5d49e54767964f5761ad7c634e00468ae8f653ded0e9744af72674cac"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/wp_u3_source_shift_query_money.sqlinc",
+      "bytes": 23526,
+      "sha256": "3aab97a21d117d1cf3350511f224e25f15405241a0e63296058eb84a0f5da0af"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/input/15102026_0405_native_append_calendar.sql",
+      "bytes": 196240,
+      "sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/input/15102026_0405_native_preparation_calendar.sql",
+      "bytes": 78316,
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/input/15102026_0405_native_workbench_calendar.sql",
+      "bytes": 44913,
+      "sha256": "ad8f9c6d4dced0f495aad27054f91b6fa542b1a8d61fce9a0c4c23fbe290b3b4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/input/wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 26431,
+      "sha256": "ee01428a370f5fb669b78eeeaa9ab9c21bb67cfb135b6e3f1a83b8b59460a1c3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/input/wp_u3_source_shift_query_money.sqlinc",
+      "bytes": 23124,
+      "sha256": "991173d8badcb24679732a093fcee18326640d270432c8153b7ac59a2d9cb932"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/native-calendar-source/private._contract_settings_apply_week_snapshot_v1_uuid_.sqlinc",
+      "bytes": 1720,
+      "sha256": "c53ab4ef48d31c4e74585e2495c83899a6503eabffcbb8aec99aec150f368367"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/native-calendar-source/private._contract_settings_effective_core_v1_uuid_uuid_date_text_uuid_.sqlinc",
+      "bytes": 20739,
+      "sha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/native-calendar-source/private._contract_week_settings_authority_before_v1__.sqlinc",
+      "bytes": 1880,
+      "sha256": "1a06329815160fd0766b784f298184eebcd46b0a2362daab25555592bf59e5d0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/native-calendar-source/private._timesheet_settings_authority_before_v1__.sqlinc",
+      "bytes": 2978,
+      "sha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private._candidate_daily_canonical_save_input_v1_uuid_integer_.sqlinc",
+      "bytes": 2303,
+      "sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private._candidate_sha256_jsonb_v1_jsonb_.sqlinc",
+      "bytes": 298,
+      "sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private._weekly_source_effective_policy_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 7422,
+      "sha256": "66daec8a58f94287e673703fd076165e910215dce842781613cd8f9c270e63e5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "bytes": 574,
+      "sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_approval_route_v1_uuid_.sqlinc",
+      "bytes": 5777,
+      "sha256": "8dd97a2a7c46ff95530f191346d03bf4f48867076e9556e58b235225668faa48"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_line_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 859,
+      "sha256": "818c2abd303df43114907cafaff5294e1d2dbc03e122a55f12a751d56be16f09"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_protected_receipt_json_v1_uuid_boolean_.sqlinc",
+      "bytes": 916,
+      "sha256": "52f1a4329c768ccbf3a8722d0eb8ded90dee99b8e3914037ef32cee7a42a22e6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_segment_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 1071,
+      "sha256": "243d62acde0d820d4724dd7eb3391affa26e607bf4d58b13b287933084ae366c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_snooze_at_cut_v1_uuid_uuid_text_text_bigint_date_.sqlinc",
+      "bytes": 1741,
+      "sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_source_binding_members_v1_uuid_.sqlinc",
+      "bytes": 3498,
+      "sha256": "771eaefe07928ff4a93abb73e8d5073f7bf1f9addda5ddd9b629a786053efa36"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "bytes": 460,
+      "sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_source_query_segment_exclusions_v1_uuid_jsonb_.sqlinc",
+      "bytes": 3833,
+      "sha256": "f00b841fd02c29101e5fa8e6249428d98d09f7da5e05551e5c8cf799d8e624f5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "bytes": 2406,
+      "sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_work_period_proof_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 4335,
+      "sha256": "2f244ca84d1551a899d5a9461e9eba6afe5557794c2138101cd6d19a6fea131c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_work_segment_gross_balance_v1_uuid_text_text_.sqlinc",
+      "bytes": 808,
+      "sha256": "96e70b650ed344ef419112ffcdebcf167baedca5ffc035ee79066fe1ad5d6045"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_workbench_accepted_work_v1_uuid_text_text_.sqlinc",
+      "bytes": 3129,
+      "sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.bpay_next_workbench_require_next_v1__.sqlinc",
+      "bytes": 398,
+      "sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_exceptional_hex_sha256_v1_text_.sqlinc",
+      "bytes": 390,
+      "sha256": "11f7f28fb29410e1c9510df8ecf0942f4c07f2fa3d9b15db7b5f62591e18dc12"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_exceptional_json_keys_exact_v1_jsonb_text___.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_actual_timesheet_submission_v1_uuid_.sqlinc",
+      "bytes": 10754,
+      "sha256": "e87a243a9ff1d70579fb09fc8b44ffb2b035cdbe1bb26f1eb5d0c36b1924800e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "bytes": 2456,
+      "sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_checklist_native_bound_snapshot_core_v1_uuid_bigint_boolean_.sqlinc",
+      "bytes": 11408,
+      "sha256": "781219bb45111ecf0afa14fb08b11195b06cbd4f56b45a26b54249492162012d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_checklist_native_initial_bound_assert_core_v1_uuid_boolean_.sqlinc",
+      "bytes": 3325,
+      "sha256": "318887be00ac528a3dd988682c264ddacde15974d112b82aeac12faa754f0226"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_checklist_native_initial_certificate_core_v1_uuid_boolean_.sqlinc",
+      "bytes": 9397,
+      "sha256": "ef5ce9d473fd80c9134d23e7c32305af70f36d0c06618d10868b039615c10af1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_checklist_native_members_core_v1_uuid_uuid_boolean_.sqlinc",
+      "bytes": 8948,
+      "sha256": "520cc261070a9eaa0291ce647adc5dcff9ed5153846b5a8cde3d8dbbfe063444"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_checklist_ordinary_next_hold_money_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 26209,
+      "sha256": "75800e01b2ad8717df93d48f83ab520a052558c9ac8194c6b29f843980452897"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_checklist_source_shift_query_money_v1_uuid_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 22879,
+      "sha256": "c9f6c1b0c6d95899e566bf1cca618633080ec284b097d422eac80d50c81d846f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "bytes": 12756,
+      "sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "bytes": 586,
+      "sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5357,
+      "sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "bytes": 1007,
+      "sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "bytes": 4461,
+      "sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "bytes": 15704,
+      "sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_is_import_authoritative_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 1588,
+      "sha256": "7861b97e31eab1c939785976219065ba3c963f5d166788ef850d335efe774794"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_local_origin_canonical_v2_jsonb_.sqlinc",
+      "bytes": 6752,
+      "sha256": "1f2c44585647139f936496628f8b520d5017cab7f19d1b28f1b1e415cd53a4da"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3525,
+      "sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_c1_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 10786,
+      "sha256": "f8279ed2c436f2cf157eed927630a069448ddce0c6b8517dbbc63dd185f575e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_c1_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 373,
+      "sha256": "f3d43d66b4f67ec5931251556dff1a24f5f640c87ac9030739d51cbf05cea36b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_facts_v1_uuid_.sqlinc",
+      "bytes": 7005,
+      "sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_gate_v1_uuid_.sqlinc",
+      "bytes": 318,
+      "sha256": "31992d662b68652d1d32851110704a6d31c17cbb15f09a4e8d5e664afab17526"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_local_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 29463,
+      "sha256": "ea61636cb2708ff7a0cd0893a2870deb9fac1d814a9b5eaa6023e7d374557ed2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_local_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 379,
+      "sha256": "fdc84f55d3a1e2c169837d584653043d4786c79bd26ad5f9100a8c481bd8f79a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_next_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 8234,
+      "sha256": "85779fc6fc1d8184e985f03cb2cba5947be57fd7f5ea6d6463ef9c18ddbe6f29"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_next_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 377,
+      "sha256": "533f1fb62e135847c4c253559420a27b91c596d91dd7884dcd77bd9df3cdaffe"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "bytes": 1480,
+      "sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_protected_wait_receipt_v1_uuid_uuid_.sqlinc",
+      "bytes": 6163,
+      "sha256": "15e722fc9de0d587e3fa032f2d739f7cc06cafc3a1b8e620a3067d933161bf9e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "bytes": 5138,
+      "sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "bytes": 285,
+      "sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_receipt_json_v1_uuid_.sqlinc",
+      "bytes": 1449,
+      "sha256": "493e840e94721ace5d87801150d5bc7f0a35df880c57d054a7395f23bf7f0e19"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_request_canonical_v1_jsonb_text_uuid_.sqlinc",
+      "bytes": 18560,
+      "sha256": "e6566b583e1d0040e512a021e4a44ee850ee8ffb6549de17332bd0bd32e64d45"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "bytes": 335,
+      "sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "bytes": 1749,
+      "sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "bytes": 7676,
+      "sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 509,
+      "sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/public._ctms_import_correction_classify_v1_uuid_.sqlinc",
+      "bytes": 3605,
+      "sha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/public._import_review_hash_v1_text_.sqlinc",
+      "bytes": 299,
+      "sha256": "d4f5765fda0fe332115c79994e636aa4232d6cdbf52e5d1f68f396c4b06bc5a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/public._import_review_query_evidence_core_v1_uuid_.sqlinc",
+      "bytes": 6888,
+      "sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/public._import_review_timesheet_protection_core_v1_uuid_.sqlinc",
+      "bytes": 6311,
+      "sha256": "12dd76a6785a4382e9fb47e71c4dffca3152273f52a1e3aebf9895cc3fea0410"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/public._pay_batch_status_is_active_reservation_text_.sqlinc",
+      "bytes": 459,
+      "sha256": "f2dff9d19beebfaea5bf833a575bde09248af72f9f713c3b1bb4e027054e2a82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5333,
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "file": "tests/healthroster-checklist-native-calendar.test.mjs",
+      "bytes": 9381,
+      "sha256": "63daa7c823dcc6d10ea78c4921219e7b73298d80534f4cdcc8bdb9e9ddf9e98d"
+    }
+  ]
+}

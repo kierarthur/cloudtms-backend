@@ -1,0 +1,67 @@
+create or replace function private.weekly_source_publication_component_canonical_v1(
+  p_component jsonb,
+  p_field text
+) returns jsonb
+language plpgsql
+immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_out jsonb;
+begin
+  perform private.weekly_source_publication_require_keys_v1(
+    p_component,
+    array[
+      'component_ordinal','component_id','component_kind','economic_key_type',
+      'economic_key_value','component_member_identity','segment_id','segment_key',
+      'segment_stable_key','work_date','reference_number','hours_day','hours_night',
+      'hours_sat','hours_sun','hours_bh','additional_code_raw','unit_count',
+      'unit_pay_rate','unit_charge_rate','expense_code','pay_ex_vat','charge_ex_vat',
+      'exclude_from_pay','origin','movement_id','movement_group_id'
+    ],
+    p_field);
+
+  v_out:=pg_catalog.jsonb_build_object(
+    'component_ordinal',private.weekly_source_publication_scalar_v1(p_component->'component_ordinal',p_field||'.component_ordinal','INT'),
+    'component_id',private.weekly_source_publication_scalar_v1(p_component->'component_id',p_field||'.component_id','UUID'),
+    'component_kind',private.weekly_source_publication_scalar_v1(p_component->'component_kind',p_field||'.component_kind','TEXT'),
+    'economic_key_type',private.weekly_source_publication_scalar_v1(p_component->'economic_key_type',p_field||'.economic_key_type','TEXT'),
+    'economic_key_value',private.weekly_source_publication_scalar_v1(p_component->'economic_key_value',p_field||'.economic_key_value','TEXT'),
+    'component_member_identity',private.weekly_source_publication_scalar_v1(p_component->'component_member_identity',p_field||'.component_member_identity','TEXT'),
+    'segment_id',private.weekly_source_publication_scalar_v1(p_component->'segment_id',p_field||'.segment_id','TEXT',null,true),
+    'segment_key',private.weekly_source_publication_scalar_v1(p_component->'segment_key',p_field||'.segment_key','TEXT',null,true),
+    'segment_stable_key',private.weekly_source_publication_scalar_v1(p_component->'segment_stable_key',p_field||'.segment_stable_key','TEXT',null,true),
+    'work_date',private.weekly_source_publication_scalar_v1(p_component->'work_date',p_field||'.work_date','DATE',null,true),
+    'reference_number',private.weekly_source_publication_scalar_v1(p_component->'reference_number',p_field||'.reference_number','TEXT',null,true),
+    'hours_day',private.weekly_source_publication_scalar_v1(p_component->'hours_day',p_field||'.hours_day','DEC',6,true),
+    'hours_night',private.weekly_source_publication_scalar_v1(p_component->'hours_night',p_field||'.hours_night','DEC',6,true),
+    'hours_sat',private.weekly_source_publication_scalar_v1(p_component->'hours_sat',p_field||'.hours_sat','DEC',6,true),
+    'hours_sun',private.weekly_source_publication_scalar_v1(p_component->'hours_sun',p_field||'.hours_sun','DEC',6,true),
+    'hours_bh',private.weekly_source_publication_scalar_v1(p_component->'hours_bh',p_field||'.hours_bh','DEC',6,true),
+    'additional_code_raw',private.weekly_source_publication_scalar_v1(p_component->'additional_code_raw',p_field||'.additional_code_raw','TEXT',null,true),
+    'unit_count',private.weekly_source_publication_scalar_v1(p_component->'unit_count',p_field||'.unit_count','DEC',6,true),
+    'unit_pay_rate',private.weekly_source_publication_scalar_v1(p_component->'unit_pay_rate',p_field||'.unit_pay_rate','DEC',6,true),
+    'unit_charge_rate',private.weekly_source_publication_scalar_v1(p_component->'unit_charge_rate',p_field||'.unit_charge_rate','DEC',6,true),
+    'expense_code',private.weekly_source_publication_scalar_v1(p_component->'expense_code',p_field||'.expense_code','TEXT',null,true),
+    'pay_ex_vat',private.weekly_source_publication_scalar_v1(p_component->'pay_ex_vat',p_field||'.pay_ex_vat','DEC',2),
+    'charge_ex_vat',private.weekly_source_publication_scalar_v1(p_component->'charge_ex_vat',p_field||'.charge_ex_vat','DEC',2,true),
+    'exclude_from_pay',private.weekly_source_publication_scalar_v1(p_component->'exclude_from_pay',p_field||'.exclude_from_pay','BOOL'),
+    'origin',private.weekly_source_publication_scalar_v1(p_component->'origin',p_field||'.origin','TEXT'),
+    'movement_id',private.weekly_source_publication_scalar_v1(p_component->'movement_id',p_field||'.movement_id','UUID',null,true),
+    'movement_group_id',private.weekly_source_publication_scalar_v1(p_component->'movement_group_id',p_field||'.movement_group_id','UUID',null,true)
+  );
+
+  -- 24 section 4.5 step 3: movement_group_id groups components that MOVE
+  -- together, so it cannot exist without a movement identity.  The head
+  -- component relation carries the same rule as a CHECK.
+  if v_out->'movement_group_id'<>'null'::jsonb and v_out->'movement_id'='null'::jsonb then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_MOVEMENT_IDENTITY_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_MOVEMENT_IDENTITY_INVALID',
+              'field',p_field,'reason','GROUP_WITHOUT_MOVEMENT')::text;
+  end if;
+
+  return v_out;
+end;
+$function$;

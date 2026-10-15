@@ -1,0 +1,235 @@
+create or replace function private.weekly_source_effective_inventory_v1(
+  p_root_timesheet_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_identity jsonb;
+  v_head public.weekly_source_entitlement_heads%rowtype;
+  v_financial public.timesheets_financials%rowtype;
+  v_components jsonb:='[]'::jsonb;
+  v_hashed jsonb:='[]'::jsonb;
+  v_pairs jsonb:='[]'::jsonb;
+  v_segments jsonb:='[]'::jsonb;
+  v_expenses jsonb:='[]'::jsonb;
+  v_authority text;
+  v_head_id uuid;
+  v_head_count integer:=0;
+  v_inventory_digest text;
+  v_result jsonb;
+begin
+  v_identity:=private.weekly_source_resolve_root_identity_v1(p_root_timesheet_id);
+  if coalesce((v_identity->>'ok')::boolean,false) is not true
+     or (v_identity->>'canonical_timesheet_id')::uuid is distinct from p_root_timesheet_id then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+      'authority',null,'head_id',null,'components','[]'::jsonb,
+      'inventory_digest',null,'component_count',0,
+      'detail',coalesce(v_identity,'{}'::jsonb)
+    );
+  end if;
+
+  -- The root identity is the Timesheet FAMILY, not one physical id: that is what
+  -- S8 and WP-01a's head keying establish, and it is how the coordinator
+  -- resolves a committed head.  Resolving by the physical id would answer "this
+  -- root has no head, the effective entitlement is the ordinary TSFIN" for a
+  -- family that rotated after its head was committed -- an UNDERSTATED effective
+  -- entitlement, which is exactly the input shape that turns a residual into an
+  -- overpayment.  Where the family's head names a different physical root the
+  -- answer is a refusal, never a quiet TSFIN.
+  -- WP-06c review finding F5.  This read used to be a bare `select ... into`
+  -- whose safety rested entirely on the partial unique index
+  -- `weekly_source_entitlement_heads_committed_current_uq`.  Part 1 review rule
+  -- 5 forbids exactly that: "never express safety through `limit`, `order by` or
+  -- 'the unique index makes this impossible'".  Executed with the index dropped
+  -- to stand for the later change that removes it, two committed current rows
+  -- for one family made this function return an ARBITRARY one with `ok:true`,
+  -- and this answer decides a pay outcome.  The cardinality is therefore checked
+  -- explicitly and anything unexpected goes to the fail-closed branch, exactly
+  -- as `weekly_source_target_family_for_root_v1` below already does.
+  select pg_catalog.count(*)::integer into v_head_count
+  from public.weekly_source_entitlement_heads head
+  where pg_catalog.btrim(head.root_family_booking_id)
+        =pg_catalog.btrim(v_identity->>'family_booking_id')
+    and head.state='COMMITTED_CURRENT';
+  if v_head_count>1 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+      'authority',null,'head_id',null,'components','[]'::jsonb,
+      'inventory_digest',null,'component_count',0,
+      'detail',pg_catalog.jsonb_build_object(
+        'reason','MULTIPLE_COMMITTED_CURRENT_HEADS_FOR_THE_FAMILY',
+        'timesheet_id',p_root_timesheet_id,
+        'family_booking_id',v_identity->>'family_booking_id',
+        'committed_current_head_count',v_head_count));
+  end if;
+  if v_head_count=1 then
+    select head.* into strict v_head
+    from public.weekly_source_entitlement_heads head
+    where pg_catalog.btrim(head.root_family_booking_id)
+          =pg_catalog.btrim(v_identity->>'family_booking_id')
+      and head.state='COMMITTED_CURRENT';
+  end if;
+
+  if v_head_count=1 and v_head.root_timesheet_id is distinct from p_root_timesheet_id then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+      'authority',null,'head_id',null,'components','[]'::jsonb,
+      'inventory_digest',null,'component_count',0,
+      'detail',pg_catalog.jsonb_build_object(
+        'reason','COMMITTED_HEAD_BELONGS_TO_ANOTHER_PHYSICAL_ROOT',
+        'timesheet_id',p_root_timesheet_id,
+        'family_booking_id',v_identity->>'family_booking_id',
+        'current_head_id',v_head.id,
+        'head_root_timesheet_id',v_head.root_timesheet_id));
+  end if;
+
+  -- `found` is not consulted here: the cardinality check above is the fact, and a
+  -- `count(*)` query sets `found` true whatever the count is.
+  if v_head_count=1 then
+    v_authority:='HEAD';
+    v_head_id:=v_head.id;
+    -- The head already stores every component and its frozen component_sha256.
+    select coalesce(pg_catalog.jsonb_agg(
+             pg_catalog.jsonb_build_object(
+               'component_ordinal',component.component_ordinal,
+               'component_id',component.component_id,
+               'component_sha256',pg_catalog.encode(component.component_sha256,'hex'),
+               'component_kind',component.component_kind,
+               'economic_key_type',component.economic_key_type,
+               'economic_key_value',component.economic_key_value,
+               'component_member_identity',component.component_member_identity,
+               'segment_id',component.segment_id,
+               'segment_key',component.segment_key,
+               'segment_stable_key',component.segment_stable_key,
+               'work_date',component.work_date,
+               'reference_number',component.reference_number,
+               'hours_day',case when component.hours_day is null then null
+                 else pg_catalog.to_char(component.hours_day,'FM9999999999990.000000') end,
+               'hours_night',case when component.hours_night is null then null
+                 else pg_catalog.to_char(component.hours_night,'FM9999999999990.000000') end,
+               'hours_sat',case when component.hours_sat is null then null
+                 else pg_catalog.to_char(component.hours_sat,'FM9999999999990.000000') end,
+               'hours_sun',case when component.hours_sun is null then null
+                 else pg_catalog.to_char(component.hours_sun,'FM9999999999990.000000') end,
+               'hours_bh',case when component.hours_bh is null then null
+                 else pg_catalog.to_char(component.hours_bh,'FM9999999999990.000000') end,
+               'additional_code_raw',component.additional_code_raw,
+               'unit_count',case when component.unit_count is null then null
+                 else pg_catalog.to_char(component.unit_count,'FM9999999999990.000000') end,
+               'unit_pay_rate',case when component.unit_pay_rate is null then null
+                 else pg_catalog.to_char(component.unit_pay_rate,'FM9999999999990.000000') end,
+               'unit_charge_rate',case when component.unit_charge_rate is null then null
+                 else pg_catalog.to_char(component.unit_charge_rate,'FM9999999999990.000000') end,
+               'expense_code',component.expense_code,
+               'pay_ex_vat',pg_catalog.to_char(component.pay_ex_vat,'FM9999999999990.00'),
+               'charge_ex_vat',case when component.charge_ex_vat is null then null
+                 else pg_catalog.to_char(component.charge_ex_vat,'FM9999999999990.00') end,
+               'exclude_from_pay',component.exclude_from_pay,
+               'origin',component.origin,
+               'movement_id',component.movement_id,
+               'movement_group_id',component.movement_group_id
+             ) order by component.component_ordinal),'[]'::jsonb)
+      into v_hashed
+    from public.weekly_source_entitlement_head_components component
+    where component.head_id=v_head.id;
+    v_result:=pg_catalog.jsonb_build_object(
+      'ok',true,'code',null,
+      'authority',v_authority,'head_id',v_head_id,
+      'components',v_hashed,
+      'inventory_digest',pg_catalog.encode(v_head.inventory_digest,'hex'),
+      'component_count',v_head.component_count
+    );
+    return v_result||pg_catalog.jsonb_build_object('approval_basis',
+      private.weekly_source_inventory_approval_basis_v2(p_root_timesheet_id,v_result));
+  end if;
+
+  -- No head: the effective entitlement is the root's current authorised
+  -- financial snapshot (24 section 4.1 makes the first entitlement the ordinary
+  -- TSFIN), mapped through the same composer.
+  v_authority:='TSFIN';
+  select financial.* into v_financial
+  from public.timesheets_financials financial
+  where financial.timesheet_id=p_root_timesheet_id and financial.is_current=true;
+
+  if found then
+    v_segments:=case
+      when pg_catalog.jsonb_typeof(v_financial.invoice_breakdown_json->'segments')='array'
+        then v_financial.invoice_breakdown_json->'segments'
+      else '[]'::jsonb end;
+    select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'work_event_id',expense.work_event_id,
+      'source_observation_kind',expense.source_observation_kind,
+      'candidate_reimbursement_ex_vat',expense.candidate_reimbursement_ex_vat::text,
+      'client_charge_ex_vat',expense.client_charge_ex_vat::text
+    ) order by expense.work_event_id),'[]'::jsonb) into v_expenses
+    from public.weekly_source_expense_pay_materialisations materialisation
+    join public.weekly_expense_authority_generations expense
+      on expense.id=materialisation.expense_authority_generation_id
+    where materialisation.root_timesheet_id=p_root_timesheet_id
+      and materialisation.candidate_timesheet_financial_id=v_financial.id;
+  end if;
+
+  v_components:=private.weekly_source_entitlement_components_v1(v_segments,v_expenses);
+
+  if v_financial.id is not null then
+    v_components:=private.weekly_source_initial_additional_components_v2(
+      v_components,v_financial.additional_units_json,
+      v_financial.additional_pay_ex_vat,v_financial.additional_charge_ex_vat,
+      v_identity->>'family_booking_id');
+  end if;
+
+  -- Hash every component with the COORDINATOR'S own canonicaliser, CONTENT
+  -- projection and encoder, so a TSFIN-derived component and the head component
+  -- it becomes are equal byte for byte rather than merely similar.
+  --
+  -- `component_sha256` is a CONTENT identity and deliberately excludes
+  -- `component_ordinal`, `movement_id` and `movement_group_id`
+  -- (interfaces\PUBLICATION_REQUEST_SHAPE.md revision note and section 5.2):
+  -- the ordinal is a component's position inside a head, and a component that
+  -- is retained while another moves out from in front of it legitimately
+  -- changes position.  That is why the coordinator writes the head row's own
+  -- component_sha256 as digest(component_content_v1(canonical)) and compares a
+  -- retained component the same way, and it is why the HEAD branch above --
+  -- which returns the head row's stored hash -- is content-based.
+  --
+  -- This branch previously hashed the CANONICAL component, ordinal and all, so
+  -- the two branches of this one function disagreed about the same component
+  -- and every first publication over a head-less root with a non-empty TSFIN
+  -- before-position was refused
+  -- WEEKLY_SOURCE_PUBLICATION_RETAINED_COMPONENT_CHANGED.  It also made this
+  -- function's own guarantee 2 false.
+  select coalesce(pg_catalog.jsonb_agg(
+           component_element.value||pg_catalog.jsonb_build_object(
+             'component_sha256',pg_catalog.encode(
+               private.weekly_source_publication_request_digest_v1(
+                 private.weekly_source_publication_component_content_v1(
+                   private.weekly_source_publication_component_canonical_v1(
+                     component_element.value,'effective_inventory.component'))),'hex'))
+           order by (component_element.value->>'component_ordinal')::integer),'[]'::jsonb),
+         coalesce(pg_catalog.jsonb_agg(
+           pg_catalog.jsonb_build_object(
+             'component_ordinal',component_element.value->'component_ordinal',
+             'component_id',component_element.value->'component_id')
+           order by (component_element.value->>'component_ordinal')::integer),'[]'::jsonb)
+    into v_hashed,v_pairs
+  from pg_catalog.jsonb_array_elements(v_components) as component_element(value);
+
+  -- The same inventory digest the coordinator writes on a head, so the two
+  -- values are directly comparable.
+  v_inventory_digest:=pg_catalog.encode(
+    private.weekly_source_publication_request_digest_v1(
+      pg_catalog.jsonb_build_object('components',v_pairs)),'hex');
+
+  v_result:=pg_catalog.jsonb_build_object(
+    'ok',true,'code',null,
+    'authority',v_authority,'head_id',null,
+    'components',v_hashed,
+    'inventory_digest',v_inventory_digest,
+    'component_count',pg_catalog.jsonb_array_length(v_hashed)
+  );
+  return v_result||pg_catalog.jsonb_build_object('approval_basis',
+    private.weekly_source_inventory_approval_basis_v2(p_root_timesheet_id,v_result));
+end;
+$function$;

@@ -1,0 +1,42 @@
+create or replace function private._contract_week_settings_authority_before_v1()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare v_contract public.contracts%rowtype; v_snapshot jsonb;
+begin
+  if tg_op='UPDATE' and old.timesheet_id is not null then
+    new.settings_authority_json:=old.settings_authority_json;
+    new.settings_authority_version:=old.settings_authority_version;
+    new.settings_authority_fingerprint:=old.settings_authority_fingerprint;
+    new.settings_authority_resolved_at:=old.settings_authority_resolved_at;
+    return new;
+  end if;
+  if new.timesheet_id is not null and tg_op='UPDATE'
+     and old.settings_authority_json<>'{}'::jsonb then
+    new.settings_authority_json:=old.settings_authority_json;
+    new.settings_authority_version:=old.settings_authority_version;
+    new.settings_authority_fingerprint:=old.settings_authority_fingerprint;
+    new.settings_authority_resolved_at:=old.settings_authority_resolved_at;
+    return new;
+  end if;
+  select * into v_contract from public.contracts c where c.id=new.contract_id;
+  if not found then return new; end if;
+  v_snapshot:=private._contract_settings_effective_core_v1(
+    v_contract.client_id,v_contract.id,new.week_ending_date,'WEEKLY',null
+  );
+  if not coalesce(new.is_adjustment,false) and coalesce(new.additional_seq,0)=0 then
+    new.submission_mode_snapshot:=coalesce(
+      v_snapshot#>>'{values,default_submission_mode}',
+      'ELECTRONIC'
+    )::public.submission_mode_enum;
+  end if;
+  new.settings_authority_json:=v_snapshot;
+  new.settings_authority_version:='CONTRACT_SETTINGS_AUTHORITY_V1';
+  new.settings_authority_fingerprint:=v_snapshot->>'authority_fingerprint';
+  new.settings_authority_resolved_at:=(v_snapshot->>'resolved_at_utc')::timestamptz;
+  return new;
+end
+$function$;

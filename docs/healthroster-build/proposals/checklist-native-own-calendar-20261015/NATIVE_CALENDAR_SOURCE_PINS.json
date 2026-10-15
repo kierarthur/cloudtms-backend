@@ -1,0 +1,37 @@
+{
+  "source_only": true,
+  "rows": [
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "source_file_sha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e",
+      "id": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "definition_sha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1",
+      "saved_file": "native-calendar-source/private._contract_settings_effective_core_v1_uuid_uuid_date_text_uuid_.sqlinc"
+    },
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "source_file_sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+      "id": "private._contract_settings_apply_week_snapshot_v1(uuid)",
+      "definition_sha256": "c53ab4ef48d31c4e74585e2495c83899a6503eabffcbb8aec99aec150f368367",
+      "saved_file": "native-calendar-source/private._contract_settings_apply_week_snapshot_v1_uuid_.sqlinc"
+    },
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "source_file_sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+      "id": "private._contract_week_settings_authority_before_v1()",
+      "definition_sha256": "1a06329815160fd0766b784f298184eebcd46b0a2362daab25555592bf59e5d0",
+      "saved_file": "native-calendar-source/private._contract_week_settings_authority_before_v1__.sqlinc"
+    },
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "source_file_sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+      "id": "private._timesheet_settings_authority_before_v1()",
+      "definition_sha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "saved_file": "native-calendar-source/private._timesheet_settings_authority_before_v1__.sqlinc"
+    }
+  ]
+}

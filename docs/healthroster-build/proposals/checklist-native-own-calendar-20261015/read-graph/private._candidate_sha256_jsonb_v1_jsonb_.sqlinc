@@ -1,0 +1,9 @@
+create or replace function private._candidate_sha256_jsonb_v1(p_value jsonb)
+returns bytea
+language sql
+immutable
+parallel safe
+set search_path = pg_catalog, extensions, pg_temp
+as $function$
+  select extensions.digest(convert_to(coalesce(p_value,'null'::jsonb)::text,'UTF8'),'sha256');
+$function$;

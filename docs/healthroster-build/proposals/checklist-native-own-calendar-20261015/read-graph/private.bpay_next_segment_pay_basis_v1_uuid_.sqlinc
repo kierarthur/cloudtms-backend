@@ -1,0 +1,16 @@
+create or replace function private.bpay_next_segment_pay_basis_v1(p_segment_id uuid)
+returns bytea language sql stable security invoker set search_path=pg_catalog,private
+as $function$
+  select pg_catalog.sha256(pg_catalog.convert_to(jsonb_build_array(r.work_id,s.segment_key,
+    s.component_key,r.source_pay_channel,r.source_umbrella_id,
+    a.tax_treatment,s.pay_excluded,s.approved_hours,s.hours_day,s.hours_night,s.hours_sat,s.hours_sun,s.hours_bh,
+    case when not s.pay_excluded and s.hours_day<>0 then s.pay_day end,
+    case when not s.pay_excluded and s.hours_night<>0 then s.pay_night end,
+    case when not s.pay_excluded and s.hours_sat<>0 then s.pay_sat end,
+    case when not s.pay_excluded and s.hours_sun<>0 then s.pay_sun end,
+    case when not s.pay_excluded and s.hours_bh<>0 then s.pay_bh end,
+    s.approved_source_ex_vat)::text,'UTF8'))
+  from private.bpay_next_approved_segment s
+  join private.bpay_next_approved_line a on a.id=s.approved_line_id
+  join private.bpay_next_work_revision r on r.id=s.revision_id where s.id=p_segment_id
+$function$;
