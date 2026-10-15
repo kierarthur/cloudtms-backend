@@ -1,0 +1,21 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: ["private._weekly_source_rule_values_v1(jsonb)","private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)","private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)","private.weekly_source_effective_rule_set_v1(uuid,uuid)","private.weekly_source_has_self_bill_rules_v1(uuid,uuid)","private.weekly_source_agency_invoice_check_only_v1(uuid)","private.weekly_source_signed_check_only_v1(uuid)","private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)","private.bpay_next_initial_tsfin_bind_v1(uuid)"]
+
+9 !== 8
+
+    at file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-constructor-acl-closure-20261015/build-and-check.mjs:13:138
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 9,
+  expected: 8,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

@@ -1,0 +1,45 @@
+{
+  "source_only": true,
+  "files": [
+    {
+      "file": "CONSTRUCTOR_CLOSURE_MANIFEST.json",
+      "bytes": 152527,
+      "sha256": "db0cf53d8eda167720f65b74a8c264a8ef5d9af00a699b0c22ad568f45cef94a"
+    },
+    {
+      "file": "FINITE_GROUP_01_FRESH_FRAME.sql",
+      "bytes": 8286,
+      "sha256": "b1b647f2e28401e6b082e22f46d2176349c984973a535ff18d48da1929bd9528"
+    },
+    {
+      "file": "FINITE_GROUP_01_SCHEMA_CONSTRUCTORS_ACL.sql",
+      "bytes": 615176,
+      "sha256": "b3656bff4cfd3ddca974fb86cb9e4f9dd0434a6e2f616b6c2dae64bef7783903"
+    },
+    {
+      "file": "FINITE_GROUP_02_FRESH_FRAME.sql",
+      "bytes": 5647,
+      "sha256": "a9f1f7b5c8e543eae8a441183c89fa5fdcd197503ee3f7da0151b2da4f7f6cab"
+    },
+    {
+      "file": "FINITE_GROUP_02_SCHEMA_CONSTRUCTORS_ACL.sql",
+      "bytes": 428721,
+      "sha256": "df33850bd092f212a4e0583740b633aa652ec607c0a340f8fe5d91c78c29dcd4"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 3058,
+      "sha256": "7899a54d53850f2ed5cbb830345f744545d1e365d4dccd736407ea1625350a07"
+    },
+    {
+      "file": "INITIAL_ACL_CENSUS_REFUSAL.txt",
+      "bytes": 1270,
+      "sha256": "98659f6535ae679363734246947768d30c7e90e702dc8b719fd79fa39dacb5db"
+    },
+    {
+      "file": "build-and-check.mjs",
+      "bytes": 11301,
+      "sha256": "c0d8cec2fb11cb7415ec30d9b408671c02e604980aee1d0dc8662c514929f7fc"
+    }
+  ]
+}

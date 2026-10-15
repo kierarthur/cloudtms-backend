@@ -1,0 +1,2323 @@
+{
+  "source_only": true,
+  "SQL_executed": false,
+  "predecessor": "2f0dd019e150e365e05045c0352caf56ab313438",
+  "predecessor_native_status": "FAILED 42883 at prepared70/source68 grouped REVOKE names8 absent helpers",
+  "rootCommit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+  "original_Native_functions": 50,
+  "original_guard_functions": 3,
+  "initial_grouped_ACL_missing_signatures": [
+    "private._weekly_source_rule_values_v1(jsonb)",
+    "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+    "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+    "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+    "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+    "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+    "private.weekly_source_signed_check_only_v1(uuid)",
+    "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+    "private.bpay_next_initial_tsfin_bind_v1(uuid)"
+  ],
+  "complete_literal_constructor_functions": 62,
+  "definitions": [
+    {
+      "id": "private._weekly_source_immutable_record_guard_v1()",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d"
+    },
+    {
+      "id": "private.weekly_source_final_rule_version_guard_v1()",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "7a01cbb37f66fd94ae96b01a8efff7e00279500267d8f2b0a0d6cbeea0a74306"
+    },
+    {
+      "id": "private.weekly_source_self_bill_binding_guard_v1()",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "30dd799cdc3d8cd8462c2a96f7de35d0c45b7e43edb11fd72b34dd9723c8d7c0"
+    },
+    {
+      "id": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500"
+    },
+    {
+      "id": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "6b1b21e7cae703b2e2c6ef8e31689f1328a81c56ab5ae1a75dc39e6a9a105797"
+    },
+    {
+      "id": "private.weekly_source_checklist_client_calendar_v1(uuid,date)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "50b4b863b755e14ebb3bd6d23cb82a5778910d181f2dc4c7ba60a4c0a4962319"
+    },
+    {
+      "id": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "f115abf9c5a260f339623e40121a937dac41d8a716379a35f4b936ffc84041ab"
+    },
+    {
+      "id": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "d762b216e1a0aefbc1fc3d6ab86ec4f28622d73eecb42bc06f960ee50575defc"
+    },
+    {
+      "id": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "9d0358f439dec88abdb7264ad7cd4709ea88739a4bdc442ee764f1ab0c410fd0"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "ef5ce9d473fd80c9134d23e7c32305af70f36d0c06618d10868b039615c10af1"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "318887be00ac528a3dd988682c264ddacde15974d112b82aeac12faa754f0226"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "781219bb45111ecf0afa14fb08b11195b06cbd4f56b45a26b54249492162012d"
+    },
+    {
+      "id": "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "520cc261070a9eaa0291ce647adc5dcff9ed5153846b5a8cde3d8dbbfe063444"
+    },
+    {
+      "id": "private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "3184b1d9174d2e2ade22d7205dafc6b5a1bc17d181626ffe158f71785cedd5b6"
+    },
+    {
+      "id": "private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "237e2f0c7a36f54e22b5179efe4d5f5d2cc4c9fd5bf6ee33b322ac0e828a3683"
+    },
+    {
+      "id": "private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "bfa7db3ed86c72be0ba31bdef7cf6faf3005bf03a546e084d60c4da2cbf74f86"
+    },
+    {
+      "id": "private.bpay_next_work_period_proof_v1(uuid,uuid,date)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "2f244ca84d1551a899d5a9461e9eba6afe5557794c2138101cd6d19a6fea131c"
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "ca9d19c90c5d8724140eb536a10f3eabd24f2b70353dc6a8110b7e3b76abc6d2"
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "4f874a5f4df09c56568b9657563ba87635471f235cc476ffa9e6cffdf974d11c"
+    },
+    {
+      "id": "private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "22135444210ec820825d6be42189271720057a939a45fc3bf206b382eb496f70"
+    },
+    {
+      "id": "private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "ad26d8941e0bf9b37668853261ebe2662237507327c7def7a1218d41f2c901a3"
+    },
+    {
+      "id": "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "f8143a5dedabf8a244f809b2be49e3d18e4671276c7791f37e1cac0d0363884a"
+    },
+    {
+      "id": "private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "c9f6c1b0c6d95899e566bf1cca618633080ec284b097d422eac80d50c81d846f"
+    },
+    {
+      "id": "private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "e89835919efed2abae2a2788094a2327df435cc9366ede7855a3fcc52fd6851e"
+    },
+    {
+      "id": "private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "35016299cea0ba196f1c810aca36930691526bff02656c9b5625eb3187f3caed"
+    },
+    {
+      "id": "private.weekly_source_checklist_process_publication_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "779063cc774c2248efd88fe08ef20c6a357013e299d3061e4ed9de6920ea3b5c"
+    },
+    {
+      "id": "private.weekly_source_checklist_process_v1(uuid,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "f44d30496303d8ba7d49330b83f39a79496367a7ed3d9c12290f3aff2b3fc737"
+    },
+    {
+      "id": "private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "602620cd3875d8fb2cc77dbb771084a3d0cae05e68c4d069c3679d0f1be81237"
+    },
+    {
+      "id": "private.weekly_source_office_tracker_v1(uuid,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "acc75c15bedf412dbfe72d1d0e5d08ff609e7646f17572a6142ffa8dc7faef97"
+    },
+    {
+      "id": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "c9a0cc54135738f33e871034cc154e79cc8ed5700c25c4b5f0d4599900da952c"
+    },
+    {
+      "id": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "ed1dc759462ffab59e1c5d231a37b3f936028712f1dc4f94432ea62f3ae21d2c"
+    },
+    {
+      "id": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "29844609a04bf348655277a3c78065645e7fa6c2dfd1bbb32a6709e215a40692"
+    },
+    {
+      "id": "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "1ed9546f75ac4bdef03e8a780f5fb596835314a10e88f334f9d9ef0ecae44ff6"
+    },
+    {
+      "id": "private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "c06fe4d00108f0db783d54e0401e1216867a12860a1e58c60abcdb26e2017304"
+    },
+    {
+      "id": "private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "ca8b0cc21411ea475c7cbf4c491d0eb59a22f5686a8d75754c737eb484980550"
+    },
+    {
+      "id": "private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "3966dba008aaf551e36627de8128282a7f7036ffaa9951a212055d9bc67c18e3"
+    },
+    {
+      "id": "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "bb4250f0a8d19f0e54610f79a46bc8e4a7eb9fb3edeb96f59eb2abb0d1585263"
+    },
+    {
+      "id": "private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "2f01ada9c32651ebb7e363dc231b62b2105b1e78d0bb54d39e38ecdf5f95a13d"
+    },
+    {
+      "id": "public.weekly_source_checklist_submission_manifest_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "4e818404c6868fe9e7533ac318bed62af8e422d8c150bdc709197c98d58e4035"
+    },
+    {
+      "id": "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "49cd50a88f97b6cfdd15f17f9360e6369ffd5875d79d7d276ac4d29e2fe76fc2"
+    },
+    {
+      "id": "public.weekly_source_checklist_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "320aa72099dbf8626b45a2d0ed79c2a4894f10bf033216e8c7957535020540eb"
+    },
+    {
+      "id": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "01c88e386fbc2737c2833b6ac7692501439894091f229b0c410653185b5dfe41"
+    },
+    {
+      "id": "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "213279b58c7dfa8e28d7d477ebb81fcea1a4cc3eb11aa514586cc65eea7162bf"
+    },
+    {
+      "id": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "dc901f193fcb33f0800e3f06886095fe0b5599debcbdc6233dcf43eab4799160"
+    },
+    {
+      "id": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "4fa6cbafed4dec3493321a83ec5ce0fbd7eb8713eb8269359d97b178b622ed5e"
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "4b773184d8fed57e7e659642c4f4b0e40e2e402b3dda63205781816150b0be66"
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "9510a9d963e5296f1a6161383a6e6e375999760b434c6bbd658fa2cfbc029ba7"
+    },
+    {
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "952aa86f5de8f4342ab1ebd6a1cf096ea712f5b93f0606ec84951707a2bdde44"
+    },
+    {
+      "id": "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "be4e5742c896847956f6ba80ecd74c4edd80f8b78cda7a4b9c61ce731c119761"
+    },
+    {
+      "id": "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "f7908839b1257fb56eb94a13c2e0e3459df7bb9a242a8a7aa0dd28b041434f6a"
+    },
+    {
+      "id": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "65c2545150297d8ea0c06554767bcd2d1431ff69a7c008bc369bf8797f7b54ce"
+    },
+    {
+      "id": "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "2b76776b7695505643e4991ce1629e9ed36671beb96484efd73c04e83b037861"
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)",
+      "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "definition_sha256": "e1aa44ad84a7146ac06f2d3cdd05afc105583a159651a70d35f00f0370fccfee"
+    },
+    {
+      "id": "private._weekly_source_rule_values_v1(jsonb)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "89e3947292da2578999ac2ce5aebdf465e54b41007587a862e2cb3bdf6d5a60c"
+    },
+    {
+      "id": "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "definition_sha256": "1e8320b48d7357ee8148ab485714323b2b3c50e45fc1be494eb373335f635c2e"
+    },
+    {
+      "id": "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "7861b97e31eab1c939785976219065ba3c963f5d166788ef850d335efe774794"
+    },
+    {
+      "id": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "definition_sha256": "df9834db5f8f7e3e94a4decd24e678610569e6848c05d13855ca4e2c77ceca82"
+    },
+    {
+      "id": "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "8091765b7a28256cbb488faa5d5b0d59f1d4fb0a172e6900f636cd0873fb1fec"
+    },
+    {
+      "id": "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "4482fb9ec88991595adb3644459fc3c14517d7f5831bb827eafaf05cfb94cc9c"
+    },
+    {
+      "id": "private.weekly_source_signed_check_only_v1(uuid)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "bc565bef991c2ee69f8f557a3a93d1b2ada589f49ca67dc824e75e35df8c449c"
+    },
+    {
+      "id": "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "b2b295823a2f3aeaf47522a8ad4b1831f1a9cb9200d8c04c7688ae199a260c89"
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_bind_v1(uuid)",
+      "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "source_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "definition_sha256": "b324fbfc66249dd762adf34f9a2c20d84e2b5e3f3b9223355477347845bb1f2c"
+    }
+  ],
+  "ACL_signatures_all_have_complete_constructor": true,
+  "SQL_language_dependencies": [
+    {
+      "from": "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+      "to": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+      "kind": "SQL_LANGUAGE_CONSTRUCTOR_REFERENCE"
+    }
+  ],
+  "independent_finite_groups": [
+    {
+      "seed": [
+        "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+        "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+        "private.weekly_source_checklist_client_calendar_v1(uuid,date)",
+        "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+        "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+        "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+        "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)",
+        "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)",
+        "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)",
+        "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)",
+        "private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)",
+        "private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)",
+        "private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)",
+        "private.bpay_next_work_period_proof_v1(uuid,uuid,date)",
+        "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)",
+        "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)",
+        "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)",
+        "private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)",
+        "private.weekly_source_checklist_process_publication_v1(uuid)",
+        "private.weekly_source_checklist_process_v1(uuid,uuid)",
+        "private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)",
+        "private.weekly_source_office_tracker_v1(uuid,uuid)",
+        "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+        "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+        "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+        "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)",
+        "private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)",
+        "private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)",
+        "private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)",
+        "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)",
+        "private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)",
+        "public.weekly_source_checklist_submission_manifest_v1(jsonb)",
+        "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)",
+        "public.weekly_source_checklist_v1(jsonb)",
+        "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+        "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+        "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+        "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+        "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+        "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+        "private.bpay_next_workbench_work_members_v1(uuid,uuid)"
+      ],
+      "functions": [
+        "private._weekly_source_immutable_record_guard_v1()",
+        "private.weekly_source_final_rule_version_guard_v1()",
+        "private.weekly_source_self_bill_binding_guard_v1()",
+        "private._weekly_source_rule_values_v1(jsonb)",
+        "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+        "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+        "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+        "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+        "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+        "private.weekly_source_signed_check_only_v1(uuid)",
+        "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+        "private.bpay_next_initial_tsfin_bind_v1(uuid)",
+        "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+        "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+        "private.weekly_source_checklist_client_calendar_v1(uuid,date)",
+        "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+        "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+        "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+        "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)",
+        "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)",
+        "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)",
+        "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)",
+        "private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)",
+        "private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)",
+        "private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)",
+        "private.bpay_next_work_period_proof_v1(uuid,uuid,date)",
+        "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)",
+        "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)",
+        "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)",
+        "private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)",
+        "private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)",
+        "private.weekly_source_checklist_process_publication_v1(uuid)",
+        "private.weekly_source_checklist_process_v1(uuid,uuid)",
+        "private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)",
+        "private.weekly_source_office_tracker_v1(uuid,uuid)",
+        "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+        "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+        "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+        "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)",
+        "private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)",
+        "private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)",
+        "private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)",
+        "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)",
+        "private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)",
+        "public.weekly_source_checklist_submission_manifest_v1(jsonb)",
+        "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)",
+        "public.weekly_source_checklist_v1(jsonb)",
+        "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+        "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+        "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+        "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+        "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+        "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+        "private.bpay_next_workbench_work_members_v1(uuid,uuid)"
+      ],
+      "ACL": [
+        {
+          "sha256": "d8456629550a651a6e79022829411f826140d537916f29b1ce68928d11cbe6f8",
+          "ids": [
+            "private._weekly_source_immutable_record_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6b21b1747a3cc95779ff56c83af74887d24ae87a119eec1788f365ccdfbbc464",
+          "ids": [
+            "private._weekly_source_immutable_record_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "4104f5613dfdb96fcf2f4c04dbeafd3122b182be763c27817af7b765bc27a7d9",
+          "ids": [
+            "private.weekly_source_final_rule_version_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8cfcab8f0d7f2705818a249ea983394e70dd056ec0978ff1656429bfe574bfc2",
+          "ids": [
+            "private._weekly_source_rule_values_v1(jsonb)",
+            "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+            "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+            "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+            "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+            "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+            "private.weekly_source_signed_check_only_v1(uuid)",
+            "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+            "private.weekly_source_final_rule_version_guard_v1()"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "2885cb8786a38cd5d45dcbd78cea27ea3fcb797ee6913cfffa1d807811235f74",
+          "ids": [
+            "private.weekly_source_self_bill_binding_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "431eebc521f79fe5d47b05df38bbfc3d49cf2d54bd7a55d6c8a6ad7edc30e98d",
+          "ids": [
+            "private.weekly_source_self_bill_binding_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "01becdb29a8b428e79fe097ed9a689cd691cf5bd0cddbd1af7c0e489e37e80d2",
+          "ids": [
+            "private.weekly_source_actual_timesheet_submission_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "ab1bb2d8dfe982636d05c0a393b34b4854af3a30950fe85f642e617d45d69ce1",
+          "ids": [
+            "private.weekly_source_actual_timesheet_submission_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "1f2664f3b954179b6527c8aea4b1517fee1b47dcee18bd50b0e5c432402cf949",
+          "ids": [
+            "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "5194924188e8497b05d42c2dc065a4d54ec3457e6204fb7c44086c125816d256",
+          "ids": [
+            "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "3d19f86cdd2ec5b700b7f27b87ae681c6f5d02cc52e79e27adb20082e616ac1f",
+          "ids": [
+            "private.weekly_source_checklist_client_calendar_v1(uuid,date)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "51cab17b14b9a432c0cf93858ad8b73a08959db44ae07fcf412ed4714d9d059e",
+          "ids": [
+            "private.weekly_source_checklist_client_calendar_v1(uuid,date)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "4b867e0a3bf43eceb3c9dffd742364a181016a59ee41bcd5a5b11478d175e84f",
+          "ids": [
+            "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "49bd6c327333c6edd082df35df5c7a66249f5d8f97c357ad5fb090f0eebddbba",
+          "ids": [
+            "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "c405962d77e09e1941e8be98d17ab7c5c6b83cf9ddaa4da99e67db38bcb48c4a",
+          "ids": [
+            "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "4a134d3990e2297d8df0c60e0eecf52f1790f09f8cb74dedf3e97b831436871d",
+          "ids": [
+            "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "fd37b7fa478ab63ae38f4bff1bf96f2a6ff291c90765c05488ff5012f462ab4c",
+          "ids": [
+            "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "a4614e41e71a5087698351c778b76534f0112d8823028b220835a41e5521acfe",
+          "ids": [
+            "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6de6a8e41aa619147fc3799d3ed8d273c52a636fe0477298e9884d4a667cafb5",
+          "ids": [
+            "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "2913a5fff870dc62768d035c0723855cf0a4ed028e8dc16c0f3c5a79cbe1126a",
+          "ids": [
+            "private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "498d5c195a68be09e3931cd9fcc10ed581697406b1a4403eeb950fc38ac7e77c",
+          "ids": [
+            "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "97a3398545244de23ffa03791099f86a07ddc276fabf661b8a3526011cf6ebc7",
+          "ids": [
+            "private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "60ead3f0fac443b3c33af573de164014a548e5a8c003c76f452a48c5205d816b",
+          "ids": [
+            "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "ce4df46982320ef1171527e6d18302bf545673dc9aaff250da545cc2604e9ba6",
+          "ids": [
+            "private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "04323e092172e3ca59cebd541b851f68813b0f1c4405b6dbd6066940242fe5c3",
+          "ids": [
+            "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "7f90b2fd932dfc27b43f40b339248bd06240a19e08ac04df9d174056ae125ad9",
+          "ids": [
+            "private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "1ab29034f69b74b2a260f12a57ed94a940f9d4bc2556a1040a2ccd2dacdaae56",
+          "ids": [
+            "private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6e84534940a8f7999aa54ce4b0d28856ea9e04d0f0e6325381e58e474d649535",
+          "ids": [
+            "private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "06b76272232d0afdefd3ecca404b807eff43656e5d6709b71240ed1d3f4c285d",
+          "ids": [
+            "private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d899bdbc87502c11bd61beb97c95f53ae68e24d87d37aee6b6eafbacd2f24496",
+          "ids": [
+            "private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6a424a5507280d833c815dfad62177ef3470c03a15843c60b491a45b767b9240",
+          "ids": [
+            "private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "71eb42143a5a55c17357cfcb84732d6b35aeb6c509e7a3e26aaec76bd3578e12",
+          "ids": [
+            "private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "480012456de0370b8e01f5f916a0a01ca8b52388c3ae9345a430034146f690c4",
+          "ids": [
+            "private.bpay_next_work_period_proof_v1(uuid,uuid,date)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "c66a7ad4094aec42bb707a311daff40cdf182e1d4b96bc5c306b48469ae3461c",
+          "ids": [
+            "private.bpay_next_work_period_proof_v1(uuid,uuid,date)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "2b05cb2d2e0ae662e06521e1c881512561c505af76a19d9e502836d93716f6dc",
+          "ids": [
+            "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "623f3e7b8e9da80d9727173a2ad97cde026d946992c4f4bddf572c130ab95b40",
+          "ids": [
+            "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6353a1fb6882adf6b3f594f3c3b7e8e31b29e28c2ee268e2308d37a69090ca45",
+          "ids": [
+            "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d08d915ebcccec03084b5cad2a5c8cad95aab590ecd7cb0f6cead6af6526400f",
+          "ids": [
+            "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "dcce5831e6f9bdbfda5202848e9ac35ed64ccfa4fc9dfc966b910cb32adf2267",
+          "ids": [
+            "private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d7852000f8c911d7c2889e3130dda203070c0bfc420e00771f0047d40f90ca60",
+          "ids": [
+            "private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "890b728d6d1e0ca844f5c5387665da2c8506583246ffa995948bcfa5b9843999",
+          "ids": [
+            "private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "a85fd41f7d28194bdb86f88a6efd27780e745139dea58b290f0ed07b3a4febd5",
+          "ids": [
+            "private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "f1b9889f8e971eae57cc6c190a136d0fbb10264874baa2e57ac05167765dfe10",
+          "ids": [
+            "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "3d6f7a77ef091f49c22720062ba52346e55cf7b3b4ab7c4b24b913cbd6b270b3",
+          "ids": [
+            "private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "5b0e623b3fdd01554e0997eaa26b70bac8dfaeb0ba51db853e56be66868f44e2",
+          "ids": [
+            "private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "573978335f203a952c3cc721e46d4c19aea17154e9b58b85787f1f280ab0189c",
+          "ids": [
+            "private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "14d2e2b5d23168065aa9719c870c2fe4cb7eb5bb9420ceb46e08323a141919cc",
+          "ids": [
+            "private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "7321be851735ca3d75fedb4e409cb0b93ab012c427569d53b7358230f2c4b918",
+          "ids": [
+            "private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "7f69ff6f72be22dd1abb833947d36c3c5757e72b87b6196136be1f89146f2cb8",
+          "ids": [
+            "private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "571b260042068d6f681f00b559bda12f516c21e6efc5585cd31a2033c500fa9c",
+          "ids": [
+            "private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "2fe712ce14c3b5568223cd003aba20acd2d5ae8d3fb74b704471460ccf60e523",
+          "ids": [
+            "private.weekly_source_checklist_process_publication_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "c3b32718086a41c9fd6ac43de99a244f826044865c3bbf2edbb447ebc5769a2a",
+          "ids": [
+            "private.weekly_source_checklist_process_publication_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "1cb9927e176af97a3dffb7ee962c107eda792397f1c9c20f8ff9471d209f2f58",
+          "ids": [
+            "private.weekly_source_checklist_process_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "c843602bcb4771d21a3e613e95bbe24ba76859d4191542f63038343c2b03ec4b",
+          "ids": [
+            "private.weekly_source_checklist_process_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "9fd41ccdce0e164f4f1dfc49739bbea967bbe37c7567c1a8265bd44ae93007a0",
+          "ids": [
+            "private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d4faa77c2c210bfed5b789ff8d85ebe09f3eaba295cd5991b819b8feafd19f1e",
+          "ids": [
+            "private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "f98d81ecbeafa0061204dcca94d1a93cc336268566eec9e5284d0c22ca2a21db",
+          "ids": [
+            "private.weekly_source_office_tracker_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "e2e2eab26612f1045ea661fb352ff0dc0285c266d5d138629fb157d012bd74f0",
+          "ids": [
+            "private.weekly_source_office_tracker_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "7076383dbfd17bc968ac384467f3bcf9dcbde038a40b2d211d545a74bfb0a284",
+          "ids": [
+            "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "b890fdae0fae5f738824100ffc857a6bdd4734cc95c2deb7bf13b76297428ad2",
+          "ids": [
+            "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d67ac24d44f8c162c6ccea5282d8b577b6db33cee6ff07b331f036c83a99ff0e",
+          "ids": [
+            "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "53e83924a31a205bffd8bad319ddae16724f64d82f00130b69de578dc5f61890",
+          "ids": [
+            "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "dafe0cd5d802d55a5c25a3fad7ef84a41a1250abf8f32fd09e447125778f427c",
+          "ids": [
+            "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "0be7a32247af7de8bb12e130c2dcf68c827dad827c747d73a0630372a592ef73",
+          "ids": [
+            "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "7d7ad7bfc478498009ee940ccf7b5b0ac3f02876c9db6083b98bd25be9a7294b",
+          "ids": [
+            "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "f893873072ac0fa7c0db9fda72e613dce514b35fe4c06d4fc2f60e1b7d3c84a8",
+          "ids": [
+            "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "f6d5d734b78507764dfd228776064213d8d125ec55e142892189237581706f37",
+          "ids": [
+            "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "9d92e6ce5cea22a15beb45ff3b07a65a0533721853fcc983a165a798d0097c0f",
+          "ids": [
+            "private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d00c2d2e346c9a42fec7b7e64d56f83ce0ac62789ece972977ba31187a2fe39a",
+          "ids": [
+            "private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "2f1f04aa3596c4805a56210abf82c7a1de956b443976d8f1cdd6ab1ffde44c8f",
+          "ids": [
+            "private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "cc0bc2bff457c0dd6b65b82d46ccab12e4eb7cf5184b2946c3e3c6384f300112",
+          "ids": [
+            "private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "5ac64fa0c14bb44360864e03425397e2906a6d58df31aba2fe66592657cdb71b",
+          "ids": [
+            "private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "3899caac32b6e302106b680d74ca3fc173a50390178f15565ca105fb4a835abf",
+          "ids": [
+            "private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "73ca653f6ca660e584a2e1e8e04f1bd1329014c347005d0897569e978db892e6",
+          "ids": [
+            "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "4471718d3170fa7835ebd5572e08540b0a3d4116e4d52fba22c42644190207ff",
+          "ids": [
+            "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "bfe944697331e25107662bd0f71a08e8e2fde859d102a0a227ce119fab29fd58",
+          "ids": [
+            "public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "550edc7e52db938020b4565d796a96e253c7e0f6ab271f8bbfee74dd361f3b31",
+          "ids": [
+            "private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "e0b86e2acfcad8aa95ab465ca317f4e44512ce0124506622a2890da654280991",
+          "ids": [
+            "private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "dd73f90dcc54d8d5e69eb5154530ac24886125ee72ea5e14b69aca630c7cf8bf",
+          "ids": [
+            "public.weekly_source_checklist_submission_manifest_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "1dc20462c9bd42d9a54945cb48de27abf0cbaaf11b01defd5085aeb7b1adbf72",
+          "ids": [
+            "public.weekly_source_checklist_submission_manifest_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "c6ea86099a38decbdd71ac01f20789bf00ec5ea668f2ca58f620a27b88d89f01",
+          "ids": [
+            "public.weekly_source_checklist_submission_manifest_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8129ebdbbb5a400e82b7a2cb570428cd07d29d5bda6b32593f96085fbc0602df",
+          "ids": [
+            "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "345e6fbe51b6d85a918cd068c3d7e5d095c8fbfce64cf027aa8de10a4151e851",
+          "ids": [
+            "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "380a76266b457352160ced8bb7e90b79a71866e24a4ce57de8c5b3ceec7ec7db",
+          "ids": [
+            "public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "bad462e7b215f979e4b10df1c900dc5f29c0613fdf0c81da500b66c3069a6600",
+          "ids": [
+            "public.weekly_source_checklist_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "b477971160e437e11838335895f8f8761d3856f368d64acdbd0643c7e185c183",
+          "ids": [
+            "public.weekly_source_checklist_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "1c4b86d272eeec5d1f41204c426f24697d87e5d2d13a017bcc16b235ca0e0896",
+          "ids": [
+            "public.weekly_source_checklist_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "f92910241d59bb2ca31a558dacf609fcd30c185940febbf887bc32ae10a4d71e",
+          "ids": [
+            "private.bpay_next_workbench_refresh_work_core_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8eafa738bfc0468b13932f33055f882f23d7c8107891bd3095c6da54d68c11d6",
+          "ids": [
+            "private.bpay_next_workbench_refresh_work_core_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "80241ad37167c2a3721501d316aed51e196726186156e1026bcc4f9ff8bfed01",
+          "ids": [
+            "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "99662b637823ff9d242a5a082d95e7a05cda5fdec514d7b7d4b7f59b41853153",
+          "ids": [
+            "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8f6a7b82a89658ec94a2edf3cd5f29de41592801826eac70391a0d95618de3e7",
+          "ids": [
+            "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d780e11a90cbe058b817cf4aca3df398a4ec90afe48823d7011f5fa33a493a40",
+          "ids": [
+            "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "7485bc02dd210e321d4167c3acbbb014c7d0690885421eac7fca859bdd4821a0",
+          "ids": [
+            "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "69b2e596509e3b3130e18eccf7a39a5be5fee4467310e895a3c7125a6fe6aa0f",
+          "ids": [
+            "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "775106ed49e19a263f3a02ab1afcb71d0d762baab55a9e40c29e689766e84b89",
+          "ids": [
+            "private.bpay_next_initial_tsfin_certificate_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "ad7ff1230313150ba742f8e746c4ef5c7cf3715338dccf5701dc197b395f737a",
+          "ids": [
+            "private.bpay_next_initial_tsfin_certificate_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8d9c7f4b35cbe248eb2a045d9e426c9f79df96109171aebf7b5e41b3b94f8fec",
+          "ids": [
+            "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "0a1e761e2cefd3a4155783389e15ab5dec0ce12de0bc34467b985c090f922ad4",
+          "ids": [
+            "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+            "private.bpay_next_initial_tsfin_bind_v1(uuid)",
+            "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+        },
+        {
+          "sha256": "3103f0e35ee2ad74a11a29cf5b081802156bf530d365a309012b507a97afa5a8",
+          "ids": [
+            "private.bpay_next_workbench_work_members_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "279ab5d76db1ea804aaa4ad22e77d1941a7cd68d2e3d6b76d8b89e1770275cc4",
+          "ids": [
+            "private.bpay_next_workbench_work_members_v1(uuid,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "bc01ce6bc722e408070e5cdeb42dab7cacde0006e613cd075743ccf3a247a414",
+          "ids": [
+            "private._weekly_source_rule_values_v1(jsonb)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "7924c7141f9d7aa7cb67914fa8bc2aa77cb875d61f4747c57f17f6c84206d890",
+          "ids": [
+            "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql"
+        },
+        {
+          "sha256": "2aff57d76a17e56d404745fdb21356768853b9bc54ebccff81bce1703dc415c4",
+          "ids": [
+            "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql"
+        },
+        {
+          "sha256": "50d0ca071d94555ef783f0f8b440f9ac739e75cefabb2463576b2656150c77f9",
+          "ids": [
+            "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "555b3d2a87822cc92af6aecb500badffd153b684382bb83a08eb91e759437bb7",
+          "ids": [
+            "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "89d87da173d20306cb389f97364cca87ae186f65e944eea0075fa8c650ccad84",
+          "ids": [
+            "private.weekly_source_agency_invoice_check_only_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "b6bdb665a8e32f6af76560bfa38b2e42c5fd94e8e24b6c163672e76595ee4e1e",
+          "ids": [
+            "private.weekly_source_signed_check_only_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "482de54bc298ee2dd3d55518c878b4adacc38a9c7bbd30c41520c6a4988a4909",
+          "ids": [
+            "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "b9f7c266084b2934ead06c652431d2793aa7b47fcacc8982fadfbddf46a173ba",
+          "ids": [
+            "private.bpay_next_initial_tsfin_bind_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+        }
+      ],
+      "statements": 248,
+      "file": "FINITE_GROUP_01_SCHEMA_CONSTRUCTORS_ACL.sql",
+      "sha256": "b3656bff4cfd3ddca974fb86cb9e4f9dd0434a6e2f616b6c2dae64bef7783903",
+      "bytes": 615176,
+      "fresh_frame_sha256": "b1b647f2e28401e6b082e22f46d2176349c984973a535ff18d48da1929bd9528"
+    },
+    {
+      "seed": [
+        "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)",
+        "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
+        "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+        "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)",
+        "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)"
+      ],
+      "functions": [
+        "private._weekly_source_immutable_record_guard_v1()",
+        "private.weekly_source_final_rule_version_guard_v1()",
+        "private.weekly_source_self_bill_binding_guard_v1()",
+        "private._weekly_source_rule_values_v1(jsonb)",
+        "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+        "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+        "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+        "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+        "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+        "private.weekly_source_signed_check_only_v1(uuid)",
+        "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+        "private.bpay_next_initial_tsfin_bind_v1(uuid)",
+        "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)",
+        "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
+        "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+        "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)",
+        "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)",
+        "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+        "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)"
+      ],
+      "ACL": [
+        {
+          "sha256": "d8456629550a651a6e79022829411f826140d537916f29b1ce68928d11cbe6f8",
+          "ids": [
+            "private._weekly_source_immutable_record_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6b21b1747a3cc95779ff56c83af74887d24ae87a119eec1788f365ccdfbbc464",
+          "ids": [
+            "private._weekly_source_immutable_record_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "4104f5613dfdb96fcf2f4c04dbeafd3122b182be763c27817af7b765bc27a7d9",
+          "ids": [
+            "private.weekly_source_final_rule_version_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8cfcab8f0d7f2705818a249ea983394e70dd056ec0978ff1656429bfe574bfc2",
+          "ids": [
+            "private._weekly_source_rule_values_v1(jsonb)",
+            "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+            "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+            "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+            "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+            "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+            "private.weekly_source_signed_check_only_v1(uuid)",
+            "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+            "private.weekly_source_final_rule_version_guard_v1()"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "2885cb8786a38cd5d45dcbd78cea27ea3fcb797ee6913cfffa1d807811235f74",
+          "ids": [
+            "private.weekly_source_self_bill_binding_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "431eebc521f79fe5d47b05df38bbfc3d49cf2d54bd7a55d6c8a6ad7edc30e98d",
+          "ids": [
+            "private.weekly_source_self_bill_binding_guard_v1()"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "775106ed49e19a263f3a02ab1afcb71d0d762baab55a9e40c29e689766e84b89",
+          "ids": [
+            "private.bpay_next_initial_tsfin_certificate_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "ad7ff1230313150ba742f8e746c4ef5c7cf3715338dccf5701dc197b395f737a",
+          "ids": [
+            "private.bpay_next_initial_tsfin_certificate_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8d9c7f4b35cbe248eb2a045d9e426c9f79df96109171aebf7b5e41b3b94f8fec",
+          "ids": [
+            "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "0a1e761e2cefd3a4155783389e15ab5dec0ce12de0bc34467b985c090f922ad4",
+          "ids": [
+            "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+            "private.bpay_next_initial_tsfin_bind_v1(uuid)",
+            "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+        },
+        {
+          "sha256": "b713af0c4472ea3564619de415f269556be407c8687a86a4ccb901a8dae96a2e",
+          "ids": [
+            "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "214e74e305a5ffccd726018be1b1b302ba0ef4f2ac773270d066c575f74cbd94",
+          "ids": [
+            "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "02e0075dcf5386a5943c9f04d8c0452afd8dab189b12c0e366480b0d718bfe4a",
+          "ids": [
+            "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "c3b61441554e7da017164607e45fc70d5e5cc65ec988f295091c74d69e0c2abf",
+          "ids": [
+            "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "e987125e2a7c276325096da1fb60a263b91d5ab8318aab65ec2fa1f41de39fd9",
+          "ids": [
+            "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "e7ae05c6f89c583b4ca0242120dc010c871e646ddf9155a11fe7ea1f4efe1327",
+          "ids": [
+            "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "aca4163836f8d1e41031a24a1a29a786d6500aa41c0601471a9950feaae27d53",
+          "ids": [
+            "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "d7b8dccccb997c77324b33813eec119724d715b7c9ce35e0ae6b97daa50d8f98",
+          "ids": [
+            "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "ad1dbb99c137315858f2335885622881470d65a007c30ddb4c00739b6f2f1fd3",
+          "ids": [
+            "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "a2bf06065aae8d769597cdae6ea751ed87be11d1ff56a5ed3f8e040b8594788e",
+          "ids": [
+            "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "8fc24d49c5f56d33c5ed2c7767905e6b83600b678f7b8da600f620fe4b3db029",
+          "ids": [
+            "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "878541ee884d76366f1faf3347ae6ff93cede63b40cf9fb67a1e7411112a6e45",
+          "ids": [
+            "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "6c80ec8562aedb8dd852814e11cb46a2dd02116a0cea390855e356f22219ffc7",
+          "ids": [
+            "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)"
+          ],
+          "source_commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+          "source_file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+        },
+        {
+          "sha256": "bc01ce6bc722e408070e5cdeb42dab7cacde0006e613cd075743ccf3a247a414",
+          "ids": [
+            "private._weekly_source_rule_values_v1(jsonb)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "7924c7141f9d7aa7cb67914fa8bc2aa77cb875d61f4747c57f17f6c84206d890",
+          "ids": [
+            "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql"
+        },
+        {
+          "sha256": "2aff57d76a17e56d404745fdb21356768853b9bc54ebccff81bce1703dc415c4",
+          "ids": [
+            "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql"
+        },
+        {
+          "sha256": "50d0ca071d94555ef783f0f8b440f9ac739e75cefabb2463576b2656150c77f9",
+          "ids": [
+            "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "555b3d2a87822cc92af6aecb500badffd153b684382bb83a08eb91e759437bb7",
+          "ids": [
+            "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "89d87da173d20306cb389f97364cca87ae186f65e944eea0075fa8c650ccad84",
+          "ids": [
+            "private.weekly_source_agency_invoice_check_only_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "b6bdb665a8e32f6af76560bfa38b2e42c5fd94e8e24b6c163672e76595ee4e1e",
+          "ids": [
+            "private.weekly_source_signed_check_only_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "482de54bc298ee2dd3d55518c878b4adacc38a9c7bbd30c41520c6a4988a4909",
+          "ids": [
+            "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+        },
+        {
+          "sha256": "b9f7c266084b2934ead06c652431d2793aa7b47fcacc8982fadfbddf46a173ba",
+          "ids": [
+            "private.bpay_next_initial_tsfin_bind_v1(uuid)"
+          ],
+          "source_commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+          "source_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+        }
+      ],
+      "statements": 132,
+      "file": "FINITE_GROUP_02_SCHEMA_CONSTRUCTORS_ACL.sql",
+      "sha256": "df33850bd092f212a4e0583740b633aa652ec607c0a340f8fe5d91c78c29dcd4",
+      "bytes": 428721,
+      "fresh_frame_sha256": "a9f1f7b5c8e543eae8a441183c89fa5fdcd197503ee3f7da0151b2da4f7f6cab"
+    }
+  ],
+  "pins": [
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql",
+      "bytes": 915760,
+      "sha256": "4fa7f3156575d6b6ea400f4cc1c1f03f14f842ab672cb917def539b1226bee64",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/SCHEMA_COMPLETE_CONSTRUCTORS_AND_ORIGINAL_ACL.sql"
+    },
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/CONSTRUCTOR_SOURCE_MANIFEST.json",
+      "bytes": 61345,
+      "sha256": "01abffe3b3c9090f375262d1fdc71bfee1f5d6f35cc378f43ed62e2ea3848178",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/CONSTRUCTOR_SOURCE_MANIFEST.json"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "bytes": 14951,
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "bytes": 8400,
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16112,
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql"
+    },
+    {
+      "commit": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+      "file": "docs/healthroster-build/proposals/agency-once-only-current-module-20261015/03_complete_once_only_agency_schemas.sqlinc",
+      "bytes": 9512,
+      "sha256": "b015fa623bc51f4f751dfd2cf1d0c852506e31398a8b377d4a7b5ae1f49c6283",
+      "saved_path": "healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/agency-once-only-current-module-20261015/03_complete_once_only_agency_schemas.sqlinc"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 54062,
+      "sha256": "2234a1645fded87fd79dff419ccb341c987c6bd65e6dd1800f5ab6e5cae91dd7",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "bytes": 101268,
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc",
+      "bytes": 4988,
+      "sha256": "91fe0fc277c9e5e726e6c8c1ab365740d0eec26190d5da33f7288c9ed2a0d403",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "bytes": 83915,
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/CURRENT_RECIPE_SUCCESSOR.json",
+      "bytes": 36061,
+      "sha256": "6faa14914db2f3180874373abbfe34a314985f68cff6493ba030d7c33f519e6f",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/CURRENT_RECIPE_SUCCESSOR.json"
+    },
+    {
+      "commit": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+      "file": "docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/COMPLETE_SHARED_OWNER_RECONCILIATION.json",
+      "bytes": 649145,
+      "sha256": "46fa1764b943a43793c39e975766d766386180b7ae965c91b0c165bf98bb70cc",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/COMPLETE_SHARED_OWNER_RECONCILIATION.json"
+    },
+    {
+      "commit": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+      "file": "docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/CURRENT_ONCE_ONLY_MOUNT_PLAN.json",
+      "bytes": 51930,
+      "sha256": "4fbf3ca0a1a790472e3d48565f20da03c9fb777024c0e56f21e1dbee8da58ef6",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/CURRENT_ONCE_ONLY_MOUNT_PLAN.json"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/01_private_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "bytes": 14295,
+      "sha256": "f7241f54b3d8d4e67410cd736e8b9e0d3f8a270cdf4c1caa9970c1a7778dfbb3",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/01_private_weekly_source_actual_timesheet_submission_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/02_private_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "bytes": 4471,
+      "sha256": "c30413ef5607b5b34393a7619dc2be04e413d2a25057261f60a70b36f7d70ff0",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/02_private_weekly_source_signed_submission_read_context_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/03_private_weekly_source_checklist_client_calendar_v1.sqlinc",
+      "bytes": 1920,
+      "sha256": "5f4bcb37a585fe960620f962a7ba5d67ebcae5208774eeb942f5862e3835b6c6",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/03_private_weekly_source_checklist_client_calendar_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/04_private_weekly_source_check_only_query_rows_v1.sqlinc",
+      "bytes": 22185,
+      "sha256": "686f01040be67787d4ee38ecb7ca993018aefe4dc044fd679b361910047588fd",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/04_private_weekly_source_check_only_query_rows_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/05_private_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "bytes": 2278,
+      "sha256": "1d44e61ba42d7db2eae5f7976f4e6293310ee78f154e824edbdbbae7d86a7460",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/05_private_weekly_source_check_only_issue_filter_keys_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/06_private_weekly_source_check_only_query_groups_v1.sqlinc",
+      "bytes": 15542,
+      "sha256": "522a3b84b66b6af5d7741dd77e98e12f4e4c947ed80372d605c6f58cbacbe946",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/06_private_weekly_source_check_only_query_groups_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/07_private_weekly_source_checklist_native_initial_certificate_core_v1.sqlinc",
+      "bytes": 9662,
+      "sha256": "d1a5e1136b2116645dfb05681651377177481b95a9f86ff82a9a0fabcd9c9531",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/07_private_weekly_source_checklist_native_initial_certificate_core_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/08_private_weekly_source_checklist_native_initial_bound_assert_core_v1.sqlinc",
+      "bytes": 3592,
+      "sha256": "85f76ba9164f9b6289ba37d56e8c0b0bee218d182082b0c6bacc8a2fa6213c5e",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/08_private_weekly_source_checklist_native_initial_bound_assert_core_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/09_private_weekly_source_checklist_native_bound_snapshot_core_v1.sqlinc",
+      "bytes": 11677,
+      "sha256": "583186aa71cc2b7b29e1fe5f46a615a519a55de5628fdf7b424479ffaf925593",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/09_private_weekly_source_checklist_native_bound_snapshot_core_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/10_private_weekly_source_checklist_native_members_core_v1.sqlinc",
+      "bytes": 9199,
+      "sha256": "3a3be183a32378c9667619118a5a269214b220dcb761f9ce3e50a41f2e4991f0",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/10_private_weekly_source_checklist_native_members_core_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/11_private_weekly_source_invoice_hold_release_context_core_v1.sqlinc",
+      "bytes": 7022,
+      "sha256": "da81d0fff4dbcb3eeb76d4805a3c2490947c440c84a18368d9b590d6967b0c40",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/11_private_weekly_source_invoice_hold_release_context_core_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/12_private_weekly_source_invoice_hold_first_invoice_assert_v1.sqlinc",
+      "bytes": 1434,
+      "sha256": "1e76c15c2d9fd87c99c84531a76f27c2fca1a75eb770d11eba706944a67eed82",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/12_private_weekly_source_invoice_hold_first_invoice_assert_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/13_private_weekly_source_invoice_unreleased_vat_fit_movements_v1.sqlinc",
+      "bytes": 956,
+      "sha256": "3154b8309d87c2cc55eb51c8b144f1613001b738a319b2daa6b26b125473c3a9",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/13_private_weekly_source_invoice_unreleased_vat_fit_movements_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/14_private_bpay_next_work_period_proof_v1.sqlinc",
+      "bytes": 4548,
+      "sha256": "cbed5046ba2c05c63222ed7339c4c0c9d91d4f3a8424a80970e61c79e84c4bb9",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/14_private_bpay_next_work_period_proof_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/15_private_weekly_source_checklist_legacy_pay_state_core_v1.sqlinc",
+      "bytes": 40209,
+      "sha256": "db24c38f9e77e220bd00b4c9f8917c2ae07bbafc4da3fa2a48cb8c99e6b50a4a",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/15_private_weekly_source_checklist_legacy_pay_state_core_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/16_private_weekly_source_checklist_legacy_read_frame_v1.sqlinc",
+      "bytes": 8161,
+      "sha256": "110981bdbac1794422e689ce3b9283519c85de916a2411758ba4d02f5b0647db",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/16_private_weekly_source_checklist_legacy_read_frame_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/17_private_weekly_source_checklist_timesheet_hold_facts_v1.sqlinc",
+      "bytes": 6713,
+      "sha256": "b8e4f7234a2d8eeb8e80f205dcb9824bf7d806bf30c90166ba551c9770e31d13",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/17_private_weekly_source_checklist_timesheet_hold_facts_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/18_private_weekly_source_checklist_information_hold_facts_v1.sqlinc",
+      "bytes": 5281,
+      "sha256": "d1aa23035627f9ce771050989698ecee8c398777788405ec246b6e5f3f1ccc43",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/18_private_weekly_source_checklist_information_hold_facts_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/19_private_weekly_source_checklist_ordinary_next_hold_money_v1.sqlinc",
+      "bytes": 27925,
+      "sha256": "da49b05fbd535cdea4688ef6aee170dc634f5f39e915e70ff49b2108dc39f4b9",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/19_private_weekly_source_checklist_ordinary_next_hold_money_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/20_private_weekly_source_checklist_source_shift_query_money_v1.sqlinc",
+      "bytes": 23146,
+      "sha256": "378d0dfb05c9a86f870140231f8b11c44d39f64ec59e8edef7b4a0117990ae50",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/20_private_weekly_source_checklist_source_shift_query_money_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/21_private_weekly_source_checklist_source_invoice_block_items_v1.sqlinc",
+      "bytes": 9337,
+      "sha256": "6d6039da6464255e9e610d0efe1bc7dfa609da828f0b0bf2a4d3630ef694ddcc",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/21_private_weekly_source_checklist_source_invoice_block_items_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/22_private_weekly_source_checklist_source_invoice_decision_items_v1.sqlinc",
+      "bytes": 9740,
+      "sha256": "c4a2e4da54b47c24ee73925f87284fdffbceab92f19ba2c52558ea9fef825448",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/22_private_weekly_source_checklist_source_invoice_decision_items_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/23_private_weekly_source_checklist_process_publication_v1.sqlinc",
+      "bytes": 13292,
+      "sha256": "cb3f0a9c545059e477159ef5f6cff900e3d0b3272ac175efc9f5631c37275f38",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/23_private_weekly_source_checklist_process_publication_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/24_private_weekly_source_checklist_process_v1.sqlinc",
+      "bytes": 8039,
+      "sha256": "f986e162baba361d4971989c80030aa63a3608d2ebd7915fd634d30ae29ed692",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/24_private_weekly_source_checklist_process_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/25_private_weekly_source_checklist_page_v1.sqlinc",
+      "bytes": 5731,
+      "sha256": "1dc3632561abeb527fb2ed7d2b23604da75352061b7a2d8c44f1f1ddd20acc61",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/25_private_weekly_source_checklist_page_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/26_private_weekly_source_office_tracker_v1.sqlinc",
+      "bytes": 6674,
+      "sha256": "e23e9b4872891304be50d9f8b9c8828571671d32b8dabafa400a9259f8517c3f",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/26_private_weekly_source_office_tracker_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/wp_u3_client_week_context.sqlinc",
+      "bytes": 22976,
+      "sha256": "202961337d928fa6c01b05800cfc2704efb7c8985394cb8c1d76c0da786c37a4",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/wp_u3_client_week_context.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/28_private_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "bytes": 5474,
+      "sha256": "bb23b8c0fed028fe3f264887453e559f02936022515df25d471a04d211362c5f",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/28_private_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/29_private_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "bytes": 9467,
+      "sha256": "6cbf2d426045ece02f484cb92be1f33800d18017215fba23751e376a2570e61a",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/29_private_weekly_source_check_only_candidate_reminder_context_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/30_public_weekly_source_check_only_candidate_reminder_atomic_v1.sqlinc",
+      "bytes": 10734,
+      "sha256": "4017a65cefc1d8faba5a7b5f6c2ad83e221736a452e283f413f51f72908b9495",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/30_public_weekly_source_check_only_candidate_reminder_atomic_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/31_private_weekly_source_checklist_submission_cycle_admit_v1.sqlinc",
+      "bytes": 5557,
+      "sha256": "760ca3eb62ad5d71bd244c53ec3f77c23530b1ea008b59fd038d910e9c53b9e0",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/31_private_weekly_source_checklist_submission_cycle_admit_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/32_private__weekly_source_settings_ensure_open_cycle_v1.sqlinc",
+      "bytes": 6392,
+      "sha256": "1a8dc8a8a7197225366a29e191db8063e3b36c0d793a80ec66643eb4b6c6fae0",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/32_private__weekly_source_settings_ensure_open_cycle_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/33_private_weekly_source_checklist_submission_cycle_prepare_v1.sqlinc",
+      "bytes": 2463,
+      "sha256": "2e2b3461fdf8e6126337b649f86902187b2fca6728fb5e73871eb03d8e939c8c",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/33_private_weekly_source_checklist_submission_cycle_prepare_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/34_public_weekly_source_submitted_timesheet_prepare_atomic_v1.sqlinc",
+      "bytes": 1988,
+      "sha256": "68d9aaf940d2f0224281b67c5f08fc932702fb3c956741abf17d527352789908",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/34_public_weekly_source_submitted_timesheet_prepare_atomic_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/35_private_weekly_source_checklist_historical_submission_descriptor_v1.sqlinc",
+      "bytes": 5828,
+      "sha256": "0b518e6f6aeb0676103163c0fb678407c43db0d19e1fab9423f976e5b5b5a292",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/35_private_weekly_source_checklist_historical_submission_descriptor_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/36_public_weekly_source_checklist_submission_manifest_v1.sqlinc",
+      "bytes": 5195,
+      "sha256": "cec186a394ae1f7d03d19307dd8c6b4ac53db1c8e8734e3f6fa9a6122013f86c",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/36_public_weekly_source_checklist_submission_manifest_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/37_public_weekly_source_checklist_historical_prepare_atomic_v1.sqlinc",
+      "bytes": 3941,
+      "sha256": "7257b6adf9429366cd5a74645477c95af592a00cd70074b923bd1e00bb3c353d",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/37_public_weekly_source_checklist_historical_prepare_atomic_v1.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/wp_u3_native_checklist.sqlinc",
+      "bytes": 60915,
+      "sha256": "dab2a032bc7a8e4a5b3914a721d2b3aefa4eb04115ceabd5f2fa33ac17308f39",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/wp_u3_native_checklist.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/01_private.bpay_next_workbench_refresh_work_core_v1_uuid_.sqlinc",
+      "bytes": 44834,
+      "sha256": "4094f71e012d2352a3c9677552733af106eb3005caf5e8308e3a93c5e6348f4a",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/01_private.bpay_next_workbench_refresh_work_core_v1_uuid_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/02_private.bpay_next_append_work_skip_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 4657,
+      "sha256": "d544cb82dba5424b5396d832a7fbccb6ba13e79cf5c70c9c63a1a63bbb8c6b12",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/02_private.bpay_next_append_work_skip_v1_uuid_uuid_uuid_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/03_private.bpay_next_create_preparation_v1_uuid_uuid_date_jsonb_uuid_jsonb_.sqlinc",
+      "bytes": 45290,
+      "sha256": "026d2d2c088bbdef2c353b24d240a317869bd0fd2bb4fdae27ea0ef51f754b94",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/03_private.bpay_next_create_preparation_v1_uuid_uuid_date_jsonb_uuid_jsonb_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/04_private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc",
+      "bytes": 1260,
+      "sha256": "6e92cce9957fc23af58a1598e58fc994a7e71f6ca39170a485d0c94408a6413c",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/04_private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/05_private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc",
+      "bytes": 545,
+      "sha256": "5779e312e507fa916ac032846e785c373642237ff9bc610b93e5c7ef0131589c",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/05_private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/06_private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc",
+      "bytes": 645,
+      "sha256": "6f3320715932ebc20aabe06eee52ac227e75e7c18b6005549723dcc0b7680a0c",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/06_private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/07_private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc",
+      "bytes": 894,
+      "sha256": "169870ebd4dab8eb445027a048ca4182119adbaf1dbe85359b815a14c21a179d",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/07_private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/08_public.weekly_source_invoice_hold_release_atomic_v1_jsonb_.sqlinc",
+      "bytes": 3942,
+      "sha256": "e3e09413cb1c659b6155e1cdaf6e044132fb26d0327fe351069dcc027518b2d4",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/08_public.weekly_source_invoice_hold_release_atomic_v1_jsonb_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/09_public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc",
+      "bytes": 57771,
+      "sha256": "3de35d309613cf5194dc43ed0a0178bf4a683bbff504f032d8acc7c37aaf6b0b",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/09_public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/10_public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc",
+      "bytes": 247013,
+      "sha256": "ea2cb8dbab811db4cddf41e095916f67e3948cb31d6bbc1c149fa8dcafaa0ebf",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/10_public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/11_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc",
+      "bytes": 7796,
+      "sha256": "14a9b6e027eea98c5d3f5313c927db886c6b4889b7a2c97f59286bdc96d35eb4",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/current_owner/11_private.candidate_notification_visible_v1_public.candidate_notifications_timestamp_with_time_zone_text_.sqlinc"
+    },
+    {
+      "commit": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+      "file": "docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/15102026_0600_native_without_duplicate_candidate_owners.sql",
+      "bytes": 5147,
+      "sha256": "a12a8766ed3e2d29dab1743790bc169042a79cb6ba6ae39e25808095e9fb3982",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/15102026_0600_native_without_duplicate_candidate_owners.sql"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/15102026_0601_healthroster_checklist_current_acl_v1.sql",
+      "bytes": 159,
+      "sha256": "011ad9f0c77f260e6d57076f1a7abd4c17392ca73a04e335c8a7a98e51c2bdd9",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/15102026_0601_healthroster_checklist_current_acl_v1.sql"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/central_acl_inventory.sqlinc",
+      "bytes": 62054,
+      "sha256": "f14468354ab9af9b1fe8b0f789380f228249f3c0757d047f315f5a991f40b896",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/central_acl_inventory.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/final_acl_union.sqlinc",
+      "bytes": 85188,
+      "sha256": "abdf437232bd4e4f8388fb1e794d2535fb49bdfea5fbee7aac4c0892c9ad442f",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/final_acl_union.sqlinc"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 95371,
+      "sha256": "90d1ff2263a9f9d53ffa9e7d83c056f13a9a91be10f5a963c5117864af271d07",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/15092026_1534_weekly_source_acl_contract_v1.sql"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs",
+      "bytes": 41351,
+      "sha256": "3bce1dc7d48ebcd23a9c4e72a41edee86fc1ff05378b59791678cebb2282d496",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/submission-cycle-prepare.mjs",
+      "bytes": 3318,
+      "sha256": "1f552a1fb8a14f8fe8c4667d47419d2043e23e1fe2a0b3e6668b95e2dd214803",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/submission-cycle-prepare.mjs"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/check-only-candidate-reminder.mjs",
+      "bytes": 3455,
+      "sha256": "a0a573a0e781f02680f85bebf16d1c13b8b54d43906dd3e0dfe70bd0956cd368",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/check-only-candidate-reminder.mjs"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/healthroster-prepare-historical-checklist.mjs",
+      "bytes": 10567,
+      "sha256": "96830dbfdf08dfd6d50ef446eee4f65c20778a87dcaaadd86d9a47b008770562",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/healthroster-prepare-historical-checklist.mjs"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "bytes": 67667,
+      "sha256": "a2e8d1689c8abb15181c89a068605d1c4fc40e3eda2a1a7981d0f5b93edf5c85",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js"
+    },
+    {
+      "commit": "c7fcb2519f9d3b93f29e580df6e6cb10c6d30322",
+      "file": "docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/wp_u3_legacy_hold_review.sqlinc",
+      "bytes": 3799,
+      "sha256": "acdff11940ec74d112330244058c3605941752d72426792e45f61501c4a8aa0b",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/wp_u3_legacy_hold_review.sqlinc"
+    },
+    {
+      "commit": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+      "file": "docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/01_complete_current_agency_runtime_with_native_checklist.sqlinc",
+      "bytes": 1409641,
+      "sha256": "5bc9e6ead03b23df4cbc4a809a016e10d3c5cc706b7daeb13f59f771dfd14a40",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/01_complete_current_agency_runtime_with_native_checklist.sqlinc"
+    },
+    {
+      "commit": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+      "file": "docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc",
+      "bytes": 61826,
+      "sha256": "f7908839b1257fb56eb94a13c2e0e3459df7bb9a242a8a7aa0dd28b041434f6a",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/public.candidate_submission_finalize_atomic_v1_uuid_text_uuid_integer_text_text_timestamp_with_time_zone_jsonb_.sqlinc"
+    },
+    {
+      "commit": "a8c32b4fb1beb3de09b58a460aec7abaf8153195",
+      "file": "docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc",
+      "bytes": 249392,
+      "sha256": "65c2545150297d8ea0c06554767bcd2d1431ff69a7c008bc369bf8797f7b54ce",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-final-shared-owner-reconciliation-20261015/forward/public.candidate_workflow_transition_atomic_v1_uuid_text_uuid_text_integer_jsonb_text_timestamp_with_time_zone_.sqlinc"
+    },
+    {
+      "commit": "82a8dc04214d5542613df3776093a04f67d4dd21",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-constructor-packet-20261015/FRESH_ROUTINE_TRIGGER_FINGERPRINT.sql",
+      "bytes": 4980,
+      "sha256": "a5c608c4097d3c9061e99c92e23e2b0d31a4b4906c04923d1dce157d5fb88b83",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-constructor-packet-20261015/FRESH_ROUTINE_TRIGGER_FINGERPRINT.sql"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "bytes": 93531,
+      "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "bytes": 1820,
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc"
+    },
+    {
+      "commit": "9d2873bd9180acd8588a44a6223d70bcf6403310",
+      "file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "bytes": 27902,
+      "sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+      "saved_path": "healthroster-checklist-native-14102026/supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+    },
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/01_13102026_1133_weekly_source_rule_sets_schema.sql",
+      "bytes": 14917,
+      "sha256": "03866ee59284377a0021defc77fb40d984e8e8127e5f3aced7bf223f99c90791",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/01_13102026_1133_weekly_source_rule_sets_schema.sql"
+    },
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/02_13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "bytes": 8366,
+      "sha256": "aff89758a2c6033c9c5dd8d330a62bda0e3ba4f8be9d0aa2576fd44f4884f348",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/02_13102026_1344_weekly_source_self_bill_report_schema.sql"
+    },
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/03_13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16078,
+      "sha256": "faca7a0392015a812bf7e1aea9089387ee38030f7e2994fe5b4cc46da01695b5",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/03_13102026_1430_weekly_source_invoice_money_origins.sql"
+    },
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/04_03_complete_once_only_agency_schemas.sqlinc",
+      "bytes": 9512,
+      "sha256": "b015fa623bc51f4f751dfd2cf1d0c852506e31398a8b377d4a7b5ae1f49c6283",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/prepared/04_03_complete_once_only_agency_schemas.sqlinc"
+    },
+    {
+      "commit": "2f0dd019e150e365e05045c0352caf56ab313438",
+      "file": "docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/FRESH_SCHEMA_ROUTINE_TRIGGER_FINGERPRINT.sql",
+      "bytes": 8199,
+      "sha256": "34ac926f127160ec40268630896738151c0380c94876ee7638ecc62fb0da22cf",
+      "saved_path": "healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-schema-complete-constructor-retry-20261015/FRESH_SCHEMA_ROUTINE_TRIGGER_FINGERPRINT.sql"
+    }
+  ],
+  "all_original_50_assertions_covered": true,
+  "each_group_genuine_schema_and_dependency_closure": true,
+  "each_group_needs_own_rollback_and_fresh_frame": true,
+  "native_results": null,
+  "no_cross_session_business_or_full_release_claim": true,
+  "compiled_dynamic_body_coverage": false
+}
