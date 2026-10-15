@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 12,
+  "pass": 12,
+  "fail": 0,
+  "syntax_pass": 3,
+  "new_private_signatures": 1,
+  "new_public_signatures": 0,
+  "existing_native_definition_changes": 0,
+  "new_store_column_calculator": 0,
+  "source_addition_reverse": "REMOVE_ONLY_NEW_PRIVATE_DECLARATION_AND_ITS_OWN_ACL; ALL_EXISTING_NATIVE_DECLARATIONS_EXACT",
+  "preserved_artifacts": 81,
+  "credential_findings": 0,
+  "whitespace_disposition": "PASS",
+  "whitespace_exceptions": [],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

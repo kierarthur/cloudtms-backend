@@ -1,0 +1,116 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_new_owner": "forward/01_nhsp_current_native_basis.sqlinc",
+  "new_private_signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+  "new_public_signatures": [],
+  "new_store_column_calculator": 0,
+  "owner_private_service_browser_EXECUTE_revoked": true,
+  "inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "saved": "input/04102026_0470_current_schema.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "commit": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/forward/04_complete_payment_facts.sqlinc",
+      "saved": "input/current_payment_facts.sqlinc",
+      "bytes": 13986,
+      "sha256": "d24607fbce88c8e8fddcce69c3b31a6021cd656038bc83fd95bef23172fecc52"
+    },
+    {
+      "commit": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/input/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "saved": "input/current_rotation_scope.sqlinc",
+      "bytes": 5334,
+      "sha256": "8c58d9897512ca0b96e5b5f99a459acdf9101afba14329ae3c6d7d2747c7bff7"
+    },
+    {
+      "commit": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/input/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "saved": "input/current_office_authority.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "commit": "ea7fe7b0f3cb3d566e0b95a0927916539d6035ba",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/input/private_weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "saved": "input/current_pay_actor.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "signature": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "source_bytes": 57447,
+      "source_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "definition_sha256": "05ea189e8c30f697af94410d6eee08afafe03dd0ad4176bdc06c195b3efdb2c6",
+      "body_sha256": "94ffb32aff669b37860479d952ca966da1ec039a2162ac3faf5d7a1fe722986d",
+      "saved": "input/current_event.sqlinc",
+      "bytes": 5531,
+      "sha256": "69ecad949f55a0bfb57baf4419955bc03f704db93ff9f7f1f19d875a63b59490"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "signature": "private.bpay_next_source_current_observation_v1(uuid)",
+      "source_bytes": 32206,
+      "source_sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51",
+      "definition_sha256": "c9e834b658f0c5d90fca518b5e597aa3acc445293e93c73f4d98b52e41b772e3",
+      "body_sha256": "00a470660664bdfdec2ac8546f35ec3cc4225a306345dbf7b82feae7f2caac6c",
+      "saved": "input/current_observation.sqlinc",
+      "bytes": 2011,
+      "sha256": "51d51e1be433c7c5a59483a698a40969afb911f69051ae943279396d371b35bd"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "signature": "private.bpay_next_source_current_revision_v1(uuid)",
+      "source_bytes": 57447,
+      "source_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "definition_sha256": "08cf1c359cf3a97aaac3ae960108b29a342d4592e8433bd608b0131b40564817",
+      "body_sha256": "f40402060d9e1dccf253d675e591c140ef6939ccac7e89febd6af25f12b1961b",
+      "saved": "input/current_revision.sqlinc",
+      "bytes": 2224,
+      "sha256": "c1efa7f2affdc1cfbf68efe59d060fd04035989b3eb0dc5668b3ecf093c55a9b"
+    }
+  ],
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-separate-event-writer-construction-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "2e5864cb22b9e1a86525b1c430b048b0613f9cab278c189f23df9f061c1fa89f"
+    },
+    {
+      "packet": "paid-match-legacy-current-viewer-consumer-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9"
+    },
+    {
+      "packet": "source-next-paid-purpose-current-consumer-20261015",
+      "artifacts": 23,
+      "manifest_sha256": "eca309accc589dea4b40dfa09c5c50f06e68d85373128bd68ef4633245b64928"
+    },
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "artifacts": 30,
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+    }
+  ],
+  "native_current_Movement_and_Original_cash_kept_separate": true,
+  "existing_native_owner_changes": 0,
+  "source_cash_paid_predicate_changes": 0,
+  "no_reversal_and_paid_writer_permission_remain_unknown": true,
+  "NHSP_no_reversal_chain_and_NONE_invoice_capture_prepared_Office_consumers_still_unimplemented": true,
+  "final_literal_private_registry_mandatory_verifier_current_body_contract_catalogue_required": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

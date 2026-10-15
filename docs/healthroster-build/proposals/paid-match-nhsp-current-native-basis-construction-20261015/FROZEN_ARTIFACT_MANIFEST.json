@@ -1,0 +1,91 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_CURRENT_NATIVE_BASIS_CONSTRUCTION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 16,
+  "artifacts": [
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 1451,
+      "sha256": "ca1706c9948ba757a23ea018e30c3644b9416b27c88120b10e464a2cf8d8f363"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 5882,
+      "sha256": "42da08c719f3417118f889a977881c84e412ba29366f452cb45b9a07a1f6774e"
+    },
+    {
+      "file": "SOURCE_ADDITION_AND_INPUT_PINS.json",
+      "bytes": 5023,
+      "sha256": "eb185550e36e68bb8966ab7298cc6f606136b283b67c17338085d94868d91bd5"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 678,
+      "sha256": "9ffd7ae093f03d1cbdef7419c21b7789929e54f92e155e14261dd61aac2af09c"
+    },
+    {
+      "file": "basis-source.test.mjs",
+      "bytes": 9140,
+      "sha256": "6830bc2eec0e662a9ce2d2735ce9eebf6007dc08076deeb784af4834188b1b76"
+    },
+    {
+      "file": "forward/01_nhsp_current_native_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4950,
+      "sha256": "fd175db2ac813a8ce715982ded1ced618a375320c78883d240fef3ccfb5fa5fe"
+    },
+    {
+      "file": "input/04102026_0470_current_schema.sql",
+      "bytes": 9883,
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "file": "input/current_event.sqlinc",
+      "bytes": 5531,
+      "sha256": "69ecad949f55a0bfb57baf4419955bc03f704db93ff9f7f1f19d875a63b59490"
+    },
+    {
+      "file": "input/current_observation.sqlinc",
+      "bytes": 2011,
+      "sha256": "51d51e1be433c7c5a59483a698a40969afb911f69051ae943279396d371b35bd"
+    },
+    {
+      "file": "input/current_office_authority.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "file": "input/current_pay_actor.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "file": "input/current_payment_facts.sqlinc",
+      "bytes": 13986,
+      "sha256": "d24607fbce88c8e8fddcce69c3b31a6021cd656038bc83fd95bef23172fecc52"
+    },
+    {
+      "file": "input/current_revision.sqlinc",
+      "bytes": 2224,
+      "sha256": "c1efa7f2affdc1cfbf68efe59d060fd04035989b3eb0dc5668b3ecf093c55a9b"
+    },
+    {
+      "file": "input/current_rotation_scope.sqlinc",
+      "bytes": 5334,
+      "sha256": "8c58d9897512ca0b96e5b5f99a459acdf9101afba14329ae3c6d7d2747c7bff7"
+    },
+    {
+      "file": "pin-source.mjs",
+      "bytes": 4177,
+      "sha256": "2cc2a5f3dc3cfe4ad51f84fe22038ee973f5b7fc6a31c3a3097e1439ada809e2"
+    }
+  ]
+}

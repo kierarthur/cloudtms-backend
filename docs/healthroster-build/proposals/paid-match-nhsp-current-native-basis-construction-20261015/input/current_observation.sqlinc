@@ -1,0 +1,22 @@
+create or replace function private.bpay_next_source_current_observation_v1(p_root uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $f$
+declare v_scopes uuid[];v_scope uuid;v_o record;v_first record;v_count integer:=0;v_authority record;
+begin
+  if p_root is null then raise exception 'BPAY_NEXT_SOURCE_OBSERVATION_INPUT_INVALID' using errcode='22023';end if;
+  select array_agg(x.id) into v_scopes from (select s.id from private.bpay_next_source_current_scopes s where s.root_timesheet_id=p_root limit 2) x;
+  if coalesce(cardinality(v_scopes),0)=0 then return jsonb_build_object('source_observed',false,'current_observation_final_revision_id',null);end if;
+  if cardinality(v_scopes)<>1 then raise exception 'BPAY_NEXT_SOURCE_SCOPE_UNCAPTURED_OR_AMBIGUOUS' using errcode='55000';end if;
+  v_scope:=v_scopes[1];
+  for v_o in select o.* from private.bpay_next_source_current_observations o where o.scope_id=v_scope and o.active
+    order by o.order_key desc,o.final_revision_id limit 2 loop
+    v_count:=v_count+1;if v_count=1 then v_first:=v_o;
+    elsif v_o.order_key=v_first.order_key then raise exception 'BPAY_NEXT_SOURCE_REVISION_HEAD_AMBIGUOUS' using errcode='55000';end if;
+  end loop;
+  if v_count=0 then raise exception 'BPAY_NEXT_SOURCE_OBSERVATION_UNCAPTURED' using errcode='55000';end if;
+  select * into strict v_authority from private.bpay_next_source_current_revision_v1(v_first.final_revision_id);
+  if not v_authority.is_current or v_authority.order_key is distinct from v_first.order_key
+    or not exists(select 1 from public.weekly_source_final_revisions r where r.id=v_first.final_revision_id and r.manifest_hash=v_first.manifest_hash) then
+    raise exception 'BPAY_NEXT_SOURCE_OBSERVATION_STALE' using errcode='55000';end if;
+  return jsonb_build_object('source_observed',true,'current_observation_final_revision_id',v_first.final_revision_id,
+    'current_observation_manifest_hash',encode(v_first.manifest_hash,'hex'));
+end $f$;
