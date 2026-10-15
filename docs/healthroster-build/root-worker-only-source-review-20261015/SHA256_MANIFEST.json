@@ -1,0 +1,45 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "FAILED_TEST_OUTPUT.txt",
+      "bytes": 7816,
+      "sha256": "4f37fb4896a7bedbfca44ec3cc02bdd07d8632b01da1dc252052853f75f89783"
+    },
+    {
+      "file": "INITIAL_LOADER_REFUSAL.json",
+      "bytes": 226,
+      "sha256": "771064e5ffae412d3a795bf98c08aac31e2844c9e7acd1bf3d53289c8cb1c346"
+    },
+    {
+      "file": "RECOVERY_FALSE_SUCCESS_REPRO.json",
+      "bytes": 510,
+      "sha256": "fa3121e14960b829ac83b932786f0a6b2a3f51f393e11aa5f4011aa68f2a8982"
+    },
+    {
+      "file": "REPRODUCE_RECOVERY.mjs.txt",
+      "bytes": 1697,
+      "sha256": "928bd6da30cfe50292b4582a6a43a863961da04610d712c597b674da6631fa55"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1332,
+      "sha256": "bb441cb05784fe12cad16ab97f19ce47240d82705d659f9da890ffb6f2a2d4f4"
+    },
+    {
+      "file": "REVIEW_OR_MOUNT_SOURCE.mjs.txt",
+      "bytes": 4699,
+      "sha256": "0e3d94177cf68229658374c7838679c49c59f3168c0bf2ea0f6af878712e4f38"
+    },
+    {
+      "file": "SOURCE_JS_MODEL_25_TEST_OUTPUT.txt",
+      "bytes": 6451,
+      "sha256": "3a9b6dcd4bc2a9cee3839b4c32e584e7307a7636b149cce020b75a64ad696262"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 869,
+      "sha256": "cc7a6eddd318217bcfd03c6df846ae59111bdc9b6a0aa327f2625a17dad5ca3c"
+    }
+  ]
+}

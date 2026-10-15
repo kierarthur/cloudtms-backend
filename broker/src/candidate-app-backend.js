@@ -3884,7 +3884,12 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
   const candidateSignature = paperReturnQrText
     ? { identity: {}, data: null }
     : await signatureAsset(env, workflow.candidate_signature_component_id);
-  const managerSignature = phase === 'FINAL'
+  const workerOnly = contract.worker_only_approval === true
+    && upper(contract.form_variant) === 'ELECTRONIC_WORKER_SIGNED'
+    && workflow.scope === 'WEEKLY' && workflow.workflow_kind === 'CONTRACT_HOURS'
+    && workflow.route === 'ELECTRONIC'
+    && parseJson(workflow.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';
+  const managerSignature = phase === 'FINAL' && !workerOnly
     ? await signatureAsset(env, workflow.manager_signature_component_id, contract.manager?.signature_storage_key, contract.manager?.signature_sha256)
     : { identity: {}, data: null };
   const additionalRows = additionalUnitRows(workflow, timesheet);
@@ -3893,7 +3898,8 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
     : candidateNameParts(candidate);
   const formVariant = paperReturnQrText
     ? 'ELECTRONIC_UNSIGNED'
-    : (phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW');
+    : workerOnly ? 'ELECTRONIC_WORKER_SIGNED'
+      : (phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW');
   const signedDate = londonCalendarDate(workflow.candidate_signed_at_utc);
   const managerDate = londonCalendarDate(
     workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
@@ -3931,7 +3937,15 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
         media_type: branding.logo_media_type
       } : {}
     },
-    wording: isObject(frozenPresentation.wording) ? frozenPresentation.wording : {
+    wording: workerOnly ? {
+      ...(isObject(frozenPresentation.wording) ? frozenPresentation.wording : {}),
+      header: { lines: ['This is the work recorded and signed by the worker.'] },
+      temporary_worker_declaration: frozenPresentation.wording?.temporary_worker_declaration || {
+        title: 'Temporary Worker Declaration',
+        lines: ['I declare that the hours and units recorded are complete and accurate.']
+      },
+      client_declaration: { title: '', lines: [] }
+    } : isObject(frozenPresentation.wording) ? frozenPresentation.wording : {
       header: { lines: ['Please review the recorded work and all attached evidence before approving.'] },
       footer: { lines: ['CloudTMS official timesheet'] },
       temporary_worker_declaration: {
@@ -3950,10 +3964,10 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
       minimum_blank_space_rows: 1, rows: additionalRows
     },
     totals: { paid_minutes: paidMinutes },
-    authorisation: { authorised: phase === 'FINAL', authorised_at_utc: phase === 'FINAL' ? workflow.manager_approved_at_utc : null },
+    authorisation: { authorised: phase === 'FINAL' && !workerOnly, authorised_at_utc: phase === 'FINAL' && !workerOnly ? workflow.manager_approved_at_utc : null },
     signatures: {
       candidate: { ...candidateSignature.identity, signed_date: signedDate },
-      authoriser: phase === 'FINAL'
+      authoriser: phase === 'FINAL' && !workerOnly
         ? { ...managerSignature.identity, signed_date: managerDate, name: workflow.manager_name, position: workflow.manager_position }
         : {}
     },
@@ -5877,6 +5891,8 @@ async function renderAndRegister(env, deps, renderContract, phase, officeActorId
       };
     }
     const digest = durable.sha256;
+    const workerOnly = contract.worker_only_approval === true
+      && upper(contract.form_variant) === 'ELECTRONIC_WORKER_SIGNED';
     const receipt = {
       form_variant: upper(contract.form_variant),
       workflow_id: workflowId,
@@ -5892,9 +5908,9 @@ async function renderAndRegister(env, deps, renderContract, phase, officeActorId
       renderer_contract_version: rendererVersion,
       candidate_signature_embedded: contract.candidate_signature_embedded === true,
       manager_signature_embedded:
-        phase === 'FINAL' && upper(contract.component_kind) !== 'EXPENSE_SUMMARY',
+        phase === 'FINAL' && !workerOnly && upper(contract.component_kind) !== 'EXPENSE_SUMMARY',
       manager_approval_date_embedded:
-        phase === 'FINAL' && upper(contract.component_kind) !== 'EXPENSE_SUMMARY'
+        phase === 'FINAL' && !workerOnly && upper(contract.component_kind) !== 'EXPENSE_SUMMARY'
     };
     if (phase === 'FINAL' && upper(contract.component_kind) !== 'EXPENSE_SUMMARY') {
       receipt.manager_signature_sha256 = text(contract.manager?.signature_sha256).replace(/^\\x/i, '').toLowerCase();
@@ -5904,6 +5920,9 @@ async function renderAndRegister(env, deps, renderContract, phase, officeActorId
       const candidateSignatureSha256 = rendered?.candidate_signature_sha256
         || text(state.workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
       if (candidateSignatureSha256) receipt.candidate_signature_sha256 = candidateSignatureSha256;
+    }
+    if (workerOnly) {
+      receipt.candidate_signature_sha256 = text(state.workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
     }
     const action = phase === 'FINAL' ? 'REGISTER_FINAL_SIGNED_DOCUMENT' : 'REGISTER_REVIEW_COMPONENT';
     const registrationPayload = {
@@ -5930,6 +5949,12 @@ async function renderAndRegister(env, deps, renderContract, phase, officeActorId
         null, env, workflowId, action, generation, registrationPayload, registrationKey
       ));
     results.push(result);
+    if (workerOnly && result?.worker_only_approval === true && result?.state === 'READY_TO_FINALISE') {
+      const completion = await withManagerFinalisationLease(env, workflowId, generation, () =>
+        finaliseWorkflow(env, deps, workflowId, generation,
+          `candidate-worker-only-finalise:${workflowId}:${generation}`, officeActorId));
+      results.push(completion);
+    }
   }
   return results;
 }
@@ -6023,26 +6048,33 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
     env, deps, workflow, generation, idempotencyKey, officeActorId
   );
   if (receiptReplay) return receiptReplay;
-  const approved = upper(workflow.route) === 'PAPER' ? null : await restOne(env, 'candidate_approval_requests',
+  const workerOnly = workflow.scope === 'WEEKLY' && workflow.workflow_kind === 'CONTRACT_HOURS'
+    && workflow.route === 'ELECTRONIC'
+    && parseJson(workflow.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';
+  const approved = upper(workflow.route) === 'PAPER' || workerOnly ? null : await restOne(env, 'candidate_approval_requests',
     `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(generation)}`
     + '&state=eq.APPROVED&select=id,request_generation,method,review_manifest_sha256,approved_at_utc&order=approved_at_utc.desc');
   const finalisationIdentity = {
     contract_version: 'CANDIDATE_FINALISATION_IDENTITY_V1',
     workflow_id: workflow.id,
     workflow_generation: generation,
-    approval_method: approved?.method || 'PAPER',
+    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',
     approval_request_id: approved?.id || null,
     approval_request_generation: approved ? Number(approved.request_generation) : null,
-    review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase() || null,
+    review_manifest_sha256_hex: text(workerOnly ? workflow.review_manifest_sha256 : approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase() || null,
     paper_return_manifest_sha256_hex: upper(workflow.route) === 'PAPER'
       ? text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() : null
   };
+  if (workerOnly) {
+    finalisationIdentity.candidate_signature_sha256_hex = text(workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
+    finalisationIdentity.policy_snapshot_sha256_hex = text(workflow.policy_snapshot_sha256).replace(/^\\x/i, '').toLowerCase();
+  }
   const replayServiceFinalisation = {
     contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
     workflow_generation: generation,
     approval_request_id: approved?.id || null,
     approval_request_generation: approved ? Number(approved.request_generation) : null,
-    approval_method: approved?.method || 'PAPER',
+    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',
     review_manifest_sha256_hex: finalisationIdentity.review_manifest_sha256_hex || '',
     paper_return_manifest_sha256_hex: finalisationIdentity.paper_return_manifest_sha256_hex || '',
     finalisation_identity: finalisationIdentity,
@@ -6052,16 +6084,16 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
     env, deps, workflow, generation, idempotencyKey, replayServiceFinalisation, officeActorId
   );
   if (replay) return replay;
-  if (upper(workflow.route) !== 'PAPER' && !approved) {
+  if (upper(workflow.route) !== 'PAPER' && !workerOnly && !approved) {
     throw new CandidateHttpError(409, 'FINAL_SIGNED_DOCUMENT_NOT_READY');
   }
   const serviceFinalisation = {
     contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
     approval_request_id: approved?.id || null,
     approval_request_generation: approved ? Number(approved.request_generation) : null,
-    approval_method: approved?.method || 'PAPER',
+    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',
     workflow_generation: generation,
-    review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
+    review_manifest_sha256_hex: finalisationIdentity.review_manifest_sha256_hex || '',
     paper_return_manifest_sha256_hex: finalisationIdentity.paper_return_manifest_sha256_hex || '',
     finalisation_identity: finalisationIdentity,
     actor_user_id: officeActorId || null
@@ -6118,7 +6150,7 @@ export async function recoverPendingCandidateManagerFinalisations(
   }] : await restRows(env, 'candidate_submission_workflows',
     `environment=eq.${encodeURIComponent(environment)}`
     + '&state=in.(MANAGER_APPROVED_PENDING_FINAL_DOCUMENT,READY_TO_FINALISE)'
-    + '&route=in.(PHONE,EMAIL)'
+    + '&route=in.(PHONE,EMAIL,ELECTRONIC)'
     + '&select=id,generation,state,updated_at_utc'
     + '&order=updated_at_utc.asc'
     + `&limit=${boundedLimit}`);
@@ -6130,6 +6162,13 @@ export async function recoverPendingCandidateManagerFinalisations(
     try {
       const completion = await withManagerFinalisationLease(
         env, row.id, Number(row.generation), async () => {
+          const current = await workflowRow(env, row.id);
+          const workerOnly = current.scope === 'WEEKLY' && current.workflow_kind === 'CONTRACT_HOURS'
+            && current.route === 'ELECTRONIC' && current.state === 'READY_TO_FINALISE'
+            && Number(current.generation) === Number(row.generation)
+            && parseJson(current.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';
+          if (workerOnly) return finaliseWorkflow(env, deps, row.id, Number(row.generation),
+            `candidate-system-worker-only-recovery:${row.id}:${row.generation}`);
           const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {
             p_environment: environment,
             p_workflow_id: requireUuid(row.id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
@@ -6144,18 +6183,22 @@ export async function recoverPendingCandidateManagerFinalisations(
             Number(row.generation),
             `candidate-system-finalise-recovery:${row.id}:${row.generation}`
           );
-          if (completion?.ok !== true) {
-            throw new CandidateHttpError(
-              409,
-              knownErrorCode({ code: completion?.error_code })
-                || 'CANDIDATE_MANAGER_FINALISATION_INCOMPLETE'
-            );
-          }
           return completion;
         }
       );
-      if (completion?.single_flight_deferred === true) deferred += 1;
-      else recovered += 1;
+      if (completion?.single_flight_deferred === true) {
+        deferred += 1;
+        continue;
+      }
+      // Both worker-only and manager recovery require genuine completion.
+      if (completion?.ok !== true) {
+        throw new CandidateHttpError(
+          409,
+          knownErrorCode({ code: completion?.error_code })
+            || 'CANDIDATE_MANAGER_FINALISATION_INCOMPLETE'
+        );
+      }
+      recovered += 1;
     } catch (error) {
       const errorCode = knownErrorCode(error);
       if (target && [

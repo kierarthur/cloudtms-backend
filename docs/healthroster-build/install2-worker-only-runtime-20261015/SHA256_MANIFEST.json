@@ -1,0 +1,35 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "MOUNTED_CANDIDATE_TEST_OUTPUT.txt",
+      "bytes": 60622,
+      "sha256": "c29eaad8b15a6d01171a1a53b51ea3ca890e034e348bc4dc6e45b72953d4281f"
+    },
+    {
+      "file": "MOUNTED_RECOVERY_23_TEST_OUTPUT.txt",
+      "bytes": 5145,
+      "sha256": "d47c9e0ed7760d7c28fac7aa4bbf2cb2b199b77eff92dd5bd3deb7a116516619"
+    },
+    {
+      "file": "MOUNT_RECEIPT.json",
+      "bytes": 1153,
+      "sha256": "4e8ccaa43f1ab003a293b329c073a71dd257b24839c21ded521472c5269cdd07"
+    },
+    {
+      "file": "RECOVERY_25_TEST_OUTPUT.txt",
+      "bytes": 5494,
+      "sha256": "438153235b440bc86eb6bff1ce00e5d66e24962a05b6fa688a878cbef34aa51a"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1479,
+      "sha256": "5b63e0a4282f93a959bc9bee945422d7917f80068060199d5256ba2bc0ef1892"
+    },
+    {
+      "file": "REVIEW_OR_MOUNT_SOURCE.mjs.txt",
+      "bytes": 4909,
+      "sha256": "075d314760d51f3670b781ff13092260c179f4ca0b2eca24a85a810b55bfcc60"
+    }
+  ]
+}

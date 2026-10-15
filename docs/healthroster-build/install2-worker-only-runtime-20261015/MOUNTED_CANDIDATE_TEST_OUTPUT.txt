@@ -1,0 +1,1553 @@
+TAP version 13
+# Subtest: Daily Timesheet cards and details never expose expense actions or totals
+ok 1 - Daily Timesheet cards and details never expose expense actions or totals
+  ---
+  duration_ms: 4.1049
+  type: 'test'
+  ...
+# Subtest: Weekly Timesheet detail exposes the expense category context at the contract level
+ok 2 - Weekly Timesheet detail exposes the expense category context at the contract level
+  ---
+  duration_ms: 0.3146
+  type: 'test'
+  ...
+# Subtest: Weekly cards and details keep linked expense Timesheets visible without moving their ownership
+ok 3 - Weekly cards and details keep linked expense Timesheets visible without moving their ownership
+  ---
+  duration_ms: 0.5864
+  type: 'test'
+  ...
+# Subtest: Weekly cards and details include pending expense categories before they own a Timesheet
+ok 4 - Weekly cards and details include pending expense categories before they own a Timesheet
+  ---
+  duration_ms: 0.4188
+  type: 'test'
+  ...
+# Subtest: Blank new Weekly Timesheet detail exposes empty expense category choices safely
+ok 5 - Blank new Weekly Timesheet detail exposes empty expense category choices safely
+  ---
+  duration_ms: 0.3754
+  type: 'test'
+  ...
+# Subtest: expense PAPER replacement finishes the held render before its atomic rebind
+ok 6 - expense PAPER replacement finishes the held render before its atomic rebind
+  ---
+  duration_ms: 0.2436
+  type: 'test'
+  ...
+# Subtest: PAPER completion emits one closed receipt and strips resubmission provenance
+ok 7 - PAPER completion emits one closed receipt and strips resubmission provenance
+  ---
+  duration_ms: 1.517
+  type: 'test'
+  ...
+# Subtest: PAPER first-call receipt commit is validated before it can reach the client
+ok 8 - PAPER first-call receipt commit is validated before it can reach the client
+  ---
+  duration_ms: 38.9285
+  type: 'test'
+  ...
+# Subtest: automatic pending-manager withdrawal emits the exact closed committed receipt
+ok 9 - automatic pending-manager withdrawal emits the exact closed committed receipt
+  ---
+  duration_ms: 0.4254
+  type: 'test'
+  ...
+# Subtest: expense category resubmission receipts carry one exact blank ADD plan in every mode
+ok 10 - expense category resubmission receipts carry one exact blank ADD plan in every mode
+  ---
+  duration_ms: 0.5514
+  type: 'test'
+  ...
+# Subtest: category and whole-claim receipts distinguish permanent, current-only and no removal
+ok 11 - category and whole-claim receipts distinguish permanent, current-only and no removal
+  ---
+  duration_ms: 0.9631
+  type: 'test'
+  ...
+# Subtest: current paper-pack email delivery restores the photograph stage only for the exact workflow generation and manifest
+ok 12 - current paper-pack email delivery restores the photograph stage only for the exact workflow generation and manifest
+  ---
+  duration_ms: 10.7289
+  type: 'test'
+  ...
+# Subtest: paper delivery enrichment changes only the matching current workflow presentation
+ok 13 - paper delivery enrichment changes only the matching current workflow presentation
+  ---
+  duration_ms: 0.8628
+  type: 'test'
+  ...
+# Subtest: paper delivery enrichment performs no extra reads when no signed-paper return is current
+ok 14 - paper delivery enrichment performs no extra reads when no signed-paper return is current
+  ---
+  duration_ms: 0.1213
+  type: 'test'
+  ...
+# Subtest: verified current paper pack supersedes an older workflow outbox-conflict receipt
+ok 15 - verified current paper pack supersedes an older workflow outbox-conflict receipt
+  ---
+  duration_ms: 0.1705
+  type: 'test'
+  ...
+# Subtest: workflow terminal failure remains authoritative without a verified current paper pack
+ok 16 - workflow terminal failure remains authoritative without a verified current paper pack
+  ---
+  duration_ms: 0.0536
+  type: 'test'
+  ...
+# Subtest: verified pack does not mask an unrelated workflow terminal failure
+ok 17 - verified pack does not mask an unrelated workflow terminal failure
+  ---
+  duration_ms: 0.0433
+  type: 'test'
+  ...
+# Subtest: stale Paper source recovery creates one exact replacement document job
+ok 18 - stale Paper source recovery creates one exact replacement document job
+  ---
+  duration_ms: 0.1751
+  type: 'test'
+  ...
+# Subtest: Paper source recovery never queues over an existing active document job
+ok 19 - Paper source recovery never queues over an existing active document job
+  ---
+  duration_ms: 0.0905
+  type: 'test'
+  ...
+# Subtest: successful factual Daily receipt never exposes internal Office resolution to the Candidate
+ok 20 - successful factual Daily receipt never exposes internal Office resolution to the Candidate
+  ---
+  duration_ms: 0.154
+  type: 'test'
+  ...
+# Subtest: Candidate RPC failures prefer the database closed code over the transport function name
+ok 21 - Candidate RPC failures prefer the database closed code over the transport function name
+  ---
+  duration_ms: 0.1778
+  type: 'test'
+  ...
+# Subtest: official signature dates use the Europe/London calendar date across midnight BST
+ok 22 - official signature dates use the Europe/London calendar date across midnight BST
+  ---
+  duration_ms: 0.8889
+  type: 'test'
+  ...
+# Subtest: Candidate expense placement closes the controlling RPC response
+ok 23 - Candidate expense placement closes the controlling RPC response
+  ---
+  duration_ms: 0.2695
+  type: 'test'
+  ...
+# Subtest: Candidate workflow creation maps the public timesheet identity to server-owned routing
+ok 24 - Candidate workflow creation maps the public timesheet identity to server-owned routing
+  ---
+  duration_ms: 0.1308
+  type: 'test'
+  ...
+# Subtest: Daily booked creation requires explicit PHONE submission and cannot borrow weekly or financial identity
+ok 25 - Daily booked creation requires explicit PHONE submission and cannot borrow weekly or financial identity
+  ---
+  duration_ms: 0.5199
+  type: 'test'
+  ...
+# Subtest: Candidate official period adds shift lines without mutating frozen week-day authority
+ok 26 - Candidate official period adds shift lines without mutating frozen week-day authority
+  ---
+  duration_ms: 0.4595
+  type: 'test'
+  ...
+# Subtest: Candidate notification preferences map installed legacy names to the closed app contract
+ok 27 - Candidate notification preferences map installed legacy names to the closed app contract
+  ---
+  duration_ms: 0.1621
+  type: 'test'
+  ...
+# Subtest: Candidate notification preference writes require the exact closed boolean map
+ok 28 - Candidate notification preference writes require the exact closed boolean map
+  ---
+  duration_ms: 0.1991
+  type: 'test'
+  ...
+# Subtest: Candidate notification projection closes internal database payloads and links
+ok 29 - Candidate notification projection closes internal database payloads and links
+  ---
+  duration_ms: 0.3769
+  type: 'test'
+  ...
+# Subtest: Weekly Source submission notifications preserve the public request deep link and policy copy
+ok 30 - Weekly Source submission notifications preserve the public request deep link and policy copy
+  ---
+  duration_ms: 0.2431
+  type: 'test'
+  ...
+# Subtest: Weekly Source hours-check notifications describe the exact request without exposing private parameters
+ok 31 - Weekly Source hours-check notifications describe the exact request without exposing private parameters
+  ---
+  duration_ms: 0.1587
+  type: 'test'
+  ...
+# Subtest: linked expense cancellation notification explains the reject-before-delete cause
+ok 32 - linked expense cancellation notification explains the reject-before-delete cause
+  ---
+  duration_ms: 0.1002
+  type: 'test'
+  ...
+# Subtest: existing linked expense rejection rows also receive the accurate cancellation copy
+ok 33 - existing linked expense rejection rows also receive the accurate cancellation copy
+  ---
+  duration_ms: 0.0613
+  type: 'test'
+  ...
+# Subtest: expense withdrawal and cancellation notifications use the exact category and safe next step
+ok 34 - expense withdrawal and cancellation notifications use the exact category and safe next step
+  ---
+  duration_ms: 0.1145
+  type: 'test'
+  ...
+# Subtest: single-category Office rejection gives a bounded reason and blank-resubmission instruction
+ok 35 - single-category Office rejection gives a bounded reason and blank-resubmission instruction
+  ---
+  duration_ms: 0.2599
+  type: 'test'
+  ...
+# Subtest: unknown notification copy remains neutral and never names an app
+ok 36 - unknown notification copy remains neutral and never names an app
+  ---
+  duration_ms: 0.1124
+  type: 'test'
+  ...
+# Subtest: whole-claim notifications identify the complete action without exposing workflow facts
+ok 37 - whole-claim notifications identify the complete action without exposing workflow facts
+  ---
+  duration_ms: 0.131
+  type: 'test'
+  ...
+# Subtest: manager refusal and whole Office rejection include only a bounded policy reason and blank restart
+ok 38 - manager refusal and whole Office rejection include only a bounded policy reason and blank restart
+  ---
+  duration_ms: 0.2214
+  type: 'test'
+  ...
+# Subtest: Candidate notification feed is scoped to the selected candidate and reads template_params
+ok 39 - Candidate notification feed is scoped to the selected candidate and reads template_params
+  ---
+  duration_ms: 22.4315
+  type: 'test'
+  ...
+# Subtest: notification management routes bind only the authenticated session and reject client selectors and malformed targets
+ok 40 - notification management routes bind only the authenticated session and reject client selectors and malformed targets
+  ---
+  duration_ms: 13.9033
+  type: 'test'
+  ...
+# Subtest: Candidate password verifiers accept the exact password and reject a different password
+ok 41 - Candidate password verifiers accept the exact password and reject a different password
+  ---
+  duration_ms: 62.4523
+  type: 'test'
+  ...
+# Subtest: challenge delivery tokens are stable for an idempotent replay and scoped to its identity
+ok 42 - challenge delivery tokens are stable for an idempotent replay and scoped to its identity
+  ---
+  duration_ms: 0.8343
+  type: 'test'
+  ...
+# Subtest: challenge replay validates changed factual input before reconstructing its token
+ok 43 - challenge replay validates changed factual input before reconstructing its token
+  ---
+  duration_ms: 1.4261
+  type: 'test'
+  ...
+# Subtest: challenge replay reads its recorded token version across writer rollback and honours reader retirement
+ok 44 - challenge replay reads its recorded token version across writer rollback and honours reader retirement
+  ---
+  duration_ms: 4.1443
+  type: 'test'
+  ...
+# Subtest: an enumeration-masked challenge result replays without requiring retired token material
+ok 45 - an enumeration-masked challenge result replays without requiring retired token material
+  ---
+  duration_ms: 0.3555
+  type: 'test'
+  ...
+# Subtest: private challenge resend exposes durable throttle receipts as HTTP 429
+ok 46 - private challenge resend exposes durable throttle receipts as HTTP 429
+  ---
+  duration_ms: 1.3155
+  type: 'test'
+  ...
+# Subtest: Candidate payload validation rejects canonical financial truth but accepts factual claim amounts
+ok 47 - Candidate payload validation rejects canonical financial truth but accepts factual claim amounts
+  ---
+  duration_ms: 0.5438
+  type: 'test'
+  ...
+# Subtest: explicit no-break input is represented as zero minutes with no interval
+ok 48 - explicit no-break input is represented as zero minutes with no interval
+  ---
+  duration_ms: 0.298
+  type: 'test'
+  ...
+# Subtest: signed Weekly Source break is shown and deducted in the completed Timesheet model
+ok 49 - signed Weekly Source break is shown and deducted in the completed Timesheet model
+  ---
+  duration_ms: 0.3242
+  type: 'test'
+  ...
+# Subtest: blank or null break values are not silently converted into a no-break declaration
+ok 50 - blank or null break values are not silently converted into a no-break declaration
+  ---
+  duration_ms: 0.0809
+  type: 'test'
+  ...
+# Subtest: Candidate route matching decodes stable path parameters and rejects partial paths
+ok 51 - Candidate route matching decodes stable path parameters and rejects partial paths
+  ---
+  duration_ms: 0.0981
+  type: 'test'
+  ...
+# Subtest: timesheet page boundary defaults to Current and validates the explicit History view
+ok 52 - timesheet page boundary defaults to Current and validates the explicit History view
+  ---
+  duration_ms: 2.682
+  type: 'test'
+  ...
+# Subtest: Weekly source Candidate routes preserve one authenticated session and exact RPC boundary
+ok 53 - Weekly source Candidate routes preserve one authenticated session and exact RPC boundary
+  ---
+  duration_ms: 2.5496
+  type: 'test'
+  ...
+# Subtest: timesheet detail aliases pass one exact server identity to the shared detail RPC
+ok 54 - timesheet detail aliases pass one exact server identity to the shared detail RPC
+  ---
+  duration_ms: 1.6291
+  type: 'test'
+  ...
+# Subtest: timesheet page adds mileage units and current supporting-evidence facts without exposing summary pages
+ok 55 - timesheet page adds mileage units and current supporting-evidence facts without exposing summary pages
+  ---
+  duration_ms: 1.5075
+  type: 'test'
+  ...
+# Subtest: timesheet detail enriches only authorised component ids with page lineage
+ok 56 - timesheet detail enriches only authorised component ids with page lineage
+  ---
+  duration_ms: 1.1238
+  type: 'test'
+  ...
+# Subtest: rejected resubmission is a thin adapter over the atomic source-bound database action
+ok 57 - rejected resubmission is a thin adapter over the atomic source-bound database action
+  ---
+  duration_ms: 1.7762
+  type: 'test'
+  ...
+# Subtest: unfinished PAPER category withdrawal returns closed 200 replacement guidance
+ok 58 - unfinished PAPER category withdrawal returns closed 200 replacement guidance
+  ---
+  duration_ms: 2.1306
+  type: 'test'
+  ...
+# Subtest: committed pending-manager withdrawal replay returns the closed receipt without rerendering
+ok 59 - committed pending-manager withdrawal replay returns the closed receipt without rerendering
+  ---
+  duration_ms: 1.0439
+  type: 'test'
+  ...
+# Subtest: public BEGIN expense update maps the PAPER document-authority fence to HTTP 409
+ok 60 - public BEGIN expense update maps the PAPER document-authority fence to HTTP 409
+  ---
+  duration_ms: 1.0883
+  type: 'test'
+  ...
+# Subtest: unfinished PAPER withdrawal guidance can start the exact remove-category pack replacement
+ok 61 - unfinished PAPER withdrawal guidance can start the exact remove-category pack replacement
+  ---
+  duration_ms: 0.9337
+  type: 'test'
+  ...
+# Subtest: combined PAPER removal submit restores frozen hours, untouched expenses and signature server-side
+ok 62 - combined PAPER removal submit restores frozen hours, untouched expenses and signature server-side
+  ---
+  duration_ms: 2.7167
+  type: 'test'
+  ...
+# Subtest: public reminder stays REMIND and cancellation requires and forwards a reason
+ok 63 - public reminder stays REMIND and cancellation requires and forwards a reason
+  ---
+  duration_ms: 7.0886
+  type: 'test'
+  ...
+# Subtest: Candidate workflow mutation requires a caller key and an exact WORKER_SUBMIT replay skips mutable enrichment
+ok 64 - Candidate workflow mutation requires a caller key and an exact WORKER_SUBMIT replay skips mutable enrichment
+  ---
+  duration_ms: 2.3003
+  type: 'test'
+  ...
+# Subtest: pending-manager withdrawal returns an accepted receipt before background document refresh
+ok 65 - pending-manager withdrawal returns an accepted receipt before background document refresh
+  ---
+  duration_ms: 3.0008
+  type: 'test'
+  ...
+# Subtest: document refresh loads independent record groups together
+ok 66 - document refresh loads independent record groups together
+  ---
+  duration_ms: 4.5255
+  type: 'test'
+  ...
+# Subtest: scheduled recovery resumes the exact saved expense document update
+ok 67 - scheduled recovery resumes the exact saved expense document update
+  ---
+  duration_ms: 0.4135
+  type: 'test'
+  ...
+# Subtest: scheduled recovery resumes an ordinary expense update without an operation row
+ok 68 - scheduled recovery resumes an ordinary expense update without an operation row
+  ---
+  duration_ms: 0.2137
+  type: 'test'
+  ...
+# Subtest: scheduled recovery requests only bounded pending review documents
+ok 69 - scheduled recovery requests only bounded pending review documents
+  ---
+  duration_ms: 0.243
+  type: 'test'
+  ...
+# Subtest: scheduled expense recovery is service-only and precedes expired-update cleanup
+ok 70 - scheduled expense recovery is service-only and precedes expired-update cleanup
+  ---
+  duration_ms: 2.02
+  type: 'test'
+  ...
+# Subtest: expense update recovery validates the embedded manager manifest identity
+ok 71 - expense update recovery validates the embedded manager manifest identity
+  ---
+  duration_ms: 1.943
+  type: 'test'
+  ...
+# Subtest: a RENDERING pending withdrawal retry resumes its saved render without resubmitting
+ok 72 - a RENDERING pending withdrawal retry resumes its saved render without resubmitting
+  ---
+  duration_ms: 1.579
+  type: 'test'
+  ...
+# [candidate-app] safe transport failure {
+#   error_code: 'CANDIDATE_REQUEST_FAILED',
+#   transport_function: null,
+#   transport_status: null,
+#   database_sqlstate: null,
+#   database_error_code: null,
+#   database_final_state: null,
+#   database_error_class: null,
+#   database_object: null,
+#   local_error_code: null,
+#   local_error_class: null,
+#   local_error_property: null,
+#   source_location: '1153:25'
+# }
+# Subtest: pending WORKER_SUBMIT replay resumes review rendering without exposing the internal contract
+ok 73 - pending WORKER_SUBMIT replay resumes review rendering without exposing the internal contract
+  ---
+  duration_ms: 1.5768
+  type: 'test'
+  ...
+# Subtest: Candidate HTTP boundary ignores unrelated routes and fails protected routes closed
+ok 74 - Candidate HTTP boundary ignores unrelated routes and fails protected routes closed
+  ---
+  duration_ms: 0.386
+  type: 'test'
+  ...
+# Subtest: normal CloudTMS office audience cannot expose Candidate or manager public routes
+ok 75 - normal CloudTMS office audience cannot expose Candidate or manager public routes
+  ---
+  duration_ms: 0.294
+  type: 'test'
+  ...
+# Subtest: normal office Candidate endpoints enforce exact methods and use one service adapter call
+ok 76 - normal office Candidate endpoints enforce exact methods and use one service adapter call
+  ---
+  duration_ms: 0.8122
+  type: 'test'
+  ...
+# Subtest: office batch projection is bounded and never fans out into per-row RPC calls
+ok 77 - office batch projection is bounded and never fans out into per-row RPC calls
+  ---
+  duration_ms: 0.5953
+  type: 'test'
+  ...
+# Subtest: office route confirmation requires a caller-owned UUID before any mutation RPC
+ok 78 - office route confirmation requires a caller-owned UUID before any mutation RPC
+  ---
+  duration_ms: 0.6383
+  type: 'test'
+  ...
+# Subtest: office rejection requires a bounded reason before the canonical confirmation call
+ok 79 - office rejection requires a bounded reason before the canonical confirmation call
+  ---
+  duration_ms: 1.2213
+  type: 'test'
+  ...
+# Subtest: office PAPER category rejection resumes once and returns the durable V2 receipt
+ok 80 - office PAPER category rejection resumes once and returns the durable V2 receipt
+  ---
+  duration_ms: 2.0629
+  type: 'test'
+  ...
+# Subtest: office errors use stable aliases without changing underlying lifecycle codes
+ok 81 - office errors use stable aliases without changing underlying lifecycle codes
+  ---
+  duration_ms: 0.1734
+  type: 'test'
+  ...
+# Subtest: office W07 route preview returns the server-owned reject-versus-manual decision only for a Candidate scope
+ok 82 - office W07 route preview returns the server-owned reject-versus-manual decision only for a Candidate scope
+  ---
+  duration_ms: 0.9483
+  type: 'test'
+  ...
+# Subtest: office W07 route preview fails closed when Candidate scope authority is unavailable
+ok 83 - office W07 route preview fails closed when Candidate scope authority is unavailable
+  ---
+  duration_ms: 0.9614
+  type: 'test'
+  ...
+# Subtest: office PAPER history uses the preceding immutable delivery generation and retained receipt
+ok 84 - office PAPER history uses the preceding immutable delivery generation and retained receipt
+  ---
+  duration_ms: 0.4285
+  type: 'test'
+  ...
+# Subtest: office cancel manager request maps to request-only authority and preserves the typed reason
+ok 85 - office cancel manager request maps to request-only authority and preserves the typed reason
+  ---
+  duration_ms: 1.1463
+  type: 'test'
+  ...
+# Subtest: office phone review sends only declared typed fields to the service adapter
+ok 86 - office phone review sends only declared typed fields to the service adapter
+  ---
+  duration_ms: 0.6035
+  type: 'test'
+  ...
+# Subtest: office signature preparation binds the exact phone request and returns an office upload route
+ok 87 - office signature preparation binds the exact phone request and returns an office upload route
+  ---
+  duration_ms: 5.6962
+  type: 'test'
+  ...
+# Subtest: office reminder batch execute remains one browser operation with server-owned reminder material
+ok 88 - office reminder batch execute remains one browser operation with server-owned reminder material
+  ---
+  duration_ms: 2.5528
+  type: 'test'
+  ...
+# Subtest: office reminder eligibility is server-owned, eligible-only and paginated
+ok 89 - office reminder eligibility is server-owned, eligible-only and paginated
+  ---
+  duration_ms: 1.846
+  type: 'test'
+  ...
+# Subtest: office reminder catalogue filters by Candidate surname and sorts every matching page
+ok 90 - office reminder catalogue filters by Candidate surname and sorts every matching page
+  ---
+  duration_ms: 1.6527
+  type: 'test'
+  ...
+# Subtest: office reminder catalogue limit counts eligible rows rather than all pending EMAIL requests
+ok 91 - office reminder catalogue limit counts eligible rows rather than all pending EMAIL requests
+  ---
+  duration_ms: 50.2203
+  type: 'test'
+  ...
+# Subtest: office reminder catalogue fails closed before an unbounded pending-request scan
+ok 92 - office reminder catalogue fails closed before an unbounded pending-request scan
+  ---
+  duration_ms: 10.7967
+  type: 'test'
+  ...
+# Subtest: office reminder all-eligible selection is resolved across the complete server catalogue
+ok 93 - office reminder all-eligible selection is resolved across the complete server catalogue
+  ---
+  duration_ms: 2.4398
+  type: 'test'
+  ...
+# Subtest: office reminder exact selection replay is returned before eligibility is recalculated
+ok 94 - office reminder exact selection replay is returned before eligibility is recalculated
+  ---
+  duration_ms: 0.5134
+  type: 'test'
+  ...
+# Subtest: paper pack responses never expose an R2 storage identity
+ok 95 - paper pack responses never expose an R2 storage identity
+  ---
+  duration_ms: 0.0848
+  type: 'test'
+  ...
+# Subtest: workflow creation policy exposes only app-safe approval choices
+ok 96 - workflow creation policy exposes only app-safe approval choices
+  ---
+  duration_ms: 0.1472
+  type: 'test'
+  ...
+# Subtest: paper return pages expose the frozen order and QR requirement without source hashes
+ok 97 - paper return pages expose the frozen order and QR requirement without source hashes
+  ---
+  duration_ms: 0.1339
+  type: 'test'
+  ...
+# Subtest: paper return V2 keeps frozen evidence digests private while assembly can match them internally
+ok 98 - paper return V2 keeps frozen evidence digests private while assembly can match them internally
+  ---
+  duration_ms: 0.1903
+  type: 'test'
+  ...
+# Subtest: paper return page projection fails closed for malformed manifest members
+ok 99 - paper return page projection fails closed for malformed manifest members
+  ---
+  duration_ms: 0.0893
+  type: 'test'
+  ...
+# Subtest: paper return page projection rejects the internal Expense Summary in legacy and V2 manifests
+ok 100 - paper return page projection rejects the internal Expense Summary in legacy and V2 manifests
+  ---
+  duration_ms: 0.1656
+  type: 'test'
+  ...
+# Subtest: component upload tickets are encrypted and do not disclose the R2 key
+ok 101 - component upload tickets are encrypted and do not disclose the R2 key
+  ---
+  duration_ms: 1.8461
+  type: 'test'
+  ...
+# Subtest: Candidate upload authority survives a short-lived federated session projection rotation
+ok 102 - Candidate upload authority survives a short-lived federated session projection rotation
+  ---
+  duration_ms: 0.9659
+  type: 'test'
+  ...
+# Subtest: Candidate upload stable binding rejects another Candidate on the same account
+ok 103 - Candidate upload stable binding rejects another Candidate on the same account
+  ---
+  duration_ms: 0.7091
+  type: 'test'
+  ...
+# Subtest: Candidate component preparation reissues an upload ticket from the exact durable replay without another mutation
+ok 104 - Candidate component preparation reissues an upload ticket from the exact durable replay without another mutation
+  ---
+  duration_ms: 1.982
+  type: 'test'
+  ...
+# Subtest: new Candidate component preparation uses the narrow authenticated fast-path RPC
+ok 105 - new Candidate component preparation uses the narrow authenticated fast-path RPC
+  ---
+  duration_ms: 1.6204
+  type: 'test'
+  ...
+# Subtest: direct Candidate Mileage and expense receipt prepares persist an exact digest without exposing it publicly
+ok 106 - direct Candidate Mileage and expense receipt prepares persist an exact digest without exposing it publicly
+  ---
+  duration_ms: 3.7134
+  type: 'test'
+  ...
+# Subtest: Candidate source digests are rejected for non-receipt component kinds
+ok 107 - Candidate source digests are rejected for non-receipt component kinds
+  ---
+  duration_ms: 0.9845
+  type: 'test'
+  ...
+# Subtest: two concurrent direct receipt prepares with different keys expose only one upload admission
+ok 108 - two concurrent direct receipt prepares with different keys expose only one upload admission
+  ---
+  duration_ms: 2.6557
+  type: 'test'
+  ...
+# Subtest: changed Candidate hours re-upload an ended receipt into fresh component-owned storage
+ok 109 - changed Candidate hours re-upload an ended receipt into fresh component-owned storage
+  ---
+  duration_ms: 2.3793
+  type: 'test'
+  ...
+# Subtest: a failed later-expense attempt may reuse its unchanged receipt in a newer generation of the same workflow
+ok 110 - a failed later-expense attempt may reuse its unchanged receipt in a newer generation of the same workflow
+  ---
+  duration_ms: 0.4603
+  type: 'test'
+  ...
+# Subtest: receipt reuse preflight depends on immutable database identity, never the historical R2 object
+ok 111 - receipt reuse preflight depends on immutable database identity, never the historical R2 object
+  ---
+  duration_ms: 0.7637
+  type: 'test'
+  ...
+# Subtest: a legacy direct PENDING receipt without its expected digest fails closed before lineage lookup
+ok 112 - a legacy direct PENDING receipt without its expected digest fails closed before lineage lookup
+  ---
+  duration_ms: 1.6473
+  type: 'test'
+  ...
+# Subtest: an exact digest-bound direct PENDING receipt replay reissues only its opaque upload ticket
+ok 113 - an exact digest-bound direct PENDING receipt replay reissues only its opaque upload ticket
+  ---
+  duration_ms: 1.6784
+  type: 'test'
+  ...
+# Subtest: a lost direct receipt prepare key recovers only the PENDING row with the same expected digest
+ok 114 - a lost direct receipt prepare key recovers only the PENDING row with the same expected digest
+  ---
+  duration_ms: 1.8285
+  type: 'test'
+  ...
+# Subtest: a legacy completed first-use receipt retry returns its direct-root component without self-rejecting
+ok 115 - a legacy completed first-use receipt retry returns its direct-root component without self-rejecting
+  ---
+  duration_ms: 1.1544
+  type: 'test'
+  ...
+# Subtest: a legacy source-linked zero-copy receipt fails closed before any ticket or mutation side effect
+ok 116 - a legacy source-linked zero-copy receipt fails closed before any ticket or mutation side effect
+  ---
+  duration_ms: 1.373
+  type: 'test'
+  ...
+# Subtest: completed exact receipt re-upload replays its current immutable component
+ok 117 - completed exact receipt re-upload replays its current immutable component
+  ---
+  duration_ms: 0.3726
+  type: 'test'
+  ...
+# Subtest: lost receipt prepare key recovers the exact pending fresh upload and reissues its ticket
+ok 118 - lost receipt prepare key recovers the exact pending fresh upload and reissues its ticket
+  ---
+  duration_ms: 1.9826
+  type: 'test'
+  ...
+# Subtest: wrong reused receipt bytes stop before R2 while exact bytes complete the fresh copy
+ok 119 - wrong reused receipt bytes stop before R2 while exact bytes complete the fresh copy
+  ---
+  duration_ms: 22.9049
+  type: 'test'
+  ...
+# Subtest: expense rendering reads the current receipt copy and never the ended lineage object
+ok 120 - expense rendering reads the current receipt copy and never the ended lineage object
+  ---
+  duration_ms: 15.4105
+  type: 'test'
+  ...
+# Subtest: Candidate component fast-path owns atomic exact-root receipt reuse and refreshes PostgREST
+ok 121 - Candidate component fast-path owns atomic exact-root receipt reuse and refreshes PostgREST
+  ---
+  duration_ms: 2.3727
+  type: 'test'
+  ...
+# Subtest: Candidate receipt lineage has a bounded source-root lookup index
+ok 122 - Candidate receipt lineage has a bounded source-root lookup index
+  ---
+  duration_ms: 0.9541
+  type: 'test'
+  ...
+# Subtest: Candidate receipt prepare reserves one live digest and owns one fresh physical storage key
+ok 123 - Candidate receipt prepare reserves one live digest and owns one fresh physical storage key
+  ---
+  duration_ms: 0.9645
+  type: 'test'
+  ...
+# Subtest: Candidate receipt verification refuses a second idempotency key for the same pending digest
+ok 124 - Candidate receipt verification refuses a second idempotency key for the same pending digest
+  ---
+  duration_ms: 1.0983
+  type: 'test'
+  ...
+# Subtest: Candidate receipt render authority protects the current copy and accepts ended lineage roots
+ok 125 - Candidate receipt render authority protects the current copy and accepts ended lineage roots
+  ---
+  duration_ms: 0.9303
+  type: 'test'
+  ...
+# Subtest: finalised Candidate detail reads the immutable signed artifact generation
+ok 126 - finalised Candidate detail reads the immutable signed artifact generation
+  ---
+  duration_ms: 0.9109
+  type: 'test'
+  ...
+# Subtest: Candidate component preparation recovers one exact pending component after an older phone loses its prepare key
+ok 127 - Candidate component preparation recovers one exact pending component after an older phone loses its prepare key
+  ---
+  duration_ms: 1.5491
+  type: 'test'
+  ...
+# Subtest: Candidate component replay remains bound to the signed-in Candidate and exact immutable upload contract
+ok 128 - Candidate component replay remains bound to the signed-in Candidate and exact immutable upload contract
+  ---
+  duration_ms: 0.3604
+  type: 'test'
+  ...
+# Subtest: component validation accepts one-page PDFs and rejects mixed multi-page evidence
+ok 129 - component validation accepts one-page PDFs and rejects mixed multi-page evidence
+  ---
+  duration_ms: 4.0099
+  type: 'test'
+  ...
+# Subtest: component validation rejects malformed images and encrypted-PDF markers
+ok 130 - component validation rejects malformed images and encrypted-PDF markers
+  ---
+  duration_ms: 0.1659
+  type: 'test'
+  ...
+# Subtest: immutable generated documents use create-only storage and permit only same-digest replay
+ok 131 - immutable generated documents use create-only storage and permit only same-digest replay
+  ---
+  duration_ms: 1.114
+  type: 'test'
+  ...
+# Subtest: idempotent component preparation always uses the original database-owned object identity
+ok 132 - idempotent component preparation always uses the original database-owned object identity
+  ---
+  duration_ms: 0.2614
+  type: 'test'
+  ...
+# Subtest: generic Mileage Claim Form is blank, reusable and agency branded
+ok 133 - generic Mileage Claim Form is blank, reusable and agency branded
+  ---
+  duration_ms: 8.1151
+  type: 'test'
+  ...
+# Subtest: Candidate mileage form actions prepare the exact PDF and queue one registered-email attachment
+ok 134 - Candidate mileage form actions prepare the exact PDF and queue one registered-email attachment
+  ---
+  duration_ms: 11.637
+  type: 'test'
+  ...
+# Subtest: final mileage submission requires the declared total and every current JPEG evidence object
+ok 135 - final mileage submission requires the declared total and every current JPEG evidence object
+  ---
+  duration_ms: 0.5155
+  type: 'test'
+  ...
+# Subtest: Candidate paper email queues the exact ready pack to the active registered account
+ok 136 - Candidate paper email queues the exact ready pack to the active registered account
+  ---
+  duration_ms: 1.1514
+  type: 'test'
+  ...
+# Subtest: Candidate paper email replays only an already claimable completed-pack row
+ok 137 - Candidate paper email replays only an already claimable completed-pack row
+  ---
+  duration_ms: 2.2561
+  type: 'test'
+  ...
+# Subtest: persisted expense and mileage PDFs are byte-deterministic across wall-clock time
+ok 138 - persisted expense and mileage PDFs are byte-deterministic across wall-clock time
+  ---
+  duration_ms: 1120.4043
+  type: 'test'
+  ...
+# Subtest: printed Mileage pages use the frozen canonical claim total
+ok 139 - printed Mileage pages use the frozen canonical claim total
+  ---
+  duration_ms: 0.1582
+  type: 'test'
+  ...
+# Subtest: expense summary rendering fails closed without the frozen canonical display total
+ok 140 - expense summary rendering fails closed without the frozen canonical display total
+  ---
+  duration_ms: 0.1857
+  type: 'test'
+  ...
+# Subtest: frozen branding ignores later live settings and validates its immutable contract
+ok 141 - frozen branding ignores later live settings and validates its immutable contract
+  ---
+  duration_ms: 0.671
+  type: 'test'
+  ...
+# Subtest: live branding is copied once to a content-addressed immutable logo key
+ok 142 - live branding is copied once to a content-addressed immutable logo key
+  ---
+  duration_ms: 1.1333
+  type: 'test'
+  ...
+# Subtest: Candidate app branding uses its dedicated logo pointer and leaves document branding independent
+ok 143 - Candidate app branding uses its dedicated logo pointer and leaves document branding independent
+  ---
+  duration_ms: 0.5854
+  type: 'test'
+  ...
+# Subtest: Candidate mileage documents use the agency app logo rather than CloudTMS document branding
+ok 144 - Candidate mileage documents use the agency app logo rather than CloudTMS document branding
+  ---
+  duration_ms: 0.4884
+  type: 'test'
+  ...
+# Subtest: document registration recovers after R2 success without rerendering a different object
+ok 145 - document registration recovers after R2 success without rerendering a different object
+  ---
+  duration_ms: 2.5131
+  type: 'test'
+  ...
+# Subtest: complete paper pack retry reuses the same deterministic object and digest
+ok 146 - complete paper pack retry reuses the same deterministic object and digest
+  ---
+  duration_ms: 1116.9397
+  type: 'test'
+  ...
+# Subtest: Paper Timesheet page renders unsigned from the exact submitted workflow without electronic hours or signature components
+ok 147 - Paper Timesheet page renders unsigned from the exact submitted workflow without electronic hours or signature components
+  ---
+  duration_ms: 23.6474
+  type: 'test'
+  ...
+# Subtest: paper pack component lookup accepts the exact current-generation clone under its frozen page identity
+ok 148 - paper pack component lookup accepts the exact current-generation clone under its frozen page identity
+  ---
+  duration_ms: 0.3103
+  type: 'test'
+  ...
+# Subtest: paper evidence carry and manifest canonicalise one page per durable source identity
+ok 149 - paper evidence carry and manifest canonicalise one page per durable source identity
+  ---
+  duration_ms: 1.9574
+  type: 'test'
+  ...
+# Subtest: paper pack component lookup canonicalises equivalent carried rows for one frozen page
+ok 150 - paper pack component lookup canonicalises equivalent carried rows for one frozen page
+  ---
+  duration_ms: 0.2163
+  type: 'test'
+  ...
+# Subtest: paper pack component lookup fails closed when duplicate rows disagree on page identity
+ok 151 - paper pack component lookup fails closed when duplicate rows disagree on page identity
+  ---
+  duration_ms: 0.1254
+  type: 'test'
+  ...
+# Subtest: paper pack component lookup ignores same-id rows outside the exact frozen page identity
+ok 152 - paper pack component lookup ignores same-id rows outside the exact frozen page identity
+  ---
+  duration_ms: 0.062
+  type: 'test'
+  ...
+# Subtest: complete paper pack assembles cloned expense evidence referenced by its durable source identity
+ok 153 - complete paper pack assembles cloned expense evidence referenced by its durable source identity
+  ---
+  duration_ms: 7.9089
+  type: 'test'
+  ...
+# Subtest: paper pack readiness uses the durable receipt and advances only the exact authenticated workflow
+ok 154 - paper pack readiness uses the durable receipt and advances only the exact authenticated workflow
+  ---
+  duration_ms: 2.2525
+  type: 'test'
+  ...
+# Subtest: released Paper pack remains authoritative after an expected generic document invalidation
+ok 155 - released Paper pack remains authoritative after an expected generic document invalidation
+  ---
+  duration_ms: 0.3375
+  type: 'test'
+  ...
+# Subtest: released Paper pack reads the canonical completed-pack identity written by the database
+ok 156 - released Paper pack reads the canonical completed-pack identity written by the database
+  ---
+  duration_ms: 0.123
+  type: 'test'
+  ...
+# Subtest: released Paper pack rejects conflicting canonical and compatibility identities
+ok 157 - released Paper pack rejects conflicting canonical and compatibility identities
+  ---
+  duration_ms: 0.1226
+  type: 'test'
+  ...
+# [candidate-app] scheduled Paper pack assembly failed {
+#   workflow_id: '00000000-0000-4000-8000-000000000060',
+#   generation: 1,
+#   error_code: 'CANDIDATE_PAPER_OUTBOX_NOT_READY',
+#   transport_function: null,
+#   transport_status: 409,
+#   database_sqlstate: null,
+#   database_error_code: null,
+#   database_final_state: null,
+#   database_error_class: null,
+#   database_object: null,
+#   local_error_code: 'CANDIDATE_PAPER_OUTBOX_NOT_READY',
+#   local_error_class: null,
+#   local_error_property: null,
+#   source_location: '10090:33',
+#   canonical_failure_code: 'CANDIDATE_PAPER_OUTBOX_NOT_READY'
+# }
+# Subtest: Paper status polling never requeues after the exact released pack is complete
+ok 158 - Paper status polling never requeues after the exact released pack is complete
+  ---
+  duration_ms: 4.489
+  type: 'test'
+  ...
+# Subtest: paper pack receipt rejects malformed hashes, generation and page-count metadata
+ok 159 - paper pack receipt rejects malformed hashes, generation and page-count metadata
+  ---
+  duration_ms: 0.5196
+  type: 'test'
+  ...
+# Subtest: paper pack release never requeues a failed mail operation
+ok 160 - paper pack release never requeues a failed mail operation
+  ---
+  duration_ms: 0.4331
+  type: 'test'
+  ...
+# Subtest: paper pack release rejects a missing outbox before creating a readiness notification
+ok 161 - paper pack release rejects a missing outbox before creating a readiness notification
+  ---
+  duration_ms: 0.2339
+  type: 'test'
+  ...
+# Subtest: paper pack release is insert-once and preserves an existing notification lifecycle
+ok 162 - paper pack release is insert-once and preserves an existing notification lifecycle
+  ---
+  duration_ms: 0.327
+  type: 'test'
+  ...
+# Subtest: paper pack notification replay never resets terminal read or push states
+ok 163 - paper pack notification replay never resets terminal read or push states
+  ---
+  duration_ms: 0.501
+  type: 'test'
+  ...
+# Subtest: paper pack release does not notify when the guarded attachment update loses its race
+ok 164 - paper pack release does not notify when the guarded attachment update loses its race
+  ---
+  duration_ms: 0.2788
+  type: 'test'
+  ...
+# Subtest: paper pack release installs the exact complete pack before notification
+ok 165 - paper pack release installs the exact complete pack before notification
+  ---
+  duration_ms: 0.3252
+  type: 'test'
+  ...
+# Subtest: paper outbox binding is already atomic and the backend only adopts the exact held row
+ok 166 - paper outbox binding is already atomic and the backend only adopts the exact held row
+  ---
+  duration_ms: 0.2788
+  type: 'test'
+  ...
+# Subtest: paper pack release rejects an already claimed held email before PATCH or notification
+ok 167 - paper pack release rejects an already claimed held email before PATCH or notification
+  ---
+  duration_ms: 0.2432
+  type: 'test'
+  ...
+# Subtest: completed paper pack stays downloadable while its email delivery is leased
+ok 168 - completed paper pack stays downloadable while its email delivery is leased
+  ---
+  duration_ms: 0.2143
+  type: 'test'
+  ...
+# Subtest: paper-pack scheduler proves the exact held email before any R2 pack work
+ok 169 - paper-pack scheduler proves the exact held email before any R2 pack work
+  ---
+  duration_ms: 1.4271
+  type: 'test'
+  ...
+# [candidate-app] scheduled Paper pack assembly failed {
+#   workflow_id: '00000000-0000-4000-8000-000000000070',
+#   generation: 3,
+#   error_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+#   transport_function: null,
+#   transport_status: 503,
+#   database_sqlstate: null,
+#   database_error_code: null,
+#   database_final_state: null,
+#   database_error_class: null,
+#   database_object: null,
+#   local_error_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+#   local_error_class: null,
+#   local_error_property: null,
+#   source_location: '9793:11',
+#   canonical_failure_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT'
+# }
+# Subtest: paper-pack scheduler durably records a classified retryable storage failure
+ok 170 - paper-pack scheduler durably records a classified retryable storage failure
+  ---
+  duration_ms: 2.9138
+  type: 'test'
+  ...
+# Subtest: Candidate auth/account mutation routes reject a missing caller idempotency key before work
+ok 171 - Candidate auth/account mutation routes reject a missing caller idempotency key before work
+  ---
+  duration_ms: 3.4943
+  type: 'test'
+  ...
+# Subtest: failed login lost-response replay does not advance the lockout counter twice
+ok 172 - failed login lost-response replay does not advance the lockout counter twice
+  ---
+  duration_ms: 30.3233
+  type: 'test'
+  ...
+# Subtest: unknown-account login owns a durable generic failure receipt and changed email conflicts
+ok 173 - unknown-account login owns a durable generic failure receipt and changed email conflicts
+  ---
+  duration_ms: 18.2671
+  type: 'test'
+  ...
+# Subtest: concurrent activation, login and refresh return the database winner refresh token
+ok 174 - concurrent activation, login and refresh return the database winner refresh token
+  ---
+  duration_ms: 49.6829
+  type: 'test'
+  ...
+# Subtest: concurrent logout and password change recover the durable result after mutable preconditions move
+ok 175 - concurrent logout and password change recover the durable result after mutable preconditions move
+  ---
+  duration_ms: 87.1739
+  type: 'test'
+  ...
+# Subtest: selected-candidate precondition recovery returns the same frozen access credential
+ok 176 - selected-candidate precondition recovery returns the same frozen access credential
+  ---
+  duration_ms: 2.7659
+  type: 'test'
+  ...
+# Subtest: push registration replay hashes semantic token identity rather than randomized ciphertext
+ok 177 - push registration replay hashes semantic token identity rather than randomized ciphertext
+  ---
+  duration_ms: 3.4073
+  type: 'test'
+  ...
+# Subtest: Candidate OpenAPI requires caller idempotency for every auth and account mutation
+ok 178 - Candidate OpenAPI requires caller idempotency for every auth and account mutation
+  ---
+  duration_ms: 4.818
+  type: 'test'
+  ...
+# Subtest: notification read acknowledgement has one durable timestamped result and conflicts on changed identity
+ok 179 - notification read acknowledgement has one durable timestamped result and conflicts on changed identity
+  ---
+  duration_ms: 2.8909
+  type: 'test'
+  ...
+# Subtest: refresh lost-response replay returns the same successor token and a new key retains theft detection
+ok 180 - refresh lost-response replay returns the same successor token and a new key retains theft detection
+  ---
+  duration_ms: 2.6154
+  type: 'test'
+  ...
+# Subtest: phone handoff replay freezes key versions and conflicts on changed public session, device, or generation
+ok 181 - phone handoff replay freezes key versions and conflicts on changed public session, device, or generation
+  ---
+  duration_ms: 3.7715
+  type: 'test'
+  ...
+# Subtest: finalisation probes its durable key receipt before current approval history
+ok 182 - finalisation probes its durable key receipt before current approval history
+  ---
+  duration_ms: 1.3957
+  type: 'test'
+  ...
+# Subtest: a pending source document remains PREPARING after its observation deadline without claiming an attempt
+ok 183 - a pending source document remains PREPARING after its observation deadline without claiming an attempt
+  ---
+  duration_ms: 0.4213
+  type: 'test'
+  ...
+# [candidate-app] Office Paper pack retry failed {
+#   workflow_id: '00000000-0000-4000-8000-000000000080',
+#   generation: 1,
+#   error_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+#   transport_function: null,
+#   transport_status: 503,
+#   database_sqlstate: null,
+#   database_error_code: null,
+#   database_final_state: null,
+#   database_error_class: null,
+#   database_object: null,
+#   local_error_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+#   local_error_class: null,
+#   local_error_property: null,
+#   source_location: '10222:13',
+#   observed_error_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+#   canonical_failure_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT'
+# }
+# Subtest: Office PAPER retry recovers an expired executor lease with a new inner attempt key
+ok 184 - Office PAPER retry recovers an expired executor lease with a new inner attempt key
+  ---
+  duration_ms: 2.4812
+  type: 'test'
+  ...
+# Subtest: paper outbox binding rejects missing, opted-out or otherwise unavailable email delivery
+ok 185 - paper outbox binding rejects missing, opted-out or otherwise unavailable email delivery
+  ---
+  duration_ms: 0.2783
+  type: 'test'
+  ...
+# Subtest: QR pack public response never defaults a missing queue result to accepted
+ok 186 - QR pack public response never defaults a missing queue result to accepted
+  ---
+  duration_ms: 0.1144
+  type: 'test'
+  ...
+# Subtest: paper outbox adoption rejects an immediately due base-PDF row
+ok 187 - paper outbox adoption rejects an immediately due base-PDF row
+  ---
+  duration_ms: 0.3049
+  type: 'test'
+  ...
+# Subtest: paper workflow multiplicity is checked before every document-state early return
+ok 188 - paper workflow multiplicity is checked before every document-state early return
+  ---
+  duration_ms: 1.9432
+  type: 'test'
+  ...
+# Subtest: private manager routes reject wrong HTTP methods before any RPC mutation
+ok 189 - private manager routes reject wrong HTTP methods before any RPC mutation
+  ---
+  duration_ms: 1.3763
+  type: 'test'
+  ...
+# Subtest: weekly manager query route returns only the closed grouped hours contract
+ok 190 - weekly manager query route returns only the closed grouped hours contract
+  ---
+  duration_ms: 1.9246
+  type: 'test'
+  ...
+# Subtest: manager approval authority is matched to the current request before a decisive mutation
+ok 191 - manager approval authority is matched to the current request before a decisive mutation
+  ---
+  duration_ms: 1.7205
+  type: 'test'
+  ...
+# Subtest: manager start replay identity changes when a preserved link receives refreshed documents
+ok 192 - manager start replay identity changes when a preserved link receives refreshed documents
+  ---
+  duration_ms: 0.6256
+  type: 'test'
+  ...
+# Subtest: manager context race is converted to the update hold instead of a false not-ready error
+ok 193 - manager context race is converted to the update hold instead of a false not-ready error
+  ---
+  duration_ms: 1.1444
+  type: 'test'
+  ...
+# [candidate-app] manager interactive dependency unavailable { stage: 'action-hold', status: 408 }
+# Subtest: manager routes bound database waits and return a retryable service response
+ok 194 - manager routes bound database waits and return a retryable service response
+  ---
+  duration_ms: 0.9351
+  type: 'test'
+  ...
+# Subtest: manager signature preparation returns the exact browser-supplied upload digest
+ok 195 - manager signature preparation returns the exact browser-supplied upload digest
+  ---
+  duration_ms: 1.3428
+  type: 'test'
+  ...
+# Subtest: every manager review surface short-circuits to the same update hold receipt
+ok 196 - every manager review surface short-circuits to the same update hold receipt
+  ---
+  duration_ms: 2.9204
+  type: 'test'
+  ...
+# Subtest: manager document reads continue on the same link after its update hold is released
+ok 197 - manager document reads continue on the same link after its update hold is released
+  ---
+  duration_ms: 1.1753
+  type: 'test'
+  ...
+# Subtest: candidate submitted-expense document reads return the original evidence rather than its review rendering
+ok 198 - candidate submitted-expense document reads return the original evidence rather than its review rendering
+  ---
+  duration_ms: 0.1349
+  type: 'test'
+  ...
+# Subtest: public Candidate workflow actions exclude service finalisation
+ok 199 - public Candidate workflow actions exclude service finalisation
+  ---
+  duration_ms: 2.4228
+  type: 'test'
+  ...
+# Subtest: public workflow responses omit renderer contracts and canonical financial internals
+ok 200 - public workflow responses omit renderer contracts and canonical financial internals
+  ---
+  duration_ms: 0.1547
+  type: 'test'
+  ...
+# Subtest: official review presentation is frozen from authoritative CloudTMS display rows
+ok 201 - official review presentation is frozen from authoritative CloudTMS display rows
+  ---
+  duration_ms: 0.1002
+  type: 'test'
+  ...
+# Subtest: background approval work is isolated and reports a bounded failure without rejecting waitUntil
+ok 202 - background approval work is isolated and reports a bounded failure without rejecting waitUntil
+  ---
+  duration_ms: 0.169
+  type: 'test'
+  ...
+# Subtest: fifty simultaneous manager follow-on tasks settle independently
+ok 203 - fifty simultaneous manager follow-on tasks settle independently
+  ---
+  duration_ms: 0.2843
+  type: 'test'
+  ...
+# Subtest: a complete paper return immediately advances through canonical finalisation
+ok 204 - a complete paper return immediately advances through canonical finalisation
+  ---
+  duration_ms: 0.1094
+  type: 'test'
+  ...
+# Subtest: a paper finalisation blocker preserves RECEIVED and returns a controlled retry state
+ok 205 - a paper finalisation blocker preserves RECEIVED and returns a controlled retry state
+  ---
+  duration_ms: 0.0797
+  type: 'test'
+  ...
+# Subtest: source candidate self-entry exposes only its configured evidence break mode
+ok 206 - source candidate self-entry exposes only its configured evidence break mode
+  ---
+  duration_ms: 1.5392
+  type: 'test'
+  ...
+# Subtest: editable printed-document Timesheets retain adaptive break entry
+ok 207 - editable printed-document Timesheets retain adaptive break entry
+  ---
+  duration_ms: 0.8172
+  type: 'test'
+  ...
+# Subtest: editable Weekly Timesheets expose stable break authority before route selection
+ok 208 - editable Weekly Timesheets expose stable break authority before route selection
+  ---
+  duration_ms: 2.2535
+  type: 'test'
+  ...
+# Subtest: TSQ1 lower-level verifier accepts only the exact signed v1 token payload
+ok 209 - TSQ1 lower-level verifier accepts only the exact signed v1 token payload
+  ---
+  duration_ms: 10.0873
+  type: 'test'
+  ...
+# Subtest: adaptive duration breaks normalise into the existing financial input without endpoints
+ok 210 - adaptive duration breaks normalise into the existing financial input without endpoints
+  ---
+  duration_ms: 0.9934
+  type: 'test'
+  ...
+# Subtest: standalone expense workflows never require an hours break context
+ok 211 - standalone expense workflows never require an hours break context
+  ---
+  duration_ms: 0.1424
+  type: 'test'
+  ...
+# Subtest: adaptive break input fails closed on stale context or wrong-mode fields
+ok 212 - adaptive break input fails closed on stale context or wrong-mode fields
+  ---
+  duration_ms: 0.2548
+  type: 'test'
+  ...
+# Subtest: no-break remains an explicit zero with no endpoints in either adaptive mode
+ok 213 - no-break remains an explicit zero with no endpoints in either adaptive mode
+  ---
+  duration_ms: 0.1102
+  type: 'test'
+  ...
+# Subtest: Candidate submission rejects contradictory saved and visible work-time aliases before database use
+ok 214 - Candidate submission rejects contradictory saved and visible work-time aliases before database use
+  ---
+  duration_ms: 0.6035
+  type: 'test'
+  ...
+# Subtest: public broker enforces the closed returned-paper QR proof envelope
+ok 215 - public broker enforces the closed returned-paper QR proof envelope
+  ---
+  duration_ms: 0.6353
+  type: 'test'
+  ...
+# Subtest: public broker accepts the QR-required v2 proof and rejects a missing QR
+ok 216 - public broker accepts the QR-required v2 proof and rejects a missing QR
+  ---
+  duration_ms: 0.2296
+  type: 'test'
+  ...
+# Subtest: public broker rejects an inapplicable or mixed-shape adaptive break before routing
+ok 217 - public broker rejects an inapplicable or mixed-shape adaptive break before routing
+  ---
+  duration_ms: 0.3386
+  type: 'test'
+  ...
+# Subtest: first combined weekly finalisation binds its worked Timesheet before same-record expense apply
+ok 218 - first combined weekly finalisation binds its worked Timesheet before same-record expense apply
+  ---
+  duration_ms: 0.7426
+  type: 'test'
+  ...
+# Subtest: expense apply still distinguishes a same-record combined claim from a genuine separate carrier
+ok 219 - expense apply still distinguishes a same-record combined claim from a genuine separate carrier
+  ---
+  duration_ms: 0.2124
+  type: 'test'
+  ...
+# Subtest: trusted weekly finalisation remains route-checked without relying on Candidate edit capability
+ok 220 - trusted weekly finalisation remains route-checked without relying on Candidate edit capability
+  ---
+  duration_ms: 1.6121
+  type: 'test'
+  ...
+# Subtest: manager finalisation recovery contract is service-only and fail-closed
+ok 221 - manager finalisation recovery contract is service-only and fail-closed
+  ---
+  duration_ms: 0.1976
+  type: 'test'
+  ...
+# Subtest: manager finalisation has bounded database lock and statement waits
+ok 222 - manager finalisation has bounded database lock and statement waits
+  ---
+  duration_ms: 0.1478
+  type: 'test'
+  ...
+# Subtest: manager finalisation uses a non-waiting database single-flight wrapper and bounded transport
+ok 223 - manager finalisation uses a non-waiting database single-flight wrapper and bounded transport
+  ---
+  duration_ms: 0.3963
+  type: 'test'
+  ...
+# Subtest: private scheduler retries only bounded manager finalisations through the service contract
+ok 224 - private scheduler retries only bounded manager finalisations through the service contract
+  ---
+  duration_ms: 1.0042
+  type: 'test'
+  ...
+# Subtest: expense finalisation signs the authoritative anchor without pairing it to an unmaterialised carrier week
+ok 225 - expense finalisation signs the authoritative anchor without pairing it to an unmaterialised carrier week
+  ---
+  duration_ms: 3.0611
+  type: 'test'
+  ...
+# Subtest: manager finalisation is single-flight across approval and scheduled recovery
+ok 226 - manager finalisation is single-flight across approval and scheduled recovery
+  ---
+  duration_ms: 1.1494
+  type: 'test'
+  ...
+# Subtest: a failed finaliser retains its short lease before recovery retries
+ok 227 - a failed finaliser retains its short lease before recovery retries
+  ---
+  duration_ms: 1.0422
+  type: 'test'
+  ...
+# Subtest: official week period supports every configured ending weekday
+ok 228 - official week period supports every configured ending weekday
+  ---
+  duration_ms: 1.3759
+  type: 'test'
+  ...
+# Subtest: official hours wording uses complete grammatical sentence-case English
+ok 229 - official hours wording uses complete grammatical sentence-case English
+  ---
+  duration_ms: 0.2272
+  type: 'test'
+  ...
+# Subtest: logos and signatures are fitted without changing their aspect ratio
+ok 230 - logos and signatures are fitted without changing their aspect ratio
+  ---
+  duration_ms: 0.1881
+  type: 'test'
+  ...
+# Subtest: TSQ1 extraction preserves the established token field and signature input
+ok 231 - TSQ1 extraction preserves the established token field and signature input
+  ---
+  duration_ms: 10.8248
+  type: 'test'
+  ...
+# Subtest: V2 contract validates the Saturday-ending Sunday-to-Saturday form
+ok 232 - V2 contract validates the Saturday-ending Sunday-to-Saturday form
+  ---
+  duration_ms: 2.1022
+  type: 'test'
+  ...
+# Subtest: manager-review timesheet requires only the Candidate signature and renders one official page
+ok 233 - manager-review timesheet requires only the Candidate signature and renders one official page
+  ---
+  duration_ms: 40.3722
+  type: 'test'
+  ...
+# Subtest: completed informational timesheet accepts only the Candidate signature and renders one official page
+ok 234 - completed informational timesheet accepts only the Candidate signature and renders one official page
+  ---
+  duration_ms: 19.5395
+  type: 'test'
+  ...
+# Subtest: official renderer emits exactly one A4 landscape page with additional units
+ok 235 - official renderer emits exactly one A4 landscape page with additional units
+  ---
+  duration_ms: 10.3911
+  type: 'test'
+  ...
+# Subtest: declaration capacity accepts an exact nine-line readable fit
+ok 236 - declaration capacity accepts an exact nine-line readable fit
+  ---
+  duration_ms: 6.4607
+  type: 'test'
+  ...
+# Subtest: date values use the writing area while the Date label sits below its line
+ok 237 - date values use the writing area while the Date label sits below its line
+  ---
+  duration_ms: 1.8191
+  type: 'test'
+  ...
+# Subtest: signature images are the final visual layer inside each declaration box
+ok 238 - signature images are the final visual layer inside each declaration box
+  ---
+  duration_ms: 0.7927
+  type: 'test'
+  ...
+# Subtest: QR forms retain the centre QR panel while electronic forms expand both detail boxes
+ok 239 - QR forms retain the centre QR panel while electronic forms expand both detail boxes
+  ---
+  duration_ms: 24.5394
+  type: 'test'
+  ...
+# Subtest: Candidate paper-return Timesheets reserve a 48 mm QR panel without overlaying form text
+ok 240 - Candidate paper-return Timesheets reserve a 48 mm QR panel without overlaying form text
+  ---
+  duration_ms: 41.6411
+  type: 'test'
+  ...
+# Subtest: dense supported form selects a readable compact mode without omitting rows
+ok 241 - dense supported form selects a readable compact mode without omitting rows
+  ---
+  duration_ms: 13.0138
+  type: 'test'
+  ...
+# Subtest: impossible one-page fixture fails instead of truncating or spilling
+ok 242 - impossible one-page fixture fails instead of truncating or spilling
+  ---
+  duration_ms: 1.1299
+  type: 'test'
+  ...
+# Subtest: layout selection preflights horizontal cells and retries a smaller readable mode
+ok 243 - layout selection preflights horizontal cells and retries a smaller readable mode
+  ---
+  duration_ms: 4.8815
+  type: 'test'
+  ...
+# Subtest: persisted official timesheet PDF bytes are deterministic across wall-clock time
+ok 244 - persisted official timesheet PDF bytes are deterministic across wall-clock time
+  ---
+  duration_ms: 1109.8269
+  type: 'test'
+  ...
+# Subtest: wrapped wording preserves an unbroken long token without overflow or truncation
+ok 245 - wrapped wording preserves an unbroken long token without overflow or truncation
+  ---
+  duration_ms: 16.3771
+  type: 'test'
+  ...
+# Subtest: HealthRoster V2 rejects ambiguous references and accepts one exact match
+ok 246 - HealthRoster V2 rejects ambiguous references and accepts one exact match
+  ---
+  duration_ms: 0.4283
+  type: 'test'
+  ...
+1..246
+# tests 246
+# suites 0
+# pass 246
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3543.6558

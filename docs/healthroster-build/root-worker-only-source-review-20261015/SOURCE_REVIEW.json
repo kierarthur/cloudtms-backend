@@ -1,0 +1,23 @@
+{
+  "bounded_source_review": "FIX_REQUIRED",
+  "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+  "raw_saved_Git_before_after": true,
+  "raw_pins": 30,
+  "whole_owners": 6,
+  "whole_reverse_hunks": 36,
+  "current_input_receipts": 8,
+  "source_JS_model_tests": 25,
+  "existing_fixture_pdf_bytes_verified": true,
+  "existing_worker_fixture_png_inspected": true,
+  "new_PDF_generation": false,
+  "confirmed_P0_P1_P2": [
+    {
+      "id": "P2-WORKER-ONLY-RECOVERY-FALSE-SUCCESS",
+      "finding": "Exact worker-only recovery early return bypasses existing completion.ok check; ok=false increments recovered rather than failed",
+      "reproduction": "Actual extracted complete recovery owner, mocked dependencies only",
+      "disposition": "Adjacent reviewed forward requested; frozen9320 preserved"
+    }
+  ],
+  "SQL_executed": false,
+  "canonical_mounted": false
+}

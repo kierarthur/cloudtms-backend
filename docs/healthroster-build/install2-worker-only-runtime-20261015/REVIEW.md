@@ -1,0 +1,7 @@
+# Candidate worker-only runtime source integration
+
+The exact three current canonical preimages at 44db8a50182823b13df0b22d69b4363ef5332a48 were proved before changing them. Candidate backend selects 90887838ca63eb698d49e3ef696dd82f6336a7ed; presentation validator and official PDF select the reviewed 9320 forwards. The recovery fix has nine exact saved/Git pins, one complete whole-function reverse and 25 passing targeted checks. It fixes P2-WORKER-ONLY-RECOVERY-FALSE-SUCCESS while retaining existing leases, non-waiting finaliser and deferral behavior.
+
+All 246 existing mounted Candidate/backend/finalisation/recovery/combined-anchor/official-PDF regression cases pass. A new production test reads the actual canonical recovery owner and passes 23 malformed/false/success/deferral/stale-target/sequential-lease cases; its .test.js name is included by the existing ordinary test command. No test changes the production financial owner.
+
+The eligible weekly HOURS form keeps the Candidate signature and omits manager assets/authorisation. Daily, expenses and combined work keep their manager path. Dated Client policy and the complete native transition/render/finaliser/private-role verifier source still need their once-only final module; these runtime files have not been deployed. Canonical SQL counts are unchanged. No database/native/API/device/feature activation or app upload is claimed. The per-file MOUNT_RECEIPT supplies exact preimage and selected forward hashes.

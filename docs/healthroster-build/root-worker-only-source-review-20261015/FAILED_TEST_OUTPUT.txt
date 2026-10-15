@@ -1,0 +1,181 @@
+TAP version 13
+# Subtest: SOURCE_ONLY complete actual owner reverse 108_complete_worker_only_candidate_transition.sqlinc
+ok 1 - SOURCE_ONLY complete actual owner reverse 108_complete_worker_only_candidate_transition.sqlinc
+  ---
+  duration_ms: 7.3538
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete actual owner reverse 109_complete_worker_only_component_render_contract.sqlinc
+ok 2 - SOURCE_ONLY complete actual owner reverse 109_complete_worker_only_component_render_contract.sqlinc
+  ---
+  duration_ms: 1.1938
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete actual owner reverse 110_complete_worker_only_candidate_finaliser.sqlinc
+ok 3 - SOURCE_ONLY complete actual owner reverse 110_complete_worker_only_candidate_finaliser.sqlinc
+  ---
+  duration_ms: 2.5779
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete actual owner reverse 111_complete_worker_only_candidate_backend.js
+ok 4 - SOURCE_ONLY complete actual owner reverse 111_complete_worker_only_candidate_backend.js
+  ---
+  duration_ms: 104.3491
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete actual owner reverse 112_complete_worker_only_presentation_contract.js
+ok 5 - SOURCE_ONLY complete actual owner reverse 112_complete_worker_only_presentation_contract.js
+  ---
+  duration_ms: 66.5492
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY complete actual owner reverse 113_complete_worker_only_official_timesheet_pdf.js
+ok 6 - SOURCE_ONLY complete actual owner reverse 113_complete_worker_only_official_timesheet_pdf.js
+  ---
+  duration_ms: 68.7217
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_candidate_transition.sqlinc
+ok 7 - SOURCE_ONLY exact native input pin reference/actual_candidate_transition.sqlinc
+  ---
+  duration_ms: 47.3627
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_component_render_contract.sqlinc
+ok 8 - SOURCE_ONLY exact native input pin reference/actual_component_render_contract.sqlinc
+  ---
+  duration_ms: 42.3437
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_candidate_finaliser.sqlinc
+ok 9 - SOURCE_ONLY exact native input pin reference/actual_candidate_finaliser.sqlinc
+  ---
+  duration_ms: 45.9671
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_candidate_backend.js
+ok 10 - SOURCE_ONLY exact native input pin reference/actual_candidate_backend.js
+  ---
+  duration_ms: 49.4837
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_presentation_contract.js
+ok 11 - SOURCE_ONLY exact native input pin reference/actual_presentation_contract.js
+  ---
+  duration_ms: 42.3273
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_official_timesheet_pdf.js
+ok 12 - SOURCE_ONLY exact native input pin reference/actual_official_timesheet_pdf.js
+  ---
+  duration_ms: 41.4611
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_official_pdf_tests.js
+ok 13 - SOURCE_ONLY exact native input pin reference/actual_official_pdf_tests.js
+  ---
+  duration_ms: 45.658
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY exact native input pin reference/actual_candidate_named_security_verifier.sql
+ok 14 - SOURCE_ONLY exact native input pin reference/actual_candidate_named_security_verifier.sql
+  ---
+  duration_ms: 42.8838
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY worker-only scope is exact WEEKLY CONTRACT_HOURS ELECTRONIC with strict false for absent policy
+ok 15 - SOURCE_ONLY worker-only scope is exact WEEKLY CONTRACT_HOURS ELECTRONIC with strict false for absent policy
+  ---
+  duration_ms: 0.2451
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY genuine document render readiness precedes READY_TO_FINALISE without a fabricated manager claim
+ok 16 - SOURCE_ONLY genuine document render readiness precedes READY_TO_FINALISE without a fabricated manager claim
+  ---
+  duration_ms: 0.1849
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY finaliser keeps mandatory Candidate signature, policy freshness, native HOURS admission and Office authorisation
+ok 17 - SOURCE_ONLY finaliser keeps mandatory Candidate signature, policy freshness, native HOURS admission and Office authorisation
+  ---
+  duration_ms: 0.538
+  type: 'test'
+  ...
+# Subtest: SOURCE_ONLY service identity retains actual policy, Candidate, manifest and replay binding; no new public signatures
+ok 18 - SOURCE_ONLY service identity retains actual policy, Candidate, manifest and replay binding; no new public signatures
+  ---
+  duration_ms: 0.7109
+  type: 'test'
+  ...
+# Subtest: ACTUAL_JS_UNIT worker-only finalisation uses only the bounded non-waiting wrapper and frozen fixture identity
+ok 19 - ACTUAL_JS_UNIT worker-only finalisation uses only the bounded non-waiting wrapper and frozen fixture identity
+  ---
+  duration_ms: 2.4729
+  type: 'test'
+  ...
+# Subtest: ACTUAL_JS_UNIT DAILY retains manager approval despite a copied fixed key elsewhere
+ok 20 - ACTUAL_JS_UNIT DAILY retains manager approval despite a copied fixed key elsewhere
+  ---
+  duration_ms: 1.1172
+  type: 'test'
+  ...
+# Subtest: ACTUAL_JS_UNIT expense retains manager approval despite a copied fixed key elsewhere
+ok 21 - ACTUAL_JS_UNIT expense retains manager approval despite a copied fixed key elsewhere
+  ---
+  duration_ms: 1.0221
+  type: 'test'
+  ...
+# Subtest: ACTUAL_JS_UNIT combined retains manager approval despite a copied fixed key elsewhere
+ok 22 - ACTUAL_JS_UNIT combined retains manager approval despite a copied fixed key elsewhere
+  ---
+  duration_ms: 0.7687
+  type: 'test'
+  ...
+# Subtest: ACTUAL_JS_UNIT ordinary policy retains manager approval despite a copied fixed key elsewhere
+ok 23 - ACTUAL_JS_UNIT ordinary policy retains manager approval despite a copied fixed key elsewhere
+  ---
+  duration_ms: 0.7432
+  type: 'test'
+  ...
+# Subtest: ACTUAL_JS_UNIT ordinary PHONE manager finalisation preserves its approval fixture identity
+ok 24 - ACTUAL_JS_UNIT ordinary PHONE manager finalisation preserves its approval fixture identity
+  ---
+  duration_ms: 2.3737
+  type: 'test'
+  ...
+# Subtest: ACTUAL_PDF worker-only official page contains only its Candidate declaration and immutable fixture signature
+not ok 25 - ACTUAL_PDF worker-only official page contains only its Candidate declaration and immutable fixture signature
+  ---
+  duration_ms: 0.5884
+  type: 'test'
+  location: 'C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\agency-worker-only-candidate-native-forward-20261015\\worker-only.test.mjs:163:1'
+  failureType: 'testCodeFailure'
+  error: 'Use an explicit ignored local proof directory'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/agency-worker-only-candidate-native-forward-20261015/worker-only.test.mjs:165:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: ACTUAL_MODEL worker-only form rejects missing Candidate, any manager signature, authorisation and DAILY scope
+ok 26 - ACTUAL_MODEL worker-only form rejects missing Candidate, any manager signature, authorisation and DAILY scope
+  ---
+  duration_ms: 1.643
+  type: 'test'
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 25
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 951.9352

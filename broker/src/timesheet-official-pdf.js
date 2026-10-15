@@ -177,7 +177,8 @@ function estimateLayoutHeight(model, layout) {
     60, Math.floor(190 * (layout.smallFont / footerStyle.fontSize))
   ));
   const workerDeclaration = normaliseLines(wording.temporary_worker_declaration);
-  const clientDeclaration = normaliseLines(wording.client_declaration);
+  const clientDeclaration = model.form_variant === 'ELECTRONIC_WORKER_SIGNED'
+    ? [] : normaliseLines(wording.client_declaration);
   const additional = model.additional_units_section || {};
   const additionalRows = additional.visible === true && Array.isArray(additional.rows)
     ? additional.rows
@@ -231,13 +232,14 @@ function measureLayoutHeightWithFonts(model, layout, regular) {
     regular, normaliseLines(model?.wording?.footer), footerStyle.fontSize, width
   ).length;
   const declarationGap = 5;
-  const declarationWidth = (width - declarationGap) / 2;
+  const workerOnly = model.form_variant === 'ELECTRONIC_WORKER_SIGNED';
+  const declarationWidth = workerOnly ? width : (width - declarationGap) / 2;
   const declarationHeight = Math.max(
     layout.declarationMinimumHeight,
     ...[
       model?.wording?.temporary_worker_declaration,
       model?.wording?.client_declaration
-    ].map(block => {
+    ].filter((_block, index) => !workerOnly || index === 0).map(block => {
       const style = configuredWordingStyle(block, layout, minimumFontSize);
       return 5 + wrapText(
         regular, normaliseLines(block), style.fontSize, declarationWidth - 4
@@ -376,11 +378,12 @@ function preflightLayoutHorizontalCapacity(model, layout, fonts) {
     });
   }
 
-  const declarationWidth = (width - 5) / 2;
+  const workerOnly = model.form_variant === 'ELECTRONIC_WORKER_SIGNED';
+  const declarationWidth = workerOnly ? width : (width - 5) / 2;
   for (const block of [
     model?.wording?.temporary_worker_declaration,
     model?.wording?.client_declaration
-  ]) {
+  ].filter((_block, index) => !workerOnly || index === 0)) {
     const titleFont = block?.title_bold === false ? regular : bold;
     fitText(
       titleFont,
@@ -829,7 +832,9 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   const page = pdf.addPage([PAGE_WIDTH_MM * MM_TO_PT, PAGE_HEIGHT_MM * MM_TO_PT]);
   const logo = await embedImage(pdf, assets.logo || model?.branding?.logo);
   const candidateSignature = await embedImage(pdf, assets.candidate_signature || model?.signatures?.candidate);
-  const authoriserSignature = await embedImage(pdf, assets.authoriser_signature || model?.signatures?.authoriser);
+  const workerOnly = model.form_variant === 'ELECTRONIC_WORKER_SIGNED';
+  const authoriserSignature = workerOnly ? null
+    : await embedImage(pdf, assets.authoriser_signature || model?.signatures?.authoriser);
 
   const margin = layout.margin;
   const width = PAGE_WIDTH_MM - margin * 2;
@@ -852,7 +857,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     ? footerWrappedLines.length * footerWordingStyle.lineHeight + layout.gap
     : 0;
   const declarationGap = 5;
-  const declarationWidth = (width - declarationGap) / 2;
+  const declarationWidth = workerOnly ? width : (width - declarationGap) / 2;
   const declarationBoxes = [
     {
       x: margin,
@@ -872,7 +877,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       signature: authoriserSignature,
       date: model?.signatures?.authoriser?.signed_date
     }
-  ].map(box => {
+  ].filter(box => !workerOnly || box.signatureRole === 'CANDIDATE').map(box => {
     const wordingStyle = configuredWordingStyle(box.wording, layout, minimumFontSize);
     const bodyLines = wrapText(
       regular, box.lines, wordingStyle.fontSize, declarationWidth - 4
@@ -1182,7 +1187,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     }
     drawText(page, regular, 'Date', box.x + declarationWidth - 24, top + declarationHeight - 2.5, layout.smallFont, 22);
     const signatureAllowed = model.form_variant === 'ELECTRONIC_SIGNED'
-      || (['ELECTRONIC_MANAGER_REVIEW', 'ELECTRONIC_CANDIDATE_INFORMATIONAL']
+      || (['ELECTRONIC_MANAGER_REVIEW', 'ELECTRONIC_CANDIDATE_INFORMATIONAL', 'ELECTRONIC_WORKER_SIGNED']
         .includes(model.form_variant) && box.signatureRole === 'CANDIDATE');
     if (signatureAllowed && box.signature) {
       signaturePlacements.push({
@@ -1255,7 +1260,8 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       signature_images_drawn_last: true,
       signature_line_zone_height_mm: layout.signatureLineZoneHeight,
       signature_overlay_height_mm: layout.signatureOverlayHeight,
-      one_page_verified: true
+      one_page_verified: true,
+      ...(workerOnly ? { worker_signature_only: true, manager_signature_block_rendered: false } : {})
     })
   });
 }

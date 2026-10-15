@@ -744,7 +744,7 @@ function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
   const qr = requireObject(model.qr, 'TIMESHEET_QR_STATE_INVALID');
   const variant = String(model.form_variant || '');
   if (![
-    'ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW',
+    'ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW','ELECTRONIC_WORKER_SIGNED',
     'ELECTRONIC_CANDIDATE_INFORMATIONAL','ELECTRONIC_UNSIGNED','QR_UNSIGNED'
   ].includes(variant)) {
     fail('TIMESHEET_FORM_VARIANT_INVALID', variant);
@@ -758,7 +758,10 @@ function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
     }
     if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_signed_has_qr');
   } else if (variant === 'ELECTRONIC_MANAGER_REVIEW'
-      || variant === 'ELECTRONIC_CANDIDATE_INFORMATIONAL') {
+      || variant === 'ELECTRONIC_CANDIDATE_INFORMATIONAL' || variant === 'ELECTRONIC_WORKER_SIGNED') {
+    if (variant === 'ELECTRONIC_WORKER_SIGNED' && model.sheet_scope !== 'WEEKLY') {
+      fail('TIMESHEET_FORM_VARIANT_INVALID', variant);
+    }
     if (!signatures.candidate?.r2_key || signatures.authoriser?.r2_key) {
       fail('TIMESHEET_SIGNATURE_ASSET_INVALID');
     }

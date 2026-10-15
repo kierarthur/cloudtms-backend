@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "source_mount": true,
+  "reviewed_recovery_fix": true,
+  "whole_recovery_hunk": 1,
+  "recovery_cases": 25,
+  "canonical_outputs": [
+    {
+      "file": "broker/src/candidate-app-backend.js",
+      "before_sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587",
+      "after_sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+      "source_commit": "90887838ca63eb698d49e3ef696dd82f6336a7ed"
+    },
+    {
+      "file": "broker/src/invoice-presentation-contract.js",
+      "before_sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1",
+      "after_sha256": "18fdb8421f95485d264941bde5b678932a7b2a94f62dbcd490e5fedebadb1fd3",
+      "source_commit": "9320ff3b494c5d105f1e9725aef7071bb724682f"
+    },
+    {
+      "file": "broker/src/timesheet-official-pdf.js",
+      "before_sha256": "7756bede5744641f729f0a44dd528f13cd0ed15de28fcd754b8dce47e3bfa2ed",
+      "after_sha256": "52e4aa425727ccc6153037ffefa0017139faab284538d7a67e4981b7a199735b",
+      "source_commit": "9320ff3b494c5d105f1e9725aef7071bb724682f"
+    }
+  ],
+  "SQL_changes": 0,
+  "deployed": false
+}
