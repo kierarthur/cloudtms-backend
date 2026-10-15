@@ -1,0 +1,173 @@
+[
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/11_complete_tsfin_prepare_write.sqlinc",
+    "reference": "reference/shared_11_complete_tsfin_prepare_write.sqlinc",
+    "sha256": "d20ae24e7e3ed504f41f3e7d7ab445de2f1674249073d25e43a16beec8c0482e",
+    "functions": [
+      "public.tsfin_prepare_write"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+    "reference": "reference/shared_12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+    "sha256": "a48e15134fd61562f75e8a8f7c7d3912b06b87046ccd3a8417fa9f2f133b2162",
+    "functions": [
+      "public.tsfin_write_current_snapshot_single_bounded"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/13_complete_tsfin_write_snapshots_and_complete.sqlinc",
+    "reference": "reference/shared_13_complete_tsfin_write_snapshots_and_complete.sqlinc",
+    "sha256": "50e5f92fefff607455618da5ae643397c79250d6c3aff808435ddb255ae719bd",
+    "functions": [
+      "public.tsfin_write_snapshots_and_complete"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/65_complete_native_invalidation_with_single_writer.sqlinc",
+    "reference": "reference/shared_65_complete_native_invalidation_with_single_writer.sqlinc",
+    "sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8",
+    "functions": [
+      "public.timesheets_invalidate_prevalidation_on_change"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/70_complete_current_publication_with_agency_validation.sqlinc",
+    "reference": "reference/shared_70_complete_current_publication_with_agency_validation.sqlinc",
+    "sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23",
+    "functions": [
+      "public.weekly_source_projection_publish_atomic_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+    "reference": "reference/shared_14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+    "sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3",
+    "functions": [
+      "private._invoice_issue_validate_batch"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+    "reference": "reference/shared_16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+    "sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09",
+    "functions": [
+      "public.invoice_issue_one"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+    "reference": "reference/shared_17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+    "sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703",
+    "functions": [
+      "private._invoice_issue_advance_core_v8"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+    "reference": "reference/shared_21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+    "sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd",
+    "functions": [
+      "public._import_review_ready_action_ids_core_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+    "reference": "reference/shared_22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+    "sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9",
+    "functions": [
+      "public.hr_weekly_apply_transactional"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+    "reference": "reference/shared_23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+    "sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f",
+    "functions": [
+      "public.weekly_source_mode_a_reference_apply_atomic_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+    "reference": "reference/shared_24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+    "sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10",
+    "functions": [
+      "public.weekly_source_mode_a_dispatch_atomic_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/97_complete_off_scope_assert_with_finite_agency.sqlinc",
+    "reference": "reference/shared_97_complete_off_scope_assert_with_finite_agency.sqlinc",
+    "sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916",
+    "functions": [
+      "private.weekly_source_rule_qualification_scope_assert_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/98_complete_off_parent_with_actual_agency.sqlinc",
+    "reference": "reference/shared_98_complete_off_parent_with_actual_agency.sqlinc",
+    "sha256": "19d0b2811cbb31fc8b8652869bfec4a77b3e2cad14b3d47d4fb4ce1face4500c",
+    "functions": [
+      "private.weekly_source_off_rule_native_parent_scope_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/99_complete_off_command_with_literal_agency.sqlinc",
+    "reference": "reference/shared_99_complete_off_command_with_literal_agency.sqlinc",
+    "sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8",
+    "functions": [
+      "private.weekly_source_rule_qualification_setup_atomic_v1",
+      "private.weekly_source_rule_qualification_execute_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/100_complete_off_transport_with_native_phase_actor.sqlinc",
+    "reference": "reference/shared_100_complete_off_transport_with_native_phase_actor.sqlinc",
+    "sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349",
+    "functions": [
+      "private.weekly_source_rule_qualification_transport_status_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  },
+  {
+    "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+    "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/101_complete_off_setup_shape_with_finite_agency.sqlinc",
+    "reference": "reference/shared_101_complete_off_setup_shape_with_finite_agency.sqlinc",
+    "sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3",
+    "functions": [
+      "private.weekly_source_off_rule_setup_shape_assert_v1"
+    ],
+    "disposition": "MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module"
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "source_only": true,
+  "native": false,
+  "entries": [
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "bytes": 249666,
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "bytes": 173042,
+      "sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade"
+    },
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "bytes": 6543,
+      "sha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5"
+    },
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "bytes": 12253,
+      "sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b"
+    },
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc",
+      "bytes": 2340,
+      "sha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20"
+    },
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "bytes": 155269,
+      "sha256": "64ef7e6d04e1b652af722cb9dd050310fcd8e1cd249f59b9359428a310b70933"
+    },
+    {
+      "pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "bytes": 2705,
+      "sha256": "226fcab97d68884aaa2a796c2a9105448ec708cbb820eb1e433e73a160bdb11d"
+    }
+  ]
+}

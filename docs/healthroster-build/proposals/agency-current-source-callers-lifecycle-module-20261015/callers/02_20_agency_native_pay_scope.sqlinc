@@ -1,0 +1,81 @@
+-- Owner-private input seam for Agency's actual native ORDINARY grain.
+-- This returns scope/approval/history inputs, never a paid/withheld quantity,
+-- monetary permission, Source namespace or caller-selected financial subject.
+create or replace function private.weekly_source_agency_native_pay_scope_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ req private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+ work private.bpay_next_work%rowtype; revision private.bpay_next_work_revision%rowtype;
+ members uuid[]; module_owner text; module_epoch bigint; work_value jsonb; revision_value jsonb;
+ legacy jsonb; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict req from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ req:=private.weekly_source_agency_change_request_assert_v1(req.contract_week_id,req.reason,
+   req.initial_row_signature,req.request_key,req.updated_by_user_id);
+ if req.state<>'ACTIVE' then raise exception 'AGENCY_CHANGE_CURRENT_REQUEST_UNAVAILABLE' using errcode='55000'; end if;
+ select * into strict t from public.timesheets where timesheet_id=req.current_timesheet_id;
+ select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current;
+ select array_agg(distinct family.family_timesheet_id order by family.family_timesheet_id) into members
+ from public._pay_timesheet_rotation_scope(array[t.timesheet_id]) family;
+ if members is null or cardinality(members) not between 1 and 256 or not t.timesheet_id=any(members)
+  or f.id is distinct from req.current_financial_id or f.timesheet_version is distinct from t.version then
+  raise exception 'AGENCY_CHANGE_NATIVE_PAY_FAMILY_SCOPE_CHANGED' using errcode='40001'; end if;
+ select m.active_owner,m.owner_epoch into strict module_owner,module_epoch
+ from private.bpay_next_module_control m where m.id=1;
+ if module_owner is null or module_owner not in('LEGACY','NEXT') or module_epoch is null
+  or module_epoch<0 or(module_owner='NEXT' and module_epoch=0) then
+  raise exception 'AGENCY_CHANGE_NATIVE_PAY_MODULE_UNAVAILABLE' using errcode='55000'; end if;
+ if module_owner='LEGACY' then
+  -- Its exact certified grain is family/shift HOURS. It supplies no general
+  -- cash/reservation/final-transfer authority and cannot permit a paid writer.
+  legacy:=private.weekly_source_settlement_allocation_v1(t.timesheet_id);
+ else
+  select w.* into work from private.bpay_next_work w where w.booking_id=t.booking_id;
+  if found then
+   if work.work_kind is distinct from 'ORDINARY' or work.origin_kind is distinct from 'CONTRACT'
+    or work.candidate_id is distinct from req.candidate_id or work.contract_id is distinct from req.contract_id
+    or work.week_ending_date is distinct from req.week_ending_date
+    or work.original_timesheet_id is null or not work.original_timesheet_id=any(members) then
+    raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_WORK_SCOPE_CONFLICT' using errcode='55000'; end if;
+   work_value:=jsonb_build_object('work_id',work.id,'work_kind',work.work_kind,'origin_kind',work.origin_kind,
+    'original_timesheet_id',work.original_timesheet_id,'booking_id',work.booking_id,
+    'candidate_id',work.candidate_id,'contract_id',work.contract_id,'week_ending_date',work.week_ending_date,
+    'current_revision_id',work.current_revision_id,'applied_revision_id',work.applied_revision_id,
+    'current_revision_no',work.current_revision_no);
+   if coalesce(work.current_revision_id,work.applied_revision_id) is not null then
+    select v.* into strict revision from private.bpay_next_work_revision v
+     where v.id=coalesce(work.current_revision_id,work.applied_revision_id) and v.work_id=work.id;
+    if revision.source_kind is distinct from 'ORDINARY'
+     or revision.physical_timesheet_id is null or not revision.physical_timesheet_id=any(members)
+     or revision.week_ending_date is distinct from req.week_ending_date then
+     raise exception 'AGENCY_CHANGE_NATIVE_ORDINARY_REVISION_SCOPE_CONFLICT' using errcode='55000'; end if;
+    revision_value:=jsonb_build_object('revision_id',revision.id,'work_id',revision.work_id,
+     'source_kind',revision.source_kind,'revision_no',revision.revision_no,
+     'physical_timesheet_id',revision.physical_timesheet_id,'physical_timesheet_version',revision.physical_timesheet_version,
+     'financial_snapshot_id',revision.financial_snapshot_id,'detail_kind',revision.detail_kind,
+     'source_pay_channel',revision.source_pay_channel,'expected_line_count',revision.expected_line_count,
+     'certified_zero',revision.certified_zero,'approved_source_ex_vat',revision.approved_source_ex_vat,
+     'sealed_at_utc',revision.sealed_at_utc);
+   end if;
+  end if;
+ end if;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_PAY_SCOPE_V1',
+  'request_id',req.id,'request_sha256',encode(req.request_sha256,'hex'),'phase_actor_user_id',req.updated_by_user_id,
+  'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'contract_week_id',req.contract_week_id,
+  'contract_id',req.contract_id,'candidate_id',req.candidate_id,'client_id',req.client_id,'week_ending_date',req.week_ending_date,
+  'family_member_ids',to_jsonb(members),'active_owner',module_owner,'owner_epoch',module_epoch,
+  'current_financial_id',f.id,'current_financial_paid_marker',f.paid_at_utc,
+  'original_captured_financial_id',req.native_receipts#>'{original_capture,current_financial_id}',
+  'ordinary_work',work_value,'ordinary_revision',revision_value,'legacy_family_hours',legacy);
+ if octet_length(result::text)>262144 then raise exception 'AGENCY_CHANGE_NATIVE_PAY_SCOPE_BOUND_EXCEEDED' using errcode='54000'; end if;
+ return result;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NATIVE_PAY_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_native_pay_scope_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_native_pay_scope_v1(uuid) from public,anon,authenticated,service_role;

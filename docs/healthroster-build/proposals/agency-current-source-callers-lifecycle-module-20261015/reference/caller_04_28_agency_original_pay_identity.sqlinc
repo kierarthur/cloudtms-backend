@@ -1,0 +1,124 @@
+-- Read-only identity/preservation witness for the single planned T0 change.
+-- Amounts remain in the native ledgers. No payment, collection or hours maths.
+create or replace function private.weekly_source_agency_original_pay_identity_v1(
+ p_timesheet_id uuid,p_actor_user_id uuid,p_original_financial_id uuid,p_request_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ scope jsonb; t public.timesheets%rowtype; original public.timesheets_financials%rowtype;
+ v_work_id uuid; line_ids uuid[]; effect_ids uuid[]; transfer_ids uuid[];
+ lines jsonb; effects jsonb; transfers jsonb; reservations jsonb:='[]'::jsonb;
+ transfer private.bpay_next_transfer%rowtype; reservation jsonb; result jsonb;
+ financial_identity jsonb; signed_identity jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_request_id is null then
+  scope:=private.weekly_source_agency_physical_pay_inputs_v1(p_timesheet_id,p_actor_user_id);
+ else
+  scope:=private.weekly_source_agency_native_pay_scope_v1(p_request_id);
+  if scope->>'phase_actor_user_id' is distinct from p_actor_user_id::text then
+   raise exception 'AGENCY_CHANGE_PAY_PHASE_ACTOR_CHANGED' using errcode='42501'; end if;
+ end if;
+ if scope->>'timesheet_id' is distinct from p_timesheet_id::text then
+  raise exception 'AGENCY_CHANGE_PAY_PHYSICAL_TARGET_CHANGED' using errcode='40001'; end if;
+ select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+ select * into strict original from public.timesheets_financials where id=p_original_financial_id
+  and timesheet_id=p_timesheet_id and timesheet_version=t.version
+  and candidate_id=(scope->>'candidate_id')::uuid and client_id=(scope->>'client_id')::uuid for update;
+ -- These are the exact lifecycle/placement fields changed by unchanged UNA,
+ -- REMOVE and current-row retirement. All economic fields and the paid marker
+ -- remain in the hash; no authorised/processing label certifies a money amount.
+ financial_identity:=to_jsonb(original)-array[
+  'is_current','updated_at','processing_status','authorised_by_user_id','authorised_at_utc','locked_by_invoice_id','locked_at_utc'];
+ if jsonb_typeof(original.invoice_breakdown_json->'segments')='array' then
+  financial_identity:=jsonb_set(financial_identity,'{invoice_breakdown_json,segments}',
+   coalesce((select jsonb_agg(segment.value-'invoice_locked_invoice_id' order by segment.ordinality)
+    from jsonb_array_elements(original.invoice_breakdown_json->'segments') with ordinality segment(value,ordinality)),'[]'::jsonb),false);
+ end if;
+ signed_identity:=to_jsonb(t)-array[
+  'actual_schedule_json','updated_at','authorised_at_server','revoked_at','revoked_reason','revoked_by'];
+ -- Type-directed timestamp instants, from these two literal native relations,
+ -- preserve hashes across sessions without changing a GUC or timestamp value.
+ select jsonb_object_agg(value.key,case when column_type.atttypid='pg_catalog.timestamptz'::regtype
+   and value.value<>'null'::jsonb then to_jsonb(extract(epoch from(value.value#>>'{}')::timestamptz))
+   else value.value end) into financial_identity from jsonb_each(financial_identity) value
+  join pg_attribute column_type on column_type.attrelid='public.timesheets_financials'::regclass
+   and column_type.attname=value.key and column_type.attnum>0 and not column_type.attisdropped;
+ select jsonb_object_agg(value.key,case when column_type.atttypid='pg_catalog.timestamptz'::regtype
+   and value.value<>'null'::jsonb then to_jsonb(extract(epoch from(value.value#>>'{}')::timestamptz))
+   else value.value end) into signed_identity from jsonb_each(signed_identity) value
+  join pg_attribute column_type on column_type.attrelid='public.timesheets'::regclass
+   and column_type.attname=value.key and column_type.attnum>0 and not column_type.attisdropped;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_ORIGINAL_PAY_IDENTITY_V1',
+  'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'original_financial_id',original.id,
+  'original_financial_identity_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+   'WEEKLY_SOURCE_AGENCY_ORIGINAL_FINANCIAL_IDENTITY_V1',financial_identity),'hex'),
+  'original_paid_marker',original.paid_at_utc,
+  'signed_timesheet_identity_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+   'WEEKLY_SOURCE_AGENCY_SIGNED_TIMESHEET_IDENTITY_V1',signed_identity),'hex'),
+  'active_owner',scope->'active_owner','owner_epoch',scope->'owner_epoch',
+  'ordinary_work_id',scope#>'{ordinary_work,work_id}',
+  'original_run_line_ids',null,'original_run_lines_sha256',null,
+  'original_effect_ids',null,'original_effects_sha256',null,
+  'original_transfer_ids',null,'original_transfers_sha256',null,'native_original_reservations',null);
+ if scope->>'active_owner'='NEXT' then
+  -- Existing native Candidate financial fence owns its real module SHARE /
+  -- worker-control UPDATE and active NET refusal. No invented job or lease.
+  perform private.bpay_next_assert_candidate_financial_fence_v1(
+   (scope->>'candidate_id')::uuid,null::uuid,null::uuid,null::bigint);
+  v_work_id:=(scope#>>'{ordinary_work,work_id}')::uuid;
+  if v_work_id is null then
+   if original.paid_at_utc is not null then
+    raise exception 'AGENCY_CHANGE_PAID_ORDINARY_WORK_UNBOUND' using errcode='55000'; end if;
+  else
+   select coalesce(array_agg(l.id order by l.id),'{}'::uuid[]),
+    coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) into line_ids,lines
+    from private.bpay_next_run_line l where l.work_id=v_work_id;
+   select coalesce(array_agg(e.id order by e.id),'{}'::uuid[]),
+    coalesce(jsonb_agg((to_jsonb(e)-'occurred_at_utc')||jsonb_build_object(
+     'occurred_at_epoch',extract(epoch from e.occurred_at_utc)) order by e.id),'[]'::jsonb) into effect_ids,effects
+    from private.bpay_next_financial_effect e where e.work_id=v_work_id;
+   select coalesce(array_agg(distinct native.id order by native.id),'{}'::uuid[]) into transfer_ids from(
+    select tr.id from private.bpay_next_transfer tr join private.bpay_next_transfer_member member
+     on member.transfer_id=tr.id and member.run_line_id=any(line_ids)
+     where tr.candidate_id=(scope->>'candidate_id')::uuid and tr.original_transfer_id is null
+    union select tr.id from private.bpay_next_transfer tr join private.bpay_next_financial_effect effect
+     on effect.original_transfer_id=tr.id and effect.id=any(effect_ids)
+     where tr.candidate_id=(scope->>'candidate_id')::uuid and tr.original_transfer_id is null
+   ) native;
+   if cardinality(line_ids)>100 or cardinality(effect_ids)>100 or cardinality(transfer_ids)>100
+    or octet_length(lines::text)>262144 or octet_length(effects::text)>262144 then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_PAY_IDENTITY_BOUND_EXCEEDED' using errcode='54000'; end if;
+   -- Only immutable Original cash identity. Runtime bank account selection,
+   -- posting status and member assembly remain exclusively native authorities.
+   select coalesce(jsonb_agg(jsonb_build_object('id',tr.id,'run_worker_id',tr.run_worker_id,
+    'candidate_id',tr.candidate_id,'projection_id',tr.projection_id,'transfer_no',tr.transfer_no,
+    'currency',tr.currency,'cash_amount',tr.cash_amount,'original_transfer_id',tr.original_transfer_id,
+    'return_cash_id',tr.return_cash_id,'created_at_epoch',extract(epoch from tr.created_at_utc)) order by tr.id),'[]'::jsonb)
+    into transfers from private.bpay_next_transfer tr where tr.id=any(transfer_ids);
+   for transfer in select tr.* from private.bpay_next_transfer tr where tr.id=any(transfer_ids) order by tr.id loop
+    select to_jsonb(native) into strict reservation
+     from private.bpay_next_original_reservation_v1(transfer.run_worker_id,transfer.id) native;
+    reservations:=reservations||jsonb_build_array(jsonb_build_object('transfer_id',transfer.id,
+     'run_worker_id',transfer.run_worker_id,'native_reservation',reservation));
+   end loop;
+   result:=result||jsonb_build_object('original_run_line_ids',to_jsonb(line_ids),
+    'original_run_lines_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_ORIGINAL_RUN_LINES_V1',lines),'hex'),
+    'original_effect_ids',to_jsonb(effect_ids),
+    'original_effects_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_ORIGINAL_EFFECTS_V1',effects),'hex'),
+    'original_transfer_ids',to_jsonb(transfer_ids),
+    'original_transfers_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_ORIGINAL_TRANSFERS_V1',transfers),'hex'),
+    'native_original_reservations',reservations);
+  end if;
+ end if;
+ if octet_length(result::text)>32768 then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_PAY_IDENTITY_BOUND_EXCEEDED' using errcode='54000'; end if;
+ return result;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_ORIGINAL_PAY_IDENTITY_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_original_pay_identity_v1(uuid,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_original_pay_identity_v1(uuid,uuid,uuid,uuid)
+ from public,anon,authenticated,service_role;

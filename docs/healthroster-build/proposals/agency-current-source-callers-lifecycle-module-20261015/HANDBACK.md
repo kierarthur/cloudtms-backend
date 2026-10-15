@@ -1,0 +1,15 @@
+# Current Agency Source, callers and Candidate SQL composition
+
+This is source-only engineering against root44db and Report9320, with the exact corrected root72ec registrations. It is not installed, PostgreSQL-compiled, natively qualified, whole-Agency complete or ready to deploy.
+
+The new executable successor adds the existing native original Candidate claim recheck to the common advancing-phase request guard, after actual physical/UNA scope proof and before current Source CAS/admission. The helper keeps its existing unavailable and proved-absence semantics. It does not make a missing Original claim available. The second exact owner change extracts only104's ACTIVE BEFORE call onto the canonical current raw05; all raw/revision/policy helper bytes and the A7 kernel remain unchanged. Two full reversals return exact committed preimages.
+
+Use00 only as once-only managed migrations: the one planned Agency request store and the additive columns on the existing validation store. Never put either CREATE TABLE or ADD COLUMN body in repeatables. The complete store88 is split exactly into migration DDL and repeatable identity guard/trigger. The literal schema is not independently installed.
+
+05 is the selected final Agency-specific repeatable:30 current caller files, current capture89/begin90/request115/Source86/ACTIVE103/current early116/final117/corrected76 registrations118, fixed policy93–95, new finite OFF parent96, Client/feature/dated policy105–107 and Candidate SQL108–110.114,119 and121 are proposed verifiers and still require native execution plus the existing complete canonical verifier closure. The60 selected Agency/core function names and every actual request-row field are recorded in CLAIM_AND_CALLER_CENSUS. Both original_capture.original_submitted_claim and Source correction frozen_original_json/proposal_json retain their actual immutable guards and native transitive token-retention owner. No new CLAIM selector exists.
+
+MANDATORY_SHARED_OWNER_UNIONS lists17 complete accepted predecessor source owners for root to compose against current financial writers, invalidation/publication/issue/ModeA and finite OFF call sites. They are retained as exact source references, not automatically executed or represented as final current unions. Current root owns those unions and the full Worker index/routes. The existing seven SOURCE_FIXTURE_SETUP Agency operations are unchanged. This packet cannot substitute for those actual call sites.
+
+Preserve the three Candidate runtime files already mounted by rootf500 exactly as MOUNTED_CANDIDATE_RUNTIME_PRESERVE records. This SQL module includes no runtime file overwrite. The accepted recovery successor908 remains the backend runtime authority.
+
+96 source/input/reversal/field/packaging cases pass, including76 raw saved Git input receipts. SQL checks are lexical packaging only. Current shared-owner composition, prospective Contract writer persistence/census, full native Candidate/Agency/OFF/date/race/security/application proof, true first Original/protection/NX-AI-6 and full NONE financial path remain required engineering or qualification.

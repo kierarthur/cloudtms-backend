@@ -1,0 +1,55 @@
+-- Existing native Candidate/I1 owners, before original D1/family business locks.
+-- No new arbiter, selector, job row, actor impersonation or lease is created.
+create or replace function private.weekly_source_agency_candidate_admit_v1(
+ p_timesheet_id uuid,p_actual_actor_user_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare t public.timesheets%rowtype;c public.contracts%rowtype;gate jsonb;module_owner text;
+ owned private.weekly_source_agency_timesheet_change_requests%rowtype;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001'; end if;
+ if private.weekly_source_pay_actor_allowed_v1(p_actual_actor_user_id) is distinct from true then
+  raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501'; end if;
+ select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+ select * into strict c from public.contracts where id=t.contract_id;
+ if t.is_current is distinct from true or t.archived_at_utc is not null
+  or t.sheet_scope::text is distinct from 'WEEKLY' or t.line_type::text is distinct from 'HOURS'
+  or c.candidate_id is null or c.client_id is null then
+  raise exception 'AGENCY_CHANGE_CANDIDATE_NATIVE_SCOPE_INVALID' using errcode='55000'; end if;
+ if private.weekly_source_agency_invoice_check_only_v1(t.timesheet_id) is distinct from true then
+  -- The ordinary check-only reader deliberately rejects every revoked root.
+  -- The single change owner may be between its genuine UNA and AUTH only;
+  -- original source/rule/input/scope and phase CAS are asserted by its caller.
+  select * into strict owned from private.weekly_source_agency_timesheet_change_requests
+   where current_timesheet_id=t.timesheet_id and state='ACTIVE';
+  if owned.current_timesheet_id is distinct from owned.initial_timesheet_id
+   or owned.current_timesheet_version is distinct from t.version
+   or owned.contract_id is distinct from c.id or owned.candidate_id is distinct from c.candidate_id
+   or owned.client_id is distinct from c.client_id
+   or owned.phase not in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT')
+   or t.revoked_at is null or t.revoked_reason is distinct from 'TIMESHEET_UNAUTHORISE'
+   or t.revoked_by is distinct from owned.native_receipts#>>'{unauthorise,phase_actor_user_id}'
+   or owned.native_receipts#>>'{unauthorise,result,ok}' is distinct from 'true'
+   or owned.native_receipts#>>'{unauthorise,result,timesheet_id}' is distinct from t.timesheet_id::text then
+   raise exception 'AGENCY_CHANGE_CANDIDATE_NATIVE_SCOPE_INVALID' using errcode='55000'; end if;
+ end if;
+ gate:=private.weekly_source_candidate_serial_gate_v1(c.candidate_id,
+  'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION',t.timesheet_id,'AGENCY_CHANGE_OFFICE_AUTHORISE_ADMISSION');
+ if gate->>'ok' is distinct from 'true' or gate->>'gate' is distinct from 'GRANTED'
+  or gate->>'candidate_id' is distinct from c.candidate_id::text then
+  raise exception 'AGENCY_CHANGE_CANDIDATE_NATIVE_ADMISSION_BUSY' using errcode='55P03'; end if;
+ select active_owner into strict module_owner from private.bpay_next_module_control where id=1;
+ if module_owner='NEXT' then
+  perform private.bpay_next_assert_candidate_financial_fence_v1(c.candidate_id,null::uuid,null::uuid,null::bigint);
+ elsif module_owner is distinct from 'LEGACY' then
+  raise exception 'AGENCY_CHANGE_NATIVE_PAY_MODULE_UNAVAILABLE' using errcode='55000'; end if;
+ return gate;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_CANDIDATE_NATIVE_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_candidate_admit_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_candidate_admit_v1(uuid,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,183 @@
+-- One writer in the existing store. The existing AFTER validation wakeup is
+-- retained, including its actual CONTEXT_CHANGED queue and locked-row skip.
+create or replace function public.weekly_source_agency_week_validation_refresh_v1(
+ p_timesheet_id uuid,p_publication_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare facts jsonb; item jsonb; target uuid; native_actor uuid; validation public.timesheet_validations%rowtype;
+ actor public.tms_users%rowtype; written jsonb:='[]'; status_value public.validation_status_enum; reason_value text;
+ r private.weekly_source_agency_timesheet_change_requests%rowtype; queue public.ts_financials_outbox%rowtype;
+ fin public.timesheets_financials%rowtype; sig jsonb; signature text; receipt jsonb; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001';end if;
+ facts:=private.weekly_source_agency_week_facts_v1(p_timesheet_id);
+ if p_publication_id is null or facts->>'publication_id' is distinct from p_publication_id::text then
+  raise exception 'AGENCY_INVOICE_VALIDATION_PUBLICATION_STALE' using errcode='40001';end if;
+ -- The validating actor is an actual native approval actor, or the immutable
+ -- accepted upload actor for a not-yet-authorised week. It is not a caller field.
+ select coalesce(f.authorised_by_user_id,u.uploaded_by_user_id) into strict native_actor
+ from public.timesheets t join public.weekly_source_uploads u on u.id=(facts->>'upload_id')::uuid
+ left join public.timesheets_financials f on f.timesheet_id=t.timesheet_id and f.is_current and f.timesheet_version=t.version
+ where t.timesheet_id=p_timesheet_id;
+ select * into strict actor from public.tms_users where id=native_actor;
+ status_value:=case when facts->'complete'='true'::jsonb then 'VALIDATION_OK'::public.validation_status_enum
+  else 'VALIDATION_ERROR'::public.validation_status_enum end;
+ reason_value:=case when status_value='VALIDATION_OK' then null else facts#>>'{reasons,0}' end;
+ if status_value='VALIDATION_ERROR' and nullif(reason_value,'') is null then
+  raise exception 'AGENCY_INVOICE_VALIDATION_REASON_UNAVAILABLE' using errcode='55000';end if;
+ for item in select value from jsonb_array_elements(facts->'records') loop
+  target:=(item->>'timesheet_id')::uuid;
+  perform 1 from public.timesheets t where t.timesheet_id=target and t.is_current
+   and t.version=(item->>'timesheet_version')::integer for update;
+  if not found then raise exception 'AGENCY_INVOICE_TIMESHEET_ROTATED' using errcode='40001';end if;
+  insert into public.timesheet_validations(id,timesheet_id,booking_id,status,reason_code,validated_at_utc,last_source,
+   created_at,updated_at,pre_validated,validation_source_kind,validation_source_publication_id,
+   validation_source_facts_sha256,validation_source_actor_user_id)
+  select gen_random_uuid(),t.timesheet_id,t.booking_id,status_value,reason_value,transaction_timestamp(),null,
+   transaction_timestamp(),transaction_timestamp(),false,'AGENCY_INVOICE_WEEK',p_publication_id,
+   decode(facts->>'facts_hash','hex'),native_actor from public.timesheets t where t.timesheet_id=target
+  on conflict(timesheet_id) do update set status=excluded.status,reason_code=excluded.reason_code,
+   validated_at_utc=excluded.validated_at_utc,last_source=null,updated_at=excluded.updated_at,pre_validated=false,
+   override_requested_at_utc=null,override_requested_by=null,override_confirmed_at_utc=null,override_confirmed_by=null,
+   override_reason=null,override_cleared_at_utc=case when timesheet_validations.override_reason is not null
+    then transaction_timestamp() else timesheet_validations.override_cleared_at_utc end,
+   validation_source_kind=excluded.validation_source_kind,validation_source_publication_id=excluded.validation_source_publication_id,
+   validation_source_facts_sha256=excluded.validation_source_facts_sha256,validation_source_actor_user_id=excluded.validation_source_actor_user_id
+  where (timesheet_validations.status,timesheet_validations.reason_code,timesheet_validations.pre_validated,
+   timesheet_validations.validation_source_kind,timesheet_validations.validation_source_publication_id,
+   timesheet_validations.validation_source_facts_sha256,timesheet_validations.validation_source_actor_user_id)
+   is distinct from(excluded.status,excluded.reason_code,false,excluded.validation_source_kind,
+    excluded.validation_source_publication_id,excluded.validation_source_facts_sha256,excluded.validation_source_actor_user_id)
+  returning * into validation;
+  if not found then select * into strict validation from public.timesheet_validations where timesheet_id=target;end if;
+  written:=written||jsonb_build_array(jsonb_build_object('timesheet_id',target,'validation_id',validation.id,'status',validation.status,
+   'reason_code',validation.reason_code,'updated_at',validation.updated_at));
+ end loop;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_VALIDATION_REFRESH_V1','main_timesheet_id',p_timesheet_id,
+  'publication_id',p_publication_id,'facts_hash',facts->>'facts_hash','complete',facts->'complete','reasons',facts->'reasons',
+  'validation_actor_user_id',native_actor,'written',written);
+ select * into r from private.weekly_source_agency_timesheet_change_requests where current_timesheet_id=p_timesheet_id and state='ACTIVE';
+ if found and r.phase='AUTHORISED' then
+  if r.source_publication_id is distinct from p_publication_id or r.source_cas is distinct from
+    private.weekly_source_bulk_source_cas_v1(r.source_cycle_id,array[r.client_id]) then
+   raise exception 'AGENCY_CHANGE_ORIGINAL_SOURCE_CAS_CHANGED' using errcode='40001';end if;
+  select * into strict fin from public.timesheets_financials where id=r.current_financial_id and is_current;
+  if fin.timesheet_id is distinct from r.current_timesheet_id or fin.timesheet_version is distinct from r.current_timesheet_version
+   or fin.authorised_by_user_id::text is distinct from r.native_receipts#>>'{authorise,phase_actor_user_id}'
+   or fin.authorised_at_utc is distinct from(r.native_receipts#>>'{authorise,authorised_at_server}')::timestamptz then
+   raise exception 'AGENCY_CHANGE_GENUINE_AUTHORISE_RECEIPT_REQUIRED' using errcode='55000';end if;
+  select * into strict validation from public.timesheet_validations where timesheet_id=p_timesheet_id;
+  -- Do not enqueue anew from a successful validation replay. A real retained
+  -- post-write receipt for this current row remains a genuine completed queue.
+  if r.native_receipts#>>'{validation_recompute,financial_id}' is distinct from fin.id::text
+   or r.native_receipts#>>'{validation_recompute,facts_sha256}' is distinct from facts->>'facts_hash' then
+   select * into queue from public.ts_financials_outbox where timesheet_id=p_timesheet_id and reason='CONTEXT_CHANGED';
+   if not found then
+    perform public.enqueue_ts_financials_priority(array[p_timesheet_id],'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+    select * into strict queue from public.ts_financials_outbox where timesheet_id=p_timesheet_id and reason='CONTEXT_CHANGED';
+   end if;
+   sig:=public.timesheet_lifecycle_guard_signature_v1(p_timesheet_id,r.contract_week_id,false);
+   signature:=nullif(btrim(coalesce(sig->>'backend_row_signature',sig->>'row_signature',sig->>'signature')),'');
+   if signature is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE' using errcode='55000';end if;
+   receipt:=result||jsonb_build_object('request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),
+    'timesheet_version',r.current_timesheet_version,'financial_id',fin.id,'outbox_id',queue.id,'outbox_reason',queue.reason,
+    'validation_row_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_TYPED_VALIDATION_ROW_V1',to_jsonb(validation)),'hex'),
+    'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid());
+   update private.weekly_source_agency_timesheet_change_requests set native_receipts=native_receipts||jsonb_build_object('validation_refresh',receipt),
+    outbox_id=queue.id,outbox_reason=queue.reason,current_row_signature=signature,version=version+1,updated_at_utc=transaction_timestamp()
+    where id=r.id;
+  end if;
+ end if;
+ -- Superseded positive originals and native reversal legs are not additional
+ -- invoiceable records. They retain an explicit error in this SAME store.
+ for target in select distinct id::uuid from jsonb_array_elements(facts->'pairs') p
+  cross join lateral unnest(array[p->>'reversed_timesheet_id',p->>'reversal_timesheet_id']) id loop
+  -- Preserve the actual retired override in the native audit before clearing
+  -- current authority. An old LEGACY override never authorises this typed row.
+  select * into validation from public.timesheet_validations where timesheet_id=target for update;
+  if found and (validation.override_requested_at_utc is not null or validation.override_requested_by is not null
+    or validation.override_confirmed_at_utc is not null or validation.override_confirmed_by is not null
+    or validation.override_reason is not null) then
+   insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,before_json,after_json,reason)
+   values(gen_random_uuid(),transaction_timestamp(),native_actor,actor.role,'timesheet_validation',target::text,
+    'AGENCY_SUPERSEDED_VALIDATION_OVERRIDE_RETIRED',
+    jsonb_build_object('validation_id',validation.id,'validation_source_kind',validation.validation_source_kind,
+     'status',validation.status,'override_requested_at_utc',validation.override_requested_at_utc,
+     'override_requested_by',validation.override_requested_by,'override_confirmed_at_utc',validation.override_confirmed_at_utc,
+     'override_confirmed_by',validation.override_confirmed_by,'override_reason',validation.override_reason,
+     'override_cleared_at_utc',validation.override_cleared_at_utc),
+    jsonb_build_object('validation_source_kind','AGENCY_INVOICE_WEEK','status','VALIDATION_ERROR',
+     'reason_code','SUPERSEDED_BY_CORRECTION','publication_id',p_publication_id),
+    'SUPERSEDED_BY_CORRECTION');
+  end if;
+  update public.timesheet_validations set status='VALIDATION_ERROR',reason_code='SUPERSEDED_BY_CORRECTION',
+   validated_at_utc=transaction_timestamp(),pre_validated=false,last_source=null,updated_at=transaction_timestamp(),
+   override_requested_at_utc=null,override_requested_by=null,override_confirmed_at_utc=null,override_confirmed_by=null,
+   override_reason=null,override_cleared_at_utc=case when override_requested_at_utc is not null or override_requested_by is not null
+    or override_confirmed_at_utc is not null or override_confirmed_by is not null or override_reason is not null
+    then transaction_timestamp() else override_cleared_at_utc end,
+   validation_source_kind='AGENCY_INVOICE_WEEK',validation_source_publication_id=p_publication_id,
+   validation_source_facts_sha256=decode(facts->>'facts_hash','hex'),validation_source_actor_user_id=native_actor
+   where timesheet_id=target;
+ end loop;
+ insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)
+ values(gen_random_uuid(),transaction_timestamp(),native_actor,actor.role,'WEEKLY_SOURCE_AGENCY_VALIDATION',p_timesheet_id::text,
+  'NATIVE_WHOLE_WEEK_VALIDATION_REFRESHED',jsonb_build_object('publication_id',p_publication_id,'facts_hash',facts->>'facts_hash',
+   'complete',facts->'complete','written',written,'native_actor_source','ACTUAL_AUTHORISE_OR_ACCEPTED_UPLOAD'),reason_value,null);
+ return result;
+exception when no_data_found or too_many_rows then raise exception 'AGENCY_INVOICE_VALIDATION_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function public.weekly_source_agency_week_validation_refresh_v1(uuid,uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_week_validation_refresh_v1(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_week_validation_refresh_v1(uuid,uuid) to service_role;
+
+-- All legacy/reference/override paths ultimately write this existing table.
+-- Preserve non-preset writes and native deletes. A preset status can only carry
+-- rederived typed native completeness; old Mode A and every override refuse.
+create or replace function private.weekly_source_agency_validation_source_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare main_id uuid; facts jsonb; reason_value text; actor_id uuid; expected_status text;
+begin
+ if tg_op='DELETE' then return old;end if;
+ if private.weekly_source_agency_invoice_check_only_v1(new.timesheet_id) is distinct from true
+  and new.validation_source_kind='LEGACY' then return new;end if;
+ if new.status::text in('OVERRIDDEN','OVERRIDE_AWAITING_CONFIRM') then
+  raise exception 'AGENCY_INVOICE_VALIDATION_OVERRIDE_FORBIDDEN' using errcode='55000';end if;
+ if new.override_requested_at_utc is not null or new.override_requested_by is not null
+  or new.override_confirmed_at_utc is not null or new.override_confirmed_by is not null or new.override_reason is not null then
+  raise exception 'AGENCY_INVOICE_VALIDATION_OVERRIDE_FORBIDDEN' using errcode='55000';end if;
+ if new.validation_source_kind is distinct from 'AGENCY_INVOICE_WEEK' or new.last_source is not null then
+  raise exception 'AGENCY_INVOICE_USES_COMPLETENESS_WRITER' using errcode='55000';end if;
+ select cw.timesheet_id into strict main_id from public.timesheets t join public.contract_weeks cw
+  on cw.contract_id=t.contract_id and cw.week_ending_date=t.week_ending_date and coalesce(cw.additional_seq,0)=0 and not cw.is_adjustment
+  where t.timesheet_id=new.timesheet_id;
+ facts:=private.weekly_source_agency_week_facts_v1(main_id);
+ expected_status:=case when facts->'complete'='true'::jsonb then 'VALIDATION_OK' else 'VALIDATION_ERROR' end;
+ reason_value:=case when expected_status='VALIDATION_OK' then null else facts#>>'{reasons,0}' end;
+ if exists(select 1 from jsonb_array_elements(facts->'pairs') p where new.timesheet_id::text in
+  (p->>'reversed_timesheet_id',p->>'reversal_timesheet_id')) then expected_status:='VALIDATION_ERROR';reason_value:='SUPERSEDED_BY_CORRECTION';end if;
+ select coalesce(f.authorised_by_user_id,u.uploaded_by_user_id) into strict actor_id
+  from public.timesheets t join public.weekly_source_uploads u on u.id=(facts->>'upload_id')::uuid
+  left join public.timesheets_financials f on f.timesheet_id=t.timesheet_id and f.is_current and f.timesheet_version=t.version
+  where t.timesheet_id=main_id;
+ if new.validation_source_publication_id::text is distinct from facts->>'publication_id'
+  or new.validation_source_facts_sha256 is distinct from decode(facts->>'facts_hash','hex')
+  or new.validation_source_actor_user_id is distinct from actor_id or new.status::text is distinct from expected_status
+  or new.reason_code is distinct from reason_value or new.pre_validated is distinct from false
+  or new.validated_at_utc is distinct from transaction_timestamp() then
+  raise exception 'AGENCY_INVOICE_GENUINE_COMPLETENESS_REQUIRED' using errcode='55000';end if;
+ return new;
+exception when no_data_found or too_many_rows then raise exception 'AGENCY_INVOICE_VALIDATION_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_validation_source_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_agency_validation_source_guard_v1() from public,anon,authenticated,service_role;
+drop trigger if exists weekly_source_agency_validation_source_guard_v1 on public.timesheet_validations;
+create trigger weekly_source_agency_validation_source_guard_v1 before insert or update on public.timesheet_validations
+ for each row execute function private.weekly_source_agency_validation_source_guard_v1();

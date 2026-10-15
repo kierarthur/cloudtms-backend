@@ -1,0 +1,106 @@
+-- Primary26.4: the actual newly issued ordinary Invoice retires only unrelated
+-- absent/unfinalised subjects in its exact native worker/client week. Native
+-- contact retirement is reused; no send, resolved classification or cash write.
+create or replace function private.weekly_source_agency_issue_close_v1(p_invoice_id uuid)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.invoices%rowtype; actual_audit public.audit_events%rowtype; target record; main_id uuid; facts jsonb;
+  incident record; wait_event record; wait_fact jsonb; protected boolean; actor public.tms_users%rowtype;
+  source_decision jsonb;
+begin
+  select * into strict i from public.invoices where id=p_invoice_id;
+  if i.type::text<>'INVOICE' or i.status::text<>'ISSUED' or i.issued_at_utc is null then return;end if;
+  if not exists(select 1 from public.invoice_lines l where l.invoice_id=i.id and l.timesheet_id is not null
+    and private.weekly_source_agency_invoice_check_only_v1(l.timesheet_id) is true) then return;end if;
+  if current_setting('transaction_isolation') is distinct from 'read committed' then
+    raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001';end if;
+  -- Exact issue-owner audit, including frozen asynchronous issue time distinct
+  -- from its audit observation timestamp. No current-XID or clock fiction.
+  select a.* into strict actual_audit from public.audit_events a
+    where a.object_type='invoice' and a.object_id_text=i.id::text and a.action='INVOICE_ISSUED'
+      and (a.ts_utc=i.issued_at_utc or case when jsonb_typeof(a.after_json->'issue_at_utc')='string'
+        and pg_input_is_valid(coalesce(a.after_json->>'issue_at_utc',''),'timestamptz')
+        then (a.after_json->>'issue_at_utc')::timestamptz=i.issued_at_utc else false end)
+    order by a.ts_utc desc,a.id desc limit 1;
+  select * into strict actor from public.tms_users where id=actual_audit.actor_user_id and is_active;
+  for target in select distinct t.contract_id,t.week_ending_date from public.invoice_lines l
+    join public.timesheets t on t.timesheet_id=l.timesheet_id
+    where l.invoice_id=i.id and private.weekly_source_agency_invoice_check_only_v1(t.timesheet_id) is true
+    order by t.contract_id,t.week_ending_date loop
+    select cw.timesheet_id into strict main_id from public.contract_weeks cw where cw.contract_id=target.contract_id
+      and cw.week_ending_date=target.week_ending_date and coalesce(cw.additional_seq,0)=0 and not cw.is_adjustment;
+    facts:=private.weekly_source_agency_week_facts_v1(main_id);
+    perform private.weekly_source_office_authority_v1(actor.id,'VIEW_SOURCE_PROGRESS',(facts->>'source_group_id')::uuid,
+      (facts->>'client_id')::uuid,target.week_ending_date);
+    if facts->'complete' is distinct from 'true'::jsonb then
+      raise exception 'HEALTHROSTER_VALIDATION_REQUIRED' using errcode='55000';end if;
+    for incident in select d.*,x.issue_family,x.id comparison_id,x.contract_id comparison_contract_id
+      from public.weekly_discrepancy_incidents d
+      join public.weekly_issue_comparison_revisions x on x.id=d.current_comparison_revision_id and x.incident_id=d.id
+      join public.weekly_work_events e on e.id=d.work_event_id and e.candidate_id=d.candidate_id and e.client_id=d.client_id
+      where d.state='OPEN' and d.source_group_id=(facts->>'source_group_id')::uuid and d.source_cycle_id=(facts->>'source_cycle_id')::uuid
+        and d.candidate_id=(facts->>'candidate_id')::uuid and d.client_id=(facts->>'client_id')::uuid
+        and x.contract_id=target.contract_id and x.projection_publication_id=(facts->>'publication_id')::uuid
+        and x.issue_family in ('HEALTHROSTER_NOT_FINALISED','SOURCE_MISSING_OR_NOT_AUTHORISED')
+        and e.work_date between target.week_ending_date-6 and target.week_ending_date
+        and not exists(select 1 from jsonb_array_elements(facts->'records') r
+          cross join lateral jsonb_array_elements(r->'schedule') s where s->>'work_event_id'=d.work_event_id::text)
+        and not exists(select 1 from private.weekly_source_manual_reviews mr where mr.work_event_id=d.work_event_id
+          and mr.candidate_id=d.candidate_id and mr.client_id=d.client_id and mr.state='OPEN')
+        and not exists(select 1 from private.timesheet_correction_requests pending where pending.state='WAITING'
+          and pending.contract_id=target.contract_id and pending.candidate_id=d.candidate_id
+          and pending.client_id=d.client_id and pending.week_ending_date=target.week_ending_date)
+        and not exists(select 1 from private.weekly_source_agency_timesheet_change_requests pending where pending.state='ACTIVE'
+          and pending.contract_id=target.contract_id and pending.candidate_id=d.candidate_id
+          and pending.client_id=d.client_id and pending.week_ending_date=target.week_ending_date)
+        and not exists(select 1 from private.weekly_source_check_only_shift_protections p where p.state='ACTIVE'
+          and p.work_event_id=d.work_event_id and p.candidate_id=d.candidate_id)
+      order by d.id for update of d loop
+      protected:=false;
+      -- Status WAIT alone is not a certificate. The same genuine native wait
+      -- receipt owner is consulted for the latest actual family/event position.
+      for wait_event in select family.root_timesheet_id,event.id event_id
+        from public.weekly_exceptional_pay_target_families family join public.weekly_exceptional_pay_family_events event on event.family_id=family.id
+        where family.contract_id=target.contract_id and family.candidate_id=incident.candidate_id
+          and family.week_ending_date=target.week_ending_date and event.durable_work_event_id=incident.work_event_id and event.state='WAIT'
+          and event.event_sequence=(select max(tail.event_sequence) from public.weekly_exceptional_pay_family_events tail
+            where tail.family_id=family.id and tail.durable_work_event_id=event.durable_work_event_id) order by event.id loop
+        wait_fact:=private.weekly_source_protected_wait_receipt_v1(wait_event.root_timesheet_id,wait_event.event_id);
+        if jsonb_typeof(wait_fact) is distinct from 'object' then
+          raise exception 'AGENCY_INVOICE_QUALIFIED_WAIT_EVIDENCE_UNAVAILABLE' using errcode='55000';end if;
+        protected:=true;
+      end loop;
+      if protected then continue;end if;
+      -- This incident is an actual Source Missing/unfinalised subject. Consume
+      -- the narrow genuine Source Missing/credit owner, never a universal
+      -- Agency pending classifier, status alias, unknown-as-false or money sum.
+      source_decision:=private.weekly_source_kept_as_paid_context_for_publication_v1(incident.work_event_id,actor.id,(facts->>'publication_id')::uuid);
+      if source_decision->>'work_event_id' is distinct from incident.work_event_id::text
+        or source_decision->>'candidate_id' is distinct from incident.candidate_id::text
+        or source_decision->>'client_id' is distinct from incident.client_id::text
+        or source_decision->>'contract_id' is distinct from target.contract_id::text
+        or source_decision->>'projection_publication_id' is distinct from facts->>'publication_id'
+        or source_decision->'decision_needed' is distinct from 'false'::jsonb then
+        continue;
+      end if;
+      update public.weekly_discrepancy_incidents set state='CANCELLED',resolved_at_utc=null,resolution_kind=null
+        where id=incident.id and state='OPEN' and episode_number=incident.episode_number
+          and current_comparison_revision_id=incident.comparison_id;
+      if not found then raise exception 'AGENCY_INVOICE_ISSUE_INCIDENT_STALE' using errcode='40001';end if;
+      perform private.weekly_source_incident_contact_retire_v1(incident.id);
+      insert into public.audit_events(ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,object_id_text,action,
+        before_json,after_json,reason) values(transaction_timestamp(),actor.id,actor.display_name,actor.role,
+        'weekly_discrepancy_incident',incident.id::text,'AGENCY_INVOICE_ISSUE_CANCELLED_UNCARRIED_QUERY',
+        jsonb_build_object('state','OPEN','episode_number',incident.episode_number,'comparison_id',incident.comparison_id),
+        jsonb_build_object('state','CANCELLED','invoice_id',i.id,'invoice_no',i.invoice_no,'issued_at_utc',i.issued_at_utc,
+          'native_issue_audit_id',actual_audit.id,'source_publication_id',facts->'publication_id','week_ending',target.week_ending_date,
+          'resolved_at_utc',null,'resolution_kind',null),'Actual issued preset Invoice; uncarried absent/unfinalised native query retired');
+    end loop;
+  end loop;
+exception when no_data_found or too_many_rows then
+  raise exception 'AGENCY_INVOICE_ISSUE_CLOSE_NATIVE_PROVENANCE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_issue_close_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_issue_close_v1(uuid) from public,anon,authenticated,service_role;

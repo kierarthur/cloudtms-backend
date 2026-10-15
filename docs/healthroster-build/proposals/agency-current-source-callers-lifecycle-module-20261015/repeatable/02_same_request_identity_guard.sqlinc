@@ -1,0 +1,42 @@
+create or replace function private.weekly_source_agency_change_identity_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$
+declare v_mutable constant text[]:=array['state','phase','version','current_timesheet_id','current_timesheet_version',
+  'current_row_signature','return_hold','outbox_id','outbox_reason','current_financial_id','native_receipts',
+  'last_refusal_code','completed_receipt','updated_at_utc','completed_at_utc','updated_by_user_id','completed_by_user_id','current_source_dependency_tokens'];
+begin
+  if tg_op='DELETE' then raise exception 'AGENCY_CHANGE_HISTORY_DELETE_FORBIDDEN' using errcode='55000';end if;
+  if to_jsonb(new)-v_mutable is distinct from to_jsonb(old)-v_mutable then
+    raise exception 'AGENCY_CHANGE_IMMUTABLE_CAPTURE_CHANGED' using errcode='55000';
+  end if;
+  if new.native_receipts->'original_capture' is distinct from old.native_receipts->'original_capture' then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_NATIVE_CAPTURE_CHANGED' using errcode='55000';
+  end if;
+  if new.current_source_dependency_tokens is distinct from old.current_source_dependency_tokens then
+    if old.state is distinct from 'ACTIVE' or not new.current_source_dependency_tokens @> old.current_source_dependency_tokens
+      or new.native_receipts#>>'{source_admission,schema_version}' is distinct from 'WEEKLY_SOURCE_AGENCY_SOURCE_PHASE_ADMISSION_V1'
+      or new.native_receipts#>>'{source_admission,request_id}' is distinct from old.id::text
+      or new.native_receipts#>>'{source_admission,request_sha256}' is distinct from encode(old.request_sha256,'hex')
+      or new.native_receipts#>>'{source_admission,actor_user_id}' is distinct from new.updated_by_user_id::text
+      or new.native_receipts#>>'{source_admission,transaction_id}' is distinct from pg_current_xact_id()::text
+      or new.native_receipts#>>'{source_admission,backend_pid}' is distinct from pg_backend_pid()::text
+      or new.native_receipts#>'{source_admission,source_cas}' is distinct from old.source_cas
+      or new.native_receipts#>>'{source_admission,source_dependency_tokens_sha256}' is distinct from encode(
+        private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',new.current_source_dependency_tokens),'hex') then
+      raise exception 'AGENCY_CHANGE_NATIVE_SOURCE_FOOTPRINT_RECEIPT_REQUIRED' using errcode='55000';end if;
+  end if;
+  if old.state='COMPLETED' and to_jsonb(new) is distinct from to_jsonb(old) then
+    raise exception 'AGENCY_CHANGE_COMPLETED_RECEIPT_IMMUTABLE' using errcode='55000';
+  end if;
+  if to_jsonb(new) is distinct from to_jsonb(old) and new.version<>old.version+1 then
+    raise exception 'AGENCY_CHANGE_PHASE_VERSION_INVALID' using errcode='40001';
+  end if;
+  return new;
+end;
+$function$;
+alter function private.weekly_source_agency_change_identity_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_agency_change_identity_guard_v1() from public,anon,authenticated,service_role;
+create trigger weekly_source_agency_change_identity_guard_v1
+  before update or delete on private.weekly_source_agency_timesheet_change_requests
+  for each row execute function private.weekly_source_agency_change_identity_guard_v1();

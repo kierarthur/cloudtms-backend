@@ -1,0 +1,275 @@
+-- Primary26.4: one factual whole-week derivation. No money, payment, rates,
+-- validation mutation or readiness inferred from a queue/status/caller flag.
+create or replace function private.weekly_source_agency_week_facts_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ t public.timesheets%rowtype; w public.contract_weeks%rowtype; con public.contracts%rowtype;
+ cycle public.weekly_source_cycles%rowtype; pub public.weekly_source_projection_publications%rowtype;
+ upload public.weekly_source_uploads%rowtype; profile public.weekly_source_format_profiles%rowtype;
+ rules jsonb; cycles uuid[]; records jsonb:='[]'; sources jsonb:='[]'; carried jsonb:='[]';
+ coverage jsonb:='[]'; queries jsonb:='[]'; protections jsonb:='[]'; pairs jsonb:='[]'; pending jsonb:='[]';
+ facts jsonb; checks jsonb; reasons text[]:='{}'; rec record; row_data record; item jsonb; source_item jsonb;
+ incident record; response public.weekly_discrepancy_events%rowtype; protection record; pair record;
+ chain jsonb; leg uuid; n integer; hit integer; event_id uuid; valid boolean; disputed boolean; wait_fact jsonb;
+ coverage_ok boolean:=false; finalised_ok boolean:=true; queries_ok boolean:=true; matching_ok boolean:=true;
+ records_ok boolean:=true; authorised_ok boolean:=true; decisions_ok boolean:=true; protection_ok boolean:=true;
+begin
+ if p_timesheet_id is null then raise exception 'AGENCY_INVOICE_TIMESHEET_REQUIRED' using errcode='22023';end if;
+ select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+ select * into strict con from public.contracts where id=t.contract_id;
+ select * into strict w from public.contract_weeks where timesheet_id=t.timesheet_id
+  and contract_id=con.id and week_ending_date=t.week_ending_date and coalesce(additional_seq,0)=0 and not is_adjustment;
+ if t.is_current is distinct from true or t.revoked_at is not null or t.archived_at_utc is not null
+  or t.sheet_scope::text<>'WEEKLY' or t.line_type::text<>'HOURS'
+  or private.weekly_source_agency_invoice_check_only_v1(t.timesheet_id) is distinct from true then
+  raise exception 'AGENCY_INVOICE_TIMESHEET_ROTATED' using errcode='40001';end if;
+ select array_agg(c.id order by c.id) into cycles from public.weekly_source_cycles c
+  join public.weekly_source_groups g on g.id=c.source_group_id and g.active and g.source_family='ROSTER'
+  join public.weekly_source_group_clients m on m.source_group_id=g.id and m.client_id=con.client_id
+   and w.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+  where c.finalisation_week_ending=w.week_ending_date and(c.scope_client_id is null or c.scope_client_id=con.client_id);
+ if cardinality(cycles)>1 then select array_agg(c.id order by c.id) into cycles from public.weekly_source_cycles c
+  where c.id=any(cycles) and c.scope_client_id=con.client_id;end if;
+ if coalesce(cardinality(cycles),0)<>1 then raise exception 'AGENCY_INVOICE_SOURCE_CYCLE_AMBIGUOUS' using errcode='55000';end if;
+ select * into strict cycle from public.weekly_source_cycles where id=cycles[1];
+ rules:=private.weekly_source_effective_rule_set_v1(con.client_id,cycle.id);
+ if rules#>>'{values,invoice_sender}' is distinct from 'AGENCY_INVOICE' then
+  raise exception 'AGENCY_INVOICE_RULE_UNAVAILABLE' using errcode='55000';end if;
+ select * into pub from public.weekly_source_projection_publications where id=cycle.current_projection_publication_id
+  and source_cycle_id=cycle.id and state='CURRENT' and authority_scope_kind='CYCLE' and report_scope_id is null and correction_session_id is null;
+ if pub.id is null then raise exception 'AGENCY_INVOICE_CURRENT_PUBLICATION_UNAVAILABLE' using errcode='55000';end if;
+ perform private.weekly_source_query_current_publication_v1(cycle.id,pub.id);
+ select * into strict upload from public.weekly_source_uploads where id=pub.upload_id and id=cycle.current_complete_upload_id
+  and source_cycle_id=cycle.id and report_scope_id is null and state='CURRENT';
+ if upload.blocked_count<>0 or upload.blocking_economic_duplicate_count<>0 or upload.malformed_count<>0 then
+  raise exception 'AGENCY_INVOICE_SOURCE_MAPPING_UNAVAILABLE' using errcode='55000';end if;
+ if exists(select 1 from public.weekly_source_upload_rows ur left join public.weekly_source_row_resolutions rr
+  on rr.upload_row_id=ur.id and rr.generation=coalesce(pub.projection_generation,pub.authority_scope_version)
+  where ur.upload_id=upload.id and ur.row_finalisation_state='SOURCE_WORKED'
+   and ur.work_date between w.week_ending_date-6 and w.week_ending_date and rr.mapping_state is distinct from 'RESOLVED') then
+  raise exception 'AGENCY_INVOICE_SOURCE_MAPPING_UNAVAILABLE' using errcode='55000';end if;
+ select * into strict profile from public.weekly_source_format_profiles where id=upload.source_format_profile_id and active;
+ if profile.profile_code is distinct from rules#>>'{values,checking_profile_kind}'
+  or not((profile.final_authority_kind='HEALTHROSTER_ACTUAL_ROWS' and profile.row_finalisation_capability='FINALISED_ROW_ONLY')
+    or(profile.profile_code='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' and profile.final_authority_kind='GENERIC_COMPLETE_SNAPSHOT'
+      and profile.row_finalisation_capability='COMPLETE_FILE_ROWS')) then
+  raise exception 'AGENCY_INVOICE_FINALISED_PROFILE_UNAVAILABLE' using errcode='55000';end if;
+ -- COMPLETE is an actual accepted/ticked coverage witness. All seven days are
+ -- tested before evaluating shifts; an export's absence of rows is not coverage.
+ select coalesce(jsonb_agg(jsonb_build_object('publication_id',p.id,'upload_id',u.id,
+  'upload_sha256',encode(u.content_sha256,'hex'),'start',u.confirmed_coverage_start_local_date,
+  'end',u.confirmed_coverage_end_local_date,'confirmed_actor',u.coverage_confirmed_by_user_id,
+  'confirmed_at',u.coverage_confirmed_at_utc) order by p.id),'[]') into coverage
+ from public.weekly_source_projection_publications p join public.weekly_source_uploads u on u.id=p.upload_id
+ where p.source_cycle_id=cycle.id and p.authority_scope_kind='CYCLE' and p.report_scope_id is null
+  and p.state in('CURRENT','STALE') and p.published_at_utc is not null and p.correction_session_id is null
+  and u.state in('CURRENT','SUPERSEDED') and u.coverage_state='COMPLETE' and u.coverage_timezone='Europe/London'
+  and u.coverage_confirmed_by_user_id is not null and u.coverage_confirmed_at_utc is not null
+  and coalesce(u.file_metadata_json->>'import_use','CHECKING')='CHECKING'
+  and exists(select 1 from public.weekly_source_upload_attempts a where a.logical_upload_id=u.id and a.result='ACCEPTED')
+  and (cycle.scope_client_id=con.client_id or exists(select 1 from public.weekly_source_row_resolutions rr
+   join public.weekly_source_upload_rows ur on ur.id=rr.upload_row_id and ur.upload_id=u.id
+   where rr.mapping_state='RESOLVED' and rr.client_id=con.client_id));
+ coverage_ok:=not exists(select 1 from generate_series(0,6) day where not exists(
+  select 1 from jsonb_array_elements(coverage) c where w.week_ending_date-day between (c->>'start')::date and(c->>'end')::date));
+ -- This is the current native finalised tuple, not the worker's signed claim.
+ for row_data in select rr.*,ur.work_date,ur.start_at_local,ur.end_at_local,ur.break_minutes,ur.actual_net_minutes,
+  ur.row_finalisation_state,ur.finalised_by,ur.bounded_raw_columns_json,ur.normalised_row_hash,
+  e.candidate_id event_candidate,e.client_id event_client,e.work_date event_date,e.first_source_group_id
+  from public.weekly_source_row_resolutions rr join public.weekly_source_upload_rows ur on ur.id=rr.upload_row_id
+  left join public.weekly_work_events e on e.id=rr.work_event_id
+  where ur.upload_id=upload.id and rr.generation=coalesce(pub.projection_generation,pub.authority_scope_version)
+   and rr.contract_id=con.id and rr.candidate_id=con.candidate_id and rr.client_id=con.client_id
+   and ur.work_date between w.week_ending_date-6 and w.week_ending_date
+  order by ur.work_date,ur.start_at_local,rr.id loop
+  if row_data.row_finalisation_state='SOURCE_WORKED' then
+   valid:=row_data.mapping_state='RESOLVED' and row_data.work_event_id is not null
+    and row_data.event_candidate=con.candidate_id and row_data.event_client=con.client_id
+    and row_data.event_date=row_data.work_date and row_data.first_source_group_id=cycle.source_group_id
+    and row_data.start_at_local is not null and row_data.end_at_local>row_data.start_at_local
+    and row_data.break_minutes is not null and row_data.actual_net_minutes>0
+    and row_data.paid_minutes=row_data.actual_net_minutes
+    and extract(epoch from(row_data.end_at_local-row_data.start_at_local))/60-row_data.break_minutes=row_data.actual_net_minutes
+    and date_trunc('minute',row_data.start_at_local)=row_data.start_at_local
+    and date_trunc('minute',row_data.end_at_local)=row_data.end_at_local
+    and (profile.row_finalisation_capability<>'FINALISED_ROW_ONLY' or(nullif(btrim(row_data.finalised_by),'') is not null
+     and row_data.finalised_by=row_data.bounded_raw_columns_json->>'finalised_by'));
+   if valid is distinct from true then raise exception 'AGENCY_INVOICE_SOURCE_TUPLE_UNAVAILABLE' using errcode='55000';end if;
+   if exists(select 1 from jsonb_array_elements(sources) s where s->>'work_event_id'=row_data.work_event_id::text) then
+    raise exception 'AGENCY_INVOICE_SOURCE_EVENT_AMBIGUOUS' using errcode='55000';end if;
+   sources:=sources||jsonb_build_array(jsonb_build_object('work_event_id',row_data.work_event_id,'upload_row_id',row_data.upload_row_id,
+    'row_sha256',encode(row_data.normalised_row_hash,'hex'),'date',row_data.work_date,'start',to_char(row_data.start_at_local,'HH24:MI'),
+    'end',to_char(row_data.end_at_local,'HH24:MI'),'end_date',row_data.end_at_local::date,'break_minutes',row_data.break_minutes));
+  end if;
+ end loop;
+ -- Current native reversal/replacement units remain native units. A reversal
+ -- is excluded from the positive records only with the real APPLIED request
+ -- and a valid complete chain. Both native legs must actually be authorised.
+ for pair in select r.* from private.timesheet_correction_requests r where r.contract_id=con.id
+  and r.candidate_id=con.candidate_id and r.client_id=con.client_id and r.week_ending_date=w.week_ending_date
+  and r.state='APPLIED' order by r.id loop
+  chain:=public.timesheet_correction_chain_scope_v1(pair.replacement_timesheet_id,false,32,100);
+  if chain->'valid' is distinct from 'true'::jsonb or chain#>'{requested_correction_unit,valid}' is distinct from 'true'::jsonb
+   or jsonb_typeof(chain#>'{requested_correction_unit,member_ids}') is distinct from 'array'
+   or not(chain#>'{requested_correction_unit,member_ids}' ? pair.replacement_timesheet_id::text)
+   or not(chain#>'{requested_correction_unit,member_ids}' ? pair.reversal_timesheet_id::text) then
+   raise exception 'AGENCY_INVOICE_NATIVE_PAIR_UNAVAILABLE' using errcode='55000';end if;
+  for leg in select value::uuid from jsonb_array_elements_text(chain#>'{requested_correction_unit,member_ids}') loop
+   if not exists(select 1 from public.timesheets x join public.timesheets_financials f on f.timesheet_id=x.timesheet_id
+    and f.is_current and not f.is_stale and f.timesheet_version=x.version
+    and f.candidate_id=con.candidate_id and f.client_id=con.client_id
+    where x.timesheet_id=leg and x.is_current and x.revoked_at is null
+    and x.authorised_at_server is not null and f.authorised_at_utc=x.authorised_at_server) then authorised_ok:=false;end if;
+  end loop;
+  pairs:=pairs||jsonb_build_array(jsonb_build_object('request_id',pair.id,'state_revision',pair.state_revision,
+   'reversed_timesheet_id',pair.reversed_timesheet_id,'reversal_timesheet_id',pair.reversal_timesheet_id,
+   'replacement_timesheet_id',pair.replacement_timesheet_id,'member_ids',chain#>'{requested_correction_unit,member_ids}'));
+ end loop;
+ for rec in select x.*,cw.id week_id from public.contract_weeks cw join public.timesheets x on x.timesheet_id=cw.timesheet_id
+  where cw.contract_id=con.id and cw.week_ending_date=w.week_ending_date and x.is_current and x.archived_at_utc is null
+   and x.sheet_scope::text='WEEKLY' and x.line_type::text='HOURS'
+   and not exists(select 1 from jsonb_array_elements(pairs) p where x.timesheet_id::text in(p->>'reversed_timesheet_id',p->>'reversal_timesheet_id'))
+  order by x.timesheet_id loop
+  if jsonb_typeof(rec.actual_schedule_json) is distinct from 'array' then
+   raise exception 'AGENCY_INVOICE_RECORD_SCHEDULE_UNAVAILABLE' using errcode='55000';end if;
+  if jsonb_array_length(rec.actual_schedule_json)=0 then continue;end if; -- empty P0 is not invoiceable
+  if rec.revoked_at is not null or rec.authorised_at_server is null then authorised_ok:=false;end if;
+  if (select count(*) from public.timesheets_financials f where f.timesheet_id=rec.timesheet_id and f.is_current and not f.is_stale
+    and f.timesheet_version=rec.version and f.authorised_at_utc is not distinct from rec.authorised_at_server
+    and f.candidate_id=con.candidate_id and f.client_id=con.client_id and f.actual_schedule_json is not distinct from rec.actual_schedule_json)<>1 then authorised_ok:=false;end if;
+  records:=records||jsonb_build_array(jsonb_build_object('timesheet_id',rec.timesheet_id,'timesheet_version',rec.version,
+   'contract_week_id',rec.week_id,'authorised_at_server',rec.authorised_at_server,'revoked_at',rec.revoked_at,'schedule',rec.actual_schedule_json));
+  for item in select value from jsonb_array_elements(rec.actual_schedule_json) loop
+   if jsonb_typeof(item) is distinct from 'object' or jsonb_typeof(item->'work_event_id') is distinct from 'string'
+    or coalesce(item->>'work_event_id','')!~'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then
+    raise exception 'AGENCY_INVOICE_RECORD_EVENT_UNBOUND' using errcode='55000';end if;
+   event_id:=(item->>'work_event_id')::uuid;
+   select count(*) into hit from jsonb_array_elements(sources) s where s->>'work_event_id'=event_id::text;
+   if hit<>1 then finalised_ok:=false;matching_ok:=false;else
+    select value into strict source_item from jsonb_array_elements(sources) s(value) where value->>'work_event_id'=event_id::text;
+    if item->>'date' is distinct from source_item->>'date' or item->>'start' is distinct from source_item->>'start'
+     or item->>'end' is distinct from source_item->>'end' or item->>'end_date' is distinct from source_item->>'end_date'
+     or (item->>'break_minutes')::integer is distinct from(source_item->>'break_minutes')::integer then matching_ok:=false;end if;
+   end if;
+   carried:=carried||jsonb_build_array(jsonb_build_object('work_event_id',event_id,'timesheet_id',rec.timesheet_id));
+  end loop;
+ end loop;
+ if exists(select 1 from jsonb_array_elements(carried) r group by r->>'work_event_id' having count(*)<>1)
+  or exists(select 1 from jsonb_array_elements(sources) s where not exists(select 1 from jsonb_array_elements(carried) r
+   where r->>'work_event_id'=s->>'work_event_id')) or jsonb_array_length(carried)<>jsonb_array_length(sources) then records_ok:=false;end if;
+ -- Only a genuine pre-authorisation worker dispute on a finalised carried
+ -- shift can hold invoicing. Reminders and unprotected absent/unfinalised
+ -- subjects are deliberately outside this predicate.
+ for incident in select i.id incident_id,i.work_event_id,i.episode_number,i.candidate_action_state,
+  x.id comparison_id,x.incident_id comparison_incident_id,x.contract_id comparison_contract_id,x.issue_family,
+  x.revision_number,x.projection_publication_id,x.material_comparison_fingerprint,
+  x.candidate_start_at_local,x.candidate_end_at_local,x.candidate_break_minutes,
+  x.system_start_at_local,x.system_end_at_local,x.system_break_minutes from public.weekly_discrepancy_incidents i
+  left join public.weekly_issue_comparison_revisions x on x.id=i.current_comparison_revision_id
+  where i.source_group_id=cycle.source_group_id and i.source_cycle_id=cycle.id and i.candidate_id=con.candidate_id
+   and i.client_id=con.client_id and i.state='OPEN'
+   and exists(select 1 from jsonb_array_elements(carried) r where r->>'work_event_id'=i.work_event_id::text)
+  order by i.id loop
+  if incident.comparison_id is null or incident.comparison_incident_id is distinct from incident.incident_id
+   or incident.comparison_contract_id is distinct from con.id
+   or incident.revision_number is distinct from(select max(revision_number) from public.weekly_issue_comparison_revisions where incident_id=incident.incident_id)
+   or incident.projection_publication_id is distinct from pub.id then raise exception 'AGENCY_INVOICE_QUERY_EVIDENCE_UNAVAILABLE' using errcode='55000';end if;
+  if incident.issue_family<>'SOURCE_HOURS_DIFFER' then continue;end if;
+  response:=null;select * into response from public.weekly_discrepancy_events e where e.incident_id=incident.incident_id
+   and e.issue_episode=incident.episode_number and e.event_kind='CANDIDATE_RESPONDED' and e.actor_kind='CANDIDATE'
+   order by e.occurred_at_utc desc,e.id desc limit 1;
+  disputed:=false;
+  if response.id is not null then
+   if response.expected_comparison_fingerprint is distinct from incident.material_comparison_fingerprint
+    or response.projection_publication_id is distinct from pub.id
+    or response.bounded_payload_json->>'choice' is null
+    or response.bounded_payload_json->>'choice' not in('CANDIDATE_WRONG','CANDIDATE_CORRECT','NEITHER_CORRECT') then
+    raise exception 'AGENCY_INVOICE_QUERY_RESPONSE_UNAVAILABLE' using errcode='55000';end if;
+   if incident.candidate_start_at_local is null or incident.candidate_end_at_local is null
+    or incident.candidate_break_minutes is null or incident.system_start_at_local is null
+    or incident.system_end_at_local is null or incident.system_break_minutes is null then
+    raise exception 'AGENCY_INVOICE_QUERY_TUPLE_UNAVAILABLE' using errcode='55000';end if;
+   disputed:=response.bounded_payload_json->>'choice' in('CANDIDATE_CORRECT','NEITHER_CORRECT')
+    and extract(epoch from(incident.system_end_at_local-incident.system_start_at_local))/60-incident.system_break_minutes
+      <=extract(epoch from(incident.candidate_end_at_local-incident.candidate_start_at_local))/60-incident.candidate_break_minutes
+    and exists(
+    select 1 from jsonb_array_elements(records) r join jsonb_array_elements(carried) a
+     on a->>'timesheet_id'=r->>'timesheet_id' and a->>'work_event_id'=incident.work_event_id::text
+     where (r->>'authorised_at_server')::timestamptz is null
+      or response.occurred_at_utc<=(r->>'authorised_at_server')::timestamptz);
+  elsif incident.candidate_action_state='RESPONDED' then raise exception 'AGENCY_INVOICE_QUERY_RESPONSE_UNAVAILABLE' using errcode='55000';end if;
+  if disputed then queries_ok:=false;end if;
+  queries:=queries||jsonb_build_array(jsonb_build_object('incident_id',incident.incident_id,'comparison_id',incident.comparison_id,
+   'comparison_fingerprint',encode(incident.material_comparison_fingerprint,'hex'),'response_id',response.id,'disputed',disputed));
+ end loop;
+ -- Existing Source WAIT remains a genuine native receipt, distinct from the
+ -- planned check-only intent. No event status alone establishes qualified WAIT.
+ for protection in select family.root_timesheet_id,e.id event_id,e.durable_work_event_id
+  from public.weekly_exceptional_pay_target_families family
+  join public.weekly_exceptional_pay_family_events e on e.family_id=family.id
+  where family.contract_id=con.id and family.candidate_id=con.candidate_id
+   and family.week_ending_date=w.week_ending_date and e.state='WAIT'
+   and e.event_sequence=(select max(tail.event_sequence) from public.weekly_exceptional_pay_family_events tail
+    where tail.family_id=family.id and tail.durable_work_event_id=e.durable_work_event_id) order by e.id loop
+  wait_fact:=private.weekly_source_protected_wait_receipt_v1(protection.root_timesheet_id,protection.event_id);
+  if jsonb_typeof(wait_fact) is distinct from 'object' then
+   raise exception 'AGENCY_INVOICE_QUALIFIED_WAIT_EVIDENCE_UNAVAILABLE' using errcode='55000';end if;
+  protection_ok:=false;reasons:=array_append(reasons,'PROTECTED_SHIFT_WAITING');
+  protections:=protections||jsonb_build_array(jsonb_build_object('native_wait_event_id',protection.event_id,
+   'work_event_id',protection.durable_work_event_id,'qualified_receipt',wait_fact));
+ end loop;
+ select coalesce(jsonb_agg(jsonb_build_object('request_id',r.id,'state_revision',r.state_revision) order by r.id),'[]') into pending
+  from private.timesheet_correction_requests r where r.contract_id=con.id and r.candidate_id=con.candidate_id
+   and r.client_id=con.client_id and r.week_ending_date=w.week_ending_date and r.state='WAITING';
+ decisions_ok:=jsonb_array_length(pending)=0 and not exists(select 1 from private.weekly_source_manual_reviews r
+  where r.contract_id=con.id and r.candidate_id=con.candidate_id and r.client_id=con.client_id
+   and r.work_date between w.week_ending_date-6 and w.week_ending_date and r.state='OPEN'
+   and exists(select 1 from jsonb_array_elements(carried) event where event->>'work_event_id'=r.work_event_id::text));
+ for protection in select p.* from private.weekly_source_check_only_shift_protections p where p.candidate_id=con.candidate_id
+  and p.contract_id=con.id and p.client_id=con.client_id and p.week_ending_date=w.week_ending_date and p.state='ACTIVE' order by p.id loop
+  select count(*) into hit from jsonb_array_elements(sources) s where s->>'work_event_id'=protection.work_event_id::text;
+  if hit=0 then protection_ok:=false;reasons:=array_append(reasons,'PROTECTED_SHIFT_WAITING');else
+   select value into strict source_item from jsonb_array_elements(sources) s(value) where s->>'work_event_id'=protection.work_event_id::text;
+   if protection.protected_start_at_local is distinct from(source_item->>'date')::date+(source_item->>'start')::time
+    or protection.protected_end_at_local is distinct from(source_item->>'end_date')::date+(source_item->>'end')::time
+    or protection.protected_break_minutes is distinct from(source_item->>'break_minutes')::integer then
+    protection_ok:=false;reasons:=array_append(reasons,'PROTECTED_HOURS_DIFFER');end if;
+  end if;
+  protections:=protections||jsonb_build_array(jsonb_build_object('id',protection.id,'version',protection.version,'work_event_id',protection.work_event_id,
+   'start',protection.protected_start_at_local,'end',protection.protected_end_at_local,'break_minutes',protection.protected_break_minutes));
+ end loop;
+ if not coverage_ok then reasons:=array_prepend('COVERAGE_MISSING',reasons);end if;
+ if not finalised_ok then reasons:=array_append(reasons,'NOT_FINALISED');end if;
+ if not queries_ok then reasons:=array_append(reasons,'QUERY_UNRESOLVED');end if;
+ if not matching_ok then reasons:=array_append(reasons,'HOURS_DIFFER');end if;
+ if not records_ok then reasons:=array_append(reasons,'RECORDS_NOT_ALIGNED');end if;
+ if not authorised_ok then reasons:=array_append(reasons,'NOT_AUTHORISED');end if;
+ if not decisions_ok then reasons:=array_append(reasons,'CORRECTION_PENDING');end if;
+ checks:=jsonb_build_object('coverage',coverage_ok,'finalised',finalised_ok,'pre_authorisation_queries',queries_ok,'matching',matching_ok,
+  'records_equal_source',records_ok,'authorised_units',authorised_ok,'no_pending_decision',decisions_ok,'protected_resolved',protection_ok);
+ facts:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_WEEK_FACTS_V1','main_timesheet_id',t.timesheet_id,
+  'main_contract_week_id',w.id,'contract_id',con.id,'candidate_id',con.candidate_id,'client_id',con.client_id,'week_ending',w.week_ending_date,
+  'source_cycle_id',cycle.id,'source_group_id',cycle.source_group_id,'publication_id',pub.id,'upload_id',upload.id,
+  'rule_set_version_id',rules->'rule_set_version_id','coverage',coverage,'finalised_source',sources,'records',records,
+  'pairs',pairs,'queries',queries,'pending_corrections',pending,'protections',protections,'conditions',checks,'reasons',to_jsonb(reasons));
+ if jsonb_array_length(records)>100 or jsonb_array_length(sources)>100 or octet_length(facts::text)>2097152 then
+  raise exception 'AGENCY_INVOICE_WEEK_FACTS_BOUND_EXCEEDED' using errcode='54000';end if;
+ return facts||jsonb_build_object('complete',cardinality(reasons)=0,'facts_hash',encode(private.weekly_source_sha256_jsonb_v1(
+  'WEEKLY_SOURCE_AGENCY_NATIVE_WEEK_FACTS_V1',facts),'hex'));
+exception when no_data_found or too_many_rows then raise exception 'AGENCY_INVOICE_WEEK_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_week_facts_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_week_facts_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_agency_week_complete_v1(p_timesheet_id uuid)
+returns table(complete boolean,reasons text[],facts_hash text) language sql stable security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$
+ select (f->>'complete')::boolean,array(select jsonb_array_elements_text(f->'reasons')),f->>'facts_hash'
+ from(select private.weekly_source_agency_week_facts_v1(p_timesheet_id) f) s;
+$function$;
+alter function private.weekly_source_agency_week_complete_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_week_complete_v1(uuid) from public,anon,authenticated,service_role;

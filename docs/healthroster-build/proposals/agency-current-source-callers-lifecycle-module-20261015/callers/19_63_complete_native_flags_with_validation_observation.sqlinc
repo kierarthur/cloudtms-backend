@@ -1,0 +1,199 @@
+-- Primary26.5's native per-event flag derivation. It is owner-private and
+-- supplies no cash, quantity certificate, scope override or browser capability.
+-- The existing Source scope refuses the genuine revoked UNA phase. Its native
+-- query-facts body is shared through an owner-only admitted Agency adapter;
+-- an unavailable native result is never relabelled to a clear query state.
+create or replace function private.weekly_source_agency_segment_flags_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+ e public.weekly_work_events%rowtype; i public.weekly_discrepancy_incidents%rowtype;
+ comparison public.weekly_issue_comparison_revisions%rowtype;
+ response public.weekly_discrepancy_events%rowtype;
+ segment jsonb; source_entry jsonb; flag jsonb; flags jsonb:='[]'::jsonb; basis jsonb:='[]'::jsonb;
+ event_id uuid; count_value integer; active_protection boolean; disputed boolean;
+ candidate_minutes numeric; source_minutes numeric; cutoff timestamptz; frame jsonb; result jsonb;
+ native_query_facts jsonb; query_item jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001';end if;
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ if r.state<>'ACTIVE' or r.phase not in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT','AUTHORISED')
+  or private.weekly_source_agency_change_request_sha256_v1(r.contract_week_id,r.reason,r.initial_row_signature,
+   r.request_key,r.actor_user_id,r.native_receipts->'original_capture') is distinct from r.request_sha256 then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_REQUEST_DIGEST_INVALID' using errcode='55000';end if;
+ if private.weekly_source_pay_actor_allowed_v1(r.updated_by_user_id) is distinct from true then
+  raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+ perform private.weekly_source_office_authority_v1(r.updated_by_user_id,'VIEW_PAY_WORK',r.source_group_id,r.client_id,r.week_ending_date);
+ if private.weekly_source_bulk_source_cas_v1(r.source_cycle_id,array[r.client_id]) is distinct from r.source_cas
+  or private.weekly_source_effective_rule_set_v1(r.client_id,r.source_cycle_id)->>'rule_set_version_id'
+    is distinct from r.rule_set_version_id::text then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_SOURCE_CAS_CHANGED' using errcode='40001';end if;
+ select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+ select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current;
+ if t.timesheet_id is distinct from r.initial_timesheet_id or t.version is distinct from r.current_timesheet_version
+  or t.contract_id is distinct from r.contract_id or t.week_ending_date is distinct from r.week_ending_date
+  or t.is_current is distinct from true or t.archived_at_utc is not null
+  or f.id is distinct from r.current_financial_id or f.timesheet_version is distinct from t.version
+  or f.locked_by_invoice_id is not null or exists(select 1 from public.invoice_lines where timesheet_id=t.timesheet_id)
+  or t.actual_schedule_json is distinct from r.native_receipts#>'{original_capture,schedule}'
+  or f.actual_schedule_json is distinct from t.actual_schedule_json
+  or f.invoice_breakdown_json->>'mode' is distinct from 'SEGMENTS'
+  or jsonb_typeof(f.invoice_breakdown_json->'segments') is distinct from 'array'
+  or jsonb_array_length(f.invoice_breakdown_json->'segments')>100
+  or jsonb_array_length(f.invoice_breakdown_json->'segments')<>jsonb_array_length(t.actual_schedule_json) then
+  raise exception 'AGENCY_CHANGE_SEGMENT_NATIVE_TARGET_CHANGED' using errcode='40001';end if;
+ -- During the genuine E7/E25/E26 observation, row signature/currentness has
+ -- already changed. Only its existing native frame, actual XID/PID and snapshot
+ -- cut can admit that intermediate phase; no caller assertion is accepted.
+ if r.phase in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING') then
+  frame:=r.native_receipts->'financial_write_frame';
+  if frame->>'request_id' is distinct from r.id::text
+   or frame->>'request_sha256' is distinct from encode(r.request_sha256,'hex')
+   or frame->>'transaction_id' is distinct from pg_current_xact_id()::text
+   or frame->>'backend_pid' is distinct from pg_backend_pid()::text
+   or frame->>'phase_actor_user_id' is distinct from r.updated_by_user_id::text
+   or frame->>'timesheet_id' is distinct from t.timesheet_id::text
+   or frame->>'timesheet_version' is distinct from t.version::text
+   or frame->'source_cas' is distinct from r.source_cas
+   or frame->>'mode' not in('MANUAL','RECOMPUTE') or frame->>'mode' is null then
+   raise exception 'AGENCY_CHANGE_GENUINE_FINANCIAL_FRAME_REQUIRED' using errcode='55000';end if;
+ else
+  r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,
+    r.initial_row_signature,r.request_key,r.updated_by_user_id);
+ end if;
+ cutoff:=transaction_timestamp();
+ if r.phase='AUTHORISED' then
+  if r.native_receipts#>>'{authorise,result,ok}' is distinct from 'true'
+   or r.native_receipts#>>'{authorise,result,timesheet_id}' is distinct from t.timesheet_id::text
+   or (r.native_receipts#>>'{authorise,financial_id}' is distinct from f.id::text
+    and coalesce((r.native_receipts#>>'{validation_write_frame,schema_version}'='WEEKLY_SOURCE_AGENCY_AUTHORISED_WRITE_FRAME_V1'
+      and r.native_receipts#>>'{validation_write_frame,request_id}'=r.id::text
+      and r.native_receipts#>>'{validation_write_frame,request_sha256}'=encode(r.request_sha256,'hex')
+      and r.native_receipts#>>'{validation_write_frame,transaction_id}'=pg_current_xact_id()::text
+      and r.native_receipts#>>'{validation_write_frame,backend_pid}'=pg_backend_pid()::text
+      and r.native_receipts#>>'{validation_write_frame,prior_financial_id}'=r.native_receipts#>>'{validation_refresh,financial_id}'
+      and exists(select 1 from public.timesheets_financials prior where prior.id::text=r.native_receipts#>>'{validation_write_frame,prior_financial_id}'
+        and not prior.is_current and prior.timesheet_id=t.timesheet_id and prior.authorised_at_utc=t.authorised_at_server)),false) is distinct from true)
+   or (r.native_receipts#>>'{authorise,authorised_at_server}')::timestamptz is distinct from t.authorised_at_server
+   or f.authorised_by_user_id::text is distinct from r.native_receipts#>>'{authorise,phase_actor_user_id}'
+   or t.authorised_at_server is null or t.revoked_at is not null then
+   raise exception 'AGENCY_CHANGE_GENUINE_AUTHORISE_RECEIPT_REQUIRED' using errcode='55000';end if;
+  cutoff:=t.authorised_at_server;
+ elsif t.authorised_at_server is not null then
+  raise exception 'AGENCY_CHANGE_SEGMENT_NATIVE_TARGET_CHANGED' using errcode='40001';end if;
+ native_query_facts:=private.weekly_source_agency_native_query_facts_v1(r.id);
+ if native_query_facts->'ok' is distinct from 'true'::jsonb or native_query_facts->>'code' is distinct from 'OK'
+  or jsonb_typeof(native_query_facts->'hours_incidents') is distinct from 'array'
+  or jsonb_typeof(native_query_facts->'manual_reviews') is distinct from 'array'
+  or jsonb_typeof(native_query_facts->'blocked') is distinct from 'boolean'
+  or coalesce(native_query_facts->>'query_state_sha256','')!~'^[0-9a-f]{64}$'
+  or native_query_facts#>>'{scope,root_timesheet_id}' is distinct from t.timesheet_id::text
+  or native_query_facts#>>'{scope,root_version}' is distinct from t.version::text
+  or native_query_facts#>>'{scope,candidate_id}' is distinct from r.candidate_id::text
+  or native_query_facts#>>'{scope,client_id}' is distinct from r.client_id::text
+  or native_query_facts#>>'{scope,contract_id}' is distinct from r.contract_id::text
+  or native_query_facts#>>'{scope,week_ending_date}' is distinct from r.week_ending_date::text then
+  raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+ for segment in select value from jsonb_array_elements(f.invoice_breakdown_json->'segments') loop
+  if jsonb_typeof(segment) is distinct from 'object' or nullif(segment->>'segment_id','') is null
+   or segment->>'work_event_id'!~'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+   or segment->>'work_event_id' is null or segment->>'source_shift_id' is distinct from segment->>'work_event_id' then
+   raise exception 'AGENCY_CHANGE_SEGMENT_EVENT_UNBOUND' using errcode='55000';end if;
+  event_id:=(segment->>'work_event_id')::uuid;
+  select count(*) into count_value from jsonb_array_elements(t.actual_schedule_json) s where s->>'work_event_id'=event_id::text;
+  if count_value<>1 then raise exception 'AGENCY_CHANGE_SEGMENT_EVENT_AMBIGUOUS' using errcode='55000';end if;
+  select value into strict source_entry from jsonb_array_elements(t.actual_schedule_json) s(value) where value->>'work_event_id'=event_id::text;
+  select * into strict e from public.weekly_work_events where id=event_id;
+  if e.candidate_id is distinct from r.candidate_id or e.client_id is distinct from r.client_id
+   or e.first_source_group_id is distinct from r.source_group_id or e.work_date::text is distinct from source_entry->>'date'
+   or segment->>'date' is distinct from source_entry->>'date' or segment->>'start' is distinct from source_entry->>'start'
+   or segment->>'end' is distinct from source_entry->>'end'
+   or (segment->>'break_mins')::numeric is distinct from (source_entry->>'break_minutes')::numeric then
+   raise exception 'AGENCY_CHANGE_SEGMENT_EVENT_UNBOUND' using errcode='55000';end if;
+  active_protection:=exists(select 1 from private.weekly_source_check_only_shift_protections p
+   where p.candidate_id=e.candidate_id and p.work_event_id=e.id and p.state='ACTIVE');
+  if active_protection and exists(select 1 from private.weekly_source_check_only_shift_protections p
+   where p.candidate_id=e.candidate_id and p.work_event_id=e.id and p.state='ACTIVE'
+    and (p.client_id is distinct from r.client_id or p.contract_id is distinct from r.contract_id
+      or p.week_ending_date is distinct from r.week_ending_date or p.work_date is distinct from e.work_date)) then
+   raise exception 'AGENCY_CHANGE_PROTECTION_EVENT_SCOPE_CHANGED' using errcode='40001';end if;
+  disputed:=false;i:=null;comparison:=null;response:=null;query_item:=null;
+  select count(*) into count_value from jsonb_array_elements(native_query_facts->'hours_incidents') q
+   where q->>'work_event_id'=e.id::text;
+  if count_value>1 then raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+  if count_value=1 then
+   select value into strict query_item from jsonb_array_elements(native_query_facts->'hours_incidents') q(value)
+    where value->>'work_event_id'=e.id::text;
+   if query_item->>'source_group_id' is distinct from r.source_group_id::text
+    or query_item->>'candidate_id' is distinct from r.candidate_id::text or query_item->>'client_id' is distinct from r.client_id::text
+    or query_item->>'comparison_contract_id' is distinct from r.contract_id::text then
+    raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+  end if;
+  select * into i from public.weekly_discrepancy_incidents where source_group_id=r.source_group_id and work_event_id=e.id and state='OPEN';
+  if found then
+   select * into strict comparison from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
+   if query_item->>'id' is distinct from i.id::text or query_item->>'current_comparison_revision_id' is distinct from comparison.id::text
+    or query_item->>'material_comparison_fingerprint' is distinct from encode(comparison.material_comparison_fingerprint,'hex')
+    or i.candidate_id is distinct from r.candidate_id or i.client_id is distinct from r.client_id
+    or comparison.incident_id is distinct from i.id or comparison.contract_id is distinct from r.contract_id
+    or comparison.id is distinct from(select id from public.weekly_issue_comparison_revisions
+      where incident_id=i.id order by revision_number desc limit 1) then
+    raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+   if comparison.issue_family='SOURCE_HOURS_DIFFER' then
+    if comparison.source_presence is distinct from 'PRESENT'
+     or comparison.candidate_timesheet_id is distinct from r.initial_timesheet_id
+     or comparison.candidate_timesheet_revision is distinct from r.initial_timesheet_version
+     or comparison.projection_publication_id is distinct from r.source_publication_id
+     or comparison.system_start_at_local is distinct from (source_entry->>'date')::date+(source_entry->>'start')::time
+     or comparison.system_end_at_local is distinct from (source_entry->>'end_date')::date+(source_entry->>'end')::time
+     or comparison.system_break_minutes is distinct from (source_entry->>'break_minutes')::integer then
+     raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SOURCE_UNAVAILABLE' using errcode='55000';end if;
+    select * into response from public.weekly_discrepancy_events where incident_id=i.id and issue_episode=i.episode_number
+     and event_kind='CANDIDATE_RESPONDED' and actor_kind='CANDIDATE' order by occurred_at_utc desc,id desc limit 1;
+    if found then
+     if response.expected_comparison_fingerprint is distinct from comparison.material_comparison_fingerprint
+      or response.projection_publication_id is distinct from comparison.projection_publication_id
+      or response.bounded_payload_json->>'choice' is null
+      or response.bounded_payload_json->>'choice' not in('CANDIDATE_WRONG','CANDIDATE_CORRECT','NEITHER_CORRECT') then
+      raise exception 'AGENCY_CHANGE_NATIVE_QUERY_RESPONSE_UNAVAILABLE' using errcode='55000';end if;
+     if response.occurred_at_utc<=cutoff and response.bounded_payload_json->>'choice' in('CANDIDATE_CORRECT','NEITHER_CORRECT') then
+      if comparison.candidate_start_at_local is null or comparison.candidate_end_at_local is null
+       or comparison.candidate_break_minutes is null or comparison.candidate_end_at_local<=comparison.candidate_start_at_local then
+       raise exception 'AGENCY_CHANGE_NATIVE_QUERY_CLAIM_UNAVAILABLE' using errcode='55000';end if;
+      candidate_minutes:=extract(epoch from(comparison.candidate_end_at_local-comparison.candidate_start_at_local))/60-comparison.candidate_break_minutes;
+      source_minutes:=extract(epoch from(comparison.system_end_at_local-comparison.system_start_at_local))/60-comparison.system_break_minutes;
+      if candidate_minutes<=0 or source_minutes<=0 then
+       raise exception 'AGENCY_CHANGE_NATIVE_QUERY_CLAIM_UNAVAILABLE' using errcode='55000';end if;
+      disputed:=source_minutes<=candidate_minutes;
+     end if;
+    elsif i.candidate_action_state='RESPONDED' then
+     raise exception 'AGENCY_CHANGE_NATIVE_QUERY_RESPONSE_UNAVAILABLE' using errcode='55000';end if;
+   end if;
+  elsif query_item is not null then
+   raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';
+  end if;
+  flag:=jsonb_build_object('segment_id',segment->>'segment_id','exclude_from_pay',active_protection or disputed);
+  flags:=flags||jsonb_build_array(flag);
+  basis:=basis||jsonb_build_array(jsonb_build_object('work_event_id',e.id,'source_entry',source_entry,
+   'active_protection',active_protection,'disputed_before_authorisation',disputed,
+   'incident_id',i.id,'comparison_id',comparison.id,'response_event_id',response.id));
+ end loop;
+ if (select count(distinct s->>'segment_id') from jsonb_array_elements(flags) s)<>jsonb_array_length(flags) then
+  raise exception 'AGENCY_CHANGE_SEGMENT_EVENT_AMBIGUOUS' using errcode='55000';end if;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_SEGMENT_FLAGS_V1','request_id',r.id,
+  'request_sha256',encode(r.request_sha256,'hex'),'timesheet_id',t.timesheet_id,'timesheet_version',t.version,
+  'financial_id',f.id,'phase_actor_user_id',r.updated_by_user_id,'source_cas',r.source_cas,'flags',flags,'basis',basis,
+  'native_query_state_sha256',native_query_facts->'query_state_sha256');
+ if octet_length(result::text)>65536 then raise exception 'AGENCY_CHANGE_SEGMENT_FLAGS_BOUND_EXCEEDED' using errcode='54000';end if;
+ return result;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_CHANGE_NATIVE_SEGMENT_FLAGS_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_segment_flags_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_segment_flags_v1(uuid) from public,anon,authenticated,service_role;

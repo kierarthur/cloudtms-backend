@@ -1,0 +1,28 @@
+[
+  {
+    "destination": "repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc",
+    "before": "reference/91_current_request_assert.sqlinc",
+    "hunks": [
+      {
+        "before": "",
+        "after": "  -- Every advancing native phase rechecks the actual immutable original claim.\n  -- The helper retains unavailable/absence semantics; no claim is manufactured.\n  perform private.weekly_source_agency_original_claim_recheck_v1(v_request.id);\n"
+      }
+    ],
+    "reverse_kind": "REMOVE_ONE_UNIQUE_CALL_AND_COMMENT",
+    "before_sha256": "56feb3d665a4ccc73d1d5ddf64c577bace4227c71a46825382fbf1a8bbba5921",
+    "after_sha256": "c88602f08cffa93133bfb46ef335cdcd3e665e3d2d74c1804077d36e2d164197"
+  },
+  {
+    "destination": "repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc",
+    "before": "reference/root_current_raw05.sqlinc",
+    "hunks": [
+      {
+        "before": "",
+        "after": " perform private.weekly_source_agency_active_source_mutation_assert_v1('public.'||tg_table_name,\n  case when tg_op in('UPDATE','DELETE') then to_jsonb(old) end,\n  case when tg_op in('INSERT','UPDATE') then to_jsonb(new) end,tokens||nested_tokens);\n"
+      }
+    ],
+    "reverse_kind": "REMOVE_ONLY_104_BEFORE_CALL_DELTA",
+    "before_sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de",
+    "after_sha256": "4d63cf74e5b3b08ad9265a775bf3618b2fd25c81afef0fa40ffc5fc9e5a5b25b"
+  }
+]

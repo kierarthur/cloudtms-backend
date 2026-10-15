@@ -1,0 +1,53 @@
+-- Selection-only witness of the unchanged invoice editor's SEGMENTS arm.
+-- No monetary aggregation, rates, VAT, rounding, line construction or mutation.
+create or replace function private.weekly_source_agency_invoice_segment_selection_v1(
+ p_timesheet_id uuid,p_financial_id uuid,p_invoice_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare fin public.timesheets_financials%rowtype; invoice public.invoices%rowtype;
+ ts public.timesheets%rowtype; pc record; segment jsonb; selected jsonb:='[]'::jsonb;
+ natural_start date; invoice_week date; target_week date; reference text;
+begin
+ select * into strict invoice from public.invoices where id=p_invoice_id;
+ select * into strict ts from public.timesheets where timesheet_id=p_timesheet_id and is_current;
+ select * into strict fin from public.timesheets_financials where id=p_financial_id and timesheet_id=ts.timesheet_id
+  and is_current and timesheet_version=ts.version and client_id=invoice.client_id;
+ if invoice.type is distinct from 'INVOICE' or invoice.status not in('DRAFT','ON_HOLD')
+  or invoice.issued_at_utc is not null or invoice.paid_at_utc is not null
+  or private.weekly_source_agency_invoice_check_only_v1(ts.timesheet_id) is distinct from true
+  or fin.processing_status::text is distinct from 'READY_FOR_INVOICE' or fin.is_stale is distinct from false
+  or fin.invoice_breakdown_json->>'mode' is distinct from 'SEGMENTS'
+  or jsonb_typeof(fin.invoice_breakdown_json->'segments') is distinct from 'array'
+  or jsonb_array_length(fin.invoice_breakdown_json->'segments')>100 then
+  raise exception 'AGENCY_DRAFT_NATIVE_SELECTION_UNAVAILABLE' using errcode='55000';end if;
+ invoice_week:=(invoice.header_snapshot_json#>>'{meta,invoice_week_start}')::date;
+ natural_start:=ts.week_ending_date-6;
+ if invoice_week is null then raise exception 'AGENCY_DRAFT_NATIVE_SELECTION_UNAVAILABLE' using errcode='55000';end if;
+ select * into strict pc from public.v_ts_invoice_precheck where timesheet_id=ts.timesheet_id;
+ for segment in select value from jsonb_array_elements(fin.invoice_breakdown_json->'segments') loop
+  if jsonb_typeof(segment) is distinct from 'object' or nullif(btrim(segment->>'segment_id'),'') is null then
+   raise exception 'AGENCY_DRAFT_NATIVE_COMPONENT_UNBOUND' using errcode='55000';end if;
+  if nullif(btrim(coalesce(segment->>'invoice_locked_invoice_id','')),'') is not null then continue;end if;
+  target_week:=nullif(btrim(coalesce(segment->>'invoice_target_week_start','')),'')::date;
+  reference:=btrim(coalesce(segment->>'ref_num',''));
+  if pc.require_reference_to_invoice is true and reference='' then continue;end if;
+  if target_week is null or target_week=natural_start then
+   if invoice_week<>natural_start then continue;end if;
+   selected:=selected||jsonb_build_array(segment);
+  elsif invoice_week=target_week and target_week<=(now() at time zone 'Europe/London')::date then
+   selected:=selected||jsonb_build_array(segment);
+  end if;
+ end loop;
+ if selected is distinct from fin.invoice_breakdown_json->'segments'
+  or (select count(distinct s->>'segment_id') from jsonb_array_elements(selected) s)<>jsonb_array_length(selected) then
+  raise exception 'AGENCY_DRAFT_ROUND_TRIP_NATIVE_COMPONENT_SUBSET_REFUSED' using errcode='55000';end if;
+ return jsonb_build_object('schema_version','INVOICE_EDIT_NATIVE_SEGMENT_SELECTION_WITNESS_V1',
+  'timesheet_id',ts.timesheet_id,'financial_id',fin.id,'invoice_id',invoice.id,
+  'invoice_week_start',invoice_week,'segments',selected);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_DRAFT_NATIVE_SELECTION_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_invoice_segment_selection_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_invoice_segment_selection_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

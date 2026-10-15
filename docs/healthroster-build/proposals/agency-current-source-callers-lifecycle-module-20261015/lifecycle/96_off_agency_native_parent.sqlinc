@@ -1,0 +1,132 @@
+-- Finite actual Agency authority for OFF discovery and native command dispatch.
+-- No caller phase/actor/scope override, Source correction alias, or new journey.
+create or replace function private.weekly_source_off_rule_agency_parent_v1(
+ p_operation text,p_native_request jsonb,p_actor_user_id uuid,p_require_active boolean
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ cw public.contract_weeks%rowtype; k public.contracts%rowtype; t public.timesheets%rowtype;
+ c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype; cycles uuid[]; actor uuid; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_operation='weekly_source_agency_timesheet_change_v1' then
+  if not private.weekly_source_qualification_closed_object_v1(p_native_request,
+     array['p_contract_week_id','p_reason','p_expected_signature','p_request_key','p_actor_user_id'])
+    or jsonb_typeof(p_native_request->'p_actor_user_id') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_contract_week_id') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_reason') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_expected_signature') is distinct from 'string'
+    or jsonb_typeof(p_native_request->'p_request_key') is distinct from 'string'
+    or length(p_native_request->>'p_reason') not between 1 and 2000
+    or length(p_native_request->>'p_expected_signature') not between 1 and 512
+    or length(p_native_request->>'p_request_key') not between 1 and 200 then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  actor:=(p_native_request->>'p_actor_user_id')::uuid;
+  if actor is distinct from p_actor_user_id then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_ACTOR_CHANGED' using errcode='42501';end if;
+  select * into strict cw from public.contract_weeks where id=(p_native_request->>'p_contract_week_id')::uuid;
+ else
+  if p_operation in('weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1') then
+   if not private.weekly_source_qualification_closed_object_v1(p_native_request,array['p_request_id','p_actor_user_id'])
+     or jsonb_typeof(p_native_request->'p_actor_user_id') is distinct from 'string' then
+    raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  elsif p_operation in('weekly_source_agency_change_worker_context_v1','weekly_source_agency_validation_context_v1') then
+   if not private.weekly_source_qualification_closed_object_v1(p_native_request,array['p_request_id']) then
+    raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  elsif p_operation in('weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_apply_v1') then
+   if not private.weekly_source_qualification_closed_object_v1(p_native_request,
+      array['p_request_id','p_expected_request_version','p_expected_context_sha256','p_snapshot'])
+     or jsonb_typeof(p_native_request->'p_expected_request_version') is distinct from 'number'
+     or p_native_request->>'p_expected_request_version' !~ '^[1-9][0-9]*$'
+     or (p_native_request->>'p_expected_request_version')::bigint>9007199254740991
+     or jsonb_typeof(p_native_request->'p_expected_context_sha256') is distinct from 'string'
+     or p_native_request->>'p_expected_context_sha256' !~ '^[0-9a-f]{64}$'
+     or jsonb_typeof(p_native_request->'p_snapshot') is distinct from 'object'
+     or octet_length((p_native_request->'p_snapshot')::text)>1048576 then
+    raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  else raise exception 'WEEKLY_SOURCE_OFF_AGENCY_OPERATION_REFUSED' using errcode='42501';end if;
+  if jsonb_typeof(p_native_request->'p_request_id') is distinct from 'string' then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_INVALID' using errcode='22023';end if;
+  select * into r from private.weekly_source_agency_timesheet_change_requests where id=(p_native_request->>'p_request_id')::uuid;
+  if not found then
+   if p_require_active then raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_UNAVAILABLE' using errcode='55000';end if;
+   return null; -- No stored parent: discovery cannot assert a fixture.
+  end if;
+  actor:=r.updated_by_user_id;
+  if p_native_request ? 'p_actor_user_id' and (p_native_request->>'p_actor_user_id')::uuid is distinct from actor then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_ACTOR_CHANGED' using errcode='42501';end if;
+  if p_actor_user_id is not null and p_actor_user_id is distinct from actor then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_ACTOR_CHANGED' using errcode='42501';end if;
+  if not p_require_active then
+   -- Discovery retains the actual immutable request scope even when a current
+   -- target changed. It is NOT a current-parent admission. Execute rederives
+   -- every current native identity/CAS/phase below before its audit/dispatch.
+   return jsonb_build_object('source_cycle_id',r.source_cycle_id,'source_group_id',r.source_group_id,
+    'agency_id',r.agency_id,'contract_week_id',r.contract_week_id,'contract_id',r.contract_id,
+    'client_id',r.client_id,'candidate_id',r.candidate_id,'agency_timesheet_id',r.current_timesheet_id,
+    'timesheet_version',r.current_timesheet_version,'week_ending_date',r.week_ending_date,
+    'actor_user_id',actor,'request_id',r.id,'request_version',r.version,
+    'request_sha256',encode(r.request_sha256,'hex'),'phase',r.phase,'source_cas',r.source_cas);
+  end if;
+  if p_require_active and not(r.state='COMPLETED' and r.phase='COMPLETED'
+     and p_operation in('weekly_source_agency_change_authorise_step_v1','weekly_source_agency_change_return_step_v1'))
+   and (r.state is distinct from 'ACTIVE'
+    or (p_operation in('weekly_source_agency_validation_context_v1','weekly_source_agency_validation_apply_v1')
+      and r.phase is distinct from 'AUTHORISED')
+    or (p_operation in('weekly_source_agency_change_worker_context_v1','weekly_source_agency_change_worker_apply_v1')
+      and r.phase not in('UNAUTHORISED','RECOMPUTE_PENDING'))
+    or (p_operation='weekly_source_agency_change_authorise_step_v1' and r.phase not in('FINANCIAL_CURRENT','AUTHORISED'))
+    or (p_operation='weekly_source_agency_change_return_step_v1' and r.phase is distinct from 'AUTHORISED')) then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_PHASE_CHANGED' using errcode='40001';end if;
+  if p_operation in('weekly_source_agency_change_worker_apply_v1','weekly_source_agency_validation_apply_v1')
+    and (p_native_request->>'p_expected_request_version')::bigint is distinct from r.version then
+   raise exception 'WEEKLY_SOURCE_OFF_AGENCY_REQUEST_VERSION_CHANGED' using errcode='40001';end if;
+  select * into strict cw from public.contract_weeks where id=r.contract_week_id;
+ end if;
+ select * into strict k from public.contracts where id=cw.contract_id;
+ select array_agg(cycle.id order by cycle.id) into cycles from public.weekly_source_cycles cycle
+  join public.weekly_source_groups g on g.id=cycle.source_group_id and g.active and g.source_family='ROSTER'
+  join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=k.client_id
+    and cw.week_ending_date between member.valid_from and coalesce(member.valid_to,'infinity'::date)
+  where cycle.finalisation_week_ending=cw.week_ending_date and (cycle.scope_client_id is null or cycle.scope_client_id=k.client_id);
+ if cardinality(cycles)>1 then
+  select array_agg(cycle.id order by cycle.id) into cycles from public.weekly_source_cycles cycle
+   where cycle.id=any(cycles) and cycle.scope_client_id=k.client_id;end if;
+ if coalesce(cardinality(cycles),0)<>1 then raise exception 'WEEKLY_SOURCE_OFF_AGENCY_CYCLE_AMBIGUOUS' using errcode='55000';end if;
+ select * into strict c from public.weekly_source_cycles where id=cycles[1];
+ select * into strict g from public.weekly_source_groups where id=c.source_group_id;
+ if g.environment is distinct from 'TEST' then
+  raise exception 'WEEKLY_SOURCE_OFF_AGENCY_TEST_REQUIRED' using errcode='42501';end if;
+ if not p_require_active then
+  return jsonb_build_object('source_cycle_id',c.id,'source_group_id',g.id,'agency_id',g.agency_id,
+   'contract_week_id',cw.id,'contract_id',k.id,'client_id',k.client_id,'candidate_id',k.candidate_id,
+   'agency_timesheet_id',cw.timesheet_id,'week_ending_date',cw.week_ending_date,'actor_user_id',actor);
+ end if;
+ select * into strict t from public.timesheets where timesheet_id=cw.timesheet_id;
+ if actor is null or k.client_id is null or k.candidate_id is null
+   or coalesce(cw.additional_seq,0)<>0 or coalesce(cw.is_adjustment,false)
+   or t.contract_id is distinct from k.id or t.week_ending_date is distinct from cw.week_ending_date
+   or t.is_current is distinct from true or t.revoked_at is not null or t.archived_at_utc is not null
+   or t.sheet_scope::text is distinct from 'WEEKLY' or t.line_type::text is distinct from 'HOURS'
+   or t.correction_id is not null or coalesce(t.is_adjustment,false) then
+  raise exception 'WEEKLY_SOURCE_OFF_AGENCY_PHYSICAL_SCOPE_CHANGED' using errcode='40001';end if;
+ if r.id is not null and (r.environment is distinct from 'TEST' or r.source_cycle_id is distinct from c.id
+   or r.agency_id is distinct from g.agency_id
+   or r.source_group_id is distinct from c.source_group_id or r.contract_id is distinct from k.id
+   or r.client_id is distinct from k.client_id or r.candidate_id is distinct from k.candidate_id
+   or r.current_timesheet_id is distinct from t.timesheet_id or r.current_timesheet_version is distinct from t.version
+   or r.week_ending_date is distinct from cw.week_ending_date
+   or r.source_publication_id is distinct from c.current_projection_publication_id
+   or r.source_upload_id is distinct from c.current_complete_upload_id
+   or private.weekly_source_bulk_source_cas_v1(c.id,array[k.client_id]) is distinct from r.source_cas) then
+  raise exception 'WEEKLY_SOURCE_OFF_AGENCY_CURRENT_CAPTURE_CHANGED' using errcode='40001';end if;
+ result:=jsonb_build_object('source_cycle_id',c.id,'source_group_id',c.source_group_id,'agency_id',g.agency_id,
+  'contract_week_id',cw.id,'contract_id',k.id,'client_id',k.client_id,'candidate_id',k.candidate_id,
+  'agency_timesheet_id',t.timesheet_id,'timesheet_version',t.version,'week_ending_date',cw.week_ending_date,
+  'actor_user_id',actor,'request_id',r.id,'request_version',r.version,'request_sha256',encode(r.request_sha256,'hex'),
+  'phase',r.phase,'source_cas',r.source_cas);
+ return result;
+end;
+$function$;
+alter function private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_off_rule_agency_parent_v1(text,jsonb,uuid,boolean) from public,anon,authenticated,service_role;

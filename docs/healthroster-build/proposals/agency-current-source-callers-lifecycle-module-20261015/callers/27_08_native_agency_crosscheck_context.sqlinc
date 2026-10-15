@@ -1,0 +1,99 @@
+-- Service Worker support projection. Actual clinical comparison and typed
+-- completeness stay with their existing native owners; no second comparison.
+create or replace function private.weekly_source_agency_crosscheck_context_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare t public.timesheets%rowtype; main_id uuid; facts jsonb; validation public.timesheet_validations%rowtype;
+  hi public.hr_imports%rowtype; rows_json jsonb; source_count integer; comparison_count integer; record_json jsonb;
+  has_native_mismatch boolean; has_native_ambiguity boolean;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+  if private.weekly_source_agency_invoice_check_only_v1(t.timesheet_id) is distinct from true then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_AGENCY_CROSSCHECK_CONTEXT_V1','timesheet_id',t.timesheet_id,
+      'timesheet_version',t.version,'is_agency_invoice',false);
+  end if;
+  if t.is_current is distinct from true or t.revoked_at is not null or t.archived_at_utc is not null
+    or t.sheet_scope::text<>'WEEKLY' or t.line_type::text<>'HOURS' then
+    raise exception 'AGENCY_INVOICE_SUPPORT_TIMESHEET_STALE' using errcode='40001';end if;
+  select cw.timesheet_id into strict main_id from public.contract_weeks cw
+    where cw.contract_id=t.contract_id and cw.week_ending_date=t.week_ending_date
+      and coalesce(cw.additional_seq,0)=0 and not cw.is_adjustment;
+  facts:=private.weekly_source_agency_week_facts_v1(main_id);
+  select value into strict record_json from jsonb_array_elements(facts->'records') r(value)
+    where r->>'timesheet_id'=t.timesheet_id::text and r->>'timesheet_version'=t.version::text;
+  -- A real bridge import is the deterministic established Mode A import,
+  -- never a Source UUID relabelled as hr_imports provenance.
+  select * into strict hi from public.hr_imports
+    where coverage_operation_key=private.weekly_source_mode_a_operation_key_v1((facts->>'publication_id')::uuid,(facts->>'client_id')::uuid)
+      and client_id=(facts->>'client_id')::uuid and import_scope::text='HR_WEEKLY'
+      and source_system::text='HEALTHROSTER' and pruned_at is null
+      and parser_version='WEEKLY_SOURCE_MODE_A_BRIDGE_V1'
+      and parse_summary_json->>'weekly_source_upload_id'=facts->>'upload_id'
+      and parse_summary_json->>'weekly_source_projection_publication_id'=facts->>'publication_id'
+      and source_file_sha256=(select encode(u.content_sha256,'hex') from public.weekly_source_uploads u where u.id=(facts->>'upload_id')::uuid);
+  select * into strict validation from public.timesheet_validations v where v.timesheet_id=t.timesheet_id;
+  if validation.validation_source_kind is distinct from 'AGENCY_INVOICE_WEEK' or validation.last_source is not null
+    or validation.pre_validated or validation.validation_source_publication_id::text is distinct from facts->>'publication_id'
+    or encode(validation.validation_source_facts_sha256,'hex') is distinct from facts->>'facts_hash'
+    or validation.status::text not in ('VALIDATION_OK','VALIDATION_ERROR')
+    or validation.override_requested_at_utc is not null or validation.override_requested_by is not null
+    or validation.override_confirmed_at_utc is not null or validation.override_confirmed_by is not null or validation.override_reason is not null then
+    raise exception 'AGENCY_INVOICE_SUPPORT_TYPED_VALIDATION_REQUIRED' using errcode='55000';end if;
+  select count(*) into source_count from jsonb_array_elements(facts->'finalised_source') source
+    where exists(select 1 from jsonb_array_elements(record_json->'schedule') segment
+      where segment->>'work_event_id'=source->>'work_event_id');
+  with native_rows as materialized (
+    select comparison.id comparison_id,comparison.comparison_state,ur.id upload_row_id,hr.id bridge_row_id,
+      jsonb_build_object('date',ur.work_date,'source_system','HEALTHROSTER','hr_request_id',hr.hr_request_id,
+        'nhsp_shift_id',null,'external_row_key',ur.external_source_key,'ward',ur.bounded_raw_columns_json->>'ward',
+        'assignment_code',ur.bounded_raw_columns_json->>'assignment_code','ref_num',comparison.source_reference_number,
+        'start',to_char(ur.start_at_local,'HH24:MI'),'end',to_char(ur.end_at_local,'HH24:MI'),
+        'break_mins',ur.break_minutes,'paid_minutes',ur.actual_net_minutes) row_json
+    from public.weekly_timesheet_source_comparisons comparison
+    join public.weekly_source_upload_rows ur on ur.id=comparison.upload_row_id and ur.upload_id=(facts->>'upload_id')::uuid
+      and ur.row_finalisation_state='SOURCE_WORKED'
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=ur.id
+      and resolution.work_event_id=comparison.work_event_id and resolution.mapping_state='RESOLVED'
+      and resolution.generation=(select coalesce(p.projection_generation,p.authority_scope_version) from public.weekly_source_projection_publications p where p.id=(facts->>'publication_id')::uuid)
+    join public.hr_rows hr on hr.import_id=hi.id and hr.payload_json->>'weekly_source_upload_row_id'=ur.id::text
+    where comparison.projection_publication_id=(facts->>'publication_id')::uuid
+      and comparison.source_cycle_id=(facts->>'source_cycle_id')::uuid and comparison.upload_id=ur.upload_id
+      and comparison.timesheet_id=t.timesheet_id and comparison.timesheet_revision=t.version
+      and comparison.contract_id=t.contract_id and comparison.work_date=ur.work_date
+      and comparison.source_start_at_local is not distinct from ur.start_at_local
+      and comparison.source_end_at_local is not distinct from ur.end_at_local
+      and comparison.source_break_minutes is not distinct from ur.break_minutes
+      and exists(select 1 from jsonb_array_elements(facts->'finalised_source') source
+        where source->>'work_event_id'=comparison.work_event_id::text and source->>'upload_row_id'=ur.id::text)
+      and exists(select 1 from jsonb_array_elements(record_json->'schedule') segment
+        where segment->>'work_event_id'=comparison.work_event_id::text)
+  ) select count(*)::integer,coalesce(jsonb_agg(row_json order by row_json->>'date',upload_row_id),'[]'::jsonb),
+      coalesce(bool_or(comparison_state='HOURS_MISMATCH'),false),
+      coalesce(bool_or(comparison_state not in ('EXACT_MATCH','REFERENCE_MISSING','HOURS_MISMATCH')),false)
+    into comparison_count,rows_json,has_native_mismatch,has_native_ambiguity from native_rows;
+  if source_count=0 or source_count<>comparison_count or comparison_count>100 or has_native_ambiguity then
+    raise exception 'AGENCY_INVOICE_SUPPORT_NATIVE_COMPARISON_UNAVAILABLE' using errcode='55000';end if;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_AGENCY_CROSSCHECK_CONTEXT_V1','is_agency_invoice',true,
+    'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'source_cycle_id',facts->'source_cycle_id',
+    'projection_publication_id',facts->'publication_id','upload_id',facts->'upload_id','hr_import_id',hi.id,
+    'facts_sha256',facts->'facts_hash','week_complete',facts->'complete','validation_source_kind',validation.validation_source_kind,
+    'validation_status',validation.status,'validation_reason',validation.reason_code,
+    'crosscheck_status',case when has_native_mismatch then 'HOURS_MISMATCH_HR' else 'OK' end,
+    'crosscheck_issues',case when has_native_mismatch then jsonb_build_array('HOURS_MISMATCH_HR') else null::jsonb end,
+    'rows',rows_json);
+exception when no_data_found or too_many_rows then
+  raise exception 'AGENCY_INVOICE_SUPPORT_NATIVE_PROVENANCE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_crosscheck_context_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_crosscheck_context_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_agency_crosscheck_context_v1(p_timesheet_id uuid)
+returns jsonb language sql stable security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$ select private.weekly_source_agency_crosscheck_context_v1(p_timesheet_id); $function$;
+alter function public.weekly_source_agency_crosscheck_context_v1(uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_crosscheck_context_v1(uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_crosscheck_context_v1(uuid) to service_role;

@@ -1,0 +1,28 @@
+{
+  "source_only": true,
+  "runtime_source_mounted_by_root": true,
+  "deployed": false,
+  "entries": [
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/candidate-app-backend.js",
+      "bytes": 604703,
+      "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+      "action": "PRESERVE_EXACT_CURRENT_CANONICAL_BYTES"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/invoice-presentation-contract.js",
+      "bytes": 41813,
+      "sha256": "18fdb8421f95485d264941bde5b678932a7b2a94f62dbcd490e5fedebadb1fd3",
+      "action": "PRESERVE_EXACT_CURRENT_CANONICAL_BYTES"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/timesheet-official-pdf.js",
+      "bytes": 53121,
+      "sha256": "52e4aa425727ccc6153037ffefa0017139faab284538d7a67e4981b7a199735b",
+      "action": "PRESERVE_EXACT_CURRENT_CANONICAL_BYTES"
+    }
+  ]
+}

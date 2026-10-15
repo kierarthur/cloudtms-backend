@@ -1,0 +1,69 @@
+{
+  "schema": "AGENCY_CURRENT_SOURCE_CORE_RECIPE_V1",
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "whole_agency_complete": false,
+  "once_only_migrations": [
+    "migration/01_same_agency_request_store.sqlinc",
+    "migration/02_typed_existing_validation_columns.sqlinc"
+  ],
+  "selected_final_repeatable": "05_agency_source_callers_and_lifecycle.sql",
+  "component_repeatables": [
+    "01_agency_source_core.sql",
+    "02_agency_current_callers.sql",
+    "04_agency_fixed_approval_candidate_lifecycle.sql"
+  ],
+  "verifications": [
+    "verification/119_current_source_raw_and_final_76_verifier.sqlinc",
+    "verification/121_current_agency_source_owner_security.sql",
+    "verification/114_candidate_native_security_verifier.sql"
+  ],
+  "selected_current_agency_functions": 60,
+  "mandatory_current_shared_owner_unions": "MANDATORY_SHARED_OWNER_UNIONS.json",
+  "mounted_candidate_runtime": "MOUNTED_CANDIDATE_RUNTIME_PRESERVE.json",
+  "required_canonical_modules": [
+    "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+    "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+    "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql"
+  ],
+  "root_grammar_replaced": false,
+  "raw05_helpers_replaced": false,
+  "raw05_change": "Only current BEFORE call delta from 104; exact current raw/revision/policy bodies retained.",
+  "existing_manager_policy_bytes_preserved": true,
+  "off_literal_agency_operations": 7,
+  "off_allowlist_widened": false,
+  "obsolete_not_selected": [
+    "87 original ACTIVE guard",
+    "92 original raw union",
+    "104 whole older D48 helper file"
+  ],
+  "mandatory_native_unrun": [
+    "PostgreSQL whole current module/caller compilation and role contracts",
+    "Actual original claim changes across native phases",
+    "Both immutable claim guards and transitive callers",
+    "Current READ COMMITTED/race/foreign-writer/OLD-NEW/nested/active mutation schedules",
+    "Actual Candidate finalisation/real document and finite OFF native invocation",
+    "Real Office/API/phone/full financial lifecycle"
+  ],
+  "claim_authorities": [
+    {
+      "kind": "AGENCY_CAPTURE",
+      "field": "native_receipts.original_capture.original_submitted_claim",
+      "immutability_owner": "private.weekly_source_agency_change_identity_guard_v1()",
+      "actual_recheck": "private.weekly_source_agency_original_claim_recheck_v1(uuid)",
+      "new_common_call": "private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)"
+    },
+    {
+      "kind": "SOURCE_CORRECTION",
+      "table": "private.timesheet_correction_requests",
+      "fields": [
+        "frozen_original_json",
+        "proposal_json"
+      ],
+      "immutability_owner": "private.timesheet_correction_request_guard_v1()",
+      "retention_owner": "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)",
+      "new_selector_kind": null
+    }
+  ]
+}

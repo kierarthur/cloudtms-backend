@@ -1,0 +1,1362 @@
+{
+  "source_only": true,
+  "native": false,
+  "request_schema": "migration/01_same_agency_request_store.sqlinc",
+  "selected_functions": 60,
+  "agency_dependencies_from_current_canonical": [
+    "private.weekly_source_agency_invoice_check_only_v1"
+  ],
+  "functions": [
+    {
+      "function": "private.weekly_source_agency_submitted_claim_v1",
+      "file": "callers/01_06_agency_immutable_submitted_claim.sqlinc",
+      "source_sha256": "7a3cc2cf5ab2e3068c283584d2f1205a6ce0b883fa3a43615ce5282b371b1e99",
+      "callees": [
+        "private._candidate_sha256_jsonb_v1",
+        "private.weekly_source_actual_timesheet_submission_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_native_pay_scope_v1",
+      "file": "callers/02_20_agency_native_pay_scope.sqlinc",
+      "source_sha256": "01c61974774af951118e5286dc20274e1802dda7f17f9a5588c3d3f8a9b2e933",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_settlement_allocation_v1",
+        "public._pay_timesheet_rotation_scope"
+      ],
+      "request_aliases": [
+        "req"
+      ],
+      "request_fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_timesheet_id",
+        "id",
+        "initial_row_signature",
+        "native_receipts",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "state",
+        "updated_by_user_id",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_legacy_original_document_v1",
+      "file": "callers/03_21_agency_legacy_original_document.sqlinc",
+      "source_sha256": "e20686ff092378310b175b242e47de9dc0d906b1811aa8b12426b7eefde4abd1",
+      "callees": [
+        "private._invoice_presentation_snapshot_batch",
+        "private.weekly_source_actual_timesheet_submission_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "native_receipts",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "source_group_id",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_original_pay_identity_v1",
+      "file": "callers/04_28_agency_original_pay_identity.sqlinc",
+      "source_sha256": "73fb6949d6fbb104a4ab869bfe46fcd8b67396438cb32f53e67e7b3ebeb48625",
+      "callees": [
+        "private.bpay_next_assert_candidate_financial_fence_v1",
+        "private.bpay_next_original_reservation_v1",
+        "private.weekly_source_agency_native_pay_scope_v1",
+        "private.weekly_source_agency_physical_pay_inputs_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_paid_write_purpose_v1",
+      "file": "callers/05_29_agency_paid_write_purpose.sqlinc",
+      "source_sha256": "9cc7504d363a8f1d4d6813daa9156c9b6964492e0ba1a63daa79452473329d18",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_legacy_original_document_v1",
+        "private.weekly_source_agency_ordinary_collection_inputs_v1",
+        "private.weekly_source_agency_original_claim_recheck_v1",
+        "private.weekly_source_agency_original_pay_identity_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "contract_week_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "native_receipts",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "source_cas",
+        "state",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_ordinary_collection_inputs_v1",
+      "file": "callers/06_34_complete_ordinary_collection_native_json_codec.sqlinc",
+      "source_sha256": "97e637e1e092287e988357fceced2fedbf35a7ffa0303e92d47fbdae58536fe3",
+      "callees": [
+        "private.bpay_next_original_reservation_v1",
+        "private.bpay_next_work_collection_observation_v1",
+        "private.weekly_source_agency_native_pay_scope_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_before_collection_inputs_v1",
+      "file": "callers/07_35_complete_before_collection_native_json_codec.sqlinc",
+      "source_sha256": "322384d3a86d099beb803318f60f8f3385990826fbea125b406fd09dceb3eb07",
+      "callees": [
+        "private.bpay_next_original_reservation_v1",
+        "private.bpay_next_work_collection_observation_v1",
+        "private.weekly_source_agency_physical_pay_inputs_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_candidate_admit_v1",
+      "file": "callers/08_38_agency_candidate_native_admission.sqlinc",
+      "source_sha256": "d5a097dff8857fe193b9067a16d93fe8d11393816cefded145d6041f492caffe",
+      "callees": [
+        "private.bpay_next_assert_candidate_financial_fence_v1",
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_candidate_serial_gate_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [
+        "owned"
+      ],
+      "request_fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "initial_timesheet_id",
+        "native_receipts",
+        "phase"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_physical_pay_inputs_v1",
+      "file": "callers/09_40_complete_physical_pay_scope_client_cycle.sqlinc",
+      "source_sha256": "8b0eb6296eb9366ff5a14d606a1b7cb4db418a5c48ec0bc8589db44badeabf31",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_settlement_allocation_v1",
+        "public._pay_timesheet_rotation_scope"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_segment_flags_apply_v1",
+      "file": "callers/10_44_agency_native_segment_flag_apply.sqlinc",
+      "source_sha256": "07783452b610ebaf30def7b1a38e0b91dfcd75509519fc5f743294e21d4473de",
+      "callees": [
+        "private.weekly_source_agency_segment_flags_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.tsfin_update_segments_locked"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "request_sha256",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_native_query_facts_v1",
+      "file": "callers/11_51_agency_owned_native_query_facts.sqlinc",
+      "source_sha256": "904ebd7b58a342a1111cdf4ac78bb40154fc051df196461414d137a38ec40d31",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_native_query_facts_for_scope_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_pay_query_scope_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_resolve_root_identity_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "native_receipts",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "rule_set_version_id",
+        "source_cas",
+        "source_cycle_id",
+        "source_group_id",
+        "state",
+        "updated_by_user_id",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_invoice_segment_selection_v1",
+      "file": "callers/12_56_native_invoice_segment_selection.sqlinc",
+      "source_sha256": "d309a3c02863722de32831a4824a46dc45d2fc7bb89860a39a96ac4464408d39",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_draft_round_trip_v1",
+      "file": "callers/13_57_complete_same_draft_with_unchanged_editor.sqlinc",
+      "source_sha256": "012f1ba20f7e209a9de62cec4b01a0374949a3e346a4c20b46a7b25068fffbc3",
+      "callees": [
+        "private.timesheet_correction_draft_holds_v1",
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_invoice_segment_selection_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.invoice_apply_edits",
+        "public.timesheet_lifecycle_guard_signature_v1"
+      ],
+      "request_aliases": [
+        "v_request"
+      ],
+      "request_fields": [
+        "client_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "native_receipts",
+        "original_draft_invoice_id",
+        "original_draft_invoice_no",
+        "phase",
+        "reason",
+        "request_key",
+        "return_hold",
+        "state"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_week_facts_v1",
+      "file": "callers/14_58_agency_native_week_facts.sqlinc",
+      "source_sha256": "f2ef4e8db4c75e8641130c0b9e1e88353c3f931b7f4f935be303766ea3c16547",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_protected_wait_receipt_v1",
+        "private.weekly_source_query_current_publication_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.timesheet_correction_chain_scope_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_week_complete_v1",
+      "file": "callers/14_58_agency_native_week_facts.sqlinc",
+      "source_sha256": "ade04770e378ab270604ec78f704e5f64e4f5c6322ef7751024a4a3535be5dc5",
+      "callees": [
+        "private.weekly_source_agency_week_facts_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "public.weekly_source_agency_week_validation_refresh_v1",
+      "file": "callers/15_73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "source_sha256": "0e39a7e159875ab49a7321581c595ca14432849fb966fe57a9f26f3dd6e64a43",
+      "callees": [
+        "private.weekly_source_agency_week_facts_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.audit_events",
+        "public.enqueue_ts_financials_priority",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.timesheet_validations"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "client_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "native_receipts",
+        "phase",
+        "request_sha256",
+        "source_cas",
+        "source_cycle_id",
+        "source_publication_id"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_validation_source_guard_v1",
+      "file": "callers/15_73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "source_sha256": "2111a86c9507d5202d51df8d12e0f8b6a7200b0dc9caa3e1cc9e52d69ac583f5",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_agency_week_facts_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_validation_context_v1",
+      "file": "callers/16_60_agency_authorised_validation_context.sqlinc",
+      "source_sha256": "d103ac992c339a4a6dd9ed5f397483ab9fbae5eaf8fcb9196d4d5acaad989e91",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_week_facts_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.tsfin_load_context_batch",
+        "public.tsfin_load_nhsp_shifts_batch",
+        "public.tsfin_load_weekly_context_batch"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_row_signature",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "native_receipts",
+        "outbox_id",
+        "outbox_reason",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "source_cas",
+        "source_publication_id",
+        "state",
+        "updated_by_user_id",
+        "version"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_validation_context_v1",
+      "file": "callers/16_60_agency_authorised_validation_context.sqlinc",
+      "source_sha256": "e2e7e0b62774972ce901543ccf9ef6590452fe3c5eee58d5a0ad24300b715f56",
+      "callees": [
+        "private.weekly_source_agency_validation_context_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_validation_frame_open_v1",
+      "file": "callers/17_61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "0cff3c5520499c52efb457be8f40c7c9b2204d12539467d81e57f5ac120092e4",
+      "callees": [
+        "private.weekly_source_agency_snapshot_provenance_assert_v1",
+        "private.weekly_source_agency_validation_context_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "request_sha256",
+        "source_cas",
+        "source_publication_id",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_validation_write_assert_v1",
+      "file": "callers/17_61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "82e555720b3ae0214163b9767e29f5c03333d868f5920d98af653ce2bf1bac3a",
+      "callees": [
+        "private.weekly_source_agency_snapshot_provenance_assert_v1",
+        "private.weekly_source_agency_week_facts_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "client_id",
+        "current_financial_id",
+        "id",
+        "native_receipts",
+        "outbox_id",
+        "outbox_reason",
+        "phase",
+        "request_sha256",
+        "source_cas",
+        "source_cycle_id",
+        "source_publication_id",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_validation_write_observe_v1",
+      "file": "callers/17_61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "44af993cdaa3513d9986fe2147754054f6a1b157ec1d0a8338e93157b73f3a8b",
+      "callees": [
+        "private.weekly_source_agency_segment_flags_apply_v1",
+        "private.weekly_source_agency_week_facts_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.timesheet_lifecycle_guard_signature_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "contract_week_id",
+        "id",
+        "native_receipts",
+        "phase",
+        "request_sha256",
+        "source_publication_id",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_validation_apply_v1",
+      "file": "callers/17_61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "4ec444a973c613c3d5d41e60fe64a25b3e14e793ccd5f83c1a3c9fe672e01993",
+      "callees": [
+        "private.weekly_source_agency_validation_context_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.tsfin_write_snapshots_and_complete"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "native_receipts",
+        "outbox_id",
+        "phase",
+        "updated_by_user_id",
+        "version"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_financial_frame_open_v1",
+      "file": "callers/18_62_complete_native_financial_observation_with_validation.sqlinc",
+      "source_sha256": "7968bc5659b43ea23dfe71a5d1edc284eae9f32385339688f4dd74f551975931",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_original_claim_recheck_v1",
+        "private.weekly_source_agency_paid_write_purpose_v1",
+        "private.weekly_source_agency_validation_frame_open_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._ctms_assert_tsfin_snapshot_policy_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "contract_week_id",
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "native_receipts",
+        "outbox_id",
+        "outbox_reason",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "source_cas",
+        "state",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_financial_write_assert_v1",
+      "file": "callers/18_62_complete_native_financial_observation_with_validation.sqlinc",
+      "source_sha256": "b1e3920fed7223a959271074008185c9ae050a6c19ae8b07abf343affe2371b4",
+      "callees": [
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_agency_original_claim_recheck_v1",
+        "private.weekly_source_agency_paid_write_purpose_v1",
+        "private.weekly_source_agency_validation_write_assert_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "canonical_family_booking_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "native_receipts",
+        "original_draft_invoice_id",
+        "original_draft_invoice_no",
+        "outbox_id",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "return_hold",
+        "rule_set_version_id",
+        "source_cas",
+        "source_cycle_id",
+        "source_group_id",
+        "updated_by_user_id",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_financial_write_observe_v1",
+      "file": "callers/18_62_complete_native_financial_observation_with_validation.sqlinc",
+      "source_sha256": "f24fefa5950eb2b7afcb0a63b72a10922dbc15b586953cab790600edcfc6bfdb",
+      "callees": [
+        "private.weekly_source_agency_segment_flags_apply_v1",
+        "private.weekly_source_agency_validation_write_observe_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "current_financial_id",
+        "current_timesheet_version",
+        "id",
+        "native_receipts",
+        "outbox_id",
+        "outbox_reason",
+        "phase"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_segment_flags_v1",
+      "file": "callers/19_63_complete_native_flags_with_validation_observation.sqlinc",
+      "source_sha256": "436cdfe767c924f21681d1cd9fd5e84aae99da54a0065ff2d855e6be5c3803cc",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_agency_native_query_facts_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "native_receipts",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "rule_set_version_id",
+        "source_cas",
+        "source_cycle_id",
+        "source_group_id",
+        "source_publication_id",
+        "state",
+        "updated_by_user_id",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_change_authorise_step_v1",
+      "file": "callers/20_64_complete_authorise_with_native_validation_writer.sqlinc",
+      "source_sha256": "010e085a82756d4b8431316a52dd8db7cbd74ef9b5644452b40d5b44a1a0474e",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_paid_write_purpose_v1",
+        "private.weekly_source_agency_segment_flags_apply_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.audit_events",
+        "public.timesheet_authorise_generic_atomic",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.weekly_source_agency_week_validation_refresh_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "candidate_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_row_signature",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "native_receipts",
+        "phase",
+        "reason",
+        "request_key",
+        "source_publication_id",
+        "state",
+        "updated_by_user_id"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_change_authorise_step_v1",
+      "file": "callers/20_64_complete_authorise_with_native_validation_writer.sqlinc",
+      "source_sha256": "6b92769d3fe53532ad789211de4a462fc0747ac61a3d2c839ddb5f42f38efd87",
+      "callees": [
+        "private.weekly_source_agency_change_authorise_step_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "completed_receipt",
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "last_refusal_code",
+        "native_receipts",
+        "phase",
+        "version"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_publication_validation_v1",
+      "file": "callers/21_66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "0f2ee3e3be0fa7fda5ed5de84c55a7d2a475a893a25b260a24421eebf08304e0",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "public.weekly_source_agency_week_validation_refresh_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_authorise_validation_after_v1",
+      "file": "callers/21_66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "48495e53a971f2242ea95fba8eb49f34674d4cf907502c2dec37cda2ebef80f8",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_agency_week_facts_v1",
+        "public.weekly_source_agency_week_validation_refresh_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_legacy_import_validation_admit_v1",
+      "file": "callers/21_66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "5879a060f0eecc14f5db9bf529fc46839c5d94688ac961af1a899e487e566dae",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_query_require_service_v1",
+        "public.hr_weekly_validation_preview"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "public.weekly_source_agency_legacy_import_validation_admit_v1",
+      "file": "callers/21_66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "d53432719a67861b5a8b959467c232bacd179250231009a33f06acbc19f28276",
+      "callees": [
+        "private.weekly_source_agency_legacy_import_validation_admit_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_change_return_step_v1",
+      "file": "callers/22_53_agency_same_draft_return_step.sqlinc",
+      "source_sha256": "21020cf9b1011b325c5eaaa00a757002062f0ef5df509f37805505dbdf569134",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_draft_round_trip_v1",
+        "private.weekly_source_agency_week_complete_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.audit_events",
+        "public.timesheet_lifecycle_guard_signature_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "completed_at_utc",
+        "completed_by_user_id",
+        "completed_receipt",
+        "contract_week_id",
+        "current_financial_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "native_receipts",
+        "original_draft_invoice_id",
+        "original_draft_invoice_no",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "return_hold",
+        "source_publication_id",
+        "state"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_change_return_step_v1",
+      "file": "callers/23_54_return_step_service_reply.sqlinc",
+      "source_sha256": "ca992a28178704135eb15c8e26f602de0e80553f150ba69c0cc18bb526e20934",
+      "callees": [
+        "private.weekly_source_agency_change_return_step_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "completed_by_user_id",
+        "completed_receipt",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "last_refusal_code",
+        "original_draft_invoice_no",
+        "phase",
+        "state",
+        "version"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_snapshot_provenance_assert_v1",
+      "file": "callers/24_19_agency_native_worker_apply.sqlinc",
+      "source_sha256": "b7c067dae7d21782aa20c32b1b48124a4ac6bf2ce12a20d873e66194929c7737",
+      "callees": [
+        "public._ctms_assert_tsfin_snapshot_policy_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "candidate_id",
+        "client_id",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "native_receipts",
+        "source_group_id"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_change_worker_apply_v1",
+      "file": "callers/24_19_agency_native_worker_apply.sqlinc",
+      "source_sha256": "66261915ef4b5e54efe08f5b3fb301141ba3cedbae15e81f1644cbd039d8d22a",
+      "callees": [
+        "private.weekly_source_agency_change_worker_context_v1",
+        "private.weekly_source_agency_financial_frame_open_v1",
+        "private.weekly_source_agency_snapshot_provenance_assert_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.contract_week_manual_upsert_atomic",
+        "public.enqueue_ts_financials",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.tsfin_write_snapshots_and_complete"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "contract_week_id",
+        "current_financial_id",
+        "current_row_signature",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "last_refusal_code",
+        "native_receipts",
+        "outbox_id",
+        "phase",
+        "updated_by_user_id",
+        "version"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_change_worker_targets_v1",
+      "file": "callers/25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "source_sha256": "25fe0fad6e7e593e194b3b0a6acc8ff8b5a2259a6d3bb7870be985209f08f438",
+      "callees": [
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_change_worker_context_v1",
+      "file": "callers/25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "source_sha256": "449078b216a81a20b9aa93c2661b90e6115ff645bde260b167fd0a847bb4c6c7",
+      "callees": [
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_paid_write_purpose_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.tsfin_load_context_batch",
+        "public.tsfin_load_nhsp_shifts_batch",
+        "public.tsfin_load_weekly_context_batch"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_financial_id",
+        "current_row_signature",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "id",
+        "initial_row_signature",
+        "native_receipts",
+        "outbox_id",
+        "outbox_reason",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "source_cas",
+        "state",
+        "updated_by_user_id",
+        "version"
+      ]
+    },
+    {
+      "function": "public.weekly_source_agency_change_worker_context_v1",
+      "file": "callers/25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "source_sha256": "6214c60811b10acb300de02b4f3f45a4f41c0ee43016838ed15a8b6fdf584eb9",
+      "callees": [
+        "private.weekly_source_agency_change_worker_context_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "public.weekly_source_agency_timesheet_change_v1",
+      "file": "callers/26_80_native_agency_business_entry.sqlinc",
+      "source_sha256": "c2b299432ee8b67508f92b1af8c52bd14c5d32519720a6fce5948055ae8f34be",
+      "callees": [
+        "private.weekly_source_agency_change_authorise_step_v1",
+        "private.weekly_source_agency_change_begin_v1",
+        "private.weekly_source_agency_change_return_step_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "completed_at_utc",
+        "completed_by_user_id",
+        "completed_receipt",
+        "contract_week_id",
+        "current_row_signature",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "environment",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "last_refusal_code",
+        "original_draft_invoice_no",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "return_hold",
+        "state",
+        "version"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_crosscheck_context_v1",
+      "file": "callers/27_08_native_agency_crosscheck_context.sqlinc",
+      "source_sha256": "e31c13535fcb32be499d1c3da2b1541acec157b0d0b9c3dce47f7658dcb8f4dd",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_agency_week_facts_v1",
+        "private.weekly_source_mode_a_operation_key_v1",
+        "private.weekly_source_query_require_service_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "public.weekly_source_agency_crosscheck_context_v1",
+      "file": "callers/27_08_native_agency_crosscheck_context.sqlinc",
+      "source_sha256": "c4337fa123822f6d8e79d28c891298ef49c7ca5f8da47b013390abc47a724935",
+      "callees": [
+        "private.weekly_source_agency_crosscheck_context_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_issue_requirements_v1",
+      "file": "callers/28_18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc",
+      "source_sha256": "4619a395b3ad7094483252e2e21ebe1284fab93f72e272d0df352e21daeaaa93",
+      "callees": [
+        "private._invoice_credit_resume_v1",
+        "private.weekly_source_agency_crosscheck_context_v1",
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "public.timesheet_correction_chain_scope_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_issue_close_v1",
+      "file": "callers/29_15_native_agency_issue_close.sqlinc",
+      "source_sha256": "9913e0674932667a1e1351444bf1c841aa9eaaf78f327637e56657c599c63c19",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_agency_week_facts_v1",
+        "private.weekly_source_incident_contact_retire_v1",
+        "private.weekly_source_kept_as_paid_context_for_publication_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_protected_wait_receipt_v1",
+        "public.audit_events"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_mode_a_units_v1",
+      "file": "callers/30_20_native_mode_a_unit_census.sqlinc",
+      "source_sha256": "0523d4f2da7606898b976ffde228e2a489ab8c6927168fe413c667f304f7aade",
+      "callees": [
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_configured_agency_invoice_v1",
+        "public.hr_weekly_validation_preview"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_change_identity_guard_v1",
+      "file": "repeatable/02_same_request_identity_guard.sqlinc",
+      "source_sha256": "1e6c451fd857256ffc9b86ebd774a638eeb353223109c93e9bec76d28909e7f0",
+      "callees": [
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_source_phase_admit_v1",
+      "file": "repeatable/03_actual_source_phase_admission.sqlinc",
+      "source_sha256": "46aae52a108cd7132e5388e07ba21dd0d0b04de9faa04b4770f4603eaa53e40b",
+      "callees": [
+        "private.timesheet_correction_a0_family_tokens_retain_v1",
+        "private.timesheet_correction_a0_fence_acquire_v1",
+        "private.timesheet_correction_a0_source_footprint_v1",
+        "private.weekly_source_lock_family_rows_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public._pay_timesheet_rotation_scope"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_source_mutation_basis_v1",
+      "file": "repeatable/04_active_source_mutation_guard.sqlinc",
+      "source_sha256": "8a16466c9ac81cfa09b6760988205fcf6dc357c6a4bd81e0eae724470090b52a",
+      "callees": [],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_active_source_mutation_assert_v1",
+      "file": "repeatable/04_active_source_mutation_guard.sqlinc",
+      "source_sha256": "6a1e28132e6287fc82534e85ff279a9d6c171ccc9c7c125eed654f33ff236d50",
+      "callees": [
+        "private.timesheet_correction_a0_source_policy_tokens_v1",
+        "private.timesheet_correction_a0_source_raw_tokens_v1",
+        "private.timesheet_correction_a0_source_revision_tokens_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_agency_source_mutation_basis_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "contract_week_id",
+        "current_source_dependency_tokens",
+        "current_timesheet_id",
+        "id",
+        "initial_row_signature",
+        "native_receipts",
+        "original_draft_invoice_id",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "source_cycle_id",
+        "source_dependency_tokens"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_change_capture_v1",
+      "file": "repeatable/05_actual_native_capture_and_digest.sqlinc",
+      "source_sha256": "e38b5bc4b59a36855d9d324833d601e4c28205a00eb78c0fe963049774bbde5a",
+      "callees": [
+        "private.weekly_source_actual_timesheet_submission_v1",
+        "private.weekly_source_agency_before_collection_inputs_v1",
+        "private.weekly_source_agency_candidate_admit_v1",
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_agency_legacy_original_document_v1",
+        "private.weekly_source_agency_original_pay_identity_v1",
+        "private.weekly_source_agency_source_phase_admit_v1",
+        "private.weekly_source_agency_submitted_claim_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_lock_family_rows_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_current_publication_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.weekly_source_office_authorise_scope_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_change_request_sha256_v1",
+      "file": "repeatable/05_actual_native_capture_and_digest.sqlinc",
+      "source_sha256": "2d2d8d878054121740f78010731ca21548da7474c99c2d388787d73721cc424a",
+      "callees": [
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.weekly_source_agency_original_claim_recheck_v1",
+      "file": "repeatable/06_actual_original_claim_recheck.sqlinc",
+      "source_sha256": "56cabb4279f1e5d889188172ddac1389fb97743b64026b5fd57bd54429e8c6ca",
+      "callees": [
+        "private._candidate_sha256_jsonb_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_timesheet_id",
+        "environment",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "native_receipts",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_change_request_assert_v1",
+      "file": "repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc",
+      "source_sha256": "cde8b4958f0c8b74e2af2429982351959e6165c48a17e499ef655a8a5b949609",
+      "callees": [
+        "private.weekly_source_agency_candidate_admit_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_agency_original_claim_recheck_v1",
+        "private.weekly_source_agency_source_phase_admit_v1",
+        "private.weekly_source_bulk_source_cas_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_lock_family_rows_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.audit_events",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.weekly_source_office_authorise_scope_v1"
+      ],
+      "request_aliases": [
+        "v_request"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "agency_id",
+        "candidate_id",
+        "canonical_family_booking_id",
+        "client_id",
+        "contract_id",
+        "contract_week_id",
+        "current_row_signature",
+        "current_source_dependency_tokens",
+        "current_timesheet_id",
+        "current_timesheet_version",
+        "environment",
+        "id",
+        "initial_row_signature",
+        "initial_timesheet_id",
+        "initial_timesheet_version",
+        "native_receipts",
+        "original_draft_invoice_id",
+        "original_draft_invoice_no",
+        "outbox_id",
+        "phase",
+        "reason",
+        "request_key",
+        "request_sha256",
+        "rule_set_version_id",
+        "source_cas",
+        "source_cycle_id",
+        "source_dependency_tokens",
+        "source_group_id",
+        "source_publication_id",
+        "source_upload_id",
+        "state",
+        "updated_by_user_id",
+        "version",
+        "week_ending_date"
+      ]
+    },
+    {
+      "function": "private.weekly_source_agency_change_begin_v1",
+      "file": "repeatable/07_actual_native_begin.sqlinc",
+      "source_sha256": "d7d4a82b5c25c1ea61c688d997a030be9c57d8caade36a53b8cfe5e85fe6437c",
+      "callees": [
+        "private.weekly_source_agency_change_capture_v1",
+        "private.weekly_source_agency_change_request_assert_v1",
+        "private.weekly_source_agency_change_request_sha256_v1",
+        "private.weekly_source_agency_draft_round_trip_v1",
+        "private.weekly_source_agency_paid_write_purpose_v1",
+        "private.weekly_source_agency_timesheet_change_requests",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "public.audit_events",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.timesheet_unauthorise_atomic"
+      ],
+      "request_aliases": [
+        "r"
+      ],
+      "request_fields": [
+        "actor_user_id",
+        "contract_week_id",
+        "current_row_signature",
+        "current_timesheet_id",
+        "id",
+        "native_receipts",
+        "original_draft_invoice_id",
+        "phase",
+        "request_key",
+        "request_sha256",
+        "state",
+        "updated_by_user_id",
+        "version"
+      ]
+    },
+    {
+      "function": "private.timesheet_correction_a0_source_raw_tokens_v1",
+      "file": "repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc",
+      "source_sha256": "f57cdaa30fa842df63aac72b11936b920314764582ce37eda71df11fde3550d6",
+      "callees": [
+        "private.timesheet_correction_a0_source_token_assert_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.timesheet_correction_a0_source_revision_tokens_v1",
+      "file": "repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc",
+      "source_sha256": "a847ecce648304d35196e295c7e15e7f8230c028dbe656a932e884dce7ce1e6a",
+      "callees": [
+        "private.timesheet_correction_a0_source_token_assert_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.timesheet_correction_a0_source_policy_tokens_v1",
+      "file": "repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc",
+      "source_sha256": "a7b926ad3adf3e063fdefb8dd5a6e74dc3783b9feeca2e0ecaef74c7b2586af9",
+      "callees": [
+        "private.timesheet_correction_a0_source_token_assert_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.timesheet_correction_a0_source_reference_before_v1",
+      "file": "repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc",
+      "source_sha256": "14acff563492f73d903f63a9775f420aee8d81182965cc7b121fe8b67677d34c",
+      "callees": [
+        "private.timesheet_correction_a0_fence_acquire_v1",
+        "private.timesheet_correction_a0_source_policy_tokens_v1",
+        "private.timesheet_correction_a0_source_raw_tokens_v1",
+        "private.timesheet_correction_a0_source_revision_tokens_v1",
+        "private.weekly_source_agency_active_source_mutation_assert_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    },
+    {
+      "function": "private.timesheet_correction_a0_source_reference_final_before_v1",
+      "file": "repeatable/117_current_source_final_before.sqlinc",
+      "source_sha256": "8652acdb373d3c9014a2a09e22f341eca4d8f5ec409d364c4af4335a4aeadd4d",
+      "callees": [
+        "private.timesheet_correction_a0_fence_acquire_v1",
+        "private.timesheet_correction_a0_source_policy_tokens_v1",
+        "private.timesheet_correction_a0_source_raw_tokens_v1",
+        "private.timesheet_correction_a0_source_revision_tokens_v1",
+        "private.weekly_source_agency_active_source_mutation_assert_v1"
+      ],
+      "request_aliases": [],
+      "request_fields": []
+    }
+  ]
+}

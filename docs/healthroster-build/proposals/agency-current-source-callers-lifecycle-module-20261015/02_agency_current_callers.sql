@@ -1,0 +1,34 @@
+-- Exact final Agency-only caller selection; canonical shared call sites are separate root unions.
+begin;
+\ir callers/01_06_agency_immutable_submitted_claim.sqlinc
+\ir callers/02_20_agency_native_pay_scope.sqlinc
+\ir callers/03_21_agency_legacy_original_document.sqlinc
+\ir callers/04_28_agency_original_pay_identity.sqlinc
+\ir callers/05_29_agency_paid_write_purpose.sqlinc
+\ir callers/06_34_complete_ordinary_collection_native_json_codec.sqlinc
+\ir callers/07_35_complete_before_collection_native_json_codec.sqlinc
+\ir callers/08_38_agency_candidate_native_admission.sqlinc
+\ir callers/09_40_complete_physical_pay_scope_client_cycle.sqlinc
+\ir callers/10_44_agency_native_segment_flag_apply.sqlinc
+\ir callers/11_51_agency_owned_native_query_facts.sqlinc
+\ir callers/12_56_native_invoice_segment_selection.sqlinc
+\ir callers/13_57_complete_same_draft_with_unchanged_editor.sqlinc
+\ir callers/14_58_agency_native_week_facts.sqlinc
+\ir callers/15_73_complete_sole_writer_with_superseded_override_retirement.sqlinc
+\ir callers/16_60_agency_authorised_validation_context.sqlinc
+\ir callers/17_61_agency_authorised_native_observation.sqlinc
+\ir callers/18_62_complete_native_financial_observation_with_validation.sqlinc
+\ir callers/19_63_complete_native_flags_with_validation_observation.sqlinc
+\ir callers/20_64_complete_authorise_with_native_validation_writer.sqlinc
+\ir callers/21_66_agency_actual_validation_hooks.sqlinc
+\ir callers/22_53_agency_same_draft_return_step.sqlinc
+\ir callers/23_54_return_step_service_reply.sqlinc
+\ir callers/24_19_agency_native_worker_apply.sqlinc
+\ir callers/25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc
+\ir callers/26_80_native_agency_business_entry.sqlinc
+\ir callers/27_08_native_agency_crosscheck_context.sqlinc
+\ir callers/28_18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc
+\ir callers/29_15_native_agency_issue_close.sqlinc
+\ir callers/30_20_native_mode_a_unit_census.sqlinc
+notify pgrst, 'reload schema';
+commit;

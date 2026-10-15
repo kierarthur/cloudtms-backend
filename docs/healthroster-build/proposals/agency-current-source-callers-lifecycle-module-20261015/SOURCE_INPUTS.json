@@ -1,0 +1,539 @@
+{
+  "root_pin": "44db8a50182823b13df0b22d69b4363ef5332a48",
+  "report_pin": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+  "registration_pin": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+  "entries": [
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/88_complete_same_request_store_source_tokens.sqlinc",
+      "reference": "88_same_request_schema_and_guard.sqlinc",
+      "bytes": 10611,
+      "sha256": "264c0b1719ac57224b60528d3268f5f5d2cee8a1c8c1b4f1c88f67a0da0f2bb7"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/91_complete_current_request_source_phase_resume.sqlinc",
+      "reference": "91_current_request_assert.sqlinc",
+      "bytes": 16248,
+      "sha256": "56feb3d665a4ccc73d1d5ddf64c577bace4227c71a46825382fbf1a8bbba5921"
+    },
+    {
+      "commit": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/15102026_0344_healthroster_source_selectors/05_raw_selector_helpers.sqlinc",
+      "reference": "root_current_raw05.sqlinc",
+      "bytes": 15713,
+      "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-policy-source-phase-successor-20261015/104_complete_same_source_before_policy_and_active_union.sqlinc",
+      "reference": "104_before_union_delta_source.sqlinc",
+      "bytes": 16038,
+      "sha256": "1364c1775200afc29c2f27ecc2887962d0cc29f0aa3a5025079cafa8cefa5a7a"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/86_agency_source_phase_admission.sqlinc",
+      "reference": "86_agency_source_phase_admission.sqlinc",
+      "bytes": 8188,
+      "sha256": "e737e82491bec65293f0f7a6d09b858d24e9e785a9342daf7ebb04547516dd07"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-policy-source-phase-successor-20261015/103_complete_active_source_guard_with_native_policy_union.sqlinc",
+      "reference": "103_complete_active_source_guard_with_native_policy_union.sqlinc",
+      "bytes": 7177,
+      "sha256": "32c1e16e17938dfc629dc71d9e32de3bc4455a537551ebfc14712c61bddde5d9"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/89_complete_native_capture_source_phase_admission.sqlinc",
+      "reference": "89_complete_native_capture_source_phase_admission.sqlinc",
+      "bytes": 23550,
+      "sha256": "8826b9ebc41fe9124d9333e2c2cfe321d7ac4486b9d9c902a2ea455accce9be7"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/15_agency_original_claim_recheck.sqlinc",
+      "reference": "15_agency_original_claim_recheck.sqlinc",
+      "bytes": 9726,
+      "sha256": "08c20fc4c0b9723c334b282a56940782b4cb8f79cc04463afe0cb5b49b464e14"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-source-phase-active-capture-forward-20261015/90_complete_native_begin_immutable_source_tokens.sqlinc",
+      "reference": "90_complete_native_begin_immutable_source_tokens.sqlinc",
+      "bytes": 14018,
+      "sha256": "9b9e18d28bea1ac712b9096df99828bd3d533b6b1c575b76273c7659a1ad3508"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/dependencies/06_agency_immutable_submitted_claim.sqlinc",
+      "reference": "caller_01_06_agency_immutable_submitted_claim.sqlinc",
+      "bytes": 5605,
+      "sha256": "90d4ad24cbca8d96a9125a2731fe3b92222d4e2931b3c01cfbacc839f1e6fe15"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/20_agency_native_pay_scope.sqlinc",
+      "reference": "caller_02_20_agency_native_pay_scope.sqlinc",
+      "bytes": 6240,
+      "sha256": "60ab70b937864ca57e7f7d786076f66ab3a011111f3a8f17d988e1d7fe236b40"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/21_agency_legacy_original_document.sqlinc",
+      "reference": "caller_03_21_agency_legacy_original_document.sqlinc",
+      "bytes": 15019,
+      "sha256": "4dce5030b0706d67b5323442799c26a03e4f77c42a1f958af8927f87b36b57e5"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/28_agency_original_pay_identity.sqlinc",
+      "reference": "caller_04_28_agency_original_pay_identity.sqlinc",
+      "bytes": 9180,
+      "sha256": "1382e30d9d5cec8f1ed24b8444d927ebcd9c696367636d805a9a9242eabe05ed"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/29_agency_paid_write_purpose.sqlinc",
+      "reference": "caller_05_29_agency_paid_write_purpose.sqlinc",
+      "bytes": 6894,
+      "sha256": "0311e44d1e0a495fae05cf98cc3939729568b1f52498fd4eb8163e43e7cb00ad"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/34_complete_ordinary_collection_native_json_codec.sqlinc",
+      "reference": "caller_06_34_complete_ordinary_collection_native_json_codec.sqlinc",
+      "bytes": 7002,
+      "sha256": "11d3b933f8962fd3d7423da1b5e5fe736bcbef8af41556dbba10b5d1fab046a4"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/35_complete_before_collection_native_json_codec.sqlinc",
+      "reference": "caller_07_35_complete_before_collection_native_json_codec.sqlinc",
+      "bytes": 7064,
+      "sha256": "0d7c9f97f3d16a833f25386146783fef55a2e4c362879a5eeec1f7bda2aa11b4"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/38_agency_candidate_native_admission.sqlinc",
+      "reference": "caller_08_38_agency_candidate_native_admission.sqlinc",
+      "bytes": 4042,
+      "sha256": "9086104bf6e173ac75d62a0cc3c440bd22669c1c643e0c4a4ab7c55dc7d8d57a"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/40_complete_physical_pay_scope_client_cycle.sqlinc",
+      "reference": "caller_09_40_complete_physical_pay_scope_client_cycle.sqlinc",
+      "bytes": 8366,
+      "sha256": "cdf06fb048fe7b67006045c6259631d541867403b9e9b00bb93d43d1ca871474"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/44_agency_native_segment_flag_apply.sqlinc",
+      "reference": "caller_10_44_agency_native_segment_flag_apply.sqlinc",
+      "bytes": 3880,
+      "sha256": "0a9dc6e31bdfe66b4031ea0f756ad4b5fb690e3a55c829cab45d5ee306c240b1"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/51_agency_owned_native_query_facts.sqlinc",
+      "reference": "caller_11_51_agency_owned_native_query_facts.sqlinc",
+      "bytes": 7337,
+      "sha256": "95b2cfccc2567c3dfd45ef7107e3b46a465afcf8b04b5c043c36c60c84495a8a"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/56_native_invoice_segment_selection.sqlinc",
+      "reference": "caller_12_56_native_invoice_segment_selection.sqlinc",
+      "bytes": 4007,
+      "sha256": "b8e79f777558b7a7f5930c96ea58b552e4eb8afcfbfdfa6cfd9b4dabba7232f7"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/57_complete_same_draft_with_unchanged_editor.sqlinc",
+      "reference": "caller_13_57_complete_same_draft_with_unchanged_editor.sqlinc",
+      "bytes": 12145,
+      "sha256": "dc4a48d5f0b8345da3e27995cae81cfcee2a48146c53b1bfba236d91be9d3a9f"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/58_agency_native_week_facts.sqlinc",
+      "reference": "caller_14_58_agency_native_week_facts.sqlinc",
+      "bytes": 25348,
+      "sha256": "82f9c09645bc8eff619fa6b33c208e774ce4ff2758cb14241ae60657c89627ab"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-validation-marker-override-source-successor-20261014/construction/73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "reference": "caller_15_73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "bytes": 16065,
+      "sha256": "2d76d3dd3f5f78ea5d08b6b7e8e22342c9c7947d4d22922d20af718448ebfaa0"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/60_agency_authorised_validation_context.sqlinc",
+      "reference": "caller_16_60_agency_authorised_validation_context.sqlinc",
+      "bytes": 6744,
+      "sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/61_agency_authorised_native_observation.sqlinc",
+      "reference": "caller_17_61_agency_authorised_native_observation.sqlinc",
+      "bytes": 16313,
+      "sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/62_complete_native_financial_observation_with_validation.sqlinc",
+      "reference": "caller_18_62_complete_native_financial_observation_with_validation.sqlinc",
+      "bytes": 19347,
+      "sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/63_complete_native_flags_with_validation_observation.sqlinc",
+      "reference": "caller_19_63_complete_native_flags_with_validation_observation.sqlinc",
+      "bytes": 16927,
+      "sha256": "27e64b68763880ce64012e9189d23255e0dc582ce4d560a2fcc3943c65acd108"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/64_complete_authorise_with_native_validation_writer.sqlinc",
+      "reference": "caller_20_64_complete_authorise_with_native_validation_writer.sqlinc",
+      "bytes": 13298,
+      "sha256": "dcb2bebdce98fb90f2451684836cac317248695bae163667c45f27dda976018f"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/66_agency_actual_validation_hooks.sqlinc",
+      "reference": "caller_21_66_agency_actual_validation_hooks.sqlinc",
+      "bytes": 6729,
+      "sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/53_agency_same_draft_return_step.sqlinc",
+      "reference": "caller_22_53_agency_same_draft_return_step.sqlinc",
+      "bytes": 10423,
+      "sha256": "f4d7100d119f1afd2f9e47ead804a605773ef17b7499480395db15ec51cdc804"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/54_return_step_service_reply.sqlinc",
+      "reference": "caller_23_54_return_step_service_reply.sqlinc",
+      "bytes": 1656,
+      "sha256": "9b4cac9d661e390272b25b84e02771d0aabd9c809961a67fcdffb3a8ee088fcb"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/19_agency_native_worker_apply.sqlinc",
+      "reference": "caller_24_19_agency_native_worker_apply.sqlinc",
+      "bytes": 14688,
+      "sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "reference": "caller_25_84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "bytes": 7819,
+      "sha256": "899bcda05f68cdf61c2a614fffe19dd7aafe51ac1f1d762ab50f3e014f76d678"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/construction/80_native_agency_business_entry.sqlinc",
+      "reference": "caller_26_80_native_agency_business_entry.sqlinc",
+      "bytes": 4768,
+      "sha256": "14a00fd9a67d100d3690aa9d9f5992dfdd67ad53c9707c2adc96ae1e9cedf7b3"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/08_native_agency_crosscheck_context.sqlinc",
+      "reference": "caller_27_08_native_agency_crosscheck_context.sqlinc",
+      "bytes": 8564,
+      "sha256": "8e44513b98adbba92d9e9609596a7596d7fe9883b9a090d1069163ff13b3cec1"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-issued-credit-dependency-source-successor-20261014/construction/18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc",
+      "reference": "caller_28_18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc",
+      "bytes": 6149,
+      "sha256": "3e2e17853e94404eb86b89032710baf4086a44330db6569e70938c0081d825f9"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/15_native_agency_issue_close.sqlinc",
+      "reference": "caller_29_15_native_agency_issue_close.sqlinc",
+      "bytes": 9087,
+      "sha256": "fa222e70af038aa5744c1e36a730497f7b4fd24d41e65eb7e44bb4e782b31ee8"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/20_native_mode_a_unit_census.sqlinc",
+      "reference": "caller_30_20_native_mode_a_unit_census.sqlinc",
+      "bytes": 3110,
+      "sha256": "0523d4f2da7606898b976ffde228e2a489ab8c6927168fe413c667f304f7aade"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/52_same_validation_store_typed_source.sqlinc",
+      "reference": "52_typed_existing_validation_columns.sqlinc",
+      "bytes": 1679,
+      "sha256": "c97fe113d927023fea276c492eb23e9803e9082d762bfe16fe656c4114df38c3"
+    },
+    {
+      "commit": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+      "path": "docs/healthroster-build/proposals/a0-source-raw-final-registration-20261015/01_source_final_before.sqlinc",
+      "reference": "root_final_source_before.sqlinc",
+      "bytes": 2428,
+      "sha256": "ee0e19e1e381c260970e5a99e3495ce10fae13a2751ee6f202effb8eecf17828"
+    },
+    {
+      "commit": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+      "path": "docs/healthroster-build/proposals/a0-source-registration-column-filter-fix-20261015/forward/02_source_raw_final_registration.sqlinc",
+      "reference": "root_corrected_76_registrations.sqlinc",
+      "bytes": 31947,
+      "sha256": "834e4134f5bc306810f627d38cad84d12fc3d8c5c6f79dddb88b26e839d50043"
+    },
+    {
+      "commit": "72ecceb8cd10c4986aa5770a29f69e18f0417616",
+      "path": "docs/healthroster-build/proposals/a0-source-registration-column-filter-fix-20261015/forward/03_source_raw_final_verifier.sqlinc",
+      "reference": "root_corrected_76_verifier.sqlinc",
+      "bytes": 14131,
+      "sha256": "64af6d58494f0bcec8d7c6022f9a7274b144cc296892d18aa5eb1b430708e2ef"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/11_complete_tsfin_prepare_write.sqlinc",
+      "reference": "shared_11_complete_tsfin_prepare_write.sqlinc",
+      "bytes": 8340,
+      "sha256": "d20ae24e7e3ed504f41f3e7d7ab445de2f1674249073d25e43a16beec8c0482e"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+      "reference": "shared_12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+      "bytes": 36923,
+      "sha256": "a48e15134fd61562f75e8a8f7c7d3912b06b87046ccd3a8417fa9f2f133b2162"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/13_complete_tsfin_write_snapshots_and_complete.sqlinc",
+      "reference": "shared_13_complete_tsfin_write_snapshots_and_complete.sqlinc",
+      "bytes": 40457,
+      "sha256": "50e5f92fefff607455618da5ae643397c79250d6c3aff808435ddb255ae719bd"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/65_complete_native_invalidation_with_single_writer.sqlinc",
+      "reference": "shared_65_complete_native_invalidation_with_single_writer.sqlinc",
+      "bytes": 5854,
+      "sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/70_complete_current_publication_with_agency_validation.sqlinc",
+      "reference": "shared_70_complete_current_publication_with_agency_validation.sqlinc",
+      "bytes": 22324,
+      "sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+      "reference": "shared_14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+      "bytes": 31334,
+      "sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+      "reference": "shared_16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+      "bytes": 26969,
+      "sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+      "reference": "shared_17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+      "bytes": 39333,
+      "sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+      "reference": "shared_21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+      "bytes": 2531,
+      "sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+      "reference": "shared_22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+      "bytes": 143534,
+      "sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+      "reference": "shared_23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+      "bytes": 16896,
+      "sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+      "reference": "shared_24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+      "bytes": 20407,
+      "sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "reference": "shared_97_complete_off_scope_assert_with_finite_agency.sqlinc",
+      "bytes": 12625,
+      "sha256": "32e44b2d3c4c2ac1b5964ab53661ddbdec49772fefc705f94024ee2f43978916"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/98_complete_off_parent_with_actual_agency.sqlinc",
+      "reference": "shared_98_complete_off_parent_with_actual_agency.sqlinc",
+      "bytes": 27588,
+      "sha256": "19d0b2811cbb31fc8b8652869bfec4a77b3e2cad14b3d47d4fb4ce1face4500c"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/99_complete_off_command_with_literal_agency.sqlinc",
+      "reference": "shared_99_complete_off_command_with_literal_agency.sqlinc",
+      "bytes": 21997,
+      "sha256": "730d4eed78d7dee60b67cabaa52d7d66718df0e8cccdbe607cc394e86552fee8"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "reference": "shared_100_complete_off_transport_with_native_phase_actor.sqlinc",
+      "bytes": 5205,
+      "sha256": "9c1fc569ce7cabd8e2a90d91c843832a0923c1db65e07a4a91e6b4bfef05c349"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "reference": "shared_101_complete_off_setup_shape_with_finite_agency.sqlinc",
+      "bytes": 6358,
+      "sha256": "ab42038e2bf0dd917ebe5652b5c35a3a38ecc0e0d24ad67a6dab4b83b2202ec3"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-fixed-approval-policy-support-20261015/93_complete_fixed_contract_approval_normaliser.sqlinc",
+      "reference": "lifecycle_93_complete_fixed_contract_approval_normaliser.sqlinc",
+      "bytes": 3629,
+      "sha256": "fd2a54af3d95c0a7bf1c014fc0baa91e76c38aca0ec27fb5c919a4b7750e0677"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-fixed-approval-policy-support-20261015/94_complete_effective_contract_fixed_approval.sqlinc",
+      "reference": "lifecycle_94_complete_effective_contract_fixed_approval.sqlinc",
+      "bytes": 2876,
+      "sha256": "e7d304e85999744cd41e0e1cf21f8bcd98f34714916e94a5fb9831262414cb84"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-fixed-approval-policy-support-20261015/95_complete_public_manager_writer_fixed_policy_guard.sqlinc",
+      "reference": "lifecycle_95_complete_public_manager_writer_fixed_policy_guard.sqlinc",
+      "bytes": 3228,
+      "sha256": "cf18a06a3186e645bd4af6fbd28528e6d5b5b22a4ec563c27eba7a6e6f6cf9e2"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/96_off_agency_native_parent.sqlinc",
+      "reference": "lifecycle_96_off_agency_native_parent.sqlinc",
+      "bytes": 10944,
+      "sha256": "c6f7b865a2f9d770fd4af0bcf282c18a5d8a1b11c138340e0f7c7f4618631910"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-client-preset-fixed-approval-source-forward-20261015/forward/105_complete_client_preset_fixed_approval.sqlinc",
+      "reference": "lifecycle_105_complete_client_preset_fixed_approval.sqlinc",
+      "bytes": 22951,
+      "sha256": "145cb1cf260cf53cbce60980a1e020154926952fab82e5fae111a6dd4ab58962"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-client-preset-fixed-approval-source-forward-20261015/forward/106_complete_feature_setup_fixed_approval_receipts.sqlinc",
+      "reference": "lifecycle_106_complete_feature_setup_fixed_approval_receipts.sqlinc",
+      "bytes": 24224,
+      "sha256": "caec60d101a9e6a5952375d099ef6cbd3f1710b707772e9722109371e06b7f72"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-client-preset-fixed-approval-source-forward-20261015/forward/107_complete_dated_candidate_fixed_approval_policy.sqlinc",
+      "reference": "lifecycle_107_complete_dated_candidate_fixed_approval_policy.sqlinc",
+      "bytes": 6084,
+      "sha256": "5a4a1f8370ded559850088545c8f2b23384c4e4cbe7d8899434e0692eb3379e0"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-worker-only-candidate-native-forward-20261015/forward/108_complete_worker_only_candidate_transition.sqlinc",
+      "reference": "lifecycle_108_complete_worker_only_candidate_transition.sqlinc",
+      "bytes": 247798,
+      "sha256": "f5f3c2a1c46820900783cfc8e09eb592193a5541acc24ef146793ff48214bb66"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-worker-only-candidate-native-forward-20261015/forward/109_complete_worker_only_component_render_contract.sqlinc",
+      "reference": "lifecycle_109_complete_worker_only_component_render_contract.sqlinc",
+      "bytes": 4215,
+      "sha256": "509c9b8e4a1ff728c9b7ffd8985f0fb2d905f7eb8623510a53938e7d05a1fd41"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-worker-only-candidate-native-forward-20261015/forward/110_complete_worker_only_candidate_finaliser.sqlinc",
+      "reference": "lifecycle_110_complete_worker_only_candidate_finaliser.sqlinc",
+      "bytes": 59930,
+      "sha256": "e3447132f8128926699f31c01751270826554ae8f09ac11637af71ba44ca39ee"
+    },
+    {
+      "commit": "9320ff3b494c5d105f1e9725aef7071bb724682f",
+      "path": "docs/healthroster-build/proposals/agency-worker-only-candidate-native-forward-20261015/114_worker_only_candidate_security_verification.sql",
+      "reference": "114_candidate_native_security_verifier.sql",
+      "bytes": 2206,
+      "sha256": "33d57d08e09180d41c399742de49c9217fad9edcb9860c8d1ea85dc983f04a8e"
+    },
+    {
+      "commit": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "reference": "canonical_claim_1_13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "bytes": 4481,
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    },
+    {
+      "commit": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+      "reference": "canonical_claim_2_13102026_1127_invariants.sqlinc",
+      "bytes": 4807,
+      "sha256": "af57e7e707915f43813e6f708b0680ba784eecfc41e3e59f219d998a676446ab"
+    },
+    {
+      "commit": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc",
+      "reference": "canonical_claim_3_01_physical_token_and_retention_helpers.sqlinc",
+      "bytes": 14965,
+      "sha256": "5ff8eea6905813e1b2964d47497f23e46d2ba0eccdd8669ada202e0bc2a1d3c8"
+    },
+    {
+      "commit": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+      "reference": "canonical_claim_4_00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "commit": "44db8a50182823b13df0b22d69b4363ef5332a48",
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "reference": "pinned-source-parser.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    }
+  ]
+}

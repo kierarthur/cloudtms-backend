@@ -1,0 +1,85 @@
+-- Native scope adapter for the genuine owned UNA/recompute phase. The original
+-- Source scope still refuses revoked roots; no shared predicate or GUC changes.
+-- Only this owner and the unchanged original scope call the private facts kernel.
+create or replace function private.weekly_source_agency_native_query_facts_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; c public.contracts%rowtype; family public.weekly_exceptional_pay_target_families%rowtype;
+ identity jsonb; frame jsonb; native_scope jsonb; actual_scope jsonb; count_value integer;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001';end if;
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ if r.state<>'ACTIVE' or r.phase not in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT','AUTHORISED')
+  or private.weekly_source_agency_change_request_sha256_v1(r.contract_week_id,r.reason,r.initial_row_signature,
+   r.request_key,r.actor_user_id,r.native_receipts->'original_capture') is distinct from r.request_sha256 then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_REQUEST_DIGEST_INVALID' using errcode='55000';end if;
+ if private.weekly_source_pay_actor_allowed_v1(r.updated_by_user_id) is distinct from true then
+  raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+ perform private.weekly_source_office_authority_v1(r.updated_by_user_id,'VIEW_PAY_WORK',r.source_group_id,r.client_id,r.week_ending_date);
+ if private.weekly_source_bulk_source_cas_v1(r.source_cycle_id,array[r.client_id]) is distinct from r.source_cas
+  or private.weekly_source_effective_rule_set_v1(r.client_id,r.source_cycle_id)->>'rule_set_version_id'
+    is distinct from r.rule_set_version_id::text then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_SOURCE_CAS_CHANGED' using errcode='40001';end if;
+ select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+ select * into strict c from public.contracts where id=t.contract_id;
+ identity:=private.weekly_source_resolve_root_identity_v1(t.timesheet_id);
+ if identity->>'ok' is distinct from 'true' or identity->>'requested_is_canonical' is distinct from 'true'
+  or identity->>'family_is_current' is distinct from 'true' or identity->>'canonical_timesheet_id' is distinct from t.timesheet_id::text
+  or identity->>'family_booking_id' is distinct from t.booking_id
+  or t.timesheet_id is distinct from r.initial_timesheet_id or t.version is distinct from r.current_timesheet_version
+  or t.is_current is distinct from true or t.archived_at_utc is not null or t.sheet_scope::text is distinct from 'WEEKLY'
+  or t.line_type::text is distinct from 'HOURS' or t.is_adjustment is distinct from false
+  or c.id is distinct from r.contract_id or c.candidate_id is distinct from r.candidate_id or c.client_id is distinct from r.client_id
+  or t.week_ending_date is distinct from r.week_ending_date then
+  raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+ select count(*) into count_value from public.contract_weeks where contract_id=c.id and week_ending_date=t.week_ending_date
+  and additional_seq=0 and is_adjustment is false and timesheet_id=t.timesheet_id;
+ if count_value<>1 then raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+ if r.phase in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING') then
+  frame:=r.native_receipts->'financial_write_frame';
+  if frame->>'transaction_id' is distinct from pg_current_xact_id()::text or frame->>'backend_pid' is distinct from pg_backend_pid()::text
+   or frame->>'request_id' is distinct from r.id::text or frame->>'request_sha256' is distinct from encode(r.request_sha256,'hex')
+   or frame->>'phase_actor_user_id' is distinct from r.updated_by_user_id::text
+   or frame->>'timesheet_id' is distinct from t.timesheet_id::text or frame->>'timesheet_version' is distinct from t.version::text
+   or frame->'source_cas' is distinct from r.source_cas then
+   raise exception 'AGENCY_CHANGE_GENUINE_FINANCIAL_FRAME_REQUIRED' using errcode='55000';end if;
+ else
+  r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,r.initial_row_signature,r.request_key,r.updated_by_user_id);
+ end if;
+ if t.revoked_at is not null and (r.phase='AUTHORISED' or t.revoked_reason is distinct from 'TIMESHEET_UNAUTHORISE'
+   or t.revoked_by is distinct from r.native_receipts#>>'{unauthorise,phase_actor_user_id}'
+   or r.native_receipts#>>'{unauthorise,result,ok}' is distinct from 'true'
+   or r.native_receipts#>>'{unauthorise,result,timesheet_id}' is distinct from t.timesheet_id::text) then
+  raise exception 'AGENCY_CHANGE_GENUINE_UNAUTHORISE_RECEIPT_REQUIRED' using errcode='55000';end if;
+ select count(*) into count_value from public.weekly_exceptional_pay_target_families where btrim(root_family_booking_id)=btrim(t.booking_id);
+ if count_value>1 then raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+ if count_value=1 then
+  select * into strict family from public.weekly_exceptional_pay_target_families where btrim(root_family_booking_id)=btrim(t.booking_id);
+  if family.root_timesheet_id is distinct from t.timesheet_id or family.root_family_booking_id is distinct from t.booking_id
+   or family.candidate_id is distinct from c.candidate_id or family.contract_id is distinct from c.id
+   or family.week_start_date is distinct from t.week_ending_date-6 or family.week_ending_date is distinct from t.week_ending_date
+   or family.bound_version is null or family.bound_version<1 then
+   raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+ end if;
+ native_scope:=jsonb_build_object('root_timesheet_id',t.timesheet_id,'family_booking_id',t.booking_id,'target_family_id',family.id,
+  'candidate_id',c.candidate_id,'client_id',c.client_id,'contract_id',c.id,'week_ending_date',t.week_ending_date,
+  'root_version',t.version::text,'family_bound_version',family.bound_version::text);
+ if t.revoked_at is null then
+  -- Where the original native scope is applicable it must be byte-identical.
+  -- Its real integrity/refusal errors propagate and are never swallowed.
+  actual_scope:=private.weekly_source_pay_query_scope_v1(t.timesheet_id);
+  if actual_scope is not null and actual_scope is distinct from native_scope then
+   raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';end if;
+ end if;
+ return private.weekly_source_native_query_facts_for_scope_v1(native_scope);
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NATIVE_QUERY_SUBJECT_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_native_query_facts_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_native_query_facts_v1(uuid) from public,anon,authenticated,service_role;

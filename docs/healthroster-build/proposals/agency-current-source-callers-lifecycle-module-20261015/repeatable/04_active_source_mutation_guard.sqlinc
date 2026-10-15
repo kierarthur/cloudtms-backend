@@ -1,0 +1,97 @@
+-- BEFORE-only native Source mutation basis. No AFTER/STABLE visibility claim.
+-- Most selected Source arrays hash their entire native row. Three identity /
+-- dependency projections below follow the actual bulk_source_facts body.
+create or replace function private.weekly_source_agency_source_mutation_basis_v1(p_relation text,p_row jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $agency_source_basis$
+declare keys text[];result jsonb;comparison public.weekly_issue_comparison_revisions%rowtype;
+begin
+ if p_row is null then return null;end if;
+ if jsonb_typeof(p_row) is distinct from 'object' then
+  raise exception 'AGENCY_ACTIVE_SOURCE_MUTATION_CONTEXT_INVALID' using errcode='55000';end if;
+ case p_relation
+ when 'public.timesheets' then keys:=array['timesheet_id','contract_id','booking_id'];
+ when 'public.timesheets_financials' then keys:=array['id','timesheet_id','client_id','candidate_id'];
+ when 'public.weekly_source_billing_movements' then
+  keys:=array['id','final_revision_id','invoice_timesheet_id','actual_client_id','candidate_id','contract_id',
+   'movement_economic_hash','source_profile_kind','source_line_kind'];
+ when 'public.weekly_issue_comparison_revisions' then keys:=array['id','incident_id','contract_id'];
+ when 'public.weekly_discrepancy_incidents' then
+  keys:=array['id','source_cycle_id','client_id','work_event_id'];
+ else return p_row;
+ end case;
+ select coalesce(jsonb_object_agg(key,value),'{}'::jsonb) into result from jsonb_each(p_row) where key=any(keys);
+ if p_relation='public.weekly_discrepancy_incidents' then
+  -- A native comparison pointer is a dependency only through the actual
+  -- referenced Contract in bulk facts. New comparison wording/hours or an
+  -- OPEN/CLOSED/audit update does not silently become another Source CAS.
+  -- This new volatile BEFORE reader deliberately obtains a fresh explicit
+  -- native reference; it does not relabel the existing STABLE CAS owners.
+  if p_row->>'current_comparison_revision_id' is not null then
+   select * into strict comparison from public.weekly_issue_comparison_revisions
+    where id=(p_row->>'current_comparison_revision_id')::uuid and incident_id=(p_row->>'id')::uuid;
+   result:=result||jsonb_build_object('source_contract_dependency',comparison.contract_id);
+  else result:=result||jsonb_build_object('source_contract_dependency',null);end if;
+ end if;
+ return result;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_ACTIVE_SOURCE_MUTATION_CONTEXT_INVALID' using errcode='55000';
+end;
+$agency_source_basis$;
+alter function private.weekly_source_agency_source_mutation_basis_v1(text,jsonb) owner to postgres;
+revoke all on function private.weekly_source_agency_source_mutation_basis_v1(text,jsonb) from public,anon,authenticated,service_role;
+
+-- Called only inside the SAME raw BEFORE owner, after real OLD+NEW tokens
+-- have gone through ordinary same-arbiter acquisition. No purpose flag / GUC
+-- / mutable actor session can exempt a Source authority change.
+create or replace function private.weekly_source_agency_active_source_mutation_assert_v1(
+ p_relation text,p_old jsonb,p_new jsonb,p_raw_tokens jsonb
+) returns void language plpgsql volatile security definer set search_path to 'pg_catalog','public','private','pg_temp'
+as $agency_source_guard$
+declare raw_tokens jsonb:='[]'::jsonb;nested_tokens jsonb:='[]'::jsonb;token jsonb;captured jsonb;
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+begin
+ if p_old is null and p_new is null then
+  raise exception 'AGENCY_ACTIVE_SOURCE_MUTATION_CONTEXT_INVALID' using errcode='55000';end if;
+ if p_old is not null then raw_tokens:=raw_tokens||private.timesheet_correction_a0_source_raw_tokens_v1(p_relation,p_old);end if;
+ if p_new is not null then raw_tokens:=raw_tokens||private.timesheet_correction_a0_source_raw_tokens_v1(p_relation,p_new);end if;
+ if p_old is not null then nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1(p_relation,p_old)
+  ||private.timesheet_correction_a0_source_policy_tokens_v1(p_relation,p_old);end if;
+ if p_new is not null then nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1(p_relation,p_new)
+  ||private.timesheet_correction_a0_source_policy_tokens_v1(p_relation,p_new);end if;
+ raw_tokens:=raw_tokens||nested_tokens;
+ -- Native trigger's exact RAW plus NESTED union, with duplicates preserved, must
+ -- match. This is not a caller-normalised or sampled dependency list.
+ if raw_tokens is distinct from p_raw_tokens then
+  raise exception 'AGENCY_CHANGE_SOURCE_FOOTPRINT_CHANGED_UNDER_LOCK' using errcode='40001';end if;
+ if private.weekly_source_agency_source_mutation_basis_v1(p_relation,p_old)
+  is not distinct from private.weekly_source_agency_source_mutation_basis_v1(p_relation,p_new) then return;end if;
+ for r in select request.* from private.weekly_source_agency_timesheet_change_requests request
+  where request.state='ACTIVE' and exists(
+   select 1 from jsonb_array_elements(raw_tokens) raw
+   where request.current_source_dependency_tokens @> jsonb_build_array(raw)
+    or(raw->>'kind' in('SOURCE_CONTRACT_COVERAGE','SOURCE_POLICY_MEMBERSHIP_COVERAGE') and exists(
+     select 1 from jsonb_array_elements(request.current_source_dependency_tokens) held
+      where held->>'kind'=raw->>'kind' and held->>'uuid'=raw->>'uuid'
+       and daterange((held->'coverage'->>0)::date,(held->'coverage'->>1)::date,'[]')
+         && daterange((raw->'coverage'->>0)::date,(raw->'coverage'->>1)::date,'[]'))))
+  order by request.id
+ loop
+  -- The existing immutable creator/click digest and captured Source scope
+  -- remain the authority; a corrupted request cannot unlock foreign Source.
+  captured:=r.native_receipts->'original_capture';
+  if captured->>'source_dependency_tokens_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',r.source_dependency_tokens),'hex')
+   or r.request_sha256 is distinct from private.weekly_source_agency_change_request_sha256_v1(
+    r.contract_week_id,r.reason,r.initial_row_signature,r.request_key,r.actor_user_id,captured)
+   or not r.current_source_dependency_tokens @> r.source_dependency_tokens then
+   raise exception 'AGENCY_ACTIVE_SOURCE_CAPTURE_INVALID' using errcode='55000';end if;
+  raise exception 'AGENCY_ACTIVE_SOURCE_MUTATION_REFUSED' using errcode='40001',detail=jsonb_build_object(
+   'schema_version','WEEKLY_SOURCE_AGENCY_ACTIVE_SOURCE_REFUSAL_V1','request_id',r.id,'request_key',r.request_key,
+   'phase',r.phase,'current_timesheet_id',r.current_timesheet_id,'original_draft_invoice_id',r.original_draft_invoice_id,
+   'source_cycle_id',r.source_cycle_id,'recovery','RESUME_SAME_REQUEST_WITH_CURRENT_SCOPED_ACTOR')::text;
+ end loop;
+end;
+$agency_source_guard$;
+alter function private.weekly_source_agency_active_source_mutation_assert_v1(text,jsonb,jsonb,jsonb) owner to postgres;
+revoke all on function private.weekly_source_agency_active_source_mutation_assert_v1(text,jsonb,jsonb,jsonb) from public,anon,authenticated,service_role;

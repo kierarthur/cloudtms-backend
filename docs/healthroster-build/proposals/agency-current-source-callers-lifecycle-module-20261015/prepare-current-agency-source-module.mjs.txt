@@ -1,0 +1,226 @@
+// Source assembly only. This program has no database, HTTP, installation or runtime calls.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+
+const here=path.dirname(fileURLToPath(import.meta.url));
+const repo=path.resolve(here,'../../../..');
+const out=path.join(here,'current-agency-source-module-construction-20261015');
+const rootPin='44db8a50182823b13df0b22d69b4363ef5332a48';
+const reportPin='9320ff3b494c5d105f1e9725aef7071bb724682f';
+const registrationPin='72ecceb8cd10c4986aa5770a29f69e18f0417616';
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const receipts=[];
+const p='docs/healthroster-build/proposals/';
+function input(commit,file,reference){
+  const b=execFileSync('git',['show',`${commit}:${file}`],{cwd:repo,maxBuffer:64*1024*1024});
+  const disk=path.join(repo,file);
+  if(commit===reportPin&&fs.existsSync(disk))assert.deepEqual(fs.readFileSync(disk),b,`Saved source differs: ${file}`);
+  receipts.push({commit,path:file,reference,bytes:b.length,sha256:sha(b)});
+  write(`reference/${reference}`,b);return b.toString('utf8');
+}
+function write(file,b){const dest=path.join(out,file);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,b);}
+function json(file,v){write(file,JSON.stringify(v,null,2)+'\n');}
+function replaceOnce(s,a,b){assert.equal(s.split(a).length,2,'Unique change anchor');return s.replace(a,b);}
+fs.mkdirSync(out,{recursive:true});
+
+const schema=input(reportPin,p+'agency-source-phase-active-capture-forward-20261015/88_complete_same_request_store_source_tokens.sqlinc','88_same_request_schema_and_guard.sqlinc');
+const guardStart=schema.indexOf('create or replace function private.weekly_source_agency_change_identity_guard_v1()');
+assert.ok(guardStart>0);const migration=schema.slice(0,guardStart),identity=schema.slice(guardStart);
+assert.equal(migration+identity,schema);
+write('migration/01_same_agency_request_store.sqlinc',migration);
+write('repeatable/02_same_request_identity_guard.sqlinc',identity);
+
+const request=input(reportPin,p+'agency-source-phase-active-capture-forward-20261015/91_complete_current_request_source_phase_resume.sqlinc','91_current_request_assert.sqlinc');
+const recheck=`  -- Every advancing native phase rechecks the actual immutable original claim.\n  -- The helper retains unavailable/absence semantics; no claim is manufactured.\n  perform private.weekly_source_agency_original_claim_recheck_v1(v_request.id);\n`;
+const anchor='  v_cas:=private.weekly_source_bulk_source_cas_v1(v_request.source_cycle_id,array[v_request.client_id]);';
+const requestForward=replaceOnce(request,anchor,recheck+anchor);
+write('repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc',requestForward);
+
+const raw=input(rootPin,'supabase/repeatable/15102026_0344_healthroster_source_selectors/05_raw_selector_helpers.sqlinc','root_current_raw05.sqlinc');
+const old104=input(reportPin,p+'agency-policy-source-phase-successor-20261015/104_complete_same_source_before_policy_and_active_union.sqlinc','104_before_union_delta_source.sqlinc');
+const activeStart=old104.indexOf(' perform private.weekly_source_agency_active_source_mutation_assert_v1(');
+assert.ok(activeStart>0);const activeEnd=old104.indexOf(" if tg_op='DELETE' then return old;end if;return new;",activeStart);
+assert.ok(activeEnd>activeStart);const activeCall=old104.slice(activeStart,activeEnd);
+assert.equal((activeCall.match(/perform private\./g)||[]).length,1);
+const finalAnchor=" if tg_op='DELETE' then return old;end if;return new;";
+const rawForward=replaceOnce(raw,finalAnchor,activeCall+finalAnchor);
+write('repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc',rawForward);
+
+const selected=[
+ ['agency-source-phase-active-capture-forward-20261015/86_agency_source_phase_admission.sqlinc','03_actual_source_phase_admission.sqlinc'],
+ ['agency-policy-source-phase-successor-20261015/103_complete_active_source_guard_with_native_policy_union.sqlinc','04_active_source_mutation_guard.sqlinc'],
+ ['agency-source-phase-active-capture-forward-20261015/89_complete_native_capture_source_phase_admission.sqlinc','05_actual_native_capture_and_digest.sqlinc'],
+ ['agency-native-paid-purpose-forward-20261014/construction/15_agency_original_claim_recheck.sqlinc','06_actual_original_claim_recheck.sqlinc'],
+ ['agency-source-phase-active-capture-forward-20261015/90_complete_native_begin_immutable_source_tokens.sqlinc','07_actual_native_begin.sqlinc']
+];
+for(const [source,dest]of selected){const s=input(reportPin,p+source,path.basename(source));write('repeatable/'+dest,s);}
+
+// Exact final private/public Agency caller bodies. Superseded variants are
+// deliberately absent; unrelated shared financial/query/publication owners
+// remain separate root compositions and are listed below with their source.
+const callers=[
+ 'agency-native-paid-purpose-forward-20261014/dependencies/06_agency_immutable_submitted_claim.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/20_agency_native_pay_scope.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/21_agency_legacy_original_document.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/28_agency_original_pay_identity.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/29_agency_paid_write_purpose.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/34_complete_ordinary_collection_native_json_codec.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/35_complete_before_collection_native_json_codec.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/38_agency_candidate_native_admission.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/40_complete_physical_pay_scope_client_cycle.sqlinc',
+ 'agency-native-authorise-phase-forward-20261014/construction/44_agency_native_segment_flag_apply.sqlinc',
+ 'agency-native-authorise-phase-forward-20261014/construction/51_agency_owned_native_query_facts.sqlinc',
+ 'agency-typed-validation-native-return-construction-20261014/construction/56_native_invoice_segment_selection.sqlinc',
+ 'agency-typed-validation-native-return-construction-20261014/construction/57_complete_same_draft_with_unchanged_editor.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/58_agency_native_week_facts.sqlinc',
+ 'agency-validation-marker-override-source-successor-20261014/construction/73_complete_sole_writer_with_superseded_override_retirement.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/60_agency_authorised_validation_context.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/61_agency_authorised_native_observation.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/62_complete_native_financial_observation_with_validation.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/63_complete_native_flags_with_validation_observation.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/64_complete_authorise_with_native_validation_writer.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/66_agency_actual_validation_hooks.sqlinc',
+ 'agency-typed-validation-native-return-construction-20261014/construction/53_agency_same_draft_return_step.sqlinc',
+ 'agency-typed-validation-native-return-construction-20261014/construction/54_return_step_service_reply.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/19_agency_native_worker_apply.sqlinc',
+ 'agency-business-entry-inline-source-forward-20261014/construction/84_complete_native_worker_context_with_manual_typed_validation.sqlinc',
+ 'agency-business-entry-inline-source-forward-20261014/construction/80_native_agency_business_entry.sqlinc',
+ 'agency-mode-a-source-support-issue-construction-20261014/construction/08_native_agency_crosscheck_context.sqlinc',
+ 'agency-issued-credit-dependency-source-successor-20261014/construction/18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc',
+ 'agency-mode-a-source-support-issue-construction-20261014/construction/15_native_agency_issue_close.sqlinc',
+ 'agency-mode-a-preset-policy-source-successor-20261014/construction/20_native_mode_a_unit_census.sqlinc'
+];
+const callerOrder=[];
+for(let n=0;n<callers.length;n++){
+ const source=callers[n],dest=`callers/${String(n+1).padStart(2,'0')}_${path.basename(source)}`;
+ const s=input(reportPin,p+source,`caller_${String(n+1).padStart(2,'0')}_${path.basename(source)}`);
+ assert.equal([...s.matchAll(/create or replace function\s+((?:public|private)\.[a-z0-9_]+)/gi)].every(m=>m[1].includes('.weekly_source_agency_')),true,`Non-Agency owner requires current root union: ${source}`);
+ write(dest,s);callerOrder.push(dest);
+}
+const typedValidation=input(reportPin,p+'agency-typed-validation-native-return-construction-20261014/construction/52_same_validation_store_typed_source.sqlinc','52_typed_existing_validation_columns.sqlinc');
+write('migration/02_typed_existing_validation_columns.sqlinc',typedValidation);
+write('00_agency_schema_once_only.sql',`-- Once-only managed migrations; never place these DDL bodies in repeatables.\nbegin;\n\\ir migration/01_same_agency_request_store.sqlinc\n\\ir migration/02_typed_existing_validation_columns.sqlinc\ncommit;\n`);
+
+const finalBefore=input(registrationPin,p+'a0-source-raw-final-registration-20261015/01_source_final_before.sqlinc','root_final_source_before.sqlinc');
+const registrations=input(registrationPin,p+'a0-source-registration-column-filter-fix-20261015/forward/02_source_raw_final_registration.sqlinc','root_corrected_76_registrations.sqlinc');
+const verifier=input(registrationPin,p+'a0-source-registration-column-filter-fix-20261015/forward/03_source_raw_final_verifier.sqlinc','root_corrected_76_verifier.sqlinc');
+assert.equal(sha(Buffer.from(registrations)),'834e4134f5bc306810f627d38cad84d12fc3d8c5c6f79dddb88b26e839d50043');
+assert.equal(sha(Buffer.from(verifier)),'64af6d58494f0bcec8d7c6022f9a7274b144cc296892d18aa5eb1b430708e2ef');
+write('repeatable/117_current_source_final_before.sqlinc',finalBefore);
+write('repeatable/118_current_source_raw_and_final_76_registrations.sqlinc',registrations);
+write('verification/119_current_source_raw_and_final_76_verifier.sqlinc',verifier);
+
+const coreOrder=['02_same_request_identity_guard.sqlinc','03_actual_source_phase_admission.sqlinc','04_active_source_mutation_guard.sqlinc',
+ '05_actual_native_capture_and_digest.sqlinc','06_actual_original_claim_recheck.sqlinc','115_complete_current_request_assert_with_original_claim_recheck.sqlinc',
+ '07_actual_native_begin.sqlinc','116_complete_current_source_raw05_with_active_before_union.sqlinc','117_current_source_final_before.sqlinc',
+ '118_current_source_raw_and_final_76_registrations.sqlinc'];
+write('01_agency_source_core.sql',`-- Proposed final chronological source module. No installation has been performed.\n-- Once-only request migration and the full selected Agency caller prerequisites are mandatory.\nbegin;\n${coreOrder.map(f=>'\\ir repeatable/'+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+write('02_agency_current_callers.sql',`-- Exact final Agency-only caller selection; canonical shared call sites are separate root unions.\nbegin;\n${callerOrder.map(f=>'\\ir '+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+write('03_agency_source_and_current_callers.sql',`-- Complete selected Agency-specific source composition, AFTER once-only migrations\n-- and mandatory current canonical/shared owner union. No native proof is implied.\nbegin;\n${callerOrder.map(f=>'\\ir '+f).join('\n')}\n${coreOrder.map(f=>'\\ir repeatable/'+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+
+const sharedSources=[
+ 'agency-native-paid-purpose-forward-20261014/construction/11_complete_tsfin_prepare_write.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc',
+ 'agency-native-paid-purpose-forward-20261014/construction/13_complete_tsfin_write_snapshots_and_complete.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/65_complete_native_invalidation_with_single_writer.sqlinc',
+ 'agency-native-whole-week-validation-runtime-forward-20261014/construction/70_complete_current_publication_with_agency_validation.sqlinc',
+ 'agency-mode-a-source-support-issue-construction-20261014/construction/14_complete_native_issue_validator_with_agency_requirements.sqlinc',
+ 'agency-mode-a-source-support-issue-construction-20261014/construction/16_complete_actual_direct_issue_with_agency_callbacks.sqlinc',
+ 'agency-mode-a-source-support-issue-construction-20261014/construction/17_complete_actual_async_issue_with_agency_callbacks.sqlinc',
+ 'agency-mode-a-preset-policy-source-successor-20261014/construction/21_complete_native_ready_units_with_preset_exclusion.sqlinc',
+ 'agency-mode-a-preset-policy-source-successor-20261014/construction/22_complete_native_mode_a_with_selected_preset_refusal.sqlinc',
+ 'agency-mode-a-preset-policy-source-successor-20261014/construction/23_complete_native_reference_apply_with_preset_row_refusal.sqlinc',
+ 'agency-mode-a-preset-policy-source-successor-20261014/construction/24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc'
+];
+for(const source of ['97_complete_off_scope_assert_with_finite_agency.sqlinc','98_complete_off_parent_with_actual_agency.sqlinc',
+ '99_complete_off_command_with_literal_agency.sqlinc','100_complete_off_transport_with_native_phase_actor.sqlinc',
+ '101_complete_off_setup_shape_with_finite_agency.sqlinc'])sharedSources.push('agency-off-native-transport-forward-20261015/'+source);
+const shared=[];for(let n=0;n<sharedSources.length;n++){
+ const source=sharedSources[n],s=input(reportPin,p+source,`shared_${path.basename(source)}`);
+ shared.push({commit:reportPin,path:p+source,reference:`reference/shared_${path.basename(source)}`,sha256:sha(Buffer.from(s)),
+  functions:[...s.matchAll(/create or replace function\s+((?:public|private)\.[a-z0-9_]+)/gi)].map(m=>m[1]),
+  disposition:'MANDATORY_CURRENT_ROOT_OWNER_UNION; not automatically executed by Agency-only module'});
+}
+json('MANDATORY_SHARED_OWNER_UNIONS.json',shared);
+const lifecycleSources=[
+ 'agency-fixed-approval-policy-support-20261015/93_complete_fixed_contract_approval_normaliser.sqlinc',
+ 'agency-fixed-approval-policy-support-20261015/94_complete_effective_contract_fixed_approval.sqlinc',
+ 'agency-fixed-approval-policy-support-20261015/95_complete_public_manager_writer_fixed_policy_guard.sqlinc',
+ 'agency-off-native-transport-forward-20261015/96_off_agency_native_parent.sqlinc',
+ 'agency-client-preset-fixed-approval-source-forward-20261015/forward/105_complete_client_preset_fixed_approval.sqlinc',
+ 'agency-client-preset-fixed-approval-source-forward-20261015/forward/106_complete_feature_setup_fixed_approval_receipts.sqlinc',
+ 'agency-client-preset-fixed-approval-source-forward-20261015/forward/107_complete_dated_candidate_fixed_approval_policy.sqlinc',
+ 'agency-worker-only-candidate-native-forward-20261015/forward/108_complete_worker_only_candidate_transition.sqlinc',
+ 'agency-worker-only-candidate-native-forward-20261015/forward/109_complete_worker_only_component_render_contract.sqlinc',
+ 'agency-worker-only-candidate-native-forward-20261015/forward/110_complete_worker_only_candidate_finaliser.sqlinc'
+];
+const lifecycleOrder=[];for(const source of lifecycleSources){const dest='lifecycle/'+path.basename(source),s=input(reportPin,p+source,'lifecycle_'+path.basename(source));write(dest,s);lifecycleOrder.push(dest);}
+const security114=input(reportPin,p+'agency-worker-only-candidate-native-forward-20261015/114_worker_only_candidate_security_verification.sql','114_candidate_native_security_verifier.sql');
+write('verification/114_candidate_native_security_verifier.sql',security114);
+write('04_agency_fixed_approval_candidate_lifecycle.sql',`-- Existing canonical function signatures and ACLs are retained by CREATE OR REPLACE.\n-- Only new OFF helper96 carries its reviewed explicit owner/ACL.\nbegin;\n${lifecycleOrder.map(f=>'\\ir '+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+write('05_agency_source_callers_and_lifecycle.sql',`-- Exact selected Agency module, including fixed approval and Candidate SQL.\n-- Apply only after both once-only migrations, canonical foundations, and mandatory\n-- current shared-owner unions. Mounted Candidate runtime bytes are NOT included.\nbegin;\n${callerOrder.map(f=>'\\ir '+f).join('\n')}\n${coreOrder.map(f=>'\\ir repeatable/'+f).join('\n')}\n${lifecycleOrder.map(f=>'\\ir '+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+const mountedRuntimePin='f500d7615d471a5bc4c030913bc71f861a7f2393';
+const mounted=[];for(const file of ['broker/src/candidate-app-backend.js','broker/src/invoice-presentation-contract.js','broker/src/timesheet-official-pdf.js']){
+ const b=execFileSync('git',['show',`${mountedRuntimePin}:${file}`],{cwd:repo,maxBuffer:32*1024*1024});mounted.push({pin:mountedRuntimePin,path:file,bytes:b.length,sha256:sha(b),action:'PRESERVE_EXACT_CURRENT_CANONICAL_BYTES'});
+}
+json('MOUNTED_CANDIDATE_RUNTIME_PRESERVE.json',{source_only:true,runtime_source_mounted_by_root:true,deployed:false,entries:mounted});
+const canonicalClaimRefs=[
+ 'supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql',
+ 'supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc',
+ 'supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc',
+ 'supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc'
+];
+for(let n=0;n<canonicalClaimRefs.length;n++)input(rootPin,canonicalClaimRefs[n],`canonical_claim_${n+1}_${path.basename(canonicalClaimRefs[n])}`);
+input(rootPin,'scripts/cloudtms-managed-release-sql.mjs','pinned-source-parser.mjs');
+const moduleFiles=[...callerOrder,...coreOrder.map(f=>'repeatable/'+f)];
+const graph=[];const signatures=new Map();
+for(const file of moduleFiles){const s=fs.readFileSync(path.join(out,file),'utf8');
+ for(const m of s.matchAll(/create or replace function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gi)){
+  const next=s.indexOf('create or replace function',m.index+m[0].length),body=s.slice(m.index,next<0?undefined:next);
+  const callees=[...new Set([...body.matchAll(/((?:public|private)\.[a-z0-9_]+)\s*\(/gi)].map(c=>c[1]).filter(c=>c!==m[1]))].sort();
+  const requestAliases=[...body.matchAll(/\b([a-z][a-z0-9_]*)\s+private\.weekly_source_agency_timesheet_change_requests%rowtype/gi)].map(a=>a[1]);
+  const requestFields=[...new Set(requestAliases.flatMap(a=>[...body.matchAll(new RegExp('\\b'+a+'\\.([a-z][a-z0-9_]*)','gi'))].map(f=>f[1])))].sort();
+  graph.push({function:m[1],file,source_sha256:sha(Buffer.from(body)),callees,request_aliases:requestAliases,request_fields:requestFields});
+ }
+ for(const m of s.matchAll(/alter function\s+((?:public|private)\.[a-z0-9_]+)\s*\(([^)]*)\)\s+owner to postgres/gi)){
+  const signature=m[1]+'('+m[2].replace(/\s+/g,' ').trim()+')';assert.equal(signatures.has(signature),false,'One selected signature: '+signature);signatures.set(signature,m[1].startsWith('public.'));
+ }
+}
+const provided=new Set(graph.map(g=>g.function));
+const agencyExternal=[...new Set(graph.flatMap(g=>g.callees).filter(c=>c.includes('.weekly_source_agency_')&&!provided.has(c)
+ &&c!=='private.weekly_source_agency_timesheet_change_requests'))].sort();
+assert.deepEqual(agencyExternal,['private.weekly_source_agency_invoice_check_only_v1']);
+json('CLAIM_AND_CALLER_CENSUS.json',{source_only:true,native:false,request_schema:'migration/01_same_agency_request_store.sqlinc',
+ selected_functions:graph.length,agency_dependencies_from_current_canonical:agencyExternal,functions:graph});
+const values=[...signatures].map(([sig,service])=>`('${sig}',${service})`).join(',\n   ');
+write('verification/121_current_agency_source_owner_security.sql',`-- Proposed final current Agency-specific signature closure. Not executed.\ndo $agency_owner_security$\ndeclare entry record; oid_value oid; p record; config text;\nbegin\n for entry in select * from(values\n   ${values}\n ) selected(signature,service_execute) loop\n  oid_value:=to_regprocedure(entry.signature);\n  if oid_value is null then raise exception 'AGENCY_SOURCE_OWNER_MISSING: %',entry.signature;end if;\n  select * into strict p from pg_proc where oid=oid_value;\n  if not p.prosecdef or p.proowner<>(select oid from pg_roles where rolname=current_user)\n   or not exists(select 1 from unnest(p.proconfig) setting where setting in(\n    'search_path=pg_catalog, public, private, pg_temp','search_path=pg_catalog, pg_temp','search_path=pg_catalog, private, pg_temp'))\n   or exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl where acl.grantee=0 and acl.privilege_type='EXECUTE')\n   or has_function_privilege('anon',oid_value,'EXECUTE') or has_function_privilege('authenticated',oid_value,'EXECUTE')\n   or has_function_privilege('service_role',oid_value,'EXECUTE') is distinct from entry.service_execute then\n   raise exception 'AGENCY_SOURCE_OWNER_SECURITY_INVALID: %',entry.signature;\n  end if;\n end loop;\nend;\n$agency_owner_security$;\n`);
+json('SOURCE_INPUTS.json',{root_pin:rootPin,report_pin:reportPin,registration_pin:registrationPin,entries:receipts});
+json('COMPLETE_REVERSES.json',[
+ {destination:'repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc',before:'reference/91_current_request_assert.sqlinc',hunks:[{before:'',after:recheck}],reverse_kind:'REMOVE_ONE_UNIQUE_CALL_AND_COMMENT',before_sha256:sha(Buffer.from(request)),after_sha256:sha(Buffer.from(requestForward))},
+ {destination:'repeatable/116_complete_current_source_raw05_with_active_before_union.sqlinc',before:'reference/root_current_raw05.sqlinc',hunks:[{before:'',after:activeCall}],reverse_kind:'REMOVE_ONLY_104_BEFORE_CALL_DELTA',before_sha256:sha(Buffer.from(raw)),after_sha256:sha(Buffer.from(rawForward))}
+]);
+json('CURRENT_MODULE_RECIPE.json',{schema:'AGENCY_CURRENT_SOURCE_CORE_RECIPE_V1',source_only:true,native:false,mounted:false,whole_agency_complete:false,
+ once_only_migrations:['migration/01_same_agency_request_store.sqlinc','migration/02_typed_existing_validation_columns.sqlinc'],
+ selected_final_repeatable:'05_agency_source_callers_and_lifecycle.sql',component_repeatables:['01_agency_source_core.sql','02_agency_current_callers.sql','04_agency_fixed_approval_candidate_lifecycle.sql'],
+ verifications:['verification/119_current_source_raw_and_final_76_verifier.sqlinc','verification/121_current_agency_source_owner_security.sql','verification/114_candidate_native_security_verifier.sql'],
+ selected_current_agency_functions:graph.length,mandatory_current_shared_owner_unions:'MANDATORY_SHARED_OWNER_UNIONS.json',
+ mounted_candidate_runtime:'MOUNTED_CANDIDATE_RUNTIME_PRESERVE.json',
+ required_canonical_modules:[
+  'supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql',
+  'supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql',
+  'supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql'],
+ root_grammar_replaced:false,raw05_helpers_replaced:false,raw05_change:'Only current BEFORE call delta from 104; exact current raw/revision/policy bodies retained.',
+ existing_manager_policy_bytes_preserved:true,off_literal_agency_operations:7,off_allowlist_widened:false,
+ obsolete_not_selected:['87 original ACTIVE guard','92 original raw union','104 whole older D48 helper file'],
+ mandatory_native_unrun:['PostgreSQL whole current module/caller compilation and role contracts','Actual original claim changes across native phases',
+  'Both immutable claim guards and transitive callers','Current READ COMMITTED/race/foreign-writer/OLD-NEW/nested/active mutation schedules',
+  'Actual Candidate finalisation/real document and finite OFF native invocation','Real Office/API/phone/full financial lifecycle'],
+ claim_authorities:[
+  {kind:'AGENCY_CAPTURE',field:'native_receipts.original_capture.original_submitted_claim',immutability_owner:'private.weekly_source_agency_change_identity_guard_v1()',actual_recheck:'private.weekly_source_agency_original_claim_recheck_v1(uuid)',new_common_call:'private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)'},
+  {kind:'SOURCE_CORRECTION',table:'private.timesheet_correction_requests',fields:['frozen_original_json','proposal_json'],immutability_owner:'private.timesheet_correction_request_guard_v1()',retention_owner:'private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)',new_selector_kind:null}
+ ]});
+console.log(JSON.stringify({output:out,inputs:receipts.length,changed_complete_owners:2,source_only:true,native:false}));

@@ -1,0 +1,14 @@
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),pin='44db8a50182823b13df0b22d69b4363ef5332a48';
+const files=[
+ 'supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql',
+ 'supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql',
+ 'supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc',
+ 'supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc',
+ 'supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc',
+ 'supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql',
+ 'supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql'
+];
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex'),entries=[];
+for(const file of files){const b=execFileSync('git',['show',`${pin}:${file}`],{cwd:repo,maxBuffer:32*1024*1024});entries.push({pin,path:file,bytes:b.length,sha256:sha(b)});}
+const out=path.join(here,'current-agency-source-module-construction-20261015/PUBLICATION_OWNER_PINS.json');fs.writeFileSync(out,JSON.stringify({source_only:true,native:false,entries},null,2)+'\n');console.log(JSON.stringify(entries,null,2));

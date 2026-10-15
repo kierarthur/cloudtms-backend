@@ -1,0 +1,45 @@
+-- One existing flag writer. All economic sums, charge and margin remain inside
+-- tsfin_update_segments_locked; this wrapper derives identity and proves flags.
+create or replace function private.weekly_source_agency_segment_flags_apply_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ before_fin public.timesheets_financials%rowtype; after_fin public.timesheets_financials%rowtype;
+ plan jsonb; native_result jsonb; old_segment jsonb; new_segment jsonb; flag jsonb; count_value integer;
+begin
+ plan:=private.weekly_source_agency_segment_flags_v1(p_request_id);
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ select * into strict before_fin from public.timesheets_financials where id=r.current_financial_id and is_current;
+ native_result:=public.tsfin_update_segments_locked(r.current_timesheet_id,plan->'flags',r.updated_by_user_id);
+ select * into strict after_fin from public.timesheets_financials where id=before_fin.id and is_current;
+ if native_result#>>'{updated,id}' is distinct from after_fin.id::text
+  or to_jsonb(after_fin)-array['invoice_breakdown_json','total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat','updated_at']
+    is distinct from to_jsonb(before_fin)-array['invoice_breakdown_json','total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat','updated_at']
+  or jsonb_typeof(after_fin.invoice_breakdown_json->'segments') is distinct from 'array'
+  or jsonb_array_length(after_fin.invoice_breakdown_json->'segments')<>jsonb_array_length(plan->'flags') then
+  raise exception 'AGENCY_CHANGE_NATIVE_SEGMENT_FLAG_WRITE_UNPROVED' using errcode='55000';end if;
+ for old_segment in select value from jsonb_array_elements(before_fin.invoice_breakdown_json->'segments') loop
+  select count(*) into count_value from jsonb_array_elements(after_fin.invoice_breakdown_json->'segments') s
+    where s->>'segment_id'=old_segment->>'segment_id';
+  if count_value<>1 then raise exception 'AGENCY_CHANGE_NATIVE_SEGMENT_FLAG_WRITE_UNPROVED' using errcode='55000';end if;
+  select value into strict new_segment from jsonb_array_elements(after_fin.invoice_breakdown_json->'segments') s(value)
+    where value->>'segment_id'=old_segment->>'segment_id';
+  select value into strict flag from jsonb_array_elements(plan->'flags') s(value) where value->>'segment_id'=old_segment->>'segment_id';
+  if new_segment-'exclude_from_pay' is distinct from old_segment-'exclude_from_pay'
+   or new_segment->'exclude_from_pay' is distinct from flag->'exclude_from_pay' then
+   raise exception 'AGENCY_CHANGE_NATIVE_SEGMENT_FLAG_WRITE_UNPROVED' using errcode='55000';end if;
+ end loop;
+ return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_SEGMENT_FLAG_WRITE_V1',
+  'request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),'phase_actor_user_id',r.updated_by_user_id,
+  'timesheet_id',r.current_timesheet_id,'timesheet_version',r.current_timesheet_version,'financial_id',after_fin.id,
+  'flags',plan->'flags','basis_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_SEGMENT_FLAG_BASIS_V1',plan->'basis'),'hex'),
+  'native_result_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_SEGMENT_FLAG_WRITE_RESULT_V1',native_result),'hex'),
+  'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid());
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NATIVE_SEGMENT_FLAG_WRITE_UNPROVED' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_segment_flags_apply_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_segment_flags_apply_v1(uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,22 @@
+-- Additive proposal for the existing validation store. LEGACY includes all
+-- existing import, manual and pre-validation paths; no row is reclassified.
+-- last_source remains the real UUID/hr_imports FK. No fabricated import row.
+alter table public.timesheet_validations
+ add column validation_source_kind text not null default 'LEGACY',
+ add column validation_source_publication_id uuid references public.weekly_source_projection_publications(id) on delete restrict,
+ add column validation_source_facts_sha256 bytea,
+ add column validation_source_actor_user_id uuid references public.tms_users(id) on delete restrict;
+alter table public.timesheet_validations add constraint timesheet_validation_typed_source_v1 check (
+ (validation_source_kind='LEGACY' and validation_source_publication_id is null
+  and validation_source_facts_sha256 is null and validation_source_actor_user_id is null)
+ or (validation_source_kind='AGENCY_INVOICE_WEEK' and last_source is null
+  and validation_source_publication_id is not null
+  and validation_source_actor_user_id is not null
+  and validation_source_facts_sha256 is not null
+  and octet_length(validation_source_facts_sha256)=32)
+);
+comment on column public.timesheet_validations.validation_source_kind is
+ 'Typed provenance of the one existing validation row. LEGACY preserves existing last_source semantics; AGENCY_INVOICE_WEEK binds genuine Source publication, facts and actual validating actor.';
+comment on column public.timesheet_validations.last_source is
+ 'Existing real hr_imports UUID FK. Never stores a text source label or an Agency publication UUID.';
+-- No grants, RLS relaxation, row update, new store or business bootstrap.

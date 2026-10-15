@@ -1,0 +1,110 @@
+create or replace function private._candidate_policy_resolve_v1(
+  p_client_id uuid,
+  p_contract_id uuid default null,
+  p_evaluation_date date default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_date date:=coalesce(p_evaluation_date,(transaction_timestamp() at time zone 'Europe/London')::date);
+  v_authority jsonb;
+  v_values jsonb;
+  v_sources jsonb;
+  v_global public.settings_defaults%rowtype;
+  v_email text;
+  v_email_ready boolean;
+  v_result jsonb;
+  v_manager_policy jsonb;
+  v_agency_group record;
+  v_agency_group_count integer;
+  v_fixed_from date;
+  v_fixed_to date;
+begin
+  if p_client_id is null then
+    raise exception 'CANDIDATE_POLICY_CLIENT_REQUIRED' using errcode='22023';
+  end if;
+  v_authority:=private._contract_settings_effective_core_v1(
+    p_client_id,p_contract_id,v_date,'WEEKLY',null
+  );
+  v_values:=v_authority->'values';
+  v_sources:=v_authority->'sources';
+  select * into v_global from public.settings_defaults where id=1;
+  if not found then
+    raise exception 'CANDIDATE_GLOBAL_SETTINGS_MISSING' using errcode='55000';
+  end if;
+  -- R242 is a system-owned dated preset policy, never an Office choice.
+  -- The Contract JSON is unversioned: a future apply/clear must not change
+  -- approval for an earlier week, and a cloned/new Contract must resolve its
+  -- own genuine membership. Re-resolve only this key from the native dated
+  -- assignment. Preserve every ordinary manager-policy byte unchanged.
+  v_manager_policy:=coalesce(v_values->'candidate_manager_approval_policy_json','{}'::jsonb)-'approval';
+  select greatest(contract.start_date,v_date-6),least(contract.end_date,v_date)
+  into v_fixed_from,v_fixed_to from public.contracts contract
+  where contract.id=p_contract_id and contract.client_id=p_client_id
+    and contract.weekly_timesheet_source::text='HEALTHROSTER'
+    and contract.start_date<=v_date and contract.end_date>=v_date-6;
+  if found
+     and v_authority->>'configured_route'='HEALTHROSTER_WEEKLY_VALIDATION'
+     and coalesce((v_authority#>>'{applicability,configuration_valid}')::boolean,false)
+     and not coalesce((v_authority#>>'{applicability,import_authoritative}')::boolean,false) then
+    select count(*) into v_agency_group_count
+    from public.weekly_source_group_clients membership
+    join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+      and source_group.active and source_group.source_family='ROSTER'
+      and source_group.environment=v_global.candidate_app_environment
+    where membership.client_id=p_client_id
+      and v_fixed_from>=membership.valid_from
+      and v_fixed_to<=coalesce(membership.valid_to,'infinity'::date);
+    if v_agency_group_count>1 then
+      raise exception 'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID' using errcode='55000';
+    elsif v_agency_group_count=1 then
+      select source_group.id,source_group.agency_id,source_group.environment into strict v_agency_group
+      from public.weekly_source_group_clients membership
+      join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+        and source_group.active and source_group.source_family='ROSTER'
+        and source_group.environment=v_global.candidate_app_environment
+      where membership.client_id=p_client_id
+        and v_fixed_from>=membership.valid_from
+        and v_fixed_to<=coalesce(membership.valid_to,'infinity'::date);
+      if private.weekly_source_configured_agency_invoice_v1(
+        p_client_id,v_agency_group.id,v_agency_group.agency_id,v_agency_group.environment,v_fixed_to
+      ) is true then
+        v_manager_policy:=v_manager_policy||jsonb_build_object('approval','NOT_REQUIRED');
+      end if;
+    end if;
+  end if;
+  v_email:=nullif(btrim(v_values->>'candidate_expense_invoice_email'),'');
+  v_email_ready:=v_email is not null and char_length(v_email)<=320
+    and v_email~'^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$';
+  v_result:=jsonb_build_object(
+    'client_id',p_client_id,'contract_id',p_contract_id,'evaluation_date',v_date,
+    'candidate_electronic_auto_authorise',coalesce((v_values->>'candidate_electronic_auto_authorise')::boolean,false),
+    'candidate_electronic_auto_authorise_source',v_sources->>'candidate_electronic_auto_authorise',
+    'expenses_require_separate_timesheet',coalesce((v_values->>'candidate_expenses_require_separate_timesheet')::boolean,false),
+    'expenses_require_separate_timesheet_source',v_sources->>'candidate_expenses_require_separate_timesheet',
+    'import_expense_separation_mandatory',coalesce((v_authority#>>'{applicability,import_authoritative}')::boolean,false),
+    'import_source_family',v_authority->>'configured_route',
+    'paper_submission_enabled',coalesce((v_values->>'candidate_paper_submission_enabled')::boolean,false),
+    'paper_submission_enabled_source',v_sources->>'candidate_paper_submission_enabled',
+    'expense_invoice_email',v_email,'expense_invoice_email_ready',v_email_ready,
+    'manager_approval_policy',v_manager_policy,
+    'allow_daily_manager_authorise_on_phone',coalesce((v_values->>'allow_daily_manager_authorise_on_phone')::boolean,true),
+    'allow_daily_manager_authorise_by_email',coalesce((v_values->>'allow_daily_manager_authorise_by_email')::boolean,false),
+    'hours_deviation_pct',v_global.candidate_hours_deviation_pct,
+    'barred_manager_email_domains',private._candidate_normalize_domain_array_v1(v_global.candidate_barred_manager_email_domains),
+    'client_setting_found',true,
+    'client_settings_id',nullif(v_authority->>'client_settings_id','')::uuid,
+    'contract_found',p_contract_id is not null,
+    'global_settings_updated_at',nullif(v_authority->>'global_settings_updated_at','')::timestamptz,
+    'authority_version',v_authority->>'authority_version',
+    'authority_fingerprint',v_authority->>'authority_fingerprint'
+  );
+  return v_result||jsonb_build_object(
+    'policy_fingerprint',encode(digest(convert_to(v_result::text,'UTF8'),'sha256'),'hex')
+  );
+end
+$function$;

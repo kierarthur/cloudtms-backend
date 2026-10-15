@@ -1,0 +1,36 @@
+-- Final native BEFORE frame; no AFTER reader or Source CAS replacement.
+create or replace function private.timesheet_correction_a0_source_reference_final_before_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $source_reference$
+declare tokens jsonb:='[]'::jsonb; nested_tokens jsonb:='[]'::jsonb;
+begin
+ if tg_table_schema<>'public' or tg_op not in('INSERT','UPDATE','DELETE') then
+  raise exception 'CORRECTION_A0_SOURCE_RAW_CONTEXT_INVALID' using errcode='55000';end if;
+ if tg_op in('UPDATE','DELETE') then
+  tokens:=tokens||private.timesheet_correction_a0_source_raw_tokens_v1('public.'||tg_table_name,to_jsonb(old));
+ end if;
+ if tg_op in('INSERT','UPDATE') then
+  tokens:=tokens||private.timesheet_correction_a0_source_raw_tokens_v1('public.'||tg_table_name,to_jsonb(new));
+ end if;
+ -- Only after the union of actual raw OLD/NEW may native fence inspection
+ -- occur. Existing business/immutable/state/financial owners remain intact.
+ perform private.timesheet_correction_a0_fence_acquire_v1(tokens,false);
+ if tg_op in('UPDATE','DELETE') then
+  nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(old))
+   ||private.timesheet_correction_a0_source_policy_tokens_v1('public.'||tg_table_name,to_jsonb(old));
+ end if;
+ if tg_op in('INSERT','UPDATE') then
+  nested_tokens:=nested_tokens||private.timesheet_correction_a0_source_revision_tokens_v1('public.'||tg_table_name,to_jsonb(new))
+   ||private.timesheet_correction_a0_source_policy_tokens_v1('public.'||tg_table_name,to_jsonb(new));
+ end if;
+ perform private.timesheet_correction_a0_fence_acquire_v1(nested_tokens,false);
+ -- Re-admit the FINAL native NEW frame after all earlier BEFORE transformations.
+ -- Both actual RAW and NESTED phases still precede the ACTIVE lookup.
+ perform private.weekly_source_agency_active_source_mutation_assert_v1('public.'||tg_table_name,
+  case when tg_op in('UPDATE','DELETE') then to_jsonb(old) end,
+  case when tg_op in('INSERT','UPDATE') then to_jsonb(new) end,tokens||nested_tokens);
+ if tg_op='DELETE' then return old;end if;return new;
+end;
+$source_reference$;
+alter function private.timesheet_correction_a0_source_reference_final_before_v1() owner to postgres;
+revoke all on function private.timesheet_correction_a0_source_reference_final_before_v1() from public,anon,authenticated,service_role;

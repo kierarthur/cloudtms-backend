@@ -1,0 +1,88 @@
+-- Finite planned-request purpose. The permission is the genuine ACTIVE native
+-- change/UNA phase, not a collection reader's `complete` flag or paid amount.
+create or replace function private.weekly_source_agency_paid_write_purpose_v1(p_request_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ before_identity jsonb; current_identity jsonb; native_input jsonb; item jsonb;
+ t public.timesheets%rowtype; original public.timesheets_financials%rowtype; claim jsonb; document_view jsonb;
+ original_id uuid; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,
+  r.initial_row_signature,r.request_key,r.updated_by_user_id);
+ if r.state<>'ACTIVE' or r.phase not in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT')
+  or r.current_timesheet_id is distinct from r.initial_timesheet_id
+  or r.current_timesheet_version is distinct from r.initial_timesheet_version then
+  raise exception 'AGENCY_CHANGE_PAID_PURPOSE_PHASE_INVALID' using errcode='55000'; end if;
+ select * into strict t from public.timesheets where timesheet_id=r.initial_timesheet_id;
+ if t.authorised_at_server is not null
+  or (r.native_receipts#>>'{unauthorise,schema_version}'='WEEKLY_SOURCE_AGENCY_NATIVE_UNAUTHORISE_V1'
+   and (r.native_receipts#>>'{unauthorise,result,ok}' is distinct from 'true'
+    or r.native_receipts#>>'{unauthorise,result,timesheet_id}' is distinct from t.timesheet_id::text
+    or t.revoked_reason is distinct from 'TIMESHEET_UNAUTHORISE'
+    or t.revoked_by is distinct from r.native_receipts#>>'{unauthorise,phase_actor_user_id}'))
+  or r.native_receipts#>>'{unauthorise,schema_version}' is null
+  or r.native_receipts#>>'{unauthorise,schema_version}' not in(
+   'WEEKLY_SOURCE_AGENCY_NATIVE_UNAUTHORISE_V1','WEEKLY_SOURCE_AGENCY_NATIVE_ALREADY_UNAUTHORISED_V1') then
+  raise exception 'AGENCY_CHANGE_GENUINE_UNAUTHORISE_RECEIPT_REQUIRED' using errcode='55000'; end if;
+ original_id:=(r.native_receipts#>>'{original_capture,current_financial_id}')::uuid;
+ before_identity:=r.native_receipts#>'{original_capture,original_before_pay_inputs,original_identity}';
+ if before_identity->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_ORIGINAL_PAY_IDENTITY_V1'
+  or before_identity->>'original_financial_id' is distinct from original_id::text then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_PAY_CAPTURE_REQUIRED' using errcode='55000'; end if;
+ current_identity:=private.weekly_source_agency_original_pay_identity_v1(t.timesheet_id,r.updated_by_user_id,original_id,r.id);
+ -- Compare the immutable Original cut, not approval state that UNA changes.
+ -- A foreign payroll/cash effect or run capture is not silently adopted.
+ if current_identity-array['native_original_reservations','original_paid_marker']
+    is distinct from before_identity-array['native_reservations_sha256','original_paid_marker']
+  or (current_identity->>'original_paid_marker')::timestamptz
+    is distinct from (before_identity->>'original_paid_marker')::timestamptz then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_PAY_IDENTITY_CHANGED' using errcode='40001'; end if;
+ select * into strict original from public.timesheets_financials where id=original_id;
+ claim:=private.weekly_source_agency_original_claim_recheck_v1(r.id);
+ if r.native_receipts#>>'{original_capture,original_submitted_claim,available}'='true'
+  and claim->>'available' is distinct from 'true' then
+  raise exception 'AGENCY_CHANGE_ORIGINAL_CLAIM_CHANGED' using errcode='40001'; end if;
+ if r.native_receipts#>>'{original_capture,original_legacy_document,available}'='true' then
+  document_view:=private.weekly_source_agency_legacy_original_document_v1(t.timesheet_id,r.id,r.updated_by_user_id);
+  if document_view->>'available' is distinct from 'true'
+   or document_view->'document_view_sha256'
+    is distinct from r.native_receipts#>'{original_capture,original_legacy_document,document_view_sha256}' then
+   raise exception 'AGENCY_CHANGE_ORIGINAL_DOCUMENT_CHANGED' using errcode='40001'; end if;
+ end if;
+ if current_identity->>'active_owner'='NEXT' then
+  native_input:=private.weekly_source_agency_ordinary_collection_inputs_v1(r.id);
+  if original.paid_at_utc is not null and native_input->'native_component_inputs' is null then
+   raise exception 'AGENCY_CHANGE_PAID_ORDINARY_INPUTS_UNBOUND' using errcode='55000'; end if;
+  for item in select value from jsonb_array_elements(coalesce(current_identity->'native_original_reservations','[]'::jsonb)) loop
+   -- Literal existing native reservation outcomes. No amount/ratio calculation,
+   -- and no UNKNOWN, pending posting, inconsistent projection or assumed zero.
+   if item#>>'{native_reservation,reservation_state}' is null
+    or item#>>'{native_reservation,reservation_state}' not in(
+     'POSTED','RETURNED','CLOSED_INTERNAL','RESERVED','INTERNAL_RESERVED','ISSUED_AWAITING_RECEIPT') then
+    raise exception 'AGENCY_CHANGE_NATIVE_ORIGINAL_RESERVATION_NOT_ADMISSIBLE' using errcode='55000'; end if;
+  end loop;
+ end if;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_PAID_WRITE_PURPOSE_V1',
+  'request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),'phase',r.phase,
+  'phase_actor_user_id',r.updated_by_user_id,'timesheet_id',t.timesheet_id,'timesheet_version',t.version,
+  'original_financial_id',original.id,'original_paid_marker',before_identity->'original_paid_marker',
+  'original_identity_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_ORIGINAL_PAY_IDENTITY_CUT_V1',before_identity),'hex'),
+  'current_native_inputs_sha256',case when native_input is null then null else encode(private.weekly_source_sha256_jsonb_v1(
+   'AGENCY_CURRENT_NATIVE_ORDINARY_INPUTS_V1',native_input),'hex') end,
+  'current_native_reservations_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+   'AGENCY_CURRENT_NATIVE_ORIGINAL_RESERVATIONS_V1',current_identity->'native_original_reservations'),'hex'),
+  'source_cas',r.source_cas,'original_submission_proved',claim->'available',
+  'original_submission_sha256',claim->'claim_sha256','original_submission_state',claim->'submission_state',
+  'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid());
+ return result;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_PAID_WRITE_PURPOSE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_paid_write_purpose_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_paid_write_purpose_v1(uuid) from public,anon,authenticated,service_role;
