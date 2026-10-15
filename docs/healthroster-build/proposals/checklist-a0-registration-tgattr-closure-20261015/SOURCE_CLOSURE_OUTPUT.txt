@@ -1,0 +1,15 @@
+✔ two complete actual f8 owners reverse four unique hunks without rewriting the rejected freeze (1.7777ms)
+✔ both collision refusal and exact final inventory require empty actual tgattr independently of event flags (0.5045ms)
+✔ same-name/type/function/owner UPDATE OF replacement passes old shape and is refused by the selected successor (0.2081ms)
+✔ existing mode WHEN argument and owner refusals stay closed alongside the column filter (0.2244ms)
+✔ literal 76 registrations are untouched and all80 packaging statements and raw artifact seals pass with native gates open (2.7897ms)
+✔ independent closure retains both complete f8 counterexamples while new proof selects only empty actual column vectors (0.6752ms)
+✔ independent literal population remains exactly both first/last whole-event row guards on every original relation (0.3798ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21.9436
