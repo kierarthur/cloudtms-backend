@@ -1,0 +1,140 @@
+-- Source purpose INPUT only. The whole sealed physical population and every
+-- negative's real native C1 resolution are required before absence of a full
+-- reversal is certified. This does not admit Same/Separate or financial writes.
+create or replace function private.weekly_source_nhsp_negative_population_v1(
+  p_upload_id uuid,p_work_event_id uuid,p_actor_user_id uuid,p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  u public.weekly_source_uploads%rowtype;c public.weekly_source_cycles%rowtype;
+  scope public.weekly_source_report_scopes%rowtype;p public.weekly_source_projection_publications%rowtype;
+  w public.weekly_work_events%rowtype;row public.weekly_source_upload_rows%rowtype;
+  resolution public.weekly_source_row_resolutions%rowtype;e public.weekly_source_row_economic_snapshots%rowtype;
+  m public.weekly_source_billing_movements%rowtype;origin private.bpay_next_source_current_origins%rowtype;
+  basis jsonb;position jsonb;target jsonb;targets jsonb:='[]'::jsonb;negatives jsonb:='[]'::jsonb;
+  magnitude jsonb;v_pay jsonb;v_charge jsonb;result jsonb;native jsonb;
+  generation integer;counted integer;total integer;negative_count integer:=0;
+  complete boolean:=true;matching boolean:=false;current_available boolean:=true;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_upload_id is null or p_work_event_id is null or p_actor_user_id is null or p_source_cycle_id is null then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_REQUEST_INVALID' using errcode='22023';end if;
+  select * into strict u from public.weekly_source_uploads where id=p_upload_id;
+  select * into strict c from public.weekly_source_cycles where id=p_source_cycle_id;
+  select * into strict w from public.weekly_work_events where id=p_work_event_id;
+  select * into strict scope from public.weekly_source_report_scopes where id=u.report_scope_id;
+  if u.source_cycle_id is distinct from c.id or u.purpose<>'ORDINARY' or u.correction_session_id is not null
+    or u.state<>'CURRENT' or u.row_manifest_hash is null or u.malformed_count<>0 or u.blocking_economic_duplicate_count<>0
+    or scope.source_cycle_id is distinct from c.id or scope.source_group_id is distinct from c.source_group_id
+    or scope.client_id is distinct from w.client_id or scope.self_bill_report_id is not null
+    or scope.current_complete_upload_id is distinct from u.id
+    or w.first_source_group_id is distinct from c.source_group_id
+    or not exists(select 1 from public.weekly_source_groups g where g.id=c.source_group_id and g.active and g.source_family='NHSP')
+    or not exists(select 1 from public.weekly_source_format_profiles profile where profile.id=u.source_format_profile_id
+      and profile.active and profile.profile_code='NHSP_FINAL_BACKING_V1')
+    or private.weekly_source_upload_manifest_hash_v1(u.id) is distinct from u.row_manifest_hash then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_SCOPE_UNBOUND' using errcode='55000';end if;
+  -- Actual viewer and both cycle/root dated permissions are proved inside the
+  -- one native basis owner before any cash/current selection is returned.
+  basis:=private.weekly_source_nhsp_paid_overlap_basis_v1(w.id,p_actor_user_id,c.id);
+  if basis->>'schema_version' is distinct from 'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1'
+    or basis->>'work_event_id' is distinct from w.id::text or basis->>'source_cycle_id' is distinct from c.id::text
+    or basis->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NHSP_PAID_OVERLAP_BASIS_INPUT_V1',basis-'inputs_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_BASIS_UNBOUND' using errcode='55000';end if;
+  if basis->>'state' is distinct from 'NATIVE_POSITION_INPUTS' then current_available:=false;
+  else
+    for position in select value from jsonb_array_elements(basis->'native_current_rows') loop
+      native:=position->'native_current_event';
+      if position->>'state' is distinct from 'CURRENT_NATIVE_POSITION' or native->'source_present' is distinct from 'true'::jsonb then
+        current_available:=false;continue;end if;
+      select * into strict m from public.weekly_source_billing_movements where id=(native->>'movement_id')::uuid;
+      select * into strict origin from private.bpay_next_source_current_origins o
+        where o.origin_kind='MOVEMENT' and o.origin_id=m.id and o.active and o.contribution=1;
+      magnitude:=private.bpay_next_source_nhsp_magnitude_v1(m.source_facts_json,m.canonical_pay_vector_json,m.canonical_charge_vector_json);
+      if not exists(select 1 from private.bpay_next_source_current_magnitudes mag
+        where mag.scope_id=origin.scope_id and mag.work_event_id=w.id and mag.magnitude_hash=origin.magnitude_hash
+          and mag.selected_movement_id=m.id and mag.economic_magnitude=magnitude)
+        or origin.magnitude_hash is distinct from private.weekly_source_sha256_jsonb_v1('BPAY_NEXT_SOURCE_NHSP_MAGNITUDE_V1',magnitude) then
+        raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_CURRENT_MAGNITUDE_UNBOUND' using errcode='55000';end if;
+      targets:=targets||jsonb_build_array(jsonb_build_object('root_timesheet_id',position->'root_timesheet_id',
+        'scope_id',origin.scope_id,'movement_id',m.id,'movement_economic_hash',encode(m.movement_economic_hash,'hex'),
+        'work_event_id',m.work_event_id,'candidate_id',m.candidate_id,'client_id',m.actual_client_id,'contract_id',m.contract_id,
+        'economic_magnitude',magnitude,'magnitude_sha256',encode(origin.magnitude_hash,'hex')));
+    end loop;
+    if jsonb_array_length(targets)=0 then current_available:=false;end if;
+  end if;
+  select count(*),min(x.id::text)::uuid into counted,p.id from public.weekly_source_projection_publications x
+    where x.upload_id=u.id and x.source_cycle_id=c.id and x.report_scope_id=scope.id
+      and x.authority_scope_kind='NHSP_REPORT_SCOPE' and x.authority_scope_version=scope.version
+      and x.correction_session_id is null and x.state in ('BUILDING','CURRENT');
+  if counted<>1 then complete:=false;
+  else
+    select * into strict p from public.weekly_source_projection_publications where id=p.id;
+    if p.state='CURRENT' and scope.current_projection_publication_id is distinct from p.id then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_PUBLICATION_UNBOUND' using errcode='55000';end if;
+    if p.authority_scope_version>2147483647 then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_GENERATION_UNBOUND' using errcode='55000';end if;
+    generation:=coalesce(p.projection_generation,p.authority_scope_version::integer);
+  end if;
+  select count(*) into total from public.weekly_source_upload_rows where upload_id=u.id;
+  if total<>u.accepted_count then
+    raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_POPULATION_UNBOUND' using errcode='55000';end if;
+  -- Scan every genuine physical row. A missing sign is not evidence that no
+  -- full negative exists. Ref Num/name/ward never substitutes event identity.
+  for row in select r.* from public.weekly_source_upload_rows r where r.upload_id=u.id order by r.source_row_ordinal loop
+    if row.row_finalisation_state is distinct from 'SOURCE_WORKED' or row.source_money_parse_state is distinct from 'VALID'
+      or row.source_qualification_profile_version is distinct from 'NHSP_TWO_COMPONENT_PENCE_V1'
+      or row.source_shift_charge_pence is null then
+      raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_PHYSICAL_UNBOUND' using errcode='55000';end if;
+    if row.source_shift_charge_pence>=0 then continue;end if;
+    negative_count:=negative_count+1;
+    select count(*) into counted from public.weekly_source_row_resolutions r
+      where r.upload_row_id=row.id and r.generation=generation;
+    if counted<>1 then complete:=false;
+      negatives:=negatives||jsonb_build_array(jsonb_build_object('upload_row_id',row.id,
+        'normalised_row_hash',encode(row.normalised_row_hash,'hex'),'state','UNAVAILABLE','reason','NATIVE_NEGATIVE_RESOLUTION_UNAVAILABLE'));
+      continue;end if;
+    select * into strict resolution from public.weekly_source_row_resolutions r where r.upload_row_id=row.id and r.generation=generation;
+    if resolution.mapping_state<>'RESOLVED' or resolution.work_event_id is null or resolution.candidate_id is null
+      or resolution.client_id is null or resolution.contract_id is null or resolution.pay_effect<>'NORMAL'
+      or resolution.paid_overlap_choice_id is not null or resolution.source_row_fingerprint is distinct from row.normalised_row_hash then
+      complete:=false;
+      negatives:=negatives||jsonb_build_array(jsonb_build_object('upload_row_id',row.id,
+        'normalised_row_hash',encode(row.normalised_row_hash,'hex'),'state','UNAVAILABLE','reason','NATIVE_NEGATIVE_RESOLUTION_UNAVAILABLE'));
+      continue;end if;
+    select * into strict e from public.weekly_source_row_economic_snapshots where id=
+      private.weekly_source_finalisation_economic_assert_v1(resolution.id,c.id,'NHSP_WEEKLY');
+    v_pay:=private.weekly_source_finalisation_vector_v1(e.id,'PAY',1::smallint);
+    v_charge:=private.weekly_source_finalisation_vector_v1(e.id,'CHARGE',1::smallint);
+    magnitude:=private.bpay_next_source_nhsp_magnitude_v1(jsonb_build_object('work_date',row.work_date,
+      'start_at_local',row.start_at_local,'end_at_local',row.end_at_local,'break_minutes',row.break_minutes),v_pay,v_charge);
+    for target in select value from jsonb_array_elements(targets) loop
+      if resolution.work_event_id::text=target->>'work_event_id' and resolution.candidate_id::text=target->>'candidate_id'
+        and resolution.client_id::text=target->>'client_id' and resolution.contract_id::text=target->>'contract_id'
+        and magnitude=target->'economic_magnitude' then matching:=true;end if;
+    end loop;
+    negatives:=negatives||jsonb_build_array(jsonb_build_object('upload_row_id',row.id,'source_row_ordinal',row.source_row_ordinal,
+      'normalised_row_hash',encode(row.normalised_row_hash,'hex'),'state','NATIVE_RESOLVED_NEGATIVE',
+      'row_resolution_id',resolution.id,'generation',resolution.generation,'work_event_id',resolution.work_event_id,
+      'candidate_id',resolution.candidate_id,'client_id',resolution.client_id,'contract_id',resolution.contract_id,
+      'economic_snapshot_id',e.id,'calculation_fingerprint',encode(e.calculation_fingerprint,'hex'),
+      'economic_magnitude',magnitude,'magnitude_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+        'BPAY_NEXT_SOURCE_NHSP_MAGNITUDE_V1',magnitude),'hex')));
+  end loop;
+  result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_NEGATIVE_POPULATION_INPUT_V1',
+    'upload_id',u.id,'content_sha256',encode(u.content_sha256,'hex'),'row_manifest_hash',encode(u.row_manifest_hash,'hex'),
+    'source_cycle_id',c.id,'source_group_id',c.source_group_id,'report_scope_id',scope.id,'authority_scope_version',scope.version,
+    'projection_publication_id',p.id,'projection_generation',generation,'work_event_id',w.id,'native_current_basis',basis,
+    'current_targets',targets,'physical_row_count',total,'negative_row_count',negative_count,'negative_rows',negatives,
+    'negative_population_complete',complete,'current_position_available',current_available,
+    'no_reversal_proved',case when complete and current_available then to_jsonb(not matching) else 'null'::jsonb end,
+    'paid_writer_permission',null);
+  if octet_length(result::text)>1048576 then raise exception 'WEEKLY_SOURCE_NHSP_NEGATIVE_BYTE_BOUND' using errcode='54000';end if;
+  return result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NHSP_NEGATIVE_POPULATION_INPUT_V1',result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,76 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_CHOICE_COMPARISON_CONSUMER_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 13,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 3023,
+      "sha256": "318c05c2deed042dd8c9958e266acc3a5551f21e3cef9a16fe7d5741b7cc5c30"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 2688,
+      "sha256": "d84fc6ad3582e1a3544d0c9ec0ec045f575a64d16828557fdf1618eb68a145ce"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 3842,
+      "sha256": "c72f45ca5be3852978c549c6f9051c61aa0740d896f354eba4ea3547d69f41ec"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 748,
+      "sha256": "745c443fdf01c4a56309a1c41b742085bfdefda3381ad6ac0ff3b66ad3ecc253"
+    },
+    {
+      "file": "before/02_complete_choice_current.sqlinc",
+      "bytes": 14996,
+      "sha256": "e9098bc075e96ec8f8eb1e05b94faf16b3d4fa241968db3075df861475a4676f"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 3518,
+      "sha256": "002b99df52f732ccb3e576d2f707b2579f31dbc5a846f127cd396a75844a8a49"
+    },
+    {
+      "file": "comparison-source.test.mjs",
+      "bytes": 9150,
+      "sha256": "8ccf7b08d4e32c25f97bb996a5eef51164ab8ad7b33275b2bb439e0864f1d269"
+    },
+    {
+      "file": "forward/01_nhsp_negative_comparison.sqlinc",
+      "bytes": 9957,
+      "sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91"
+    },
+    {
+      "file": "forward/02_complete_choice_current.sqlinc",
+      "bytes": 15405,
+      "sha256": "9759f6f283da73c72bdbfefc6d9a4324abf8b58a23eee4d3a431f2f2fce1cdae"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5522,
+      "sha256": "3218b74c681b222a849f8a59e9cdcff6d390e6d8c40900a4c4c3a3c5486baee0"
+    },
+    {
+      "file": "input/current_negative_population.sqlinc",
+      "bytes": 11997,
+      "sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa"
+    },
+    {
+      "file": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "file": "input/current_office_recheck.sqlinc",
+      "bytes": 21127,
+      "sha256": "4064405738cb2723b9f93a1026a6b875fd824feaec2ab8e2e99bef851019d6eb"
+    }
+  ]
+}

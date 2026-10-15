@@ -1,0 +1,49 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+  "native": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "input_file": "docs/healthroster-build/proposals/paid-match-legacy-current-viewer-consumer-20261015/forward/01_complete_choice_current.sqlinc",
+  "before_sha256": "e9098bc075e96ec8f8eb1e05b94faf16b3d4fa241968db3075df861475a4676f",
+  "after_sha256": "9759f6f283da73c72bdbfefc6d9a4324abf8b58a23eee4d3a431f2f2fce1cdae",
+  "hunks": [
+    {
+      "name": "literal NHSP negative comparison only inside local raw-validated actor comparison copies",
+      "before": "    for v_compare_item in select value from jsonb_array_elements(v_compare_inputs->'overlaps') loop\n",
+      "after": "    for v_compare_item in select value from jsonb_array_elements(v_compare_inputs->'overlaps') loop\n      if v_compare_item ? 'nhsp_negative_population' then\n        -- Compare only the closed rederived NHSP semantic facts locally.\n        -- Both raw witnesses/audit generations remain untouched below.\n        v_compare_item:=jsonb_set(v_compare_item,'{nhsp_negative_population}',\n          private.weekly_source_nhsp_negative_comparison_v1(v_compare_item->'nhsp_negative_population'),false);\n      end if;\n"
+    }
+  ],
+  "whole_reverse": true,
+  "inputs": [
+    {
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/03_nhsp_negative_population.sqlinc",
+      "saved": "input/current_negative_population.sqlinc",
+      "bytes": 11997,
+      "sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa"
+    },
+    {
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "saved": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/04_complete_office_recheck.sqlinc",
+      "saved": "input/current_office_recheck.sqlinc",
+      "bytes": 21127,
+      "sha256": "4064405738cb2723b9f93a1026a6b875fd824feaec2ab8e2e99bef851019d6eb"
+    }
+  ],
+  "new_private_signature": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+  "new_public_signatures": [],
+  "core_sha256": "2c57508f5eed894d114e6715d881f0876ecd88dfdbc4037b8aa96f3c0cd7fe91",
+  "raw_saved_and_observed_proofs_never_rewritten": true,
+  "existing_ROSTER_Legacy_actor_equality_paid_eligibility_and_projection_lock_bodies_unchanged": true,
+  "comparison_codec_is_not_native_proof_or_writer_authority": true,
+  "NHSP_choice_and_phased_projection_still_unimplemented": true,
+  "native_calls": 0,
+  "canonical_mounted": false
+}

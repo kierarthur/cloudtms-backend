@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 12,
+  "pass": 12,
+  "fail": 0,
+  "syntax_pass": 3,
+  "complete_owner_reverse": 1,
+  "unique_hunks": 1,
+  "native_current_input_pins": 4,
+  "new_private_signatures": 1,
+  "new_public_signatures": 0,
+  "new_table_column_calculator": 0,
+  "preserved_artifacts": 68,
+  "credential_findings": 0,
+  "whitespace_disposition": "EXACT SOURCE EXCEPTIONS RETAINED; NO BLANKET PASS",
+  "whitespace_exceptions": [
+    {
+      "file": "input/current_office_recheck.sqlinc",
+      "kind": "EXACT INPUT EOF BLANK"
+    }
+  ],
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}

@@ -1,0 +1,81 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_order": [
+    "forward/01_nhsp_negative_comparison.sqlinc",
+    "forward/02_complete_choice_current.sqlinc"
+  ],
+  "new_private_signature": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+  "new_public_signatures": [],
+  "new_table_column_calculator": 0,
+  "current_choice_before_sha256": "e9098bc075e96ec8f8eb1e05b94faf16b3d4fa241968db3075df861475a4676f",
+  "current_choice_after_sha256": "9759f6f283da73c72bdbfefc6d9a4324abf8b58a23eee4d3a431f2f2fce1cdae",
+  "whole_reverse": true,
+  "unique_hunks": 1,
+  "raw_actor_audit_confirmation_CAS_idempotency_native_eligibility_original_and_current_proofs_preserved": true,
+  "codec_authority": "LOCAL SEMANTIC COMPARISON ONLY; ACTUAL CURRENT CONSTRUCTOR + IMMUTABLE AUDIT-BOUND ORIGINAL CONSTRUCTOR REQUIRED; NO PROOF OR FINANCIAL WRITER AUTHORITY",
+  "recognized_field": "nhsp_negative_population",
+  "ignored_comparison_lifecycle_only": [
+    "authority_scope_version",
+    "projection_publication_id",
+    "projection_generation",
+    "negative_rows.row_resolution_id",
+    "negative_rows.economic_snapshot_id",
+    "negative_rows.generation"
+  ],
+  "full_source_native_payment_magnitude_economic_fingerprint_meaning_stays": true,
+  "current_owner_leaf": "BODY_ONLY; final atomic root immediately retains actual current logical owner/private ACL",
+  "inputs": [
+    {
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-negative-population-construction-20261015/forward/03_nhsp_negative_population.sqlinc",
+      "saved": "input/current_negative_population.sqlinc",
+      "bytes": 11997,
+      "sha256": "c37daa7d9af497b3bfd9fa94202a644645af8dc253011591ad5a6e168648a7aa"
+    },
+    {
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "file": "docs/healthroster-build/proposals/paid-match-nhsp-current-native-basis-construction-20261015/forward/01_nhsp_current_native_basis.sqlinc",
+      "saved": "input/current_nhsp_basis.sqlinc",
+      "bytes": 12107,
+      "sha256": "965ca6594e627c7cff5544ecfd2d918ca0ecabffe71cc051c7ba124ff63c78d6"
+    },
+    {
+      "commit": "44189e5dd387e00c4456f6b662f9483b0911cd36",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/04_complete_office_recheck.sqlinc",
+      "saved": "input/current_office_recheck.sqlinc",
+      "bytes": 21127,
+      "sha256": "4064405738cb2723b9f93a1026a6b875fd824feaec2ab8e2e99bef851019d6eb"
+    }
+  ],
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-native-invoice-values-construction-20261015",
+      "artifacts": 17,
+      "manifest_sha256": "cbae56a4c479d7d53660ea93de981f7c01e03ac24d228fea2779ac555aeb1296"
+    },
+    {
+      "packet": "paid-match-nhsp-negative-population-construction-20261015",
+      "artifacts": 21,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    },
+    {
+      "packet": "paid-match-nhsp-current-native-basis-construction-20261015",
+      "artifacts": 16,
+      "manifest_sha256": "67c33d965c537452c16ab52313ced8801429eb30f7f16a654e5b1bb35519f75c"
+    },
+    {
+      "packet": "paid-match-legacy-current-viewer-consumer-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9"
+    }
+  ],
+  "NHSP_admission_projection_negative_first_NONE_origin_capture_prepared_Office_Report_pipeline_still_incomplete": true,
+  "final_current_private_registry_verifier_contract_catalogue_REQUIRED": true,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}
