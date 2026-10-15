@@ -1,0 +1,22 @@
+-- Proposed exact new owner closure. Native execution remains a release gate.
+do $contract_fixed_security$
+declare entry record;oid_value oid;p record;
+begin
+ for entry in select * from(values
+  ('private.weekly_source_contract_fixed_approval_locks_v1(uuid[])',false,'search_path=pg_catalog, pg_temp','void'),
+  ('private.weekly_source_contract_fixed_approval_sync_v1(uuid,uuid)',false,'search_path=pg_catalog, public, private, extensions, pg_temp','public.contracts'),
+  ('public.weekly_source_contract_write_atomic_v1(jsonb)',true,'search_path=pg_catalog, public, private, pg_temp','jsonb')
+ ) selected(signature,service_execute,expected_search_path,result_type) loop
+  oid_value:=to_regprocedure(entry.signature);
+  if oid_value is null then raise exception 'CONTRACT_FIXED_APPROVAL_OWNER_MISSING: %',entry.signature;end if;
+  select proc.* into strict p from pg_proc proc where proc.oid=oid_value;
+  if not p.prosecdef or p.provolatile<>'v' or p.proowner<>(select r.oid from pg_roles r where r.rolname=current_user)
+   or p.prorettype<>to_regtype(entry.result_type) or not entry.expected_search_path=any(coalesce(p.proconfig,'{}'::text[]))
+   or exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl where acl.grantee=0 and acl.privilege_type='EXECUTE')
+   or has_function_privilege('anon',oid_value,'EXECUTE') or has_function_privilege('authenticated',oid_value,'EXECUTE')
+   or has_function_privilege('service_role',oid_value,'EXECUTE') is distinct from entry.service_execute then
+   raise exception 'CONTRACT_FIXED_APPROVAL_OWNER_SECURITY_INVALID: %',entry.signature;
+  end if;
+ end loop;
+end;
+$contract_fixed_security$;

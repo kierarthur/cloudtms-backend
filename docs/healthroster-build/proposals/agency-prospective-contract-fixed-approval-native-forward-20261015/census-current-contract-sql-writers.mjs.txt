@@ -1,0 +1,39 @@
+// Exact saved Git source only. No database, network or runtime mutation.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import {scanManagedSql} from '../../../../scripts/cloudtms-managed-release-sql.mjs';
+import {sqlDateKey} from '../../../../scripts/cloudtms-db-release-lib.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),pin='f500d7615d471a5bc4c030913bc71f861a7f2393';
+const out=path.join(here,'prospective-contract-fixed-approval-construction-20261015'),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const git=(...args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false',...args],{cwd:repo,maxBuffer:512*1024*1024});
+const paths=git('ls-tree','-r','--name-only',pin,'--','supabase/migrations','supabase/repeatable').toString('utf8').trim().split('\n').filter(Boolean);
+const batch=execFileSync('git',['cat-file','--batch'],{cwd:repo,input:paths.map(p=>`${pin}:${p}`).join('\n')+'\n',maxBuffer:512*1024*1024});
+const bytes=new Map();let offset=0;for(const file of paths){const end=batch.indexOf(10,offset),match=batch.subarray(offset,end).toString('utf8').match(/^[0-9a-f]{40} blob (\d+)$/);assert.ok(match,file);offset=end+1;const size=Number(match[1]);bytes.set(file,batch.subarray(offset,offset+size));offset+=size+1;}assert.equal(offset,batch.length);
+const sort=(a,b)=>sqlDateKey(a).localeCompare(sqlDateKey(b))||a.localeCompare(b);
+const migrations=paths.filter(p=>p.startsWith('supabase/migrations/')&&p.toLowerCase().endsWith('.sql')).sort(sort),roots=paths.filter(p=>p.startsWith('supabase/repeatable/')&&p.toLowerCase().endsWith('.sql')).sort(sort);
+const ordered=[...migrations];function visit(file,active=new Set()){assert.ok(!active.has(file),file);active.add(file);assert.ok(bytes.has(file),file);ordered.push(file);
+ for(const line of bytes.get(file).toString('utf8').split(/\r?\n/)){const m=line.match(/^\s*\\ir\s+(?:'([^']+)'|"([^"]+)"|([^\s;]+))\s*;?\s*$/);if(m){const child=path.posix.normalize(path.posix.join(path.posix.dirname(file),m[1]??m[2]??m[3]));assert.ok(child.startsWith('supabase/repeatable/'));visit(child,active);}}active.delete(file);}
+for(const file of roots)visit(file);
+assert.equal(migrations.length,400);assert.equal(roots.length,1063);
+const owners=new Map(),nonfunction=[];let definitionCount=0;
+const writer=/\b(?:insert\s+into|update|delete\s+from)\s+(?:(?:"?public"?)\s*\.\s*)?"?contracts"?(?![a-z0-9_])/gi;
+function headerKey(def){const m=def.match(/^create\s+(?:or\s+replace\s+)?function\s+((?:"?[a-z0-9_]+"?\s*\.\s*)?"?[a-z0-9_]+"?)\s*\(([\s\S]*?)\)\s*returns\b/i);if(!m)return null;
+ const name=m[1].replace(/["\s]/g,'').toLowerCase(),schemaName=name.includes('.')?name:'public.'+name;
+ // These headers use flat native type/default declarations. Retain argument
+ // count with native types to distinguish any actual overloads in the census.
+ const args=m[2].split(',').map(a=>a.trim().replace(/\s+default\s+[\s\S]*$/i,'').replace(/\s*=\s*[\s\S]*$/,'').replace(/^(?:in|out|inout|variadic)\s+/i,'').replace(/^p_[a-z0-9_]+\s+/i,'').replace(/^([a-z][a-z0-9_]*)\s+(?=(?:uuid|text|jsonb|boolean|integer|bigint|timestamptz|timestamp|date|numeric|smallint)\b)/i,'').replace(/\s+/g,' ').toLowerCase());
+ return {name:schemaName,key:schemaName+'('+args.join(',')+')'};
+}
+for(const file of ordered){const p=scanManagedSql(bytes.get(file).toString('utf8'));for(const statement of p.statements){const def=p.source.slice(statement.start,statement.end),header=headerKey(def),matches=[...def.matchAll(writer)].map(m=>({statement:m[0],line:def.slice(0,m.index).split('\n').length,context:def.slice(Math.max(0,m.index-90),Math.min(def.length,m.index+220))}));
+ if(header){definitionCount++;owners.set(header.key,{...header,path:file,definition:def,definition_sha256:sha(def),writes:matches});}
+ else if(matches.length)nonfunction.push({path:file,writes:matches});}}
+const current=[...owners.values()].filter(r=>r.writes.length).map(({definition,...r})=>r).sort((a,b)=>a.key.localeCompare(b.key));
+const inputs=[...new Set(ordered)].map(file=>({path:file,bytes:bytes.get(file).length,sha256:sha(bytes.get(file))}));
+fs.writeFileSync(path.join(out,'CURRENT_SQL_CONTRACT_WRITER_CENSUS.json'),JSON.stringify({source_only:true,native:false,pin,migrations:migrations.length,repeatables:roots.length,ordered_occurrences:ordered.length,definitions_seen:definitionCount,distinct_definition_keys:owners.size,current_literal_contract_writers:current,nonfunction_historical_contract_writes:nonfunction,inputs,
+ limitation:'Literal source census over the complete pinned chronological inventory. Quoted/schema-qualified and bare Contract writes included. Dynamic identifiers without a literal Contract name and runtime external writers need native/caller qualification; this is not a database privilege claim.'},null,2)+'\n');
+for(const r of current){const owner=owners.get(r.key);fs.mkdirSync(path.join(out,'reference/current-sql-writers'),{recursive:true});fs.writeFileSync(path.join(out,'reference/current-sql-writers',r.name.replace('.','_')+'_'+sha(r.key).slice(0,8)+'.sqlinc'),owner.definition+'\n');}
+const directNames=['private.weekly_source_query_require_service_v1','private._weekly_source_settings_require_admin_v1','private._contract_settings_effective_core_v1','private.weekly_source_configured_agency_invoice_v1','private.weekly_source_sha256_jsonb_v1','public.contract_manager_authoriser_policy_get_v1'];
+const direct=[];fs.mkdirSync(path.join(out,'reference/direct-native-dependencies'),{recursive:true});
+for(const name of directNames){const matches=[...owners.values()].filter(r=>r.name===name);assert.equal(matches.length,1,name);const row=matches[0],file='reference/direct-native-dependencies/'+name.replace('.','_')+'.sqlinc';fs.writeFileSync(path.join(out,file),row.definition+'\n');direct.push({pin,name,key:row.key,path:row.path,raw_bytes:bytes.get(row.path).length,raw_sha256:sha(bytes.get(row.path)),definition_sha256:row.definition_sha256,reference:file});}
+fs.writeFileSync(path.join(out,'DIRECT_NATIVE_DEPENDENCIES.json'),JSON.stringify({source_only:true,native:false,dependencies:direct,transitive_native_qualification:'MANDATORY whole current release; these are literal direct owner receipts, not a claim of complete native execution.'},null,2)+'\n');
+console.log(JSON.stringify({migrations:migrations.length,repeatables:roots.length,ordered_occurrences:ordered.length,current_literal_contract_writers:current.map(r=>({name:r.name,key:r.key,path:r.path,writes:r.writes.length})),nonfunction_historical_matches:nonfunction.length},null,2));

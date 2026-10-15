@@ -1,0 +1,80 @@
+// Actual source writers only. No database, HTTP, dependency install or deployment.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';import vm from 'node:vm';
+import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {scanManagedSql} from '../../../../scripts/cloudtms-managed-release-sql.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),out=path.join(here,'prospective-contract-fixed-approval-construction-20261015');
+const pin='f500d7615d471a5bc4c030913bc71f861a7f2393',sourcePin='7afa77836974e011516d146be6778a5db32fc9e6';
+const git=(...args)=>execFileSync('git',args,{cwd:repo,maxBuffer:32*1024*1024}),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+function write(file,s){const dest=path.join(out,file);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,s);}
+function json(file,v){write(file,JSON.stringify(v,null,2)+'\n');}
+function once(s,a,b){assert.equal(s.split(a).length,2,'Unique writer change anchor: '+a.slice(0,70));return s.replace(a,()=>b);}
+function sqlDefinition(s,name){const p=scanManagedSql(s),matches=p.statements.map(st=>p.source.slice(st.start,st.end)).filter(st=>new RegExp('^create\\s+(?:or\\s+replace\\s+)?function\\s+'+name.replace('.','\\.')+'\\s*\\(','i').test(st));assert.equal(matches.length,1,name);return matches[0];}
+const census=JSON.parse(fs.readFileSync(path.join(out,'ACTUAL_CONTRACT_WRITER_CENSUS.json'),'utf8'));
+const original=git('show',`${pin}:broker/src/index.js`).toString('utf8');assert.equal(sha(original),census.worker.sha256);
+const positive=census.writes.filter(r=>['POST','PATCH'].includes(r.method));assert.equal(positive.length,10);assert.equal(new Set(positive.map(r=>r.owner)).size,8);
+const callChanges=[];let current=original;
+for(const r of positive){assert.equal(original.slice(r.start,r.end),r.snippet);assert.ok(r.snippet.startsWith('fetch('));
+ let context='';if(['handleContractsUpdate','handleContractsReplace'].includes(r.owner))context=r.snippet.includes('normStart')?', { expectedUpdatedAt: updated?.updated_at }':', { expectedUpdatedAt: current.updated_at }';
+ if(['handleContractsTruncateTailSafely','handleContractsPlanRanges','handleContractsUnplanRanges'].includes(r.owner))context=', { expectedUpdatedAt: c.updated_at }';
+ if(r.owner==='handleContractsDuplicate')context=', { policySource: { id: src.id, updated_at: src.updated_at } }';
+ const after='contractPresetWriteFetch(env, user.id,'+(/^\s/.test(r.snippet.slice(6))?'':' ')+r.snippet.slice(6,-1)+context+')';
+ current=once(current,r.snippet,after);callChanges.push({owner:r.owner,before:r.snippet,after});
+}
+// Carry the SAME actual read version used to calculate each date change.
+// A fresh transport-side timestamp read would silently permit a stale overwrite.
+current=once(current,'?id=eq.${enc(contractId)}&select=id,start_date,end_date`','?id=eq.${enc(contractId)}&select=id,start_date,end_date,updated_at`');
+current=once(current,'?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot`','?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot,updated_at`');
+current=once(current,"          'std_schedule_json'\n        ].join(',')","          'std_schedule_json',\n          'updated_at'\n        ].join(',')");
+current=once(current,"  if (!res.ok) return printedTimesheetPolicyErrorResponse(env, req, 'The Contract printed-timesheet policy was not changed.');",`  if (!res.ok) {
+    const failure = await res.json().catch(() => null);
+    const code = /^CANDIDATE_[A-Z0-9_]+$/.test(String(failure?.code || ''))
+      ? failure.code : 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_FAILED';
+    const message = code === 'CANDIDATE_FIXED_APPROVAL_CONTRACT_DEPENDENCY_UNAVAILABLE'
+      ? 'The Contract settings service is temporarily unavailable. Retry after it is restored.'
+      : res.status === 409 ? 'The Contract changed. Reload and try again.'
+      : 'The Contract settings request could not be completed. Reload before retrying.';
+    return printedTimesheetPolicyErrorResponse(env, req, message, res.status === 409 ? 409 : 503, code);
+  }`);
+const importAddition="import { createContractPresetWriteTransport } from './weekly-source/contract-preset-write.mjs';\nconst contractPresetWriteFetch = createContractPresetWriteTransport({ sbRpc, unwrapRpcJsonb });\n";
+current=importAddition+current;
+function jsFunction(s,name){const start=s.indexOf('async function '+name+'(');assert.ok(start>=0,name);
+ const endPattern=/^}\r?$/gm;endPattern.lastIndex=start;let m;while((m=endPattern.exec(s))){const candidate=s.slice(start,m.index+m[0].length);try{new vm.Script('('+candidate+')');return candidate;}catch{}}
+ throw new Error('No complete actual function: '+name);}
+const functionHunks=[...new Set(positive.map(r=>r.owner))].map(name=>{
+ const before=jsFunction(original,name),after=jsFunction(current,name);assert.match(before,/const\s+user\s*=\s*await\s+requireUser/);return{name,before,after};
+});
+let reversed=current.slice(importAddition.length);for(const h of functionHunks)reversed=once(reversed,h.after,h.before);assert.equal(reversed,original);
+write('before/125_complete_current_worker_index.js',original);write('forward/125_complete_current_worker_index_with_contract_persistence.js',current);
+const sourceIndexPath='docs/healthroster-build/proposals/agency-off-native-transport-forward-20261015/102_complete_current_index_with_actual_off_agency.js';
+const priorIndex=git('show',`${sourcePin}:${sourceIndexPath}`).toString('utf8');let joined=priorIndex;
+for(const h of functionHunks){assert.equal(jsFunction(priorIndex,h.name),h.before,'102 Contract owner must match current root exactly');joined=once(joined,h.before,h.after);}
+joined=importAddition+joined;
+write('before/126_complete_agency_off_one_click_index.js',priorIndex);write('forward/126_complete_agency_off_one_click_index_with_contract_persistence.js',joined);
+json('WORKER_COMPLETE_REVERSES.json',{source_only:true,native:false,inputs:[{pin,path:'broker/src/index.js',sha256:sha(original),bytes:Buffer.byteLength(original)},
+ {pin:sourcePin,path:sourceIndexPath,sha256:sha(priorIndex),bytes:Buffer.byteLength(priorIndex)}],import_addition:importAddition,function_hunks:functionHunks,call_hunks:callChanges,
+ current_forward_sha256:sha(current),joined_forward_sha256:sha(joined),alternatives_mutually_exclusive:true,preferred_source:'forward/126_complete_agency_off_one_click_index_with_contract_persistence.js'});
+const nativeInputs=[
+ ['public.contracts_clone_and_extend_atomic','supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql','127_complete_native_clone_with_fixed_approval.sqlinc'],
+ ['public.contract_week_delete_planned','supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql','128_complete_native_planned_week_delete_with_fixed_approval.sqlinc'],
+ ['public.timesheet_weekly_chain_delete_apply','supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql','129_complete_native_chain_boundary_with_fixed_approval.sqlinc']
+];
+const nativeReverses=[];
+for(const [name,file,dest]of nativeInputs){const b=git('show',`${pin}:${file}`),before=sqlDefinition(b.toString('utf8'),name);let after=before;const hunks=[];
+ if(name.includes('clone_and_extend')){
+  const a='  returning c.* into v_succ;',z=a+'\n  v_succ:=private.weekly_source_contract_fixed_approval_sync_v1(v_succ.id,p_actor_user_id);';after=once(after,a,z);hunks.push({before:a,after:z});
+  const a2='  v_cur.end_date := v_close_to;',z2=a2+'\n  v_cur:=private.weekly_source_contract_fixed_approval_sync_v1(v_cur.id,p_actor_user_id);';after=once(after,a2,z2);hunks.push({before:a2,after:z2});
+ }else{
+  const match=after.match(/UPDATE public\.contracts\s+SET start_date = v_new_start,\s+end_date = v_new_end\s+WHERE id = v_contract_id;/);assert.ok(match,name);
+  const a=match[0],z=a+'\n      PERFORM private.weekly_source_contract_fixed_approval_sync_v1(v_contract_id,p_actor_user_id);';after=once(after,a,z);hunks.push({before:a,after:z});
+ }
+ write('reference/'+path.basename(file),b);write('before/'+dest,before+'\n');write('forward/'+dest,after+'\n');nativeReverses.push({name,input:{pin,path:file,raw_bytes:b.length,raw_sha256:sha(b),definition_sha256:sha(before)},forward:'forward/'+dest,before:'before/'+dest,forward_sha256:sha(after),hunks,whole_function_hunk:{before,after}});
+}
+const policySource='docs/healthroster-build/proposals/agency-fixed-approval-policy-support-20261015/95_complete_public_manager_writer_fixed_policy_guard.sqlinc';
+const policyBefore=git('show',`${sourcePin}:${policySource}`).toString('utf8');const policyAnchor='  -- An ordinary approved-email/domain edit cannot clear a system-fixed key.';
+const policyAddition='  -- Refresh only the native system key after the existing CAS, preserving\n  -- the ordinary request hash/replay identity and all manager policy fields.\n  v_contract:=private.weekly_source_contract_fixed_approval_sync_v1(p_contract_id,p_actor_user_id);\n';
+const policyAfter=once(policyBefore,policyAnchor,policyAddition+policyAnchor);
+write('before/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc',policyBefore);write('forward/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc',policyAfter);
+nativeReverses.push({name:'public.contract_manager_authoriser_policy_update_v1',input:{pin:sourcePin,path:policySource,raw_bytes:Buffer.byteLength(policyBefore),raw_sha256:sha(policyBefore)},before:'before/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc',forward:'forward/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc',forward_sha256:sha(policyAfter),hunks:[{before:'',after:policyAddition}],whole_function_hunk:{before:policyBefore,after:policyAfter}});
+json('NATIVE_COMPLETE_REVERSES.json',{source_only:true,native:false,records:nativeReverses});
+write('reference/pinned-source-parser.mjs',git('show',`${pin}:scripts/cloudtms-managed-release-sql.mjs`));
+write('00_prospective_contract_fixed_approval.sql',`-- Proposal after current fixed-policy93–107 and mandatory native foundations.\nbegin;\n\\ir 123_contract_fixed_approval_native_helpers.sqlinc\n\\ir 124_contract_write_with_native_fixed_approval.sqlinc\n${nativeReverses.map(r=>'\\ir '+r.forward).join('\n')}\n\\ir 131_contract_fixed_approval_owner_security.sqlinc\nnotify pgrst, 'reload schema';\ncommit;\n`);
+console.log(JSON.stringify({out,actual_worker_writes:positive.length,actual_worker_owners:functionHunks.length,native_existing_owners:nativeReverses.length,new_private_helpers:2,new_public_service_only_rpc:1,source_only:true,native:false}));

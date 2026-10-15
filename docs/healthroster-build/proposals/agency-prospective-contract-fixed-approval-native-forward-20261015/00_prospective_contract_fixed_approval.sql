@@ -1,0 +1,11 @@
+-- Proposal after current fixed-policy93–107 and mandatory native foundations.
+begin;
+\ir 123_contract_fixed_approval_native_helpers.sqlinc
+\ir 124_contract_write_with_native_fixed_approval.sqlinc
+\ir forward/127_complete_native_clone_with_fixed_approval.sqlinc
+\ir forward/128_complete_native_planned_week_delete_with_fixed_approval.sqlinc
+\ir forward/129_complete_native_chain_boundary_with_fixed_approval.sqlinc
+\ir forward/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc
+\ir 131_contract_fixed_approval_owner_security.sqlinc
+notify pgrst, 'reload schema';
+commit;

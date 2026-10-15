@@ -1,0 +1,44 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "source_root_pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "accepted_agency_pin": "7afa77836974e011516d146be6778a5db32fc9e6",
+  "prerequisites": [
+    "Canonical current Source/A0/settings/Contract/Candidate foundations, including all mandatory pending schema fields",
+    "Current Agency module389 plus actual17 shared-owner union7afa and corrected122 verifier",
+    "Fixed policy93/94, actual Client105/feature106 and dated Candidate policy107; do not replay old95 after130"
+  ],
+  "sql": "00_prospective_contract_fixed_approval.sql",
+  "new_private_owner_only_functions": 2,
+  "new_public_service_only_rpc": 1,
+  "existing_complete_sql_owner_replacements": 4,
+  "new_runtime_module": {
+    "source": "contract-preset-write.mjs",
+    "target": "broker/src/weekly-source/contract-preset-write.mjs"
+  },
+  "worker_alternatives_mutually_exclusive": [
+    "forward/125_complete_current_worker_index_with_contract_persistence.js",
+    "forward/126_complete_agency_off_one_click_index_with_contract_persistence.js"
+  ],
+  "preferred_worker": "forward/126_complete_agency_off_one_click_index_with_contract_persistence.js",
+  "current_worker_delta": "Import/factory plus eight complete handler reversals from WORKER_COMPLETE_REVERSES. Preferred126 retains accepted102 Agency/OFF/one-click index. Root owns any later Office/current-index union; never overwrite an unmatched current file.",
+  "final_owner_substitution": "Select130 instead of95 in the final once-only Agency owner list; append123/124 and complete127/128/129. Preserve current signatures/configuration/ACL of the four existing owners. No new Candidate-named function.",
+  "runtime_preserve": "MOUNTED_CANDIDATE_RUNTIME_PRESERVE.json: do not replace the three exact mounted f500 Candidate/presentation/PDF runtime files",
+  "existing_stores_only": [
+    "public.contracts.candidate_manager_approval_policy_json",
+    "public.candidate_manager_authoriser_policy_receipts"
+  ],
+  "new_table": false,
+  "new_trigger": false,
+  "new_office_approval_input": false,
+  "new_fixture_setup_operation": false,
+  "pending": [
+    "Independent source critique and exact current root module composition",
+    "Whole chronological PostgreSQL compile and actual first-use typed dynamic Contract INSERT/PATCH, clone, deletion and manager-policy calls",
+    "Actual service/browser/private-helper/API schema-cache and role tests",
+    "Read committed and old repeatable-read lock/CAS/phantom/group/routing/date schedules",
+    "Genuine dated weekly HOURS transition/finalisation/official-document phone/application proof",
+    "True Original/protection/NX-AI-6/full NONE financial engineering and whole TEST acceptance"
+  ]
+}

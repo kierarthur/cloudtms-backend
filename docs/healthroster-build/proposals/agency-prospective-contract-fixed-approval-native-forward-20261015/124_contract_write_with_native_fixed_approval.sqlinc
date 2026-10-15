@@ -1,0 +1,89 @@
+-- Source proposal: the actual existing Contract create/PATCH payloads remain
+-- finite and admin-owned. System approval cannot be supplied in values.
+create or replace function public.weekly_source_contract_write_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $contract_write$
+declare actor uuid;mode text;values_json jsonb;contract_id uuid;expected timestamptz;
+ before_row public.contracts%rowtype;after_row public.contracts%rowtype;source_row public.contracts%rowtype;
+ old_client uuid;new_client uuid;old_client_contract uuid;source_id uuid;source_expected timestamptz;columns_sql text;expressions_sql text;changes_sql text;
+ permitted constant text[]:=array[
+ 'candidate_id','client_id','role','band','display_site','ward_hint','start_date','end_date','pay_method_snapshot',
+ 'rates_json','std_hours_json','std_schedule_json','bucket_labels_json','additional_rates_json','default_submission_mode',
+ 'week_ending_weekday_snapshot','auto_invoice','require_reference_to_pay','require_reference_to_invoice','mileage_pay_rate','mileage_charge_rate',
+ 'overrideclientsettings','candidate_paper_submission_enabled_override','candidate_expenses_require_separate_timesheet_override',
+ 'candidate_expense_invoice_email_override','is_ad_hoc','is_nhsp','autoprocess_hr','requires_hr','no_timesheet_required',
+ 'weekly_timesheet_source','daily_calc_of_invoices','group_nightsat_sunbh','self_bill','hr_attach_to_invoice','ts_attach_to_invoice',
+ 'reference_number_required_to_issue_invoice','send_manual_invoices_to_different_email','manual_invoices_alt_email_address',
+ 'send_ts_queries_to_different_email','ts_queries_alt_email_address','timesheet_break_entry_mode','created_at','updated_at'];
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if jsonb_typeof(p_request) is distinct from 'object' or p_request-array['actor_user_id','mode','values','contract_id','expected_updated_at',
+   'policy_source_contract_id','policy_source_expected_updated_at']<>'{}'::jsonb then
+  raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;mode:=p_request->>'mode';values_json:=p_request->'values';
+ perform private._weekly_source_settings_require_admin_v1(actor);
+ if mode is null or mode not in('POST','PATCH') or jsonb_typeof(values_json) is distinct from 'object' or values_json='{}'::jsonb
+  or octet_length(values_json::text)>262144 or exists(select 1 from jsonb_object_keys(values_json) key where not(key=any(permitted))) then
+  raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_INVALID' using errcode='22023';end if;
+ if mode='PATCH' then
+  contract_id:=(p_request->>'contract_id')::uuid;expected:=(p_request->>'expected_updated_at')::timestamptz;
+  if contract_id is null or expected is null or values_json ? 'created_at' or p_request ? 'policy_source_contract_id'
+    or p_request ? 'policy_source_expected_updated_at' then
+   raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_INVALID' using errcode='22023';end if;
+  select c.* into strict before_row from public.contracts c where c.id=contract_id;
+  old_client:=before_row.client_id;new_client:=case when values_json ? 'client_id' then (values_json->>'client_id')::uuid else old_client end;
+ else
+  if p_request ? 'contract_id' or p_request ? 'expected_updated_at' then
+   raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_INVALID' using errcode='22023';end if;
+  new_client:=(values_json->>'client_id')::uuid;old_client:=new_client;
+ end if;
+ perform private.weekly_source_contract_fixed_approval_locks_v1(array[old_client,new_client]);
+ if mode='PATCH' then
+  select c.* into strict before_row from public.contracts c where c.id=contract_id for update nowait;
+  if before_row.client_id is distinct from old_client or before_row.updated_at is distinct from expected then
+   raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';end if;
+ else
+  source_id:=(p_request->>'policy_source_contract_id')::uuid;
+  source_expected:=(p_request->>'policy_source_expected_updated_at')::timestamptz;
+  if (source_id is null)<>(source_expected is null) then
+   raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_INVALID' using errcode='22023';end if;
+  if source_id is not null then
+   select c.* into strict source_row from public.contracts c where c.id=source_id for share nowait;
+   if source_row.client_id is distinct from new_client or source_row.updated_at is distinct from source_expected then
+    raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';end if;
+   -- Copy ordinary manager-policy bytes from the ACTUAL source Contract;
+   -- the next native sync rederives only the fixed key for the new scope.
+   values_json:=values_json||jsonb_build_object('candidate_manager_approval_policy_json',source_row.candidate_manager_approval_policy_json);
+  end if;
+ end if;
+ -- Identifiers come exclusively from the finite list above or the one native
+ -- copy field. JSON values remain bound parameters; no caller SQL is accepted.
+ select string_agg(format('%I',key),',' order by key),
+  string_agg(format('incoming.%I',key),',' order by key),
+  string_agg(format('%I=incoming.%I',key,key),',' order by key)
+ into columns_sql,expressions_sql,changes_sql from jsonb_object_keys(values_json) key;
+ if mode='POST' then
+  execute format('insert into public.contracts as target(%s) select %s from jsonb_populate_record(null::public.contracts,$1) incoming returning target.*',columns_sql,expressions_sql)
+   into strict after_row using values_json;
+ else
+  execute format('update public.contracts as target set %s from jsonb_populate_record(null::public.contracts,$1) incoming where target.id=$2 and target.updated_at is not distinct from $3 returning target.*',changes_sql)
+   into strict after_row using values_json,contract_id,expected;
+ end if;
+ after_row:=private.weekly_source_contract_fixed_approval_sync_v1(after_row.id,actor);
+ if old_client is distinct from new_client then
+  select c.id into old_client_contract from public.contracts c where c.client_id=old_client order by c.id limit 1;
+  if old_client_contract is not null then perform private.weekly_source_contract_fixed_approval_sync_v1(old_client_contract,actor);end if;
+ end if;
+ return to_jsonb(after_row);
+exception when no_data_found or too_many_rows then
+ raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';
+ when lock_not_available then
+ raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';
+ when invalid_text_representation or invalid_datetime_format or datetime_field_overflow then
+ raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_WRITE_INVALID' using errcode='22023';
+end;
+$contract_write$;
+alter function public.weekly_source_contract_write_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_contract_write_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_contract_write_atomic_v1(jsonb) to service_role;

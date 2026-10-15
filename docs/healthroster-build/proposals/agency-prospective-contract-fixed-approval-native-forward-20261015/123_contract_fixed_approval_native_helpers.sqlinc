@@ -1,0 +1,129 @@
+-- Source proposal: native Contract write locks and the system-owned fixed key.
+-- No trigger, new store, caller approval choice or transport-only completion.
+create or replace function private.weekly_source_contract_fixed_approval_locks_v1(p_client_ids uuid[])
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $contract_fixed_locks$
+declare clients uuid[];groups_before uuid[];groups_after uuid[];identity uuid;
+begin
+ if p_client_ids is null or cardinality(p_client_ids) not between 1 and 2 or array_position(p_client_ids,null) is not null then
+  raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_SCOPE_INVALID' using errcode='22023';end if;
+ select array_agg(distinct value order by value) into clients from unnest(p_client_ids) value;
+ if (select count(*) from public.clients c where c.id=any(clients))<>cardinality(clients) then
+  raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_SCOPE_INVALID' using errcode='22023';end if;
+ select coalesce(array_agg(distinct m.source_group_id order by m.source_group_id),'{}'::uuid[]) into groups_before
+ from public.weekly_source_group_clients m where m.client_id=any(clients);
+ -- Same lifecycle/client keys and order as the actual feature/Client owners.
+ -- Existing native deletion/clone callers may already hold their Contract;
+ -- non-waiting acquisition refuses a race instead of reversing that lock order.
+ foreach identity in array groups_before loop
+  if not pg_try_advisory_xact_lock(hashtextextended('weekly-source-cycle-lifecycle:'||identity::text,0)) then
+   raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';end if;
+ end loop;
+ foreach identity in array clients loop
+  if not pg_try_advisory_xact_lock(hashtextextended('weekly-source-settings-client:'||identity::text,0)) then
+   raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';end if;
+ end loop;
+ perform 1 from public.clients c where c.id=any(clients) order by c.id for update nowait;
+ perform 1 from public.weekly_source_groups g where g.id=any(groups_before) order by g.id for update nowait;
+ perform 1 from public.weekly_source_group_rule_assignments a where a.source_group_id=any(groups_before) order by a.id for update nowait;
+ perform 1 from public.weekly_source_group_clients m where m.client_id=any(clients) order by m.id for update nowait;
+ perform 1 from public.weekly_source_client_policies cp where cp.client_id=any(clients) order by cp.id for update nowait;
+ perform 1 from public.client_settings cs where cs.client_id=any(clients) order by cs.id for update nowait;
+ select coalesce(array_agg(distinct m.source_group_id order by m.source_group_id),'{}'::uuid[]) into groups_after
+ from public.weekly_source_group_clients m where m.client_id=any(clients);
+ if groups_after is distinct from groups_before then
+  raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';end if;
+exception when lock_not_available then
+ raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';
+end;
+$contract_fixed_locks$;
+alter function private.weekly_source_contract_fixed_approval_locks_v1(uuid[]) owner to postgres;
+revoke all on function private.weekly_source_contract_fixed_approval_locks_v1(uuid[]) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_contract_fixed_approval_sync_v1(p_contract_id uuid,p_actor_user_id uuid)
+returns public.contracts language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $contract_fixed_sync$
+declare contract public.contracts%rowtype;target_client uuid;before_policy jsonb;after_policy jsonb;scope record;authority jsonb;
+ today date:=(transaction_timestamp() at time zone 'Europe/London')::date;
+ v_environment text;fixed boolean:=false;group_id uuid;scope_date date;capture jsonb;response jsonb;receipt_key text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ -- Permission remains with the actual native Contract/deletion/clone caller.
+ -- This private helper derives a system key and records that caller's REAL actor.
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+  raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_ACTOR_REQUIRED' using errcode='42501';end if;
+ select c.* into strict contract from public.contracts c where c.id=p_contract_id;
+ target_client:=contract.client_id;
+ perform private.weekly_source_contract_fixed_approval_locks_v1(array[target_client]);
+ select s.candidate_app_environment into strict v_environment from public.settings_defaults s where s.id=1;
+ -- The native configured predicate considers EVERY Contract for the Client.
+ -- Inserting/changing one route can therefore apply/clear other raw keys.
+ -- Refresh that same complete Client set, with one receipt per real change.
+ for contract in select c.* from public.contracts c where c.client_id=target_client order by c.id for update nowait
+ loop
+ fixed:=false;group_id:=null;scope_date:=null;
+ before_policy:=contract.candidate_manager_approval_policy_json;
+ if before_policy is not null and jsonb_typeof(before_policy) is distinct from 'object' then
+  raise exception 'CANDIDATE_MANAGER_CONTRACT_POLICY_FIELD_INVALID' using errcode='22023';end if;
+ if contract.weekly_timesheet_source::text='HEALTHROSTER' and contract.end_date>=greatest(contract.start_date,today) then
+  -- The raw Contract key represents an existing current/future preset.107 is
+  -- still the sole dated Candidate consumer; this unversioned key NEVER grants
+  -- approval for an earlier, later, DAILY, expense or combined workflow.
+  for scope in
+   with dates as (
+    select greatest(contract.start_date,today) evaluation_date
+    union select m.valid_from from public.weekly_source_group_clients m where m.client_id=contract.client_id
+    union select m.valid_to+1 from public.weekly_source_group_clients m where m.client_id=contract.client_id and isfinite(m.valid_to)
+    union select a.effective_from_week_ending-6 from public.weekly_source_group_rule_assignments a
+     join public.weekly_source_group_clients m on m.source_group_id=a.source_group_id where m.client_id=contract.client_id
+    union select a.effective_to_week_ending+1 from public.weekly_source_group_rule_assignments a
+     join public.weekly_source_group_clients m on m.source_group_id=a.source_group_id where m.client_id=contract.client_id and isfinite(a.effective_to_week_ending)
+    union select cp.effective_from from public.weekly_source_client_policies cp where cp.client_id=contract.client_id
+    union select cp.effective_to+1 from public.weekly_source_client_policies cp where cp.client_id=contract.client_id and isfinite(cp.effective_to)
+    union select cs.effective_from from public.client_settings cs where cs.client_id=contract.client_id and cs.effective_from is not null
+    union select c.end_date+1 from public.contracts c where c.client_id=contract.client_id and isfinite(c.end_date)
+   )
+   select distinct g.id,g.agency_id,g.environment,greatest(d.evaluation_date,contract.start_date,today) evaluation_date
+   from dates d join public.weekly_source_group_clients m on m.client_id=contract.client_id
+    and greatest(d.evaluation_date,contract.start_date,today) between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+   join public.weekly_source_groups g on g.id=m.source_group_id and g.active and g.source_family='ROSTER' and g.environment=v_environment
+   where greatest(d.evaluation_date,contract.start_date,today)<=contract.end_date order by evaluation_date,g.id
+  loop
+   if (select count(*) from public.weekly_source_group_clients m join public.weekly_source_groups g on g.id=m.source_group_id
+     and g.active and g.source_family='ROSTER' and g.environment=v_environment where m.client_id=contract.client_id
+      and scope.evaluation_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))<>1 then
+    raise exception 'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID' using errcode='55000';end if;
+   authority:=private._contract_settings_effective_core_v1(contract.client_id,contract.id,scope.evaluation_date,'WEEKLY',null);
+   if authority->>'configured_route'='HEALTHROSTER_WEEKLY_VALIDATION'
+    and coalesce((authority#>>'{applicability,configuration_valid}')::boolean,false)
+    and not coalesce((authority#>>'{applicability,import_authoritative}')::boolean,false)
+    and private.weekly_source_configured_agency_invoice_v1(contract.client_id,scope.id,scope.agency_id,scope.environment,scope.evaluation_date) is true then
+    fixed:=true;group_id:=scope.id;scope_date:=scope.evaluation_date;exit;
+   end if;
+  end loop;
+ end if;
+ after_policy:=case when fixed then coalesce(before_policy,'{}'::jsonb)||jsonb_build_object('approval','NOT_REQUIRED') else before_policy-'approval' end;
+ if after_policy is not distinct from before_policy then continue;end if;
+ capture:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_FIXED_APPROVAL_CHANGE_V1','contract_id',contract.id,
+  'client_id',contract.client_id,'source_group_id',group_id,'effective_from',scope_date,'expected_contract_updated_at',contract.updated_at,
+  'before_policy',before_policy,'after_policy',after_policy,'operation',case when fixed then 'APPLY' else 'CLEAR' end);
+ capture:=capture||jsonb_build_object('input_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_FIXED_APPROVAL_CHANGE_V1',capture),'hex'));
+ receipt_key:='SOURCE_AGENCY_FIXED:'||gen_random_uuid()::text;
+ update public.contracts c set candidate_manager_approval_policy_json=after_policy,updated_at=transaction_timestamp()
+  where c.id=contract.id returning c.* into contract;
+ response:=public.contract_manager_authoriser_policy_get_v1(contract.id)||jsonb_build_object('system_fixed_approval',capture,'idempotent_replay',false);
+ insert into public.candidate_manager_authoriser_policy_receipts(entity_kind,entity_id,idempotency_key,semantic_sha256,response_json,actor_user_id,recorded_at_utc)
+ values('CONTRACT',contract.id,receipt_key,extensions.digest(convert_to(after_policy::text,'UTF8'),'sha256'),response,p_actor_user_id,transaction_timestamp());
+ end loop;
+ select c.* into strict contract from public.contracts c where c.id=p_contract_id and c.client_id=target_client;
+ return contract;
+exception when no_data_found or too_many_rows then
+ raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_SCOPE_INVALID' using errcode='55000';
+ when lock_not_available then
+ raise exception 'CANDIDATE_FIXED_APPROVAL_CONTRACT_CONTEXT_STALE' using errcode='40001';
+end;
+$contract_fixed_sync$;
+alter function private.weekly_source_contract_fixed_approval_sync_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_contract_fixed_approval_sync_v1(uuid,uuid) from public,anon,authenticated,service_role;

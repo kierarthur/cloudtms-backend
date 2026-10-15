@@ -1,0 +1,244 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "independent_review": "PENDING",
+  "files": [
+    {
+      "path": "00_prospective_contract_fixed_approval.sql",
+      "bytes": 587,
+      "sha256": "503d9449bca484a8797e5936043f412b83c65d43ab0388946f0b270207204aca"
+    },
+    {
+      "path": "123_contract_fixed_approval_native_helpers.sqlinc",
+      "bytes": 10868,
+      "sha256": "080edcc5d39ea6c3523d88535e97b50f0c18c5060675e1fc923570513f4f2164"
+    },
+    {
+      "path": "124_contract_write_with_native_fixed_approval.sqlinc",
+      "bytes": 7172,
+      "sha256": "763a03b1ef18d09b6faacfd9159ab16e72a0bb652a56a3029103cf7a2818774f"
+    },
+    {
+      "path": "131_contract_fixed_approval_owner_security.sqlinc",
+      "bytes": 1657,
+      "sha256": "72265ed6719fec4f2659b8d9ae44ae039678489610a49ab10ae783ec2b6a796b"
+    },
+    {
+      "path": "ACTUAL_CONTRACT_WRITER_CENSUS.json",
+      "bytes": 7750,
+      "sha256": "7d8aa1e04f382d949edc75fcad7a10b4408d2e32e2a5010b3f431833df5d6443"
+    },
+    {
+      "path": "before/125_complete_current_worker_index.js",
+      "bytes": 8927507,
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d"
+    },
+    {
+      "path": "before/126_complete_agency_off_one_click_index.js",
+      "bytes": 8941104,
+      "sha256": "ca8f7dd6adcc52f29a8b2f6fedafa904fbe8919ea4e8386c75114e25665afd48"
+    },
+    {
+      "path": "before/127_complete_native_clone_with_fixed_approval.sqlinc",
+      "bytes": 85971,
+      "sha256": "bc898a8572c778cbd55265fc62c5a2152ffd9f796089fe42b49d7c50efd60205"
+    },
+    {
+      "path": "before/128_complete_native_planned_week_delete_with_fixed_approval.sqlinc",
+      "bytes": 4401,
+      "sha256": "eabe0262964c7eda4c884564a65b024bf77a1735322a394a8f4fcc54cece6276"
+    },
+    {
+      "path": "before/129_complete_native_chain_boundary_with_fixed_approval.sqlinc",
+      "bytes": 9093,
+      "sha256": "d9bd7e54827c82a888634c5573588d16429f9b972288b501664d3947b5e41a73"
+    },
+    {
+      "path": "before/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc",
+      "bytes": 3228,
+      "sha256": "cf18a06a3186e645bd4af6fbd28528e6d5b5b22a4ec563c27eba7a6e6f6cf9e2"
+    },
+    {
+      "path": "build-prospective-contract-writers.mjs.txt",
+      "bytes": 10751,
+      "sha256": "b491e67752320e2b99cbe82082cf704b283b607a01f13567c8e5a2ca063bd423"
+    },
+    {
+      "path": "census-current-contract-sql-writers.mjs.txt",
+      "bytes": 6744,
+      "sha256": "d31be12498d0ecf24b9968d4e4248d7fce81eae4fc99fe1814cf8f4a6d230be4"
+    },
+    {
+      "path": "census-prospective-contract-writers.mjs.txt",
+      "bytes": 2726,
+      "sha256": "7a3fc31f29dd52c7314b9b154a25ed929c1798783f7a5ef51b60cb33af3c37c7"
+    },
+    {
+      "path": "contract-preset-write.mjs",
+      "bytes": 4971,
+      "sha256": "d567fb8d69765833965fe4fca43d186771124b4dbf99e0e5abdc8fa36a6f36ae"
+    },
+    {
+      "path": "CURRENT_SQL_CONTRACT_WRITER_CENSUS.json",
+      "bytes": 385131,
+      "sha256": "13ee83c1f5f248be86c2c8bceb070d1d05fe85e635b4f2614a63e6ccb1495b93"
+    },
+    {
+      "path": "DIRECT_NATIVE_DEPENDENCIES.json",
+      "bytes": 3945,
+      "sha256": "ed57bfc86a9d032938df0c4844ce5167899483b83456dc997b95dd880badf22a"
+    },
+    {
+      "path": "forward/125_complete_current_worker_index_with_contract_persistence.js",
+      "bytes": 8928972,
+      "sha256": "0bf6e3bdb15210a3963183ad1d832f57a18586ac1b9a5e02a8f4e797bb7d2f45"
+    },
+    {
+      "path": "forward/126_complete_agency_off_one_click_index_with_contract_persistence.js",
+      "bytes": 8942569,
+      "sha256": "de517403d6c1e2af28f508ef72a3c79d7dd4cfd5884b09068e27fcd4205461f8"
+    },
+    {
+      "path": "forward/127_complete_native_clone_with_fixed_approval.sqlinc",
+      "bytes": 86153,
+      "sha256": "be324639955e23ccf93a5a508987e429f71700496cb17d8b99dc7d705ae05b51"
+    },
+    {
+      "path": "forward/128_complete_native_planned_week_delete_with_fixed_approval.sqlinc",
+      "bytes": 4501,
+      "sha256": "ca3d6a49fc6f5ffd053d88ea6852b7d776725be3223afbe3cd8e49bedcbbe4f9"
+    },
+    {
+      "path": "forward/129_complete_native_chain_boundary_with_fixed_approval.sqlinc",
+      "bytes": 9193,
+      "sha256": "74528dbfe732149e1ffe17188ab9a13154df5429758b3335689c9f56b334c7c9"
+    },
+    {
+      "path": "forward/130_complete_manager_policy_writer_with_native_fixed_sync.sqlinc",
+      "bytes": 3481,
+      "sha256": "92342e6801dd6878034f8d477b7d87ae5aea70995f250635e67bb733efb89cb2"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 11755,
+      "sha256": "e97602920b4524229b669c2b1b0639442ddf3402a90d94ba8dbb996b65f60e72"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 4880,
+      "sha256": "8a1ac86c48ce16bd211ba2af5155407d683c1eac761c0108d434db609b684183"
+    },
+    {
+      "path": "MOUNTED_CANDIDATE_RUNTIME_PRESERVE.json",
+      "bytes": 976,
+      "sha256": "1a3b2d3ae159505b6d4fdd7460390eed822fe6119569cc57281f568a0be81c26"
+    },
+    {
+      "path": "NATIVE_COMPLETE_REVERSES.json",
+      "bytes": 216809,
+      "sha256": "b84433b54a658611b3dcc934b7de3fa227d67cbae5a1af7af3c74723aa32785b"
+    },
+    {
+      "path": "prospective-contract.test.mjs",
+      "bytes": 22135,
+      "sha256": "45d6f1807df5e9113733987298bdc3aee4ae2f6d13764478581d5d2243369bfb"
+    },
+    {
+      "path": "reference/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+      "bytes": 127427,
+      "sha256": "7fdddc57b5f1ca6aff196567a10dd09b393185b17efdfe9b58bb766aea7e847b"
+    },
+    {
+      "path": "reference/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+      "bytes": 234886,
+      "sha256": "9093e8f09ffea82bf383503357b6a5509be2436a053a1566fa99040a5961fcb0"
+    },
+    {
+      "path": "reference/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "bytes": 170666,
+      "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+    },
+    {
+      "path": "reference/26082026_0042_candidate_manager_authoriser_policy_receipts.sql",
+      "bytes": 1486,
+      "sha256": "60fe571b2a3fadc41f76435fc1df7eb56350b8fb6bfedc46049b233db082b67c"
+    },
+    {
+      "path": "reference/current_worker_index.js.txt",
+      "bytes": 8927507,
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d"
+    },
+    {
+      "path": "reference/current-sql-writers/public_contract_manager_authoriser_policy_update_v1_f451d512.sqlinc",
+      "bytes": 2564,
+      "sha256": "9bd21586bf839a9b5a938d812e5fb9f4f10e9c969bed501ab20e6fc394627e45"
+    },
+    {
+      "path": "reference/current-sql-writers/public_contract_week_delete_planned_332d1087.sqlinc",
+      "bytes": 4401,
+      "sha256": "eabe0262964c7eda4c884564a65b024bf77a1735322a394a8f4fcc54cece6276"
+    },
+    {
+      "path": "reference/current-sql-writers/public_contracts_clone_and_extend_atomic_82f54b68.sqlinc",
+      "bytes": 85971,
+      "sha256": "bc898a8572c778cbd55265fc62c5a2152ffd9f796089fe42b49d7c50efd60205"
+    },
+    {
+      "path": "reference/current-sql-writers/public_timesheet_weekly_chain_delete_apply_be7febb7.sqlinc",
+      "bytes": 9093,
+      "sha256": "d9bd7e54827c82a888634c5573588d16429f9b972288b501664d3947b5e41a73"
+    },
+    {
+      "path": "reference/direct-native-dependencies/private__contract_settings_effective_core_v1.sqlinc",
+      "bytes": 20740,
+      "sha256": "4ed9042556f624e6561dedda2026735104b95f4f10d35388a4a4aaf1d3cc633e"
+    },
+    {
+      "path": "reference/direct-native-dependencies/private__weekly_source_settings_require_admin_v1.sqlinc",
+      "bytes": 589,
+      "sha256": "b4901bd6be7fdc7cc9e7045941d8d757b0f158eacc4982d6e60dfb0c4a5aef57"
+    },
+    {
+      "path": "reference/direct-native-dependencies/private_weekly_source_configured_agency_invoice_v1.sqlinc",
+      "bytes": 3647,
+      "sha256": "c2acb040f85c22387481735fbeb54a9263acaadb3cc59a914ac0e00387844952"
+    },
+    {
+      "path": "reference/direct-native-dependencies/private_weekly_source_query_require_service_v1.sqlinc",
+      "bytes": 510,
+      "sha256": "6aa87be22a37e7f0001524c5dd41ee591c4d93c4d9f15a3adfa11046fdfe78ea"
+    },
+    {
+      "path": "reference/direct-native-dependencies/private_weekly_source_sha256_jsonb_v1.sqlinc",
+      "bytes": 337,
+      "sha256": "7b5cd0e0e1c1a19655ecdde94c4cb35d5fa26c09787e850d8e77912539548075"
+    },
+    {
+      "path": "reference/direct-native-dependencies/public_contract_manager_authoriser_policy_get_v1.sqlinc",
+      "bytes": 2391,
+      "sha256": "c1825ccf0780fb4a7c170e904a3bcf974231abf7a8df760c9cb8ae573dd74c5f"
+    },
+    {
+      "path": "reference/pinned-source-parser.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "SELECTED_CURRENT_RECIPE.json",
+      "bytes": 2738,
+      "sha256": "7ce4c758affbf219277a7c492861e74e003f38ce5421b5077c5a9e25ea0f5303"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 14508,
+      "sha256": "7301f24a53949cb4065edc1f303cd1e663be41df4474855d662c0cb7d14fbb22"
+    },
+    {
+      "path": "WORKER_COMPLETE_REVERSES.json",
+      "bytes": 285579,
+      "sha256": "2496f91f35f77fb73670bab1ed5166cc68f5b2510b54277c8822c6c7c6edad75"
+    }
+  ],
+  "all_packet_high_confidence_credential_scan": "PASS"
+}

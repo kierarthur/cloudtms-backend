@@ -1,0 +1,24 @@
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),pin='f500d7615d471a5bc4c030913bc71f861a7f2393';
+const out=path.join(here,'prospective-contract-fixed-approval-construction-20261015');fs.mkdirSync(path.join(out,'reference'),{recursive:true});
+const git=(...args)=>execFileSync('git',args,{cwd:repo,maxBuffer:32*1024*1024}),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const indexPath='broker/src/index.js',b=git('show',`${pin}:${indexPath}`),s=b.toString('utf8');
+fs.writeFileSync(path.join(out,'reference/current_worker_index.js.txt'),b);
+const functions=[...s.matchAll(/^(?:export )?(?:async )?function ([A-Za-z0-9_]+)\(/gm)].map(m=>({name:m[1],start:m.index,line:s.slice(0,m.index).split('\n').length}));
+function callEnd(start){let depth=0,quote=null,lineComment=false,blockComment=false;for(let i=s.indexOf('(',start);i<s.length;i++){
+ const c=s[i],next=s[i+1];if(lineComment){if(c==='\n')lineComment=false;continue;}if(blockComment){if(c==='*'&&next==='/'){blockComment=false;i++;}continue;}
+ if(quote){if(c==='\\'){i++;continue;}if(c===quote)quote=null;continue;}
+ if(c==='/'&&next==='/'){lineComment=true;i++;continue;}if(c==='/'&&next==='*'){blockComment=true;i++;continue;}
+ if(c==='"'||c==="'"||c==='`'){quote=c;continue;}if(c==='(')depth++;else if(c===')'&&--depth===0)return i+1;
+ }throw new Error('Unclosed Contract fetch');}
+const writes=[];
+for(const m of s.matchAll(/(?:fetch|sbFetch)\(\s*(?:env,\s*)?`\$\{env\.SUPABASE_URL\}\/rest\/v1\/contracts(?:[?`])/g)){
+ const end=callEnd(m.index),snippet=s.slice(m.index,end),method=snippet.match(/method\s*:\s*['"](POST|PATCH|DELETE|PUT)['"]/i);if(!method)continue;
+ const owner=functions.findLast(f=>f.start<m.index);
+ writes.push({owner:owner?.name,line:s.slice(0,m.index).split('\n').length,method:method[1],start:m.index,end,snippet});
+}
+const rpcFiles=['supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql','supabase/migrations/26082026_0042_candidate_manager_authoriser_policy_receipts.sql'];
+const sql=[];for(const file of rpcFiles){const b=git('show',`${pin}:${file}`);fs.writeFileSync(path.join(out,'reference',path.basename(file)),b);sql.push({pin,path:file,bytes:b.length,sha256:sha(b)});}
+const result={source_only:true,native:false,pin,worker:{path:indexPath,bytes:b.length,sha256:sha(b)},sql_inputs:sql,writes};
+fs.writeFileSync(path.join(out,'ACTUAL_CONTRACT_WRITER_CENSUS.json'),JSON.stringify(result,null,2)+'\n');
+console.log(JSON.stringify(writes.map(({snippet,...r})=>r),null,2));

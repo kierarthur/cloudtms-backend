@@ -1,0 +1,44 @@
+create or replace function public.contract_manager_authoriser_policy_update_v1(
+  p_contract_id uuid,
+  p_expected_contract_updated_at timestamptz,
+  p_policy jsonb,
+  p_actor_user_id uuid,
+  p_idempotency_key text,
+  p_now_utc timestamptz default pg_catalog.transaction_timestamp()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $function$
+declare
+  v_contract public.contracts%rowtype;
+  v_policy jsonb:=private._candidate_manager_authoriser_policy_normalize_v2(p_policy,'CONTRACT_WRITE');
+  v_hash bytea;
+  v_existing public.candidate_manager_authoriser_policy_receipts%rowtype;
+  v_response jsonb;
+begin
+  if p_contract_id is null or p_expected_contract_updated_at is null or p_actor_user_id is null
+     or pg_catalog.char_length(pg_catalog.btrim(coalesce(p_idempotency_key,''))) not between 16 and 200 then
+    raise exception using errcode='22023',message='CANDIDATE_MANAGER_AUTHORISER_REQUEST_INVALID';
+  end if;
+  v_hash:=extensions.digest(pg_catalog.convert_to(v_policy::text,'UTF8'),'sha256');
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('CONTRACT:'||p_contract_id::text||':'||p_idempotency_key,0));
+  select * into v_existing from public.candidate_manager_authoriser_policy_receipts r
+    where r.entity_kind='CONTRACT' and r.entity_id=p_contract_id and r.idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.semantic_sha256<>v_hash then raise exception using errcode='40001',message='CANDIDATE_MANAGER_AUTHORISER_IDEMPOTENCY_CONFLICT'; end if;
+    return v_existing.response_json||pg_catalog.jsonb_build_object('idempotent_replay',true);
+  end if;
+  select * into v_contract from public.contracts c where c.id=p_contract_id for update;
+  if not found then raise exception using errcode='P0002',message='CONTRACT_NOT_FOUND'; end if;
+  if v_contract.updated_at is distinct from p_expected_contract_updated_at then
+    raise exception using errcode='40001',message='CANDIDATE_MANAGER_AUTHORISER_VERSION_CONFLICT';
+  end if;
+  update public.contracts set candidate_manager_approval_policy_json=v_policy,updated_at=p_now_utc where id=p_contract_id;
+  v_response:=public.contract_manager_authoriser_policy_get_v1(p_contract_id)||pg_catalog.jsonb_build_object('idempotent_replay',false);
+  insert into public.candidate_manager_authoriser_policy_receipts(entity_kind,entity_id,idempotency_key,semantic_sha256,response_json,actor_user_id,recorded_at_utc)
+  values ('CONTRACT',p_contract_id,p_idempotency_key,v_hash,v_response,p_actor_user_id,p_now_utc);
+  return v_response;
+end;
+$function$;

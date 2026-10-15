@@ -1,0 +1,67 @@
+{
+  "source_only": true,
+  "native": false,
+  "dependencies": [
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "name": "private.weekly_source_query_require_service_v1",
+      "key": "private.weekly_source_query_require_service_v1()",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "raw_bytes": 268078,
+      "raw_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "reference": "reference/direct-native-dependencies/private_weekly_source_query_require_service_v1.sqlinc"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "name": "private._weekly_source_settings_require_admin_v1",
+      "key": "private._weekly_source_settings_require_admin_v1(uuid)",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "raw_bytes": 73391,
+      "raw_sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+      "definition_sha256": "bf3a9ec7a2fcacc5428f11df878c1e99eb0f968fdb2f9ec343aa98b072e2eb5e",
+      "reference": "reference/direct-native-dependencies/private__weekly_source_settings_require_admin_v1.sqlinc"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "name": "private._contract_settings_effective_core_v1",
+      "key": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "path": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "raw_bytes": 21363,
+      "raw_sha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e",
+      "definition_sha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1",
+      "reference": "reference/direct-native-dependencies/private__contract_settings_effective_core_v1.sqlinc"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "name": "private.weekly_source_configured_agency_invoice_v1",
+      "key": "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "raw_bytes": 101268,
+      "raw_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "definition_sha256": "b2b295823a2f3aeaf47522a8ad4b1831f1a9cb9200d8c04c7688ae199a260c89",
+      "reference": "reference/direct-native-dependencies/private_weekly_source_configured_agency_invoice_v1.sqlinc"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "name": "private.weekly_source_sha256_jsonb_v1",
+      "key": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "path": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "raw_bytes": 9589,
+      "raw_sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "reference": "reference/direct-native-dependencies/private_weekly_source_sha256_jsonb_v1.sqlinc"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "name": "public.contract_manager_authoriser_policy_get_v1",
+      "key": "public.contract_manager_authoriser_policy_get_v1(uuid)",
+      "path": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "raw_bytes": 28588,
+      "raw_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "definition_sha256": "668687918dccebdad851ecbc17b53c712706ec72eb45f33eced4bcae66ccfb1c",
+      "reference": "reference/direct-native-dependencies/public_contract_manager_authoriser_policy_get_v1.sqlinc"
+    }
+  ],
+  "transitive_native_qualification": "MANDATORY whole current release; these are literal direct owner receipts, not a claim of complete native execution."
+}

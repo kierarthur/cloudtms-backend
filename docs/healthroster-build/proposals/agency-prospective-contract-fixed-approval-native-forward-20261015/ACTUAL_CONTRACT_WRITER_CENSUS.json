@@ -1,0 +1,122 @@
+{
+  "source_only": true,
+  "native": false,
+  "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "worker": {
+    "path": "broker/src/index.js",
+    "bytes": 8927507,
+    "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d"
+  },
+  "sql_inputs": [
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+      "bytes": 234886,
+      "sha256": "9093e8f09ffea82bf383503357b6a5509be2436a053a1566fa99040a5961fcb0"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/migrations/26082026_0042_candidate_manager_authoriser_policy_receipts.sql",
+      "bytes": 1486,
+      "sha256": "60fe571b2a3fadc41f76435fc1df7eb56350b8fb6bfedc46049b233db082b67c"
+    }
+  ],
+  "writes": [
+    {
+      "owner": "handleContractsCreate",
+      "line": 8157,
+      "method": "POST",
+      "start": 327144,
+      "end": 329214,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {\n    method: 'POST',\n    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },\n    body: JSON.stringify({\n      // 🔄 candidate_id can be null/unassigned\n      candidate_id: (body.candidate_id === undefined ? null : body.candidate_id),\n      client_id: body.client_id,\n      role: body.role || null,\n      band: body.band ?? null,\n      display_site: body.display_site || null,\n      ward_hint: body.ward_hint || null,\n      start_date: body.start_date,\n      end_date: body.end_date,\n\n      // ✅ NEW: persist overrideclientsettings\n      overrideclientsettings,\n      candidate_paper_submission_enabled_override,\n      candidate_expenses_require_separate_timesheet_override,\n      candidate_expense_invoice_email_override,\n\n      // ✅ NEW: persist is_ad_hoc\n      is_ad_hoc,\n\n      // NEW: contract route / calc overrides\n      is_nhsp,\n      autoprocess_hr,\n      requires_hr,\n      no_timesheet_required,\n      weekly_timesheet_source,\n      daily_calc_of_invoices,\n      group_nightsat_sunbh,\n      self_bill,\n\n      // ✅ NEW: attachments\n      hr_attach_to_invoice,\n      ts_attach_to_invoice,\n\n      pay_method_snapshot: pmSnap,\n      rates_json: prunedRates,\n      std_schedule_json,\n      std_hours_json,\n      bucket_labels_json: bucketLabels,\n      additional_rates_json,                    // NEW\n\n      // ✅ IMPORTANT: only store when overrideclientsettings=true\n      default_submission_mode: default_submission_mode_to_store,\n\n      week_ending_weekday_snapshot: weekEndingSnapshot,\n      auto_invoice,\n      require_reference_to_pay: body.require_reference_to_pay,\n      require_reference_to_invoice: body.require_reference_to_invoice,\n      mileage_pay_rate,\n      mileage_charge_rate,\n      send_ts_queries_to_different_email: queryEmailOverride.send_ts_queries_to_different_email,\n      ts_queries_alt_email_address: queryEmailOverride.ts_queries_alt_email_address,\n      timesheet_break_entry_mode: timesheetBreakEntryMode,\n      created_at: nowIso(),\n      updated_at: nowIso()\n    })\n  })"
+    },
+    {
+      "owner": "handleContractsUpdate",
+      "line": 11606,
+      "method": "PATCH",
+      "start": 469836,
+      "end": 470038,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {\n    method: 'PATCH',\n    headers: { ...sbHeaders(env), 'Prefer': 'return-representation' },\n    body: JSON.stringify(patch)\n  })"
+    },
+    {
+      "owner": "handleContractsUpdate",
+      "line": 11658,
+      "method": "PATCH",
+      "start": 472170,
+      "end": 472441,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {\n      method: 'PATCH',\n      headers: { ...sbHeaders(env), 'Prefer': 'return-representation' },\n      body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })\n    })"
+    },
+    {
+      "owner": "handleContractsReplace",
+      "line": 12287,
+      "method": "PATCH",
+      "start": 500233,
+      "end": 500435,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {\n    method: 'PATCH',\n    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },\n    body: JSON.stringify(patch)\n  })"
+    },
+    {
+      "owner": "handleContractsReplace",
+      "line": 12362,
+      "method": "PATCH",
+      "start": 503580,
+      "end": 503851,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {\n      method: 'PATCH',\n      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },\n      body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })\n    })"
+    },
+    {
+      "owner": "handleContractsDuplicate",
+      "line": 12519,
+      "method": "DELETE",
+      "start": 510526,
+      "end": 510707,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(rollbackId)}`, {\n          method: 'DELETE',\n          headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }\n        })"
+    },
+    {
+      "owner": "handleContractsDuplicate",
+      "line": 12623,
+      "method": "POST",
+      "start": 515338,
+      "end": 515524,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {\n      method: 'POST',\n      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },\n      body: JSON.stringify(payload)\n    })"
+    },
+    {
+      "owner": "computePayMethodWarnings",
+      "line": 13069,
+      "method": "DELETE",
+      "start": 530186,
+      "end": 530350,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {\n    method: 'DELETE',\n    headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },\n  })"
+    },
+    {
+      "owner": "handleContractsTruncateTailSafely",
+      "line": 106628,
+      "method": "PATCH",
+      "start": 4999984,
+      "end": 5000256,
+      "snippet": "fetch(\n      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`,\n      {\n        method: 'PATCH',\n        headers: { ...sbHeaders(env), Prefer: 'return=representation' },\n        body: JSON.stringify({ end_date: safeEnd, updated_at: nowIso() })\n      }\n    )"
+    },
+    {
+      "owner": "handleContractPrintedTimesheetPolicyUpdate",
+      "line": 141350,
+      "method": "PATCH",
+      "start": 6309441,
+      "end": 6309825,
+      "snippet": "fetch(\n    `${env.SUPABASE_URL}/rest/v1/contracts` +\n      `?id=eq.${enc(contractId)}` +\n      `&updated_at=eq.${enc(current.updated_at)}`,\n    {\n      method: 'PATCH',\n      headers: { ...sbHeaders(env), Prefer: 'return=representation' },\n      body: JSON.stringify({\n        candidate_paper_submission_enabled_override: body.override,\n        updated_at: nowIso()\n      })\n    }\n  )"
+    },
+    {
+      "owner": "handleContractsPlanRanges",
+      "line": 175078,
+      "method": "PATCH",
+      "start": 7609619,
+      "end": 7609906,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {\n            method: 'PATCH',\n            headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },\n            body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })\n          })"
+    },
+    {
+      "owner": "handleContractsUnplanRanges",
+      "line": 176043,
+      "method": "PATCH",
+      "start": 7645350,
+      "end": 7645621,
+      "snippet": "fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {\n        method: 'PATCH',\n        headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },\n        body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })\n      })"
+    }
+  ]
+}
