@@ -1,0 +1,23 @@
+-- Exact current shared Agency owner composition after the once-only schema
+-- and selected current Agency/core/fixed-policy/Candidate SQL module.
+-- CREATE OR REPLACE preserves every existing function identity, owner and ACL.
+begin;
+\ir forward/01_current_11_complete_tsfin_prepare_write.sqlinc
+\ir forward/02_current_12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc
+\ir forward/03_current_13_complete_tsfin_write_snapshots_and_complete.sqlinc
+\ir forward/04_current_65_complete_native_invalidation_with_single_writer.sqlinc
+\ir forward/05_current_70_complete_current_publication_with_agency_validation.sqlinc
+\ir forward/06_current_14_complete_native_issue_validator_with_agency_requirements.sqlinc
+\ir forward/07_current_16_complete_actual_direct_issue_with_agency_callbacks.sqlinc
+\ir forward/08_current_17_complete_actual_async_issue_with_agency_callbacks.sqlinc
+\ir forward/09_current_21_complete_native_ready_units_with_preset_exclusion.sqlinc
+\ir forward/10_current_22_complete_native_mode_a_with_selected_preset_refusal.sqlinc
+\ir forward/11_current_23_complete_native_reference_apply_with_preset_row_refusal.sqlinc
+\ir forward/12_current_24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc
+\ir forward/13_current_97_complete_off_scope_assert_with_finite_agency.sqlinc
+\ir forward/14_current_98_complete_off_parent_with_actual_agency.sqlinc
+\ir forward/15_current_99_complete_off_command_with_literal_agency.sqlinc
+\ir forward/16_current_100_complete_off_transport_with_native_phase_actor.sqlinc
+\ir forward/17_current_101_complete_off_setup_shape_with_finite_agency.sqlinc
+notify pgrst, 'reload schema';
+commit;

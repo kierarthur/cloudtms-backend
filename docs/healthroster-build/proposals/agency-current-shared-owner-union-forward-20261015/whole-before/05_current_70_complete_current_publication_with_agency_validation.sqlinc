@@ -1,0 +1,425 @@
+create or replace function public.weekly_source_projection_publish_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_publication_id uuid;
+  v_expected_comparison bytea;
+  v_expected_issue bytea;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_correction public.weekly_final_source_correction_sessions%rowtype;
+  v_scope_version bigint;
+  v_scope_upload uuid;
+  v_client_id uuid;
+  v_comparison_hash bytea;
+  v_issue_hash bytea;
+  v_fingerprint bytea;
+  v_resolution_count integer;
+  v_generation integer;
+  v_ready_session_version bigint;
+  v_signed_fence jsonb; v_prior_publication_i1_context text:=current_setting('cloudtms.weekly_source_publication_i1_context',true);
+begin
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in ('actor_user_id','publication_id',
+         'expected_comparison_manifest_hash','expected_issue_set_hash')
+     ) then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_PUBLISH_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_publication_id:=(p_request->>'publication_id')::uuid;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_PUBLISH_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_actor is null or v_publication_id is null then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_PUBLISH_REQUEST_INVALID' using errcode='22023';
+  end if;
+  v_expected_comparison:=case
+    when nullif(p_request->>'expected_comparison_manifest_hash','') is null then null
+    else private.weekly_source_hex32_v1(
+      p_request->>'expected_comparison_manifest_hash',
+      'WEEKLY_SOURCE_COMPARISON_MANIFEST_HASH_INVALID'
+    ) end;
+  v_expected_issue:=case
+    when nullif(p_request->>'expected_issue_set_hash','') is null then null
+    else private.weekly_source_hex32_v1(
+      p_request->>'expected_issue_set_hash','WEEKLY_SOURCE_ISSUE_SET_HASH_INVALID'
+    ) end;
+
+  select * into v_publication
+  from public.weekly_source_projection_publications
+  where id=v_publication_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_NOT_FOUND' using errcode='22023';
+  end if;
+  select * into strict v_upload
+  from public.weekly_source_uploads where id=v_publication.upload_id;
+  select * into strict v_cycle
+  from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  select * into strict v_group
+  from public.weekly_source_groups where id=v_cycle.source_group_id;
+  if v_publication.authority_scope_kind='CYCLE' then
+    v_scope_version:=v_cycle.version;
+    v_scope_upload:=v_cycle.current_complete_upload_id;
+    begin
+      v_client_id:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';
+    end;
+  else
+    select * into strict v_scope
+    from public.weekly_source_report_scopes
+    where id=v_publication.report_scope_id;
+    v_scope_version:=v_scope.version;
+    v_scope_upload:=v_scope.current_complete_upload_id;
+    v_client_id:=v_scope.client_id;
+  end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  if v_publication.authority_scope_kind='CYCLE' and v_publication.correction_session_id is null then
+    -- Full signed set, including an empty set, captured before any business lock.
+    v_signed_fence:=private.weekly_source_publication_signed_family_fence_v1(v_publication.id,null);
+    perform set_config('cloudtms.weekly_source_publication_i1_context',jsonb_build_object('schema_version','WEEKLY_SOURCE_PUBLICATION_I1_CONTEXT_V1',
+      'publication_id',v_publication.id,'root_ids',v_signed_fence->'signed_root_ids')::text,true);
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(pg_catalog.encode(v_upload.declared_scope_fingerprint,'hex'),73241837)
+  );
+  -- Retain the native scope advisory before group/cycle to match upload owners.
+  -- Signed physical I-1 was acquired above. Binding's group lock is pre-held.
+  select * into strict v_group from public.weekly_source_groups where id=v_group.id for update;
+  perform 1 from public.weekly_source_cycles where id=v_cycle.id for update;
+  if v_publication.authority_scope_kind='SELF_BILL_REPORT_SCOPE' then
+    perform private.weekly_source_self_bill_report_seal_assert_v1(v_upload.id);
+  end if;
+  if v_publication.authority_scope_kind='CYCLE' then
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_publication.source_cycle_id for update;
+    v_scope_version:=v_cycle.version;
+    v_scope_upload:=v_cycle.current_complete_upload_id;
+  else
+    -- Each NHSP Trust publishes independently under its report-scope head.
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+    select * into strict v_scope
+    from public.weekly_source_report_scopes
+    where id=v_publication.report_scope_id for update;
+    if v_scope.source_cycle_id is distinct from v_cycle.id
+       or v_scope.source_group_id is distinct from v_group.id
+       or v_scope.environment is distinct from v_group.environment
+       or v_scope.agency_id is distinct from v_group.agency_id
+       or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='55000';
+    end if;
+    v_scope_version:=v_scope.version;
+    v_scope_upload:=v_scope.current_complete_upload_id;
+    v_client_id:=v_scope.client_id;
+  end if;
+  select * into strict v_publication
+  from public.weekly_source_projection_publications
+  where id=v_publication_id for update;
+  select * into strict v_upload
+  from public.weekly_source_uploads where id=v_publication.upload_id;
+  if v_signed_fence is not null then
+    perform private.weekly_source_publication_signed_family_fence_v1(v_publication.id,v_signed_fence);
+  end if;
+  if private.weekly_source_scope_fingerprint_v1(
+       v_group.environment,v_group.agency_id,v_group.id,v_cycle.id,
+       v_publication.report_scope_id,v_client_id
+     ) is distinct from v_upload.declared_scope_fingerprint then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='55000';
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'RECHECK_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+  if v_publication.correction_session_id is not null then
+    select * into v_correction
+    from public.weekly_final_source_correction_sessions
+    where id=v_publication.correction_session_id for update;
+    if not found
+       or v_correction.source_cycle_id is distinct from v_cycle.id
+       or v_correction.authority_scope_kind is distinct from v_publication.authority_scope_kind
+       or v_correction.report_scope_id is distinct from v_publication.report_scope_id
+       or v_correction.replacement_correction_upload_id is distinct from v_upload.id
+       or v_correction.actor_user_id is distinct from v_actor
+       or v_upload.purpose<>'FINAL_SOURCE_CORRECTION'
+       or v_upload.state<>'CORRECTION_READY'
+       or v_scope_version<>v_publication.authority_scope_version
+       or coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id)
+            is distinct from v_correction.expected_current_final_revision_id then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_PUBLICATION_STALE' using errcode='40001';
+    end if;
+    if v_publication.state='CORRECTION_READY' then
+      if v_correction.replacement_projection_publication_id is distinct from v_publication.id
+         or (v_publication.rebuild_idempotency_key is not null
+             and v_publication.ready_session_version is null) then
+        raise exception 'WEEKLY_SOURCE_CORRECTION_PUBLICATION_STALE' using errcode='40001';
+      end if;
+      if (v_expected_comparison is not null
+            and v_expected_comparison<>v_publication.comparison_manifest_hash)
+         or (v_expected_issue is not null
+            and v_expected_issue<>v_publication.issue_set_hash) then
+        raise exception 'WEEKLY_SOURCE_PUBLICATION_HASH_MISMATCH' using errcode='40001';
+      end if;
+      v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PUBLICATION_FINGERPRINT_V1',
+        pg_catalog.jsonb_build_object(
+          'publication_id',v_publication.id,'upload_id',v_publication.upload_id,
+          'authority_scope_version',v_publication.authority_scope_version,
+          'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+          'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex')
+        )
+      );
+      perform set_config('cloudtms.weekly_source_publication_i1_context',coalesce(v_prior_publication_i1_context,''),true);
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status','CORRECTION_READY','publication_id',v_publication.id,
+        'upload_id',v_publication.upload_id,
+        'authority_scope_version',v_publication.authority_scope_version,
+        'projection_generation',v_publication.projection_generation,
+        'ready_session_version',v_publication.ready_session_version,
+        'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+        'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex'),
+        'publication_fingerprint',pg_catalog.encode(v_fingerprint,'hex'),'idempotent',true
+      );
+    end if;
+    if (v_publication.rebuild_idempotency_key is null and (
+         v_correction.state<>'READY'
+         or v_correction.replacement_projection_publication_id is not null
+       ))
+       or (v_publication.rebuild_idempotency_key is not null and (
+         v_publication.projection_generation is null
+         or v_publication.ready_session_version is null
+         or v_correction.state<>'REVIEWED'
+         or v_correction.version<>v_publication.ready_session_version
+         or v_correction.replacement_projection_publication_id is null
+         or v_correction.replacement_projection_publication_id=v_publication.id
+       )) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_PUBLICATION_STALE' using errcode='40001';
+    end if;
+  end if;
+  if v_publication.state='CURRENT'
+      and v_publication.correction_session_id is null
+      and v_scope_upload=v_publication.upload_id
+      and v_scope_version=v_publication.authority_scope_version then
+    if (v_expected_comparison is not null
+          and v_expected_comparison<>v_publication.comparison_manifest_hash)
+       or (v_expected_issue is not null
+          and v_expected_issue<>v_publication.issue_set_hash) then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_HASH_MISMATCH' using errcode='40001';
+    end if;
+    v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PUBLICATION_FINGERPRINT_V1',
+      pg_catalog.jsonb_build_object(
+        'publication_id',v_publication.id,'upload_id',v_publication.upload_id,
+        'authority_scope_version',v_publication.authority_scope_version,
+        'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+        'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex')
+      )
+    );
+    perform set_config('cloudtms.weekly_source_publication_i1_context',coalesce(v_prior_publication_i1_context,''),true);
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status',v_publication.state,'publication_id',v_publication.id,
+      'upload_id',v_publication.upload_id,
+      'authority_scope_version',v_publication.authority_scope_version,
+      'projection_generation',v_publication.projection_generation,
+      'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+      'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex'),
+      'publication_fingerprint',pg_catalog.encode(v_fingerprint,'hex'),'idempotent',true
+    );
+  end if;
+  if v_publication.state not in ('BUILDING','FAILED')
+     or v_scope_version<>v_publication.authority_scope_version
+     or (v_publication.correction_session_id is null and (
+       v_scope_upload is distinct from v_publication.upload_id
+       or v_upload.state<>'CURRENT'
+     )) then
+    if v_publication.state in ('BUILDING','FAILED') then
+      update public.weekly_source_projection_publications
+      set state='STALE',failure_code='AUTHORITY_SCOPE_CHANGED'
+      where id=v_publication.id;
+    end if;
+    perform set_config('cloudtms.weekly_source_publication_i1_context',coalesce(v_prior_publication_i1_context,''),true);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'status','STALE','reason_code','WEEKLY_SOURCE_PUBLICATION_CAS_STALE',
+      'publication_id',v_publication.id,'current_upload_id',v_scope_upload,
+      'current_authority_scope_version',v_scope_version
+    );
+  end if;
+
+  if v_publication.authority_scope_version>2147483647
+     or coalesce(v_publication.projection_generation,0)>2147483647 then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_GENERATION_OVERFLOW' using errcode='22003';
+  end if;
+  v_generation:=coalesce(
+    v_publication.projection_generation,
+    v_publication.authority_scope_version::integer
+  );
+  select pg_catalog.count(*)::integer into v_resolution_count
+  from public.weekly_source_row_resolutions resolution
+  join public.weekly_source_upload_rows source_row
+    on source_row.id=resolution.upload_row_id
+  where source_row.upload_id=v_upload.id
+    and resolution.generation=v_generation;
+  if v_resolution_count<>(select count(*) from public.weekly_source_upload_rows r
+       where r.upload_id=v_upload.id and r.row_finalisation_state<>'SOURCE_REPORT_LINE')
+     or exists(
+       select 1
+       from public.weekly_source_upload_rows source_row
+       where source_row.upload_id=v_upload.id
+         and source_row.row_finalisation_state<>'SOURCE_REPORT_LINE'
+         and not exists(
+           select 1
+            from public.weekly_source_row_resolutions resolution
+            where resolution.upload_row_id=source_row.id
+              and resolution.generation=v_generation
+              and resolution.source_row_fingerprint=source_row.normalised_row_hash
+         )
+     )
+     or (v_publication.projection_generation is null and exists(
+        select 1
+        from public.weekly_source_row_resolutions resolution
+       join public.weekly_source_upload_rows source_row
+         on source_row.id=resolution.upload_row_id
+        where source_row.upload_id=v_upload.id
+          and resolution.generation<>v_generation
+     )) then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_RESOLUTION_CENSUS_INCOMPLETE'
+      using errcode='55000';
+  end if;
+
+  v_comparison_hash:=private.weekly_source_projection_comparison_manifest_hash_v1(
+    v_publication.id
+  );
+  v_issue_hash:=private.weekly_source_projection_issue_set_hash_v1(v_publication.id);
+  if (v_expected_comparison is not null and v_expected_comparison<>v_comparison_hash)
+     or (v_expected_issue is not null and v_expected_issue<>v_issue_hash) then
+    update public.weekly_source_projection_publications
+    set state='FAILED',failure_code='PUBLICATION_HASH_MISMATCH'
+    where id=v_publication.id;
+    if v_publication.correction_session_id is not null then
+      update public.weekly_final_source_correction_sessions
+      set updated_at_utc=pg_catalog.transaction_timestamp()
+      where id=v_publication.correction_session_id;
+    elsif v_publication.authority_scope_kind='CYCLE' then
+      update public.weekly_source_cycles
+      set projection_state='FAILED',current_projection_publication_id=null
+      where id=v_cycle.id and current_complete_upload_id=v_publication.upload_id
+        and version=v_publication.authority_scope_version;
+    else
+      update public.weekly_source_report_scopes
+      set projection_state='FAILED',current_projection_publication_id=null,
+          updated_at_utc=pg_catalog.transaction_timestamp()
+      where id=v_scope.id and current_complete_upload_id=v_publication.upload_id
+        and version=v_publication.authority_scope_version;
+    end if;
+    perform set_config('cloudtms.weekly_source_publication_i1_context',coalesce(v_prior_publication_i1_context,''),true);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'status','FAILED','reason_code','WEEKLY_SOURCE_PUBLICATION_HASH_MISMATCH',
+      'publication_id',v_publication.id
+    );
+  end if;
+
+  v_ready_session_version:=case when v_publication.correction_session_id is null then null
+    else v_correction.version+1 end;
+  update public.weekly_source_projection_publications
+  set comparison_manifest_hash=v_comparison_hash,issue_set_hash=v_issue_hash,
+      state=case when v_publication.correction_session_id is null
+        then 'CURRENT' else 'CORRECTION_READY' end,
+      ready_session_version=v_ready_session_version,
+      failure_code=null,published_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_publication.id;
+  if v_publication.correction_session_id is not null then
+    if v_publication.rebuild_idempotency_key is null then
+      update public.weekly_final_source_correction_sessions
+      set replacement_projection_publication_id=v_publication.id,
+          version=version+1,updated_at_utc=pg_catalog.transaction_timestamp()
+      where id=v_publication.correction_session_id and state='READY'
+        and version=v_correction.version
+        and replacement_correction_upload_id=v_publication.upload_id
+        and replacement_projection_publication_id is null;
+    else
+      update public.weekly_final_source_correction_sessions
+      set replacement_projection_publication_id=v_publication.id,
+          state='READY',review_idempotency_key=null,review_request_hash=null,
+          review_result_json=null,review_result_hash=null,
+          version=version+1,updated_at_utc=pg_catalog.transaction_timestamp()
+      where id=v_publication.correction_session_id and state='REVIEWED'
+        and version=v_publication.ready_session_version
+        and replacement_correction_upload_id=v_publication.upload_id
+        and replacement_projection_publication_id is not null
+        and replacement_projection_publication_id<>v_publication.id;
+    end if;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_PUBLICATION_CAS_LOST' using errcode='40001';
+    end if;
+  elsif v_publication.authority_scope_kind='CYCLE' then
+    update public.weekly_source_cycles
+    set projection_state='CURRENT',current_projection_publication_id=v_publication.id
+    where id=v_cycle.id and current_complete_upload_id=v_publication.upload_id
+      and version=v_publication.authority_scope_version;
+  else
+    update public.weekly_source_report_scopes
+    set projection_state='CURRENT',current_projection_publication_id=v_publication.id,
+        updated_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_scope.id and current_complete_upload_id=v_publication.upload_id
+      and version=v_publication.authority_scope_version;
+  end if;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_CAS_LOST' using errcode='40001';
+  end if;
+  if v_publication.correction_session_id is null and exists (
+    select 1 from public.weekly_source_format_profiles profile
+    where profile.id=v_upload.source_format_profile_id
+      and (profile.profile_code='NHSP_PREFINAL_RELEASED_V1'
+        or (v_group.source_family='ROSTER' and profile.profile_code in (
+          'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')))
+  ) and v_publication.authority_scope_kind='CYCLE' then
+    -- Recheck already-signed candidate evidence in the same publication
+    -- transaction. This writes comparison/query evidence only: no source
+    -- financial movement or Timesheet hours are created here.
+    perform private.weekly_source_candidate_prefinal_publish_recheck_v1(
+      v_actor,v_publication.id
+    );
+  end if;
+  if v_publication.correction_session_id is null then
+    perform private.weekly_source_self_bill_report_bind_v1(v_publication.id);
+  end if;
+  if v_publication.correction_session_id is null and v_publication.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' then
+    perform private.weekly_source_import_outreach_v1(v_publication.id);
+  end if;
+  v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_PUBLICATION_FINGERPRINT_V1',
+    pg_catalog.jsonb_build_object(
+      'publication_id',v_publication.id,'upload_id',v_publication.upload_id,
+      'authority_scope_version',v_publication.authority_scope_version,
+      'comparison_manifest_hash',pg_catalog.encode(v_comparison_hash,'hex'),
+      'issue_set_hash',pg_catalog.encode(v_issue_hash,'hex')
+    )
+  );
+  perform set_config('cloudtms.weekly_source_publication_i1_context',coalesce(v_prior_publication_i1_context,''),true);
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status',case when v_publication.correction_session_id is null
+      then 'CURRENT' else 'CORRECTION_READY' end,
+    'publication_id',v_publication.id,
+    'upload_id',v_publication.upload_id,
+    'authority_scope_version',v_publication.authority_scope_version,
+    'projection_generation',v_publication.projection_generation,
+    'ready_session_version',v_ready_session_version,
+    'comparison_manifest_hash',pg_catalog.encode(v_comparison_hash,'hex'),
+    'issue_set_hash',pg_catalog.encode(v_issue_hash,'hex'),
+    'publication_fingerprint',pg_catalog.encode(v_fingerprint,'hex'),
+    'idempotent',false
+  );
+exception when others then
+  perform set_config('cloudtms.weekly_source_publication_i1_context',coalesce(v_prior_publication_i1_context,''),true);
+  raise;
+end;
+$function$;

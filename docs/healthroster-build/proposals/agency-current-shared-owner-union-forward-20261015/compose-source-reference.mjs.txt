@@ -1,0 +1,129 @@
+// Pure source inventory and exact owner composition. No SQL/API/install method is called.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';import {fileURLToPath,pathToFileURL} from 'node:url';
+import {scanManagedSql} from '../../../../scripts/cloudtms-managed-release-sql.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..');
+const currentRoot=path.resolve(repo,'../healthroster-install2-14102026'),pin='f500d7615d471a5bc4c030913bc71f861a7f2393';
+const out=path.join(here,'current-agency-shared-unions-construction-20261015');fs.mkdirSync(out,{recursive:true});
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const git=(...args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false',...args],{cwd:repo,maxBuffer:256*1024*1024});
+function write(file,s){const d=path.join(out,file);fs.mkdirSync(path.dirname(d),{recursive:true});fs.writeFileSync(d,s);}
+function json(file,v){write(file,JSON.stringify(v,null,2)+'\n');}
+const core='docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/';
+const selections=JSON.parse(fs.readFileSync(path.join(repo,core,'MANDATORY_SHARED_OWNER_UNIONS.json'),'utf8'));
+const wanted=new Set(selections.flatMap(s=>s.functions));
+const compiler='scripts/cloudtms-db-release-lib.mjs',compilerBytes=fs.readFileSync(path.join(currentRoot,compiler));
+assert.deepEqual(compilerBytes,git('show',`${pin}:${compiler}`),'Current inventory compiler differs from pinned Git');
+const {inventory}=await import(pathToFileURL(path.join(currentRoot,compiler)).href);
+const inv=inventory(),ordered=[...inv.migrations.map(r=>r.path),...inv.repeatables.flatMap(r=>r.paths)];
+const allPaths=[...new Set(ordered)];
+const batch=execFileSync('git',['cat-file','--batch'],{cwd:repo,input:allPaths.map(file=>`${pin}:${file}`).join('\n')+'\n',maxBuffer:256*1024*1024});
+const committed=new Map();let offset=0;
+for(const file of allPaths){const lf=batch.indexOf(10,offset),header=batch.subarray(offset,lf).toString('utf8'),m=header.match(/^[0-9a-f]{40} blob (\d+)$/);assert.ok(m,file+': '+header);offset=lf+1;const size=Number(m[1]);committed.set(file,batch.subarray(offset,offset+size));offset+=size+1;}
+assert.equal(offset,batch.length);
+const owners=new Map();let checked=0;
+for(const file of ordered){const b=fs.readFileSync(path.join(currentRoot,file));assert.deepEqual(b,committed.get(file),'Current saved SQL differs: '+file);checked++;
+ const parsed=scanManagedSql(b.toString('utf8'));
+ for(const statement of parsed.statements){const definition=parsed.source.slice(statement.start,statement.end),m=definition.match(/^create\s+(?:or\s+replace\s+)?function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/i);
+  if(m&&wanted.has(m[1].toLowerCase()))owners.set(m[1].toLowerCase(),{name:m[1].toLowerCase(),path:file,raw_bytes:b.length,raw_sha256:sha(b),definition,definition_sha256:sha(definition)});
+ }
+}
+for(const name of wanted)assert.ok(owners.has(name),'Current canonical owner absent: '+name);
+const records=[];
+for(let n=0;n<selections.length;n++){
+ const item=selections[n],forward=git('show',`38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:${core}${item.reference}`).toString('utf8');
+ const parsed=scanManagedSql(forward);
+ for(const name of item.functions){const stmt=parsed.statements.find(s=>new RegExp('^create\\s+(?:or\\s+replace\\s+)?function\\s+'+name.replace('.','\\.')+'\\s*\\(','i').test(parsed.source.slice(s.start,s.end)));assert.ok(stmt);
+  const definition=parsed.source.slice(stmt.start,stmt.end),current=owners.get(name),slug=String(n+1).padStart(2,'0')+'_'+name.replace('.','_');
+  write('before/'+slug+'.sqlinc',current.definition+'\n');write('accepted/'+slug+'.sqlinc',definition+'\n');
+  records.push({number:n+1,name,current:{pin,path:current.path,raw_bytes:current.raw_bytes,raw_sha256:current.raw_sha256,definition_sha256:current.definition_sha256},accepted:{pin:'38964e6acf7e0d10af9cfbc223a9bb251a4dadfd',path:core+item.reference,definition_sha256:sha(definition)},slug});
+ }
+}
+json('CURRENT_OWNER_INPUTS.json',{source_only:true,native:false,pin,pure_inventory:{compiler,compiler_sha256:sha(compilerBytes),methods:['inventory'],migrations:inv.migrations.length,repeatables:inv.repeatables.length,ordered_occurrences_checked:checked},records});
+const prop=path.join(repo,'docs/healthroster-build/proposals');
+const load=p=>JSON.parse(fs.readFileSync(path.join(prop,p),'utf8'));
+const paid=load('agency-native-paid-purpose-forward-20261014/construction/FULL_CURRENT_WRITER_REVERSE.json');
+const native=load('agency-native-whole-week-validation-runtime-forward-20261014/construction/AUTHORISED_NATIVE_FULL_REVERSE.json');
+const publication=load('agency-native-whole-week-validation-runtime-forward-20261014/construction/PUBLISHER_MODE_A_FULL_REVERSE.json');
+const issue=load('agency-mode-a-source-support-issue-construction-20261014/construction/ISSUE_VALIDATOR_FULL_REVERSE.json');
+const issueOwners=load('agency-mode-a-source-support-issue-construction-20261014/construction/ACTUAL_ISSUE_OWNERS_FULL_REVERSE.json');
+const mode=load('agency-mode-a-preset-policy-source-successor-20261014/construction/MODE_A_POLICY_COMPLETE_REVERSES.json');
+const dispatch=load('agency-mode-a-preset-policy-source-successor-20261014/construction/DISPATCH_SELECTION_FULL_REVERSE.json');
+const off=load('agency-off-native-transport-forward-20261015/OFF_AGENCY_COMPLETE_REVERSES.json');
+const lineage=load('agency-mode-a-preset-policy-source-successor-20261014/CURRENT_HR_NATIVE_LINEAGE_REVERSE.json');
+function apply(s,hunks,reverse=false){const list=reverse?[...hunks].reverse():hunks;for(const h of list){const a=reverse?h.after:h.before,b=reverse?h.before:h.after;if(a===''){assert.equal(b,'');continue;}assert.equal(s.split(a).length,2,'Unique full current hunk: '+(h.label||a.slice(0,70)));s=s.replace(a,()=>b);}return s;}
+function definitionFor(s,name){const parsed=scanManagedSql(s);const st=parsed.statements.find(st=>new RegExp('^create\\s+(?:or\\s+replace\\s+)?function\\s+'+name.replace('.','\\.')+'\\s*\\(','i').test(parsed.source.slice(st.start,st.end)));assert.ok(st,name);return parsed.source.slice(st.start,st.end);}
+const baselineChecks=[],reverseRecords=[],grouped=new Map();
+for(const r of records){const accepted=fs.readFileSync(path.join(out,'accepted/'+r.slug+'.sqlinc'),'utf8').trimEnd();let baseline=accepted,hunks=[];
+ if(r.number<=3){const row=paid.rows[r.number-1];hunks=row.hunks;baseline=row.before;assert.equal(apply(baseline,hunks),accepted);}
+ else if(r.number===4){hunks=native.joins.find(j=>j.output.startsWith('65_')).hunks;baseline=apply(accepted,hunks,true);}
+ else if(r.number===5){hunks=publication.joins[0].hunks;baseline=apply(accepted,hunks,true);}
+ else if(r.number===6){hunks=issue.hunks;baseline=apply(accepted,hunks,true);}
+ else if([7,8].includes(r.number)){hunks=issueOwners.files[r.number-7].hunks;baseline=apply(accepted,hunks,true);}
+ else if([9,10,11,12].includes(r.number)){
+  hunks=mode.reverses[r.number-9].hunks;baseline=apply(accepted,hunks,true);
+  if(r.number===10){baseline=apply(baseline,[{before:lineage.before,after:lineage.after}]);}
+  if(r.number===12){baseline=apply(baseline,dispatch.hunks,true);}
+ }
+ else if(r.number>=13){const row=off.reverses[r.number-13];
+  const beforeFull=fs.readFileSync(path.join(prop,'agency-off-native-transport-forward-20261015/before',row.output+'.txt'),'utf8');
+  baseline=definitionFor(beforeFull,r.name);
+  // The complete two-owner command source includes one intentionally unchanged owner.
+  hunks=row.hunks.filter(h=>accepted.includes(h.after)||baseline.includes(h.before));
+ }
+ write('accepted-before/'+r.slug+'.sqlinc',baseline+'\n');
+ const current=owners.get(r.name).definition;
+ baselineChecks.push({number:r.number,name:r.name,current_sha256:sha(current),accepted_baseline_sha256:sha(baseline),exact_current_preimage:current===baseline,hunks:hunks.length});
+ if(r.number<=12)assert.equal(current,baseline,'Shared current preimage changed: '+r.name);
+ const group=grouped.get(r.number)||[];group.push(r);grouped.set(r.number,group);
+ reverseRecords.push({name:r.name,current:r.current,forward_sha256:sha(accepted),changed:current!==accepted,
+  source_before:'before/'+r.slug+'.sqlinc',source_forward:'accepted/'+r.slug+'.sqlinc',
+  full_function_hunks:current===accepted?[]:[{before:current,after:accepted}],
+  agency_predecessor_delta_hunks:hunks,contains_reviewed_money_physical_predecessor:r.number>=13&&current!==baseline});
+}
+json('BASELINE_COMPARISON.json',baselineChecks);
+const forwardOrder=[];
+for(const [number,group]of grouped){const file='forward/'+String(number).padStart(2,'0')+'_current_'+path.basename(selections[number-1].reference).replace(/^shared_/,'');
+ const current=group.map(r=>owners.get(r.name).definition+'\n').join('\n'),forward=group.map(r=>fs.readFileSync(path.join(out,'accepted/'+r.slug+'.sqlinc'),'utf8')).join('\n');
+ write(file,forward);write(file.replace('forward/','whole-before/'),current);forwardOrder.push(file);
+ const raw=committed.get(group[0].current.path);write('reference/current_'+String(number).padStart(2,'0')+'_'+path.basename(group[0].current.path),raw);
+}
+json('COMPLETE_CURRENT_SHARED_REVERSES.json',{source_only:true,native:false,current_pin:pin,source_packet:'38964e6acf7e0d10af9cfbc223a9bb251a4dadfd',
+ selected_files:17,selected_function_owners:18,changed_function_owners:17,records:reverseRecords});
+json('OFF_PREDECESSOR_PROVENANCE.json',{source_only:true,native:false,agency_operations:off.operations,predecessors:off.pins.filter(p=>!p.path.includes('index')&&!p.path.includes('/runtime/')),
+ composition:'Exact Money OFF18 + actual physical Contract identity predecessor bodies from accepted97–101, including existing Money target fields and operations; no later whole-body replay.',
+ money_confirmed_no_newer_off_parent:'paid-match-off-physical-contract-current-owner-20261015',agency_operations_widened:false});
+const oldVerifierPath=core+'verification/121_current_agency_source_owner_security.sql',oldVerifier=git('show',`38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:${oldVerifierPath}`).toString('utf8');
+const invokerSignature='private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)';
+const oldTuple=`('${invokerSignature}',false)`,newTuple=`('${invokerSignature}',true)`;
+assert.equal(oldVerifier.split(oldTuple).length,2);const newVerifier=oldVerifier.replace(oldTuple,newTuple);
+write('verification/122_complete_current_agency_security_with_actual_invoker_helper_grant.sql',newVerifier);
+write('verification-before/121_current_agency_security.sql',oldVerifier);
+json('SERVICE_INVOKER_HELPER_VERIFIER_REVERSE.json',{source_only:true,native:false,old_source:{pin:'38964e6acf7e0d10af9cfbc223a9bb251a4dadfd',path:oldVerifierPath,sha256:sha(oldVerifier)},
+ actual_grant_source:{pin:'38964e6acf7e0d10af9cfbc223a9bb251a4dadfd',path:core+'callers/18_62_complete_native_financial_observation_with_validation.sqlinc'},
+ forward:'verification/122_complete_current_agency_security_with_actual_invoker_helper_grant.sql',forward_sha256:sha(newVerifier),hunks:[{before:oldTuple,after:newTuple}],
+ existing_reviewed_grant_preserved:true,new_grant_added:false,new_public_rpc:false});
+const migrationPath=core+'migration/01_same_agency_request_store.sqlinc',identityPath=core+'repeatable/02_same_request_identity_guard.sqlinc';
+const originalMigration=git('show',`38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:${migrationPath}`).toString('utf8'),originalIdentity=git('show',`38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:${identityPath}`).toString('utf8');
+assert.ok(originalMigration.endsWith('\n\n'));write('migration/01_same_agency_request_store.sqlinc',originalMigration.slice(0,-1));write('repeatable/02_same_request_identity_guard.sqlinc','\n'+originalIdentity);
+json('SCHEMA_SPLIT_PACKAGING_SUCCESSOR.json',{source_only:true,native:false,pin:'38964e6acf7e0d10af9cfbc223a9bb251a4dadfd',migration_before:migrationPath,identity_before:identityPath,
+ migration_before_sha256:sha(originalMigration),identity_before_sha256:sha(originalIdentity),migration_after_sha256:sha(originalMigration.slice(0,-1)),identity_after_sha256:sha('\n'+originalIdentity),
+ combined_bytes_sha256:sha(originalMigration+originalIdentity),change:'Move one boundary newline from migration EOF to identity prefix; concatenation is byte-identical to raw88; no SQL body change.'});
+write('00_current_agency_shared_owners.sql',`-- Exact current shared Agency owner composition after the once-only schema\n-- and selected current Agency/core/fixed-policy/Candidate SQL module.\n-- CREATE OR REPLACE preserves every existing function identity, owner and ACL.\nbegin;\n${forwardOrder.map(f=>'\\ir '+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+write('reference/pinned-source-parser.mjs',git('show',`${pin}:scripts/cloudtms-managed-release-sql.mjs`));
+write('reference/pinned-inventory-compiler.mjs.txt',compilerBytes);
+const coreWrapper=git('show',`38964e6acf7e0d10af9cfbc223a9bb251a4dadfd:${core}05_agency_source_callers_and_lifecycle.sql`).toString('utf8');
+const coreIncludes=[...coreWrapper.matchAll(/^\\ir ([^\r\n]+)$/gm)].map(m=>m[1]);
+const coreSibling='../agency-current-source-callers-lifecycle-module-20261015/';
+const currentFullIncludes=coreIncludes.map(f=>f==='repeatable/02_same_request_identity_guard.sqlinc'?f:coreSibling+f);
+write('01_selected_full_agency_sql_recipe.sql',`-- Executable proposal recipe; references immutable389 sibling inputs.\n-- Root must canonical-contain every include before release. No table DDL here.\nbegin;\n${[...currentFullIncludes,...forwardOrder].map(f=>'\\ir '+f).join('\n')}\nnotify pgrst, 'reload schema';\ncommit;\n`);
+write('02_selected_final_security_recipe.sql',`-- Exact proposed final verifiers. Original389/121 is FIX_REQUIRED and excluded.\n\\ir ${coreSibling}verification/114_candidate_native_security_verifier.sql\n\\ir ${coreSibling}verification/119_current_source_raw_and_final_76_verifier.sqlinc\n\\ir verification/122_complete_current_agency_security_with_actual_invoker_helper_grant.sql\n`);
+json('SELECTED_CURRENT_MODULE_RECIPE.json',{source_only:true,native:false,mounted:false,whole_agency_complete:false,current_root_pin:pin,previous_module_pin:'38964e6acf7e0d10af9cfbc223a9bb251a4dadfd',
+ once_only_migrations:['migration/01_same_agency_request_store.sqlinc',coreSibling+'migration/02_typed_existing_validation_columns.sqlinc'],
+ selected_complete_repeatable:'01_selected_full_agency_sql_recipe.sql',selected_final_verification:'02_selected_final_security_recipe.sql',shared_files:17,selected_shared_function_owners:18,changed_shared_function_owners:17,
+ original_389_verifier_121:'FIX_REQUIRED: excludes actual existing bounded E7 service helper grant; select122 successor instead',
+ old_source_modules_not_later_replayed:['389 mandatory shared-owner reference bodies','Money OFF18 five old whole owners','original389/121 private service deny expectation'],
+ runtime_files:'Preserve all three exact f500 Candidate runtime files from389 MOUNTED_CANDIDATE_RUNTIME_PRESERVE; no runtime bytes in this SQL packet',
+ pending_actual_engineering:['Prospective Contract raw fixed approval persistence and complete writer census','Full Worker index/routes/Office producer+consumer union owned by root','True first Original/protection/NX-AI-6 and full NONE financial path'],
+ native_gates_not_claimed:['Full final chronological PostgreSQL compile/function and signature contract','Exact complete ACL/security/owner/search_path/verifier union','Actual read committed lock/CAS/old-RR/race/foreign writer schedules','Genuine Candidate/Agency/OFF/invoice/protection/documents/API/UI/phone/financial proofs']});
+console.log(JSON.stringify({out,selected_files:17,selected_function_owners:18,changed_function_owners:17,current_preimage_exact_first12:true,off_reviewed_predecessors_composed:true,source_only:true,native:false}));

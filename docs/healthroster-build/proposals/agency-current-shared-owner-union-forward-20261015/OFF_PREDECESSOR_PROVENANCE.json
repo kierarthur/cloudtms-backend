@@ -1,0 +1,60 @@
+{
+  "source_only": true,
+  "native": false,
+  "agency_operations": [
+    "weekly_source_agency_timesheet_change_v1",
+    "weekly_source_agency_change_worker_context_v1",
+    "weekly_source_agency_change_worker_apply_v1",
+    "weekly_source_agency_validation_context_v1",
+    "weekly_source_agency_validation_apply_v1",
+    "weekly_source_agency_change_authorise_step_v1",
+    "weekly_source_agency_change_return_step_v1"
+  ],
+  "predecessors": [
+    {
+      "path": "docs/healthroster-build/proposals/qualification-physical-contract-identity-successor-20261014/forward/03_complete_off_scope_assert.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "5db83fc13f120a706b1d19ad6afa34e85bdab50603846fe3bed9261334611293",
+      "bytes": 12044
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-physical-contract-current-owner-20261015/forward/01_complete_off_parent_scope.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "bf906a58bd518bd615fa94b6d68fc760c0d47809e40bfb18187f288957f8fdcc",
+      "bytes": 26495
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/01_complete_off_command.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "532277c48e03bbd40c5bb4852fd30a8a1acaf4574a57dbb89fba3212211876d4",
+      "bytes": 19812
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/02_complete_off_transport.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "bytes": 4106
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/03_complete_off_setup_shape.sqlinc",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59",
+      "bytes": 6040
+    },
+    {
+      "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "pin": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "raw_sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69",
+      "bytes": 3815
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "raw_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "bytes": 3520
+    }
+  ],
+  "composition": "Exact Money OFF18 + actual physical Contract identity predecessor bodies from accepted97–101, including existing Money target fields and operations; no later whole-body replay.",
+  "money_confirmed_no_newer_off_parent": "paid-match-off-physical-contract-current-owner-20261015",
+  "agency_operations_widened": false
+}

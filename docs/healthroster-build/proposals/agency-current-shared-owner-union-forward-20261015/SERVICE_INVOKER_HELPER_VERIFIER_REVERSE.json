@@ -1,0 +1,24 @@
+{
+  "source_only": true,
+  "native": false,
+  "old_source": {
+    "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+    "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/verification/121_current_agency_source_owner_security.sql",
+    "sha256": "20260434ba281fd117caece35ad5a9aeff310c6d2473bc531fc4a21ac2f7109d"
+  },
+  "actual_grant_source": {
+    "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+    "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/callers/18_62_complete_native_financial_observation_with_validation.sqlinc"
+  },
+  "forward": "verification/122_complete_current_agency_security_with_actual_invoker_helper_grant.sql",
+  "forward_sha256": "9892b323691035ad5d3b29eb4216969392ea137ef2441c48e3e4d99ec67f23be",
+  "hunks": [
+    {
+      "before": "('private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)',false)",
+      "after": "('private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)',true)"
+    }
+  ],
+  "existing_reviewed_grant_preserved": true,
+  "new_grant_added": false,
+  "new_public_rpc": false
+}

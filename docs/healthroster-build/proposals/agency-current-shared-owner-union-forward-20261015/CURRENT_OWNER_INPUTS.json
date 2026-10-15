@@ -1,0 +1,323 @@
+{
+  "source_only": true,
+  "native": false,
+  "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "pure_inventory": {
+    "compiler": "scripts/cloudtms-db-release-lib.mjs",
+    "compiler_sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+    "methods": [
+      "inventory"
+    ],
+    "migrations": 400,
+    "repeatables": 1063,
+    "ordered_occurrences_checked": 2150
+  },
+  "records": [
+    {
+      "number": 1,
+      "name": "public.tsfin_prepare_write",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/19012026_extras.sql",
+        "raw_bytes": 325476,
+        "raw_sha256": "8c8dadbaaf5e45e377f4cee4586080677627236bda91aea423bac743c30a0c36",
+        "definition_sha256": "4e2bd516d8b3687d078b9d4b306061e0d7b9e27477d8e95cf1213e25dfbfcc6e"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_11_complete_tsfin_prepare_write.sqlinc",
+        "definition_sha256": "6c8c14d38a260608d37071225a76ce0b0b244cd46c0f5fd67f6d58bd302ab7ad"
+      },
+      "slug": "01_public_tsfin_prepare_write"
+    },
+    {
+      "number": 2,
+      "name": "public.tsfin_write_current_snapshot_single_bounded",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/21072026_1235_37_tsfin_write_current_snapshot_single_bounded.sql",
+        "raw_bytes": 36836,
+        "raw_sha256": "9f82588a4c16e4cbbf7285560b5ee1701b021eee51c854658d92c50ed08650aa",
+        "definition_sha256": "a2c478f9f90e17a61c8c4fbf039ce422fbf3c84ce94ef5a162b7616c7909354a"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_12_complete_tsfin_write_current_snapshot_single_bounded.sqlinc",
+        "definition_sha256": "cc24785572fd1ae8e61a290f370b179498b4019bdef1c108638e245f122b2a16"
+      },
+      "slug": "02_public_tsfin_write_current_snapshot_single_bounded"
+    },
+    {
+      "number": 3,
+      "name": "public.tsfin_write_snapshots_and_complete",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/21072026_1235_38_tsfin_write_snapshots_and_complete.sql",
+        "raw_bytes": 39780,
+        "raw_sha256": "175903f7dd7b6f48af6209cf29173a5e05372d05ba8c59d87399833e1d008693",
+        "definition_sha256": "144df3cfb0907e8f17645c2f512bb58aa700fcc2c98483cbb2265149a1a708d2"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_13_complete_tsfin_write_snapshots_and_complete.sqlinc",
+        "definition_sha256": "cba99033db1752348fe6c1bc268280abb10c1673b622eee7ed4b33ecbfe460e7"
+      },
+      "slug": "03_public_tsfin_write_snapshots_and_complete"
+    },
+    {
+      "number": 4,
+      "name": "public.timesheets_invalidate_prevalidation_on_change",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "raw_bytes": 136273,
+        "raw_sha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc",
+        "definition_sha256": "bfd51c9fe2c6b00bf7057a9b6d457ddd3b1b521312e2aad050f07717d8b27dd7"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_65_complete_native_invalidation_with_single_writer.sqlinc",
+        "definition_sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8"
+      },
+      "slug": "04_public_timesheets_invalidate_prevalidation_on_change"
+    },
+    {
+      "number": 5,
+      "name": "public.weekly_source_projection_publish_atomic_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+        "raw_bytes": 74335,
+        "raw_sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061",
+        "definition_sha256": "5f595cf2ff14c774518a95aa921f17bf3a0a306e17fa9fcc9b085c8792bb36b3"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_70_complete_current_publication_with_agency_validation.sqlinc",
+        "definition_sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23"
+      },
+      "slug": "05_public_weekly_source_projection_publish_atomic_v1"
+    },
+    {
+      "number": 6,
+      "name": "private._invoice_issue_validate_batch",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+        "raw_bytes": 179772,
+        "raw_sha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04",
+        "definition_sha256": "0e4c0edb61486c0b094dbea450a0d32ef16e656f0bfb9e59a9f3ec5353275a50"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_14_complete_native_issue_validator_with_agency_requirements.sqlinc",
+        "definition_sha256": "fbbeed43a4efacecb83e7f7e142dbdf71e44fdbbfbb144e712e840cb556e17a3"
+      },
+      "slug": "06_private__invoice_issue_validate_batch"
+    },
+    {
+      "number": 7,
+      "name": "public.invoice_issue_one",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/21072026_1235_59_invoice_issue_one.sql",
+        "raw_bytes": 26323,
+        "raw_sha256": "d821064b1906dda4b3bab856d0c2df7b319b032af269ce37c77d5aa2aa1efff2",
+        "definition_sha256": "c35933482c037f7be42a3bd86d1ccf00d1033da6d0303614dce7fb59408db80c"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_16_complete_actual_direct_issue_with_agency_callbacks.sqlinc",
+        "definition_sha256": "2e0ece0215a4c58cb80b79e05316790c20aca9ff3e2d10cb40a756396a232c09"
+      },
+      "slug": "07_public_invoice_issue_one"
+    },
+    {
+      "number": 8,
+      "name": "private._invoice_issue_advance_core_v8",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+        "raw_bytes": 38448,
+        "raw_sha256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25",
+        "definition_sha256": "ec8bc469e80722b414f22e58d6e809c0ebc568c0f29592180fe3a00066beac3a"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_17_complete_actual_async_issue_with_agency_callbacks.sqlinc",
+        "definition_sha256": "0433e01ee6fbbc9dd49064dd675b5a47fa22b984fc649bc04fa71ef8d06de703"
+      },
+      "slug": "08_private__invoice_issue_advance_core_v8"
+    },
+    {
+      "number": 9,
+      "name": "public._import_review_ready_action_ids_core_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+        "raw_bytes": 275109,
+        "raw_sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+        "definition_sha256": "e65254f1a4c58015fcda37a42f0b1c1cb7ce0eff96c77295cdca6e394045e442"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+        "definition_sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd"
+      },
+      "slug": "09_public__import_review_ready_action_ids_core_v1"
+    },
+    {
+      "number": 10,
+      "name": "public.hr_weekly_apply_transactional",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+        "raw_bytes": 143100,
+        "raw_sha256": "9559e417369550cfca8ffff0fd078034c1201abf1975f87d6bcc0b0a43909ace",
+        "definition_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+        "definition_sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9"
+      },
+      "slug": "10_public_hr_weekly_apply_transactional"
+    },
+    {
+      "number": 11,
+      "name": "public.weekly_source_mode_a_reference_apply_atomic_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+        "raw_bytes": 44246,
+        "raw_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+        "definition_sha256": "ffe342df0eefe945f9785fe6b8771a3ab8a9266279c6a11d17c6e167e195869e"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+        "definition_sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f"
+      },
+      "slug": "11_public_weekly_source_mode_a_reference_apply_atomic_v1"
+    },
+    {
+      "number": 12,
+      "name": "public.weekly_source_mode_a_dispatch_atomic_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+        "raw_bytes": 44246,
+        "raw_sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447",
+        "definition_sha256": "5cd589e5b903ad0dd2b09ecad1be083bff49af090042574c7a83c4289791e4ce"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+        "definition_sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10"
+      },
+      "slug": "12_public_weekly_source_mode_a_dispatch_atomic_v1"
+    },
+    {
+      "number": 13,
+      "name": "private.weekly_source_rule_qualification_scope_assert_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+        "raw_bytes": 21135,
+        "raw_sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b",
+        "definition_sha256": "c962ff3f8bc0712a2de78a951fc3b3f11d108620ff1c12941c4ff391d7118b6a"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_97_complete_off_scope_assert_with_finite_agency.sqlinc",
+        "definition_sha256": "b14ef129a2f06168eccf227b15bdb9ab3de1967e7a461fa223e7baec40c8a7cc"
+      },
+      "slug": "13_private_weekly_source_rule_qualification_scope_assert_v1"
+    },
+    {
+      "number": 14,
+      "name": "private.weekly_source_off_rule_native_parent_scope_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "raw_bytes": 22606,
+        "raw_sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585",
+        "definition_sha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_98_complete_off_parent_with_actual_agency.sqlinc",
+        "definition_sha256": "20d9dab05d326a76136fb35361f3c3e1dbe0d5f2de2bab5055e49decf76d4748"
+      },
+      "slug": "14_private_weekly_source_off_rule_native_parent_scope_v1"
+    },
+    {
+      "number": 15,
+      "name": "private.weekly_source_rule_qualification_setup_atomic_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "raw_bytes": 18928,
+        "raw_sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360",
+        "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_99_complete_off_command_with_literal_agency.sqlinc",
+        "definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "slug": "15_private_weekly_source_rule_qualification_setup_atomic_v1"
+    },
+    {
+      "number": 15,
+      "name": "private.weekly_source_rule_qualification_execute_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "raw_bytes": 18928,
+        "raw_sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360",
+        "definition_sha256": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_99_complete_off_command_with_literal_agency.sqlinc",
+        "definition_sha256": "eb195c08dafb3c460b7467c3b743b52fbc2922e2caa9fd7755a8d9c2797a1dc1"
+      },
+      "slug": "15_private_weekly_source_rule_qualification_execute_v1"
+    },
+    {
+      "number": 16,
+      "name": "private.weekly_source_rule_qualification_transport_status_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "raw_bytes": 3929,
+        "raw_sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8",
+        "definition_sha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_100_complete_off_transport_with_native_phase_actor.sqlinc",
+        "definition_sha256": "b000a53cdc7b6e5e7cdc243bcd8ab888eebd21c1dbb4767195f3b67a2fe981fc"
+      },
+      "slug": "16_private_weekly_source_rule_qualification_transport_status_v1"
+    },
+    {
+      "number": 17,
+      "name": "private.weekly_source_off_rule_setup_shape_assert_v1",
+      "current": {
+        "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+        "raw_bytes": 5863,
+        "raw_sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e",
+        "definition_sha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a"
+      },
+      "accepted": {
+        "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+        "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/reference/shared_101_complete_off_setup_shape_with_finite_agency.sqlinc",
+        "definition_sha256": "ce5df0ccb6d5aecf67176ce14cc9a349cb100b0d3e22b3854f41594f86682403"
+      },
+      "slug": "17_private_weekly_source_off_rule_setup_shape_assert_v1"
+    }
+  ]
+}

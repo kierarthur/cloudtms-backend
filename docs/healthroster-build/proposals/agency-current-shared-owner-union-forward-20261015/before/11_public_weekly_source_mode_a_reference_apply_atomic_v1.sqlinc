@@ -1,0 +1,321 @@
+create or replace function public.weekly_source_mode_a_reference_apply_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_publication_id uuid;
+  v_operation_id uuid;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_client_id uuid;
+  v_operation_key text;
+  v_import public.hr_imports%rowtype;
+  v_state public.import_review_states%rowtype;
+  v_envelope jsonb;
+  v_request_hash text;
+  v_apply jsonb;
+  v_auto_requested boolean;
+  v_timesheet_id uuid;
+  v_timesheet public.timesheets%rowtype;
+  v_items jsonb;
+  v_item_count integer;
+  v_manifest_hash bytea;
+  v_operation_row_id uuid;
+  v_comparison public.weekly_timesheet_source_comparisons%rowtype;
+  v_ordinal integer;
+  v_applied_ids uuid[];
+  -- WP-37: the established family resolver's answer for one physical id.
+  v_root_identity jsonb;
+  v_root_reason text;
+  v_refused integer:=0;
+  v_results jsonb:='[]'::jsonb;
+  v_client_results jsonb:='[]'::jsonb;
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in ('actor_user_id','publication_id','operation_id')
+     ) then
+    raise exception 'WEEKLY_SOURCE_MODE_A_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_publication_id:=(p_request->>'publication_id')::uuid;
+    v_operation_id:=coalesce(nullif(p_request->>'operation_id','')::uuid,pg_catalog.gen_random_uuid());
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_MODE_A_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_actor is null or v_publication_id is null then
+    raise exception 'WEEKLY_SOURCE_MODE_A_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  select * into v_publication
+  from public.weekly_source_projection_publications where id=v_publication_id for update;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_NOT_FOUND' using errcode='22023';
+  end if;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'RECHECK_SOURCE',v_group.id,null,v_cycle.finalisation_week_ending
+  );
+  perform public._import_review_assert_actor_v1(v_actor);
+
+  for v_client_id in
+    select distinct contract.client_id
+    from public.weekly_timesheet_source_comparisons comparison
+    join public.contracts contract on contract.id=comparison.contract_id
+    where comparison.projection_publication_id=v_publication_id
+    order by 1
+  loop
+    v_operation_key:=private.weekly_source_mode_a_operation_key_v1(v_publication_id,v_client_id);
+    select * into v_import from public.hr_imports where coverage_operation_key=v_operation_key;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_MODE_A_NOT_DISPATCHED' using errcode='55000',
+        detail=pg_catalog.jsonb_build_object('client_id',v_client_id)::text;
+    end if;
+    select * into strict v_state from public.import_review_states where import_id=v_import.id;
+
+    -- Every Weekly Source reference-apply operation is recorded before the
+    -- established owner runs, one row per signed Timesheet with at least one
+    -- exact match, so the Weekly Source side carries its own evidence of what
+    -- it asked for.
+    --
+    -- WP-37, closing WP-31's finding F3.  A CloudTMS Timesheet id ROTATES when
+    -- the Timesheet is replaced by a newer version (`24 §9A`), and the
+    -- comparisons written against the superseded head remain.  Iterating those
+    -- physical ids used to hand a non-current id to the established settings
+    -- resolver, which raised `P0002 CONTRACT_SETTINGS_CURRENT_TIMESHEET_NOT_FOUND`
+    -- and aborted the whole call — so one superseded head blocked the CURRENT
+    -- head's reference and its auto-authorisation decision.  Each physical id
+    -- is therefore resolved through the established family resolver
+    -- `private.weekly_source_resolve_root_identity_v1` (itself the installed
+    -- `public._pay_timesheet_rotation_scope`; no second resolver is written
+    -- here), and only the family's canonical current head proceeds.  A
+    -- superseded member is recorded as REFUSED with its reason and skipped —
+    -- `24 §9A`: "the older id is never authorised" — and a family whose
+    -- identity cannot be established fails closed the same way.
+    for v_timesheet_id in
+      select distinct comparison.timesheet_id
+      from public.weekly_timesheet_source_comparisons comparison
+      join public.contracts contract on contract.id=comparison.contract_id
+      where comparison.projection_publication_id=v_publication_id
+        and contract.client_id=v_client_id
+        and comparison.comparison_state='EXACT_MATCH'
+      order by 1
+    loop
+      v_root_identity:=private.weekly_source_resolve_root_identity_v1(v_timesheet_id);
+      -- A boolean read from JSON is three-valued: an absent key, a JSON null
+      -- and a non-boolean value must all be the UNSAFE answer, so every read
+      -- below is gated on `jsonb_typeof` before it is trusted.
+      v_root_reason:=case
+        when pg_catalog.jsonb_typeof(v_root_identity->'ok')<>'boolean'
+          or (v_root_identity->>'ok')::boolean is not true
+          then coalesce(nullif(v_root_identity->>'reason',''),'ROOT_IDENTITY_UNRESOLVED')
+        when pg_catalog.jsonb_typeof(v_root_identity->'requested_is_canonical')<>'boolean'
+          or (v_root_identity->>'requested_is_canonical')::boolean is not true
+          then 'TIMESHEET_SUPERSEDED'
+        when pg_catalog.jsonb_typeof(v_root_identity->'family_is_current')<>'boolean'
+          or (v_root_identity->>'family_is_current')::boolean is not true
+          then 'TIMESHEET_NOT_CURRENT'
+        else null
+      end;
+      if v_root_reason is not null then
+        perform private.weekly_source_mode_a_refuse_operation_v1(
+          v_cycle.id,v_upload.id,v_publication_id,v_timesheet_id,v_actor,
+          'WEEKLY_SOURCE_MODE_A_'||v_root_reason
+        );
+        v_refused:=v_refused+1;
+        continue;
+      end if;
+      select * into strict v_timesheet from public.timesheets where timesheet_id=v_timesheet_id;
+      select coalesce(pg_catalog.jsonb_agg(
+               pg_catalog.jsonb_build_object(
+                 'comparison_id',comparison.id,'upload_row_id',comparison.upload_row_id,
+                 'work_event_id',comparison.work_event_id,'work_date',comparison.work_date,
+                 'reference_number',comparison.source_reference_number
+               ) order by comparison.work_date,comparison.id
+             ),'[]'::jsonb),
+             count(*)::integer
+      into v_items,v_item_count
+      from public.weekly_timesheet_source_comparisons comparison
+      where comparison.projection_publication_id=v_publication_id
+        and comparison.timesheet_id=v_timesheet_id
+        and comparison.comparison_state='EXACT_MATCH';
+      if v_item_count=0 then continue; end if;
+
+      v_manifest_hash:=private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_TIMESHEET_REFERENCE_APPLY_MANIFEST_V1',v_items
+      );
+      -- The auto-authorisation decision is the established resolver's, taken
+      -- in validation context exactly as
+      -- public._import_review_auto_authorise_targets_core_v1 reads it.
+      v_auto_requested:=coalesce((
+        public.import_auto_authorise_policy_resolve_v2(
+          'HEALTHROSTER'::public.hr_source_enum,v_client_id,v_timesheet.contract_id,
+          v_timesheet_id,v_timesheet.week_ending_date,true
+        )->>'effective_value')::boolean,false);
+
+      insert into public.weekly_timesheet_reference_apply_operations(
+        source_cycle_id,upload_id,projection_publication_id,timesheet_id,
+        expected_timesheet_revision,expected_item_count,expected_item_manifest_hash,
+        auto_authorise_requested,auto_authorise_applied,state,actor_user_id,
+        idempotency_key,operation_hash
+      ) values (
+        v_cycle.id,v_upload.id,v_publication_id,v_timesheet_id,
+        v_timesheet.version,v_item_count,v_manifest_hash,
+        v_auto_requested,false,'READY',v_actor,
+        'weekly-source-mode-a-apply:'||v_publication_id::text||':'||v_timesheet_id::text
+          ||':'||v_timesheet.version::text,
+        private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_TIMESHEET_REFERENCE_APPLY_OPERATION_V1',
+          pg_catalog.jsonb_build_object(
+            'projection_publication_id',v_publication_id,'timesheet_id',v_timesheet_id,
+            'timesheet_revision',v_timesheet.version,'manifest',v_items
+          )
+        )
+      )
+      on conflict (idempotency_key) do nothing
+      returning id into v_operation_row_id;
+      if v_operation_row_id is null then
+        select id into v_operation_row_id
+        from public.weekly_timesheet_reference_apply_operations
+        where idempotency_key='weekly-source-mode-a-apply:'||v_publication_id::text||':'
+          ||v_timesheet_id::text||':'||v_timesheet.version::text;
+        continue;
+      end if;
+
+      v_ordinal:=0;
+      for v_comparison in
+        select * from public.weekly_timesheet_source_comparisons comparison
+        where comparison.projection_publication_id=v_publication_id
+          and comparison.timesheet_id=v_timesheet_id
+          and comparison.comparison_state='EXACT_MATCH'
+        order by comparison.work_date,comparison.id
+      loop
+        v_ordinal:=v_ordinal+1;
+        insert into public.weekly_timesheet_reference_apply_items(
+          operation_id,item_ordinal,comparison_id,upload_row_id,work_event_id,
+          work_date,reference_number,reference_fact_hash
+        ) values (
+          v_operation_row_id,v_ordinal,v_comparison.id,v_comparison.upload_row_id,
+          v_comparison.work_event_id,v_comparison.work_date,
+          v_comparison.source_reference_number,
+          private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_TIMESHEET_REFERENCE_FACT_V1',
+            pg_catalog.jsonb_build_object(
+              'comparison_id',v_comparison.id,'work_event_id',v_comparison.work_event_id,
+              'work_date',v_comparison.work_date,
+              'reference_number',v_comparison.source_reference_number
+            )
+          )
+        );
+      end loop;
+      v_results:=v_results||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'operation_id',v_operation_row_id,'timesheet_id',v_timesheet_id,
+        'item_count',v_item_count,'auto_authorise_requested',v_auto_requested
+      ));
+    end loop;
+
+    -- The established reference and apply owner.  The apply contract is the
+    -- server's own envelope, hashed by the import-review owner, never composed
+    -- from caller facts.
+    v_envelope:=public._import_review_apply_envelope_core_v1(v_import.id);
+    v_request_hash:=public._import_review_hash_v1(v_envelope::text);
+    if pg_catalog.jsonb_array_length(coalesce(v_envelope->'selected_action_ids','[]'::jsonb))=0 then
+      update public.weekly_timesheet_reference_apply_operations
+      set state='REFUSED',result_code='IMPORT_REVIEW_NO_READY_SELECTED_ACTIONS',
+        completed_at_utc=pg_catalog.transaction_timestamp()
+      where projection_publication_id=v_publication_id and state='READY'
+        and timesheet_id in (
+          select comparison.timesheet_id from public.weekly_timesheet_source_comparisons comparison
+          join public.contracts contract on contract.id=comparison.contract_id
+          where comparison.projection_publication_id=v_publication_id and contract.client_id=v_client_id
+        );
+      v_client_results:=v_client_results||pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object('client_id',v_client_id,'import_id',v_import.id,
+          'applied',false,'reason_code','IMPORT_REVIEW_NO_READY_SELECTED_ACTIONS')
+      );
+      continue;
+    end if;
+
+    v_apply:=public.hr_weekly_apply_transactional(
+      v_import.id,
+      pg_catalog.jsonb_build_object(
+        'review_contract',pg_catalog.jsonb_build_object(
+          'schema_version','IMPORT_REVIEW_APPLY_CONTRACT_V1',
+          'operation_id',v_operation_id,
+          'state_version',v_state.state_version,
+          'coverage_fingerprint',v_import.coverage_fingerprint,
+          'preview_fingerprint',v_state.preview_fingerprint,
+          'request_hash',v_request_hash
+        ),
+        'review_selected_action_ids',coalesce(v_envelope->'selected_action_ids','[]'::jsonb),
+        'invalidation_action_ids',coalesce(v_envelope->'reference_invalidation_action_ids','[]'::jsonb)
+      ),
+      v_actor
+    );
+
+    -- The established owner names the Timesheets it auto-authorised.  This
+    -- owner only records that answer; it never authorises anything itself.
+    select coalesce(array_agg(distinct value::uuid),array[]::uuid[]) into v_applied_ids
+    from pg_catalog.jsonb_array_elements_text(
+      coalesce(v_apply->'auto_authorise_timesheet_ids','[]'::jsonb)
+    ) value;
+
+    update public.weekly_timesheet_reference_apply_operations operation
+    set state='APPLIED',result_code='IMPORT_REVIEW_APPLIED',
+      auto_authorise_applied=operation.timesheet_id=any(v_applied_ids),
+      completed_at_utc=pg_catalog.transaction_timestamp()
+    where operation.projection_publication_id=v_publication_id and operation.state='READY'
+      and operation.timesheet_id in (
+        select comparison.timesheet_id from public.weekly_timesheet_source_comparisons comparison
+        join public.contracts contract on contract.id=comparison.contract_id
+        where comparison.projection_publication_id=v_publication_id and contract.client_id=v_client_id
+      );
+    update public.weekly_timesheet_reference_apply_items item
+    set applied_at_utc=pg_catalog.transaction_timestamp()
+    where item.operation_id in (
+      select operation.id from public.weekly_timesheet_reference_apply_operations operation
+      where operation.projection_publication_id=v_publication_id and operation.state='APPLIED'
+    ) and item.applied_at_utc is null;
+
+    v_client_results:=v_client_results||pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('client_id',v_client_id,'import_id',v_import.id,
+        'applied',true,'apply_result',v_apply,
+        -- WP-37.  `hr_weekly_apply_transactional` does not authorise: it records
+        -- the committed operation and NAMES the post-commit targets in
+        -- `auto_authorise_timesheet_ids`, which the established import-review
+        -- follow-up owner then acts on.  These three values are that owner's
+        -- own handle (`public.import_review_apply_status_get_v1`), so the
+        -- acceptance route can run the SAME follow-up the ordinary Imports
+        -- route runs instead of inventing a second authorisation path
+        -- (`25 §9` "Complete coverage may auto-authorise…").
+        'operation_id',v_operation_id,
+        'request_hash',v_request_hash,
+        'auto_authorise_timesheet_ids',
+          coalesce(v_apply->'auto_authorise_timesheet_ids','[]'::jsonb))
+    );
+  end loop;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'publication_id',v_publication_id,
+    'operations',v_results,'clients',v_client_results,
+    -- WP-37: physical Timesheet ids skipped because the family's canonical
+    -- current head is a different row (`24 §9A`), recorded as REFUSED.
+    'superseded_heads_refused',v_refused
+  );
+end;
+$function$;

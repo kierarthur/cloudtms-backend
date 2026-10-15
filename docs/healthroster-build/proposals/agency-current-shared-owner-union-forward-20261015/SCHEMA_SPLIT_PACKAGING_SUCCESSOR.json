@@ -1,0 +1,13 @@
+{
+  "source_only": true,
+  "native": false,
+  "pin": "38964e6acf7e0d10af9cfbc223a9bb251a4dadfd",
+  "migration_before": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/migration/01_same_agency_request_store.sqlinc",
+  "identity_before": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/repeatable/02_same_request_identity_guard.sqlinc",
+  "migration_before_sha256": "2999d2917cf1b3debfc9830f3bdbce96144c5214bb779de173c70c01a20d0077",
+  "identity_before_sha256": "1e6c451fd857256ffc9b86ebd774a638eeb353223109c93e9bec76d28909e7f0",
+  "migration_after_sha256": "0168d26f24fce41f53bc2c02ccd803bb811cbc2bea04bc77c9c901858769d3f8",
+  "identity_after_sha256": "6e0342f2fc3c21d5cdf4b8752b3a399a464f8fb7a1cb6b6f8af1122327c3c119",
+  "combined_bytes_sha256": "264c0b1719ac57224b60528d3268f5f5d2cee8a1c8c1b4f1c88f67a0da0f2bb7",
+  "change": "Move one boundary newline from migration EOF to identity prefix; concatenation is byte-identical to raw88; no SQL body change."
+}

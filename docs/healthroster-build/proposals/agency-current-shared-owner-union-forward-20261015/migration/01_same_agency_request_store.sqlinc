@@ -1,0 +1,93 @@
+-- One planned preset-T0 change request authority, primary §§25.2/26.5.1/26.11.
+-- Source construction only. No runtime/bootstrap assertion or business data.
+create table private.weekly_source_agency_timesheet_change_requests (
+  id uuid primary key default gen_random_uuid(),
+  request_key text not null unique check(length(request_key) between 1 and 200),
+  request_sha256 bytea not null check(octet_length(request_sha256)=32),
+  actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+  reason text not null check(length(btrim(reason)) between 1 and 2000),
+  environment text not null check(environment='TEST'),
+  agency_id uuid not null,
+  contract_week_id uuid not null references public.contract_weeks(id) on delete restrict,
+  contract_id uuid not null references public.contracts(id) on delete restrict,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  client_id uuid not null references public.clients(id) on delete restrict,
+  week_ending_date date not null,
+  source_group_id uuid not null references public.weekly_source_groups(id) on delete restrict,
+  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,
+  source_upload_id uuid not null references public.weekly_source_uploads(id) on delete restrict,
+  source_publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,
+  rule_set_version_id uuid not null references public.weekly_source_rule_set_versions(id) on delete restrict,
+  source_cas jsonb not null check(coalesce(jsonb_typeof(source_cas)='object'
+    and source_cas ?& array['schema_version','source_cycle_id','client_ids','source_cas_sha256']
+    and source_cas-array['schema_version','source_cycle_id','client_ids','source_cas_sha256']='{}'::jsonb
+    and jsonb_typeof(source_cas->'schema_version')='string'
+    and source_cas->>'schema_version'='WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    and jsonb_typeof(source_cas->'source_cycle_id')='string'
+    and jsonb_typeof(source_cas->'client_ids')='array'
+    and jsonb_typeof(source_cas->'source_cas_sha256')='string'
+    and source_cas->>'source_cas_sha256'~'^[0-9a-f]{64}$',false)),
+  -- Immutable native capture tokens and the current monotonic native footprint
+  -- live on this SINGLE planned request. No parallel scope/claim ledger.
+  source_dependency_tokens jsonb not null check(jsonb_typeof(source_dependency_tokens)='array'
+    and octet_length(source_dependency_tokens::text)<=8388608),
+  current_source_dependency_tokens jsonb not null check(jsonb_typeof(current_source_dependency_tokens)='array'
+    and octet_length(current_source_dependency_tokens::text)<=8388608
+    and current_source_dependency_tokens @> source_dependency_tokens),
+  initial_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  initial_timesheet_version integer not null check(initial_timesheet_version>=1),
+  initial_row_signature text not null check(length(initial_row_signature) between 1 and 512),
+  canonical_family_booking_id text not null check(length(canonical_family_booking_id) between 1 and 200
+    and canonical_family_booking_id=btrim(canonical_family_booking_id)),
+  original_draft_invoice_id uuid references public.invoices(id) on delete restrict,
+  original_draft_invoice_no text,
+  state text not null default 'ACTIVE' check(state in('ACTIVE','COMPLETED')),
+  phase text not null default 'CAPTURED' check(phase in('CAPTURED','DRAFT_REMOVED','UNAUTHORISED',
+    'SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT','AUTHORISED','COMPLETED')),
+  version bigint not null default 1 check(version>=1),
+  current_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  current_timesheet_version integer not null check(current_timesheet_version>=1),
+  current_row_signature text not null check(length(current_row_signature) between 1 and 512),
+  return_hold boolean not null default false,
+  outbox_id uuid,
+  outbox_reason public.ts_fin_reason_enum,
+  current_financial_id uuid references public.timesheets_financials(id) on delete restrict,
+  native_receipts jsonb not null check(coalesce(jsonb_typeof(native_receipts)='object'
+    and jsonb_typeof(native_receipts->'original_capture')='object'
+    and native_receipts#>>'{original_capture,schema_version}'='WEEKLY_SOURCE_AGENCY_CHANGE_NATIVE_CAPTURE_V1'
+    and octet_length(native_receipts::text)<=65536,false)),
+  last_refusal_code text check(last_refusal_code is null or length(last_refusal_code) between 1 and 200),
+  completed_receipt jsonb check(completed_receipt is null or (jsonb_typeof(completed_receipt)='object'
+    and octet_length(completed_receipt::text)<=16384)),
+  created_at_utc timestamptz not null default transaction_timestamp(),
+  updated_at_utc timestamptz not null default transaction_timestamp(),
+  completed_at_utc timestamptz,
+  -- Original creator/click remains immutable. Each accepted phase is approved
+  -- and audited by its genuine current scoped actor; no creator impersonation.
+  updated_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  completed_by_user_id uuid references public.tms_users(id) on delete restrict,
+  check((state='ACTIVE' and phase<>'COMPLETED' and completed_receipt is null
+      and completed_at_utc is null and completed_by_user_id is null)
+    or(state='COMPLETED' and phase='COMPLETED' and completed_receipt is not null
+      and completed_at_utc is not null and completed_by_user_id is not null and not return_hold)),
+  check(not return_hold or(state='ACTIVE' and original_draft_invoice_id is not null)),
+  check(original_draft_invoice_id is not null or original_draft_invoice_no is null),
+  check((outbox_id is null)=(outbox_reason is null)),
+  check(coalesce(source_cas->>'source_cycle_id'=source_cycle_id::text,false)),
+  check(coalesce(source_cas->'client_ids'=jsonb_build_array(client_id),false))
+);
+alter table private.weekly_source_agency_timesheet_change_requests owner to postgres;
+alter table private.weekly_source_agency_timesheet_change_requests enable row level security;
+alter table private.weekly_source_agency_timesheet_change_requests force row level security;
+create policy cloudtms_miget_service_owner_all on private.weekly_source_agency_timesheet_change_requests
+  for all to current_user using(true) with check(true);
+revoke all on private.weekly_source_agency_timesheet_change_requests from public,anon,authenticated,service_role;
+grant all on private.weekly_source_agency_timesheet_change_requests to postgres;
+create unique index weekly_source_agency_change_active_family_v1
+  on private.weekly_source_agency_timesheet_change_requests(agency_id,canonical_family_booking_id) where state='ACTIVE';
+create unique index weekly_source_agency_change_active_week_v1
+  on private.weekly_source_agency_timesheet_change_requests(contract_week_id) where state='ACTIVE';
+create index weekly_source_agency_change_current_draft_hold_v1
+  on private.weekly_source_agency_timesheet_change_requests(original_draft_invoice_id) where return_hold;
+comment on table private.weekly_source_agency_timesheet_change_requests is
+  'Single planned preset-T0 amendment/phase and original-D1 hold authority. No schedule, finance, pay, query, queue or P0 correction authority; history retained.';
