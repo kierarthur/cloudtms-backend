@@ -9,13 +9,17 @@ import { exactAtomicBody, scanManagedSql } from './cloudtms-managed-release-sql.
 // This prepares source only. The account-appropriate native MCP owns execution
 // and rollback; the separate existing shared-turn helper owns the lock session.
 const root = process.cwd();
-const output = path.resolve(root, '.codex-tmp/qt-admin-native-20261016');
+const calendar = process.argv.includes('--calendar');
+assert(process.argv.slice(2).every(value => value === '--calendar'), 'unknown trial option');
+const output = path.resolve(root, calendar ? '.codex-tmp/qt-calendar-native-20261016' : '.codex-tmp/qt-admin-native-20261016');
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const sources = [
   'supabase/migrations/15102026_0800_candidate_push_timing_authority.sql',
   'supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql',
   'tests/weekly-source/push-timing-admin-native.sql'
 ];
+if (calendar) sources.push('supabase/repeatable/15102026_0801_candidate_push_calendar_v1.sql',
+  'tests/weekly-source/push-timing-calendar-native.sql');
 const sha = value => createHash('sha256').update(value).digest('hex');
 const functions = [
   'private.weekly_contact_assert_closed_v1(jsonb,text[],text[],text)',
@@ -26,12 +30,17 @@ const functions = [
   'public.candidate_push_timing_get_v1(jsonb)',
   'public.candidate_push_timing_save_v1(jsonb)'
 ];
+if (calendar) functions.push(
+  'private.weekly_contact_london_boundary_v1(date,time without time zone,boolean)',
+  'private.weekly_contact_push_allowed_windows_v1(jsonb,date,boolean)',
+  'private.weekly_contact_push_timing_decision_v1(jsonb,timestamptz,timestamptz,jsonb)',
+  'public.weekly_source_push_calendar_decision_v1(jsonb)');
 const names = functions.map(value => `'${value}'`).join(',');
 const frame = `select jsonb_build_object(
  'database',current_database(),
  'tables_absent',to_regclass('public.candidate_push_timing_policy') is null and to_regclass('public.candidate_push_timing_commands') is null,
  'functions_absent',not exists(select 1 from unnest(array[${names}]) n where to_regprocedure(n) is not null),
- 'fixture_absent',not exists(select 1 from public.tms_users where id='f7160000-0000-4000-8000-000000000001' or email='healthroster-qt-rollback-only@example.invalid'),
+ 'fixture_absent',not exists(select 1 from public.tms_users where id='f7160000-0000-4000-8000-000000000001' or email='healthroster-qt-rollback-only@example.invalid')${calendar ? " and not exists(select 1 from public.candidates where id='f7160000-0000-4000-8000-000000000010' or email='healthroster-qt-calendar@example.invalid' or key_norm='HR_QT_CALENDAR_ROLLBACK') and not exists(select 1 from public.clients where id='f7160000-0000-4000-8000-000000000011') and not exists(select 1 from public.client_settings where client_id='f7160000-0000-4000-8000-000000000011')" : ''},
  'legacy_one',exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1),
  'migration_ledger',(select md5(coalesce(string_agg(to_jsonb(t)::text,'|' order by to_jsonb(t)::text),'')) from private.cloudtms_migration_ledger t),
  'repeatable_ledger',(select md5(coalesce(string_agg(to_jsonb(t)::text,'|' order by to_jsonb(t)::text),'')) from private.cloudtms_repeatable_ledger t));\n`;
@@ -63,7 +72,9 @@ const manifest = {
   source_commit: sourceCommit, sources: pins, sql_bytes: Buffer.byteLength(sql), sql_sha256: sha(sql),
   statements: scanManagedSql(sql).statements.length, fingerprint_sha256: sha(frame),
   account: 'kier@arthur-rai.co.uk', native_server: 'cloudtms-miget-operations-kier-codex', database: 'agency_test',
-  scope: 'QT administration native constructor/fixture only; no configured bootstrap, dispatch, provider, Worker, UI, race or full-release acceptance'
+  scope: calendar
+    ? 'QT administration, pure London timing/DST and existing-calendar adapter only; no configured bootstrap, dispatch/provider, START/race or full-release acceptance'
+    : 'QT administration native constructor/fixture only; no configured bootstrap, dispatch, provider, Worker, UI, race or full-release acceptance'
 };
 assert(manifest.sql_bytes <= 8_000_000 && manifest.statements <= 1_000);
 fs.mkdirSync(output, { recursive: true });

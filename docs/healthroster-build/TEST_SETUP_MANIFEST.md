@@ -1,5 +1,11 @@
 # HealthRoster TEST setup manifest
 
+## QT-CALENDAR-RB-16102026 — bounded timing/calendar proof
+
+Manifested before mutation. Current kier@arthur-rai.co.uk native Operations rollback, agency_test only, under the existing shared turn. Reuses the exact QT-ADMIN fixture below and adds four complete timing/calendar routines. Adds one temporary candidate f7160000-0000-4000-8000-000000000010 (healthroster-qt-calendar@example.invalid, key HR_QT_CALENDAR_ROLLBACK), client f7160000-0000-4000-8000-000000000011 and its native client_settings row. Assert all identifiers/email/key absent before insert. No contact addresses, sends, financial rows, signatures or activation. Read the actual existing settings_defaults holiday list and compare the genuine effective owner; never edit it. All existing guards/constraints stay enabled.
+
+Pure explicit historical instants exercise summer/winter, spring missing end, autumn repeated end, wraparound quiet, exact interval/expiry boundaries, Saturday window, Sunday/holiday exclusion, disabled/INHERIT calendar independence, missing required configuration and the28date bound. These are function inputs, not business timestamps. Actual agency/null-client and real fixture-client paths must agree on the current configured calendar, and all invalid/deployment/role/ACL negatives must reject. Before/fresh-after frame includes both QT tables, eleven routines, every fixture, LEGACY1 and both ledger hashes. The server owns the sole rollback; require accepted/error-free assertions, rolledBack=true, connectedFresh=true and exact frame equality. This does not prove configured bootstrap, target reader, native START/consume/races, full release or phone acceptance.
+
 ## QT-ADMIN-RB-16102026 — bounded V6 administration proof
 
 Manifested before mutation. Current account kier@arthur-rai.co.uk; only native cloudtms-miget-operations-kier-codex rollback tool, explicit agency_test/cloudtms_test_clone. Hold existing shared turn(20261013,1) through before/trial/rollback/fresh proof. No durable bootstrap, feature activation, provider/send, queue drain, payment/settlement or full release rehearsal.
