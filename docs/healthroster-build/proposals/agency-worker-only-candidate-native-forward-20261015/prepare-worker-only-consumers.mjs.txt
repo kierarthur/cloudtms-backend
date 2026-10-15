@@ -1,0 +1,337 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { functionEvents } from '../fixed-approval-policy-construction-20261015/reference/pinned-source-parser.mjs';
+
+const here = path.join(path.dirname(fileURLToPath(import.meta.url)), 'worker-only-consumers');
+const pin = 'fa66183f01913e86651e82816f5e88f97e07123c';
+const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+for (const dir of ['before', 'forward', 'reference']) fs.mkdirSync(path.join(here, dir), { recursive: true });
+const inputs = [], owners = [];
+function input(sourcePath, name, id = null) {
+  const raw = execFileSync('git', ['show', `${pin}:${sourcePath}`], { maxBuffer: 16_000_000 });
+  const text = raw.toString('utf8');
+  let selected = text;
+  if (id) {
+    const found = functionEvents(text).events.filter(event => event.kind === 'CREATE' && event.id === id);
+    assert.equal(found.length, 1, id);
+    selected = found[0].definition;
+  }
+  const reference = `reference/${name}`;
+  fs.writeFileSync(path.join(here, reference), selected);
+  inputs.push({ pin, path: sourcePath, raw_bytes: raw.length, raw_sha256: sha(raw), reference,
+    selected_definition_sha256: sha(selected), ...(id ? { id } : {}) });
+  return selected;
+}
+function owner(file, before, changes) {
+  const nl = before.includes('\r\n') ? '\r\n' : '\n';
+  const lines = value => value.replaceAll('\r\n', '\n').replaceAll('\n', nl);
+  let after = before;
+  const hunks = changes.map(change => ({ ...change, before: lines(change.before), after: lines(change.after) }));
+  for (const hunk of hunks) {
+    assert.equal(after.split(hunk.before).length, 2, file + ': ' + hunk.purpose);
+    after = after.replace(hunk.before, () => hunk.after);
+  }
+  fs.writeFileSync(path.join(here, 'before', file), before);
+  fs.writeFileSync(path.join(here, 'forward', file), after);
+  owners.push({ file, before_sha256: sha(before), after_sha256: sha(after), hunks });
+  return after;
+}
+const source = 'supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql';
+const transition = input(source, 'actual_candidate_transition.sqlinc',
+  'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)');
+owner('108_complete_worker_only_candidate_transition.sqlinc', transition, [
+  { purpose: 'Exact weekly HOURS exemption has a local branch only', before: '  v_is_electronic boolean;',
+    after: '  v_is_electronic boolean;\n  v_worker_only_approval boolean:=false;' },
+  { purpose: 'Only the current system policy and a matching immutable snapshot admit worker-only document actions',
+    before: "  if v_action='AMEND' then",
+    after: `  v_worker_only_approval:=v_workflow.scope='WEEKLY' and v_workflow.workflow_kind='CONTRACT_HOURS'
+    and v_workflow.route='ELECTRONIC'
+    and coalesce(v_policy#>'{manager_approval_policy,approval}'='"NOT_REQUIRED"'::jsonb,false)
+    and (v_action='WORKER_SUBMIT' or (
+      coalesce(v_workflow.policy_snapshot_json#>'{manager_approval_policy,approval}'='"NOT_REQUIRED"'::jsonb,false)
+      and coalesce(v_policy->>'policy_fingerprint'=v_workflow.policy_snapshot_json->>'policy_fingerprint',false)));
+  if v_workflow.scope='WEEKLY' and v_workflow.workflow_kind='CONTRACT_HOURS'
+     and v_workflow.policy_snapshot_json#>'{manager_approval_policy,approval}'='"NOT_REQUIRED"'::jsonb
+     and v_action in ('REGISTER_REVIEW_COMPONENT','SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST')
+     and v_worker_only_approval is distinct from true then
+    raise exception 'CANDIDATE_POLICY_CHANGED' using errcode='40001';
+  end if;
+
+  if v_action='AMEND' then` },
+  { purpose: 'The unsigned preset retains the existing electronic route and cannot choose a manager or paper route',
+    before: "    v_is_electronic:=upper(coalesce(v_payload->>'approval_route',v_workflow.route))<>'PAPER';",
+    after: `    if v_worker_only_approval and upper(coalesce(v_payload->>'approval_route',v_workflow.route))<>'ELECTRONIC' then
+      raise exception 'CANDIDATE_FIXED_APPROVAL_ROUTE_INVALID' using errcode='22023';
+    end if;
+    v_is_electronic:=upper(coalesce(v_payload->>'approval_route',v_workflow.route))<>'PAPER';` },
+  { purpose: 'A genuine rendered worker-only PDF fills final document identity without inventing manager evidence',
+    before: "    v_manifest:=private._candidate_review_manifest_v1(v_workflow.id,v_workflow.generation);\n    if coalesce((v_manifest->>'all_ready')::boolean,false) then",
+    after: `    if v_worker_only_approval then
+      if v_component.component_kind<>'HOURS_TIMESHEET'
+         or v_render_contract->>'form_variant'<>'ELECTRONIC_WORKER_SIGNED'
+         or v_receipt->>'form_variant'<>'ELECTRONIC_WORKER_SIGNED'
+         or v_receipt->>'candidate_signature_sha256' is distinct from encode(v_workflow.candidate_signature_sha256,'hex')
+         or coalesce((v_receipt->>'manager_signature_embedded')::boolean,false)
+         or coalesce((v_receipt->>'manager_approval_date_embedded')::boolean,false) then
+        raise exception 'CANDIDATE_WORKER_ONLY_DOCUMENT_INVALID' using errcode='55000';
+      end if;
+      update public.candidate_submission_components set
+        final_signed_storage_key=review_storage_key,final_signed_content_sha256=review_content_sha256,
+        final_signed_media_type=review_media_type,final_signed_byte_size=review_byte_size,
+        final_signed_page_count=review_page_count,final_signed_render_input_sha256=review_render_input_sha256,
+        final_signed_renderer_contract_version=review_renderer_contract_version,
+        final_signed_renderer_receipt_json=review_renderer_receipt_json,
+        final_signed_generated_at_utc=review_generated_at_utc,final_signed_render_state='READY'
+      where id=v_component.id returning * into v_component;
+    end if;
+    v_manifest:=private._candidate_review_manifest_v1(v_workflow.id,v_workflow.generation);
+    if coalesce((v_manifest->>'all_ready')::boolean,false) then` },
+  { purpose: 'Only actual worker-only document readiness skips the manager-request state',
+    before: "        state='READY_FOR_MANAGER_APPROVAL',review_manifest_json=v_manifest,",
+    after: "        state=case when v_worker_only_approval then 'READY_TO_FINALISE' else 'READY_FOR_MANAGER_APPROVAL' end,review_manifest_json=v_manifest," },
+  { purpose: 'The genuine registration result drives the existing service finaliser',
+    before: "      'review_manifest',v_manifest);\n    update public.candidate_submission_workflows set last_mutation_response_json=v_response where id=v_workflow.id;",
+    after: "      'review_manifest',v_manifest)||case when v_worker_only_approval\n        then jsonb_build_object('worker_only_approval',true) else '{}'::jsonb end;\n    update public.candidate_submission_workflows set last_mutation_response_json=v_response where id=v_workflow.id;" },
+  { purpose: 'No manager request or manager email may be created for a system-fixed weekly HOURS submission',
+    before: "  elsif v_action in ('SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST') then",
+    after: "  elsif v_action in ('SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST') then\n    if v_worker_only_approval then\n      raise exception 'CANDIDATE_MANAGER_APPROVAL_NOT_REQUIRED' using errcode='55000';\n    end if;" }
+]);
+const render = input('supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql',
+  'actual_component_render_contract.sqlinc', 'private._candidate_component_render_contract_v1(uuid,integer,uuid,text)');
+owner('109_complete_worker_only_component_render_contract.sqlinc', render, [
+  { purpose: 'Scoped worker-only contract state', before: '  v_candidate_required boolean;',
+    after: '  v_candidate_required boolean;\n  v_worker_only_approval boolean:=false;' },
+  { purpose: 'The genuine frozen policy selects a worker-only form with the required Candidate signature',
+    before: "  v_candidate_required:=v_component.component_kind='HOURS_TIMESHEET';\n  v_form_variant:=case",
+    after: `  v_candidate_required:=v_component.component_kind='HOURS_TIMESHEET';
+  v_worker_only_approval:=v_candidate_required and v_workflow.scope='WEEKLY'
+    and v_workflow.workflow_kind='CONTRACT_HOURS' and v_workflow.route='ELECTRONIC'
+    and coalesce(v_workflow.policy_snapshot_json#>'{manager_approval_policy,approval}'='"NOT_REQUIRED"'::jsonb,false);
+  v_form_variant:=case
+    when v_worker_only_approval then 'ELECTRONIC_WORKER_SIGNED'` },
+  { purpose: 'Worker-only rendering does not load or fabricate a manager signature',
+    before: "  if v_phase='FINAL' then", after: "  if v_phase='FINAL' and not v_worker_only_approval then" },
+  { purpose: 'Actual contract flags truthfully declare no manager signature/date in either phase',
+    before: "    'manager_signature_embedded',v_phase='FINAL',\n    'manager_approval_date_embedded',v_phase='FINAL'\n  );",
+    after: "    'manager_signature_embedded',v_phase='FINAL' and not v_worker_only_approval,\n    'manager_approval_date_embedded',v_phase='FINAL' and not v_worker_only_approval\n  )||case when v_worker_only_approval then jsonb_build_object('worker_only_approval',true) else '{}'::jsonb end;" }
+]);
+const finaliser = input(source, 'actual_candidate_finaliser.sqlinc',
+  'public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)');
+owner('110_complete_worker_only_candidate_finaliser.sqlinc', finaliser, [
+  { purpose: 'Worker-only finalisation is a narrow actual workflow branch', before: '  v_completion_after jsonb;',
+    after: '  v_completion_after jsonb;\n  v_worker_only_approval boolean:=false;\n  v_worker_only_final_state jsonb;' },
+  { purpose: 'Only frozen exact weekly HOURS system policy can select the worker-only identity',
+    before: '  v_finalisation_identity:=v_service_finalisation->\'finalisation_identity\';',
+    after: `  v_worker_only_approval:=v_workflow.scope='WEEKLY' and v_workflow.workflow_kind='CONTRACT_HOURS'
+    and v_workflow.route='ELECTRONIC'
+    and coalesce(v_workflow.policy_snapshot_json#>'{manager_approval_policy,approval}'='"NOT_REQUIRED"'::jsonb,false);
+  v_finalisation_identity:=v_service_finalisation->'finalisation_identity';` },
+  { purpose: 'Exact worker-only finalisation identity is bound to genuine Candidate, policy and rendered manifest hashes',
+    before: "  if jsonb_typeof(v_finalisation_identity) is distinct from 'object' then\n    if v_workflow.route='PAPER' then",
+    after: `  if jsonb_typeof(v_finalisation_identity) is distinct from 'object' then
+    if v_worker_only_approval then
+      v_finalisation_identity:=jsonb_build_object(
+        'contract_version','CANDIDATE_FINALISATION_IDENTITY_V1',
+        'workflow_id',v_workflow.id,'workflow_generation',p_expected_generation,
+        'approval_method','ELECTRONIC','approval_request_id',null,'approval_request_generation',null,
+        'review_manifest_sha256_hex',encode(v_workflow.review_manifest_sha256,'hex'),
+        'paper_return_manifest_sha256_hex',null,
+        'candidate_signature_sha256_hex',encode(v_workflow.candidate_signature_sha256,'hex'),
+        'policy_snapshot_sha256_hex',encode(v_workflow.policy_snapshot_sha256,'hex'));
+    elsif v_workflow.route='PAPER' then` },
+  { purpose: 'No new route is created; ELECTRONIC identity is allowed only inside the fixed branch',
+    before: "     or upper(coalesce(v_finalisation_identity->>'approval_method','')) not in ('EMAIL','PHONE','PAPER') then",
+    after: "     or (upper(coalesce(v_finalisation_identity->>'approval_method','')) not in ('EMAIL','PHONE','PAPER')\n       and not (v_worker_only_approval and v_finalisation_identity->>'approval_method'='ELECTRONIC')) then" },
+  { purpose: 'Service finalisation cannot borrow a manager request or substitute a Candidate/policy/document identity',
+    before: "    if v_workflow.route='PAPER' then\n      if nullif(v_service_finalisation->>'approval_request_id','') is not null",
+    after: `    if v_worker_only_approval then
+      if nullif(v_service_finalisation->>'approval_request_id','') is not null
+         or nullif(v_finalisation_identity->>'approval_request_id','') is not null
+         or v_finalisation_identity->'approval_request_generation' is distinct from 'null'::jsonb
+         or v_finalisation_identity->>'approval_method' is distinct from 'ELECTRONIC'
+         or v_finalisation_identity->>'review_manifest_sha256_hex' is distinct from encode(v_workflow.review_manifest_sha256,'hex')
+         or v_finalisation_identity->>'candidate_signature_sha256_hex' is distinct from encode(v_workflow.candidate_signature_sha256,'hex')
+         or v_finalisation_identity->>'policy_snapshot_sha256_hex' is distinct from encode(v_workflow.policy_snapshot_sha256,'hex') then
+        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000',
+          detail=jsonb_build_object('stage','WORKER_ONLY_IDENTITY')::text;
+      end if;
+    elsif v_workflow.route='PAPER' then
+      if nullif(v_service_finalisation->>'approval_request_id','') is not null` },
+  { purpose: 'The original manager-approved request lookup is retained for every other electronic workflow',
+    before: `    select * into v_approved_request
+    from public.candidate_approval_requests a
+      where a.workflow_id=v_workflow.id and a.workflow_generation=v_workflow.generation
+        and a.state='APPROVED' and a.review_manifest_sha256=v_workflow.review_manifest_sha256
+    for update;
+    if not found then raise exception 'FINAL_SIGNED_DOCUMENT_NOT_READY' using errcode='55000'; end if;`,
+    after: `    if not v_worker_only_approval then
+      select * into v_approved_request
+      from public.candidate_approval_requests a
+        where a.workflow_id=v_workflow.id and a.workflow_generation=v_workflow.generation
+          and a.state='APPROVED' and a.review_manifest_sha256=v_workflow.review_manifest_sha256
+      for update;
+      if not found then raise exception 'FINAL_SIGNED_DOCUMENT_NOT_READY' using errcode='55000'; end if;
+    end if;` },
+  { purpose: 'The Candidate signature remains mandatory; manager evidence is skipped only for the exact fixed branch',
+    before: `    select * into v_manager_signature from public.candidate_submission_components c
+    where c.id=v_workflow.manager_signature_component_id and c.workflow_id=v_workflow.id
+      and c.document_role='MANAGER_SIGNATURE' and c.state='IMMUTABLE'
+      and c.approval_request_id=v_approved_request.id for update;
+    if (v_workflow.workflow_kind<>'CONTRACT_EXPENSE' and (
+          v_candidate_signature.id is null
+          or v_candidate_signature.source_content_sha256 is distinct from v_workflow.candidate_signature_sha256))
+       or v_manager_signature.id is null
+       or v_manager_signature.source_content_sha256 is distinct from v_workflow.manager_signature_sha256
+       or v_workflow.manager_approved_at_utc is null then`,
+    after: `    if not v_worker_only_approval then
+      select * into v_manager_signature from public.candidate_submission_components c
+      where c.id=v_workflow.manager_signature_component_id and c.workflow_id=v_workflow.id
+        and c.document_role='MANAGER_SIGNATURE' and c.state='IMMUTABLE'
+        and c.approval_request_id=v_approved_request.id for update;
+    end if;
+    if (v_workflow.workflow_kind<>'CONTRACT_EXPENSE' and (
+          v_candidate_signature.id is null
+          or v_candidate_signature.source_content_sha256 is distinct from v_workflow.candidate_signature_sha256))
+       or (not v_worker_only_approval and (v_manager_signature.id is null
+         or v_manager_signature.source_content_sha256 is distinct from v_workflow.manager_signature_sha256
+         or v_workflow.manager_approved_at_utc is null)) then` },
+  { purpose: 'The official worker-only page is the actual immutable final artifact and cannot carry manager approval fields',
+    before: '    v_render_input:=private._candidate_render_input_v1(v_workflow.id,v_workflow.generation);',
+    after: `    if v_worker_only_approval and (
+      v_hours_component.final_signed_renderer_receipt_json->>'form_variant' is distinct from 'ELECTRONIC_WORKER_SIGNED'
+      or v_hours_component.final_signed_renderer_receipt_json->>'candidate_signature_sha256'
+        is distinct from encode(v_candidate_signature.source_content_sha256,'hex')
+      or v_hours_component.final_signed_renderer_receipt_json->'candidate_signature_embedded' is distinct from 'true'::jsonb
+      or v_hours_component.final_signed_renderer_receipt_json->'manager_signature_embedded' is distinct from 'false'::jsonb
+      or v_hours_component.final_signed_renderer_receipt_json->'manager_approval_date_embedded' is distinct from 'false'::jsonb
+      or v_workflow.manager_signature_component_id is not null or v_workflow.manager_signature_sha256 is not null
+      or v_workflow.manager_name is not null or v_workflow.manager_position is not null
+      or v_workflow.manager_approved_at_utc is not null
+      or exists(select 1 from public.candidate_approval_requests approval where approval.workflow_id=v_workflow.id
+        and approval.workflow_generation=v_workflow.generation and approval.state in ('PENDING','APPROVED'))
+    ) then raise exception 'CANDIDATE_WORKER_ONLY_DOCUMENT_INVALID' using errcode='55000';end if;
+    v_render_input:=private._candidate_render_input_v1(v_workflow.id,v_workflow.generation);` },
+  { purpose: 'The current effective fixed policy remains required before native financial admission',
+    before: '  v_workflow.issue_codes:=private._candidate_finalisation_issue_codes_v1(',
+    after: `  if v_worker_only_approval then
+    if v_current_policy#>'{manager_approval_policy,approval}' is distinct from '"NOT_REQUIRED"'::jsonb then
+      raise exception 'CANDIDATE_POLICY_CHANGED' using errcode='40001';end if;
+  end if;
+  v_workflow.issue_codes:=private._candidate_finalisation_issue_codes_v1(` },
+  { purpose: 'The established finaliser context precedes the genuine HOURS-only final-state assertion and unchanged financial owner',
+    before: `      perform set_config('cloudtms.candidate_electronic_finalise',v_workflow.id::text||':'||v_workflow.generation::text,true);
+      v_hours_result:=public.contract_week_manual_upsert_atomic(`,
+    after: `      perform set_config('cloudtms.candidate_electronic_finalise',v_workflow.id::text||':'||v_workflow.generation::text,true);
+      if v_worker_only_approval then
+        v_worker_only_final_state:=private._candidate_weekly_final_state_guard_v1(
+          v_workflow.contract_week_id,v_workflow.target_timesheet_id,
+          v_hours_input->'timesheet_create_json',coalesce(v_hours_input->'timesheet_patch_json','{}'::jsonb),
+          v_hours_input->'canonical_tsfin_snapshot');
+        if v_worker_only_final_state->>'expected_line_type' is distinct from 'HOURS'
+           or v_worker_only_final_state->>'record_role'='IMPORT_HOURS'
+           or coalesce((v_worker_only_final_state->>'expense_value')::numeric,-1)<>0 then
+          raise exception 'CANDIDATE_FIXED_APPROVAL_HOURS_SCOPE_INVALID' using errcode='55000';end if;
+      end if;
+      v_hours_result:=public.contract_week_manual_upsert_atomic(` },
+  { purpose: 'The owner retains the required explicit Office authorisation click for this preset',
+    before: "  v_auto_requested:=coalesce((v_current_policy->>'candidate_electronic_auto_authorise')::boolean,false)\n    and v_workflow.route<>'PAPER';",
+    after: "  v_auto_requested:=coalesce((v_current_policy->>'candidate_electronic_auto_authorise')::boolean,false)\n    and v_workflow.route<>'PAPER' and not v_worker_only_approval;" }
+]);
+function within(sourceText, start, next, changes) {
+  const at = sourceText.indexOf(start), end = sourceText.indexOf(next, at + start.length);
+  assert.ok(at >= 0 && end > at, start);
+  const before = sourceText.slice(at, end);
+  let after = before;
+  for (const [from, to] of changes) {
+    assert.equal(after.split(from).length, 2, start + ': ' + from.slice(0, 100));
+    after = after.replace(from, () => to);
+  }
+  return { purpose: 'Actual complete ' + start.split('(')[0] + ' retains all ordinary behavior', before, after };
+}
+const backend = input('broker/src/candidate-app-backend.js', 'actual_candidate_backend.js');
+const backendChanges = [
+  within(backend, 'async function buildOfficialCandidateModel(', '\nfunction expenseClaim(', [
+    ["  const managerSignature = phase === 'FINAL'", "  const workerOnly = contract.worker_only_approval === true\n    && upper(contract.form_variant) === 'ELECTRONIC_WORKER_SIGNED'\n    && workflow.scope === 'WEEKLY' && workflow.workflow_kind === 'CONTRACT_HOURS'\n    && workflow.route === 'ELECTRONIC'\n    && parseJson(workflow.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';\n  const managerSignature = phase === 'FINAL' && !workerOnly"],
+    ["    : (phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW');", "    : workerOnly ? 'ELECTRONIC_WORKER_SIGNED'\n      : (phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW');"],
+    ["    wording: isObject(frozenPresentation.wording) ? frozenPresentation.wording : {", "    wording: workerOnly ? {\n      ...(isObject(frozenPresentation.wording) ? frozenPresentation.wording : {}),\n      header: { lines: ['This is the work recorded and signed by the worker.'] },\n      temporary_worker_declaration: frozenPresentation.wording?.temporary_worker_declaration || {\n        title: 'Temporary Worker Declaration',\n        lines: ['I declare that the hours and units recorded are complete and accurate.']\n      },\n      client_declaration: { title: '', lines: [] }\n    } : isObject(frozenPresentation.wording) ? frozenPresentation.wording : {"],
+    ["    authorisation: { authorised: phase === 'FINAL', authorised_at_utc: phase === 'FINAL' ? workflow.manager_approved_at_utc : null },", "    authorisation: { authorised: phase === 'FINAL' && !workerOnly, authorised_at_utc: phase === 'FINAL' && !workerOnly ? workflow.manager_approved_at_utc : null },"],
+    ["      authoriser: phase === 'FINAL'", "      authoriser: phase === 'FINAL' && !workerOnly"]
+  ]),
+  within(backend, 'async function renderAndRegister(', '\nasync function resolveWorkflowSession(', [
+    ["    const digest = durable.sha256;\n    const receipt = {", "    const digest = durable.sha256;\n    const workerOnly = contract.worker_only_approval === true\n      && upper(contract.form_variant) === 'ELECTRONIC_WORKER_SIGNED';\n    const receipt = {"],
+    ["        phase === 'FINAL' && upper(contract.component_kind) !== 'EXPENSE_SUMMARY',", "        phase === 'FINAL' && !workerOnly && upper(contract.component_kind) !== 'EXPENSE_SUMMARY',"],
+    ["        phase === 'FINAL' && upper(contract.component_kind) !== 'EXPENSE_SUMMARY'\n    };", "        phase === 'FINAL' && !workerOnly && upper(contract.component_kind) !== 'EXPENSE_SUMMARY'\n    };"],
+    ["    const action = phase === 'FINAL' ? 'REGISTER_FINAL_SIGNED_DOCUMENT' : 'REGISTER_REVIEW_COMPONENT';", "    if (workerOnly) {\n      receipt.candidate_signature_sha256 = text(state.workflow.candidate_signature_sha256).replace(/^\\\\x/i, '').toLowerCase();\n    }\n    const action = phase === 'FINAL' ? 'REGISTER_FINAL_SIGNED_DOCUMENT' : 'REGISTER_REVIEW_COMPONENT';"],
+    ["    results.push(result);\n  }\n  return results;", "    results.push(result);\n    if (workerOnly && result?.worker_only_approval === true && result?.state === 'READY_TO_FINALISE') {\n      const completion = await withManagerFinalisationLease(env, workflowId, generation, () =>\n        finaliseWorkflow(env, deps, workflowId, generation,\n          `candidate-worker-only-finalise:${workflowId}:${generation}`, officeActorId));\n      results.push(completion);\n    }\n  }\n  return results;"]
+  ]),
+  within(backend, 'async function finaliseWorkflow(', '\nexport async function recoverPendingCandidateManagerFinalisations(', [
+    ["  const approved = upper(workflow.route) === 'PAPER' ? null : await restOne(env, 'candidate_approval_requests',", "  const workerOnly = workflow.scope === 'WEEKLY' && workflow.workflow_kind === 'CONTRACT_HOURS'\n    && workflow.route === 'ELECTRONIC'\n    && parseJson(workflow.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';\n  const approved = upper(workflow.route) === 'PAPER' || workerOnly ? null : await restOne(env, 'candidate_approval_requests',"],
+    ["    approval_method: approved?.method || 'PAPER',\n    approval_request_id:", "    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',\n    approval_request_id:"],
+    ["    review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\\\x/i, '').toLowerCase() || null,", "    review_manifest_sha256_hex: text(workerOnly ? workflow.review_manifest_sha256 : approved?.review_manifest_sha256).replace(/^\\\\x/i, '').toLowerCase() || null,"],
+    ["  const replayServiceFinalisation = {", "  if (workerOnly) {\n    finalisationIdentity.candidate_signature_sha256_hex = text(workflow.candidate_signature_sha256).replace(/^\\\\x/i, '').toLowerCase();\n    finalisationIdentity.policy_snapshot_sha256_hex = text(workflow.policy_snapshot_sha256).replace(/^\\\\x/i, '').toLowerCase();\n  }\n  const replayServiceFinalisation = {"],
+    ["    approval_method: approved?.method || 'PAPER',\n    review_manifest_sha256_hex:", "    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',\n    review_manifest_sha256_hex:"],
+    ["  if (upper(workflow.route) !== 'PAPER' && !approved) {", "  if (upper(workflow.route) !== 'PAPER' && !workerOnly && !approved) {"],
+    ["    approval_method: approved?.method || 'PAPER',\n    workflow_generation:", "    approval_method: workerOnly ? 'ELECTRONIC' : approved?.method || 'PAPER',\n    workflow_generation:"],
+    ["    review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\\\x/i, '').toLowerCase(),", "    review_manifest_sha256_hex: finalisationIdentity.review_manifest_sha256_hex || '',"]
+  ]),
+  within(backend, 'export async function recoverPendingCandidateManagerFinalisations(', '\nexport async function resumePendingCandidateReviewRenders(', [
+    ["    + '&route=in.(PHONE,EMAIL)'", "    + '&route=in.(PHONE,EMAIL,ELECTRONIC)'"],
+    ["          const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {", "          const current = await workflowRow(env, row.id);\n          const workerOnly = current.scope === 'WEEKLY' && current.workflow_kind === 'CONTRACT_HOURS'\n            && current.route === 'ELECTRONIC' && current.state === 'READY_TO_FINALISE'\n            && Number(current.generation) === Number(row.generation)\n            && parseJson(current.policy_snapshot_json, {})?.manager_approval_policy?.approval === 'NOT_REQUIRED';\n          if (workerOnly) return finaliseWorkflow(env, deps, row.id, Number(row.generation),\n            `candidate-system-worker-only-recovery:${row.id}:${row.generation}`);\n          const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {"]
+  ])
+];
+owner('111_complete_worker_only_candidate_backend.js', backend, backendChanges);
+const presentation = input('broker/src/invoice-presentation-contract.js', 'actual_presentation_contract.js');
+owner('112_complete_worker_only_presentation_contract.js', presentation, [
+  { purpose: 'Official worker-only model has an explicit literal form variant',
+    before: "    'ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW',",
+    after: "    'ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW','ELECTRONIC_WORKER_SIGNED'," },
+  { purpose: 'The worker-only model requires the real Candidate signature and prohibits manager assets/authorisation',
+    before: "  } else if (variant === 'ELECTRONIC_MANAGER_REVIEW'\n      || variant === 'ELECTRONIC_CANDIDATE_INFORMATIONAL') {",
+    after: "  } else if (variant === 'ELECTRONIC_MANAGER_REVIEW'\n      || variant === 'ELECTRONIC_CANDIDATE_INFORMATIONAL' || variant === 'ELECTRONIC_WORKER_SIGNED') {\n    if (variant === 'ELECTRONIC_WORKER_SIGNED' && model.sheet_scope !== 'WEEKLY') {\n      fail('TIMESHEET_FORM_VARIANT_INVALID', variant);\n    }" }
+]);
+const pdf = input('broker/src/timesheet-official-pdf.js', 'actual_official_timesheet_pdf.js');
+const pdfChanges = [
+  within(pdf, 'function estimateLayoutHeight(', '\nfunction measureLayoutHeightWithFonts(', [
+    ["  const clientDeclaration = normaliseLines(wording.client_declaration);", "  const clientDeclaration = model.form_variant === 'ELECTRONIC_WORKER_SIGNED'\n    ? [] : normaliseLines(wording.client_declaration);"]
+  ]),
+  within(pdf, 'function measureLayoutHeightWithFonts(', '\nfunction preflightLayoutHorizontalCapacity(', [
+    ["  const declarationWidth = (width - declarationGap) / 2;", "  const workerOnly = model.form_variant === 'ELECTRONIC_WORKER_SIGNED';\n  const declarationWidth = workerOnly ? width : (width - declarationGap) / 2;"],
+    ["    ].map(block => {", "    ].filter((_block, index) => !workerOnly || index === 0).map(block => {"]
+  ]),
+  within(pdf, 'function preflightLayoutHorizontalCapacity(', '\nexport async function selectOfficialTimesheetOnePageLayout(', [
+    ["  const declarationWidth = (width - 5) / 2;", "  const workerOnly = model.form_variant === 'ELECTRONIC_WORKER_SIGNED';\n  const declarationWidth = workerOnly ? width : (width - 5) / 2;"],
+    ["  ]) {\n    const titleFont = block?.title_bold", "  ].filter((_block, index) => !workerOnly || index === 0)) {\n    const titleFont = block?.title_bold"]
+  ]),
+  { purpose: 'Worker-only official rendering never loads an authoriser image',
+    before: "  const authoriserSignature = await embedImage(pdf, assets.authoriser_signature || model?.signatures?.authoriser);",
+    after: "  const workerOnly = model.form_variant === 'ELECTRONIC_WORKER_SIGNED';\n  const authoriserSignature = workerOnly ? null\n    : await embedImage(pdf, assets.authoriser_signature || model?.signatures?.authoriser);" },
+  { purpose: 'The actual official page contains a full-width worker declaration with no manager block',
+    before: "  const declarationWidth = (width - declarationGap) / 2;\n  const declarationBoxes = [",
+    after: "  const declarationWidth = workerOnly ? width : (width - declarationGap) / 2;\n  const declarationBoxes = [" },
+  { purpose: 'Only the actual Candidate declaration is drawn for the worker-only variant',
+    before: "  ].map(box => {\n    const wordingStyle = configuredWordingStyle(box.wording, layout, minimumFontSize);",
+    after: "  ].filter(box => !workerOnly || box.signatureRole === 'CANDIDATE').map(box => {\n    const wordingStyle = configuredWordingStyle(box.wording, layout, minimumFontSize);" },
+  { purpose: 'The real Candidate signature is embedded on the final worker-only page',
+    before: "      || (['ELECTRONIC_MANAGER_REVIEW', 'ELECTRONIC_CANDIDATE_INFORMATIONAL']",
+    after: "      || (['ELECTRONIC_MANAGER_REVIEW', 'ELECTRONIC_CANDIDATE_INFORMATIONAL', 'ELECTRONIC_WORKER_SIGNED']" },
+  { purpose: 'Actual worker-only layout receipt records that the manager block was omitted',
+    before: "      one_page_verified: true\n    })",
+    after: "      one_page_verified: true,\n      ...(workerOnly ? { worker_signature_only: true, manager_signature_block_rendered: false } : {})\n    })" }
+];
+owner('113_complete_worker_only_official_timesheet_pdf.js', pdf, pdfChanges);
+input('tests/timesheet_official_pdf.test.js', 'actual_official_pdf_tests.js');
+input('supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql',
+  'actual_candidate_named_security_verifier.sql');
+
+fs.writeFileSync(path.join(here, 'COMPLETE_REVERSES.json'), JSON.stringify({
+  source_only: true, native: false, canonical_mounted: false, independent_review: 'PENDING',
+  inputs, owners, new_signatures: [], new_tables: [], new_columns: [],
+  engineering_complete: false, required_unbuilt: ['Named security and source/role/native acceptance',
+    'Complete current owner/capture/claim/trigger/module composition']
+}, null, 2) + '\n');
+console.log(JSON.stringify({ source_only: true, complete_owners: owners.length,
+  exact_hunks: owners.reduce((sum, value) => sum + value.hunks.length, 0), native: false }));

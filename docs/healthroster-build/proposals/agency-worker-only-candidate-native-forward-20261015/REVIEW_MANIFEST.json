@@ -1,0 +1,153 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "files": [
+    {
+      "path": "114_worker_only_candidate_security_verification.sql",
+      "bytes": 2206,
+      "sha256": "33d57d08e09180d41c399742de49c9217fad9edcb9860c8d1ea85dc983f04a8e"
+    },
+    {
+      "path": "before/108_complete_worker_only_candidate_transition.sqlinc",
+      "bytes": 244989,
+      "sha256": "a3f71e8611d9bf392dd0b96e78a5ad5350da45b84d292931a19a7aa3b556d49f"
+    },
+    {
+      "path": "before/109_complete_worker_only_component_render_contract.sqlinc",
+      "bytes": 3629,
+      "sha256": "61a0e3d48fc312f97b8d34616cd60f2c79910c67d8d9f4af167f451552ec8401"
+    },
+    {
+      "path": "before/110_complete_worker_only_candidate_finaliser.sqlinc",
+      "bytes": 55445,
+      "sha256": "391dc6f1f0f30f32f93f3ac935f9f53b132855716a2eedd800c42f862288593c"
+    },
+    {
+      "path": "before/111_complete_worker_only_candidate_backend.js",
+      "bytes": 601690,
+      "sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587"
+    },
+    {
+      "path": "before/112_complete_worker_only_presentation_contract.js",
+      "bytes": 41599,
+      "sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1"
+    },
+    {
+      "path": "before/113_complete_worker_only_official_timesheet_pdf.js",
+      "bytes": 52454,
+      "sha256": "7756bede5744641f729f0a44dd528f13cd0ed15de28fcd754b8dce47e3bfa2ed"
+    },
+    {
+      "path": "COMPLETE_REVERSES.json",
+      "bytes": 90328,
+      "sha256": "30508738274b2c4caed4e499db59e78cc96f534a6d4c854b72ece627deec523e"
+    },
+    {
+      "path": "forward/108_complete_worker_only_candidate_transition.sqlinc",
+      "bytes": 247798,
+      "sha256": "f5f3c2a1c46820900783cfc8e09eb592193a5541acc24ef146793ff48214bb66"
+    },
+    {
+      "path": "forward/109_complete_worker_only_component_render_contract.sqlinc",
+      "bytes": 4215,
+      "sha256": "509c9b8e4a1ff728c9b7ffd8985f0fb2d905f7eb8623510a53938e7d05a1fd41"
+    },
+    {
+      "path": "forward/110_complete_worker_only_candidate_finaliser.sqlinc",
+      "bytes": 59930,
+      "sha256": "e3447132f8128926699f31c01751270826554ae8f09ac11637af71ba44ca39ee"
+    },
+    {
+      "path": "forward/111_complete_worker_only_candidate_backend.js",
+      "bytes": 604625,
+      "sha256": "eeb6179fa11219c1cb27d006ba4155c95595ac67cb1eb50df6b28550ff4414b4"
+    },
+    {
+      "path": "forward/112_complete_worker_only_presentation_contract.js",
+      "bytes": 41813,
+      "sha256": "18fdb8421f95485d264941bde5b678932a7b2a94f62dbcd490e5fedebadb1fd3"
+    },
+    {
+      "path": "forward/113_complete_worker_only_official_timesheet_pdf.js",
+      "bytes": 53121,
+      "sha256": "52e4aa425727ccc6153037ffefa0017139faab284538d7a67e4981b7a199735b"
+    },
+    {
+      "path": "freeze-worker-only-consumers.mjs.txt",
+      "bytes": 8563,
+      "sha256": "f066ee67528f991e6d9b9a5a24011e0fc9d91f4da19043626c7081a1ae9dcf0f"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 4147,
+      "sha256": "d08a9f662c664fd7704bf75df6421d0546b80eda059457867a188ed5e5083424"
+    },
+    {
+      "path": "prepare-worker-only-consumers.mjs.txt",
+      "bytes": 32305,
+      "sha256": "08608404101a0980f24e1c8ef471d4f5c143fc1667713cf9d7ac9c18530221df"
+    },
+    {
+      "path": "reference/actual_candidate_backend.js",
+      "bytes": 601690,
+      "sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587"
+    },
+    {
+      "path": "reference/actual_candidate_finaliser.sqlinc",
+      "bytes": 55445,
+      "sha256": "391dc6f1f0f30f32f93f3ac935f9f53b132855716a2eedd800c42f862288593c"
+    },
+    {
+      "path": "reference/actual_candidate_named_security_verifier.sql",
+      "bytes": 9720,
+      "sha256": "e4f027dc5656d30844312e8b1e99d4ef3dcf37676ddc73faad58318755a64be1"
+    },
+    {
+      "path": "reference/actual_candidate_transition.sqlinc",
+      "bytes": 244989,
+      "sha256": "a3f71e8611d9bf392dd0b96e78a5ad5350da45b84d292931a19a7aa3b556d49f"
+    },
+    {
+      "path": "reference/actual_component_render_contract.sqlinc",
+      "bytes": 3629,
+      "sha256": "61a0e3d48fc312f97b8d34616cd60f2c79910c67d8d9f4af167f451552ec8401"
+    },
+    {
+      "path": "reference/actual_official_pdf_tests.js",
+      "bytes": 19688,
+      "sha256": "a21942f696ea9314ad9d87935480cb1b6295c2a3077304374a0c6e734857f127"
+    },
+    {
+      "path": "reference/actual_official_timesheet_pdf.js",
+      "bytes": 52454,
+      "sha256": "7756bede5744641f729f0a44dd528f13cd0ed15de28fcd754b8dce47e3bfa2ed"
+    },
+    {
+      "path": "reference/actual_presentation_contract.js",
+      "bytes": 41599,
+      "sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1"
+    },
+    {
+      "path": "reference/pinned-source-parser.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 1323,
+      "sha256": "cdb2307c91117f0d0a66fe19ee414e0bc79aeae002f4d086e93614d468bcd12f"
+    },
+    {
+      "path": "test-dependencies.mjs",
+      "bytes": 670,
+      "sha256": "6548a805fcdc9c771959c8c4eade58bfd3e4ce71b3196de7790f395d4e0f8353"
+    },
+    {
+      "path": "worker-only.test.mjs",
+      "bytes": 13980,
+      "sha256": "7a402deaf58923dbb62304b9197bc90f2ff2f26bbc5bdc66f0bd99237535594d"
+    }
+  ]
+}

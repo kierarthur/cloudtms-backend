@@ -1,0 +1,45 @@
+{
+  "source_only": true,
+  "native": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "tests": 26,
+  "pass": 26,
+  "fail": 0,
+  "source_cases": 18,
+  "actual_javascript_unit_cases_with_mocked_dependencies": 6,
+  "actual_pdf_fixture_render_cases": 1,
+  "actual_model_negative_case": 1,
+  "javascript_syntax_checks": 3,
+  "complete_owners": 6,
+  "exact_hunks": 36,
+  "input_receipts": 8,
+  "pdf_fixture_qa": {
+    "output_files": [
+      {
+        "name": "worker-only.pdf",
+        "sha256": "99fda562ae685fdb93f1e1ec9c98c7efdef0faa1c13aab3922c23bbb0c650703"
+      },
+      {
+        "name": "manager-review.pdf",
+        "sha256": "c40899c452736cc94a8c49a7e5bc3f5205c9d8362a18e7591440fb00d2aab623"
+      }
+    ],
+    "worker_pages": 1,
+    "ordinary_pages": 1,
+    "worker_signature_labels": 1,
+    "ordinary_signature_labels": 2,
+    "worker_declaration_present": true,
+    "worker_manager_declaration_absent": true,
+    "ordinary_manager_declaration_retained": true,
+    "visually_inspected_png": true,
+    "fixture_candidate_image_only": true,
+    "actual_candidate_or_installed_document_gate": false
+  },
+  "sql_compilation": false,
+  "named_security_execution": false,
+  "off_native_invocation": false,
+  "installed_worker_or_api_test": false,
+  "database_calls": 0,
+  "external_actions": 0
+}
