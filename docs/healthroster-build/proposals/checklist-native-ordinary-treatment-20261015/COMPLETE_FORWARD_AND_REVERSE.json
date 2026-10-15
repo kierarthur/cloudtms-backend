@@ -1,0 +1,63 @@
+{
+  "source_only": true,
+  "native": false,
+  "records": [
+    {
+      "source_commit": "696bf40c1d1a4617cb0ae5a9f32963c3d45509e3",
+      "source_path": "docs/healthroster-build/proposals/checklist-native-own-calendar-20261015/forward/wp_u3_ordinary_next_hold.sqlinc",
+      "input": "input/wp_u3_ordinary_next_hold.sqlinc",
+      "output": "forward/wp_u3_ordinary_next_hold.sqlinc",
+      "before_sha256": "6a3d30a5d49e54767964f5761ad7c634e00468ae8f653ded0e9744af72674cac",
+      "after_sha256": "94c754acd3837df530d181bcfcb74d47c2980571b4c727be31a2bcf7b7850fa5",
+      "whole_reverse_equal": true,
+      "hunks": [
+        {
+          "label": "genuine treatment authority locals only",
+          "before": "  native_daily boolean:=false;v_identity_candidate uuid;v_identity_client uuid;daily_date date;daily_evidence jsonb;v_native_period jsonb;",
+          "after": "  native_daily boolean:=false;v_identity_candidate uuid;v_identity_client uuid;daily_date date;daily_evidence jsonb;v_native_period jsonb;\n  approval_revision_id uuid;approval_revision_id_after uuid;approval_revision jsonb;native_publication jsonb;"
+        },
+        {
+          "label": "exact native original approval and sealed clone publication proof, before any money",
+          "before": "  v_native_period:=private.bpay_next_work_period_proof_v1(work.id,revision.id,native_today);",
+          "after": "  begin\n    approval_revision_id:=private.bpay_next_treatment_approval_revision_v1(revision.id);\n  exception when sqlstate '23514' then\n    return jsonb_build_object('known',false,'reason','NATIVE_TREATMENT_APPROVAL_UNAVAILABLE',\n      'native_facts',facts||jsonb_build_object('native_qualification_sqlstate',sqlstate));end;\n  select to_jsonb(a) into approval_revision from private.bpay_next_work_revision a where a.id=approval_revision_id and a.work_id=work.id;\n  select to_jsonb(p) into native_publication from private.bpay_next_publication p where p.work_id=work.id and p.revision_id=revision.id;\n  facts:=facts||jsonb_build_object('native_approval_revision_id',approval_revision_id,'native_approval_revision',approval_revision,\n    'native_treatment_publication',native_publication);\n  v_native_period:=private.bpay_next_work_period_proof_v1(work.id,revision.id,native_today);"
+        },
+        {
+          "label": "native proof replaces blanket rejection of legitimate treatment clones only",
+          "before": "    or revision.payment_treatment_approval_revision_id is not null or revision.source_head_id is not null or revision.source_event_id is not null",
+          "after": "    or revision.source_head_id is not null or revision.source_event_id is not null"
+        },
+        {
+          "label": "same actual native treatment proof and original approval/publication share the final frame",
+          "before": "  if v_native_period is distinct from private.bpay_next_work_period_proof_v1(work.id,revision.id,native_today)",
+          "after": "  begin\n    approval_revision_id_after:=private.bpay_next_treatment_approval_revision_v1(revision.id);\n  exception when sqlstate '23514' then\n    raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';end;\n  if approval_revision_id is distinct from approval_revision_id_after\n    or approval_revision is distinct from (select to_jsonb(a) from private.bpay_next_work_revision a where a.id=approval_revision_id and a.work_id=work.id)\n    or native_publication is distinct from (select to_jsonb(p) from private.bpay_next_publication p where p.work_id=work.id and p.revision_id=revision.id)\n    or v_native_period is distinct from private.bpay_next_work_period_proof_v1(work.id,revision.id,native_today)"
+        }
+      ]
+    }
+  ],
+  "native_inputs": [
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "source_file_sha256": "56d91e37ede376018c72245ee02fd1d30237f987c656754b2fd0ec668582ddc1",
+      "id": "private.bpay_next_treatment_approval_revision_v1(uuid)",
+      "definition_sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7",
+      "saved_file": "input/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc"
+    },
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "source_file_sha256": "56d91e37ede376018c72245ee02fd1d30237f987c656754b2fd0ec668582ddc1",
+      "id": "private.bpay_next_stage_treatment_revision_v1(uuid,uuid)",
+      "definition_sha256": "e74016205091f4d9e437cfae1e916c3369c43719d51e870fb968629130bccb94",
+      "saved_file": "input/private.bpay_next_stage_treatment_revision_v1_uuid_uuid_.sqlinc"
+    },
+    {
+      "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "source_file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "source_file_sha256": "56d91e37ede376018c72245ee02fd1d30237f987c656754b2fd0ec668582ddc1",
+      "id": "private.bpay_next_treatment_payload_assert_v1(uuid)",
+      "definition_sha256": "2a3c04531f229e7963e0f226716f577f97d9ca056c818fbee8898a7319d62fd2",
+      "saved_file": "input/private.bpay_next_treatment_payload_assert_v1_uuid_.sqlinc"
+    }
+  ]
+}

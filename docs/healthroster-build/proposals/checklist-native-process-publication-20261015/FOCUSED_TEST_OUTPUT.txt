@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: complete process owner preserves all immutable task run receipt checks and reverses exactly
+ok 1 - complete process owner preserves all immutable task run receipt checks and reverses exactly
+  ---
+  duration_ms: 67.5487
+  type: 'test'
+  ...
+# Subtest: publication proof has one private read-only ABI and cannot emit paid cash amounts invoice readiness or service grants
+ok 2 - publication proof has one private read-only ABI and cannot emit paid cash amounts invoice readiness or service grants
+  ---
+  duration_ms: 3.7813
+  type: 'test'
+  ...
+# Subtest: standalone proof rejects wrong receipt revision source cycle manifest policy Client and unaccepted outcome before current publication
+ok 3 - standalone proof rejects wrong receipt revision source cycle manifest policy Client and unaccepted outcome before current publication
+  ---
+  duration_ms: 0.4867
+  type: 'test'
+  ...
+# Subtest: PROPOSED alone cannot prove processing; exact current native HEAD publication is required at the same original revision
+ok 4 - PROPOSED alone cannot prove processing; exact current native HEAD publication is required at the same original revision
+  ---
+  duration_ms: 0.4138
+  type: 'test'
+  ...
+# Subtest: the actual immutable Report reference is pinned and its NONE-to-retained-B mapping is deliberately not imported
+ok 5 - the actual immutable Report reference is pinned and its NONE-to-retained-B mapping is deliberately not imported
+  ---
+  duration_ms: 43.2801
+  type: 'test'
+  ...
+# Subtest: a whole-task WAIT proof enumerates all actual final snapshot event/root lineage members and never proves an empty set
+ok 6 - a whole-task WAIT proof enumerates all actual final snapshot event/root lineage members and never proves an empty set
+  ---
+  duration_ms: 0.5181
+  type: 'test'
+  ...
+# Subtest: old sibling WAIT cannot certify current generation and final event publication
+ok 7 - old sibling WAIT cannot certify current generation and final event publication
+  ---
+  duration_ms: 0.5109
+  type: 'test'
+  ...
+# Subtest: SOURCE_LOCAL requires native current inventory and exact own publication or authorised snapshot origin
+ok 8 - SOURCE_LOCAL requires native current inventory and exact own publication or authorised snapshot origin
+  ---
+  duration_ms: 0.4043
+  type: 'test'
+  ...
+# Subtest: RETAINED_C1 and DIRECT_NEXT retain their unchanged native accepted receipt readers without settlement inference
+ok 9 - RETAINED_C1 and DIRECT_NEXT retain their unchanged native accepted receipt readers without settlement inference
+  ---
+  duration_ms: 0.4735
+  type: 'test'
+  ...
+# Subtest: existing process scope keeps financial and invoice history separate and adds all proof facts before its revision hash
+ok 10 - existing process scope keeps financial and invoice history separate and adds all proof facts before its revision hash
+  ---
+  duration_ms: 0.5043
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 246.9637

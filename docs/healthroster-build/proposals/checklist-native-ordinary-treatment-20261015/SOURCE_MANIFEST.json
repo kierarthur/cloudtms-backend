@@ -1,0 +1,336 @@
+{
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "predecessor": "696bf40c1d1a4617cb0ae5a9f32963c3d45509e3",
+  "predecessor_raw_saved_pins_unchanged": 93,
+  "whole_reverse_hunks": 4,
+  "read_graph_routines": 47,
+  "source_read_graph_lock_sites": 5,
+  "conditional_TRUE_native_locks": 5,
+  "literal_read_writers": 0,
+  "compiled_effective_body_coverage": false,
+  "compiled_purity": false,
+  "financial_acceptance": false,
+  "whole_process_acceptance": false,
+  "lexical": [
+    {
+      "file": "forward/wp_u3_ordinary_next_hold.sqlinc",
+      "statements": 3
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/build-read-graphs.mjs",
+      "bytes": 4029,
+      "sha256": "f3cac6ddd97e5b2df97bdbd6976d07795fc97a9fec564b7543e5c7a810b6b98b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/check-current-sources.mjs",
+      "bytes": 6441,
+      "sha256": "6fef103f1c904e9c423b6dcbeac0b86c3654511de450e4ce2d219b0be2603bbd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/COMPLETE_FORWARD_AND_REVERSE.json",
+      "bytes": 5378,
+      "sha256": "af74f15e132d236c751f44d7c3f3ce764c211283603a6b804c502ff7f96a5fb2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/FOCUSED_COMBINED_TEST_OUTPUT.txt",
+      "bytes": 4683,
+      "sha256": "df89c6b415220a7adfd4f5f61547c4223a235a113faf461ac10d9ba60f55869f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/HANDOFF.md",
+      "bytes": 2319,
+      "sha256": "31d9733c58867a9ae37d1ff6fb11d992be4e3524b57154791ec6b9572404ff5c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/NATIVE_READ_GRAPH.json",
+      "bytes": 37972,
+      "sha256": "e2ec9fc935aa33216ece98e03692df48e6a42dbef2eb526d51b621f5faacedc5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/build-source.mjs",
+      "bytes": 5169,
+      "sha256": "6b856ab7ad40469550860e0593aaaac190b463909141c0c1f286f36415217854"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/forward/wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 28251,
+      "sha256": "94c754acd3837df530d181bcfcb74d47c2980571b4c727be31a2bcf7b7850fa5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/input/private.bpay_next_stage_treatment_revision_v1_uuid_uuid_.sqlinc",
+      "bytes": 4132,
+      "sha256": "e74016205091f4d9e437cfae1e916c3369c43719d51e870fb968629130bccb94"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/input/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "bytes": 2406,
+      "sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/input/private.bpay_next_treatment_payload_assert_v1_uuid_.sqlinc",
+      "bytes": 5804,
+      "sha256": "2a3c04531f229e7963e0f226716f577f97d9ca056c818fbee8898a7319d62fd2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/input/wp_u3_ordinary_next_hold.sqlinc",
+      "bytes": 26792,
+      "sha256": "6a3d30a5d49e54767964f5761ad7c634e00468ae8f653ded0e9744af72674cac"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private._candidate_daily_canonical_save_input_v1_uuid_integer_.sqlinc",
+      "bytes": 2303,
+      "sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private._candidate_sha256_jsonb_v1_jsonb_.sqlinc",
+      "bytes": 298,
+      "sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "bytes": 574,
+      "sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_approval_route_v1_uuid_.sqlinc",
+      "bytes": 5777,
+      "sha256": "8dd97a2a7c46ff95530f191346d03bf4f48867076e9556e58b235225668faa48"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_line_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 859,
+      "sha256": "818c2abd303df43114907cafaff5294e1d2dbc03e122a55f12a751d56be16f09"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_segment_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 1071,
+      "sha256": "243d62acde0d820d4724dd7eb3391affa26e607bf4d58b13b287933084ae366c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_snooze_at_cut_v1_uuid_uuid_text_text_bigint_date_.sqlinc",
+      "bytes": 1741,
+      "sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_source_binding_members_v1_uuid_.sqlinc",
+      "bytes": 3498,
+      "sha256": "771eaefe07928ff4a93abb73e8d5073f7bf1f9addda5ddd9b629a786053efa36"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "bytes": 460,
+      "sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "bytes": 2406,
+      "sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_work_period_proof_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 4335,
+      "sha256": "2f244ca84d1551a899d5a9461e9eba6afe5557794c2138101cd6d19a6fea131c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_work_segment_gross_balance_v1_uuid_text_text_.sqlinc",
+      "bytes": 808,
+      "sha256": "96e70b650ed344ef419112ffcdebcf167baedca5ffc035ee79066fe1ad5d6045"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_workbench_accepted_work_v1_uuid_text_text_.sqlinc",
+      "bytes": 3129,
+      "sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.bpay_next_workbench_require_next_v1__.sqlinc",
+      "bytes": 398,
+      "sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_actual_timesheet_submission_v1_uuid_.sqlinc",
+      "bytes": 14074,
+      "sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "bytes": 2456,
+      "sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_checklist_native_bound_snapshot_core_v1_uuid_bigint_boolean_.sqlinc",
+      "bytes": 11408,
+      "sha256": "781219bb45111ecf0afa14fb08b11195b06cbd4f56b45a26b54249492162012d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_checklist_native_initial_bound_assert_core_v1_uuid_boolean_.sqlinc",
+      "bytes": 3325,
+      "sha256": "318887be00ac528a3dd988682c264ddacde15974d112b82aeac12faa754f0226"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_checklist_native_initial_certificate_core_v1_uuid_boolean_.sqlinc",
+      "bytes": 9397,
+      "sha256": "ef5ce9d473fd80c9134d23e7c32305af70f36d0c06618d10868b039615c10af1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_checklist_native_members_core_v1_uuid_uuid_boolean_.sqlinc",
+      "bytes": 8948,
+      "sha256": "520cc261070a9eaa0291ce647adc5dcff9ed5153846b5a8cde3d8dbbfe063444"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_checklist_ordinary_next_hold_money_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 27668,
+      "sha256": "f8143a5dedabf8a244f809b2be49e3d18e4671276c7791f37e1cac0d0363884a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "bytes": 12756,
+      "sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "bytes": 586,
+      "sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5357,
+      "sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "bytes": 1007,
+      "sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "bytes": 4461,
+      "sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "bytes": 15704,
+      "sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3525,
+      "sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "bytes": 1480,
+      "sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "bytes": 5138,
+      "sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "bytes": 285,
+      "sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "bytes": 335,
+      "sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "bytes": 1749,
+      "sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "bytes": 7676,
+      "sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 509,
+      "sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/public._ctms_import_correction_classify_v1_uuid_.sqlinc",
+      "bytes": 3605,
+      "sha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/public._import_review_hash_v1_text_.sqlinc",
+      "bytes": 299,
+      "sha256": "d4f5765fda0fe332115c79994e636aa4232d6cdbf52e5d1f68f396c4b06bc5a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/public._import_review_query_evidence_core_v1_uuid_.sqlinc",
+      "bytes": 6888,
+      "sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/public._import_review_timesheet_protection_core_v1_uuid_.sqlinc",
+      "bytes": 6311,
+      "sha256": "12dd76a6785a4382e9fb47e71c4dffca3152273f52a1e3aebf9895cc3fea0410"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/public._pay_batch_status_is_active_reservation_text_.sqlinc",
+      "bytes": 459,
+      "sha256": "f2dff9d19beebfaea5bf833a575bde09248af72f9f713c3b1bb4e027054e2a82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-treatment-20261015/read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5333,
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "file": "tests/healthroster-checklist-legacy-read-frame.test.mjs",
+      "bytes": 6145,
+      "sha256": "54186a0bcb45b61867ce0b153944e183f6e50ad25c7cc390c65d541441d038d4"
+    },
+    {
+      "file": "tests/healthroster-checklist-ordinary-treatment.test.mjs",
+      "bytes": 5247,
+      "sha256": "05f0efb52864adb626df4a636156bc1220093827a2bbfd0001138d06716682eb"
+    },
+    {
+      "file": "tests/healthroster-checklist-process-publication.test.mjs",
+      "bytes": 7733,
+      "sha256": "2b937f4f241bcb88b93e9fe2995f97c3efc001c4200000bacaafc99f6f0330a1"
+    }
+  ]
+}

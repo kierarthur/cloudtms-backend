@@ -1,0 +1,21 @@
+create or replace function private._weekly_source_settings_assert_request_v1(
+  p_request jsonb,
+  p_allowed_keys text[],
+  p_reason text
+) returns void
+language plpgsql
+immutable
+security invoker
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1
+       from pg_catalog.jsonb_object_keys(p_request) supplied(key)
+       where not (supplied.key=any(p_allowed_keys))
+     ) then
+    raise exception '%',p_reason using errcode='22023';
+  end if;
+end;
+$function$;

@@ -1,0 +1,13 @@
+create or replace function private.weekly_exceptional_hex_sha256_v1(
+  p_value text
+) returns bytea
+language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_value is null or p_value!~'^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_PROTECTED_SHA256_INVALID' using errcode='22023';
+  end if;
+  return pg_catalog.decode(p_value,'hex');
+end;
+$function$;

@@ -1,0 +1,49 @@
+create or replace function private._candidate_daily_canonical_save_input_v1(
+  p_workflow_id uuid,
+  p_generation integer
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_hours jsonb;
+  v_patch jsonb;
+begin
+  select * into v_workflow
+  from public.candidate_submission_workflows
+  where id=p_workflow_id and generation=p_generation;
+  if not found or v_workflow.workflow_kind<>'DAILY' or v_workflow.scope<>'DAILY'
+     or v_workflow.target_timesheet_id is null then
+    raise exception 'CANDIDATE_DAILY_IDENTITY_INVALID' using errcode='22023';
+  end if;
+  if v_workflow.immutable_submission_json is null
+     or private._candidate_sha256_jsonb_v1(v_workflow.immutable_submission_json)
+        is distinct from v_workflow.immutable_submission_sha256 then
+    raise exception 'CANDIDATE_IMMUTABLE_SUBMISSION_MISMATCH' using errcode='40001';
+  end if;
+  v_hours:=coalesce(v_workflow.immutable_submission_json->'hours_submission',v_workflow.immutable_submission_json);
+  v_patch:=coalesce(v_hours->'timesheet_patch_json','{}'::jsonb);
+  if jsonb_typeof(v_hours)<>'object' or jsonb_typeof(v_patch)<>'object' then
+    raise exception 'CANDIDATE_DAILY_SAVE_PAYLOAD_INVALID' using errcode='22023';
+  end if;
+  return jsonb_build_object(
+    'contract_version','CANDIDATE_DAILY_CANONICAL_SAVE_V1',
+    'workflow_id',v_workflow.id,
+    'workflow_generation',v_workflow.generation,
+    'timesheet_id',v_workflow.target_timesheet_id,
+    'work_date',v_workflow.work_date,
+    'timesheet_patch_json',jsonb_build_object(
+      'worked_start_iso',coalesce(v_patch->'worked_start_iso',v_hours->'worked_start_iso','null'::jsonb),
+      'worked_end_iso',coalesce(v_patch->'worked_end_iso',v_hours->'worked_end_iso','null'::jsonb),
+      'break_start_iso',coalesce(v_patch->'break_start_iso',v_hours->'break_start_iso','null'::jsonb),
+      'break_end_iso',coalesce(v_patch->'break_end_iso',v_hours->'break_end_iso','null'::jsonb),
+      'break_minutes',coalesce(v_patch->'break_minutes',v_hours->'break_minutes','null'::jsonb),
+      'actual_schedule_json',coalesce(v_patch->'actual_schedule_json',v_hours->'actual_schedule_json','null'::jsonb)
+    )
+  );
+end;
+$function$;

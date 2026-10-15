@@ -1,0 +1,52 @@
+create or replace function private.bpay_next_stage_treatment_revision_v1(p_work_id uuid,p_expected_revision_id uuid)
+returns uuid language plpgsql volatile security invoker set search_path=pg_catalog,private
+as $function$
+declare w private.bpay_next_work%rowtype; r private.bpay_next_work_revision%rowtype;
+ v_root uuid;v_revision uuid:=gen_random_uuid();v_candidate uuid;
+begin
+ if p_work_id is null or p_expected_revision_id is null then
+  raise exception using errcode='22023',message='BPAY_NEXT_RESOLUTION_IDENTITY_INVALID';end if;
+ -- W2 prelocks its entire finite Candidate/Work/Position scope before seed/clone.
+ -- This helper stages only; original publisher owns seal, pointer and command.
+ select x.candidate_id into strict v_candidate from private.bpay_next_work x where x.id=p_work_id;
+ perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_candidate for update;
+ if not found then raise exception using errcode='23514',message='BPAY_NEXT_RESOLUTION_STALE';end if;
+ select x.* into strict w from private.bpay_next_work x where x.id=p_work_id for update;
+ select x.* into strict r from private.bpay_next_work_revision x where x.id=p_expected_revision_id and x.work_id=w.id for share;
+ if w.approval_state is distinct from 'APPROVED' or w.current_revision_id is distinct from r.id
+  or w.applied_revision_id is distinct from r.id or w.current_revision_no is distinct from r.revision_no
+  or r.sealed_at_utc is null or r.approved_at_utc is null then
+  raise exception using errcode='23514',message='BPAY_NEXT_RESOLUTION_STALE';end if;
+ v_root:=private.bpay_next_treatment_approval_revision_v1(r.id);
+ insert into private.bpay_next_work_revision
+ select (jsonb_populate_record(null::private.bpay_next_work_revision,to_jsonb(r)||jsonb_build_object(
+  'id',v_revision,'revision_no',r.revision_no+1,'payment_treatment_approval_revision_id',v_root,
+  'source_event_id',null,'approved_at_utc',null,'sealed_at_utc',null,'created_at_utc',transaction_timestamp()))).*;
+ insert into private.bpay_next_approved_line
+ select (jsonb_populate_record(null::private.bpay_next_approved_line,to_jsonb(x)||jsonb_build_object(
+  'id',gen_random_uuid(),'revision_id',v_revision,'created_at_utc',transaction_timestamp()))).*
+ from private.bpay_next_approved_line x where x.revision_id=r.id;
+ insert into private.bpay_next_rate_detail
+ select (jsonb_populate_record(null::private.bpay_next_rate_detail,to_jsonb(x)||jsonb_build_object(
+  'id',gen_random_uuid(),'approved_line_id',n.id))).*
+ from private.bpay_next_rate_detail x join private.bpay_next_approved_line o on o.id=x.approved_line_id
+ join private.bpay_next_approved_line n on n.revision_id=v_revision and n.component_key=o.component_key where o.revision_id=r.id;
+ insert into private.bpay_next_rate_schedule
+ select (jsonb_populate_record(null::private.bpay_next_rate_schedule,to_jsonb(x)||jsonb_build_object(
+  'id',gen_random_uuid(),'revision_id',v_revision))).* from private.bpay_next_rate_schedule x where x.revision_id=r.id;
+ insert into private.bpay_next_shift_detail
+ select (jsonb_populate_record(null::private.bpay_next_shift_detail,to_jsonb(x)||jsonb_build_object(
+  'id',gen_random_uuid(),'approved_line_id',n.id))).*
+ from private.bpay_next_shift_detail x join private.bpay_next_approved_line o on o.id=x.approved_line_id
+ join private.bpay_next_approved_line n on n.revision_id=v_revision and n.component_key=o.component_key where o.revision_id=r.id;
+ insert into private.bpay_next_break_detail
+ select (jsonb_populate_record(null::private.bpay_next_break_detail,to_jsonb(x)||jsonb_build_object(
+  'id',gen_random_uuid(),'shift_detail_id',nd.id))).*
+ from private.bpay_next_break_detail x join private.bpay_next_shift_detail od on od.id=x.shift_detail_id
+ join private.bpay_next_approved_line o on o.id=od.approved_line_id
+ join private.bpay_next_approved_line n on n.revision_id=v_revision and n.component_key=o.component_key
+ join private.bpay_next_shift_detail nd on nd.approved_line_id=n.id and nd.detail_no=od.detail_no where o.revision_id=r.id;
+ perform private.bpay_next_treatment_payload_assert_v1(v_revision);
+ return v_revision;
+end
+$function$;

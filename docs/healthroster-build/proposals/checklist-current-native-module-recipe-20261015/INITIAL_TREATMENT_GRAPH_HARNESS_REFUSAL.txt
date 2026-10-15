@@ -1,0 +1,10 @@
+The first combined packet checker refused at its uniform zero-lock assertion:
+AssertionError: 5 !== 0.
+
+The ordinary treatment graph intentionally retains the unchanged Native77
+shared cores and their five conditional TRUE-mode FOR SHARE sites. The
+ordinary reader enters the member core with literal FALSE; source alone does
+not prove compiled FALSE purity. The combined checker now expects exactly
+five inherited sites for the treatment graph and zero for process/Legacy.
+The handoff wording was corrected to retain these five sites explicitly.
+No SQL, production body, native guard or preceding frozen packet changed.

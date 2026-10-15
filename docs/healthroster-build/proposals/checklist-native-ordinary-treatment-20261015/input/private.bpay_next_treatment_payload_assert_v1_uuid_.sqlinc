@@ -1,0 +1,42 @@
+create or replace function private.bpay_next_treatment_payload_assert_v1(p_revision_id uuid)
+returns void language plpgsql volatile security invoker set search_path=pg_catalog,private
+as $function$
+declare r private.bpay_next_work_revision%rowtype; a private.bpay_next_work_revision%rowtype;
+begin
+ select x.* into strict r from private.bpay_next_work_revision x where x.id=p_revision_id;
+ if r.payment_treatment_approval_revision_id is null then return;end if;
+ select x.* into a from private.bpay_next_work_revision x
+  where x.id=r.payment_treatment_approval_revision_id and x.work_id=r.work_id;
+ if a.id is null or a.id=r.id or a.payment_treatment_approval_revision_id is not null
+  or a.sealed_at_utc is null or a.approved_at_utc is null or r.source_event_id is not null
+  or r.revision_no<=a.revision_no
+  or (to_jsonb(r)-array['id','revision_no','source_event_id','approved_at_utc','sealed_at_utc','created_at_utc','payment_treatment_approval_revision_id']) is distinct from (to_jsonb(a)-array['id','revision_no','source_event_id','approved_at_utc','sealed_at_utc','created_at_utc','payment_treatment_approval_revision_id']) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_SOURCE_CHANGED';end if;
+ if exists(with original as (select to_jsonb(x)-array['id','revision_id','created_at_utc'] payload from private.bpay_next_approved_line x where x.revision_id=a.id), treatment as (select to_jsonb(x)-array['id','revision_id','created_at_utc'] payload from private.bpay_next_approved_line x where x.revision_id=r.id)
+  (select payload from original except all select payload from treatment)
+  union all (select payload from treatment except all select payload from original)) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_LINE_PAYLOAD_CHANGED';end if;
+ if exists(with original as (select jsonb_build_array(l.component_key,to_jsonb(x)-array['id','approved_line_id']) payload from private.bpay_next_rate_detail x join private.bpay_next_approved_line l on l.id=x.approved_line_id where l.revision_id=a.id), treatment as (select jsonb_build_array(l.component_key,to_jsonb(x)-array['id','approved_line_id']) payload from private.bpay_next_rate_detail x join private.bpay_next_approved_line l on l.id=x.approved_line_id where l.revision_id=r.id)
+  (select payload from original except all select payload from treatment)
+  union all (select payload from treatment except all select payload from original)) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_RATE_PAYLOAD_CHANGED';end if;
+ if exists(with original as (select to_jsonb(x)-array['id','revision_id'] payload from private.bpay_next_rate_schedule x where x.revision_id=a.id), treatment as (select to_jsonb(x)-array['id','revision_id'] payload from private.bpay_next_rate_schedule x where x.revision_id=r.id)
+  (select payload from original except all select payload from treatment)
+  union all (select payload from treatment except all select payload from original)) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_SCHEDULE_PAYLOAD_CHANGED';end if;
+ if exists(with original as (select jsonb_build_array(l.component_key,to_jsonb(x)-array['id','approved_line_id']) payload from private.bpay_next_shift_detail x join private.bpay_next_approved_line l on l.id=x.approved_line_id where l.revision_id=a.id), treatment as (select jsonb_build_array(l.component_key,to_jsonb(x)-array['id','approved_line_id']) payload from private.bpay_next_shift_detail x join private.bpay_next_approved_line l on l.id=x.approved_line_id where l.revision_id=r.id)
+  (select payload from original except all select payload from treatment)
+  union all (select payload from treatment except all select payload from original)) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_SHIFT_PAYLOAD_CHANGED';end if;
+ if exists(with original as (select jsonb_build_array(l.component_key,d.detail_no,to_jsonb(x)-array['id','shift_detail_id']) payload from private.bpay_next_break_detail x join private.bpay_next_shift_detail d on d.id=x.shift_detail_id join private.bpay_next_approved_line l on l.id=d.approved_line_id where l.revision_id=a.id), treatment as (select jsonb_build_array(l.component_key,d.detail_no,to_jsonb(x)-array['id','shift_detail_id']) payload from private.bpay_next_break_detail x join private.bpay_next_shift_detail d on d.id=x.shift_detail_id join private.bpay_next_approved_line l on l.id=d.approved_line_id where l.revision_id=r.id)
+  (select payload from original except all select payload from treatment)
+  union all (select payload from treatment except all select payload from original)) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_BREAK_PAYLOAD_CHANGED';end if;
+ if r.sealed_at_utc is not null then
+ if exists(with original as (select jsonb_build_array(l.component_key,d.detail_no,to_jsonb(x)-array['id','revision_id','approved_line_id','shift_detail_id']) payload from private.bpay_next_approved_segment x join private.bpay_next_approved_line l on l.id=x.approved_line_id join private.bpay_next_shift_detail d on d.id=x.shift_detail_id where x.revision_id=a.id), treatment as (select jsonb_build_array(l.component_key,d.detail_no,to_jsonb(x)-array['id','revision_id','approved_line_id','shift_detail_id']) payload from private.bpay_next_approved_segment x join private.bpay_next_approved_line l on l.id=x.approved_line_id join private.bpay_next_shift_detail d on d.id=x.shift_detail_id where x.revision_id=r.id)
+  (select payload from original except all select payload from treatment)
+  union all (select payload from treatment except all select payload from original)) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_SEGMENT_PAYLOAD_CHANGED';end if;
+ end if;
+end
+$function$;

@@ -1,0 +1,54 @@
+create or replace function private.bpay_next_source_binding_members_v1(p_receipt_id uuid)
+returns table(candidate_id uuid,member_no integer,head_id uuid,prior_head_id uuid,
+  work_id uuid,revision_id uuid,publication_command_id uuid,predecessor_revision_id uuid)
+language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare
+  v_receipt private.weekly_source_entitlement_publication_receipts%rowtype;
+  v_n integer; v_i integer; v_row record;
+begin
+  select r.* into strict v_receipt from private.weekly_source_entitlement_publication_receipts r
+    where r.id=p_receipt_id;
+  v_n:=pg_catalog.cardinality(v_receipt.head_ids);
+  if v_n not between 1 and 2 or not exists (
+    select 1 from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=v_receipt.decision_bundle_id and b.bundle_revision=v_receipt.bundle_revision
+      and b.candidate_id=v_receipt.candidate_id and b.state in ('PROPOSED','COMMITTED')
+      and b.request_digest=v_receipt.request_digest and b.decision_id=v_receipt.decision_id
+      and b.decided_by_user_id=v_receipt.decided_by_user_id) then
+    raise exception using errcode='55000',message='BPAY_NEXT_BINDING_RECEIPT_NOT_QUALIFIED';
+  end if;
+  for v_i in 1..v_n loop
+    select h.id,h.prior_head_id,w.id as work_id,r.id as revision_id,
+           p.command_id,coalesce(p.predecessor_revision_id,
+             case when p.command_id is null and w.current_revision_id is distinct from r.id
+               then w.current_revision_id end) as predecessor_revision_id into v_row
+      from public.weekly_source_entitlement_heads h
+      join public.weekly_source_root_authorisations a on a.root_timesheet_id=h.root_timesheet_id
+        and a.withdrawn_at_utc is null and a.current_entitlement_head_id=h.id
+      join private.bpay_next_work w on w.original_timesheet_id=h.root_timesheet_id
+        and w.booking_id=h.root_family_booking_id and w.candidate_id=h.candidate_id
+        and w.contract_id=h.contract_id and w.week_ending_date=h.week_ending_date and w.work_kind='SOURCE'
+      join private.bpay_next_work_revision r on r.work_id=w.id and r.source_head_id=h.id and r.source_event_id=h.id
+        and r.physical_timesheet_id=h.root_timesheet_id and r.physical_timesheet_version=h.root_timesheet_version
+        and r.source_kind in ('SOURCE','PROTECTED')
+      left join private.bpay_next_publication p on p.work_id=w.id and p.revision_id=r.id
+        and p.candidate_id=w.candidate_id
+      where h.id=v_receipt.head_ids[v_i] and h.state='COMMITTED_CURRENT'
+        and h.candidate_id=v_receipt.candidate_id and h.root_timesheet_id=v_receipt.member_root_ids[v_i]
+        and h.root_family_booking_id=v_receipt.member_family_booking_ids[v_i]
+        and h.root_timesheet_version=v_receipt.member_root_versions[v_i]
+        and h.decision_bundle_id=v_receipt.decision_bundle_id and h.bundle_revision=v_receipt.bundle_revision
+        and h.publication_receipt_digest=v_receipt.request_digest
+        and h.scope_change_tx_token=v_receipt.scope_change_tx_token;
+    if not found then
+      raise exception using errcode='55000',message='BPAY_NEXT_BINDING_MEMBER_NOT_CURRENT';
+    end if;
+    candidate_id:=v_receipt.candidate_id; member_no:=v_i; head_id:=v_row.id;
+    prior_head_id:=v_row.prior_head_id; work_id:=v_row.work_id; revision_id:=v_row.revision_id;
+    publication_command_id:=v_row.command_id; predecessor_revision_id:=v_row.predecessor_revision_id;
+    return next;
+  end loop;
+end
+$function$;

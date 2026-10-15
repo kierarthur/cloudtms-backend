@@ -1,0 +1,35 @@
+create or replace function private.weekly_source_checklist_native_initial_bound_assert_core_v1(p_binding_version_id uuid,p_native_locks boolean)
+returns void language plpgsql security definer set search_path=pg_catalog,private,public
+as $function$
+declare v private.bpay_next_source_component_binding_version%rowtype;l private.bpay_next_approved_line%rowtype;
+  cert jsonb;origin jsonb;basis jsonb;component jsonb;
+begin
+  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;
+  select x.* into strict v from private.bpay_next_source_component_binding_version x where x.id=p_binding_version_id;
+  if v.origin_kind is distinct from 'INITIAL_AUTHORISED_TSFIN_V1' then
+    raise exception 'BPAY_NEXT_INITIAL_ORIGIN_REQUIRED' using errcode='23514';end if;
+  cert:=private.weekly_source_checklist_native_initial_certificate_core_v1(v.initial_root_authorisation_id,p_native_locks);origin:=cert->'origin';basis:=cert->'basis';
+  select value into strict component from jsonb_array_elements(cert->'components') x(value)
+    where (value->>'component_id')::uuid=v.source_component_id;
+  select x.* into strict l from private.bpay_next_approved_line x
+    where x.revision_id=(cert->>'revision_id')::uuid and x.source_component_id=v.source_component_id;
+  if (v.candidate_id,v.canonical_work_id,v.approval_work_id,v.approval_revision_id,v.publication_command_id_1,
+      v.initial_financial_snapshot_id,v.initial_root_timesheet_id,v.initial_root_version,v.initial_authorisation_generation,
+      v.initial_authorised_row_signature,v.initial_financial_snapshot_digest,v.initial_inventory_digest,v.initial_entitlement_digest,
+      v.initial_detail_digest,v.initial_policy_digest,v.initial_certificate_digest,v.component_sha256)
+    is distinct from ((cert->>'candidate_id')::uuid,(cert->>'work_id')::uuid,(cert->>'work_id')::uuid,(cert->>'revision_id')::uuid,
+      (cert->>'command_id')::uuid,(origin->>'financial_snapshot_id')::uuid,(origin->>'root_timesheet_id')::uuid,
+      (origin->>'root_version')::integer,(origin->>'authorisation_generation')::integer,origin->>'authorised_row_signature',
+      decode(origin->>'financial_snapshot_digest','hex'),decode(basis->>'inventory_digest','hex'),decode(basis->>'entitlement_digest','hex'),
+      decode(basis->>'detail_digest','hex'),decode(basis->>'policy_fingerprint','hex'),decode(cert->>'certificate_digest','hex'),
+      decode(component->>'component_sha256','hex'))
+     or (v.approved_line_id,v.classification_line_id,v.canonical_component_key,v.approval_component_key,
+         v.approval_source_channel,v.tax_treatment,v.publication_work_id_1,v.publication_revision_id_1)
+       is distinct from (l.id,l.id,l.component_key,l.component_key,cert->>'source_channel',l.tax_treatment,
+         (cert->>'work_id')::uuid,(cert->>'revision_id')::uuid)
+     or v.binding_digest is distinct from sha256(convert_to(jsonb_build_array('INITIAL_AUTHORISED_TSFIN_V1',v.canonical_work_id,
+       v.canonical_component_key,v.approval_revision_id,v.approved_line_id,v.initial_root_authorisation_id,
+       cert->>'certificate_digest',cert->>'command_id',component->>'component_sha256')::text,'UTF8'))
+  then raise exception 'BPAY_NEXT_INITIAL_CAPTURE_CERTIFICATE_CHANGED' using errcode='23514';end if;
+end
+$function$;

@@ -1,0 +1,11 @@
+create or replace function private.weekly_source_publication_request_digest_v1(
+  p_canonical jsonb
+) returns bytea
+language sql
+immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select pg_catalog.sha256(
+    pg_catalog.convert_to(
+      private.weekly_source_canonical_json_text_v1(p_canonical),'UTF8'));
+$function$;

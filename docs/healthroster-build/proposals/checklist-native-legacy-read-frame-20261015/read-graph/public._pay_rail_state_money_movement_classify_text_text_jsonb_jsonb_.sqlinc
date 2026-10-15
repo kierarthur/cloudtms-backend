@@ -1,0 +1,511 @@
+CREATE OR REPLACE FUNCTION public._pay_rail_state_money_movement_classify(
+  p_transfer_status text DEFAULT NULL::text,
+  p_rail_state text DEFAULT NULL::text,
+  p_event_payload_json jsonb DEFAULT '{}'::jsonb,
+  p_provider_meta_json jsonb DEFAULT '{}'::jsonb
+)
+RETURNS TABLE(
+  cash_state text,
+  normalised_transfer_status text,
+  is_final_money_moved boolean,
+  is_terminal_no_money boolean,
+  is_pending_non_final boolean,
+  completed_at_allowed boolean,
+  reason text,
+  support_details_json jsonb
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_event_payload_json jsonb := '{}'::jsonb;
+  v_provider_meta_json jsonb := '{}'::jsonb;
+  v_transfer_status_upper text := NULL::text;
+  v_rail_state_upper text := NULL::text;
+  v_event_status_upper text := NULL::text;
+  v_provider_status_upper text := NULL::text;
+  v_event_outcome_upper text := NULL::text;
+  v_provider_outcome_upper text := NULL::text;
+  v_error_code_upper text := NULL::text;
+  v_reason_code_upper text := NULL::text;
+  v_provider_key_upper text := NULL::text;
+  v_provider_event_type_upper text := NULL::text;
+  v_provider_event_transport_upper text := NULL::text;
+  v_data_new_state_upper text := NULL::text;
+  v_data_state_upper text := NULL::text;
+  v_old_state_upper text := NULL::text;
+  v_new_state_upper text := NULL::text;
+  v_normalised_state_upper text := NULL::text;
+  v_primary_status_upper text := NULL::text;
+  v_status_terms text[] := ARRAY[]::text[];
+  v_final_status_present boolean := false;
+  v_terminal_status_present boolean := false;
+  v_pending_status_present boolean := false;
+  v_explicit_final_paid_evidence boolean := false;
+  v_explicit_terminal_no_money_evidence boolean := false;
+  v_explicit_pending_evidence boolean := false;
+  v_ambiguous_commit_or_execute boolean := false;
+  v_ambiguous_return_or_revert boolean := false;
+  v_bool_true_terms text[] := ARRAY['true','t','yes','y','1','final','settled','paid','completed','success','succeeded'];
+  v_bool_false_terms text[] := ARRAY['false','f','no','n','0'];
+BEGIN
+  IF p_event_payload_json IS NOT NULL AND jsonb_typeof(p_event_payload_json) = 'object' THEN
+    v_event_payload_json := p_event_payload_json;
+  END IF;
+
+  IF p_provider_meta_json IS NOT NULL AND jsonb_typeof(p_provider_meta_json) = 'object' THEN
+    v_provider_meta_json := p_provider_meta_json;
+  END IF;
+
+  v_transfer_status_upper := upper(NULLIF(btrim(COALESCE(p_transfer_status, '')), ''));
+  v_rail_state_upper := upper(NULLIF(btrim(COALESCE(p_rail_state, '')), ''));
+
+  v_event_status_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'status',
+    v_event_payload_json->>'normalised_state',
+    v_event_payload_json->>'normalized_state',
+    v_event_payload_json->>'new_state',
+    v_event_payload_json->>'state',
+    v_event_payload_json->>'rail_state',
+    v_event_payload_json->>'payment_status',
+    v_event_payload_json->>'provider_status',
+    v_event_payload_json #>> '{payment,status}',
+    v_event_payload_json #>> '{provider,status}',
+    v_event_payload_json #>> '{data,new_state}',
+    v_event_payload_json #>> '{data,state}',
+    v_event_payload_json #>> '{data,status}',
+    ''
+  )), ''));
+
+  v_provider_status_upper := upper(NULLIF(btrim(COALESCE(
+    v_provider_meta_json->>'status',
+    v_provider_meta_json->>'normalised_state',
+    v_provider_meta_json->>'normalized_state',
+    v_provider_meta_json->>'new_state',
+    v_provider_meta_json->>'state',
+    v_provider_meta_json->>'rail_state',
+    v_provider_meta_json->>'payment_status',
+    v_provider_meta_json->>'provider_status',
+    v_provider_meta_json #>> '{payment,status}',
+    v_provider_meta_json #>> '{provider,status}',
+    v_provider_meta_json #>> '{data,new_state}',
+    v_provider_meta_json #>> '{data,state}',
+    v_provider_meta_json #>> '{data,status}',
+    ''
+  )), ''));
+
+  v_event_outcome_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'outcome',
+    v_event_payload_json->>'cash_state',
+    v_event_payload_json->>'money_movement_state',
+    v_event_payload_json->>'mapping_status',
+    v_event_payload_json #>> '{payment,outcome}',
+    v_event_payload_json #>> '{provider,outcome}',
+    v_event_payload_json #>> '{data,outcome}',
+    ''
+  )), ''));
+
+  v_provider_outcome_upper := upper(NULLIF(btrim(COALESCE(
+    v_provider_meta_json->>'outcome',
+    v_provider_meta_json->>'cash_state',
+    v_provider_meta_json->>'money_movement_state',
+    v_provider_meta_json->>'mapping_status',
+    v_provider_meta_json #>> '{payment,outcome}',
+    v_provider_meta_json #>> '{provider,outcome}',
+    v_provider_meta_json #>> '{data,outcome}',
+    ''
+  )), ''));
+
+  v_error_code_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'error_code',
+    v_event_payload_json->>'failure_code',
+    v_event_payload_json->>'decline_code',
+    v_event_payload_json #>> '{error,code}',
+    v_event_payload_json #>> '{failure,code}',
+    v_provider_meta_json->>'error_code',
+    v_provider_meta_json->>'failure_code',
+    v_provider_meta_json->>'decline_code',
+    v_provider_meta_json #>> '{error,code}',
+    v_provider_meta_json #>> '{failure,code}',
+    ''
+  )), ''));
+
+  v_reason_code_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'reason_code',
+    v_event_payload_json->>'reason',
+    v_event_payload_json->>'failed_reason',
+    v_event_payload_json #>> '{reason,code}',
+    v_provider_meta_json->>'reason_code',
+    v_provider_meta_json->>'reason',
+    v_provider_meta_json->>'failed_reason',
+    v_provider_meta_json #>> '{reason,code}',
+    ''
+  )), ''));
+
+
+  v_provider_key_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'provider_key',
+    v_event_payload_json->>'provider',
+    v_event_payload_json->>'rail_provider',
+    v_provider_meta_json->>'provider_key',
+    v_provider_meta_json->>'provider',
+    v_provider_meta_json->>'rail_provider',
+    ''
+  )), ''));
+
+  v_provider_event_type_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'provider_event_type',
+    v_event_payload_json->>'event_type',
+    v_event_payload_json->>'event',
+    v_provider_meta_json->>'provider_event_type',
+    v_provider_meta_json->>'event_type',
+    v_provider_meta_json->>'event',
+    ''
+  )), ''));
+
+  v_provider_event_transport_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'provider_event_transport',
+    v_event_payload_json->>'event_source',
+    v_event_payload_json->>'source',
+    v_provider_meta_json->>'provider_event_transport',
+    v_provider_meta_json->>'event_source',
+    v_provider_meta_json->>'source',
+    ''
+  )), ''));
+
+  v_data_new_state_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json #>> '{data,new_state}',
+    v_provider_meta_json #>> '{data,new_state}',
+    v_event_payload_json->>'new_state',
+    v_provider_meta_json->>'new_state',
+    ''
+  )), ''));
+
+  v_data_state_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json #>> '{data,state}',
+    v_provider_meta_json #>> '{data,state}',
+    v_event_payload_json->>'state',
+    v_provider_meta_json->>'state',
+    ''
+  )), ''));
+
+  v_old_state_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json #>> '{data,old_state}',
+    v_provider_meta_json #>> '{data,old_state}',
+    ''
+  )), ''));
+
+  v_new_state_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json #>> '{data,new_state}',
+    v_provider_meta_json #>> '{data,new_state}',
+    v_event_payload_json->>'new_state',
+    v_provider_meta_json->>'new_state',
+    ''
+  )), ''));
+
+  v_normalised_state_upper := upper(NULLIF(btrim(COALESCE(
+    v_event_payload_json->>'normalised_state',
+    v_event_payload_json->>'normalized_state',
+    v_provider_meta_json->>'normalised_state',
+    v_provider_meta_json->>'normalized_state',
+    ''
+  )), ''));
+
+  v_status_terms := ARRAY[
+    v_transfer_status_upper,
+    v_rail_state_upper,
+    v_event_status_upper,
+    v_provider_status_upper,
+    v_event_outcome_upper,
+    v_provider_outcome_upper,
+    v_error_code_upper,
+    v_reason_code_upper,
+    v_data_new_state_upper,
+    v_data_state_upper,
+    v_old_state_upper,
+    v_new_state_upper,
+    v_normalised_state_upper
+  ];
+
+  SELECT COALESCE(status_terms.status_text, 'UNKNOWN')
+  INTO v_primary_status_upper
+  FROM unnest(v_status_terms) AS status_terms(status_text)
+  WHERE status_terms.status_text IS NOT NULL
+  LIMIT 1;
+
+  v_final_status_present := EXISTS (
+    SELECT 1
+    FROM unnest(ARRAY[
+      v_transfer_status_upper,
+      v_rail_state_upper,
+      v_event_status_upper,
+      v_provider_status_upper,
+      v_event_outcome_upper,
+      v_provider_outcome_upper,
+      v_error_code_upper,
+      v_reason_code_upper,
+      v_data_new_state_upper,
+      v_data_state_upper,
+      v_new_state_upper,
+      v_normalised_state_upper
+    ]) AS status_terms(status_text)
+    WHERE status_terms.status_text IN (
+      'PAID',
+      'SETTLED',
+      'COMPLETED',
+      'SUCCESS',
+      'SUCCEEDED',
+      'PAYMENT_PAID',
+      'PAYMENT_SETTLED',
+      'PAYMENT_COMPLETED',
+      'FINAL_PAID',
+      'MONEY_MOVED',
+      'CONFIRMED_PAID',
+      'CONFIRMED_SETTLED'
+    )
+  );
+
+  v_terminal_status_present := EXISTS (
+    SELECT 1
+    FROM unnest(ARRAY[
+      v_transfer_status_upper,
+      v_rail_state_upper,
+      v_event_status_upper,
+      v_provider_status_upper,
+      v_event_outcome_upper,
+      v_provider_outcome_upper,
+      v_error_code_upper,
+      v_reason_code_upper,
+      v_data_new_state_upper,
+      v_data_state_upper,
+      v_new_state_upper,
+      v_normalised_state_upper
+    ]) AS status_terms(status_text)
+    WHERE status_terms.status_text IN (
+      'FAILED',
+      'FAILURE',
+      'REJECTED',
+      'DECLINED',
+      'CANCELLED',
+      'CANCELED',
+      'SUBMISSION_FAILED',
+      'FAILED_BEFORE_COMMIT',
+      'CANCELLED_BEFORE_RELEASE',
+      'CANCELED_BEFORE_RELEASE',
+      'WRONG_BANK',
+      'WRONG_BANK_DETAILS',
+      'NO_MONEY',
+      'NO_PAYMENT_MADE',
+      'NOT_PAID',
+      'REVERSED_BEFORE_RELEASE',
+      'INSUFFICIENT_FUNDS',
+      'ACCOUNT_CLOSED',
+      'INVALID_ACCOUNT',
+      'INVALID_SORT_CODE',
+      'BANK_REJECTED'
+    )
+  );
+
+  v_pending_status_present := EXISTS (
+    SELECT 1
+    FROM unnest(ARRAY[
+      v_transfer_status_upper,
+      v_rail_state_upper,
+      v_event_status_upper,
+      v_provider_status_upper,
+      v_event_outcome_upper,
+      v_provider_outcome_upper,
+      v_error_code_upper,
+      v_reason_code_upper,
+      v_data_new_state_upper,
+      v_data_state_upper,
+      v_new_state_upper,
+      v_normalised_state_upper
+    ]) AS status_terms(status_text)
+    WHERE status_terms.status_text IN (
+      'CREATED',
+      'ACCEPTED',
+      'SCHEDULED',
+      'SUBMITTED',
+      'SENT',
+      'PROCESSING',
+      'IN_FLIGHT',
+      'IN-FLIGHT',
+      'INFLIGHT',
+      'QUEUED',
+      'PENDING',
+      'PENDING_SETTLEMENT',
+      'PENDING_CONFIRMATION',
+      'PENDING_SUBMISSION',
+      'AUTHORISED',
+      'AUTHORIZED',
+      'AWAITING_CONFIRMATION',
+      'AWAITING_SETTLEMENT'
+    )
+  );
+
+  v_ambiguous_commit_or_execute := EXISTS (
+    SELECT 1
+    FROM unnest(v_status_terms) AS status_terms(status_text)
+    WHERE status_terms.status_text IN ('COMMITTED', 'EXECUTED')
+  );
+
+  v_ambiguous_return_or_revert := EXISTS (
+    SELECT 1
+    FROM unnest(v_status_terms) AS status_terms(status_text)
+    WHERE status_terms.status_text IN ('RETURNED', 'REVERTED', 'REVERSED')
+  );
+
+  v_explicit_final_paid_evidence := (
+    lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'final_paid', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'is_final_money_moved', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'money_moved', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'payment_made', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'settlement_confirmed', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'settled', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'paid', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json #>> '{money_movement,final_paid}', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json #>> '{settlement,confirmed}', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'final_paid', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'is_final_money_moved', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'money_moved', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'payment_made', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'settlement_confirmed', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'settled', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'paid', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json #>> '{money_movement,final_paid}', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json #>> '{settlement,confirmed}', '')), '')) = ANY(v_bool_true_terms)
+  );
+
+  v_explicit_terminal_no_money_evidence := (
+    lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'no_payment_made', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'no_money', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'terminal_no_money', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'wrong_bank', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'cancelled_before_release', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'canceled_before_release', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'failed_before_commit', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json #>> '{money_movement,no_payment_made}', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'no_payment_made', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'no_money', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'terminal_no_money', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'wrong_bank', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'cancelled_before_release', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'canceled_before_release', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'failed_before_commit', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json #>> '{money_movement,no_payment_made}', '')), '')) = ANY(v_bool_true_terms)
+  );
+
+  v_explicit_pending_evidence := (
+    lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'pending', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'in_flight', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_event_payload_json->>'processing', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'pending', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'in_flight', '')), '')) = ANY(v_bool_true_terms)
+    OR lower(NULLIF(btrim(COALESCE(v_provider_meta_json->>'processing', '')), '')) = ANY(v_bool_true_terms)
+  );
+
+  v_explicit_final_paid_evidence := COALESCE(v_explicit_final_paid_evidence, false);
+  v_explicit_terminal_no_money_evidence := COALESCE(v_explicit_terminal_no_money_evidence, false);
+  v_explicit_pending_evidence := COALESCE(v_explicit_pending_evidence, false);
+
+  IF v_explicit_final_paid_evidence OR v_final_status_present THEN
+    cash_state := 'FINAL_PAID';
+    normalised_transfer_status := 'COMPLETED';
+    is_final_money_moved := true;
+    is_terminal_no_money := false;
+    is_pending_non_final := false;
+    completed_at_allowed := true;
+    reason := 'Explicit final-paid/provider-settled evidence was found.';
+  ELSIF v_explicit_terminal_no_money_evidence OR v_terminal_status_present THEN
+    cash_state := 'TERMINAL_NO_MONEY';
+    normalised_transfer_status := CASE
+      WHEN v_primary_status_upper IN ('CANCELLED', 'CANCELED', 'CANCELLED_BEFORE_RELEASE', 'CANCELED_BEFORE_RELEASE') THEN 'CANCELLED'
+      ELSE 'FAILED'
+    END;
+    is_final_money_moved := false;
+    is_terminal_no_money := true;
+    is_pending_non_final := false;
+    completed_at_allowed := false;
+    reason := 'Terminal no-money/failure/cancelled-before-release evidence was found.';
+  ELSIF v_explicit_pending_evidence OR v_pending_status_present THEN
+    cash_state := 'PENDING_NON_FINAL';
+    normalised_transfer_status := CASE
+      WHEN v_primary_status_upper IN ('CREATED', 'SCHEDULED', 'SUBMITTED', 'SENT', 'PROCESSING', 'QUEUED', 'ACCEPTED', 'PENDING') THEN CASE WHEN v_primary_status_upper = 'CREATED' THEN 'PENDING' ELSE v_primary_status_upper END
+      ELSE 'PENDING'
+    END;
+    is_final_money_moved := false;
+    is_terminal_no_money := false;
+    is_pending_non_final := true;
+    completed_at_allowed := false;
+    reason := 'Pending/non-final provider or rail state was found.';
+  ELSE
+    cash_state := 'UNKNOWN';
+    normalised_transfer_status := COALESCE(v_primary_status_upper, 'UNKNOWN');
+    is_final_money_moved := false;
+    is_terminal_no_money := false;
+    is_pending_non_final := false;
+    completed_at_allowed := false;
+    reason := CASE
+      WHEN v_ambiguous_commit_or_execute THEN 'Bare COMMITTED/EXECUTED evidence is ambiguous and is not final-paid evidence without explicit final settlement metadata.'
+      WHEN v_ambiguous_return_or_revert THEN 'RETURNED/REVERTED/REVERSED evidence is ambiguous and is not terminal no-money without explicit no-payment-made evidence.'
+      ELSE 'No explicit final-paid, terminal no-money, or pending non-final evidence was found.'
+    END;
+  END IF;
+
+  support_details_json := jsonb_build_object(
+    'transfer_status', p_transfer_status,
+    'rail_state', p_rail_state,
+    'transfer_status_upper', v_transfer_status_upper,
+    'rail_state_upper', v_rail_state_upper,
+    'event_status_upper', v_event_status_upper,
+    'provider_status_upper', v_provider_status_upper,
+    'event_outcome_upper', v_event_outcome_upper,
+    'provider_outcome_upper', v_provider_outcome_upper,
+    'error_code_upper', v_error_code_upper,
+    'reason_code_upper', v_reason_code_upper,
+    'primary_status_upper', v_primary_status_upper,
+    'final_status_present', v_final_status_present,
+    'terminal_status_present', v_terminal_status_present,
+    'pending_status_present', v_pending_status_present,
+    'explicit_final_paid_evidence', v_explicit_final_paid_evidence,
+    'explicit_terminal_no_money_evidence', v_explicit_terminal_no_money_evidence,
+    'explicit_pending_evidence', v_explicit_pending_evidence,
+    'ambiguous_commit_or_execute', v_ambiguous_commit_or_execute,
+    'ambiguous_return_or_revert', v_ambiguous_return_or_revert,
+    'committed_or_executed_requires_explicit_final_paid_metadata', true,
+    'returned_or_reverted_requires_explicit_no_money_metadata', true,
+    'provider_key_upper', v_provider_key_upper,
+    'provider_event_type_upper', v_provider_event_type_upper,
+    'provider_event_transport_upper', v_provider_event_transport_upper,
+    'data_new_state_upper', v_data_new_state_upper,
+    'data_state_upper', v_data_state_upper,
+    'old_state_upper', v_old_state_upper,
+    'new_state_upper', v_new_state_upper,
+    'normalised_state_upper', v_normalised_state_upper,
+    'is_unknown_or_review', (cash_state = 'UNKNOWN'),
+    'can_no_money_unwind', (cash_state = 'TERMINAL_NO_MONEY'),
+    'reason_code', CASE
+      WHEN cash_state = 'FINAL_PAID' THEN 'FINAL_PAID_EXPLICIT'
+      WHEN cash_state = 'TERMINAL_NO_MONEY' THEN 'TERMINAL_NO_MONEY_EXPLICIT'
+      WHEN cash_state = 'PENDING_NON_FINAL' THEN 'PENDING_NON_FINAL'
+      WHEN v_ambiguous_commit_or_execute THEN 'AMBIGUOUS_COMMITTED_OR_EXECUTED'
+      WHEN v_ambiguous_return_or_revert THEN 'AMBIGUOUS_RETURNED_OR_REVERTED'
+      ELSE 'UNKNOWN_NO_EXPLICIT_PROVIDER_OUTCOME'
+    END,
+    'reason_label', reason,
+    'success_only_status_update', (cash_state = 'FINAL_PAID'),
+    'event_payload_keys', CASE
+      WHEN jsonb_typeof(v_event_payload_json) = 'object' THEN COALESCE((SELECT jsonb_agg(event_keys.key_name ORDER BY event_keys.key_name) FROM jsonb_object_keys(v_event_payload_json) AS event_keys(key_name)), '[]'::jsonb)
+      ELSE '[]'::jsonb
+    END,
+    'provider_meta_keys', CASE
+      WHEN jsonb_typeof(v_provider_meta_json) = 'object' THEN COALESCE((SELECT jsonb_agg(meta_keys.key_name ORDER BY meta_keys.key_name) FROM jsonb_object_keys(v_provider_meta_json) AS meta_keys(key_name)), '[]'::jsonb)
+      ELSE '[]'::jsonb
+    END
+  );
+
+  RETURN NEXT;
+END;
+$function$;

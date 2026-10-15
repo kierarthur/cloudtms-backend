@@ -1,0 +1,87 @@
+-- Purpose-bound Legacy native financial position. A native remaining balance
+-- is retained as its own fact; it is never renamed withheld cash or paid.
+create or replace function private.weekly_source_checklist_legacy_read_frame_v1(
+ p_timesheet_id uuid,p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $legacy_frame$
+declare actor public.tms_users%rowtype;t public.timesheets%rowtype;f public.timesheets_financials%rowtype;
+ module private.bpay_next_module_control%rowtype;witness jsonb;permission jsonb;facts jsonb;
+ financial_scope jsonb;financial_scope_after jsonb;state jsonb;state_after jsonb;
+ frame jsonb;frame_after jsonb;n bigint;proof text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private._weekly_source_settings_assert_request_v1(p_scope,array['source_group_id','source_cycle_id','client_id','week_ending'],
+  'WEEKLY_SOURCE_CHECKLIST_LEGACY_SCOPE_INVALID');
+ if p_timesheet_id is null or p_actor_user_id is null or exists(select 1 from unnest(array['source_group_id','source_cycle_id','client_id']) k
+  where jsonb_typeof(p_scope->k) is distinct from 'string' or pg_input_is_valid(p_scope->>k,'uuid') is distinct from true)
+  or jsonb_typeof(p_scope->'week_ending') is distinct from 'string' or pg_input_is_valid(p_scope->>'week_ending','date') is distinct from true then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_LEGACY_SCOPE_INVALID' using errcode='22023';end if;
+ select a.* into actor from public.tms_users a where a.id=p_actor_user_id and a.is_active;
+ if actor.id is null or (lower(btrim(coalesce(actor.role,'')))<>'admin' and private.weekly_source_pay_actor_allowed_v1(actor.id) is distinct from true) then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_ACTOR_DENIED' using errcode='42501';end if;
+ permission:=private.weekly_source_office_authority_v1(actor.id,'VIEW_PAY_WORK',(p_scope->>'source_group_id')::uuid,
+  (p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date);
+ if not exists(select 1 from public.weekly_source_cycles c join public.weekly_source_groups g on g.id=c.source_group_id and g.active
+  join public.weekly_source_group_clients m on m.source_group_id=g.id and m.client_id=(p_scope->>'client_id')::uuid
+  where c.id=(p_scope->>'source_cycle_id')::uuid and g.id=(p_scope->>'source_group_id')::uuid
+   and (c.scope_client_id is null or c.scope_client_id=m.client_id)
+   and (p_scope->>'week_ending')::date between c.finalisation_week_ending-6 and c.finalisation_week_ending
+   and (p_scope->>'week_ending')::date between m.valid_from and coalesce(m.valid_to,'infinity'::date)) then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_LEGACY_SCOPE_UNPROVED' using errcode='55000';end if;
+ witness:=private.weekly_source_actual_timesheet_submission_v1(p_timesheet_id);
+ if witness->'actual_submitted' is distinct from 'true'::jsonb or witness->>'client_id' is distinct from p_scope->>'client_id'
+  or witness->>'week_ending_date' is distinct from p_scope->>'week_ending' then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_LEGACY_SUBJECT_UNPROVED' using errcode='55000';end if;
+ select m.* into module from private.bpay_next_module_control m where m.id=1;
+ facts:=jsonb_build_object('scope',p_scope,'actor_user_id',actor.id,'permission',permission,'actual_submission',witness,'module',to_jsonb(module));
+ if module.active_owner is distinct from 'LEGACY' then
+  return jsonb_build_object('known',false,'reason','NATIVE_LEGACY_OWNER_UNAVAILABLE','native_facts',facts);end if;
+ select r.* into t from public.timesheets r where r.timesheet_id=p_timesheet_id;
+ select count(*),(array_agg(r.id order by r.id))[1] into n,f.id from public.timesheets_financials r where r.timesheet_id=t.timesheet_id and r.is_current;
+ if n<>1 then return jsonb_build_object('known',false,'reason','NATIVE_CURRENT_FINANCIAL_AMBIGUOUS','native_facts',facts);end if;
+ select r.* into strict f from public.timesheets_financials r where r.id=f.id;
+ facts:=facts||jsonb_build_object('root',to_jsonb(t),'current_financial',to_jsonb(f));
+ if t.is_current is distinct from true or t.revoked_at is not null or t.archived_at_utc is not null or t.authorised_at_server is null
+  or t.line_type::text is distinct from 'HOURS' or t.sheet_scope::text not in('WEEKLY','DAILY')
+  or f.timesheet_version is distinct from t.version or f.is_stale is distinct from false or f.authorised_at_utc is null
+  or f.client_id::text is distinct from witness->>'client_id' or f.candidate_id::text is distinct from witness->>'candidate_id'
+  or private.weekly_source_pay_query_scope_v1(t.timesheet_id) is not null
+  or (select count(*) from public.timesheets r where r.booking_id=t.booking_id and r.is_current)<>1 then
+  return jsonb_build_object('known',false,'reason','NATIVE_CURRENT_LEGACY_IDENTITY_UNAVAILABLE','native_facts',facts);end if;
+ select coalesce(jsonb_agg(to_jsonb(s) order by s.family_timesheet_id),'[]'::jsonb) into financial_scope
+  from private.bpay_entitlement_financial_scope_v1(array[t.timesheet_id]) s;
+ if jsonb_array_length(financial_scope)=0 or exists(select 1 from jsonb_array_elements(financial_scope) s
+  where s->>'requested_timesheet_id' is distinct from t.timesheet_id::text
+   or s->>'canonical_timesheet_id' is distinct from t.timesheet_id::text
+   or s->>'booking_id' is distinct from t.booking_id or s->'requested_is_canonical' is distinct from 'true'::jsonb) then
+  return jsonb_build_object('known',false,'reason','NATIVE_LEGACY_FAMILY_SCOPE_UNAVAILABLE',
+   'native_facts',facts||jsonb_build_object('financial_scope',financial_scope));end if;
+ frame:=jsonb_build_object('root',to_jsonb(t),'financial',to_jsonb(f),'module',to_jsonb(module),'permission',permission,'submission',witness);
+ -- This is the whole actual native read body with only its optional debug
+ -- audit removed. It preserves every native component/settled/reserved/stage,
+ -- treatment, advance, snooze and outstanding calculation. No fake actor.
+ state:=private.weekly_source_checklist_legacy_pay_state_core_v1(t.timesheet_id);
+ state_after:=private.weekly_source_checklist_legacy_pay_state_core_v1(t.timesheet_id);
+ select coalesce(jsonb_agg(to_jsonb(s) order by s.family_timesheet_id),'[]'::jsonb) into financial_scope_after
+  from private.bpay_entitlement_financial_scope_v1(array[t.timesheet_id]) s;
+ frame_after:=jsonb_build_object('root',(select to_jsonb(r) from public.timesheets r where r.timesheet_id=t.timesheet_id),
+  'financial',(select to_jsonb(r) from public.timesheets_financials r where r.id=f.id),
+  'module',(select to_jsonb(m) from private.bpay_next_module_control m where m.id=1),
+  'permission',private.weekly_source_office_authority_v1(actor.id,'VIEW_PAY_WORK',(p_scope->>'source_group_id')::uuid,
+   (p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date),'submission',private.weekly_source_actual_timesheet_submission_v1(t.timesheet_id));
+ if frame is distinct from frame_after or state is distinct from state_after or financial_scope is distinct from financial_scope_after
+  or (select count(*) from public.timesheets_financials r where r.timesheet_id=t.timesheet_id and r.is_current)<>1
+  or (select count(*) from public.timesheets r where r.booking_id=t.booking_id and r.is_current)<>1 then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';end if;
+ facts:=facts||jsonb_build_object('financial_scope',financial_scope,'native_position',state,'frame',frame);
+ proof:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_LEGACY_READ_FRAME_V1',facts),'hex');
+ if state->'ok' is distinct from 'true'::jsonb or state->>'timesheet_id' is distinct from t.timesheet_id::text then
+  return jsonb_build_object('known',false,'reason','NATIVE_LEGACY_POSITION_UNAVAILABLE','native_facts',facts);end if;
+ return jsonb_build_object('known',true,'contract','WEEKLY_SOURCE_CHECKLIST_LEGACY_READ_FRAME_V1',
+  'timesheet_id',t.timesheet_id,'financial_id',f.id,'scope',p_scope,'native_position',state,'read_proof_hash',proof,
+  'withholding_known',false,'native_facts',facts);
+end;
+$legacy_frame$;
+alter function private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;

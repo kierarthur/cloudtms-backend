@@ -1,0 +1,20 @@
+{
+  "source_only": true,
+  "source_commit": "696bf40c1d1a4617cb0ae5a9f32963c3d45509e3",
+  "source_path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_hold_facts.sqlinc",
+  "input": "input/wp_u3_native_hold_facts.sqlinc",
+  "output": "forward/wp_u3_native_hold_facts.sqlinc",
+  "before_sha256": "3ba1dae5bec90dc144aa258e460e41c4fb477e492764a41257446ea32bae6262",
+  "after_sha256": "7792fff54583ffab3e51973e39b904e9f419ed0fc57ef3c3536b68f7c3995ba9",
+  "hunks": [
+    {
+      "before": "  next_owner boolean; route text; hash text; reason text;",
+      "after": "  next_owner boolean; route text; hash text; reason text;legacy_frame jsonb;"
+    },
+    {
+      "before": "  facts:=jsonb_build_object('scope',p_scope,'timesheet_id',t.timesheet_id,'actual_submission',witness,",
+      "after": "  if not next_owner and native_scope is null then\n    legacy_frame:=private.weekly_source_checklist_legacy_read_frame_v1(t.timesheet_id,p_scope,p_actor_user_id);end if;\n  facts:=jsonb_build_object('legacy_native_position_frame',legacy_frame,'scope',p_scope,'timesheet_id',t.timesheet_id,'actual_submission',witness,"
+    }
+  ],
+  "whole_reverse_equal": true
+}

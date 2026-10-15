@@ -1,0 +1,100 @@
+TAP version 13
+# Subtest: whole genuine native position core reverses only private ABI stability and optional audit extraction
+ok 1 - whole genuine native position core reverses only private ABI stability and optional audit extraction
+  ---
+  duration_ms: 150.1607
+  type: 'test'
+  ...
+# Subtest: native position exposes no fake actor and preserves native component settled reserved treatment snooze and outstanding calculations
+ok 2 - native position exposes no fake actor and preserves native component settled reserved treatment snooze and outstanding calculations
+  ---
+  duration_ms: 0.7799
+  type: 'test'
+  ...
+# Subtest: Legacy position is purpose-bound to real service actor Office scope and actual submitted identity before native reads
+ok 3 - Legacy position is purpose-bound to real service actor Office scope and actual submitted identity before native reads
+  ---
+  duration_ms: 0.5506
+  type: 'test'
+  ...
+# Subtest: wrong owner ambiguous TF wrong version stale unauthorised Source or wrong canonical family never gets a native Legacy position certificate
+ok 4 - wrong owner ambiguous TF wrong version stale unauthorised Source or wrong canonical family never gets a native Legacy position certificate
+  ---
+  duration_ms: 0.4035
+  type: 'test'
+  ...
+# Subtest: complete position family actor scope physical TF and owner frames recheck before hashing every native amount fact
+ok 5 - complete position family actor scope physical TF and owner frames recheck before hashing every native amount fact
+  ---
+  duration_ms: 0.4336
+  type: 'test'
+  ...
+# Subtest: native Legacy remaining balance is never renamed positive withholding no hold zero paid or a complete process
+ok 6 - native Legacy remaining balance is never renamed positive withholding no hold zero paid or a complete process
+  ---
+  duration_ms: 1.5869
+  type: 'test'
+  ...
+# Subtest: whole existing hold adapter adds Legacy current position only in its actual ordinary Legacy arm and preserves all withholding unknown values
+ok 7 - whole existing hold adapter adds Legacy current position only in its actual ordinary Legacy arm and preserves all withholding unknown values
+  ---
+  duration_ms: 44.9224
+  type: 'test'
+  ...
+# Subtest: complete Legacy frame literal graph contains all 34 native source bodies without a writer audit rowlock or unresolved callee
+ok 8 - complete Legacy frame literal graph contains all 34 native source bodies without a writer audit rowlock or unresolved callee
+  ---
+  duration_ms: 7.3617
+  type: 'test'
+  ...
+# Subtest: entire ordinary/Daily/calendar owner reverses exactly four treatment-only hunks
+ok 9 - entire ordinary/Daily/calendar owner reverses exactly four treatment-only hunks
+  ---
+  duration_ms: 64.9464
+  type: 'test'
+  ...
+# Subtest: all three actual complete native treatment approval staging and payload owners match raw Git file and definition pins
+ok 10 - all three actual complete native treatment approval staging and payload owners match raw Git file and definition pins
+  ---
+  duration_ms: 149.4176
+  type: 'test'
+  ...
+# Subtest: original approval native guard validates exact cloned payload sealed current predecessor and native POSITION_APPLY command
+ok 11 - original approval native guard validates exact cloned payload sealed current predecessor and native POSITION_APPLY command
+  ---
+  duration_ms: 0.7328
+  type: 'test'
+  ...
+# Subtest: reader requires that actual native approval proof before positive money and only removes blanket treatment-pointer refusal
+ok 12 - reader requires that actual native approval proof before positive money and only removes blanket treatment-pointer refusal
+  ---
+  duration_ms: 0.5838
+  type: 'test'
+  ...
+# Subtest: base approval full row and actual native treatment publication bind final refresh and read proof
+ok 13 - base approval full row and actual native treatment publication bind final refresh and read proof
+  ---
+  duration_ms: 0.5425
+  type: 'test'
+  ...
+# Subtest: actual clone native source keeps the same ordinary source kind and immutable Daily approval evidence
+ok 14 - actual clone native source keeps the same ordinary source kind and immutable Daily approval evidence
+  ---
+  duration_ms: 0.6456
+  type: 'test'
+  ...
+# Subtest: calendar Daily accepted snooze money conservation and private ACL remain outside all treatment edits
+ok 15 - calendar Daily accepted snooze money conservation and private ACL remain outside all treatment edits
+  ---
+  duration_ms: 0.7777
+  type: 'test'
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 349.8546

@@ -1,0 +1,29 @@
+create or replace function private.weekly_source_publication_receipt_json_v1(
+  p_receipt_id uuid
+) returns jsonb
+language sql stable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select pg_catalog.jsonb_build_object(
+    'id',receipt_row.id,
+    'decision_bundle_id',receipt_row.decision_bundle_id,
+    'pending_bundle_id',receipt_row.pending_bundle_id,
+    'bundle_revision',receipt_row.bundle_revision,
+    'request_digest',pg_catalog.encode(receipt_row.request_digest,'hex'),
+    'publication_mode',receipt_row.publication_mode,
+    'candidate_id',receipt_row.candidate_id,
+    'member_root_ids',pg_catalog.to_jsonb(receipt_row.member_root_ids),
+    'member_family_booking_ids',pg_catalog.to_jsonb(receipt_row.member_family_booking_ids),
+    'member_root_versions',pg_catalog.to_jsonb(receipt_row.member_root_versions),
+    'head_ids',pg_catalog.to_jsonb(receipt_row.head_ids),
+    'scope_change_tx_token',receipt_row.scope_change_tx_token,
+    'decision_id',receipt_row.decision_id,
+    'decided_by_user_id',receipt_row.decided_by_user_id,
+    'released_by_worker_id',receipt_row.released_by_worker_id,
+    'released_by_worker_run_id',receipt_row.released_by_worker_run_id,
+    'census_json',receipt_row.census_json,
+    'proof_json',receipt_row.proof_json,
+    'created_at_utc',receipt_row.created_at_utc)
+  from private.weekly_source_entitlement_publication_receipts as receipt_row
+  where receipt_row.id=p_receipt_id;
+$function$;

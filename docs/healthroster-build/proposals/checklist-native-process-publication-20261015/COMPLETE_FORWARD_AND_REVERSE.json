@@ -1,0 +1,32 @@
+{
+  "source_only": true,
+  "records": [
+    {
+      "source_commit": "696bf40c1d1a4617cb0ae5a9f32963c3d45509e3",
+      "source_path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_process.sqlinc",
+      "input": "input/wp_u3_native_process.sqlinc",
+      "output": "forward/wp_u3_native_process.sqlinc",
+      "before_sha256": "de7effdbe2c1d9bdc56c90691ab917d13b97fe520251e06870bafad5fd8ba5af",
+      "after_sha256": "4fafea382271fbcb641ab131247f28a40202c3f864f4622221b38aca8fce278c",
+      "hunks": [
+        {
+          "before": "  facts jsonb:='[]'::jsonb; proof boolean; tasks_proved boolean; count_tasks integer;",
+          "after": "  facts jsonb:='[]'::jsonb; proof boolean; tasks_proved boolean; count_tasks integer;\n  publication_proof jsonb;publication_proof_after jsonb;publication_facts jsonb;"
+        },
+        {
+          "before": "    if revision.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' then",
+          "after": "    publication_facts:='[]'::jsonb;\n    if revision.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' then"
+        },
+        {
+          "before": "        -- A PROPOSED or suppressed orchestration receipt alone has no native\n        -- effective publication proof. Keep this case outstanding until the\n        -- exact retained publication owner is composed by the integrator.\n        if task.client_id=p_client and task.state in('PROPOSED','TARGET_MANAGED_SUPPRESSED') then tasks_proved:=false; end if;",
+          "after": "        -- Orchestration alone still proves nothing. Require the SAME actual\n        -- receipt revision's current native publication, for every actual event.\n        if task.client_id=p_client and task.state in('PROPOSED','TARGET_MANAGED_SUPPRESSED') then\n          publication_proof:=private.weekly_source_checklist_process_publication_v1(receipt.id);\n          publication_proof_after:=private.weekly_source_checklist_process_publication_v1(receipt.id);\n          if publication_proof is distinct from publication_proof_after then\n            raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';end if;\n          publication_facts:=publication_facts||jsonb_build_array(jsonb_build_object('task_id',task.id,'publication',publication_proof));\n          tasks_proved:=tasks_proved and publication_proof->'proved'='true'::jsonb;\n        end if;"
+        },
+        {
+          "before": "      'process_complete',coalesce(proof,false),'pay_run_id',",
+          "after": "      'process_complete',coalesce(proof,false),'native_publication_facts',publication_facts,'pay_run_id',"
+        }
+      ],
+      "whole_reverse_equal": true
+    }
+  ]
+}

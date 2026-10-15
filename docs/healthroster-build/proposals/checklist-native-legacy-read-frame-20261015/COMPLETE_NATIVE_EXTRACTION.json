@@ -1,0 +1,30 @@
+{
+  "source_only": true,
+  "native_SQL": false,
+  "source_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+  "source_file_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f",
+  "id": "public.timesheet_pay_state(uuid,uuid)",
+  "native_definition_sha256": "1578659c9810c90a2fa9c2bfa1bf3f854189b1274c8936cdaf6ff55c07f00a77",
+  "saved_native": "input/complete_native_timesheet_pay_state.sqlinc",
+  "output": "forward/wp_u3_legacy_pay_state_core.sqlinc",
+  "output_sha256": "db24c38f9e77e220bd00b4c9f8917c2ae07bbafc4da3fa2a48cb8c99e6b50a4a",
+  "only_native_body_change": "remove optional diagnostic audit; all native classifier and quantities byte-preserved",
+  "full_reverse_equal": true,
+  "hunks": [
+    {
+      "before": "CREATE OR REPLACE FUNCTION public.timesheet_pay_state(p_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)",
+      "after": "CREATE OR REPLACE FUNCTION private.weekly_source_checklist_legacy_pay_state_core_v1(p_timesheet_id uuid)"
+    },
+    {
+      "before": " LANGUAGE plpgsql\n SECURITY DEFINER",
+      "after": " LANGUAGE plpgsql STABLE\n SECURITY DEFINER"
+    },
+    {
+      "before": "  BEGIN\n    IF p_actor_user_id IS NOT NULL THEN\n      PERFORM public._imp_debug_audit(\n        p_actor_user_id,\n        'TIMESHEET_PAY_STATE',\n        jsonb_build_object(\n          'timesheet_id', p_timesheet_id::text,\n          'has_tsfin', v_has_tsfin,\n          'result', v_out\n        ),\n        'timesheets',\n        p_timesheet_id::text\n      );\n    END IF;\n  EXCEPTION WHEN OTHERS THEN\n    NULL;\n  END;\n",
+      "after": "  -- Native diagnostic audit belongs to the unchanged public owner only.\n"
+    }
+  ],
+  "added_private_ACL": true,
+  "public_native_owner_unchanged": true
+}

@@ -1,0 +1,30 @@
+create or replace function private.bpay_next_treatment_approval_revision_v1(p_revision_id uuid)
+returns uuid language plpgsql stable security invoker set search_path=pg_catalog,private
+as $function$
+declare r private.bpay_next_work_revision%rowtype; a private.bpay_next_work_revision%rowtype;
+ pred private.bpay_next_work_revision%rowtype; pub private.bpay_next_publication%rowtype;
+begin
+ select x.* into r from private.bpay_next_work_revision x where x.id=p_revision_id;
+ if r.id is null or r.approved_at_utc is null or r.sealed_at_utc is null then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_APPROVAL_UNAVAILABLE';end if;
+ if r.payment_treatment_approval_revision_id is null then return r.id;end if;
+ select x.* into a from private.bpay_next_work_revision x
+  where x.id=r.payment_treatment_approval_revision_id and x.work_id=r.work_id;
+ select x.* into pub from private.bpay_next_publication x where x.work_id=r.work_id and x.revision_id=r.id;
+ select x.* into pred from private.bpay_next_work_revision x where x.id=pub.predecessor_revision_id and x.work_id=r.work_id;
+ if a.id is null or a.id=r.id or a.payment_treatment_approval_revision_id is not null
+  or a.approved_at_utc is null or a.sealed_at_utc is null or r.source_event_id is not null
+  or (to_jsonb(r)-array['id','revision_no','source_event_id','approved_at_utc','sealed_at_utc','created_at_utc','payment_treatment_approval_revision_id']) is distinct from (to_jsonb(a)-array['id','revision_no','source_event_id','approved_at_utc','sealed_at_utc','created_at_utc','payment_treatment_approval_revision_id'])
+  or pub.revision_no is distinct from r.revision_no
+  or pred.id is null or pred.sealed_at_utc is null or pred.approved_at_utc is null
+  or coalesce(pred.payment_treatment_approval_revision_id,pred.id) is distinct from a.id
+  or pred.revision_no+1 is distinct from r.revision_no
+  or not exists(select 1 from private.bpay_next_command c
+   join private.bpay_next_command_member m on m.command_id=c.id and m.candidate_id=pub.candidate_id
+   join private.bpay_next_work w on w.id=pub.work_id and w.candidate_id=pub.candidate_id
+   where c.id=pub.command_id and c.command_kind='POSITION_APPLY' and c.sealed_at_utc is not null
+    and c.expected_member_count=1 and m.member_no=1) then
+  raise exception using errcode='23514',message='BPAY_NEXT_TREATMENT_APPROVAL_UNAVAILABLE';end if;
+ return a.id;
+end
+$function$;
