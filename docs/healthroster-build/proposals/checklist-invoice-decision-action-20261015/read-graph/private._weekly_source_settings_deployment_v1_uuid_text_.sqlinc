@@ -1,0 +1,18 @@
+create or replace function private._weekly_source_settings_deployment_v1(
+  p_agency_id uuid,
+  p_environment text
+) returns text
+language plpgsql
+immutable
+security invoker
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_environment text:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_environment,'')));
+begin
+  if p_agency_id is null or v_environment not in ('TEST','LIVE') then
+    raise exception 'WEEKLY_SOURCE_SETTINGS_DEPLOYMENT_INVALID' using errcode='22023';
+  end if;
+  return v_environment;
+end;
+$function$;

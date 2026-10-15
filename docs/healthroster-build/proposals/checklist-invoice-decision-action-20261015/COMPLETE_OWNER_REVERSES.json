@@ -1,0 +1,149 @@
+{
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "records": [
+    {
+      "commit": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+      "file": "docs/healthroster-build/proposals/checklist-native-invoice-decision-transport-20261015/forward/wp_u3_source_invoice_decisions.sqlinc",
+      "saved": "input/before_wp_u3_source_invoice_decisions.sqlinc",
+      "output": "forward/wp_u3_source_invoice_decisions.sqlinc",
+      "before_bytes": 7465,
+      "before_sha256": "753eac4f9d839b2e2fa37060451422e151a150ff5f9d7bcc895226789e34be5b",
+      "after_bytes": 9968,
+      "after_sha256": "20717d0e82aac0062002d0beae2f690933988b567d74f4969f91ddf9c5e0559e",
+      "hunks": [
+        {
+          "label": "explicitly distinguish a native action descriptor from a release write",
+          "before": "-- and native release qualification. No release, money calculation or action.",
+          "after": "-- and native release qualification. No release write or money calculation.\n-- An action descriptor requires both literal native choices to qualify."
+        },
+        {
+          "label": "same owner separate actual choice qualifications",
+          "before": "  decisions jsonb:='[]'::jsonb; witness jsonb; proof text; known boolean;",
+          "after": "  decisions jsonb:='[]'::jsonb; witness jsonb; proof text; known boolean; choices_known boolean;\n  file_request jsonb; file_context jsonb; file_context_again jsonb;"
+        },
+        {
+          "label": "unqualified base items retain no action",
+          "before": "    known:=false;context:=null;context_again:=null;request:=null;",
+          "after": "    known:=false;choices_known:=false;context:=null;context_again:=null;request:=null;\n    file_request:=null;file_context:=null;file_context_again:=null;item:=item||jsonb_build_object('action',null);"
+        },
+        {
+          "label": "qualify BILL_AS_FILE through same native owner and first-invoice assertion twice",
+          "before": "      fact:=fact||jsonb_build_object('decision_known',true,'pending_decision',true);",
+          "after": "      -- Choice eligibility is native-owned. Do not infer BILL_AS_FILE from the\n      -- default qualification, calculate money or expose a public lock mode.\n      file_request:=request||jsonb_build_object('action','BILL_AS_FILE');\n      begin\n        file_context:=private.weekly_source_invoice_hold_release_context_core_v1(file_request,false);\n        perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);\n        file_context_again:=private.weekly_source_invoice_hold_release_context_core_v1(file_request,false);\n        perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);\n        if file_context is distinct from file_context_again or (file_context-'choice') is distinct from (context-'choice')\n          or file_context->>'choice' is distinct from 'BILL_AS_FILE' then\n          raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;\n        choices_known:=true;\n      exception when sqlstate '55000' or sqlstate '40001' or sqlstate '22023' then\n        if sqlerrm='WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' then raise; end if;\n        fact:=fact||jsonb_build_object('choice_qualification_sqlstate',sqlstate,'choice_qualification_code',sqlerrm);\n      end;\n      fact:=fact||jsonb_build_object('decision_known',true,'pending_decision',true,'native_release_choices_known',choices_known,\n        'native_file_release_request',file_request,'native_file_release_context',file_context,'native_file_release_context_again',file_context_again);"
+        },
+        {
+          "label": "closed literal action binds both native choices to same qualified witness",
+          "before": "      item:=item||jsonb_build_object('native_invoice_decision_witness',witness,",
+          "after": "      item:=item||jsonb_build_object('action',case when choices_known then jsonb_build_object(\n          'kind','INVOICE_HOLD_DECISION','label','Review invoice hold','native_allowed',true,\n          'target',jsonb_build_object('contract','WEEKLY_SOURCE_CHECKLIST_INVOICE_HOLD_DECISION_ACTION_V1',\n            'actor_user_id',p_actor_user_id,'permission_view','ADMIN','scope',p_scope,\n            'billing_movement_id',witness->'billing_movement_id','client_manifest_id',witness->'client_manifest_id','upload_row_id',row_id,\n            'expected_source_row_hash',witness->'source_row_hash','expected_authority_scope_version',cycle.version,\n            'hold_kind','VAT_FIT','decision_read_proof_hash',proof,'choices',jsonb_build_array('BILL_AT_NET_PLUS_20','BILL_AS_FILE'))) end,\n        'native_invoice_decision_witness',witness,"
+        }
+      ]
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-next-hold-20261015/forward/healthroster-checklist-source.mjs",
+      "saved": "input/before_healthroster-checklist-source.mjs",
+      "output": "forward/healthroster-checklist-source.mjs",
+      "before_bytes": 37035,
+      "before_sha256": "6d972dea797a1c559312c55fa11b8025ee714392e9b4374793ab24435080eb0a",
+      "after_bytes": 38922,
+      "after_sha256": "24eab68f71c697c118203c79bb850d554baa05988511ce40eceae679a1d7b23b",
+      "hunks": [
+        {
+          "label": "finite invoice action kind",
+          "before": "'DAILY_REVIEW', 'UPLOAD']);",
+          "after": "'DAILY_REVIEW', 'UPLOAD', 'INVOICE_HOLD_DECISION']);"
+        },
+        {
+          "label": "action requires the already validated invoice decision witness; cells and main rows have none",
+          "before": "function link(l, scope) {",
+          "after": "function link(l, scope, invoiceDecision = null) {"
+        },
+        {
+          "label": "closed actor scope native-row CAS and choice descriptor",
+          "before": "  text(l.label, 250); object(l.target);",
+          "after": "  text(l.label, 250); object(l.target);\n  if(l.kind==='INVOICE_HOLD_DECISION') {\n    const t=l.target,d=invoiceDecision;\n    closed(t,['contract','actor_user_id','permission_view','scope','billing_movement_id','client_manifest_id','upload_row_id',\n      'expected_source_row_hash','expected_authority_scope_version','hold_kind','decision_read_proof_hash','choices']);\n    uuid(t.actor_user_id);bindScope(t.scope);\n    for(const key of ['billing_movement_id','client_manifest_id','upload_row_id'])uuid(t[key]);\n    if(!d||l.label!=='Review invoice hold'||t.contract!=='WEEKLY_SOURCE_CHECKLIST_INVOICE_HOLD_DECISION_ACTION_V1'||t.permission_view!=='ADMIN'||\n      !same(t.actor_user_id,d.actor_user_id)||!sameScope(t.scope,scope)||!sameScope(t.scope,d.scope)||\n      !['billing_movement_id','client_manifest_id','upload_row_id'].every(k=>same(t[k],d[k]))||\n      typeof t.expected_source_row_hash!=='string'||!HASH.test(t.expected_source_row_hash)||t.expected_source_row_hash!==d.source_row_hash||\n      !Number.isSafeInteger(t.expected_authority_scope_version)||t.expected_authority_scope_version<0||t.expected_authority_scope_version!==d.authority_scope_version||\n      t.hold_kind!=='VAT_FIT'||typeof t.decision_read_proof_hash!=='string'||!HASH.test(t.decision_read_proof_hash)||t.decision_read_proof_hash!==d.read_proof_hash||\n      !Array.isArray(t.choices)||t.choices.length!==2||t.choices[0]!=='BILL_AT_NET_PLUS_20'||t.choices[1]!=='BILL_AS_FILE') {\n      fail('CHECKLIST_INVOICE_DECISION_ACTION_INVALID');\n    }\n    return copy(l);\n  }"
+        },
+        {
+          "label": "invoice action has one native kind and only with qualified decision witness",
+          "before": "item.source_information_witness!==null||item.native_source_witness!==null||item.queries_parent_witness!=null||item.action!==null)",
+          "after": "item.source_information_witness!==null||item.native_source_witness!==null||item.queries_parent_witness!=null||item.action===undefined||\n      (item.action!==null&&(item.action.kind!=='INVOICE_HOLD_DECISION'||item.native_invoice_decision_witness==null)))"
+        },
+        {
+          "label": "other item kinds cannot borrow the invoice action descriptor",
+          "before": "  const action = link(item.action ?? null, item.scope);",
+          "after": "  if(item.action?.kind==='INVOICE_HOLD_DECISION'&&item.item_kind!=='NATIVE_INVOICE')fail('CHECKLIST_INVOICE_DECISION_ACTION_INVALID');\n  const action = link(item.action ?? null, item.scope,item.item_kind==='NATIVE_INVOICE'?item.native_invoice_decision_witness:null);"
+        }
+      ]
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-next-hold-20261015/forward/checklist-read.mjs",
+      "saved": "input/before_checklist-read.mjs",
+      "output": "forward/checklist-read.mjs",
+      "before_bytes": 6041,
+      "before_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "after_bytes": 6041,
+      "after_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "hunks": []
+    },
+    {
+      "commit": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+      "file": "docs/healthroster-build/proposals/checklist-native-ordinary-next-hold-20261015/forward/wp_u3_native_checklist.sqlinc",
+      "saved": "input/before_wp_u3_native_checklist.sqlinc",
+      "output": "forward/wp_u3_native_checklist.sqlinc",
+      "before_bytes": 59358,
+      "before_sha256": "9a1feefc6c31f577267f83c4165ff2bd015aabafcdac2670298721b37b6f8aa6",
+      "after_bytes": 59367,
+      "after_sha256": "bfbb8a4c1eb9c8ef99fb7c885b1f478adf3d396cb8ecf933df8ba3310ae2edff",
+      "hunks": [
+        {
+          "label": "one native child action passes through without invented Finalise target",
+          "before": "'subject','INVOICE_ONLY','permitted_pay_subject',false,'action',null,'counted_timesheet_id',null,",
+          "after": "'subject','INVOICE_ONLY','permitted_pay_subject',false,'action',raw->'action','counted_timesheet_id',null,"
+        }
+      ]
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "file": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/forward/workspace-actions.jsinc",
+      "saved": "input/before_workspace-actions.jsinc",
+      "output": "forward/workspace-actions.jsinc",
+      "before_bytes": 131648,
+      "before_sha256": "acdb3e89f6eebf410eaa52b1d1a8597e92c8bf06dc3288afefc0447eae34c656",
+      "after_bytes": 140311,
+      "after_sha256": "a105a27b8f92842a68fe320ce1947c5c9f436383f0824dc30175434a1bfc1448",
+      "hunks": [
+        {
+          "label": "purpose-bound invoice child preserves complete current paid and R254 union",
+          "before": "  function handleAction(detailValue) {",
+          "after": "// One purpose-bound caller for the existing native invoice release owner.\nfunction normaliseChecklistInvoiceDecision(value,actorId) {\n  const closed=(v,keys)=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(v,k));\n  const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v),hash=v=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);\n  const date=v=>typeof v==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;\n  if(!closed(value,['contract','actor_user_id','permission_view','scope','billing_movement_id','client_manifest_id','upload_row_id',\n    'expected_source_row_hash','expected_authority_scope_version','hold_kind','decision_read_proof_hash','choices'])\n    ||value.contract!=='WEEKLY_SOURCE_CHECKLIST_INVOICE_HOLD_DECISION_ACTION_V1'||!uuid(actorId)||value.actor_user_id!==actorId||value.permission_view!=='ADMIN'\n    ||!closed(value.scope,['source_group_id','source_cycle_id','client_id','week_ending'])\n    ||!['source_group_id','source_cycle_id','client_id'].every(k=>uuid(value.scope[k]))||!date(value.scope.week_ending)\n    ||!['billing_movement_id','client_manifest_id','upload_row_id'].every(k=>uuid(value[k]))\n    ||!hash(value.expected_source_row_hash)||!hash(value.decision_read_proof_hash)||!Number.isSafeInteger(value.expected_authority_scope_version)\n    ||value.expected_authority_scope_version<0||value.hold_kind!=='VAT_FIT'||!Array.isArray(value.choices)||value.choices.length!==2\n    ||value.choices[0]!=='BILL_AT_NET_PLUS_20'||value.choices[1]!=='BILL_AS_FILE')return null;\n  return JSON.parse(JSON.stringify(value));\n}\nfunction openChecklistInvoiceDecision(detail) {\n  const session=typeof SESSION!=='undefined'?SESSION:null,user=session?.user,actorId=user?.id;\n  const roles=JSON.stringify(user?.roles),flags=JSON.stringify([user?.role,user?.is_active]),workspace=workspaceApi();\n  const action=normaliseChecklistInvoiceDecision(detail.payload,actorId);\n  if(detail.label!=='Review invoice hold'||detail.enabled!==true||!action||user?.is_active!==true||String(user?.role??'').trim().toLowerCase()!=='admin'\n    ||typeof workspace?.issueCommand!=='function'||typeof detail.returnTo!=='function'||typeof detail.callerCurrent!=='function'||detail.callerCurrent()!==true||typeof root.showModal!=='function')\n    return openDetail({detail:{problem:'This invoice decision could not be verified. Refresh the Checklist before continuing.'}},'View details');\n  const sessionCurrent=()=>!!session&&!!user&&(typeof SESSION!=='undefined'?SESSION:null)===session&&SESSION.user===user\n    &&SESSION.user.id===actorId&&JSON.stringify(SESSION.user.roles)===roles&&JSON.stringify([SESSION.user.role,SESSION.user.is_active])===flags&&workspaceApi()===workspace&&detail.callerCurrent()===true;\n  const parents=Array.isArray(root.__modalStack)?root.__modalStack.slice():[],parentTokens=parents.map(p=>p._token),kind='weekly-source-checklist-invoice-decision-v1';\n  const context={entity:'weekly-source-child',data:{},weeklySourceChildKind:kind};\n  const state={choice:'BILL_AT_NET_PLUS_20',confirmed:false,busy:false,error:'',pending:null};let frame=null,token=null;\n  const parentCurrent=()=>parents.length===(root.__modalStack||[]).length&&parents.every((p,i)=>root.__modalStack[i]===p&&p._token===parentTokens[i]);\n  const current=()=>sessionCurrent()&&!!frame&&frame._token===token&&(root.__modalStack||[]).length===parents.length+1\n    &&parents.every((p,i)=>root.__modalStack[i]===p&&p._token===parentTokens[i])&&(root.__modalStack||[]).at(-1)===frame;\n  const renderTab=()=>{\n    if(!sessionCurrent())return '';\n    if(!frame){const stack=root.__modalStack||[],child=stack.at(-1);\n      if(stack.length!==parents.length+1||!parents.every((p,i)=>stack[i]===p&&p._token===parentTokens[i])||child?.kind!==kind\n        ||child.renderTab!==renderTab||child._ctxRef!==context)return '';frame=child;token=child._token;}\n    if(!current())return '';\n    const choices=[['BILL_AT_NET_PLUS_20','Bill at net + 20%'],['BILL_AS_FILE','Bill as in the file']].map(([value,label])=>\n      `<label><input type=\"radio\" name=\"ws-invoice-release-choice\" data-wsa-invoice-choice value=\"${value}\"${state.choice===value?' checked':''}${state.busy||state.pending?' disabled':''}><span>${label}</span></label>`).join('');\n    const markup=`<div class=\"ws-child\" data-wsa-screen=\"invoice-decision\"><p>The amount with VAT in this export line does not equal its net plus 20% VAT. Choose how this line should be billed.</p>\n      ${detail.context?.client?`<p>${escapeHtml(detail.context.client)}</p>`:''}<div class=\"ws-child-fields\">${choices}</div>\n      <label class=\"ws-confirm\"><input type=\"checkbox\" data-wsa-invoice-confirm${state.confirmed?' checked':''}${state.busy?' disabled':''}><span>Release this invoice hold using the selected billing choice.</span></label>\n      ${state.error?`<p role=\"alert\">${escapeHtml(state.error)}</p>`:''}<div class=\"ws-child-actions\"><button type=\"button\" class=\"btn btn-outline\" data-wsa-invoice-close>Cancel</button>\n      <button type=\"button\" class=\"btn primary\" data-wsa-invoice-submit${state.confirmed&&!state.busy?'':' disabled'}>${state.pending?'Retry exact request':'Release invoice hold'}</button></div></div>`;\n    setTimeout(wire,0);return typeof root.html==='function'?root.html(markup):markup;\n  };\n  const wire=()=>{\n    if(!current())return;const host=root.document?.querySelector('[data-wsa-screen=\"invoice-decision\"]');if(!host||host.dataset.wsaWired==='1')return;host.dataset.wsaWired='1';\n    host.querySelector('[data-wsa-invoice-close]')?.addEventListener('click',()=>{if(current())closeChild();});\n    host.querySelectorAll('[data-wsa-invoice-choice]').forEach(input=>input.addEventListener('change',()=>{\n      if(!current()||state.busy||state.pending||!action.choices.includes(input.value))return;state.choice=input.value;state.confirmed=false;rerender(kind);\n    }));\n    host.querySelector('[data-wsa-invoice-confirm]')?.addEventListener('change',event=>{if(!current()||state.busy)return;state.confirmed=event.target.checked;\n      host.querySelector('[data-wsa-invoice-submit]').disabled=!state.confirmed||state.busy;});\n    host.querySelector('[data-wsa-invoice-submit]')?.addEventListener('click',async()=>{\n      if(!current()||!state.confirmed||state.busy)return;\n      if(!state.pending)state.pending={upload_row_id:action.upload_row_id,source_cycle_id:action.scope.source_cycle_id,report_scope_id:null,\n        expected_source_row_hash:action.expected_source_row_hash,expected_authority_scope_version:action.expected_authority_scope_version,hold_kind:'VAT_FIT',action:state.choice};\n      state.busy=true;state.error='';rerender(kind);\n      try {\n        const result=await workspace.issueCommand('RELEASE_INVOICE_HOLD',JSON.parse(JSON.stringify(state.pending)));\n        if(!current())return;\n        const keys=['ok','contract','status','idempotent','release_id','upload_row_id','hold_kind','action','net_pence','vat_pence','gross_pence'];\n        const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v);\n        if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).length!==keys.length||!keys.every(k=>Object.prototype.hasOwnProperty.call(result,k))\n          ||result.ok!==true||result.contract!=='WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_V1'||result.status!=='RELEASED'||typeof result.idempotent!=='boolean'\n          ||!uuid(result.release_id)||result.upload_row_id!==action.upload_row_id||result.hold_kind!=='VAT_FIT'||result.action!==state.pending.action\n          ||!['net_pence','vat_pence','gross_pence'].every(k=>Number.isSafeInteger(result[k])))throw new Error('Unconfirmed invoice decision');\n        markCompletedChildClean();closeChild();\n        if(!sessionCurrent()||!parentCurrent())return;\n        root.__toast?.('Invoice hold released.');await detail.returnTo();\n        if(!sessionCurrent()||!parentCurrent())return;\n      }catch{\n        if(!current())return;state.error='The invoice decision result could not be confirmed. Retry this exact request, or close and refresh the Checklist.';\n      }finally{state.busy=false;if(current())rerender(kind);}\n    });\n  };\n  root.modalCtx=context;root.showModal('Review invoice hold',[{key:'main',label:'Review invoice hold'}],renderTab,null,false,wire,\n    {kind,noParentGate:true,showSave:false,showApply:false,runOnRender:true});\n  return !!frame&&current();\n}\n\n  function handleAction(detailValue) {"
+        },
+        {
+          "label": "only literal invoice descriptor dispatches the new purpose caller",
+          "before": "    const label = asText(detail.label);\n    if (detail.kind === 'CHECK_ONLY_D10_CANDIDATE_REMINDER')",
+          "after": "    const label = asText(detail.label);\n    if (detail.kind === 'CHECKLIST_INVOICE_HOLD_DECISION') return openChecklistInvoiceDecision(detail);\n    if (detail.kind === 'CHECK_ONLY_D10_CANDIDATE_REMINDER')"
+        }
+      ]
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "file": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/forward/import-workspace.jsinc",
+      "saved": "input/before_import-workspace.jsinc",
+      "output": "forward/import-workspace.jsinc",
+      "before_bytes": 165012,
+      "before_sha256": "0ade9730da19455b83f95a20c48cff2b80f770329a2e560ee5ba1f011400e27a",
+      "after_bytes": 165580,
+      "after_sha256": "d4f34617ce86e94cd1a21bfa81c98d7ad05109060684582aebf6ca0380ffe84d",
+      "hunks": [
+        {
+          "label": "actual Checklist caller returns to same captured Checklist after native command",
+          "before": "      if(action.kind==='UPLOAD_DETAIL'&&root.CloudTMSWeeklySourceWorkspaceActionsV1)",
+          "after": "      if(action.kind==='INVOICE_HOLD_DECISION'&&root.CloudTMSWeeklySourceWorkspaceActionsV1){\n        const invoiceWorkspace=session.workspace;\n        const callerCurrent=()=>generation===session.openGeneration&&session.openCurrent?.()===true&&session.workspace===invoiceWorkspace;\n        return root.CloudTMSWeeklySourceWorkspaceActionsV1.handleAction({kind:'CHECKLIST_INVOICE_HOLD_DECISION',label:'Review invoice hold',enabled:true,\n          payload:target,context:{client:row.client},callerCurrent,returnTo:()=>current()?returnToChecklist():undefined});\n      }\n      if(action.kind==='UPLOAD_DETAIL'&&root.CloudTMSWeeklySourceWorkspaceActionsV1)"
+        }
+      ]
+    }
+  ]
+}

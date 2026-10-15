@@ -1,0 +1,11 @@
+create or replace function private.weekly_source_bulk_source_cas_v1(p_cycle_id uuid,p_client_ids uuid[])
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare facts jsonb;
+begin
+  facts:=private.weekly_source_bulk_source_facts_v1(p_cycle_id,p_client_ids);
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_BULK_SOURCE_CAS_V1','source_cycle_id',p_cycle_id,
+    'client_ids',facts->'client_ids','source_cas_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1',facts),'hex'));
+end;
+$function$;

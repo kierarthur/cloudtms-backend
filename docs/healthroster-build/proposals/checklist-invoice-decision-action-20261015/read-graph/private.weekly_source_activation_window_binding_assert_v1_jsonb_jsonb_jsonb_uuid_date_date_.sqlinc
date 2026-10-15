@@ -1,0 +1,69 @@
+create or replace function private.weekly_source_activation_window_binding_assert_v1(p_binding jsonb,p_native jsonb,p_closure jsonb,p_group uuid,p_from date,p_to date)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare a public.weekly_source_group_rule_assignments%rowtype; v public.weekly_source_rule_set_versions%rowtype; lease jsonb; off_lease boolean;
+begin
+  if not private.weekly_source_qualification_closed_object_v1(p_binding,array['schema_version','assignment_id','assignment_version','assignment_sha256',
+    'source_group_id','feature_purpose','rule_set_version_id','rule_values_sha256','effective_from_week_ending','effective_to_week_ending',
+    'native_effective_from_week_ending','native_effective_to_week_ending','fixture_cycle_id','fixture_rule_set_version_id','fixture_rule_values_sha256',
+    'scope_id','scope_sha256','original_census_sha256','scope_binding_sha256'])
+    or p_binding->>'schema_version' is distinct from 'WEEKLY_SOURCE_ACTIVATION_WINDOW_BINDING_V1'
+    or exists(select 1 from unnest(array['assignment_id','source_group_id','fixture_cycle_id','scope_id']) key
+      where coalesce(p_binding->>key,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['assignment_sha256','scope_sha256','original_census_sha256','scope_binding_sha256']) key
+      where coalesce(p_binding->>key,'') !~ '^[0-9a-f]{64}$')
+    or coalesce(p_binding->>'assignment_version','') !~ '^[1-9][0-9]*$'
+    or p_binding->>'scope_binding_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ACTIVATION_WINDOW_BINDING_V1',p_binding-'scope_binding_sha256'),'hex')
+    or p_binding->>'source_group_id' is distinct from p_group::text
+    or p_binding->>'effective_from_week_ending' is distinct from p_from::text
+    or p_binding->>'effective_to_week_ending' is distinct from p_to::text
+    or p_binding->>'native_effective_from_week_ending' is distinct from p_native->>'effective_from_week_ending'
+    or p_binding->>'native_effective_to_week_ending' is distinct from p_native->>'effective_to_week_ending'
+    or p_binding->>'fixture_cycle_id' is distinct from p_closure->>'source_cycle_id'
+    or exists(select 1 from unnest(array['scope_id','scope_sha256','original_census_sha256']) key where p_binding->>key is distinct from p_closure->>key)
+    or extract(dow from p_from)<>0 or (p_to is not null and (extract(dow from p_to)<>0 or p_to<p_from))
+    or extract(dow from (p_native->>'effective_from_week_ending')::date)<>0
+    or p_from<(p_native->>'effective_from_week_ending')::date then
+    raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_INVALID' using errcode='55000'; end if;
+  select * into strict a from public.weekly_source_group_rule_assignments where id=(p_binding->>'assignment_id')::uuid;
+  if a.source_group_id<>p_group or a.effective_from_week_ending<>p_from or a.effective_to_week_ending is distinct from p_to
+    or a.rule_set_version_id::text is distinct from p_binding->>'rule_set_version_id'
+    or p_binding->>'feature_purpose' not in ('RULE_SET','PROTECTED_SOURCE') then
+    raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_CHANGED' using errcode='40001'; end if;
+  -- Before activation/recording the ENTIRE exact saved row is still disabled.
+  -- After activation the normal native receipt, request/CAS and admin guards
+  -- remain the capability reader's authority; this is never a new toggle.
+  if not a.feature_enabled and (a.version::text is distinct from p_binding->>'assignment_version'
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(a)),'hex')
+      is distinct from p_binding->>'assignment_sha256') then
+    raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_CHANGED' using errcode='40001'; end if;
+  if a.feature_enabled and (a.feature_purpose is distinct from p_binding->>'feature_purpose'
+    or a.feature_receipt_json#>'{protected_capability_qualification,activation_scope}' is distinct from p_binding) then
+    raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_CHANGED' using errcode='40001'; end if;
+  select audit.after_json,audit.object_type='weekly_source_off_rule_test_journey' into strict lease,off_lease
+    from public.audit_events audit where audit.object_id_text=p_closure->>'scope_id' and audit.event_sequence_is_authoritative
+      and ((audit.object_type='weekly_source_off_rule_test_journey' and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_OPENED')
+        or (audit.object_type='weekly_source_protected_test_journey' and audit.action='WEEKLY_SOURCE_TEST_JOURNEY_OPENED'))
+      and audit.after_json->>'scope_sha256'=p_closure->>'scope_sha256';
+  if p_binding->>'feature_purpose'='PROTECTED_SOURCE' then
+    if a.rule_set_version_id is not null or p_binding->'rule_values_sha256' is distinct from 'null'::jsonb
+      or p_binding->'fixture_rule_set_version_id' is distinct from 'null'::jsonb
+      or p_binding->'fixture_rule_values_sha256' is distinct from 'null'::jsonb
+      or p_native->'capabilities' @> '["AUTOMATIC_RECONCILE"]'::jsonb or off_lease then
+      raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_INVALID' using errcode='55000'; end if;
+  else
+    select * into strict v from public.weekly_source_rule_set_versions where id=a.rule_set_version_id;
+    if not off_lease or lease->>'purpose' is distinct from 'AUTOMATIC_JOURNEY'
+      or lease->>'rule_set_version_id' is distinct from v.id::text
+      or p_binding->>'fixture_rule_set_version_id' is distinct from v.id::text
+      or p_binding->>'fixture_rule_values_sha256' is distinct from v.values_sha256
+      or p_binding->>'rule_values_sha256' is distinct from v.values_sha256
+      or v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL' then
+      raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_INVALID' using errcode='55000'; end if;
+    perform private._weekly_source_rule_group_context_v1(p_group,p_from,p_to,v.values_json,true);
+  end if;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_OPERATIONAL_ACTIVATION_WINDOW_BINDING_INVALID' using errcode='55000';
+end;
+$function$;

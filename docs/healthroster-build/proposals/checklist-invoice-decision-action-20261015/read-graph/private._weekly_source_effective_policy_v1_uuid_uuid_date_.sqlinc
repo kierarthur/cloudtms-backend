@@ -1,0 +1,186 @@
+create or replace function private._weekly_source_effective_policy_v1(
+  p_client_id uuid,
+  p_contract_id uuid,
+  p_work_date date
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_group record;
+  v_client_policy public.weekly_source_client_policies%rowtype;
+  v_contract_policy public.weekly_source_contract_policies%rowtype;
+  v_group_count integer;
+  v_client_policy_count integer;
+  v_contract_policy_count integer;
+  v_contract_client_id uuid;
+  v_policy jsonb;
+  v_source_expenses boolean;
+  v_source_expense_vat boolean;
+  v_candidate_queries boolean;
+  v_manager_queries boolean;
+  v_completed_copy boolean;
+  v_manager_recipient text;
+  v_completed_recipient text;
+begin
+  if p_client_id is null or p_work_date is null then
+    raise exception 'WEEKLY_SOURCE_POLICY_SCOPE_REQUIRED' using errcode='22023';
+  end if;
+
+  select count(*) into v_group_count
+  from public.weekly_source_group_clients gc
+  join public.weekly_source_groups g on g.id=gc.source_group_id
+  where gc.client_id=p_client_id
+    and g.active
+    and p_work_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date);
+  if v_group_count<>1 then
+    raise exception 'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID'
+      using errcode='55000',
+            detail=pg_catalog.jsonb_build_object(
+              'reason_code','WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID',
+              'client_id',p_client_id,
+              'work_date',p_work_date,
+              'match_count',v_group_count
+            )::text;
+  end if;
+
+  select g.*,gc.id as membership_id into strict v_group
+  from public.weekly_source_group_clients gc
+  join public.weekly_source_groups g on g.id=gc.source_group_id
+  where gc.client_id=p_client_id
+    and g.active
+    and p_work_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date);
+
+  select count(*) into v_client_policy_count
+  from public.weekly_source_client_policies cp
+  where cp.source_group_id=v_group.id
+    and cp.client_id=p_client_id
+    and p_work_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date);
+  if v_client_policy_count<>1 then
+    raise exception 'WEEKLY_SOURCE_CLIENT_POLICY_CARDINALITY_INVALID'
+      using errcode='55000',
+            detail=pg_catalog.jsonb_build_object(
+              'reason_code','WEEKLY_SOURCE_CLIENT_POLICY_CARDINALITY_INVALID',
+              'client_id',p_client_id,
+              'source_group_id',v_group.id,
+              'work_date',p_work_date,
+              'match_count',v_client_policy_count
+            )::text;
+  end if;
+
+  select cp.* into strict v_client_policy
+  from public.weekly_source_client_policies cp
+  where cp.source_group_id=v_group.id
+    and cp.client_id=p_client_id
+    and p_work_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date);
+
+  if p_contract_id is not null then
+    select c.client_id into strict v_contract_client_id
+    from public.contracts c where c.id=p_contract_id;
+    if v_contract_client_id is distinct from p_client_id then
+      raise exception 'WEEKLY_SOURCE_CONTRACT_CLIENT_MISMATCH' using errcode='22023';
+    end if;
+    select count(*) into v_contract_policy_count
+    from public.weekly_source_contract_policies ctp
+    where ctp.contract_id=p_contract_id
+      and p_work_date between ctp.effective_from and coalesce(ctp.effective_to,'infinity'::date);
+    if v_contract_policy_count>1 then
+      raise exception 'WEEKLY_SOURCE_CONTRACT_POLICY_CARDINALITY_INVALID' using errcode='55000';
+    end if;
+    if v_contract_policy_count=1 then
+      select ctp.* into strict v_contract_policy
+      from public.weekly_source_contract_policies ctp
+      where ctp.contract_id=p_contract_id
+        and p_work_date between ctp.effective_from and coalesce(ctp.effective_to,'infinity'::date);
+    end if;
+  end if;
+
+  v_source_expenses:=coalesce(
+    v_contract_policy.source_fixed_expenses_enabled_override,
+    v_client_policy.source_fixed_expenses_enabled
+  );
+  v_source_expense_vat:=v_source_expenses and coalesce(
+    v_contract_policy.source_expense_vat_enabled_override,
+    v_client_policy.source_expense_vat_enabled
+  );
+  v_candidate_queries:=coalesce(
+    v_contract_policy.candidate_queries_enabled_override,
+    v_client_policy.candidate_queries_enabled
+  );
+  v_manager_queries:=coalesce(
+    v_contract_policy.manager_queries_enabled_override,
+    v_client_policy.manager_queries_enabled
+  );
+  v_completed_copy:=coalesce(
+    v_contract_policy.completed_pack_copy_enabled_override,
+    v_client_policy.completed_pack_copy_enabled
+  );
+  v_manager_recipient:=case when v_manager_queries then nullif(pg_catalog.btrim(coalesce(
+    v_contract_policy.manager_query_recipient_override,
+    v_client_policy.manager_query_recipient
+  )), '') end;
+  v_completed_recipient:=case when v_completed_copy then nullif(pg_catalog.btrim(coalesce(
+    v_contract_policy.completed_pack_recipient_override,
+    v_client_policy.completed_pack_recipient
+  )), '') end;
+
+  if v_completed_copy and v_completed_recipient is null then
+    raise exception 'WEEKLY_SOURCE_COMPLETED_PACK_RECIPIENT_REQUIRED' using errcode='55000';
+  end if;
+
+  v_policy:=pg_catalog.jsonb_build_object(
+    'policy_version','WEEKLY_SOURCE_EFFECTIVE_POLICY_V1',
+    'source_group_id',v_group.id,
+    'source_group_membership_id',v_group.membership_id,
+    'source_group_code',v_group.code,
+    'source_family',v_group.source_family,
+    'timezone',v_group.timezone,
+    'cutoff_weekday',v_group.cutoff_weekday,
+    'cutoff_local_time',v_group.cutoff_local_time,
+    'client_id',p_client_id,
+    'contract_id',p_contract_id,
+    'work_date',p_work_date,
+    'authority_mode',v_client_policy.authority_mode,
+    'document_mode',v_client_policy.document_mode,
+    'self_bill_enabled',v_client_policy.self_bill_enabled,
+    'self_bill_correction_presentation',v_client_policy.self_bill_correction_presentation,
+    'source_fixed_expenses_enabled',v_source_expenses,
+    'source_expense_vat_enabled',v_source_expense_vat,
+    'weekly_rate_classification_method',coalesce(
+      v_contract_policy.weekly_rate_classification_method_override,
+      v_client_policy.weekly_rate_classification_method
+    ),
+    'duration_break_tie_rule',coalesce(
+      v_contract_policy.duration_break_tie_rule_override,
+      v_client_policy.duration_break_tie_rule
+    ),
+    'candidate_queries_enabled',v_candidate_queries,
+    'manager_queries_enabled',v_manager_queries,
+    'manager_query_recipient',v_manager_recipient,
+    'completed_pack_copy_enabled',v_completed_copy,
+    'completed_pack_recipient',v_completed_recipient,
+    'c1_source_mode',case
+      when v_client_policy.authority_mode='SOURCE_AUTHORITY'
+       and v_client_policy.self_bill_enabled
+       and v_group.source_family='NHSP' then 'NHSP_WEEKLY'
+      when v_client_policy.authority_mode='SOURCE_AUTHORITY'
+       and v_client_policy.self_bill_enabled
+       and v_group.source_family='ROSTER' then 'HEALTHROSTER_WEEKLY'
+      else null
+    end,
+    'client_policy_id',v_client_policy.id,
+    'contract_policy_id',v_contract_policy.id
+  );
+
+  return v_policy || pg_catalog.jsonb_build_object(
+    'policy_sha256',pg_catalog.encode(
+      extensions.digest(pg_catalog.convert_to(v_policy::text,'UTF8'),'sha256'),'hex'
+    )
+  );
+exception
+  when no_data_found then
+    raise exception 'WEEKLY_SOURCE_POLICY_SCOPE_NOT_FOUND' using errcode='22023';
+end;
+$function$;

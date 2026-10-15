@@ -1,0 +1,421 @@
+{
+  "status": "UNMOUNTED_FINITE_NATIVE_VAT_FIT_DECISION_ACTION_SOURCE_SUCCESSOR",
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "canonical_mounted": false,
+  "independent_review": "PENDING",
+  "predecessor_financial": "b0086dd9d6b5b6c1f20ef9bc57c2b73c7e669fe4",
+  "predecessor_decision": "9b44412d7fdda7f8e099036e7c8a7297a8eeb795",
+  "predecessor_Office_union": "de90ab2134aca782a0f4b56154585fad65a81f12",
+  "source_cases": 185,
+  "focused_new_cases": 15,
+  "source_failed": 0,
+  "unchanged_whole_predecessor_cases": 110,
+  "whole_predecessor_failed": 0,
+  "whole_owners": 6,
+  "literal_hunks": 14,
+  "qualification_callee_bodies": 49,
+  "TRUE_native_parity": false,
+  "FALSE_native_purity": false,
+  "compiled_crypto_ABI": false,
+  "native_command_replay": false,
+  "browser_UI": false,
+  "whole_caller_performance": false,
+  "ordinary_LEGACY": false,
+  "Daily_null_Contract": false,
+  "own_calendar_mapping": false,
+  "whole_row_amounts": false,
+  "full_process_completion": false,
+  "syntax": [
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/build-source.mjs",
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/check-source.mjs",
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/checklist-read.mjs",
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/healthroster-checklist-source.mjs",
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_checklist-read.mjs",
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_healthroster-checklist-source.mjs",
+    "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/whole-predecessor-regressions.mjs"
+  ],
+  "lexical": [
+    {
+      "file": "forward/wp_u3_native_checklist.sqlinc",
+      "statements": 4
+    },
+    {
+      "file": "forward/wp_u3_source_invoice_decisions.sqlinc",
+      "statements": 3
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/COMPLETE_OWNER_REVERSES.json",
+      "bytes": 21511,
+      "sha256": "a359e3b34a9d125f7651a34dbabfdf632c3876e3528e74ea87aa5ed1544ece89"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/HANDOFF.md",
+      "bytes": 7345,
+      "sha256": "c77f305b14e02cc0581d8ef156c4eef12bf5cb615af5edce1420b7dcc7fb3a6e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/INITIAL_HARNESS_PAY_VIEW_REFUSAL.txt",
+      "bytes": 574,
+      "sha256": "97f5173ee2c3c924f10e2880256405956a9ae8a161c7f344e4b5304d0ca6e520"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/NATIVE_READ_GRAPH.json",
+      "bytes": 36924,
+      "sha256": "dcb7deb8744a6a4cbe7fbd0b1df3233acff706764f358710ffa6e6e951ffddf8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 154,
+      "sha256": "fe0a21e138a3ef165b298622719063e14a8861fe8f1c977b5a057ad004f12305"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/SOURCE_TEST_OUTPUT.txt",
+      "bytes": 23587,
+      "sha256": "4f731b9d79e5dc73b99935bc740a161a7a48db56dc1814ff77e0b3694093b192"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/WHOLE_PREDECESSOR_OUTPUT.txt",
+      "bytes": 13096,
+      "sha256": "3edabe615406e82295f259113c6563908455afa2ba9cff4a10af4fc45a221ab3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/WHOLE_PREDECESSOR_REGRESSION_PINS.json",
+      "bytes": 3318,
+      "sha256": "5c0d9ace037e95c7bfa1e97ad9695aca29f9c91fe8327d7f5196cbbedba463cc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/build-source.mjs",
+      "bytes": 12667,
+      "sha256": "7cb596cba23452bc417b4cd6d4a8df778a9f1f54a95d0603bab1990a9ed8b695"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/check-source.mjs",
+      "bytes": 3642,
+      "sha256": "470658f10ee4da7aa5550e041a1472e0480d66acb5dc5bd4e3eb813d5cdd5707"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/healthroster-checklist-source.mjs",
+      "bytes": 38922,
+      "sha256": "24eab68f71c697c118203c79bb850d554baa05988511ce40eceae679a1d7b23b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/import-workspace.jsinc",
+      "bytes": 165580,
+      "sha256": "d4f34617ce86e94cd1a21bfa81c98d7ad05109060684582aebf6ca0380ffe84d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/workspace-actions.jsinc",
+      "bytes": 140311,
+      "sha256": "a105a27b8f92842a68fe320ce1947c5c9f436383f0824dc30175434a1bfc1448"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/wp_u3_native_checklist.sqlinc",
+      "bytes": 59367,
+      "sha256": "bfbb8a4c1eb9c8ef99fb7c885b1f478adf3d396cb8ecf933df8ba3310ae2edff"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/wp_u3_source_invoice_decisions.sqlinc",
+      "bytes": 9968,
+      "sha256": "20717d0e82aac0062002d0beae2f690933988b567d74f4969f91ddf9c5e0559e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_checklist-read.mjs",
+      "bytes": 6041,
+      "sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_healthroster-checklist-source.mjs",
+      "bytes": 37035,
+      "sha256": "6d972dea797a1c559312c55fa11b8025ee714392e9b4374793ab24435080eb0a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_import-workspace.jsinc",
+      "bytes": 165012,
+      "sha256": "0ade9730da19455b83f95a20c48cff2b80f770329a2e560ee5ba1f011400e27a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_workspace-actions.jsinc",
+      "bytes": 131648,
+      "sha256": "acdb3e89f6eebf410eaa52b1d1a8597e92c8bf06dc3288afefc0447eae34c656"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_wp_u3_native_checklist.sqlinc",
+      "bytes": 59358,
+      "sha256": "9a1feefc6c31f577267f83c4165ff2bd015aabafcdac2670298721b37b6f8aa6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/input/before_wp_u3_source_invoice_decisions.sqlinc",
+      "bytes": 7465,
+      "sha256": "753eac4f9d839b2e2fa37060451422e151a150ff5f9d7bcc895226789e34be5b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/office-invoice-decision.jsinc",
+      "bytes": 8558,
+      "sha256": "7f098e3e220ae45d64e43f359d4de09ebbd9dc92e283aa4aa468d02393266325"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._candidate_manager_authoriser_domain_array_v2_jsonb_.sqlinc",
+      "bytes": 1134,
+      "sha256": "08a11187357177365c79cc86a2f5c0151b83d39b9ef762bb3207a8e0ceaad5ff"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._candidate_manager_authoriser_effective_v2_jsonb_jsonb_.sqlinc",
+      "bytes": 2573,
+      "sha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._candidate_manager_authoriser_email_array_v2_jsonb_.sqlinc",
+      "bytes": 1089,
+      "sha256": "b80ea81da356fb33877aca886beab1844758b373e210bc15f403dd6e8f44f064"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._candidate_manager_authoriser_policy_normalize_v2_jsonb_text_.sqlinc",
+      "bytes": 3023,
+      "sha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._candidate_normalize_domain_v1_text_.sqlinc",
+      "bytes": 257,
+      "sha256": "e9ac8f0fd4fd2e96d087c5020c35ca697044d1a4870cdc5f1378acedb68a4010"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._candidate_normalize_email_text_.sqlinc",
+      "bytes": 225,
+      "sha256": "a0d6fc7b820bede6a22c737c9151d219d49c16c70d66781852ecdb804df52e82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._contract_settings_effective_core_v1_uuid_uuid_date_text_uuid_.sqlinc",
+      "bytes": 20739,
+      "sha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._timesheet_settings_authority_frozen_v1_uuid_.sqlinc",
+      "bytes": 1325,
+      "sha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._weekly_source_effective_policy_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 7422,
+      "sha256": "66daec8a58f94287e673703fd076165e910215dce842781613cd8f9c270e63e5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._weekly_source_rule_group_context_v1_uuid_date_date_jsonb_boolean_.sqlinc",
+      "bytes": 9565,
+      "sha256": "1e8320b48d7357ee8148ab485714323b2b3c50e45fc1be494eb373335f635c2e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "bytes": 574,
+      "sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._weekly_source_settings_deployment_v1_uuid_text_.sqlinc",
+      "bytes": 537,
+      "sha256": "d6df1a43326e4988f798939845fa8d314a9e04af3b4af283c4e1983fa7c0b1b5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private._weekly_source_settings_require_admin_v1_uuid_.sqlinc",
+      "bytes": 588,
+      "sha256": "bf3a9ec7a2fcacc5428f11df878c1e99eb0f968fdb2f9ec343aa98b072e2eb5e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_exceptional_json_keys_exact_v1_jsonb_text___.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_activation_window_binding_assert_v1_jsonb_jsonb_jsonb_uuid_date_date_.sqlinc",
+      "bytes": 6390,
+      "sha256": "6c3f907f878562b1c2c3cfe30f8917609a95fc296654c9f08e2d8a4fc1391e84"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_automatic_reconcile_producer_ready_v1_uuid_.sqlinc",
+      "bytes": 1842,
+      "sha256": "a71d94d207666f3feaf9e2e2a6b05ee696127105c7c86ca368a6895bb8a032ed"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_bulk_producer_ready_v1_uuid_.sqlinc",
+      "bytes": 614,
+      "sha256": "6825bea312c58819bd21d91eeed69ddb0b33214fc704fd0c1d558ed20b8f0b53"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_bulk_source_cas_v1_uuid_uuid___.sqlinc",
+      "bytes": 607,
+      "sha256": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_bulk_source_facts_v1_uuid_uuid___.sqlinc",
+      "bytes": 19274,
+      "sha256": "bd83ccd7668ecc00910890dcaf209dbdfb8d7c2aced6f433c61c9ac70b5ab02f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_checking_client_scope_v1_uuid_.sqlinc",
+      "bytes": 1269,
+      "sha256": "076e8c1577ab178c2aae76ba9ae6b7e66ebe90bb417f174d149f3de728ef941b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_checklist_source_invoice_block_items_v1_jsonb_uuid_.sqlinc",
+      "bytes": 9086,
+      "sha256": "e89835919efed2abae2a2788094a2327df435cc9366ede7855a3fcc52fd6851e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_checklist_source_invoice_decision_items_v1_jsonb_uuid_.sqlinc",
+      "bytes": 9483,
+      "sha256": "35016299cea0ba196f1c810aca36930691526bff02656c9b5625eb3187f3caed"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_effective_rule_set_v1_uuid_uuid_.sqlinc",
+      "bytes": 1819,
+      "sha256": "df9834db5f8f7e3e94a4decd24e678610569e6848c05d13855ca4e2c77ceca82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_finalisation_hex32_v1_text_text_.sqlinc",
+      "bytes": 516,
+      "sha256": "fd017cef3b29141acb8c89d7fb113882ead82bea998d8a39c0dad0e3b46ab1c7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_historical_fixture_setup_assert_v1_jsonb_boolean_.sqlinc",
+      "bytes": 7774,
+      "sha256": "983823324d841e058c3ff7eb6739fd743e3b652bc12801dc43ddc2fffdb53072"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_invoice_hold_first_invoice_assert_v1_uuid_.sqlinc",
+      "bytes": 1201,
+      "sha256": "237e2f0c7a36f54e22b5179efe4d5f5d2cc4c9fd5bf6ee33b322ac0e828a3683"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_invoice_hold_release_context_core_v1_jsonb_boolean_.sqlinc",
+      "bytes": 6771,
+      "sha256": "3184b1d9174d2e2ade22d7205dafc6b5a1bc17d181626ffe158f71785cedd5b6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_invoice_unreleased_vat_fit_movements_v1_uuid_.sqlinc",
+      "bytes": 717,
+      "sha256": "bfa7db3ed86c72be0ba31bdef7cf6faf3005bf03a546e084d60c4da2cbf74f86"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_magnit_contract_price_assert_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 1494,
+      "sha256": "77d4387e5eafd1595794c4c91234f0f3a75fef4a76f25b2dc0aceb543f11d55b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_off_rule_setup_shape_assert_v1_jsonb_.sqlinc",
+      "bytes": 5862,
+      "sha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3525,
+      "sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_operational_effective_rule_set_v1_uuid_uuid_.sqlinc",
+      "bytes": 1366,
+      "sha256": "e9c7ef9f1971c313a1c69c7dd1a4d6f252c71a0662c9fce6551944b9086eee12"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_protected_capability_receipt_v1_uuid_.sqlinc",
+      "bytes": 2848,
+      "sha256": "d06b2e9384230206a08c19dea6ff95f631e3ccfb96742ee2c084a49b071364d8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_protected_capability_release_evidence_v1_uuid_date_date_text_.sqlinc",
+      "bytes": 6265,
+      "sha256": "cb5225c22f36ad0e94a730d94443be6ecfd6c6a15e530c88d44c4292d36a5008"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_protected_execution_tree_assert_v2_jsonb_text_text_.sqlinc",
+      "bytes": 3556,
+      "sha256": "203128859623831c6f4184076a4107abf69e988c80bcffc3cbdddf4cfe8da457"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_protected_operational_certificate_assert_v1_jsonb_uuid_date_date_text_.sqlinc",
+      "bytes": 15384,
+      "sha256": "11889dd4707bfdcbb9b87b63bdd6f0f50f404249c18b1f95ee0f317a595bc488"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_protected_qualification_current_catalogue_v1__.sqlinc",
+      "bytes": 14616,
+      "sha256": "8ed96f861e2295fda376f88060a7c918ce7eb7272569c39f4cec739616f98cfc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_protected_qualification_release_v1__.sqlinc",
+      "bytes": 2230,
+      "sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_qualification_closed_object_v1_jsonb_text___.sqlinc",
+      "bytes": 380,
+      "sha256": "d54470fa4c15557a31176f4e2559f2dd12a6d3c8bc8c3b26b353715fca9bf730"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_query_current_publication_v1_uuid_uuid_.sqlinc",
+      "bytes": 3650,
+      "sha256": "cd4b71b4777bc146ce610ada54e3a19d946439c14f9b218cf447cb0fd9bfa232"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 509,
+      "sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_rule_qualification_authorization_v1_uuid_uuid_text_.sqlinc",
+      "bytes": 6806,
+      "sha256": "779bd0e39e9f66056a8f1d5e17428f18dcafbbb6378df1603b9bb91f34427288"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_rule_qualification_context_v1_uuid_uuid_.sqlinc",
+      "bytes": 1912,
+      "sha256": "7d30c476cdfc85af54b4d4fa05106200003b9e1cd9876aa90ad92e54528fe224"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_rule_qualification_scope_assert_v1_jsonb_uuid_boolean_.sqlinc",
+      "bytes": 11949,
+      "sha256": "c962ff3f8bc0712a2de78a951fc3b3f11d108620ff1c12941c4ff391d7118b6a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_self_bill_report_duplicate_prior_v1_uuid_.sqlinc",
+      "bytes": 1308,
+      "sha256": "f3ab670799886fdb81e39a2d4b314f61d54ceb273ea772447fab223610937d0d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/read-graph/public.settings_finance_pick_date_.sqlinc",
+      "bytes": 1522,
+      "sha256": "271b632f9db9f39cfa71230b17c4a8ac9f26a97177303d9f5b8745bc5be9a5ba"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/whole-predecessor-regressions.mjs",
+      "bytes": 3965,
+      "sha256": "af27d4e94a6e497ee98b8113fa7db25289ec59db26690f9ebc62eb0a3f05115c"
+    },
+    {
+      "file": "tests/healthroster-checklist-invoice-decision-action.test.mjs",
+      "bytes": 21685,
+      "sha256": "08c7119eb3b41c81736b1699f0c95090c41dcf61310e219aff4247b2b00d8ad1"
+    }
+  ]
+}

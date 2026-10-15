@@ -1,0 +1,15 @@
+create or replace function private.weekly_source_self_bill_report_duplicate_prior_v1(p_report_row_id uuid)
+returns boolean language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(select 1 from public.weekly_source_upload_rows r
+    join public.weekly_source_uploads u on u.id=r.upload_id
+    join public.weekly_source_report_scopes s on s.id=u.report_scope_id
+    join public.weekly_source_self_bill_reports report on report.id=s.self_bill_report_id
+    join public.weekly_source_billing_movements m on m.actual_client_id=s.client_id and m.source_line_kind='SELF_BILL_REPORT_LINE'
+      and m.movement_role='POSITIVE' and m.placement_state='PLACED'
+    join public.weekly_source_upload_rows prior on prior.id=m.self_bill_report_row_id and prior.external_source_key=r.external_source_key
+    join public.weekly_source_final_revisions fr on fr.id=m.final_revision_id and fr.state='CURRENT'
+    join public.weekly_source_report_scopes ps on ps.id=fr.report_scope_id and ps.source_group_id=s.source_group_id
+    join public.weekly_source_self_bill_reports pr on pr.id=ps.self_bill_report_id and pr.invoice_date<report.invoice_date
+    where r.id=p_report_row_id and r.row_finalisation_state='SOURCE_REPORT_LINE' and r.source_shift_charge_pence>=0)
+$function$;

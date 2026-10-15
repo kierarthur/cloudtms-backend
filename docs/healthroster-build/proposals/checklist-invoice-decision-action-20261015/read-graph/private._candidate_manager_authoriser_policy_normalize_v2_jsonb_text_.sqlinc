@@ -1,0 +1,68 @@
+create or replace function private._candidate_manager_authoriser_policy_normalize_v2(
+  p_policy jsonb,
+  p_scope text default 'EFFECTIVE'
+)
+returns jsonb
+language plpgsql
+immutable
+parallel safe
+set search_path=''
+as $function$
+declare
+  v_source jsonb:=case when pg_catalog.jsonb_typeof(p_policy)='object' then p_policy else '{}'::jsonb end;
+  v_scope text:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_scope,'EFFECTIVE')));
+  v_mode text:=pg_catalog.upper(pg_catalog.btrim(coalesce(v_source->>'mode','INHERIT')));
+  v_emails jsonb;
+  v_domains jsonb;
+  v_allow_free boolean:=false;
+begin
+  if v_scope not in ('CLIENT','CONTRACT_WRITE','EFFECTIVE') then
+    raise exception using errcode='22023',message='CANDIDATE_MANAGER_POLICY_SCOPE_INVALID';
+  end if;
+  if v_scope='CLIENT' and exists (
+    select 1 from pg_catalog.jsonb_object_keys(v_source) k
+    where k not in ('approved_emails','approved_domains','allow_free_business_email')
+  ) then
+    raise exception using errcode='22023',message='CANDIDATE_MANAGER_CLIENT_POLICY_FIELD_INVALID';
+  end if;
+  if v_scope='CONTRACT_WRITE' and exists (
+    select 1 from pg_catalog.jsonb_object_keys(v_source) k
+    where k not in ('mode','approved_emails','approved_domains')
+  ) then
+    raise exception using errcode='22023',message='CANDIDATE_MANAGER_CONTRACT_POLICY_FIELD_INVALID';
+  end if;
+  v_emails:=private._candidate_manager_authoriser_email_array_v2(v_source->'approved_emails');
+  v_domains:=private._candidate_manager_authoriser_domain_array_v2(v_source->'approved_domains');
+  if v_source ? 'allow_free_business_email' then
+    if pg_catalog.jsonb_typeof(v_source->'allow_free_business_email')<>'boolean' then
+      raise exception using errcode='22023',message='CANDIDATE_MANAGER_FREE_EMAIL_SETTING_INVALID';
+    end if;
+    v_allow_free:=(v_source->>'allow_free_business_email')::boolean;
+  end if;
+
+  if v_scope='CLIENT' then
+    return pg_catalog.jsonb_build_object(
+      'approved_emails',v_emails,'approved_domains',v_domains,
+      'allow_free_business_email',v_allow_free
+    );
+  elsif v_scope='CONTRACT_WRITE' then
+    if v_mode not in ('INHERIT','EXTEND','CONTRACT_ONLY') then
+      raise exception using errcode='22023',message='CANDIDATE_MANAGER_CONTRACT_MODE_INVALID';
+    end if;
+    if v_mode='INHERIT' and (pg_catalog.jsonb_array_length(v_emails)>0 or pg_catalog.jsonb_array_length(v_domains)>0) then
+      raise exception using errcode='22023',message='CANDIDATE_MANAGER_INHERIT_HAS_ADDITIONS';
+    end if;
+    if v_mode='CONTRACT_ONLY' and pg_catalog.jsonb_array_length(v_emails)=0 and pg_catalog.jsonb_array_length(v_domains)=0 then
+      raise exception using errcode='22023',message='CANDIDATE_MANAGER_CONTRACT_ONLY_EMPTY';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'mode',v_mode,'approved_emails',v_emails,'approved_domains',v_domains
+    );
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'approved_emails',v_emails,'approved_domains',v_domains,
+    'allow_free_business_email',v_allow_free
+  );
+end;
+$function$;
