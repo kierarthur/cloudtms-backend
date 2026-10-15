@@ -1,0 +1,60 @@
+{
+  "status": "ORIGINAL_SOURCE_ONLY_RESTORATION_RENDERER_CASES",
+  "commit": "f8c7830b22805339b205afe74fe3fc163f96381c",
+  "pins": [
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 14597,
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "bytes": 9034,
+      "sha256": "45c120e90133fe49a06477d7a06dde2f41ac0b09052bf1d5489b90a088f640c4"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 43001,
+      "sha256": "96bddacd87c6e4720e7453eef51f2cac069f0304022eb31d5d8534339e379aca"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "tests/healthroster-live-test-restoration.test.mjs",
+      "bytes": 13344,
+      "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+    },
+    {
+      "file": "tests/healthroster-full-rehearsal-protocol.test.mjs",
+      "bytes": 7134,
+      "sha256": "4bfe273f1fe3ae8f7773e4b4600ee2cefb8756c81d9e2e63677369efd89728fe"
+    }
+  ],
+  "adaptations": [
+    {
+      "file": "tests/healthroster-live-test-restoration.test.mjs",
+      "original_sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc",
+      "harness_sha256": "51720cd64952c7594b4e6c35d2ab2f49f3cd109d980a1309f99e3cb7ea9be9ab",
+      "changes": "Only module import URLs, frozen fs import and the single actual outer file URL substituted. All original test bodies/assertions unchanged; original complete assertFreshRestoration function isolated with its real branded validator."
+    },
+    {
+      "file": "tests/healthroster-full-rehearsal-protocol.test.mjs",
+      "original_sha256": "4bfe273f1fe3ae8f7773e4b4600ee2cefb8756c81d9e2e63677369efd89728fe",
+      "harness_sha256": "1f07c4f85565deb6c73584ab75dcc21db6b1a6c40ec9425b20bd89aaeb28036a",
+      "changes": "Only module import URLs, frozen fs import and the single actual outer file URL substituted. All original test bodies/assertions unchanged; original complete assertFreshRestoration function isolated with its real branded validator."
+    }
+  ],
+  "actual_complete_gate_function_sha256": "11055f5ed0e737ca592973f560f9968af827327d3e7ca742a6fc16a21cdef75b",
+  "original_WeakMap_and_validator_preserved": true,
+  "whole_native_coordinator_executed": false,
+  "SQL_executed": false,
+  "native": false
+}

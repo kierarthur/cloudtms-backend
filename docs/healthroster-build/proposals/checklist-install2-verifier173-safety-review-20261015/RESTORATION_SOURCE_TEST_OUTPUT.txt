@@ -1,0 +1,39 @@
+✔ unchanged full tables and exact fresh parent abort/fixture absence qualify (2.9044ms)
+✔ native other-transaction claim and retry qualify without replacing original fingerprints (0.883ms)
+✔ claim labels without native request/terminal proof fail (5.8268ms)
+✔ other changed relation and omitted or duplicate relation cannot be attributed (0.7055ms)
+✔ incomplete or independently wrong two-table row map fails (0.4076ms)
+✔ old receipt mutation/deletion and new finance identity fail (0.9721ms)
+✔ outbox stable-field change, nonincreasing attempts and impossible retry time fail (0.5901ms)
+✔ own, aborted, unknown or before-visible writer XID fails (0.5926ms)
+✔ genuinely active before-snapshot writer is distinguished from later native time (0.3241ms)
+✔ dynamic exception fixture identity must be absent and cannot be attributed as background (0.4815ms)
+✔ exact observer order, all units, epoch and parent PID/XID bind (0.6871ms)
+✔ fixture readback is read-only, identity-scoped and handles empty native footprint (1.6203ms)
+✔ observer resets roles before read and does not add mutation/transaction control (0.7997ms)
+✔ snapshot binds complete raw-row and stable-field hashes and native receipt semantics (0.1394ms)
+✔ writer census explicitly converts the actual text-valued contract exporter before JSON traversal (0.2711ms)
+✔ actual renderer retains native body exactly and captures after role reset before rollback (0.474ms)
+✔ only actual qualification for these exact before/after snapshots admits a delta (0.3628ms)
+✔ changed proof fields and mutated before maps cannot reuse a legitimate qualification (0.3344ms)
+✔ both actual full snapshot epochs and Xip ranges must be proved (0.3296ms)
+✔ retry timing derives the exact capped fail formula as well as five-minute dequeue (0.2369ms)
+✔ actual final publication gate rejects forged, copied and stale qualifications and retains its independent guards (0.5061ms)
+✔ a reviewed read-only envelope is removed while every native assertion and inner rollback remains exact (0.7527ms)
+✔ envelope review cannot permit prepared transactions, alternate modes or error rollback overrides (0.1823ms)
+✔ removing an exact native snapshot envelope cannot silently downgrade or replace its isolation (0.2684ms)
+✔ incompatible verifier modes refuse one outer rehearsal without dropping either native check (0.2552ms)
+✔ verifier client variable is cleared before and after each complete savepoint, while its native body is retained (0.7429ms)
+✔ source definitions remain in the outer transaction and are not isolated like verifier fixtures (0.1556ms)
+✔ reviewed verifier paths under tests and native inner rollback-to behavior are retained (0.1773ms)
+✔ transaction or connection escape and error-control override are refused before any script is returned (0.4644ms)
+✔ source identity/hash/path/kind drift refuses rather than using current dirty SQL (0.1886ms)
+✔ only closed SQLSTATE/code and sealed source census fields survive diagnostic sanitization (0.3018ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 93.0265

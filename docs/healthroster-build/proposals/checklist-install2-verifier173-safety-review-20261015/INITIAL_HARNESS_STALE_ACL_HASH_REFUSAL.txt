@@ -1,0 +1,23 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Catalogue disposition requires exact complete body hash
++ actual - expected
+
++ 'a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631'
+- '6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d'
+
+    at file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-install2-verifier173-safety-review-20261015/build-safety-ledger.mjs:24:289
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631',
+  expected: '6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

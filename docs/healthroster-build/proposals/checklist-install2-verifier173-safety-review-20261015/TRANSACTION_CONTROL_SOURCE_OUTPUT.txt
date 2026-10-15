@@ -1,0 +1,7 @@
+{
+  "status": "EXACT173_CONTROL_SOURCE_COMPATIBILITY_NOT_SAFETY_APPROVAL",
+  "compatible": 173,
+  "refused": 0,
+  "refusals": [],
+  "native": false
+}

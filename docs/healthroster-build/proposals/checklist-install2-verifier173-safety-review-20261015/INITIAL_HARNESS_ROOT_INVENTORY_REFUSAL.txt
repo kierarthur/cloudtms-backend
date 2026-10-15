@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+994 !== 1060
+
+    at file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-install2-verifier173-safety-review-20261015/build-frozen-census.mjs:15:291 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 994,
+  expected: 1060,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

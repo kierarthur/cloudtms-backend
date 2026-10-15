@@ -1,0 +1,40 @@
+{
+  "status": "CURRENT173_FINITE_SOURCE_SAFETY_LEDGER_NOT_EXECUTION_APPROVAL",
+  "counts": {
+    "baseline": 25,
+    "migrations": 399,
+    "repeatables": 1060,
+    "roots": 1484,
+    "canonical_inputs": 1745,
+    "occurrences": 2160,
+    "upgrade_verifiers": 173,
+    "new_verifiers": 174
+  },
+  "decisions": {
+    "RETAIN_FIXTURE_BODY_WITH_NATIVE_PRECONDITIONS": 74,
+    "HOLD_COMPILED_GUARDED_ALIAS_AND_FIXTURE_CLOSURE": 12,
+    "RETAIN_EVIDENCE_OR_REFUSAL_BODY_WITH_NATIVE_PRECONDITIONS": 29,
+    "RETAIN_CATALOGUE_ASSERTIONS": 40,
+    "UNSUPPORTED_IN_ROLLBACK_REHEARSAL": 16,
+    "RETAIN_EXACT_CATALOGUE_DISPOSITION": 2
+  },
+  "raw_saved_git_files": 1939,
+  "guarded_alias_indices": [
+    3,
+    28,
+    43,
+    53,
+    57,
+    67,
+    68,
+    89,
+    93,
+    94,
+    97,
+    98,
+    113
+  ],
+  "legacy_review_writer_refuses_173": true,
+  "native": false,
+  "execution_authorised": false
+}
