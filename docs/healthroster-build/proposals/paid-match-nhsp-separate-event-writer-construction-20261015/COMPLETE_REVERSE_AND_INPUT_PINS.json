@@ -1,0 +1,94 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "commit": "7351816ce8cfecd29fcf7dbdffbee60ca46c1791",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "source": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/05_complete_projection_rows.sqlinc",
+  "before_sha256": "bac2c386c5fcd246a788ce412b3de46bafaf821f386f51b8f6dec72bb4cac6e4",
+  "after_sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2",
+  "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+  "hunks": [
+    {
+      "name": "row-local finite NHSP separate intent",
+      "before": "  v_paid_choices jsonb;v_paid_recheck jsonb;v_paid_choice jsonb;v_paid_inputs jsonb;v_pay_effect text;v_paid_choice_id bigint;",
+      "after": "  v_paid_choices jsonb;v_paid_recheck jsonb;v_paid_choice jsonb;v_paid_inputs jsonb;v_pay_effect text;v_paid_choice_id bigint;\n  v_nhsp_paid_separate boolean;"
+    },
+    {
+      "name": "every physical row resets separate intent",
+      "before": "    v_paid_choice:=null;v_paid_inputs:=null;v_pay_effect:='NORMAL';v_paid_choice_id:=null;",
+      "after": "    v_paid_choice:=null;v_paid_inputs:=null;v_pay_effect:='NORMAL';v_paid_choice_id:=null;\n    v_nhsp_paid_separate:=false;"
+    },
+    {
+      "name": "derive separate only from existing native immutable choice after its full current proof",
+      "before": "          v_pay_effect:=v_paid_choice->>'pay_effect';v_paid_choice_id:=(v_paid_choice->>'choice_id')::bigint;",
+      "after": "          v_pay_effect:=v_paid_choice->>'pay_effect';v_paid_choice_id:=(v_paid_choice->>'choice_id')::bigint;\n          if v_identity_kind='SCHEDULE_TUPLE' and v_pay_effect='NORMAL' then\n            if v_profile.profile_code<>'NHSP_FINAL_BACKING_V1'\n              or v_publication.authority_scope_kind<>'NHSP_REPORT_SCOPE'\n              or v_upload.purpose<>'ORDINARY' or v_group.source_family<>'NHSP'\n              or v_source_row.row_finalisation_state<>'SOURCE_WORKED'\n              or v_source_row.source_shift_charge_pence is null or v_source_row.source_shift_charge_pence<0\n              or v_paid_choice_id is null or v_prior_work_event_id is not null then\n              raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_SEPARATE_SCOPE_INVALID' using errcode='55000';end if;\n            -- The actual paid-choice owner already proved actor/Contract,\n            -- paid target, no protection, full facts and I-1 membership. The\n            -- next NHSP admission stage must also prove its real no-reversal\n            -- chain. No caller boolean may create this distinct event.\n            v_nhsp_paid_separate:=true;\n          end if;"
+    },
+    {
+      "name": "explicit proved Separate disambiguates the compatible set without choosing an old event",
+      "before": "          if v_compatible_count>1 then",
+      "after": "          if v_compatible_count>1 and not v_nhsp_paid_separate then"
+    },
+    {
+      "name": "choice-owned stable uniqueness supplements genuine native schedule only for Separate",
+      "before": "              'start_at_local',v_source_row.start_at_local,'end_at_local',v_source_row.end_at_local\n            )\n          );\n        end if;\n        if v_identity_kind='SCHEDULE_TUPLE' and v_compatible_count=1 then",
+      "after": "              'start_at_local',v_source_row.start_at_local,'end_at_local',v_source_row.end_at_local\n            )||case when v_nhsp_paid_separate then\n              -- This is the persisted native Office choice identity. It\n              -- creates a distinct event without rewriting any old key,\n              -- treating Ref Num as identity, or creating an economic key.\n              pg_catalog.jsonb_build_object('office_separate_choice_id',v_paid_choice_id,\n                'office_separate_target_work_event_id',v_paid_choice->>'paid_overlap_target_work_event_id')\n              else '{}'::jsonb end\n          );\n        end if;\n        if v_identity_kind='SCHEDULE_TUPLE' and v_compatible_count=1 and not v_nhsp_paid_separate then"
+    }
+  ],
+  "whole_reverse": true,
+  "inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "saved": "input/04102026_0475_current_selector.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "saved": "input/15092026_1534_source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "saved": "input/current_upload_staging_adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "commit": "7351816ce8cfecd29fcf7dbdffbee60ca46c1791",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/06_complete_choice_admit.sqlinc",
+      "saved": "input/current_choice_admit.sqlinc",
+      "bytes": 10567,
+      "sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3"
+    },
+    {
+      "commit": "7351816ce8cfecd29fcf7dbdffbee60ca46c1791",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-current-viewer-consumer-20261015/forward/01_complete_choice_current.sqlinc",
+      "saved": "input/current_choice_and_projection_lock.sqlinc",
+      "bytes": 14996,
+      "sha256": "e9098bc075e96ec8f8eb1e05b94faf16b3d4fa241968db3075df861475a4676f"
+    }
+  ],
+  "intent_derived_only_from_actual_native_current_choice": true,
+  "existing_I1_scope_group_cycle_family_and_schedule_lock_order_unchanged": true,
+  "ordinary_Same_ROSTER_C1_calculations_unchanged": true,
+  "existing_event_keys_never_rewritten": true,
+  "stable_uniqueness_uses_actual_immutable_office_choice_not_Ref_Num": true,
+  "new_public_private_signatures": [],
+  "new_stores_columns": 0,
+  "current_NHSP_paid_choice_admission_implemented": false,
+  "remaining_construction": [
+    "actual NHSP current MOVEMENT/magnitude paid basis",
+    "complete native no-reversal chain proof",
+    "NHSP raw B NONE invoice origin and capture exclusions",
+    "report-scope Office/current/prepared/confirmation constructors",
+    "real finalised history replay/readback",
+    "final actual Source38/Report/native whole-owner composition and ACL/verifier union"
+  ],
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

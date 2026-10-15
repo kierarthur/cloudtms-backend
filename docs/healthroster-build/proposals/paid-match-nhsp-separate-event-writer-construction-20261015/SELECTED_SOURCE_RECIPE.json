@@ -1,0 +1,50 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "7351816ce8cfecd29fcf7dbdffbee60ca46c1791",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_complete_owner": "forward/01_complete_projection_rows.sqlinc",
+  "replaces_complete_leaf": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/forward/05_complete_projection_rows.sqlinc",
+  "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+  "new_private_public_signatures": [],
+  "new_store_column": 0,
+  "body_only_leaf": true,
+  "owner_and_existing_service_only_public_ACL_must_be_explicit_in_final_atomic_root": true,
+  "no_ACL_widening_authorised": true,
+  "conditional_current_NHSP_paid_choice_path_remains_unreachable_without_required_companions": true,
+  "actual_remaining_code": [
+    "actual NHSP current MOVEMENT/magnitude paid basis",
+    "complete native no-reversal chain proof",
+    "NHSP raw B NONE invoice origin and capture exclusions",
+    "report-scope Office/current/prepared/confirmation constructors",
+    "real finalised history replay/readback",
+    "final actual Source38/Report/native whole-owner composition and ACL/verifier union"
+  ],
+  "final_current_Source38_Report_native_fullowner_union_required": true,
+  "preserved": [
+    {
+      "packet": "paid-shift-match-writer-none-construction-20261014",
+      "artifacts": 58,
+      "manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453"
+    },
+    {
+      "packet": "paid-match-legacy-current-viewer-consumer-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "c646451d43f4607fb2c8c38a964c813bde2e2e2b9c6517af47b7eacff0c61bf9"
+    },
+    {
+      "packet": "source-next-paid-purpose-current-consumer-20261015",
+      "artifacts": 23,
+      "manifest_sha256": "eca309accc589dea4b40dfa09c5c50f06e68d85373128bd68ef4633245b64928"
+    },
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "artifacts": 30,
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+    }
+  ],
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

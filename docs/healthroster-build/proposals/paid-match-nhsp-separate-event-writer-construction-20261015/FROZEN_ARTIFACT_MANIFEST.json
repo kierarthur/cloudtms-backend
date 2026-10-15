@@ -1,0 +1,81 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_SEPARATE_EVENT_WRITER_CONSTRUCTION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 6836,
+      "sha256": "b53e968e093d78c49617583c18afc435aa0123de484318678bf75d54942d2f18"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 3423,
+      "sha256": "1d271249d0f28cad48ea41b690b8d18e9bbd93d923ba8af194661f72ce204166"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 2260,
+      "sha256": "427f2ed5e0b8cdc195ed7d644cd6724a9fd59e92f1314ef8b0538eaf00de81d4"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 523,
+      "sha256": "080acb0e2c083c6368e9ca7ad68b0577b1f1735094e2d80878b860db766a09a7"
+    },
+    {
+      "file": "before/01_complete_projection_rows.sqlinc",
+      "bytes": 72586,
+      "sha256": "bac2c386c5fcd246a788ce412b3de46bafaf821f386f51b8f6dec72bb4cac6e4"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 6826,
+      "sha256": "255dca8dde31de2d769aae68ce35f2c9bd208bd77c3173ccc97366491292615c"
+    },
+    {
+      "file": "forward/01_complete_projection_rows.sqlinc",
+      "bytes": 74228,
+      "sha256": "9c2908449cbc7565095db16f7e36b385bdd382caaac70bfe229c76025274a9c2"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4763,
+      "sha256": "2bb275dff192d1d1675b37ba4c83a77e702df30ef2f969c2371ee863e4bafef8"
+    },
+    {
+      "file": "input/04102026_0475_current_selector.sql",
+      "bytes": 57447,
+      "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+    },
+    {
+      "file": "input/15092026_1534_source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "input/current_choice_admit.sqlinc",
+      "bytes": 10567,
+      "sha256": "6ea1302571538a0bb6f23242293170d33a711359e08a80e19f4149ed965ad8a3"
+    },
+    {
+      "file": "input/current_choice_and_projection_lock.sqlinc",
+      "bytes": 14996,
+      "sha256": "e9098bc075e96ec8f8eb1e05b94faf16b3d4fa241968db3075df861475a4676f"
+    },
+    {
+      "file": "input/current_upload_staging_adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "file": "nhsp-event-source.test.mjs",
+      "bytes": 10116,
+      "sha256": "123ae0b13bc6098a85585a77866d00827db91d2cce066e158207df383afab904"
+    }
+  ]
+}

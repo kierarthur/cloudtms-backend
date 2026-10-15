@@ -1,0 +1,21 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "cases": 15,
+  "pass": 15,
+  "fail": 0,
+  "syntax_pass": 4,
+  "whole_owner_reverse": 1,
+  "unique_hunks": 5,
+  "preserved_artifacts": 125,
+  "credential_findings": 0,
+  "whitespace_disposition": "PASS",
+  "whitespace_exceptions": [],
+  "current_NHSP_paid_choice_admission_implemented": false,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "scratch_created": false,
+  "cleanup_retried": false
+}
