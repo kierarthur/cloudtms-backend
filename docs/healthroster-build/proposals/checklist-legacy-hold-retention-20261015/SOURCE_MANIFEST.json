@@ -1,0 +1,326 @@
+{
+  "source_only": true,
+  "SQL_executed": false,
+  "files": [
+    {
+      "file": "build-source.mjs",
+      "bytes": 13884,
+      "sha256": "bb1b6ff054698580176c6d24c32e52497263e9b014bfd3a8daaffb08de50622f"
+    },
+    {
+      "file": "check-source.mjs",
+      "bytes": 8385,
+      "sha256": "821903298623aba299ab874fcf8ac1f606033fb09b62eb50d07ef2ff66bebea2"
+    },
+    {
+      "file": "COMPLETE_OWNER_REVERSALS.json",
+      "bytes": 14619,
+      "sha256": "f597aa2691949b92b11c00351b6e8c7811dd049ac71983f441b03e6a28a6ebad"
+    },
+    {
+      "file": "CURRENT_RECIPE_SUCCESSOR.json",
+      "bytes": 36061,
+      "sha256": "6faa14914db2f3180874373abbfe34a314985f68cff6493ba030d7c33f519e6f"
+    },
+    {
+      "file": "CURRENT_RUNTIME_REGRESSION_OUTPUT.txt",
+      "bytes": 30688,
+      "sha256": "764d97c716d1389be29e4f18e40ec70fb364d42096dc23f6d74ec3e801479fc7"
+    },
+    {
+      "file": "CURRENT_RUNTIME_REGRESSION_PINS.json",
+      "bytes": 24473,
+      "sha256": "ff50c5f753abd03eeb75f122ad0dfc1f8d28415b3708641af10d876f917db734"
+    },
+    {
+      "file": "FOCUSED_TEST_OUTPUT.txt",
+      "bytes": 1181,
+      "sha256": "c2e620b3fddde88e6ab0a90deb6a6743a33c534a461c6354adf7000b377792b0"
+    },
+    {
+      "file": "forward/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 95371,
+      "sha256": "90d1ff2263a9f9d53ffa9e7d83c056f13a9a91be10f5a963c5117864af271d07"
+    },
+    {
+      "file": "forward/15102026_0600_healthroster_checklist_current_v1.sql",
+      "bytes": 5489,
+      "sha256": "a6159703ad0c0fd215ff1fd6acb95f3689c9760fe69baa07edd11af06fe73cc7"
+    },
+    {
+      "file": "forward/central_acl_inventory.sqlinc",
+      "bytes": 62054,
+      "sha256": "f14468354ab9af9b1fe8b0f789380f228249f3c0757d047f315f5a991f40b896"
+    },
+    {
+      "file": "forward/final_acl_union.sqlinc",
+      "bytes": 85188,
+      "sha256": "abdf437232bd4e4f8388fb1e794d2535fb49bdfea5fbee7aac4c0892c9ad442f"
+    },
+    {
+      "file": "forward/healthroster-checklist-source.mjs",
+      "bytes": 41351,
+      "sha256": "3bce1dc7d48ebcd23a9c4e72a41edee86fc1ff05378b59791678cebb2282d496"
+    },
+    {
+      "file": "forward/wp_u3_client_week_context.sqlinc",
+      "bytes": 22976,
+      "sha256": "202961337d928fa6c01b05800cfc2704efb7c8985394cb8c1d76c0da786c37a4"
+    },
+    {
+      "file": "forward/wp_u3_legacy_hold_review.sqlinc",
+      "bytes": 3799,
+      "sha256": "acdff11940ec74d112330244058c3605941752d72426792e45f61501c4a8aa0b"
+    },
+    {
+      "file": "forward/wp_u3_native_checklist.sqlinc",
+      "bytes": 60915,
+      "sha256": "dab2a032bc7a8e4a5b3914a721d2b3aefa4eb04115ceabd5f2fa33ac17308f39"
+    },
+    {
+      "file": "HANDOFF.md",
+      "bytes": 5128,
+      "sha256": "fd1b4d90199646a257142e50340528037be9aefd1d174f95d1999080bae732a2"
+    },
+    {
+      "file": "INITIAL_FOCUSED_HARNESS_REFUSAL_RAW.json",
+      "bytes": 8365,
+      "sha256": "b84688001e1f95bade0c78c9d96f1cf6394edb96196f86ff33b6c161455e6a9a"
+    },
+    {
+      "file": "INITIAL_FOCUSED_HARNESS_REFUSAL.txt",
+      "bytes": 6055,
+      "sha256": "208131418e7db5b3137fd326a25ab728d4ef400c55cd846ad8d208a53b705ff8"
+    },
+    {
+      "file": "INITIAL_SCANNER_HARNESS_REFUSAL.txt",
+      "bytes": 1784,
+      "sha256": "0da5944bd1bf62d16b64f4bafbd42f250f03ccb1c77e9c9cb91f1d3958aba6a7"
+    },
+    {
+      "file": "input/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 95293,
+      "sha256": "1b946d7451118599b1fd4a63a8f0693af6ceb5ad6df9492233eab27fda2b20b2"
+    },
+    {
+      "file": "input/15102026_0600_healthroster_checklist_current_v1.sql",
+      "bytes": 5390,
+      "sha256": "b59fa11aa99c07748107b038cedf8f4a6cedbd05baf8b6545642621ccaeca555"
+    },
+    {
+      "file": "input/central_acl_inventory.sqlinc",
+      "bytes": 61974,
+      "sha256": "dfd8d8c2db38f5c8a56d43400b60cb9cef1e81471497f74678ab63121c9b62dc"
+    },
+    {
+      "file": "input/final_acl_union.sqlinc",
+      "bytes": 85108,
+      "sha256": "1bfd119d401ccbe741ee163811a722d478faa2ae12a391d248257e220a37c49c"
+    },
+    {
+      "file": "input/healthroster-checklist-source.mjs",
+      "bytes": 39189,
+      "sha256": "bc79256b6d0e3938f12f0d7e4f7a5bdcd817f7533b4730ac36e25c82e57d0c31"
+    },
+    {
+      "file": "input/wp_u3_client_week_context.sqlinc",
+      "bytes": 22036,
+      "sha256": "39edefabaf28e4147f91d849c9b6e7c9a1bdeb74a331a1487e4952a70ded3304"
+    },
+    {
+      "file": "input/wp_u3_native_checklist.sqlinc",
+      "bytes": 59148,
+      "sha256": "9aa9fa0d5c58b23ec20ecfe8226880750ade9d6942adbc785fc85b317d08a72c"
+    },
+    {
+      "file": "legacy-retention.test.mjs",
+      "bytes": 8298,
+      "sha256": "a985e07b769800aef76616eac6462f4f67b43a77c971f7bf7643ff04abe88ff4"
+    },
+    {
+      "file": "NATIVE_READ_GRAPH.json",
+      "bytes": 24378,
+      "sha256": "8ece614cc4f63596ec264fcdfa164e39b8a2c82e3eff08dd3d7e2a478a5ac05a"
+    },
+    {
+      "file": "read-graph/private._candidate_daily_canonical_save_input_v1_uuid_integer_.sqlinc",
+      "bytes": 2303,
+      "sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664"
+    },
+    {
+      "file": "read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "file": "read-graph/private._candidate_sha256_jsonb_v1_jsonb_.sqlinc",
+      "bytes": 298,
+      "sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103"
+    },
+    {
+      "file": "read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "bytes": 574,
+      "sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "file": "read-graph/private.bpay_entitlement_financial_scope_v1_uuid___.sqlinc",
+      "bytes": 2034,
+      "sha256": "c9515f39b1a2ac5cb2e867bdbd58b986ce5d7e29ea5848c03f3403a475350320"
+    },
+    {
+      "file": "read-graph/private.bpay_settled_financial_scope_v1_uuid___.sqlinc",
+      "bytes": 1780,
+      "sha256": "3b7a81e5f4157370fceeff2eeb9e19e28c683a802d4c24bfe0cc5e9c627c9ef3"
+    },
+    {
+      "file": "read-graph/private.weekly_source_actual_timesheet_submission_v1_uuid_.sqlinc",
+      "bytes": 14074,
+      "sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500"
+    },
+    {
+      "file": "read-graph/private.weekly_source_checklist_legacy_hold_review_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 3401,
+      "sha256": "e632a4359006ee96ad31d60f7c02ad962419e5e01a953066c7cfe92215b9f798"
+    },
+    {
+      "file": "read-graph/private.weekly_source_checklist_legacy_pay_state_core_v1_uuid_.sqlinc",
+      "bytes": 39980,
+      "sha256": "ca9d19c90c5d8724140eb536a10f3eabd24f2b70353dc6a8110b7e3b76abc6d2"
+    },
+    {
+      "file": "read-graph/private.weekly_source_checklist_legacy_read_frame_v1_uuid_jsonb_uuid_.sqlinc",
+      "bytes": 7918,
+      "sha256": "4f874a5f4df09c56568b9657563ba87635471f235cc476ffa9e6cffdf974d11c"
+    },
+    {
+      "file": "read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3525,
+      "sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "file": "read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "file": "read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "file": "read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 509,
+      "sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "file": "read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "file": "read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "read-graph/public._import_review_hash_v1_text_.sqlinc",
+      "bytes": 299,
+      "sha256": "d4f5765fda0fe332115c79994e636aa4232d6cdbf52e5d1f68f396c4b06bc5a8"
+    },
+    {
+      "file": "read-graph/public._import_review_query_evidence_core_v1_uuid_.sqlinc",
+      "bytes": 6888,
+      "sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3"
+    },
+    {
+      "file": "read-graph/public._import_review_timesheet_protection_core_v1_uuid_.sqlinc",
+      "bytes": 6311,
+      "sha256": "12dd76a6785a4382e9fb47e71c4dffca3152273f52a1e3aebf9895cc3fea0410"
+    },
+    {
+      "file": "read-graph/public._pay_active_settled_components_uuid___.sqlinc",
+      "bytes": 14958,
+      "sha256": "073842bb1da6abb079d548922a3fb56a77b8d26b76001c2b74740731b37142df"
+    },
+    {
+      "file": "read-graph/public._pay_batch_item_economic_components_uuid_uuid___.sqlinc",
+      "bytes": 30193,
+      "sha256": "c2a3ced7beb5db6744406d524abc274fc2d8d2ede8f904cce6a973a1e6a2ae18"
+    },
+    {
+      "file": "read-graph/public._pay_batch_item_source_reservation_amount_ex_vat_uuid_.sqlinc",
+      "bytes": 11012,
+      "sha256": "f701e7ef559e2383ecb7c6315de2279beb2ecfec85e9e9fceabe6e2409bfec22"
+    },
+    {
+      "file": "read-graph/public._pay_batch_status_is_active_reservation_text_.sqlinc",
+      "bytes": 459,
+      "sha256": "f2dff9d19beebfaea5bf833a575bde09248af72f9f713c3b1bb4e027054e2a82"
+    },
+    {
+      "file": "read-graph/public._pay_current_timesheet_entitlement_components_uuid___.sqlinc",
+      "bytes": 26454,
+      "sha256": "b10f7cb9a4c8d5cb61c74f0514d5eda038798a941253f7aea39746a85a54d1f6"
+    },
+    {
+      "file": "read-graph/public._pay_outstanding_components_uuid___.sqlinc",
+      "bytes": 1167,
+      "sha256": "ddacb15d88e712007f4445252caa0ba9f20b3d10e1838d039c34f0ae8b039668"
+    },
+    {
+      "file": "read-graph/public._pay_outstanding_components_uuid___uuid_.sqlinc",
+      "bytes": 14469,
+      "sha256": "82d3b581777923e6c0a4e45082cc02fed702b2a57945565739bf9d6f6b89da23"
+    },
+    {
+      "file": "read-graph/public._pay_policy_x_assert_economic_key_uuid_text_text_text_text_text_boolean_jsonb_.sqlinc",
+      "bytes": 6666,
+      "sha256": "9319928d0f395930201aa58f2ebb60170ec073601ba9d22be620ea7cffe210a9"
+    },
+    {
+      "file": "read-graph/public._pay_policy_x_resolve_post_draft_economic_key_uuid_uuid_uuid_text_text_text_jsonb_jsonb_jsonb_jsonb_.sqlinc",
+      "bytes": 23622,
+      "sha256": "3b3336bff88a41e6a6e3ad77576805be625171a44fd98b824cf454247e608fb8"
+    },
+    {
+      "file": "read-graph/public._pay_policy_x_resolve_pre_draft_economic_key_uuid_jsonb_text_text_text_date_.sqlinc",
+      "bytes": 17171,
+      "sha256": "e3fe30964b0f7818356631c714dd4dcdda845a28316440abd714d8f016aa1f5e"
+    },
+    {
+      "file": "read-graph/public._pay_rail_state_money_movement_classify_text_text_jsonb_jsonb_.sqlinc",
+      "bytes": 21459,
+      "sha256": "64b738b725eebbce74cc1c45caeaa3d44e30e49ac0604c1ff32248997c874357"
+    },
+    {
+      "file": "read-graph/public._pay_reserved_components_uuid___.sqlinc",
+      "bytes": 577,
+      "sha256": "489b5cd56b7d702fe5c0f0eded91b7c4115dd2c6b0a68943c32062fcb8508430"
+    },
+    {
+      "file": "read-graph/public._pay_reserved_components_uuid___uuid_.sqlinc",
+      "bytes": 19326,
+      "sha256": "8aef4e688b89eec0e6ef890a462d13a83ffbbd8d17f84ee83840343630f3c63b"
+    },
+    {
+      "file": "read-graph/public._pay_timesheet_components_jsonb_.sqlinc",
+      "bytes": 6802,
+      "sha256": "155b0c9a3f73812992598bb1ce53b44dc9821cb91c31eb93f7ac9f97a78b844b"
+    },
+    {
+      "file": "read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5333,
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "file": "run-current-regressions.mjs",
+      "bytes": 2209,
+      "sha256": "7e8f5a4f34f1ced096eac095319e6ca09391b857af135189cca37f2beb4dbdd1"
+    }
+  ]
+}

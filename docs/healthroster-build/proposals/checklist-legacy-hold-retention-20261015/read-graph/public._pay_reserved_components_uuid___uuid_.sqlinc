@@ -1,0 +1,381 @@
+CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid)
+ RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, amount_ex_vat numeric, amount_inc_vat numeric)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+ SET jit TO 'off'
+AS $function$
+WITH
+inp AS (
+  SELECT COALESCE(
+    (
+      SELECT array_agg(DISTINCT input_values.timesheet_id_value ORDER BY input_values.timesheet_id_value)
+      FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_values(timesheet_id_value)
+      WHERE input_values.timesheet_id_value IS NOT NULL
+    ),
+    ARRAY[]::uuid[]
+  ) AS ts_ids
+),
+rotation_scope_rows AS (
+  SELECT
+    scope_rows.requested_timesheet_id,
+    scope_rows.booking_id,
+    scope_rows.canonical_timesheet_id,
+    scope_rows.family_timesheet_id,
+    scope_rows.family_is_current,
+    scope_rows.family_version,
+    scope_rows.requested_is_canonical
+  FROM inp AS input_scope
+  JOIN private.bpay_settled_financial_scope_v1(input_scope.ts_ids) AS scope_rows
+    ON true
+),
+rotation_scope_keyed AS (
+  SELECT
+    rotation_scope_rows.requested_timesheet_id,
+    rotation_scope_rows.booking_id,
+    rotation_scope_rows.canonical_timesheet_id,
+    rotation_scope_rows.family_timesheet_id,
+    rotation_scope_rows.family_is_current,
+    rotation_scope_rows.family_version,
+    rotation_scope_rows.requested_is_canonical,
+    COALESCE(rotation_scope_rows.booking_id, rotation_scope_rows.requested_timesheet_id::text) AS scope_family_key
+  FROM rotation_scope_rows
+  WHERE rotation_scope_rows.requested_timesheet_id IS NOT NULL
+),
+projection_targets AS (
+  SELECT
+    rotation_scope_keyed.scope_family_key,
+    COALESCE(
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.canonical_timesheet_id ORDER BY rotation_scope_keyed.canonical_timesheet_id)
+        FILTER (
+          WHERE COALESCE(rotation_scope_keyed.requested_is_canonical, false) = true
+            AND rotation_scope_keyed.canonical_timesheet_id IS NOT NULL
+        )
+      )[1],
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.requested_timesheet_id ORDER BY rotation_scope_keyed.requested_timesheet_id)
+        FILTER (WHERE rotation_scope_keyed.requested_timesheet_id IS NOT NULL)
+      )[1],
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.canonical_timesheet_id ORDER BY rotation_scope_keyed.canonical_timesheet_id)
+        FILTER (WHERE rotation_scope_keyed.canonical_timesheet_id IS NOT NULL)
+      )[1]
+    ) AS projected_timesheet_id
+  FROM rotation_scope_keyed
+  GROUP BY rotation_scope_keyed.scope_family_key
+),
+family_to_projection AS (
+  SELECT DISTINCT
+    rotation_scope_keyed.family_timesheet_id,
+    projection_targets.projected_timesheet_id
+  FROM rotation_scope_keyed
+  JOIN projection_targets
+    ON projection_targets.scope_family_key = rotation_scope_keyed.scope_family_key
+  WHERE rotation_scope_keyed.family_timesheet_id IS NOT NULL
+    AND projection_targets.projected_timesheet_id IS NOT NULL
+),
+active_batch_item_ids AS (
+  SELECT DISTINCT
+    pay_batch_item_row.id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM family_to_projection
+  -- CAP-01 A12: every lookup below is probed from the requested family (item by timesheet_id, then primary keys).
+  -- The OFFSET 0 fences stop the planner from starting at every open-batch Candidate and reading all of its items
+  -- (unrelated open Drafts), or from hashing every transfer / applied correction in the agency. Rows unchanged.
+  CROSS JOIN LATERAL (
+    SELECT scoped_active_item.*
+    FROM public.pay_batch_items AS scoped_active_item
+    WHERE scoped_active_item.timesheet_id = family_to_projection.family_timesheet_id
+    OFFSET 0
+  ) AS pay_batch_item_row
+  CROSS JOIN LATERAL (
+    SELECT scoped_active_candidate.*
+    FROM public.pay_batch_candidates AS scoped_active_candidate
+    WHERE scoped_active_candidate.id = pay_batch_item_row.pay_batch_candidate_id
+    OFFSET 0
+  ) AS pay_batch_candidate_row
+  CROSS JOIN LATERAL (
+    SELECT scoped_active_batch.*
+    FROM public.pay_batches AS scoped_active_batch
+    WHERE scoped_active_batch.id = pay_batch_candidate_row.pay_batch_id
+    OFFSET 0
+  ) AS pay_batch_row
+  LEFT JOIN LATERAL (
+    SELECT scoped_active_transfer.*
+    FROM public.pay_bank_transfers AS scoped_active_transfer
+    WHERE scoped_active_transfer.id = pay_batch_item_row.pay_bank_transfer_id
+    OFFSET 0
+  ) AS pay_bank_transfer_row
+    ON true
+  WHERE pay_batch_item_row.timesheet_id IS NOT NULL
+    AND COALESCE(pay_batch_item_row.is_voided, false) = false
+    AND upper(coalesce(pay_batch_item_row.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND public._pay_batch_status_is_active_reservation(pay_batch_row.status)
+    AND (p_exclude_pay_batch_id IS NULL OR pay_batch_row.id <> p_exclude_pay_batch_id)
+    AND UPPER(BTRIM(COALESCE(pay_batch_item_row.item_type, ''))) IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_correction_row
+      WHERE applied_correction_row.pay_batch_item_id = pay_batch_item_row.id
+        AND applied_correction_row.status = 'APPLIED'
+        AND applied_correction_row.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      OFFSET 0
+    )
+    AND NOT (
+      upper(btrim(coalesce(pay_batch_candidate_row.settlement_status, ''))) = 'SETTLED'
+      OR pay_batch_candidate_row.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(pay_bank_transfer_row.status, ''))) = 'COMPLETED'
+      OR pay_bank_transfer_row.completed_at_utc IS NOT NULL
+    )
+),
+open_correction_exact_item_ids AS (
+  SELECT DISTINCT
+    open_correction_request_row.id AS correction_request_id,
+    open_correction_request_row.pay_batch_id AS pay_batch_id,
+    parsed_exact_item_ids.pay_batch_item_id AS pay_batch_item_id
+  FROM public.pay_payment_correction_requests AS open_correction_request_row
+  JOIN LATERAL (
+    SELECT DISTINCT
+      exact_item_text_values.item_id_text::uuid AS pay_batch_item_id
+    FROM (
+      SELECT item_array_values.item_id_text
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(open_correction_request_row.plan_json->'selected_pay_batch_item_ids') = 'array'
+            THEN open_correction_request_row.plan_json->'selected_pay_batch_item_ids'
+          WHEN jsonb_typeof(open_correction_request_row.plan_json#>'{selection,selected_pay_batch_item_ids}') = 'array'
+            THEN open_correction_request_row.plan_json#>'{selection,selected_pay_batch_item_ids}'
+          WHEN jsonb_typeof(open_correction_request_row.plan_json#>'{selection,pay_batch_item_ids}') = 'array'
+            THEN open_correction_request_row.plan_json#>'{selection,pay_batch_item_ids}'
+          WHEN jsonb_typeof(open_correction_request_row.plan_json#>'{work_expansion_plan,selected_pay_batch_item_ids}') = 'array'
+            THEN open_correction_request_row.plan_json#>'{work_expansion_plan,selected_pay_batch_item_ids}'
+          WHEN jsonb_typeof(open_correction_request_row.selection_json->'selected_pay_batch_item_ids') = 'array'
+            THEN open_correction_request_row.selection_json->'selected_pay_batch_item_ids'
+          WHEN jsonb_typeof(open_correction_request_row.selection_json->'pay_batch_item_ids') = 'array'
+            THEN open_correction_request_row.selection_json->'pay_batch_item_ids'
+          WHEN jsonb_typeof(open_correction_request_row.selection_json->'expected_pay_batch_item_ids') = 'array'
+            THEN open_correction_request_row.selection_json->'expected_pay_batch_item_ids'
+          ELSE '[]'::jsonb
+        END
+      ) AS item_array_values(item_id_text)
+
+      UNION ALL
+
+      SELECT open_correction_request_row.selection_json->>'pay_batch_item_id'
+      WHERE open_correction_request_row.selection_json ? 'pay_batch_item_id'
+
+      UNION ALL
+
+      SELECT open_correction_request_row.selection_json->>'expected_pay_batch_item_id'
+      WHERE open_correction_request_row.selection_json ? 'expected_pay_batch_item_id'
+    ) AS exact_item_text_values
+    WHERE nullif(btrim(coalesce(exact_item_text_values.item_id_text, '')), '') IS NOT NULL
+      AND nullif(btrim(coalesce(exact_item_text_values.item_id_text, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS parsed_exact_item_ids
+    ON true
+  JOIN public.pay_batch_items AS exact_pay_batch_item_row
+    ON exact_pay_batch_item_row.id = parsed_exact_item_ids.pay_batch_item_id
+  JOIN public.pay_batch_candidates AS exact_pay_batch_candidate_row
+    ON exact_pay_batch_candidate_row.id = exact_pay_batch_item_row.pay_batch_candidate_id
+   AND exact_pay_batch_candidate_row.pay_batch_id = open_correction_request_row.pay_batch_id
+  WHERE open_correction_request_row.status IN ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
+    AND open_correction_request_row.correction_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
+    AND (p_exclude_pay_batch_id IS NULL OR open_correction_request_row.pay_batch_id <> p_exclude_pay_batch_id)
+),
+open_correction_hold_item_ids AS (
+  SELECT DISTINCT
+    open_correction_exact_item_ids.pay_batch_item_id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM open_correction_exact_item_ids
+  JOIN public.pay_batch_items AS selected_pay_batch_item_row
+    ON selected_pay_batch_item_row.id = open_correction_exact_item_ids.pay_batch_item_id
+  JOIN family_to_projection
+    ON family_to_projection.family_timesheet_id = selected_pay_batch_item_row.timesheet_id
+  JOIN public.pay_batch_candidates AS selected_pay_batch_candidate_row
+    ON selected_pay_batch_candidate_row.id = selected_pay_batch_item_row.pay_batch_candidate_id
+   AND selected_pay_batch_candidate_row.pay_batch_id = open_correction_exact_item_ids.pay_batch_id
+  LEFT JOIN public.pay_bank_transfers AS selected_pay_bank_transfer_row
+    ON selected_pay_bank_transfer_row.id = selected_pay_batch_item_row.pay_bank_transfer_id
+  WHERE selected_pay_batch_item_row.timesheet_id IS NOT NULL
+    AND COALESCE(selected_pay_batch_item_row.is_voided, false) = false
+    AND upper(coalesce(selected_pay_batch_item_row.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND (p_exclude_pay_batch_id IS NULL OR selected_pay_batch_candidate_row.pay_batch_id <> p_exclude_pay_batch_id)
+    AND UPPER(BTRIM(COALESCE(selected_pay_batch_item_row.item_type, ''))) IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_correction_row
+      WHERE applied_correction_row.pay_batch_item_id = selected_pay_batch_item_row.id
+        AND applied_correction_row.status = 'APPLIED'
+        AND applied_correction_row.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    AND NOT (
+      upper(btrim(coalesce(selected_pay_batch_candidate_row.settlement_status, ''))) = 'SETTLED'
+      OR selected_pay_batch_candidate_row.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(selected_pay_bank_transfer_row.status, ''))) = 'COMPLETED'
+      OR selected_pay_bank_transfer_row.completed_at_utc IS NOT NULL
+    )
+),
+unresolved_terminal_failure_hold_item_ids AS (
+  SELECT DISTINCT
+    terminal_failure_item_row.id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM family_to_projection
+  -- CAP-01 A12: same per-family probes; failure events are reached through the item's transfer id
+  -- (idx_pay_bank_transfer_events_transfer_source_state_received), not scanned agency-wide. Rows unchanged.
+  CROSS JOIN LATERAL (
+    SELECT scoped_terminal_item.*
+    FROM public.pay_batch_items AS scoped_terminal_item
+    WHERE scoped_terminal_item.timesheet_id = family_to_projection.family_timesheet_id
+    OFFSET 0
+  ) AS terminal_failure_item_row
+  CROSS JOIN LATERAL (
+    SELECT scoped_terminal_candidate.*
+    FROM public.pay_batch_candidates AS scoped_terminal_candidate
+    WHERE scoped_terminal_candidate.id = terminal_failure_item_row.pay_batch_candidate_id
+    OFFSET 0
+  ) AS terminal_failure_candidate_row
+  CROSS JOIN LATERAL (
+    SELECT scoped_terminal_event.*
+    FROM public.pay_bank_transfer_events AS scoped_terminal_event
+    WHERE scoped_terminal_event.pay_bank_transfer_id = terminal_failure_item_row.pay_bank_transfer_id
+      AND scoped_terminal_event.pay_batch_id = terminal_failure_candidate_row.pay_batch_id
+      AND scoped_terminal_event.mapping_status = 'MATCHED'
+      AND scoped_terminal_event.normalised_state IN ('FAILED','DECLINED','REJECTED','CANCELLED')
+    OFFSET 0
+  ) AS terminal_failure_event_row
+  LEFT JOIN LATERAL (
+    SELECT scoped_terminal_transfer.*
+    FROM public.pay_bank_transfers AS scoped_terminal_transfer
+    WHERE scoped_terminal_transfer.id = terminal_failure_item_row.pay_bank_transfer_id
+    OFFSET 0
+  ) AS terminal_failure_transfer_row
+    ON true
+  WHERE terminal_failure_item_row.timesheet_id IS NOT NULL
+    AND COALESCE(terminal_failure_item_row.is_voided, false) = false
+    AND upper(coalesce(terminal_failure_item_row.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND (p_exclude_pay_batch_id IS NULL OR terminal_failure_candidate_row.pay_batch_id <> p_exclude_pay_batch_id)
+    AND UPPER(BTRIM(COALESCE(terminal_failure_item_row.item_type, ''))) IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_correction_row
+      WHERE applied_correction_row.pay_batch_item_id = terminal_failure_item_row.id
+        AND applied_correction_row.status = 'APPLIED'
+        AND applied_correction_row.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      OFFSET 0
+    )
+    AND NOT (
+      upper(btrim(coalesce(terminal_failure_candidate_row.settlement_status, ''))) = 'SETTLED'
+      OR terminal_failure_candidate_row.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(terminal_failure_transfer_row.status, ''))) = 'COMPLETED'
+      OR terminal_failure_transfer_row.completed_at_utc IS NOT NULL
+    )
+),
+active_item_ids AS (
+  SELECT active_batch_item_ids.pay_batch_item_id, active_batch_item_ids.projected_timesheet_id
+  FROM active_batch_item_ids
+  UNION
+  SELECT open_correction_hold_item_ids.pay_batch_item_id, open_correction_hold_item_ids.projected_timesheet_id
+  FROM open_correction_hold_item_ids
+  UNION
+  SELECT unresolved_terminal_failure_hold_item_ids.pay_batch_item_id, unresolved_terminal_failure_hold_item_ids.projected_timesheet_id
+  FROM unresolved_terminal_failure_hold_item_ids
+),
+active_item_id_array AS (
+  SELECT
+    CASE
+      WHEN COUNT(*) = 0 THEN ARRAY['00000000-0000-0000-0000-000000000000'::uuid]
+      ELSE ARRAY_AGG(active_item_ids.pay_batch_item_id ORDER BY active_item_ids.pay_batch_item_id)
+    END AS pay_batch_item_ids
+  FROM active_item_ids
+),
+active_item_projection_map AS (
+  -- CAP-01 A12 v2: one keyed map {pay_batch_item_id: [projected_timesheet_id, ...]} built once from the distinct
+  -- (item, projection) pairs, so reserved_keyed_raw does a keyed lookup per component row instead of a nested loop
+  -- over every active item (quadratic in the requested Timesheets' own active items). Same rows and multiplicity.
+  SELECT COALESCE(
+    jsonb_object_agg(item_projection_rows.item_key, item_projection_rows.projected_timesheet_ids),
+    '{}'::jsonb
+  ) AS projection_map
+  FROM (
+    SELECT
+      active_item_ids.pay_batch_item_id::text AS item_key,
+      jsonb_agg(active_item_ids.projected_timesheet_id::text ORDER BY active_item_ids.projected_timesheet_id) AS projected_timesheet_ids
+    FROM active_item_ids
+    WHERE active_item_ids.pay_batch_item_id IS NOT NULL
+      AND active_item_ids.projected_timesheet_id IS NOT NULL
+    GROUP BY active_item_ids.pay_batch_item_id
+  ) AS item_projection_rows
+),
+reserved_keyed_raw AS (
+  SELECT
+    economic_component_rows.pay_batch_item_id,
+    active_item_rows.projected_timesheet_id_text::uuid AS timesheet_id,
+    UPPER(NULLIF(BTRIM(COALESCE(economic_component_rows.key_type, '')), '')) AS key_type,
+    NULLIF(BTRIM(COALESCE(economic_component_rows.key_value, '')), '') AS key_value,
+    ROUND(COALESCE(economic_component_rows.source_amount_ex_vat, 0), 2) AS amount_ex_vat,
+    ROUND(COALESCE(economic_component_rows.source_amount_inc_vat, 0), 2) AS amount_inc_vat
+  FROM active_item_id_array
+  JOIN LATERAL public._pay_batch_item_economic_components(
+    p_pay_batch_id => NULL::uuid,
+    p_pay_batch_item_ids => active_item_id_array.pay_batch_item_ids
+  ) AS economic_component_rows
+    ON true
+  CROSS JOIN LATERAL jsonb_array_elements_text(
+    (SELECT active_item_projection_map.projection_map FROM active_item_projection_map)
+      -> (economic_component_rows.pay_batch_item_id::text)
+  ) AS active_item_rows(projected_timesheet_id_text)
+  WHERE UPPER(BTRIM(COALESCE(economic_component_rows.item_type, ''))) IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND economic_component_rows.key_resolution_failure_reason IS NULL
+    AND economic_component_rows.source_amount_ex_vat IS NOT NULL
+    AND UPPER(BTRIM(COALESCE(economic_component_rows.key_type, ''))) IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+),
+reserved_keyed AS (
+  SELECT
+    reserved_keyed_raw.pay_batch_item_id,
+    reserved_keyed_raw.timesheet_id,
+    reserved_keyed_raw.key_type,
+    reserved_keyed_raw.key_value,
+    ROUND(SUM(COALESCE(reserved_keyed_raw.amount_ex_vat, 0)), 2) AS amount_ex_vat,
+    ROUND(SUM(COALESCE(reserved_keyed_raw.amount_inc_vat, 0)), 2) AS amount_inc_vat
+  FROM reserved_keyed_raw
+  WHERE reserved_keyed_raw.timesheet_id IS NOT NULL
+    AND reserved_keyed_raw.key_type IS NOT NULL
+    AND BTRIM(reserved_keyed_raw.key_type) <> ''
+    AND reserved_keyed_raw.key_value IS NOT NULL
+    AND BTRIM(reserved_keyed_raw.key_value) <> ''
+    AND NOT (reserved_keyed_raw.key_type = 'TS_DAY' AND reserved_keyed_raw.key_value !~ '^\d{4}-\d{2}-\d{2}$')
+  GROUP BY
+    reserved_keyed_raw.pay_batch_item_id,
+    reserved_keyed_raw.timesheet_id,
+    reserved_keyed_raw.key_type,
+    reserved_keyed_raw.key_value
+),
+reserved_components AS (
+  SELECT
+    reserved_keyed_rows.timesheet_id,
+    reserved_keyed_rows.key_type,
+    reserved_keyed_rows.key_value,
+    ROUND(SUM(COALESCE(reserved_keyed_rows.amount_ex_vat, 0)), 2) AS amount_ex_vat,
+    ROUND(SUM(COALESCE(reserved_keyed_rows.amount_inc_vat, 0)), 2) AS amount_inc_vat
+  FROM reserved_keyed AS reserved_keyed_rows
+  GROUP BY
+    reserved_keyed_rows.timesheet_id,
+    reserved_keyed_rows.key_type,
+    reserved_keyed_rows.key_value
+)
+SELECT
+  reserved_component_rows.timesheet_id,
+  reserved_component_rows.key_type,
+  reserved_component_rows.key_value,
+  reserved_component_rows.amount_ex_vat,
+  reserved_component_rows.amount_inc_vat
+FROM reserved_components AS reserved_component_rows
+WHERE reserved_component_rows.timesheet_id IS NOT NULL
+  AND reserved_component_rows.key_type IS NOT NULL
+  AND reserved_component_rows.key_value IS NOT NULL
+  AND (
+    ROUND(COALESCE(reserved_component_rows.amount_ex_vat, 0), 2) <> 0
+    OR ROUND(COALESCE(reserved_component_rows.amount_inc_vat, 0), 2) <> 0
+  );
+$function$;

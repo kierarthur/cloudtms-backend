@@ -1,0 +1,154 @@
+{
+  "source_only": true,
+  "predecessor": "0d002966b022734f7b86c9a6f98d7a2332080721",
+  "SQL_executed": false,
+  "records": [
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/27_private_weekly_source_healthroster_checklist_leaf_v1.sqlinc",
+      "input": "input/wp_u3_client_week_context.sqlinc",
+      "output": "forward/wp_u3_client_week_context.sqlinc",
+      "before_sha256": "39edefabaf28e4147f91d849c9b6e7c9a1bdeb74a331a1487e4952a70ded3304",
+      "after_sha256": "202961337d928fa6c01b05800cfc2704efb7c8985394cb8c1d76c0da786c37a4",
+      "hunks": [
+        {
+          "label": "private Legacy review frame variable only",
+          "before": "  v_money jsonb;v_money_row jsonb;",
+          "after": "  v_money jsonb;v_legacy jsonb;v_money_row jsonb;"
+        },
+        {
+          "label": "genuine Legacy hold review participates before older signed-week admission",
+          "before": "          v_scope_open:=v_scope_open+1;\n        end if;\n      end loop;",
+          "after": "          v_scope_open:=v_scope_open+1;\n        end if;\n        v_legacy:=private.weekly_source_checklist_legacy_hold_review_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);\n        v_scope_money_facts:=v_scope_money_facts||jsonb_build_array(v_legacy->'native_facts');\n        if v_legacy->'review_required'='true'::jsonb then\n          v_scope_money:=v_scope_money||jsonb_build_array((v_legacy-'native_facts')||jsonb_build_object('native_financial_kind','LEGACY_REVIEW'));\n          v_scope_open:=v_scope_open+1;\n        end if;\n      end loop;"
+        },
+        {
+          "label": "same ordinary Legacy review for actual Agency submitted Timesheets",
+          "before": "      if v_money->'known'='true'::jsonb then v_financial_items:=v_financial_items||jsonb_build_array(v_money-'native_facts'); end if;\n    end loop;",
+          "after": "      if v_money->'known'='true'::jsonb then v_financial_items:=v_financial_items||jsonb_build_array(v_money-'native_facts'); end if;\n      v_legacy:=private.weekly_source_checklist_legacy_hold_review_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);\n      v_financial_facts:=v_financial_facts||jsonb_build_array(v_legacy->'native_facts');\n      if v_legacy->'review_required'='true'::jsonb then\n        v_financial_items:=v_financial_items||jsonb_build_array((v_legacy-'native_facts')||jsonb_build_object('native_financial_kind','LEGACY_REVIEW'));end if;\n    end loop;"
+        }
+      ],
+      "whole_reverse_equal": true
+    },
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/38_public_weekly_source_checklist_v1.sqlinc",
+      "input": "input/wp_u3_native_checklist.sqlinc",
+      "output": "forward/wp_u3_native_checklist.sqlinc",
+      "before_sha256": "9aa9fa0d5c58b23ec20ecfe8226880750ade9d6942adbc785fc85b317d08a72c",
+      "after_sha256": "dab2a032bc7a8e4a5b3914a721d2b3aefa4eb04115ceabd5f2fa33ac17308f39",
+      "hunks": [
+        {
+          "label": "do not discard a leaf-retained older signed week before native financial merge",
+          "before": "      if own_week<>latest_week and completed then continue; end if;\n      checked_text:=case when checked then 'Checked' else (actual_count-checked_count)::text||' Timesheets not yet checked' end;",
+          "after": "      checked_text:=case when checked then 'Checked' else (actual_count-checked_count)::text||' Timesheets not yet checked' end;"
+        },
+        {
+          "label": "separate unknown-quantity Legacy review consumes genuine native witness before positive NEXT branch",
+          "before": "      for raw in select value from jsonb_array_elements(leaf->'native_financial_items') loop\n",
+          "after": "      for raw in select value from jsonb_array_elements(leaf->'native_financial_items') loop\n        if raw->>'native_financial_kind'='LEGACY_REVIEW' then\n          if raw->'review_required' is distinct from 'true'::jsonb\n            or raw#>'{native_legacy_review_witness,scope}' is distinct from row_scope then\n            raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_FINANCIAL_FRAME_UNAVAILABLE' using errcode='55000';end if;\n          row_items:=row_items||jsonb_build_array(jsonb_build_object(\n            'item_id','native-legacy-review:'||(raw#>>'{native_legacy_review_witness,timesheet_id}'),\n            'item_kind','NATIVE_ORDINARY_FINANCIAL_REVIEW','scope',row_scope,'route',route,'worker',raw->'worker',\n            'work_date',raw->'work_date','sheet_scope',raw->'sheet_scope','reason_code','NATIVE_LEGACY_PAY_HOLD_REVIEW',\n            'status',raw->'status','hold',raw->'hold','subject','PAY','permitted_pay_subject',true,\n            'action',case when view='ADMIN' then jsonb_build_object('kind','TIMESHEET','label','Review native pay hold in Timesheet ›',\n              'native_allowed',true,'target',jsonb_build_object('timesheet_id',raw#>>'{native_legacy_review_witness,timesheet_id}')) end,\n            'counted_timesheet_id',raw#>>'{native_legacy_review_witness,timesheet_id}','correction_binding',null,'submission_read',null,\n            'source_information_witness',null,'native_source_witness',null,'native_invoice_witness',null,'native_invoice_decision_witness',null,\n            'queries_parent_witness',null,'native_ordinary_money_witness',null,'native_legacy_review_witness',raw->'native_legacy_review_witness','_rank',35));\n          open_count:=open_count+1;pay_count:=pay_count+1;completed:=false;pay_complete:=false;complete_text:=open_count::text||' items';\n          continue;\n        end if;\n"
+        },
+        {
+          "label": "older signed-week closure now follows both actual native financial arms",
+          "before": "    fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_financial_facts',financial_facts));",
+          "after": "    if route='SIGNED_TIMESHEETS' and own_week<>latest_week and completed then continue; end if;\n    fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_financial_facts',financial_facts));"
+        }
+      ],
+      "whole_reverse_equal": true
+    },
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/healthroster-checklist-source.mjs",
+      "input": "input/healthroster-checklist-source.mjs",
+      "output": "forward/healthroster-checklist-source.mjs",
+      "before_sha256": "bc79256b6d0e3938f12f0d7e4f7a5bdcd817f7533b4730ac36e25c82e57d0c31",
+      "after_sha256": "3bce1dc7d48ebcd23a9c4e72a41edee86fc1ff05378b59791678cebb2282d496",
+      "hunks": [
+        {
+          "label": "closed native Legacy witness field",
+          "before": "'native_invoice_decision_witness', 'native_ordinary_money_witness']);",
+          "after": "'native_invoice_decision_witness', 'native_ordinary_money_witness', 'native_legacy_review_witness']);"
+        },
+        {
+          "label": "separate native Legacy review item discriminant",
+          "before": "'NATIVE_INVOICE', 'NATIVE_ORDINARY_FINANCIAL'].includes(item.item_kind)",
+          "after": "'NATIVE_INVOICE', 'NATIVE_ORDINARY_FINANCIAL', 'NATIVE_ORDINARY_FINANCIAL_REVIEW'].includes(item.item_kind)"
+        },
+        {
+          "label": "strict actor/scope/identity/unknown-amount review witness decoder",
+          "before": "  } else if (item.item_kind === 'NATIVE_ORDINARY_FINANCIAL') {",
+          "after": "  } else if (item.item_kind === 'NATIVE_ORDINARY_FINANCIAL_REVIEW') {\n    const w=item.native_legacy_review_witness;\n    closed(w,['owner','actor_user_id','scope','timesheet_id','financial_id','native_basis','amount_basis','counts_for_row_admission','read_proof_hash']);\n    uuid(w.actor_user_id);bindScope(w.scope);uuid(w.timesheet_id);uuid(w.financial_id);uuid(item.counted_timesheet_id);\n    if(w.owner!=='private.weekly_source_checklist_legacy_read_frame_v1'||!same(w.actor_user_id,actor.actor_user_id)||\n      !sameScope(w.scope,item.scope)||!same(w.timesheet_id,item.counted_timesheet_id)||\n      w.native_basis!=='NATIVE_CURRENT_TSFIN_PAY_ON_HOLD'||w.amount_basis!=='UNAVAILABLE'||w.counts_for_row_admission!==false||\n      typeof w.read_proof_hash!=='string'||!HASH.test(w.read_proof_hash)||item.item_id!=='native-legacy-review:'+w.timesheet_id||\n      !['SIGNED_TIMESHEETS','AGENCY_INVOICE'].includes(item.route)||item.reason_code!=='NATIVE_LEGACY_PAY_HOLD_REVIEW'||\n      item.subject!=='PAY'||item.permitted_pay_subject!==true||item.status?.text!=='Decision needed'||item.status?.tone!=='warning'||\n      item.hold?.authority?.owner!=='ORDINARY'||item.hold.authority.hash!==w.read_proof_hash||item.hold.authority.withholding_known!==false||\n      item.hold.holds_pay!==null||item.hold.holds_pay_scope!==null||item.hold.withheld_amount_pence!==null||\n      item.hold.holds_invoice!==null||item.hold.pending_decision!==null||item.correction_binding!==null||item.submission_read!==null||\n      item.source_information_witness!==null||item.native_source_witness!=null||item.native_invoice_witness!=null||item.native_invoice_decision_witness!=null||\n      item.native_ordinary_money_witness!=null||item.queries_parent_witness!=null||item.action===undefined||\n      (item.action!==null&&(item.action.kind!=='TIMESHEET'||!same(item.action.target?.timesheet_id,w.timesheet_id)))) {\n      fail('CHECKLIST_NATIVE_LEGACY_REVIEW_INVALID');\n    }\n  } else if (item.item_kind === 'NATIVE_ORDINARY_FINANCIAL') {"
+        },
+        {
+          "label": "review witness cannot be smuggled into another item kind",
+          "before": "  if (item.item_kind !== 'NATIVE_ORDINARY_FINANCIAL' && item.native_ordinary_money_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+          "after": "  if (item.item_kind !== 'NATIVE_ORDINARY_FINANCIAL_REVIEW' && item.native_legacy_review_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');\n  if (item.item_kind !== 'NATIVE_ORDINARY_FINANCIAL' && item.native_ordinary_money_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');"
+        }
+      ],
+      "whole_reverse_equal": true
+    },
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/15102026_0600_healthroster_checklist_current_v1.sql",
+      "input": "input/15102026_0600_healthroster_checklist_current_v1.sql",
+      "output": "forward/15102026_0600_healthroster_checklist_current_v1.sql",
+      "before_sha256": "b59fa11aa99c07748107b038cedf8f4a6cedbd05baf8b6545642621ccaeca555",
+      "after_sha256": "a6159703ad0c0fd215ff1fd6acb95f3689c9760fe69baa07edd11af06fe73cc7",
+      "hunks": [
+        {
+          "label": "new private review helper is declared before leaf and public Checklist",
+          "before": "\\ir healthroster_checklist_current/27_private_weekly_source_healthroster_checklist_leaf_v1.sqlinc",
+          "after": "\\ir healthroster_checklist_current/39_private_weekly_source_checklist_legacy_hold_review_v1.sqlinc\n\\ir healthroster_checklist_current/27_private_weekly_source_healthroster_checklist_leaf_v1.sqlinc"
+        }
+      ],
+      "whole_reverse_equal": true
+    },
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/central_acl_inventory.sqlinc",
+      "input": "input/central_acl_inventory.sqlinc",
+      "output": "forward/central_acl_inventory.sqlinc",
+      "before_sha256": "dfd8d8c2db38f5c8a56d43400b60cb9cef1e81471497f74678ab63121c9b62dc",
+      "after_sha256": "f14468354ab9af9b1fe8b0f789380f228249f3c0757d047f315f5a991f40b896",
+      "hunks": [
+        {
+          "label": "add exactly the genuine private Legacy review helper; all existing private/service/table contracts retained",
+          "before": "    ('private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)'),",
+          "after": "    ('private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)'),\n    ('private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)'),"
+        }
+      ],
+      "whole_reverse_equal": true
+    },
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/final_acl_union.sqlinc",
+      "input": "input/final_acl_union.sqlinc",
+      "output": "forward/final_acl_union.sqlinc",
+      "before_sha256": "1bfd119d401ccbe741ee163811a722d478faa2ae12a391d248257e220a37c49c",
+      "after_sha256": "abdf437232bd4e4f8388fb1e794d2535fb49bdfea5fbee7aac4c0892c9ad442f",
+      "hunks": [
+        {
+          "label": "add exactly the genuine private Legacy review helper; all existing private/service/table contracts retained",
+          "before": "    ('private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)'),",
+          "after": "    ('private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)'),\n    ('private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)'),"
+        }
+      ],
+      "whole_reverse_equal": true
+    },
+    {
+      "commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "file": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "input": "input/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "output": "forward/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "before_sha256": "1b946d7451118599b1fd4a63a8f0693af6ceb5ad6df9492233eab27fda2b20b2",
+      "after_sha256": "90d1ff2263a9f9d53ffa9e7d83c056f13a9a91be10f5a963c5117864af271d07",
+      "hunks": [
+        {
+          "label": "add exactly the genuine private Legacy review helper; all existing private/service/table contracts retained",
+          "before": "    'private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)',",
+          "after": "    'private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)',\n    'private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)',"
+        }
+      ],
+      "whole_reverse_equal": true
+    }
+  ]
+}

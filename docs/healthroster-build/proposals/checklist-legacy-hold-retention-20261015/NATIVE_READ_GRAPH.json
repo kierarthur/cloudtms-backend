@@ -1,0 +1,507 @@
+{
+  "source_only": true,
+  "compiled_effective_body_coverage": false,
+  "native_purity": false,
+  "functions": [
+    {
+      "id": "private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)",
+      "source_file": "supabase/repeatable/healthroster_checklist_current/39_private_weekly_source_checklist_legacy_hold_review_v1.sqlinc",
+      "source_commit": null,
+      "source_output": "forward/wp_u3_legacy_hold_review.sqlinc",
+      "source_proof": "CURRENT_SAVED_SUCCESSOR_WITH_COMPLETE_REVERSE",
+      "definition_sha256": "e632a4359006ee96ad31d60f7c02ad962419e5e01a953066c7cfe92215b9f798",
+      "saved_file": "read-graph/private.weekly_source_checklist_legacy_hold_review_v1_uuid_jsonb_uuid_.sqlinc",
+      "calls": [
+        "private.weekly_source_checklist_legacy_read_frame_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)",
+      "source_file": "supabase/repeatable/healthroster_checklist_current/16_private_weekly_source_checklist_legacy_read_frame_v1.sqlinc",
+      "source_commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "source_output": "../checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/16_private_weekly_source_checklist_legacy_read_frame_v1.sqlinc",
+      "source_proof": "EXACT_FROZEN_PREDECESSOR",
+      "definition_sha256": "4f874a5f4df09c56568b9657563ba87635471f235cc476ffa9e6cffdf974d11c",
+      "saved_file": "read-graph/private.weekly_source_checklist_legacy_read_frame_v1_uuid_jsonb_uuid_.sqlinc",
+      "calls": [
+        "private._weekly_source_settings_assert_request_v1",
+        "private.bpay_entitlement_financial_scope_v1",
+        "private.weekly_source_actual_timesheet_submission_v1",
+        "private.weekly_source_checklist_legacy_pay_state_core_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_pay_query_scope_v1",
+        "private.weekly_source_query_require_service_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "saved_file": "read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "calls": [
+        "private.weekly_source_sha256_text_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4",
+      "saved_file": "read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.bpay_entitlement_financial_scope_v1(uuid[])",
+      "source_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "c9515f39b1a2ac5cb2e867bdbd58b986ce5d7e29ea5848c03f3403a475350320",
+      "saved_file": "read-graph/private.bpay_entitlement_financial_scope_v1_uuid___.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "source_file": "supabase/repeatable/healthroster_checklist_current/01_private_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "source_commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "source_output": "../checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/01_private_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "source_proof": "EXACT_FROZEN_PREDECESSOR",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500",
+      "saved_file": "read-graph/private.weekly_source_actual_timesheet_submission_v1_uuid_.sqlinc",
+      "calls": [
+        "private._candidate_daily_canonical_save_input_v1",
+        "private._candidate_sha256_jsonb_v1",
+        "public._import_review_query_evidence_core_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)",
+      "source_file": "supabase/repeatable/healthroster_checklist_current/15_private_weekly_source_checklist_legacy_pay_state_core_v1.sqlinc",
+      "source_commit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+      "source_output": "../checklist-current-native-module-recipe-20261015/forward/sql/healthroster_checklist_current/15_private_weekly_source_checklist_legacy_pay_state_core_v1.sqlinc",
+      "source_proof": "EXACT_FROZEN_PREDECESSOR",
+      "definition_sha256": "ca9d19c90c5d8724140eb536a10f3eabd24f2b70353dc6a8110b7e3b76abc6d2",
+      "saved_file": "read-graph/private.weekly_source_checklist_legacy_pay_state_core_v1_uuid_.sqlinc",
+      "calls": [
+        "public._pay_outstanding_components",
+        "public._pay_rail_state_money_movement_classify"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "saved_file": "read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "calls": [
+        "private.weekly_source_pay_actor_allowed_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+      "saved_file": "read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "source_file": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf",
+      "saved_file": "read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "calls": [
+        "private._candidate_expense_source_family_v1",
+        "private.weekly_source_resolve_root_identity_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_query_require_service_v1()",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "saved_file": "read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_sha256_text_v1(text,text)",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+      "saved_file": "read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "calls": [
+        "extensions.digest"
+      ],
+      "opaque_native_ABI": [
+        "extensions.digest"
+      ],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private._candidate_daily_canonical_save_input_v1(uuid,integer)",
+      "source_file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664",
+      "saved_file": "read-graph/private._candidate_daily_canonical_save_input_v1_uuid_integer_.sqlinc",
+      "calls": [
+        "private._candidate_sha256_jsonb_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private._candidate_sha256_jsonb_v1(jsonb)",
+      "source_file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103",
+      "saved_file": "read-graph/private._candidate_sha256_jsonb_v1_jsonb_.sqlinc",
+      "calls": [
+        "extensions.digest"
+      ],
+      "opaque_native_ABI": [
+        "extensions.digest"
+      ],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._import_review_query_evidence_core_v1(uuid)",
+      "source_file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3",
+      "saved_file": "read-graph/public._import_review_query_evidence_core_v1_uuid_.sqlinc",
+      "calls": [
+        "public._import_review_hash_v1",
+        "public._import_review_timesheet_protection_core_v1"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_outstanding_components(uuid[],uuid)",
+      "source_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "82d3b581777923e6c0a4e45082cc02fed702b2a57945565739bf9d6f6b89da23",
+      "saved_file": "read-graph/public._pay_outstanding_components_uuid___uuid_.sqlinc",
+      "calls": [
+        "private.bpay_entitlement_financial_scope_v1",
+        "public._pay_current_timesheet_entitlement_components",
+        "public._pay_policy_x_resolve_pre_draft_economic_key",
+        "public._pay_reserved_components"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_outstanding_components(uuid[])",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "ddacb15d88e712007f4445252caa0ba9f20b3d10e1838d039c34f0ae8b039668",
+      "saved_file": "read-graph/public._pay_outstanding_components_uuid___.sqlinc",
+      "calls": [
+        "public._pay_outstanding_components"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_rail_state_money_movement_classify(text,text,jsonb,jsonb)",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "64b738b725eebbce74cc1c45caeaa3d44e30e49ac0604c1ff32248997c874357",
+      "saved_file": "read-graph/public._pay_rail_state_money_movement_classify_text_text_jsonb_jsonb_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private._candidate_expense_source_family_v1(uuid)",
+      "source_file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d",
+      "saved_file": "read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "source_file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6",
+      "saved_file": "read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "calls": [
+        "public._pay_timesheet_rotation_scope"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._import_review_hash_v1(text)",
+      "source_file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "d4f5765fda0fe332115c79994e636aa4232d6cdbf52e5d1f68f396c4b06bc5a8",
+      "saved_file": "read-graph/public._import_review_hash_v1_text_.sqlinc",
+      "calls": [
+        "extensions.digest"
+      ],
+      "opaque_native_ABI": [
+        "extensions.digest"
+      ],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._import_review_timesheet_protection_core_v1(uuid)",
+      "source_file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "12dd76a6785a4382e9fb47e71c4dffca3152273f52a1e3aebf9895cc3fea0410",
+      "saved_file": "read-graph/public._import_review_timesheet_protection_core_v1_uuid_.sqlinc",
+      "calls": [
+        "public._pay_batch_status_is_active_reservation"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_current_timesheet_entitlement_components(uuid[])",
+      "source_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "b10f7cb9a4c8d5cb61c74f0514d5eda038798a941253f7aea39746a85a54d1f6",
+      "saved_file": "read-graph/public._pay_current_timesheet_entitlement_components_uuid___.sqlinc",
+      "calls": [
+        "private.bpay_entitlement_financial_scope_v1",
+        "public._pay_active_settled_components",
+        "public._pay_policy_x_resolve_pre_draft_economic_key",
+        "public._pay_timesheet_components"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_policy_x_resolve_pre_draft_economic_key(uuid,jsonb,text,text,text,date)",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "e3fe30964b0f7818356631c714dd4dcdda845a28316440abd714d8f016aa1f5e",
+      "saved_file": "read-graph/public._pay_policy_x_resolve_pre_draft_economic_key_uuid_jsonb_text_text_text_date_.sqlinc",
+      "calls": [
+        "public._pay_policy_x_assert_economic_key"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_reserved_components(uuid[],uuid)",
+      "source_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "8aef4e688b89eec0e6ef890a462d13a83ffbbd8d17f84ee83840343630f3c63b",
+      "saved_file": "read-graph/public._pay_reserved_components_uuid___uuid_.sqlinc",
+      "calls": [
+        "private.bpay_settled_financial_scope_v1",
+        "public._pay_batch_item_economic_components",
+        "public._pay_batch_status_is_active_reservation"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_reserved_components(uuid[])",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "489b5cd56b7d702fe5c0f0eded91b7c4115dd2c6b0a68943c32062fcb8508430",
+      "saved_file": "read-graph/public._pay_reserved_components_uuid___.sqlinc",
+      "calls": [
+        "public._pay_reserved_components"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_timesheet_rotation_scope(uuid[])",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "saved_file": "read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_batch_status_is_active_reservation(text)",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "f2dff9d19beebfaea5bf833a575bde09248af72f9f713c3b1bb4e027054e2a82",
+      "saved_file": "read-graph/public._pay_batch_status_is_active_reservation_text_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_active_settled_components(uuid[])",
+      "source_file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "073842bb1da6abb079d548922a3fb56a77b8d26b76001c2b74740731b37142df",
+      "saved_file": "read-graph/public._pay_active_settled_components_uuid___.sqlinc",
+      "calls": [
+        "private.bpay_settled_financial_scope_v1",
+        "public._pay_batch_item_economic_components"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_timesheet_components(jsonb)",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "155b0c9a3f73812992598bb1ce53b44dc9821cb91c31eb93f7ac9f97a78b844b",
+      "saved_file": "read-graph/public._pay_timesheet_components_jsonb_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_policy_x_assert_economic_key(uuid,text,text,text,text,text,boolean,jsonb)",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "9319928d0f395930201aa58f2ebb60170ec073601ba9d22be620ea7cffe210a9",
+      "saved_file": "read-graph/public._pay_policy_x_assert_economic_key_uuid_text_text_text_text_text_boolean_jsonb_.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "private.bpay_settled_financial_scope_v1(uuid[])",
+      "source_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "3b7a81e5f4157370fceeff2eeb9e19e28c683a802d4c24bfe0cc5e9c627c9ef3",
+      "saved_file": "read-graph/private.bpay_settled_financial_scope_v1_uuid___.sqlinc",
+      "calls": [],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_batch_item_economic_components(uuid,uuid[])",
+      "source_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "c2a3ced7beb5db6744406d524abc274fc2d8d2ede8f904cce6a973a1e6a2ae18",
+      "saved_file": "read-graph/public._pay_batch_item_economic_components_uuid_uuid___.sqlinc",
+      "calls": [
+        "public._pay_batch_item_source_reservation_amount_ex_vat",
+        "public._pay_policy_x_assert_economic_key",
+        "public._pay_policy_x_resolve_post_draft_economic_key"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_batch_item_source_reservation_amount_ex_vat(uuid)",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "f701e7ef559e2383ecb7c6315de2279beb2ecfec85e9e9fceabe6e2409bfec22",
+      "saved_file": "read-graph/public._pay_batch_item_source_reservation_amount_ex_vat_uuid_.sqlinc",
+      "calls": [
+        "public._pay_policy_x_resolve_post_draft_economic_key"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    },
+    {
+      "id": "public._pay_policy_x_resolve_post_draft_economic_key(uuid,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,jsonb)",
+      "source_file": "supabase/repeatable/20072026_1133_resolve_frozen_recovery_timesheet_identity.sql",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_output": null,
+      "source_proof": "EXACT_ROOT_LITERAL",
+      "definition_sha256": "3b3336bff88a41e6a6e3ad77576805be625171a44fd98b824cf454247e608fb8",
+      "saved_file": "read-graph/public._pay_policy_x_resolve_post_draft_economic_key_uuid_uuid_uuid_text_text_text_jsonb_jsonb_jsonb_jsonb_.sqlinc",
+      "calls": [
+        "public._pay_policy_x_assert_economic_key"
+      ],
+      "opaque_native_ABI": [],
+      "dynamic_SQL_tokens": 0
+    }
+  ]
+}

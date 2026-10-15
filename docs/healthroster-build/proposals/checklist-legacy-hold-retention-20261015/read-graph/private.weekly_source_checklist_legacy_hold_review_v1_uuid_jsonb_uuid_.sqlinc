@@ -1,0 +1,42 @@
+create or replace function private.weekly_source_checklist_legacy_hold_review_v1(
+ p_timesheet_id uuid,p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $legacy_review$
+declare frame jsonb;frame_after jsonb;facts jsonb;witness jsonb;proof text;worker text;work_date date;
+begin
+ frame:=private.weekly_source_checklist_legacy_read_frame_v1(p_timesheet_id,p_scope,p_actor_user_id);
+ facts:=jsonb_build_object('legacy_read_frame',frame);
+ if frame->'known' is distinct from 'true'::jsonb then
+  return jsonb_build_object('review_required',null,'native_facts',facts);end if;
+ -- The exact native frame already requires actual submission, the LEGACY
+ -- owner, one coherent current booking/TF, authorisation, dated permission,
+ -- ordinary ownership and the genuine canonical native financial family.
+ if frame#>'{native_facts,current_financial,pay_on_hold}' is distinct from 'true'::jsonb then
+  return jsonb_build_object('review_required',false,'native_facts',facts);end if;
+ work_date:=case when frame#>>'{native_facts,root,sheet_scope}'='DAILY'
+  then (frame#>>'{native_facts,actual_submission,work_date}')::date
+  else (p_scope->>'week_ending')::date end;
+ if work_date is null or work_date not between (p_scope->>'week_ending')::date-6 and (p_scope->>'week_ending')::date then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_LEGACY_REVIEW_DATE_UNPROVED' using errcode='55000';end if;
+ select coalesce(nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),'Worker') into worker
+  from public.candidates c where c.id=(frame#>>'{native_facts,actual_submission,candidate_id}')::uuid;
+ if worker is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_LEGACY_REVIEW_SUBJECT_UNPROVED' using errcode='55000';end if;
+ frame_after:=private.weekly_source_checklist_legacy_read_frame_v1(p_timesheet_id,p_scope,p_actor_user_id);
+ if frame is distinct from frame_after then
+  raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';end if;
+ facts:=facts||jsonb_build_object('legacy_read_frame_again',frame_after,'worker',worker,'work_date',work_date,
+  'native_basis','NATIVE_CURRENT_TSFIN_PAY_ON_HOLD','amount_basis','UNAVAILABLE','withholding_known',false);
+ proof:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_LEGACY_HOLD_REVIEW_V1',facts),'hex');
+ witness:=jsonb_build_object('owner','private.weekly_source_checklist_legacy_read_frame_v1','actor_user_id',p_actor_user_id,
+  'scope',p_scope,'timesheet_id',p_timesheet_id,'financial_id',frame->'financial_id',
+  'native_basis','NATIVE_CURRENT_TSFIN_PAY_ON_HOLD','amount_basis','UNAVAILABLE','counts_for_row_admission',false,
+  'read_proof_hash',proof);
+ return jsonb_build_object('review_required',true,'worker',worker,'work_date',work_date,
+  'sheet_scope',frame#>'{native_facts,root,sheet_scope}','native_legacy_review_witness',witness,
+  'status',jsonb_build_object('text','Decision needed','tone','warning','subtext','Native pay hold needs review','subtone','warning'),
+  'hold',jsonb_build_object('holds_pay',null,'holds_pay_scope',null,'withheld_amount_pence',null,
+   'holds_invoice',null,'pending_decision',null,'authority',jsonb_build_object('owner','ORDINARY','hash',proof,'withholding_known',false)),
+  'native_facts',facts);
+end;
+$legacy_review$;

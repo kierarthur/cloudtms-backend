@@ -1,0 +1,158 @@
+CREATE OR REPLACE FUNCTION public._pay_policy_x_assert_economic_key(
+  p_timesheet_id uuid,
+  p_key_type text,
+  p_key_value text,
+  p_context text DEFAULT NULL::text,
+  p_authority_scope text DEFAULT NULL::text,
+  p_resolution_source text DEFAULT NULL::text,
+  p_required boolean DEFAULT true,
+  p_source_json jsonb DEFAULT '{}'::jsonb
+)
+RETURNS TABLE(
+  ok boolean,
+  timesheet_id uuid,
+  key_type text,
+  key_value text,
+  failure_reason text,
+  failure_detail text,
+  resolution_source text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_timesheet_id uuid := p_timesheet_id;
+  v_key_type text := UPPER(NULLIF(BTRIM(COALESCE(p_key_type, '')), ''));
+  v_key_value text := NULLIF(BTRIM(COALESCE(p_key_value, '')), '');
+  v_context text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_context, '')), ''), '-', '_'));
+  v_authority_scope text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_authority_scope, '')), ''), '-', '_'));
+  v_resolution_source text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_resolution_source, '')), ''), '-', '_'));
+  v_required boolean := COALESCE(p_required, true);
+  v_source_json jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_source_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_source_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_failure_reason text := NULL::text;
+  v_failure_detail text := NULL::text;
+  v_date_text text := NULL::text;
+  v_source_live_component_flag text := NULL::text;
+  v_source_live_tsfin_flag text := NULL::text;
+  v_source_live_truth_flag text := NULL::text;
+  v_source_live_segment_flag text := NULL::text;
+  v_source_missing_snapshot_flag text := NULL::text;
+BEGIN
+  v_source_live_component_flag := LOWER(BTRIM(COALESCE(v_source_json->>'live_component_identity_used', '')));
+  v_source_live_tsfin_flag := LOWER(BTRIM(COALESCE(v_source_json->>'live_tsfin_used', v_source_json->>'live_tsfin_identity_used', '')));
+  v_source_live_truth_flag := LOWER(BTRIM(COALESCE(v_source_json->>'live_truth_used', '')));
+  v_source_live_segment_flag := LOWER(BTRIM(COALESCE(v_source_json->>'live_segment_identity_used', '')));
+  v_source_missing_snapshot_flag := LOWER(BTRIM(COALESCE(v_source_json->>'missing_deterministic_post_draft_snapshot', v_source_json->>'missing_frozen_snapshot', '')));
+
+  IF v_authority_scope = 'POST_DRAFT'
+     AND (
+       v_resolution_source = 'LIVE'
+       OR v_resolution_source LIKE 'LIVE_%'
+       OR v_resolution_source LIKE '%_LIVE'
+       OR v_resolution_source LIKE '%_LIVE_%'
+       OR v_resolution_source LIKE '%LIVE_FINANCE%'
+       OR v_resolution_source LIKE '%LIVE_COMPONENT%'
+       OR v_resolution_source LIKE '%LIVE_TSFIN%'
+       OR v_source_live_component_flag IN ('true', 't', 'yes', '1')
+       OR v_source_live_tsfin_flag IN ('true', 't', 'yes', '1')
+       OR v_source_live_truth_flag IN ('true', 't', 'yes', '1')
+       OR v_source_live_segment_flag IN ('true', 't', 'yes', '1')
+     ) THEN
+    v_failure_reason := 'POST_DRAFT_LIVE_COMPONENT_KEY_REJECTED';
+    v_failure_detail := 'Post-draft economic key resolution cannot use live truth, live TSFIN, live segment identity, or live finance-component identity.';
+
+  ELSIF v_timesheet_id IS NULL AND v_required THEN
+    v_failure_reason := CASE
+      WHEN v_authority_scope = 'POST_DRAFT' THEN 'POST_DRAFT_KEY_RESOLUTION_FAILED'
+      ELSE 'TIMESHEET_ID_NOT_RESOLVED'
+    END;
+    v_failure_detail := 'timesheet_id is required for economic entitlement keyspace resolution.';
+
+  ELSIF v_authority_scope = 'POST_DRAFT'
+     AND v_required
+     AND (v_key_type IS NULL OR v_key_value IS NULL)
+     AND v_source_missing_snapshot_flag IN ('true', 't', 'yes', '1') THEN
+    v_failure_reason := 'MISSING_DETERMINISTIC_POST_DRAFT_SNAPSHOT_EVIDENCE';
+    v_failure_detail := 'Post-draft batch artefacts did not contain deterministic frozen snapshot evidence for the economic key.';
+
+  ELSIF v_key_type IS NULL AND v_required THEN
+    v_failure_reason := CASE
+      WHEN v_authority_scope = 'POST_DRAFT' THEN 'POST_DRAFT_KEY_RESOLUTION_FAILED'
+      ELSE 'KEY_TYPE_NOT_RESOLVED'
+    END;
+    v_failure_detail := 'key_type is required and was not resolved.';
+
+  ELSIF v_key_value IS NULL AND v_required THEN
+    v_failure_reason := CASE
+      WHEN v_authority_scope = 'POST_DRAFT' THEN 'POST_DRAFT_KEY_RESOLUTION_FAILED'
+      ELSE 'KEY_VALUE_NOT_RESOLVED'
+    END;
+    v_failure_detail := 'key_value is required and was not resolved.';
+
+  ELSIF v_key_type IN (
+    'SEGMENT_ID',
+    'SEGMENT_KEY',
+    'SEGMENT_STABLE_KEY',
+    'STABLE_SEGMENT_KEY',
+    'SEGMENT_STABLE_ID',
+    'SEGMENT_HANDLE',
+    'UI_SELECTION_ID',
+    'SELECTION_ID',
+    'SELECTION_HANDLE',
+    'SNOOZE_ID',
+    'SNOOZE_KEY',
+    'PREVIEW_ROW_ID',
+    'ROW_ID',
+    'LINE_ID',
+    'PAY_BATCH_ITEM_ID',
+    'FINANCE_COMPONENT_ID',
+    'COMPONENT_ID'
+  ) THEN
+    v_failure_reason := 'IDENTITY_HANDLE_NOT_ECONOMIC_KEY';
+    v_failure_detail := 'Identity handles may locate evidence but cannot be used as entitlement buckets.';
+
+  ELSIF v_key_type = 'TS_DAY' THEN
+    IF v_key_value IS NULL THEN
+      v_failure_reason := CASE
+        WHEN v_authority_scope = 'POST_DRAFT' THEN 'POST_DRAFT_KEY_RESOLUTION_FAILED'
+        ELSE 'KEY_VALUE_NOT_RESOLVED'
+      END;
+      v_failure_detail := 'TS_DAY requires a YYYY-MM-DD work-date key_value.';
+    ELSIF v_key_value !~ '^\d{4}-\d{2}-\d{2}$' THEN
+      v_failure_reason := CASE
+        WHEN v_key_value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          OR v_key_value ~* '^(seg|segment|stable|snooze|row|selection)[:_\-]'
+        THEN 'TS_DAY_KEY_VALUE_IDENTITY_HANDLE'
+        ELSE 'TS_DAY_KEY_VALUE_NOT_DATE'
+      END;
+      v_failure_detail := 'TS_DAY must remain date-bucketed with key_value formatted as YYYY-MM-DD.';
+    ELSE
+      BEGIN
+        v_date_text := to_char(v_key_value::date, 'YYYY-MM-DD');
+        IF v_date_text IS DISTINCT FROM v_key_value THEN
+          v_failure_reason := 'TS_DAY_KEY_VALUE_NOT_DATE';
+          v_failure_detail := 'TS_DAY key_value is not a valid canonical YYYY-MM-DD date.';
+        END IF;
+      EXCEPTION
+        WHEN OTHERS THEN
+          v_failure_reason := 'TS_DAY_KEY_VALUE_NOT_DATE';
+          v_failure_detail := 'TS_DAY key_value could not be cast to a valid date.';
+      END;
+    END IF;
+  END IF;
+
+  ok := v_failure_reason IS NULL;
+  timesheet_id := v_timesheet_id;
+  key_type := CASE WHEN v_failure_reason IS NULL THEN v_key_type ELSE NULL::text END;
+  key_value := CASE WHEN v_failure_reason IS NULL THEN v_key_value ELSE NULL::text END;
+  failure_reason := v_failure_reason;
+  failure_detail := v_failure_detail;
+  resolution_source := v_resolution_source;
+  RETURN NEXT;
+END;
+$function$;

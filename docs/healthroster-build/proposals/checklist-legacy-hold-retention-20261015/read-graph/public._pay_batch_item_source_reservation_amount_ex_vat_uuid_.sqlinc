@@ -1,0 +1,248 @@
+CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)
+RETURNS numeric
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+SET plpgsql_check.mode TO 'disabled'
+AS $function$
+DECLARE
+  v_pay_batch_id uuid;
+  v_timesheet_id uuid;
+  v_item_type text;
+  v_finance_case_id uuid;
+  v_finance_component_id uuid;
+  v_amount_ex_vat numeric;
+  v_frozen_source_amount numeric;
+  v_frozen_target_amount_ex_vat numeric;
+  v_frozen_resolution_mode public.pay_finance_component_resolution_mode_enum;
+  v_frozen_resolution_payload_json jsonb;
+  v_frozen_resolution_result_json jsonb;
+  v_frozen_component_key_type text;
+  v_frozen_component_key_value text;
+  v_frozen_component_snapshot_json jsonb;
+  v_frozen_source_basis_json jsonb;
+  v_single_breakdown_meta_json jsonb := '{}'::jsonb;
+  v_breakdown_count integer := 0;
+  v_resolved_key_type text;
+  v_resolved_key_value text;
+  v_key_resolution_failure_reason text;
+  v_source_text text;
+  v_frozen_resolved_source_text text;
+  v_has_source_target_split boolean;
+BEGIN
+  IF p_pay_batch_item_id IS NULL THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  SELECT
+    pay_batch_candidate_row.pay_batch_id,
+    pay_batch_item_row.timesheet_id,
+    UPPER(NULLIF(BTRIM(COALESCE(pay_batch_item_row.item_type, '')), '')),
+    pay_batch_item_row.finance_case_id,
+    pay_batch_item_row.finance_component_id,
+    pay_batch_item_row.amount_ex_vat,
+    pay_batch_item_row.frozen_source_amount,
+    pay_batch_item_row.frozen_target_amount_ex_vat,
+    pay_batch_item_row.frozen_resolution_mode,
+    pay_batch_item_row.frozen_resolution_payload_json,
+    pay_batch_item_row.frozen_resolution_result_json,
+    pay_batch_item_row.frozen_component_key_type,
+    pay_batch_item_row.frozen_component_key_value,
+    CASE
+      WHEN jsonb_typeof(COALESCE(pay_batch_item_row.frozen_component_snapshot_json, '{}'::jsonb)) = 'object'
+        THEN COALESCE(pay_batch_item_row.frozen_component_snapshot_json, '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END,
+    CASE
+      WHEN jsonb_typeof(COALESCE(pay_batch_item_row.frozen_source_basis_json, '{}'::jsonb)) = 'object'
+        THEN COALESCE(pay_batch_item_row.frozen_source_basis_json, '{}'::jsonb)
+      ELSE '{}'::jsonb
+    END
+  INTO
+    v_pay_batch_id,
+    v_timesheet_id,
+    v_item_type,
+    v_finance_case_id,
+    v_finance_component_id,
+    v_amount_ex_vat,
+    v_frozen_source_amount,
+    v_frozen_target_amount_ex_vat,
+    v_frozen_resolution_mode,
+    v_frozen_resolution_payload_json,
+    v_frozen_resolution_result_json,
+    v_frozen_component_key_type,
+    v_frozen_component_key_value,
+    v_frozen_component_snapshot_json,
+    v_frozen_source_basis_json
+  FROM public.pay_batch_items AS pay_batch_item_row
+  JOIN public.pay_batch_candidates AS pay_batch_candidate_row
+    ON pay_batch_candidate_row.id = pay_batch_item_row.pay_batch_candidate_id
+  WHERE pay_batch_item_row.id = p_pay_batch_item_id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  IF v_item_type NOT IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA') THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  SELECT
+    COUNT(*)::integer,
+    CASE
+      WHEN COUNT(*) = 1 THEN (ARRAY_AGG(breakdown_row.meta_json ORDER BY breakdown_row.id))[1]
+      ELSE '{}'::jsonb
+    END
+  INTO
+    v_breakdown_count,
+    v_single_breakdown_meta_json
+  FROM public.pay_batch_item_breakdowns AS breakdown_row
+  WHERE breakdown_row.pay_batch_item_id = p_pay_batch_item_id;
+
+  IF jsonb_typeof(COALESCE(v_single_breakdown_meta_json, '{}'::jsonb)) <> 'object' THEN
+    v_single_breakdown_meta_json := '{}'::jsonb;
+  END IF;
+
+  SELECT
+    resolved_key_row.key_type,
+    resolved_key_row.key_value,
+    resolved_key_row.key_resolution_failure_reason
+  INTO
+    v_resolved_key_type,
+    v_resolved_key_value,
+    v_key_resolution_failure_reason
+  FROM public._pay_policy_x_resolve_post_draft_economic_key(
+    p_pay_batch_item_id => p_pay_batch_item_id,
+    p_pay_batch_id => v_pay_batch_id,
+    p_timesheet_id => v_timesheet_id,
+    p_item_type => v_item_type,
+    p_frozen_key_type => v_frozen_component_key_type,
+    p_frozen_key_value => v_frozen_component_key_value,
+    p_frozen_component_snapshot_json => v_frozen_component_snapshot_json,
+    p_frozen_source_basis_json => v_frozen_source_basis_json,
+    p_breakdown_meta_json => v_single_breakdown_meta_json,
+    p_target_snapshot_json => NULL::jsonb
+  ) AS resolved_key_row
+  LIMIT 1;
+
+  IF v_key_resolution_failure_reason IS NOT NULL
+     OR v_resolved_key_type IS NULL
+     OR BTRIM(COALESCE(v_resolved_key_type, '')) = ''
+     OR v_resolved_key_value IS NULL
+     OR BTRIM(COALESCE(v_resolved_key_value, '')) = ''
+     OR (v_resolved_key_type = 'TS_DAY' AND v_resolved_key_value !~ '^\d{4}-\d{2}-\d{2}$') THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  SELECT ROUND(
+           SUM((frozen_resolution_component.component_json->>'source_pay_ex_vat')::numeric),
+           2
+         )::text
+  INTO v_frozen_resolved_source_text
+  FROM jsonb_array_elements(
+    CASE
+      WHEN jsonb_typeof(v_frozen_resolution_payload_json->'case_components') = 'array'
+        THEN v_frozen_resolution_payload_json->'case_components'
+      ELSE '[]'::jsonb
+    END
+  ) AS frozen_resolution_component(component_json)
+  WHERE UPPER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'component_key_type', ''))) = v_resolved_key_type
+    AND BTRIM(COALESCE(frozen_resolution_component.component_json->>'component_key_value', '')) = v_resolved_key_value
+    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'is_resolution_stale', 'false'))) NOT IN ('true','t','1','yes','y','on')
+    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'is_stale_saved_resolution', 'false'))) NOT IN ('true','t','1','yes','y','on')
+    AND LOWER(BTRIM(COALESCE(frozen_resolution_component.component_json->>'requires_resolution', 'true'))) IN ('false','f','0','no','n','off')
+    AND NULLIF(BTRIM(COALESCE(frozen_resolution_component.component_json->>'resolved_rate_resolution_id', '')), '') IS NOT NULL
+    AND COALESCE(frozen_resolution_component.component_json->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$';
+
+  IF v_frozen_resolved_source_text IS NOT NULL THEN
+    RETURN ROUND(ABS(v_frozen_resolved_source_text::numeric), 2)::numeric(12,2);
+  END IF;
+
+  IF v_frozen_source_amount IS NOT NULL THEN
+    RETURN ROUND(ABS(v_frozen_source_amount), 2)::numeric(12,2);
+  END IF;
+
+  SELECT source_candidates.source_text_value
+  INTO v_source_text
+  FROM (
+    VALUES
+      (v_frozen_component_snapshot_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_pay_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_pay_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'basis_source_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'reserved_source_amount'),
+      (v_frozen_component_snapshot_json->>'frozen_source_amount'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,amount_ex_vat}'),
+      (v_frozen_source_basis_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'source_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'source_pay_ex_vat'),
+      (v_frozen_source_basis_json->>'source_pay_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'basis_source_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'reserved_source_amount'),
+      (v_frozen_source_basis_json->>'frozen_source_amount'),
+      (v_frozen_source_basis_json->>'pay_ex_vat'),
+      (v_frozen_source_basis_json->>'pay_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'amount_ex_vat'),
+      (v_frozen_source_basis_json->>'pay_amount'),
+      (v_frozen_resolution_payload_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_amount_ex_vat'),
+      (v_frozen_resolution_payload_json->>'source_pay_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_amount_ex_vat'),
+      (v_frozen_resolution_result_json->>'source_pay_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_amount_ex_vat'),
+      (v_single_breakdown_meta_json->>'source_pay_ex_vat')
+  ) AS source_candidates(source_text_value)
+  WHERE source_candidates.source_text_value IS NOT NULL
+    AND BTRIM(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+  LIMIT 1;
+
+  IF v_source_text IS NOT NULL THEN
+    RETURN ROUND(ABS(v_source_text::numeric), 2)::numeric(12,2);
+  END IF;
+
+  v_has_source_target_split :=
+       v_finance_case_id IS NOT NULL
+    OR v_finance_component_id IS NOT NULL
+    OR v_frozen_target_amount_ex_vat IS NOT NULL
+    OR v_frozen_resolution_mode IS NOT NULL
+    OR v_frozen_resolution_payload_json IS NOT NULL
+    OR v_frozen_resolution_result_json IS NOT NULL
+    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_rate'
+    OR v_frozen_component_snapshot_json ? 'target_units'
+    OR v_frozen_component_snapshot_json ? 'resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
+
+  IF v_has_source_target_split THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  IF v_amount_ex_vat IS NOT NULL THEN
+    RETURN ROUND(ABS(v_amount_ex_vat), 2)::numeric(12,2);
+  END IF;
+
+  RETURN NULL::numeric(12,2);
+END;
+$function$;

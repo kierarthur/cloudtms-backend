@@ -1,0 +1,17 @@
+✔ actual native Legacy hold remains a scoped open review with unknown quantities and Admin-only Timesheet action (1.7996ms)
+✔ Legacy review rejects foreign actor/scope/Timesheet/financial/proof identities and scalar coercion (0.4602ms)
+✔ review cannot invent a positive/zero quantity, financial basis, cleared flag or counted admission (0.3465ms)
+✔ Legacy witness cannot be smuggled into Source/NEXT/ordinary items or open adjacent fields (0.2088ms)
+✔ new private helper consumes exact coherent native Legacy frame twice and never calculates withholding (3.0327ms)
+✔ Legacy review enters signed retention before older-week admission and binds full facts; Agency uses same helper (0.566ms)
+✔ exact predecessor ordering reproduces older known NEXT hold loss; successor closure follows financial merge (0.7586ms)
+✔ both financial arms prevent completed/pay-completed and cannot increment actual-Timesheet admission (0.3979ms)
+✔ successor is complete current recipe plus one private helper, with seven full reversible owners (12.0476ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 137.9474

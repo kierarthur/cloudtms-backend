@@ -1,0 +1,338 @@
+CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid)
+ RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+with
+inp as (
+  select coalesce(
+    (
+      select array_agg(distinct t_input.x order by t_input.x)
+      from unnest(coalesce(p_timesheet_ids, array[]::uuid[])) as t_input(x)
+      where t_input.x is not null
+    ),
+    array[]::uuid[]
+  ) as ts_ids
+),
+rotation_scope_rows as (
+  select
+    scope_rows.requested_timesheet_id,
+    scope_rows.booking_id,
+    scope_rows.canonical_timesheet_id,
+    scope_rows.family_timesheet_id,
+    scope_rows.family_is_current,
+    scope_rows.family_version,
+    scope_rows.requested_is_canonical
+  from inp as input_scope
+  join private.bpay_entitlement_financial_scope_v1(input_scope.ts_ids) as scope_rows
+    on true
+),
+rotation_scope_keyed as (
+  select
+    rotation_scope_rows.requested_timesheet_id,
+    rotation_scope_rows.booking_id,
+    rotation_scope_rows.canonical_timesheet_id,
+    rotation_scope_rows.family_timesheet_id,
+    rotation_scope_rows.family_is_current,
+    rotation_scope_rows.family_version,
+    rotation_scope_rows.requested_is_canonical,
+    coalesce(rotation_scope_rows.booking_id, rotation_scope_rows.requested_timesheet_id::text) as scope_family_key
+  from rotation_scope_rows
+  where rotation_scope_rows.requested_timesheet_id is not null
+),
+projection_targets as (
+  select
+    rotation_scope_keyed.scope_family_key,
+    coalesce(
+      (
+        array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+        filter (
+          where coalesce(rotation_scope_keyed.requested_is_canonical, false) = true
+            and rotation_scope_keyed.canonical_timesheet_id is not null
+        )
+      )[1],
+      (
+        array_agg(distinct rotation_scope_keyed.requested_timesheet_id order by rotation_scope_keyed.requested_timesheet_id)
+        filter (where rotation_scope_keyed.requested_timesheet_id is not null)
+      )[1],
+      (
+        array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+        filter (where rotation_scope_keyed.canonical_timesheet_id is not null)
+      )[1]
+    ) as projected_timesheet_id
+  from rotation_scope_keyed
+  group by rotation_scope_keyed.scope_family_key
+),
+family_to_projection as (
+  select distinct
+    rotation_scope_keyed.family_timesheet_id,
+    projection_targets.projected_timesheet_id
+  from rotation_scope_keyed
+  join projection_targets
+    on projection_targets.scope_family_key = rotation_scope_keyed.scope_family_key
+  where rotation_scope_keyed.family_timesheet_id is not null
+    and projection_targets.projected_timesheet_id is not null
+),
+timesheet_entitlement_components as (
+  select
+    entitlement_rows.timesheet_id,
+    entitlement_rows.key_type,
+    entitlement_rows.key_value,
+    entitlement_rows.truth_ex_vat,
+    entitlement_rows.baseline_ex_vat,
+    entitlement_rows.truth_inc_vat,
+    entitlement_rows.baseline_inc_vat
+  from public._pay_current_timesheet_entitlement_components((select input_scope.ts_ids from inp as input_scope)) as entitlement_rows
+),
+reserved_components as (
+  select
+    reserved_component_rows.timesheet_id,
+    reserved_component_rows.key_type,
+    reserved_component_rows.key_value,
+    reserved_component_rows.amount_ex_vat,
+    reserved_component_rows.amount_inc_vat
+  from public._pay_reserved_components(
+    (select input_scope.ts_ids from inp as input_scope),
+    p_exclude_pay_batch_id
+  ) as reserved_component_rows
+),
+component_truth_raw as (
+  select
+    family_to_projection.projected_timesheet_id as timesheet_id,
+    upper(nullif(btrim(coalesce(finance_component_rows.component_key_type,'')), '')) as raw_key_type,
+    nullif(btrim(coalesce(finance_component_rows.component_key_value,'')), '') as raw_key_value,
+    case
+      when jsonb_typeof(coalesce(finance_component_rows.source_basis_json, '{}'::jsonb)) = 'object'
+        then coalesce(finance_component_rows.source_basis_json, '{}'::jsonb)
+      else '{}'::jsonb
+    end as source_basis_json,
+    round(
+      case
+        when pay_advance_rows.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+          then coalesce(finance_component_rows.remaining_source_amount,0) * -1
+        when pay_advance_rows.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
+          then coalesce(finance_component_rows.remaining_source_amount,0)
+        else 0
+      end,
+      2
+    ) as signed_amount
+  from family_to_projection
+  join public.pay_finance_case_components as finance_component_rows
+    on finance_component_rows.linked_timesheet_id = family_to_projection.family_timesheet_id
+  join public.pay_advances as pay_advance_rows
+    on pay_advance_rows.id = finance_component_rows.finance_case_id
+  where finance_component_rows.linked_timesheet_id is not null
+    and family_to_projection.projected_timesheet_id is not null
+    and finance_component_rows.closed_at_utc is null
+    and coalesce(finance_component_rows.remaining_source_amount,0) > 0
+    and pay_advance_rows.case_type in (
+      'OVERPAYMENT'::public.pay_finance_case_type_enum,
+      'UNDERPAYMENT'::public.pay_finance_case_type_enum
+    )
+),
+component_truth_prepared as (
+  select
+    component_truth_raw_rows.timesheet_id,
+    component_truth_raw_rows.raw_key_type,
+    component_truth_raw_rows.raw_key_value,
+    component_truth_raw_rows.source_basis_json,
+    component_truth_raw_rows.signed_amount,
+    coalesce(
+      upper(nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'item_type', '')), '')),
+      case
+        when component_truth_raw_rows.raw_key_type in ('TS_DAY','TS_TOTAL','CASE_TOTAL')
+          then 'SEGMENT_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'work_date','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+          then 'SEGMENT_DELTA'
+        when component_truth_raw_rows.raw_key_type = 'ADJUSTMENT_CODE'
+          then 'ADJUSTMENT_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'adjustment_id','')), '') is not null
+          then 'ADJUSTMENT_DELTA'
+        when component_truth_raw_rows.raw_key_type = 'EXPENSE_CODE'
+         and upper(coalesce(component_truth_raw_rows.raw_key_value, '')) = 'MILEAGE'
+          then 'MILEAGE_DELTA'
+        when component_truth_raw_rows.raw_key_type in ('ADDITIONAL_CODE','EXPENSE_CODE')
+          then 'EXPENSE_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'additional_code','')), '') is not null
+          then 'EXPENSE_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'expense_code','')), '') is not null
+          then 'EXPENSE_DELTA'
+        else null::text
+      end
+    ) as resolver_item_type,
+    nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'work_date','')), '') as source_work_date_text
+  from component_truth_raw as component_truth_raw_rows
+),
+component_truth_keyed as (
+  select
+    component_truth_prepared_rows.timesheet_id,
+    resolved_component_keys.key_type,
+    resolved_component_keys.key_value,
+    component_truth_prepared_rows.signed_amount
+  from component_truth_prepared as component_truth_prepared_rows
+  join lateral public._pay_policy_x_resolve_pre_draft_economic_key(
+    p_timesheet_id => component_truth_prepared_rows.timesheet_id,
+    p_live_source_json => component_truth_prepared_rows.source_basis_json || jsonb_build_object(
+      'timesheet_id', component_truth_prepared_rows.timesheet_id::text,
+      'item_type', component_truth_prepared_rows.resolver_item_type,
+      'component_key_type', component_truth_prepared_rows.raw_key_type,
+      'component_key_value', component_truth_prepared_rows.raw_key_value,
+      'work_date', component_truth_prepared_rows.source_work_date_text,
+      'live_truth_used', true
+    ),
+    p_item_type => component_truth_prepared_rows.resolver_item_type,
+    p_key_type_hint => component_truth_prepared_rows.raw_key_type,
+    p_key_value_hint => component_truth_prepared_rows.raw_key_value,
+    p_work_date => case
+      when component_truth_prepared_rows.source_work_date_text ~ '^\d{4}-\d{2}-\d{2}$'
+        then component_truth_prepared_rows.source_work_date_text::date
+      when component_truth_prepared_rows.raw_key_type = 'TS_DAY'
+       and component_truth_prepared_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
+        then component_truth_prepared_rows.raw_key_value::date
+      else null::date
+    end
+  ) as resolved_component_keys
+    on true
+  where resolved_component_keys.key_resolution_failure_reason is null
+),
+component_truth as (
+  select
+    component_truth_keyed_rows.timesheet_id,
+    component_truth_keyed_rows.key_type,
+    component_truth_keyed_rows.key_value,
+    round(sum(component_truth_keyed_rows.signed_amount), 2) as truth_ex_vat,
+    round(sum(component_truth_keyed_rows.signed_amount), 2) as truth_inc_vat
+  from component_truth_keyed as component_truth_keyed_rows
+  where component_truth_keyed_rows.key_type is not null
+    and btrim(component_truth_keyed_rows.key_type) <> ''
+    and component_truth_keyed_rows.key_value is not null
+    and btrim(component_truth_keyed_rows.key_value) <> ''
+  group by
+    component_truth_keyed_rows.timesheet_id,
+    component_truth_keyed_rows.key_type,
+    component_truth_keyed_rows.key_value
+),
+component_keys as (
+  select distinct
+    component_truth_keys.timesheet_id,
+    component_truth_keys.key_type,
+    component_truth_keys.key_value
+  from component_truth as component_truth_keys
+),
+component_joined as (
+  select
+    component_keys.timesheet_id,
+    component_keys.key_type,
+    component_keys.key_value,
+    coalesce(component_truth.truth_ex_vat,0) as truth_ex_vat,
+    0::numeric as baseline_ex_vat,
+    coalesce(reserved_components.amount_ex_vat,0) as reserved_ex_vat,
+    coalesce(component_truth.truth_inc_vat,0) as truth_inc_vat,
+    0::numeric as baseline_inc_vat,
+    coalesce(reserved_components.amount_inc_vat,0) as reserved_inc_vat
+  from component_keys
+  left join component_truth
+    on component_truth.timesheet_id = component_keys.timesheet_id
+   and component_truth.key_type = component_keys.key_type
+   and component_truth.key_value = component_keys.key_value
+  left join reserved_components
+    on reserved_components.timesheet_id = component_keys.timesheet_id
+   and reserved_components.key_type = component_keys.key_type
+   and reserved_components.key_value = component_keys.key_value
+),
+all_legacy_keys as (
+  select distinct
+    legacy_key_rows.timesheet_id,
+    legacy_key_rows.key_type,
+    legacy_key_rows.key_value
+  from (
+    select
+      timesheet_entitlement_components.timesheet_id,
+      timesheet_entitlement_components.key_type,
+      timesheet_entitlement_components.key_value
+    from timesheet_entitlement_components
+    union all
+    select
+      reserved_components.timesheet_id,
+      reserved_components.key_type,
+      reserved_components.key_value
+    from reserved_components
+  ) as legacy_key_rows
+),
+legacy_joined as (
+  select
+    all_legacy_keys.timesheet_id,
+    all_legacy_keys.key_type,
+    all_legacy_keys.key_value,
+    coalesce(timesheet_entitlement_components.truth_ex_vat,0) as truth_ex_vat,
+    coalesce(timesheet_entitlement_components.baseline_ex_vat,0) as baseline_ex_vat,
+    coalesce(reserved_components.amount_ex_vat,0) as reserved_ex_vat,
+    coalesce(timesheet_entitlement_components.truth_inc_vat,0) as truth_inc_vat,
+    coalesce(timesheet_entitlement_components.baseline_inc_vat,0) as baseline_inc_vat,
+    coalesce(reserved_components.amount_inc_vat,0) as reserved_inc_vat
+  from all_legacy_keys
+  left join timesheet_entitlement_components
+    on timesheet_entitlement_components.timesheet_id = all_legacy_keys.timesheet_id
+   and timesheet_entitlement_components.key_type = all_legacy_keys.key_type
+   and timesheet_entitlement_components.key_value = all_legacy_keys.key_value
+  left join reserved_components
+    on reserved_components.timesheet_id = all_legacy_keys.timesheet_id
+   and reserved_components.key_type = all_legacy_keys.key_type
+   and reserved_components.key_value = all_legacy_keys.key_value
+),
+final_rows as (
+  select
+    component_joined.timesheet_id,
+    component_joined.key_type,
+    component_joined.key_value,
+    component_joined.truth_ex_vat,
+    component_joined.baseline_ex_vat,
+    component_joined.reserved_ex_vat,
+    component_joined.truth_inc_vat,
+    component_joined.baseline_inc_vat,
+    component_joined.reserved_inc_vat
+  from component_joined
+
+  union all
+
+  select
+    legacy_joined.timesheet_id,
+    legacy_joined.key_type,
+    legacy_joined.key_value,
+    legacy_joined.truth_ex_vat,
+    legacy_joined.baseline_ex_vat,
+    legacy_joined.reserved_ex_vat,
+    legacy_joined.truth_inc_vat,
+    legacy_joined.baseline_inc_vat,
+    legacy_joined.reserved_inc_vat
+  from legacy_joined
+  where not exists (
+    select 1
+    from component_truth
+    where component_truth.timesheet_id = legacy_joined.timesheet_id
+      and component_truth.key_type = legacy_joined.key_type
+      and component_truth.key_value = legacy_joined.key_value
+  )
+)
+select
+  final_rows.timesheet_id,
+  final_rows.key_type,
+  final_rows.key_value,
+  round(final_rows.truth_ex_vat,2) as truth_ex_vat,
+  round(final_rows.baseline_ex_vat,2) as baseline_ex_vat,
+  round(final_rows.reserved_ex_vat,2) as reserved_ex_vat,
+  round(final_rows.truth_ex_vat - final_rows.baseline_ex_vat - final_rows.reserved_ex_vat,2) as outstanding_ex_vat,
+  round(final_rows.truth_inc_vat,2) as truth_inc_vat,
+  round(final_rows.baseline_inc_vat,2) as baseline_inc_vat,
+  round(final_rows.reserved_inc_vat,2) as reserved_inc_vat,
+  round(final_rows.truth_inc_vat - final_rows.baseline_inc_vat - final_rows.reserved_inc_vat,2) as outstanding_inc_vat,
+  (
+    round(abs(final_rows.reserved_ex_vat),2) >
+    round(abs(greatest(final_rows.truth_ex_vat - final_rows.baseline_ex_vat, 0)),2)
+  ) as reservation_overrun_detected
+from final_rows
+where final_rows.timesheet_id is not null
+  and final_rows.key_type is not null
+  and final_rows.key_value is not null;
+$function$;

@@ -1,0 +1,301 @@
+{
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "pins": [
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-d10-actions.test.mjs",
+      "sha256": "54ecdbfd244a6adc3f28db59516647f3958c910196f740f9311112f3fc33b2cb",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-daily-save.test.mjs",
+      "sha256": "0f9b9d43e8a7fc1eeb99f75ad9888b2605fcb18549c64834a43880d0d42836e6",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-historical-caller.test.mjs",
+      "sha256": "d00ce46007872ecd49927f1ac4e5999918cf019a95d5b38ac3c2393073a54440",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-historical-source.test.mjs",
+      "sha256": "5c4151c270e9b3bfa42cc6695d8decd4aa5fa9aa036ad93a9974da5e7cefb5f3",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-invoice-decision-action.test.mjs",
+      "sha256": "08c7119eb3b41c81736b1699f0c95090c41dcf61310e219aff4247b2b00d8ad1",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-invoice-decision-transport.test.mjs",
+      "sha256": "3401197fd596a9fd109cb09a00348b8d8e2f15ce294de4d1ddc5b03f6919ac81",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-legacy-read-frame.test.mjs",
+      "sha256": "54186a0bcb45b61867ce0b153944e183f6e50ad25c7cc390c65d541441d038d4",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-native-calendar.test.mjs",
+      "sha256": "63daa7c823dcc6d10ea78c4921219e7b73298d80534f4cdcc8bdb9e9ddf9e98d",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-native-daily-hold.test.mjs",
+      "sha256": "6b48e669df1b6046613a05f012bb113b23b2189acaec2c850ed50a496dfb5d0d",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-native-filter-source.test.mjs",
+      "sha256": "4d2409d1224810ed73506b4e85e58cc85cb5986abe0337f89b052f8d5e601d1a",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-native-producer.test.mjs",
+      "sha256": "d49148e1f080177d3089b022a9f77c14756232ed12929926c77cc4ee057e8e2e",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-ordinary-next-hold.test.mjs",
+      "sha256": "44505be98b5415e26e2cc8cb0d5fe0f461bafbfb3afcdd15b5f983420f6bd958",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-ordinary-treatment.test.mjs",
+      "sha256": "05f0efb52864adb626df4a636156bc1220093827a2bbfd0001138d06716682eb",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-process-event-coverage.test.mjs",
+      "sha256": "d3def09f77333fc3337a3673c9307dc9e78172c0ea0e1fe75aedcf99fea5f32b",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-process-publication.test.mjs",
+      "sha256": "2b937f4f241bcb88b93e9fe2995f97c3efc001c4200000bacaafc99f6f0330a1",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-r254-reminder.test.mjs",
+      "sha256": "fe77915aa704143f4677a0fa26aeb9c4d774598499eb7c03cea3df182de3e966",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "sha256": "24a6335214cdaf26c0cc6e74121d9d2afaa88a0ff744e6745a183dadd394c55a",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-source-invoice-release-kernel.test.mjs",
+      "sha256": "1f72dc6151a88794a76f5734e43990f2c6e4a3d811037574612a5e4d99d5c50b",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-source-query-money.test.mjs",
+      "sha256": "0e2d0ffd65297edf3eb4d0a01aed269554d6345f17a36744668f8a08cab87e67",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "sha256": "b93a73a6e76e3aeda2f53dc82f42e53e0d9e22068fcbb3e300cf691129898e74",
+      "all_assertions_unchanged": true
+    },
+    {
+      "commit": "f8831f2edf9ab92a5d4a6cd110b1cb40d62cbbaa",
+      "file": "tests/healthroster-checklist-sql-source.test.mjs",
+      "sha256": "ad99ab8ddb9fa1e2fa03263e7be2b3a7c4c2244a620a107c899e7aca8e79fef9",
+      "all_assertions_unchanged": true
+    }
+  ],
+  "resolution_changes": [
+    {
+      "specifier": "../broker/src/weekly-source/submission-cycle-prepare.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-daily-save.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/submission-cycle-prepare.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-invoice-decision-action.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-invoice-decision-action-20261015/forward/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-invoice-decision-action.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "./healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/routes.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-invoice-decision-action.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js"
+    },
+    {
+      "specifier": "./index.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/weekly-source/index.js"
+    },
+    {
+      "specifier": "./guard-refusal-record.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/weekly-source/guard-refusal-record.mjs"
+    },
+    {
+      "specifier": "../bpay-busy.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/bpay-busy.js"
+    },
+    {
+      "specifier": "../payment-actor-permission.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/payment-actor-permission.js"
+    },
+    {
+      "specifier": "./protected-action-orchestrator.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/weekly-source/protected-action-orchestrator.mjs"
+    },
+    {
+      "specifier": "../bpay-next-legacy-fence.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/bpay-next-legacy-fence.js"
+    },
+    {
+      "specifier": "./rule-set-validation.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/broker/src/weekly-source/rule-set-validation.js"
+    },
+    {
+      "specifier": "./checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "./check-only-candidate-reminder.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/check-only-candidate-reminder.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-native-invoice-decision-transport-20261015/forward/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-invoice-decision-transport.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-native-invoice-decision-transport-20261015/forward/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-invoice-decision-transport.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-native-daily-hold.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-native-next-daily-hold-20261015/forward/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-native-daily-hold.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-native-producer.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-native-producer.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-native-ordinary-next-hold-20261015/forward/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-ordinary-next-hold.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../docs/healthroster-build/proposals/checklist-native-ordinary-next-hold-20261015/forward/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-ordinary-next-hold.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/routes.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-r254-reminder.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/check-only-candidate-reminder.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-r254-reminder.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/check-only-candidate-reminder.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/routes.js",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-read-transport.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/cross-owner/forward/12_broker.src.weekly-source.routes.js"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-read-transport.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-read-transport.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-source-query-money.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/checklist-read.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-source-query-money.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/forward/runtime/checklist-read.mjs"
+    },
+    {
+      "specifier": "../broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "parent": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/tests/healthroster-checklist-source.test.mjs",
+      "target": "file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/forward/healthroster-checklist-source.mjs"
+    }
+  ]
+}

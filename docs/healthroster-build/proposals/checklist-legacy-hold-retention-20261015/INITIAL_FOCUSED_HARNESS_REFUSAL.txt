@@ -1,0 +1,57 @@
+✔ actual native Legacy hold remains a scoped open review with unknown quantities and Admin-only Timesheet action (1.6324ms)
+✔ Legacy review rejects foreign actor/scope/Timesheet/financial/proof identities and scalar coercion (0.7255ms)
+✔ review cannot invent a positive/zero quantity, financial basis, cleared flag or counted admission (0.3851ms)
+✔ Legacy witness cannot be smuggled into Source/NEXT/ordinary items or open adjacent fields (0.2228ms)
+✔ new private helper consumes exact coherent native Legacy frame twice and never calculates withholding (3.0192ms)
+✔ Legacy review enters signed retention before older-week admission and binds full facts; Agency uses same helper (0.8885ms)
+✔ exact predecessor ordering reproduces older known NEXT hold loss; successor closure follows financial merge (1.4992ms)
+✖ both financial arms prevent completed/pay-completed and cannot increment actual-Timesheet admission (1.2584ms)
+✔ successor is complete current recipe plus one private helper, with seven full reversible owners (7.8752ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 8
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 127.7988
+
+✖ failing tests:
+
+test at docs\healthroster-build\proposals\checklist-legacy-hold-retention-20261015\legacy-retention.test.mjs:11:1
+✖ both financial arms prevent completed/pay-completed and cannot increment actual-Timesheet admission (1.2584ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /'scope'\} is distinct from row_scope/. Input:
+
+  "if raw->>'native_financial_kind'='LEGACY_REVIEW' then\n" +
+    "          if raw->'review_required' is distinct from 'true'::jsonb\n" +
+    "            or raw#>'{native_legacy_review_witness,scope}' is distinct from row_scope then\n" +
+    "            raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_FINANCIAL_FRAME_UNAVAILABLE' using errcode='55000';end if;\n" +
+    '          row_items:=row_items||jsonb_build_array(jsonb_build_object(\n' +
+    "            'item_id','native-legacy-review:'||(raw#>>'{native_legacy_review_witness,timesheet_id}'),\n" +
+    "            'item_kind','NATIVE_ORDINARY_FINANCIAL_REVIEW','scope',row_scope,'route',route,'worker',raw->'worker',\n" +
+    "            'work_date',raw->'work_date','sheet_scope',raw->'sheet_scope','reason_code','NATIVE_LEGACY_PAY_HOLD_REVIEW',\n" +
+    "            'status',raw->'status','hold',raw->'hold','subject','PAY','permitted_pay_subject',true,\n" +
+    "            'action',case when view='ADMIN' then jsonb_build_object('kind','TIMESHEET','label','Review native pay hold in Timesheet ›',\n" +
+    "              'native_allowed',true,'target',jsonb_build_object('timesheet_id',raw#>>'{native_legacy_review_witness,timesheet_id}')) end,\n" +
+    "            'counted_timesheet_id',raw#>>'{native_legacy_review_witness,timesheet_id}','correction_binding',null,'submission_read',null,\n" +
+    "            'source_information_witness',null,'native_source_witness',null,'native_invoice_witness',null,'native_invoice_decision_witness',null,\n" +
+    "            'queries_parent_witness',null,'native_ordinary_money_witness',null,'native_legacy_review_witness',raw->'native_legacy_review_witness','_rank',35));\n" +
+    "          open_count:=open_count+1;pay_count:=pay_count+1;completed:=false;pay_complete:=false;complete_text:=open_count::text||' items';\n" +
+    '          continue;\n' +
+    '        end if;\n' +
+    '        '
+
+      at TestContext.<anonymous> (file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/checklist-legacy-hold-retention-20261015/legacy-retention.test.mjs:11:553)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "if raw->>'native_financial_kind'='LEGACY_REVIEW' then\n          if raw->'review_required' is distinct from 'true'::jsonb\n            or raw#>'{native_legacy_review_witness,scope}' is distinct from row_scope then\n            raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_FINANCIAL_FRAME_UNAVAILABLE' using errcode='55000';end if;\n          row_items:=row_items||jsonb_build_array(jsonb_build_object(\n            'item_id','native-legacy-review:'||(raw#>>'{native_legacy_review_witness,timesheet_id}'),\n            'item_kind','NATIVE_ORDINARY_FINANCIAL_REVIEW','scope',row_scope,'route',route,'worker',raw->'worker',\n            'work_date',raw->'work_date','sheet_scope',raw->'sheet_scope','reason_code','NATIVE_LEGACY_PAY_HOLD_REVIEW',\n            'status',raw->'status','hold',raw->'hold','subject','PAY','permitted_pay_subject',true,\n            'action',case when view='ADMIN' then jsonb_build_object('kind','TIMESHEET','label','Review native pay hold in Timesheet ›',\n              'native_allowed',true,'target',jsonb_build_object('timesheet_id',raw#>>'{native_legacy_review_witness,timesheet_id}')) end,\n            'counted_timesheet_id',raw#>>'{native_legacy_review_witness,timesheet_id}','correction_binding',null,'submission_read',null,\n            'source_information_witness',null,'native_source_witness',null,'native_invoice_witness',null,'native_invoice_decision_witness',null,\n            'queries_parent_witness',null,'native_ordinary_money_witness',null,'native_legacy_review_witness',raw->'native_legacy_review_witness','_rank',35));\n          open_count:=open_count+1;pay_count:=pay_count+1;completed:=false;pay_complete:=false;complete_text:=open_count::text||' items';\n          continue;\n        end if;\n        ",
+    expected: /'scope'\} is distinct from row_scope/,
+    operator: 'match',
+    diff: 'simple'
+  }

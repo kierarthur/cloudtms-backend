@@ -1,0 +1,1712 @@
+\set ON_ERROR_STOP on
+
+begin;
+
+do $verify_weekly_source_acl$
+declare
+  v_bad integer;
+  v_contract_count integer;
+  v_distinct_contract_count integer;
+  v_immutable_count integer;
+  v_lifecycle_count integer;
+  v_stateful_count integer;
+  v_lifecycle_column_count integer;
+  v_names text;
+  v_service_role_oid oid;
+  v_expected_private_native_tables text[]:=array[
+    'private.weekly_source_accepted_publication_actions_v1',
+    'private.weekly_source_banking_pay_absence',
+    'private.weekly_source_entitlement_publication_receipts',
+    'private.weekly_source_external_publication_arrivals',
+    'private.weekly_source_first_authorisation_withdrawal_receipts',
+    'private.weekly_source_import_preparations',
+    'private.weekly_source_local_protected_decision_receipts',
+    'private.weekly_source_manual_review_commands',
+    'private.weekly_source_manual_reviews',
+    'private.weekly_source_office_rechecks',
+    'private.weekly_source_office_row_choices',
+    'private.weekly_source_pending_release_review_items',
+    'private.weekly_source_workbench_inventory_install_v1',
+    'private.weekly_source_workbench_inventory_v1'
+  ]::text[];
+  v_expected_immutable text[]:=array[
+    'weekly_candidate_app_mutation_receipts',
+    'weekly_discrepancy_events',
+    'weekly_exceptional_c1_component_records',
+    'weekly_exceptional_c1_publication_checkpoints',
+    'weekly_exceptional_c1_source_parts',
+    'weekly_exceptional_c1_source_records',
+    'weekly_exceptional_pay_family_events',
+    'weekly_exceptional_pay_target_events',
+    'weekly_exceptional_payment_events',
+    'weekly_final_source_correction_root_impacts',
+    'weekly_issue_comparison_revisions',
+    'weekly_source_charge_acceptances',
+    'weekly_source_charge_checks',
+    'weekly_source_contract_qualification_observations',
+    'weekly_source_entitlement_head_components',
+    'weekly_source_expense_cell_evidence',
+    'weekly_source_expense_pay_materialisations',
+    'weekly_source_final_snapshot_lines',
+    'weekly_source_invoice_hold_releases',
+    'weekly_source_invoice_presentation_lines',
+    'weekly_source_manifest_movements',
+    'weekly_source_money_cell_evidence',
+    'weekly_source_nhsp_backing_reports',
+    'weekly_source_ordinary_pay_projection_receipts',
+    'weekly_source_physical_rows',
+    'weekly_source_row_economic_snapshots',
+    'weekly_source_row_expense_policy_snapshots',
+    'weekly_source_row_qualification_evidence',
+    'weekly_source_row_resolutions',
+    'weekly_source_row_timesheet_lineages',
+    'weekly_source_rule_set_versions',
+    'weekly_source_self_bill_reports',
+    'weekly_source_upload_attempts',
+    'weekly_source_upload_rows',
+    'weekly_source_upload_supersessions',
+    'weekly_timesheet_authority_resolutions',
+    'weekly_timesheet_source_comparisons',
+    'weekly_work_event_source_links',
+    'weekly_work_events'
+  ]::text[];
+  v_expected_lifecycle_columns text[]:=array[
+    'office_action_notifications.operational_state',
+    'office_action_notifications.read_at_utc',
+    'office_action_notifications.resolved_at_utc',
+    'weekly_candidate_message_notifications.retired_at_utc',
+    'weekly_completed_pack_copy_events.provider_command_id',
+    'weekly_completed_pack_copy_events.state',
+    'weekly_exceptional_c1_unknown_outcomes.recovered_at_utc',
+    'weekly_exceptional_c1_unknown_outcomes.recovery_idempotency_key',
+    'weekly_exceptional_c1_unknown_outcomes.recovery_result_json',
+    'weekly_exceptional_c1_unknown_outcomes.state',
+    'weekly_exceptional_payment_approvals.withdrawal_kind',
+    'weekly_exceptional_payment_approvals.withdrawn_at_utc',
+    'weekly_exceptional_payment_approvals.withdrawn_by_user_id',
+    'weekly_manager_route_preparations.bound_at_utc',
+    'weekly_manager_route_preparations.retired_at_utc',
+    'weekly_manager_route_preparations.state',
+    'weekly_manager_route_receipts.revoked_at_utc',
+    'weekly_manager_route_receipts.state',
+    'weekly_message_delivery_failures.acknowledged_at_utc',
+    'weekly_message_delivery_failures.resolved_at_utc',
+    'weekly_message_delivery_failures.state',
+    'weekly_message_provider_attempts.bounded_error_json',
+    'weekly_message_provider_attempts.bounded_provider_receipt_json',
+    'weekly_message_provider_attempts.completed_at_utc',
+    'weekly_message_provider_attempts.outcome',
+    'weekly_message_renders.state',
+    'weekly_message_target_attempts.bounded_error_json',
+    'weekly_message_target_attempts.bounded_provider_receipt_json',
+    'weekly_message_target_attempts.completed_at_utc',
+    'weekly_message_target_attempts.outcome',
+    'weekly_message_target_attempts.provider_message_id',
+    'weekly_message_target_attempts.result_hash',
+    'weekly_source_billing_movements.placement_state',
+    'weekly_source_entitlement_decision_bundles.committed_at_utc',
+    'weekly_source_entitlement_decision_bundles.state',
+    'weekly_source_entitlement_decision_bundles.superseded_at_utc',
+    'weekly_source_entitlement_heads.committed_at_utc',
+    'weekly_source_entitlement_heads.publication_receipt_digest',
+    'weekly_source_entitlement_heads.scope_change_tx_token',
+    'weekly_source_entitlement_heads.state',
+    'weekly_source_entitlement_heads.superseded_at_utc',
+    'weekly_source_entitlement_heads.superseded_by_head_id',
+    'weekly_source_entitlement_heads.superseded_by_withdrawal_id',
+    'weekly_source_entitlement_heads.superseded_reason',
+    'weekly_source_expense_materialisations.state',
+    'weekly_source_pending_entitlement_bundles.last_census_json',
+    'weekly_source_pending_entitlement_bundles.lease_expires_at_utc',
+    'weekly_source_pending_entitlement_bundles.lease_owner',
+    'weekly_source_pending_entitlement_bundles.lease_token',
+    'weekly_source_pending_entitlement_bundles.lease_worker_run_id',
+    'weekly_source_pending_entitlement_bundles.manual_review_reason',
+    'weekly_source_pending_entitlement_bundles.next_check_at_utc',
+    'weekly_source_pending_entitlement_bundles.pending_revision',
+    'weekly_source_pending_entitlement_bundles.released_at_utc',
+    'weekly_source_pending_entitlement_bundles.released_by_worker_id',
+    'weekly_source_pending_entitlement_bundles.released_by_worker_run_id',
+    'weekly_source_pending_entitlement_bundles.released_receipt_digest',
+    'weekly_source_pending_entitlement_bundles.released_receipt_id',
+    'weekly_source_pending_entitlement_bundles.state',
+    'weekly_source_pending_entitlement_bundles.technical_failure_count',
+    'weekly_source_pending_entitlement_bundles.updated_at_utc',
+    'weekly_source_root_authorisations.current_entitlement_head_id',
+    'weekly_source_root_authorisations.updated_at_utc',
+    'weekly_source_root_authorisations.withdrawn_at_utc',
+    'weekly_source_root_authorisations.withdrawn_by_user_id',
+    'weekly_source_state_transitions.ordinary_source_entitlement_projection_state',
+    'weekly_timesheet_reference_apply_items.applied_at_utc'
+  ]::text[];
+  v_expected_stateful text[]:=array[
+    'weekly_candidate_cohorts',
+    'weekly_candidate_outreach_generations',
+    'weekly_candidate_outreach_memberships',
+    'weekly_candidate_response_draft_items',
+    'weekly_candidate_response_drafts',
+    'weekly_discrepancy_incidents',
+    'weekly_exceptional_c1_publication_requests',
+    'weekly_exceptional_orchestration_runs',
+    'weekly_exceptional_orchestration_steps',
+    'weekly_exceptional_pay_generations',
+    'weekly_exceptional_pay_target_families',
+    'weekly_exceptional_pending_reconciliation_targets',
+    'weekly_expense_authority_generations',
+    'weekly_final_source_correction_sessions',
+    'weekly_manager_cohort_due_events',
+    'weekly_manager_recipient_generations',
+    'weekly_manager_recipient_memberships',
+    'weekly_manager_recipient_routes',
+    'weekly_manager_review_batches',
+    'weekly_manager_review_items',
+    'weekly_message_dispatch_commands',
+    'weekly_message_dispatch_targets',
+    'weekly_message_intents',
+    'weekly_route_activations',
+    'weekly_source_client_cycle_completions',
+    'weekly_source_client_manifests',
+    'weekly_source_client_policies',
+    'weekly_source_contract_policies',
+    'weekly_source_cycles',
+    'weekly_source_final_revisions',
+    'weekly_source_finalisation_pay_runs',
+    'weekly_source_finalisation_pay_tasks',
+    'weekly_source_format_profiles',
+    'weekly_source_global_settings',
+    'weekly_source_group_clients',
+    'weekly_source_group_rule_assignments',
+    'weekly_source_groups',
+    'weekly_source_invoice_line_bindings',
+    'weekly_source_invoice_placements',
+    'weekly_source_projection_publications',
+    'weekly_source_report_scopes',
+    'weekly_source_rule_sets',
+    'weekly_source_self_bill_report_line_bindings',
+    'weekly_source_uploads',
+    'weekly_timesheet_reference_apply_operations',
+    'weekly_timesheet_submission_request_memberships',
+    'weekly_timesheet_submission_requests'
+  ]::text[];
+  -- Registered Weekly Source private helpers. This array is the independent
+  -- expected copy of private._weekly_source_acl_private_helper_contract_v1().
+  -- It is an inventory of owner-internal routines, not a grant list and not an
+  -- exception list: every entry must exist, be owned by the release owner and
+  -- be executable by nobody — PUBLIC, anon, authenticated and service_role
+  -- alike. Listing a routine here grants it nothing.
+  --
+  -- A routine granted execute to service_role belongs in
+  -- v_expected_service_rpcs below instead, and no signature may appear in both:
+  -- a signature listed in the service array but not actually granted makes the
+  -- routine sweep fail, which is how the two lists stay honest.
+  v_expected_private_helpers text[]:=array[
+    'private._weekly_source_acl_lifecycle_column_contract_v1()',
+    'private._weekly_source_acl_private_helper_contract_v1()',
+    'private._weekly_source_acl_service_rpc_contract_v1()',
+    'private._weekly_source_acl_table_contract_v1()',
+    'private._weekly_source_banking_pay_absence_environment_guard_v1()',
+    'private._weekly_source_completed_pack_copy_eligibility_v1(uuid)',
+    'private._weekly_source_effective_policy_v1(uuid,uuid,date)',
+    'private._weekly_source_immutable_fact_guard_v1()',
+    'private._weekly_source_immutable_record_guard_v1()',
+    'private._weekly_source_pending_counter_reset_guard_v1()',
+    'private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)',
+    'private._weekly_source_rule_values_v1(jsonb)',
+    'private._weekly_source_settings_assert_request_v1(jsonb,text[],text)',
+    'private._weekly_source_settings_client_shape_v1(uuid,text,uuid,date)',
+    'private._weekly_source_settings_contract_shape_v1(uuid,text,uuid,date)',
+    'private._weekly_source_settings_deployment_v1(uuid,text)',
+    'private._weekly_source_settings_ensure_open_cycle_v1(uuid,timestamp with time zone)',
+    'private._weekly_source_settings_ensure_open_cycle_v1(uuid,uuid,bytea,uuid)',
+    'private._weekly_source_settings_group_list_v1(uuid,text,text,boolean)',
+    'private._weekly_source_settings_require_admin_v1(uuid)',
+    'private._weekly_source_settings_stale_open_v1(uuid,uuid)',
+    'private.bpay_next_work_period_proof_v1(uuid,uuid,date)',
+    'private.timesheet_correction_a0_booking_before_v1()',
+    'private.timesheet_correction_a0_candidate_before_v1()',
+    'private.timesheet_correction_a0_clock_scope_v1(uuid)',
+    'private.timesheet_correction_a0_native_input_witness_v1(uuid)',
+    'private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)',
+    'private.timesheet_correction_a0_reference_before_v1()',
+    'private.timesheet_correction_a0_send_family_fence_v1(uuid)',
+    'private.timesheet_correction_a0_signed_precursor_v1(uuid)',
+    'private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)',
+    'private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)',
+    'private.weekly_exceptional_candidate_signed_evidence_v1(uuid)',
+    'private.weekly_exceptional_hex_sha256_v1(text)',
+    'private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])',
+    'private.weekly_source_accepted_publication_action_immutable_v1()',
+    'private.weekly_source_accepted_publication_action_record_v1(jsonb,jsonb,jsonb)',
+    'private.weekly_source_accepted_publication_action_verify_v1(uuid,uuid,bigint,bytea,uuid)',
+    'private.weekly_source_accepted_publication_context_v1(jsonb)',
+    'private.weekly_source_accepted_removal_query_evidence_v1(uuid,uuid,uuid,uuid,uuid)',
+    'private.weekly_source_activation_window_binding_assert_v1(jsonb,jsonb,jsonb,uuid,date,date)',
+    'private.weekly_source_actual_timesheet_submission_v1(uuid)',
+    'private.weekly_source_agency_invoice_check_only_v1(uuid)',
+    'private.weekly_source_approval_duty_v1(uuid)',
+    'private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)',
+    'private.weekly_source_approved_expense_evidence_v1(uuid,jsonb)',
+    'private.weekly_source_attempt_append_without_upload_v1(text,uuid,uuid,uuid,uuid,text,bytea,uuid,uuid,text,bigint,bytea,text,text,text,text,text,uuid)',
+    'private.weekly_source_audit_chronology_v1(uuid)',
+    'private.weekly_source_audit_entitlement_head_v1()',
+    'private.weekly_source_audit_family_v1(uuid)',
+    'private.weekly_source_audit_first_authorisation_v1()',
+    'private.weekly_source_audit_guard_refusal_v1(uuid,jsonb,text,uuid)',
+    'private.weekly_source_audit_human_reason_v1(text)',
+    'private.weekly_source_audit_key_v1(uuid)',
+    'private.weekly_source_audit_lifecycle_rank_v1(text)',
+    'private.weekly_source_audit_pending_bundle_v1()',
+    'private.weekly_source_audit_references_v1(jsonb,jsonb)',
+    'private.weekly_source_audit_sentence_v1(text,jsonb,jsonb,text)',
+    'private.weekly_source_authority_subset_v1(jsonb)',
+    'private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)',
+    'private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid)',
+    'private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)',
+    'private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)',
+    'private.weekly_source_automatic_reconcile_selection_v1(uuid,uuid)',
+    'private.weekly_source_automatic_reconcile_stage_proof_v1(jsonb)',
+    'private.weekly_source_automatic_reconcile_stage_replay_assert_v1(uuid,jsonb)',
+    'private.weekly_source_banking_pay_absence_clear_v1()',
+    'private.weekly_source_banking_pay_absence_declare_v1(text,text)',
+    'private.weekly_source_banking_pay_absence_v1()',
+    'private.weekly_source_banking_pay_boundary_notice_v1()',
+    'private.weekly_source_banking_pay_branch_probe_v1(text)',
+    'private.weekly_source_banking_pay_integration_arrived_v1()',
+    'private.weekly_source_billing_movement_hash_v1(jsonb)',
+    'private.weekly_source_breaks_equivalent_v1(integer,integer)',
+    'private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)',
+    'private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text)',
+    'private.weekly_source_bulk_own_stage_event_excluded_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)',
+    'private.weekly_source_bulk_producer_ready_v1(uuid)',
+    'private.weekly_source_bulk_signed_claim_v1(uuid)',
+    'private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])',
+    'private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)',
+    'private.weekly_source_bulk_source_cas_v1(uuid,uuid[])',
+    'private.weekly_source_bulk_source_facts_v1(uuid,uuid[])',
+    'private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)',
+    'private.weekly_source_bulk_stage_replay_assert_v1(uuid,jsonb)',
+    'private.weekly_source_candidate_app_assert_hours_only_v1(jsonb)',
+    'private.weekly_source_candidate_app_assert_new_week_submission_v1(jsonb,jsonb)',
+    'private.weekly_source_candidate_app_assert_request_shape_v1(jsonb)',
+    'private.weekly_source_candidate_app_assert_week_revision_v1(jsonb,jsonb,jsonb,jsonb)',
+    'private.weekly_source_candidate_app_break_v1(jsonb,integer)',
+    'private.weekly_source_candidate_app_issue_hours_v1(date,timestamp without time zone,timestamp without time zone,integer,text,jsonb)',
+    'private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamp with time zone)',
+    'private.weekly_source_candidate_app_receipt_v1(uuid,uuid,text,uuid,bytea)',
+    'private.weekly_source_candidate_app_responses_v1(jsonb,jsonb,boolean)',
+    'private.weekly_source_candidate_app_schedule_v1(jsonb,jsonb)',
+    'private.weekly_source_candidate_app_units_day_v1(jsonb,date)',
+    'private.weekly_source_candidate_app_units_week_v1(jsonb)',
+    'private.weekly_source_candidate_approved_clock_row_v2(jsonb,jsonb,text)',
+    'private.weekly_source_candidate_approved_entitlement_v1(jsonb)',
+    'private.weekly_source_candidate_approved_hours_v1(jsonb)',
+    'private.weekly_source_candidate_contract_week_view_merge_v1(uuid,timestamp with time zone)',
+    'private.weekly_source_candidate_current_rows_v1(uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_candidate_forbidden_key_parts_v1()',
+    'private.weekly_source_candidate_forbidden_words_v1()',
+    'private.weekly_source_candidate_generation_current_v1(uuid)',
+    'private.weekly_source_candidate_head_hours_v2(uuid)',
+    'private.weekly_source_candidate_hours_differ_v1(jsonb,jsonb)',
+    'private.weekly_source_candidate_hours_push_head_rows_v1(uuid)',
+    'private.weekly_source_candidate_hours_push_head_v1()',
+    'private.weekly_source_candidate_hours_push_payload_v1(uuid)',
+    'private.weekly_source_candidate_hours_push_v1(uuid)',
+    'private.weekly_source_candidate_hours_shape_v1(jsonb)',
+    'private.weekly_source_candidate_initial_approval_v2(uuid)',
+    'private.weekly_source_candidate_list_approval_v1(uuid)',
+    'private.weekly_source_candidate_notification_intent_v1()',
+    'private.weekly_source_candidate_notification_retire_v1()',
+    'private.weekly_source_candidate_payload_safe_v1(jsonb)',
+    'private.weekly_source_candidate_prefinal_publish_recheck_v1(uuid,uuid)',
+    'private.weekly_source_candidate_saved_local_hours_v2(uuid)',
+    'private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)',
+    'private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)',
+    'private.weekly_source_candidate_view_merge_v1(uuid,timestamp with time zone)',
+    'private.weekly_source_candidate_view_request_v1(jsonb)',
+    'private.weekly_source_candidate_view_v1(uuid,timestamp with time zone)',
+    'private.weekly_source_candidate_week_context_v1(uuid)',
+    'private.weekly_source_canonical_json_text_v1(jsonb)',
+    'private.weekly_source_canonical_report_number_v1(text)',
+    'private.weekly_source_charge_acceptance_policy_fingerprint_v1()',
+    'private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)',
+    'private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)',
+    'private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)',
+    'private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_checking_client_scope_v1(uuid)',
+    'private.weekly_source_checklist_client_calendar_v1(uuid,date)',
+    'private.weekly_source_checklist_historical_submission_descriptor_v1(uuid)',
+    'private.weekly_source_checklist_information_hold_facts_v1(jsonb,jsonb,uuid)',
+    'private.weekly_source_checklist_legacy_pay_state_core_v1(uuid)',
+    'private.weekly_source_checklist_legacy_hold_review_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_checklist_legacy_read_frame_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_checklist_native_bound_snapshot_core_v1(uuid,bigint,boolean)',
+    'private.weekly_source_checklist_native_initial_bound_assert_core_v1(uuid,boolean)',
+    'private.weekly_source_checklist_native_initial_certificate_core_v1(uuid,boolean)',
+    'private.weekly_source_checklist_native_members_core_v1(uuid,uuid,boolean)',
+    'private.weekly_source_checklist_ordinary_next_hold_money_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_checklist_page_v1(jsonb,jsonb,uuid,text,text,text)',
+    'private.weekly_source_checklist_process_publication_v1(uuid)',
+    'private.weekly_source_checklist_process_v1(uuid,uuid)',
+    'private.weekly_source_checklist_source_invoice_block_items_v1(jsonb,uuid)',
+    'private.weekly_source_checklist_source_invoice_decision_items_v1(jsonb,uuid)',
+    'private.weekly_source_checklist_source_shift_query_money_v1(uuid,uuid,jsonb,uuid)',
+    'private.weekly_source_checklist_submission_cycle_admit_v1(uuid,text,uuid)',
+    'private.weekly_source_checklist_submission_cycle_prepare_v1(uuid,uuid)',
+    'private.weekly_source_checklist_timesheet_hold_facts_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_completed_rows_v1(uuid,uuid,uuid)',
+    'private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)',
+    'private.weekly_source_configured_upload_profile_v1(uuid,uuid,text,text)',
+    'private.weekly_source_contract_week_settings_authority_assert_v1(uuid)',
+    'private.weekly_source_correct_final_office_preview_v1(uuid)',
+    'private.weekly_source_correct_final_preconditions_v1(uuid,uuid,uuid,boolean)',
+    'private.weekly_source_correct_final_prepared_context_v1(uuid)',
+    'private.weekly_source_covered_hours_incident_v1(uuid)',
+    'private.weekly_source_current_publication_guard_v1(uuid,text,uuid,uuid,uuid,bigint)',
+    'private.weekly_source_cutoff_admission_assert_v1(uuid,text,timestamp with time zone)',
+    'private.weekly_source_delivery_aggregate_command_v1(uuid)',
+    'private.weekly_source_delivery_target_immutable_v1()',
+    'private.weekly_source_delivery_target_set_hash_v1(uuid,uuid,text,jsonb)',
+    'private.weekly_source_effective_inventory_v1(uuid)',
+    'private.weekly_source_effective_rule_set_v1(uuid,uuid)',
+    'private.weekly_source_entitlement_component_id_v1(text,text,text,text)',
+    'private.weekly_source_entitlement_components_v1(jsonb,jsonb)',
+    'private.weekly_source_entitlement_derived_uuid_v1(text,text)',
+    'private.weekly_source_entitlement_head_inventory_assert_v1()',
+    'private.weekly_source_entitlement_head_ledger_mark_v1()',
+    'private.weekly_source_entitlement_head_receipt_assert_v1()',
+    'private.weekly_source_entitlement_head_root_identity_v1()',
+    'private.weekly_source_entitlement_head_withdrawal_supersession_guard_v1()',
+    'private.weekly_source_entitlement_proposal_cross_contract_request_v1(uuid,uuid,uuid,uuid,bigint,uuid,uuid,uuid,uuid[],text,text,text,text,uuid,uuid,timestamp with time zone)',
+    'private.weekly_source_entitlement_proposal_record_v1(jsonb,uuid,uuid,date,uuid)',
+    'private.weekly_source_entitlement_proposal_request_v1(uuid,uuid,text,uuid,bigint,uuid,uuid,jsonb,text)',
+    'private.weekly_source_entitlement_proposal_request_v2(uuid,jsonb,text,uuid,bigint,uuid,uuid,jsonb,text)',
+    'private.weekly_source_entitlement_publication_receipt_immutable_v1()',
+    'private.weekly_source_entitlement_publish_core_v1(jsonb,text,jsonb,uuid,text,uuid,jsonb,jsonb)',
+    'private.weekly_source_entitlement_publish_immediate_v1(jsonb)',
+    'private.weekly_source_expected_week_question_v1(uuid)',
+    'private.weekly_source_expected_week_unsigned_materialise_v1(uuid)',
+    'private.weekly_source_expense_authority_evidence_v1(uuid,jsonb)',
+    'private.weekly_source_export_approved_hours_v1(uuid)',
+    'private.weekly_source_export_hours_v1(uuid)',
+    'private.weekly_source_export_invoice_movements_v1(uuid)',
+    'private.weekly_source_export_source_hours_v1(uuid)',
+    'private.weekly_source_export_submitted_hours_v1(uuid)',
+    'private.weekly_source_external_publication_arrival_immutable_v1()',
+    'private.weekly_source_external_publication_declared_v1(jsonb)',
+    'private.weekly_source_final_rule_version_guard_v1()',
+    'private.weekly_source_final_state_fingerprint_v1(jsonb)',
+    'private.weekly_source_final_upload_assert_v1(uuid)',
+    'private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)',
+    'private.weekly_source_final_upload_gate_v1(uuid)',
+    'private.weekly_source_final_value_vector_v1(jsonb)',
+    'private.weekly_source_finalisation_economic_assert_v1(uuid,uuid,text)',
+    'private.weekly_source_finalisation_expense_policy_assert_v1(uuid,uuid)',
+    'private.weekly_source_finalisation_hex32_v1(text,text)',
+    'private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)',
+    'private.weekly_source_finalisation_insert_reversal_v1(uuid,uuid,uuid,uuid,uuid,text,jsonb)',
+    'private.weekly_source_finalisation_lineage_assert_v1(uuid,uuid)',
+    'private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)',
+    'private.weekly_source_finalisation_negate_vector_v1(jsonb)',
+    'private.weekly_source_finalisation_pay_context_v1(uuid,uuid)',
+    'private.weekly_source_finalisation_pay_run_json_v1(public.weekly_source_finalisation_pay_runs)',
+    'private.weekly_source_finalisation_pay_run_refresh_v1(uuid)',
+    'private.weekly_source_finalisation_pay_task_json_v1(public.weekly_source_finalisation_pay_tasks)',
+    'private.weekly_source_finalisation_vector_v1(uuid,text,smallint)',
+    'private.weekly_source_finalise_core_v1(jsonb,uuid)',
+    'private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)',
+    'private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)',
+    'private.weekly_source_first_authorisation_context_v1(uuid)',
+    'private.weekly_source_first_authorisation_withdraw_checks_v1(jsonb,jsonb,uuid,text)',
+    'private.weekly_source_first_authorisation_withdraw_protected_v1(uuid[],uuid,timestamp with time zone)',
+    'private.weekly_source_first_authorisation_withdrawal_recorded_v1(uuid,text,uuid)',
+    'private.weekly_source_first_authorise_core_v1(uuid,text,uuid,jsonb)',
+    'private.weekly_source_freeze_census_uuid_array_v1(jsonb)',
+    'private.weekly_source_freeze_census_v1(uuid,uuid[])',
+    'private.weekly_source_frozen_rule_values_v1(uuid)',
+    'private.weekly_source_guard_flag_v1(jsonb,text,boolean)',
+    'private.weekly_source_guard_refusal_bases_v1()',
+    'private.weekly_source_guard_refusal_basis_clause_v1(text)',
+    'private.weekly_source_guard_refusal_detail_v1(jsonb)',
+    'private.weekly_source_guard_refusal_entry_point_installed_v1(text)',
+    'private.weekly_source_guard_refusal_record_v1(text,jsonb,text,uuid)',
+    'private.weekly_source_has_self_bill_rules_v1(uuid,uuid)',
+    'private.weekly_source_head_origin_guard_v2()',
+    'private.weekly_source_healthroster_checklist_leaf_v1(jsonb)',
+    'private.weekly_source_hex32_v1(text,text)',
+    'private.weekly_source_historical_fixture_assignment_assert_v1(jsonb)',
+    'private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)',
+    'private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb)',
+    'private.weekly_source_historical_fixture_setup_assert_v1(jsonb,boolean)',
+    'private.weekly_source_import_is_prepared_v1(uuid)',
+    'private.weekly_source_import_outreach_v1(uuid)',
+    'private.weekly_source_incident_contact_retire_v1(uuid)',
+    'private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)',
+    'private.weekly_source_invalidation_contract_assert_v1(uuid,uuid[],uuid,text,uuid[])',
+    'private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)',
+    'private.weekly_source_inventory_changed_v1()',
+    'private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])',
+    'private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)',
+    'private.weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb)',
+    'private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_invoice_admission_receipt_map_v1(uuid)',
+    'private.weekly_source_invoice_admitted_member_money_v1(uuid,uuid)',
+    'private.weekly_source_invoice_allocation_assert_v1(uuid)',
+    'private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)',
+    'private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)',
+    'private.weekly_source_invoice_duty_v1(uuid)',
+    'private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)',
+    'private.weekly_source_invoice_expected_version_fingerprint_v1(uuid,bigint)',
+    'private.weekly_source_invoice_family_timesheet_ids_v1(uuid)',
+    'private.weekly_source_invoice_header_refresh_v1(uuid)',
+    'private.weekly_source_invoice_hold_first_invoice_assert_v1(uuid)',
+    'private.weekly_source_invoice_hold_release_context_core_v1(jsonb,boolean)',
+    'private.weekly_source_invoice_issue_blockers_v1(uuid,text[])',
+    'private.weekly_source_invoice_issue_guard_v1()',
+    'private.weekly_source_invoice_issue_reasons_v1(jsonb,text[])',
+    'private.weekly_source_invoice_issue_skippable_code_v1(text)',
+    'private.weekly_source_invoice_issue_skippable_reason_v1(text)',
+    'private.weekly_source_invoice_issue_tsfin_skippable_v1(uuid,text)',
+    'private.weekly_source_invoice_issue_validate_v1(uuid)',
+    'private.weekly_source_invoice_legacy_render_support_v1(uuid)',
+    'private.weekly_source_invoice_line_amounts_v1(uuid,uuid)',
+    'private.weekly_source_invoice_line_owner_guard_v1()',
+    'private.weekly_source_invoice_manifest_admission_money_v1(uuid)',
+    'private.weekly_source_invoice_movement_money_v1(uuid,uuid)',
+    'private.weekly_source_invoice_movement_only_integrity_v1(uuid)',
+    'private.weekly_source_invoice_movement_window_id_v1(uuid)',
+    'private.weekly_source_invoice_only_vector_v1(text,bigint)',
+    'private.weekly_source_invoice_placement_identity_guard_v1()',
+    'private.weekly_source_invoice_presentation_expected_source_hash_v1(uuid)',
+    'private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)',
+    'private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)',
+    'private.weekly_source_invoice_receipt_projection_assert_v1(uuid)',
+    'private.weekly_source_invoice_receipt_support_v1(uuid)',
+    'private.weekly_source_invoice_rounding_authority_rebuild_v1(uuid)',
+    'private.weekly_source_invoice_rounding_receipt_set_v1(uuid,jsonb)',
+    'private.weekly_source_invoice_rounding_suppression_witness_v1(uuid)',
+    'private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)',
+    'private.weekly_source_invoice_tsfin_first_authorisation_v1(uuid)',
+    'private.weekly_source_invoice_tsfin_refusal_v1(jsonb)',
+    'private.weekly_source_invoice_tsfin_state_v1(uuid)',
+    'private.weekly_source_invoice_unreleased_vat_fit_movements_v1(uuid)',
+    'private.weekly_source_invoice_vat_target_pence_v1(numeric,numeric,text,numeric)',
+    'private.weekly_source_invoice_window_cycle_v1(uuid,uuid)',
+    'private.weekly_source_invoice_window_lock_inventory_v1(uuid,bigint,uuid,uuid)',
+    'private.weekly_source_invoice_window_scope_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)',
+    'private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)',
+    'private.weekly_source_jsonb_atoms_v1(jsonb)',
+    'private.weekly_source_local_origin_canonical_v2(jsonb)',
+    'private.weekly_source_local_protected_pending_released_v1()',
+    'private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)',
+    'private.weekly_source_local_publication_origin_guard_v2()',
+    'private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)',
+    'private.weekly_source_lock_and_resolve_families_v1(uuid,uuid[],text,uuid,text)',
+    'private.weekly_source_lock_family_rows_v1(uuid[],uuid)',
+    'private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)',
+    'private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)',
+    'private.weekly_source_managed_root_guard_v1(uuid)',
+    'private.weekly_source_manager_due_event_covers_v1(uuid,uuid)',
+    'private.weekly_source_manual_review_command_immutable_v1()',
+    'private.weekly_source_manual_review_final_rows_v2(uuid)',
+    'private.weekly_source_manual_review_source_v2(uuid)',
+    'private.weekly_source_manual_reviews_finalised_v1(uuid,uuid)',
+    'private.weekly_source_missing_scope_facts_v1(uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_missing_scope_unchanged_v1(uuid,uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_mode_a_operation_key_v1(uuid,uuid)',
+    'private.weekly_source_mode_a_refuse_operation_v1(uuid,uuid,uuid,uuid,uuid,text)',
+    'private.weekly_source_mode_a_role_type_v1(text,text)',
+    'private.weekly_source_not_finalised_dispatch_v1(uuid)',
+    'private.weekly_source_not_finalised_due_scope_guard_v1()',
+    'private.weekly_source_notification_route_contract_v1()',
+    'private.weekly_source_observation_begin_v1()',
+    'private.weekly_source_observation_end_v1(uuid)',
+    'private.weekly_source_observation_seal_v1()',
+    'private.weekly_source_observation_storage_v1()',
+    'private.weekly_source_observe_effect_v1()',
+    'private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)',
+    'private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)',
+    'private.weekly_source_office_authorisation_state_v1(uuid)',
+    'private.weekly_source_office_candidate_phase_v1(uuid,timestamp with time zone)',
+    'private.weekly_source_office_contact_policy_v1(uuid,jsonb)',
+    'private.weekly_source_office_group_key_v1(uuid,uuid,uuid,bytea)',
+    'private.weekly_source_office_invoice_movements_v1(uuid[])',
+    'private.weekly_source_office_lifecycle_phase_v1(uuid,jsonb)',
+    'private.weekly_source_office_lifecycle_policy_v1()',
+    'private.weekly_source_office_lifecycle_result_v1(text,jsonb,jsonb,text)',
+    'private.weekly_source_office_lifecycle_row_v1(text)',
+    'private.weekly_source_office_missing_scope_fingerprint_v1(uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_office_money_text_v1(numeric)',
+    'private.weekly_source_office_next_owner_v1()',
+    'private.weekly_source_office_next_paid_evidence_page_v1(uuid,uuid,text,uuid,jsonb,integer)',
+    'private.weekly_source_office_payment_progress_v1(uuid[])',
+    'private.weekly_source_office_proposal_revision_v1(uuid[],bytea)',
+    'private.weekly_source_office_proposal_view_v1(uuid,uuid[])',
+    'private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_office_route_key_v1(uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_office_schedule_absent_v1(text)',
+    'private.weekly_source_office_schedule_from_actual_v1(jsonb)',
+    'private.weekly_source_office_schedule_from_allocation_v1(jsonb,text)',
+    'private.weekly_source_office_schedule_from_components_v1(jsonb,text)',
+    'private.weekly_source_office_schedule_from_rows_v1(jsonb,text)',
+    'private.weekly_source_office_tracker_v1(uuid,uuid)',
+    'private.weekly_source_office_unauthorise_action_state_v1(uuid)',
+    'private.weekly_source_office_workspace_version_v1(uuid,uuid)',
+    'private.weekly_source_operational_effective_rule_set_v1(uuid,uuid)',
+    'private.weekly_source_operational_empty_v1(uuid,uuid)',
+    'private.weekly_source_ordinary_authorisation_guard_tg_v1()',
+    'private.weekly_source_ordinary_authorisation_guard_v1(uuid,text)',
+    'private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)',
+    'private.weekly_source_ordinary_projection_actual_schedule_v1(jsonb)',
+    'private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)',
+    'private.weekly_source_ordinary_projection_current_segments_v1(uuid,uuid)',
+    'private.weekly_source_ordinary_projection_expense_movement_assert_v1(uuid,uuid,uuid,uuid,uuid)',
+    'private.weekly_source_ordinary_projection_expenses_materialise_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_ordinary_projection_hex32_v1(text,text)',
+    'private.weekly_source_ordinary_projection_receipt_insert_v1(uuid,uuid,uuid,uuid,uuid,text,text,text,jsonb,bytea,jsonb,bytea,bytea,bytea,bytea,bytea,bytea,bytea,text,bytea,uuid)',
+    'private.weekly_source_ordinary_projection_receipt_json_v1(public.weekly_source_ordinary_pay_projection_receipts)',
+    'private.weekly_source_ordinary_projection_root_hash_v1(uuid)',
+    'private.weekly_source_ordinary_projection_snapshot_assert_v1(uuid,text,jsonb,jsonb,jsonb,jsonb,jsonb)',
+    'private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)',
+    'private.weekly_source_overlap_admission_assert_v1(uuid)',
+    'private.weekly_source_pay_query_admit_v2()',
+    'private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_facts_v1(uuid)',
+    'private.weekly_source_pay_query_gate_v1(uuid)',
+    'private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_open_display_v1(uuid,integer,text,uuid)',
+    'private.weekly_source_pay_query_scope_v1(uuid)',
+    'private.weekly_source_pending_entitlement_bundle_save_v1(jsonb,jsonb,jsonb)',
+    'private.weekly_source_pending_entitlement_release_apply_v1(uuid,bigint,bytea,text,uuid,uuid)',
+    'private.weekly_source_pending_entitlement_release_claim_page_v1(text,uuid,integer,integer)',
+    'private.weekly_source_pending_entitlement_release_record_failure_v1(uuid,uuid,text,uuid,text,text)',
+    'private.weekly_source_pending_release_backoff_v1(integer)',
+    'private.weekly_source_pending_release_census_signature_v1(jsonb)',
+    'private.weekly_source_pending_release_lock_and_census_v1(uuid,uuid[],text[],integer[],uuid)',
+    'private.weekly_source_pending_release_manual_review_v1(uuid,text,jsonb)',
+    'private.weekly_source_pending_release_record_review_items_v1(uuid,bigint,text,jsonb,jsonb)',
+    'private.weekly_source_pending_release_refuse_v1(uuid,text,jsonb,jsonb,text)',
+    'private.weekly_source_pending_release_review_item_immutable_v1()',
+    'private.weekly_source_pending_release_review_items_page_v1(uuid,bigint,integer,integer)',
+    'private.weekly_source_pending_release_review_reason_v1(text,text,jsonb,integer)',
+    'private.weekly_source_pending_release_superseded_v1(uuid,text,jsonb)',
+    'private.weekly_source_pending_release_technical_failure_v1(uuid,text,jsonb,jsonb)',
+    'private.weekly_source_pending_release_transient_v1(text,jsonb,text)',
+    'private.weekly_source_pending_release_watch_page_v1(text,uuid,integer)',
+    'private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)',
+    'private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(jsonb,jsonb)',
+    'private.weekly_source_post_verified_evidence_record_v1(uuid,jsonb)',
+    'private.weekly_source_post_verified_partial_artifact_assert_v1(jsonb,jsonb)',
+    'private.weekly_source_post_verified_setup_artifact_assert_v1(jsonb,jsonb)',
+    'private.weekly_source_projection_comparison_manifest_hash_v1(uuid)',
+    'private.weekly_source_projection_comparison_manifest_v1(uuid)',
+    'private.weekly_source_projection_hex32_v1(text,text)',
+    'private.weekly_source_projection_issue_set_hash_v1(uuid)',
+    'private.weekly_source_projection_issue_set_v1(uuid)',
+    'private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])',
+    'private.weekly_source_protected_activation_probe_assert_v1(uuid,uuid,uuid,date,date,uuid)',
+    'private.weekly_source_protected_activation_probe_authorization_assert_v1(jsonb,uuid,date,date,text)',
+    'private.weekly_source_protected_activation_probe_begin_v1(jsonb)',
+    'private.weekly_source_protected_activation_probe_execute_v1(uuid,jsonb)',
+    'private.weekly_source_protected_capability_receipt_v1(uuid)',
+    'private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)',
+    'private.weekly_source_protected_component_event_v1(jsonb)',
+    'private.weekly_source_protected_component_manifest_v1(jsonb,jsonb)',
+    'private.weekly_source_protected_contact_retire_v1(uuid,uuid)',
+    'private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)',
+    'private.weekly_source_protected_family_lock_v1(uuid)',
+    'private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)',
+    'private.weekly_source_protected_group_lock_v1(uuid)',
+    'private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)',
+    'private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)',
+    'private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)',
+    'private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)',
+    'private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)',
+    'private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)',
+    'private.weekly_source_protected_qualification_begin_v1(jsonb)',
+    'private.weekly_source_protected_qualification_census_v1(uuid)',
+    'private.weekly_source_protected_qualification_current_catalogue_v1()',
+    'private.weekly_source_protected_qualification_owner_v1()',
+    'private.weekly_source_protected_qualification_release_v1()',
+    'private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)',
+    'private.weekly_source_protected_query_rows_v1(uuid,uuid,boolean)',
+    'private.weekly_source_protected_saved_prepare_route_v1(jsonb,text,text)',
+    'private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)',
+    'private.weekly_source_protected_test_authorization_v1(uuid)',
+    'private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)',
+    'private.weekly_source_protected_test_setup_atomic_v1(jsonb)',
+    'private.weekly_source_protected_wait_receipt_v1(uuid,uuid)',
+    'private.weekly_source_protected_wait_witness_v1(uuid,uuid)',
+    'private.weekly_source_publication_before_inventory_v1(jsonb,integer)',
+    'private.weekly_source_publication_comparison_record_v1(uuid,uuid,text,text)',
+    'private.weekly_source_publication_component_canonical_v1(jsonb,text)',
+    'private.weekly_source_publication_component_content_v1(jsonb)',
+    'private.weekly_source_publication_receipt_json_v1(uuid)',
+    'private.weekly_source_publication_request_canonical_v1(jsonb,text,uuid)',
+    'private.weekly_source_publication_request_digest_v1(jsonb)',
+    'private.weekly_source_publication_require_keys_v1(jsonb,text[],text)',
+    'private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)',
+    'private.weekly_source_publication_signed_family_fence_v1(uuid,jsonb)',
+    'private.weekly_source_publication_signed_roots_v1(uuid)',
+    'private.weekly_source_publication_target_root_blank_v1(uuid,text)',
+    'private.weekly_source_qualification_closed_object_v1(jsonb,text[])',
+    'private.weekly_source_query_ascii_fold_v1(text)',
+    'private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamp with time zone)',
+    'private.weekly_source_query_candidate_intent_v1(uuid,text,integer,timestamp with time zone)',
+    'private.weekly_source_query_candidate_timesheet_hash_v1(uuid)',
+    'private.weekly_source_query_cohort_ensure_v1(uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_query_comparison_fingerprint_v1(uuid,integer,uuid,jsonb)',
+    'private.weekly_source_query_current_publication_v1(uuid,uuid)',
+    'private.weekly_source_query_hex32_v1(text,text)',
+    'private.weekly_source_query_incident_policy_v1(uuid)',
+    'private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)',
+    'private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamp with time zone)',
+    'private.weekly_source_query_manager_row_owned_v1(uuid,uuid,integer)',
+    'private.weekly_source_query_normalise_recipient_v1(text)',
+    'private.weekly_source_query_notice_fanout_v1(uuid,uuid,text,jsonb)',
+    'private.weekly_source_query_require_service_v1()',
+    'private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_query_response_fingerprint_v1(uuid,uuid,uuid,integer,uuid,bytea)',
+    'private.weekly_source_query_restart_activated_cohort_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_rebill_movement_insert_v1(uuid,uuid)',
+    'private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)',
+    'private.weekly_source_report_fin_dispatch_v1(jsonb)',
+    'private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)',
+    'private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)',
+    'private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)',
+    'private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)',
+    'private.weekly_source_report_fin_strategy_v1(uuid)',
+    'private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts)',
+    'private.weekly_source_report_shift_facts_v1(uuid,uuid)',
+    'private.weekly_source_report_shift_facts_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_resolve_root_identity_v1(uuid)',
+    'private.weekly_source_retain_approved_additional_v2(uuid,jsonb)',
+    'private.weekly_source_root_agency_id_v1(uuid[])',
+    'private.weekly_source_root_authorisation_identity_v1()',
+    'private.weekly_source_root_authorisation_signature_v1(uuid,uuid,text,integer,integer,text,text[])',
+    'private.weekly_source_root_authorisation_state_v1(uuid,uuid[])',
+    'private.weekly_source_root_authorisation_withdrawal_once_v1()',
+    'private.weekly_source_root_integrity_assert_v1(uuid,text,integer)',
+    'private.weekly_source_root_protected_decision_hashes_v1(uuid[])',
+    'private.weekly_source_rule_coverage_floor_v1(uuid,uuid)',
+    'private.weekly_source_rule_qualification_authorization_v1(uuid,uuid,text)',
+    'private.weekly_source_rule_qualification_context_v1(uuid,uuid)',
+    'private.weekly_source_rule_qualification_execute_v1(jsonb)',
+    'private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)',
+    'private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)',
+    'private.weekly_source_rule_qualification_status_v1(jsonb)',
+    'private.weekly_source_rule_qualification_transport_status_v1(jsonb)',
+    'private.weekly_source_rule_report_fixture_bind_v1(jsonb)',
+    'private.weekly_source_rule_report_fixture_finalise_v1(jsonb,jsonb)',
+    'private.weekly_source_schedule_compatible_v1(jsonb,date)',
+    'private.weekly_source_scope_fingerprint_v1(text,uuid,uuid,uuid,uuid,uuid)',
+    'private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)',
+    'private.weekly_source_self_bill_binding_guard_v1()',
+    'private.weekly_source_self_bill_report_bind_v1(uuid)',
+    'private.weekly_source_self_bill_report_duplicate_hold_v1(uuid)',
+    'private.weekly_source_self_bill_report_duplicate_prior_v1(uuid)',
+    'private.weekly_source_self_bill_report_finalise_v1(jsonb,text)',
+    'private.weekly_source_self_bill_report_manifest_v1(jsonb)',
+    'private.weekly_source_self_bill_report_movement_insert_v1(uuid,uuid)',
+    'private.weekly_source_self_bill_report_pay_authority_v1(uuid)',
+    'private.weekly_source_self_bill_report_pay_witness_v1(uuid)',
+    'private.weekly_source_self_bill_report_prior_binding_v1(uuid)',
+    'private.weekly_source_self_bill_report_projection_rows_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_self_bill_report_row_dto_v1(jsonb)',
+    'private.weekly_source_self_bill_report_row_hash_v1(jsonb)',
+    'private.weekly_source_self_bill_report_rules_assert_v1(uuid,uuid)',
+    'private.weekly_source_self_bill_report_seal_assert_v1(uuid)',
+    'private.weekly_source_self_bill_report_stored_rows_v1(uuid)',
+    'private.weekly_source_self_bill_report_workspace_v1(jsonb)',
+    'private.weekly_source_settlement_allocation_v1(uuid)',
+    'private.weekly_source_settlement_bounds_v1()',
+    'private.weekly_source_settlement_position_gate_v1(jsonb)',
+    'private.weekly_source_settlement_position_unit_v1()',
+    'private.weekly_source_settlement_reason_class_v1(text)',
+    'private.weekly_source_settlement_snapshot_shifts_v1(jsonb)',
+    'private.weekly_source_sha256_jsonb_v1(text,jsonb)',
+    'private.weekly_source_sha256_text_v1(text,text)',
+    'private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)',
+    'private.weekly_source_shift_on_self_bill_v1(uuid,uuid)',
+    'private.weekly_source_signed_check_only_v1(uuid)',
+    'private.weekly_source_signed_submission_read_context_v1(uuid,uuid)',
+    'private.weekly_source_snapshot_authority_subset_v1(uuid)',
+    'private.weekly_source_snapshot_value_fingerprint_v1(uuid,jsonb)',
+    'private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()',
+    'private.weekly_source_source_amount_warnings_v1(uuid,uuid)',
+    'private.weekly_source_staged_entitlement_components_v1(uuid,uuid)',
+    'private.weekly_source_staged_prior_wait_receipt_v1(uuid,uuid)',
+    'private.weekly_source_staged_publication_context_v1(uuid,uuid)',
+    'private.weekly_source_staged_source_documents_v1(uuid)',
+    'private.weekly_source_submission_request_start_v1(jsonb,boolean)',
+    'private.weekly_source_target_family_for_root_v1(uuid)',
+    'private.weekly_source_target_family_root_identity_v1()',
+    'private.weekly_source_timesheet_category_v2(uuid)',
+    'private.weekly_source_timesheet_lineage_assert_v1(uuid)',
+    'private.weekly_source_unprotected_not_finalised_close_v1(uuid,uuid)',
+    'private.weekly_source_upload_attempt_append_v1(uuid,uuid,text,text)',
+    'private.weekly_source_upload_client_eligible_v1(uuid,uuid,date)',
+    'private.weekly_source_upload_coverage_context_v1(uuid,uuid)',
+    'private.weekly_source_upload_coverage_floor_assert_v1(uuid,uuid,text,date)',
+    'private.weekly_source_upload_manifest_hash_v1(uuid)',
+    'private.weekly_source_upload_manifest_v1(uuid)',
+    'private.weekly_source_upload_seal_core_v1(uuid,uuid)',
+    'private.weekly_source_uuid_array_is_distinct_v1(uuid[])',
+    'private.weekly_source_uuid_set_difference_v1(uuid[],uuid[])',
+    'private.weekly_source_uuid_set_equals_v1(uuid[],uuid[])',
+    'private.weekly_source_uuid_set_intersect_v1(uuid[],uuid[])',
+    'private.weekly_source_uuid_set_union_v1(uuid[],uuid[])',
+    'private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)',
+    'private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_verified_role_band_match_v1(text,text,uuid,uuid,uuid,text,date)',
+    'private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date)',
+    'private.weekly_source_withdrawal_canonical_request_v1(uuid,uuid,uuid,uuid,text,integer,uuid,uuid,uuid,integer,text,uuid,bigint)',
+    'private.weekly_source_withdrawal_receipt_immutable_v1()',
+    'private.weekly_source_withdrawal_transfer_scope_v1(uuid,uuid[])',
+    'private.weekly_source_withdrawal_uuid_array_v1(jsonb)',
+    'private.weekly_source_work_event_schedule_compatible_v1(uuid,timestamp without time zone,timestamp without time zone)',
+    'private.weekly_source_workbench_inventory_install_page_v1()',
+    'private.weekly_source_workbench_inventory_seed_page_v1(uuid)',
+    'private.weekly_source_workbench_inventory_track_v1()'
+  ];
+  v_expected_service_rpcs text[]:=array[
+    'private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)',
+    'private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)',
+    'private.weekly_source_invoice_batch_snapshot_v1()',
+    'private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)',
+    'private.weekly_source_managed_root_guard_decision_v1(uuid)',
+    'private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)',
+    'private.weekly_source_pay_actor_allowed_v1(uuid)',
+    'private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)',
+    'public.timesheet_correction_credit_candidates_v1(jsonb)',
+    'public.weekly_exceptional_pay_action_context_v1(jsonb)',
+    'public.weekly_exceptional_pay_action_publication_status_v1(jsonb)',
+    'public.weekly_exceptional_pay_complete_c1_publication_v1(jsonb)',
+    'public.weekly_exceptional_pay_complete_local_v1(jsonb)',
+    'public.weekly_exceptional_pay_next_publication_status_v1(jsonb)',
+    'public.weekly_exceptional_pay_prepare_action_v1(jsonb)',
+    'public.weekly_exceptional_pay_prepare_family_v1(jsonb)',
+    'public.weekly_exceptional_pay_publish_next_v1(jsonb)',
+    'public.weekly_exceptional_pay_read_c1_request_v1(jsonb)',
+    'public.weekly_exceptional_pay_record_c1_checkpoint_v1(jsonb)',
+    'public.weekly_exceptional_pay_record_c1_recovery_v1(jsonb)',
+    'public.weekly_exceptional_pay_record_c1_unknown_v1(jsonb)',
+    'public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)',
+    'public.weekly_exceptional_pay_wait_atomic_v1(jsonb)',
+    'public.weekly_source_audit_guard_refusal_record_v1(jsonb)',
+    'public.weekly_source_automatic_reconcile_atomic_v1(jsonb)',
+    'public.weekly_source_candidate_app_draft_save_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)',
+    'public.weekly_source_candidate_app_request_get_v1(uuid,text,uuid,timestamp with time zone)',
+    'public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)',
+    'public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)',
+    'public.weekly_source_candidate_hours_evidence_v1(jsonb)',
+    'public.weekly_source_candidate_hours_push_v1(jsonb)',
+    'public.weekly_source_candidate_query_get_v1(jsonb)',
+    'public.weekly_source_candidate_reminder_atomic_v1(jsonb)',
+    'public.weekly_source_candidate_response_submit_atomic_v1(jsonb)',
+    'public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamp with time zone)',
+    'public.weekly_source_charge_accept_atomic_v1(jsonb)',
+    'public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)',
+    'public.weekly_source_checklist_historical_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_checklist_submission_manifest_v1(jsonb)',
+    'public.weekly_source_checklist_v1(jsonb)',
+    'public.weekly_source_client_cycle_resolve_atomic_v1(jsonb)',
+    'public.weekly_source_client_settings_get_v1(jsonb)',
+    'public.weekly_source_client_settings_save_atomic_v1(jsonb)',
+    'public.weekly_source_combined_finalise_workspace_v1(jsonb)',
+    'public.weekly_source_combined_review_workspace_v1(jsonb)',
+    'public.weekly_source_completed_pack_copy_commit_atomic_v1(jsonb)',
+    'public.weekly_source_completed_pack_copy_due_list_v1(jsonb)',
+    'public.weekly_source_completed_pack_copy_status_sync_v1(jsonb)',
+    'public.weekly_source_contract_settings_get_v1(jsonb)',
+    'public.weekly_source_contract_settings_save_atomic_v1(jsonb)',
+    'public.weekly_source_correct_final_apply_atomic_v1(jsonb)',
+    'public.weekly_source_correct_final_cancel_atomic_v1(jsonb)',
+    'public.weekly_source_correct_final_open_atomic_v1(jsonb)',
+    'public.weekly_source_correct_final_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_correct_final_review_atomic_v1(jsonb)',
+    'public.weekly_source_external_publication_arrival_v1(jsonb)',
+    'public.weekly_source_external_publication_pending_inputs_v1(jsonb)',
+    'public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)',
+    'public.weekly_source_finalisation_pay_task_finish_atomic_v1(jsonb)',
+    'public.weekly_source_finalisation_pay_task_recover_atomic_v1(jsonb)',
+    'public.weekly_source_finalisation_pay_task_start_atomic_v1(jsonb)',
+    'public.weekly_source_finalisation_pay_task_unknown_atomic_v1(jsonb)',
+    'public.weekly_source_finalise_atomic_v1(jsonb)',
+    'public.weekly_source_first_authorisation_withdraw_available_v1(uuid)',
+    'public.weekly_source_first_authorisation_withdraw_request_v1(jsonb)',
+    'public.weekly_source_first_authorisation_withdraw_v1(uuid,uuid,text,uuid)',
+    'public.weekly_source_first_authorise_v1(uuid,uuid,text,uuid)',
+    'public.weekly_source_global_settings_get_v1(jsonb)',
+    'public.weekly_source_global_settings_save_atomic_v1(jsonb)',
+    'public.weekly_source_group_rule_assign_atomic_v1(jsonb)',
+    'public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)',
+    'public.weekly_source_guard_refusal_record_after_rollback_v1(jsonb)',
+    'public.weekly_source_import_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_invoice_admit_atomic_v1(jsonb)',
+    'public.weekly_source_invoice_batch_admit_atomic_v1(jsonb)',
+    'public.weekly_source_invoice_batch_candidates_v1(jsonb)',
+    'public.weekly_source_invoice_edit_context_v1(jsonb)',
+    'public.weekly_source_invoice_evidence_v1(jsonb)',
+    'public.weekly_source_invoice_hold_release_atomic_v1(jsonb)',
+    'public.weekly_source_invoice_move_atomic_v1(jsonb)',
+    'public.weekly_source_invoice_report_rows_v1(jsonb)',
+    'public.weekly_source_later_change_decide_atomic_v1(jsonb)',
+    'public.weekly_source_manager_review_get_v1(jsonb)',
+    'public.weekly_source_manager_review_respond_atomic_v1(jsonb)',
+    'public.weekly_source_manager_route_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_manual_review_open_v1(jsonb)',
+    'public.weekly_source_manual_review_resolve_v1(jsonb)',
+    'public.weekly_source_message_dispatch_claim_v1(jsonb)',
+    'public.weekly_source_message_dispatch_result_atomic_v1(jsonb)',
+    'public.weekly_source_message_dispatch_snapshot_failure_atomic_v1(jsonb)',
+    'public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)',
+    'public.weekly_source_message_dispatch_target_claim_v1(jsonb)',
+    'public.weekly_source_message_dispatch_target_result_atomic_v1(jsonb)',
+    'public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)',
+    'public.weekly_source_message_render_due_list_v1(jsonb)',
+    'public.weekly_source_message_render_input_v1(jsonb)',
+    'public.weekly_source_message_render_stage_atomic_v1(jsonb)',
+    'public.weekly_source_message_targets_register_atomic_v1(jsonb)',
+    'public.weekly_source_mode_a_dispatch_atomic_v1(jsonb)',
+    'public.weekly_source_mode_a_reference_apply_atomic_v1(jsonb)',
+    'public.weekly_source_nhsp_report_scope_resolve_atomic_v1(jsonb)',
+    'public.weekly_source_no_shifts_attest_atomic_v1(jsonb)',
+    'public.weekly_source_office_authorise_scope_v1(jsonb)',
+    'public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)',
+    'public.weekly_source_office_notification_ack_atomic_v1(jsonb)',
+    'public.weekly_source_office_notifications_list_v1(jsonb)',
+    'public.weekly_source_office_recheck_begin_v1(jsonb)',
+    'public.weekly_source_office_summary_rows_v1(jsonb)',
+    'public.weekly_source_office_timesheet_presentation_v1(jsonb)',
+    'public.weekly_source_office_workspace_v1(jsonb)',
+    'public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)',
+    'public.weekly_source_pending_entitlement_bundle_reopen_v1(uuid,text,uuid)',
+    'public.weekly_source_pending_entitlement_release_apply_v1(jsonb)',
+    'public.weekly_source_pending_entitlement_release_claim_page_v1(jsonb)',
+    'public.weekly_source_pending_entitlement_release_record_failure_v1(jsonb)',
+    'public.weekly_source_projection_begin_atomic_v1(jsonb)',
+    'public.weekly_source_projection_publish_atomic_v1(jsonb)',
+    'public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)',
+    'public.weekly_source_protect_all_signed_atomic_v1(jsonb)',
+    'public.weekly_source_protected_editor_context_v1(jsonb)',
+    'public.weekly_source_protected_editor_prepare_v1(jsonb)',
+    'public.weekly_source_query_accept_system_hours_atomic_v1(jsonb)',
+    'public.weekly_source_query_ask_candidate_atomic_v1(jsonb)',
+    'public.weekly_source_query_scheduler_tick_v1(jsonb)',
+    'public.weekly_source_query_send_manager_now_atomic_v1(jsonb)',
+    'public.weekly_source_query_sync_atomic_v1(jsonb)',
+    'public.weekly_source_report_history_v1(jsonb)',
+    'public.weekly_source_rule_set_version_save_atomic_v1(jsonb)',
+    'public.weekly_source_rule_sets_get_v1(jsonb)',
+    'public.weekly_source_self_bill_report_scope_resolve_atomic_v1(jsonb)',
+    'public.weekly_source_source_group_save_atomic_v1(jsonb)',
+    'public.weekly_source_source_groups_get_v1(jsonb)',
+    'public.weekly_source_submitted_timesheet_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_target_managed_root_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_timesheet_audit_chronology_v1(jsonb)',
+    'public.weekly_source_timesheet_hours_export_v1(jsonb)',
+    'public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)',
+    'public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)',
+    'public.weekly_source_timesheet_submission_request_start_atomic_v1(jsonb)',
+    'public.weekly_source_upload_abort_atomic_v1(jsonb)',
+    'public.weekly_source_upload_attempt_record_atomic_v1(jsonb)',
+    'public.weekly_source_upload_context_v1(jsonb)',
+    'public.weekly_source_upload_detail_v1(jsonb)',
+    'public.weekly_source_upload_seal_atomic_v1(jsonb)',
+    'public.weekly_source_upload_stage_begin_atomic_v1(jsonb)',
+    'public.weekly_source_upload_stage_rows_atomic_v1(jsonb)',
+    'public.weekly_source_workspace_scopes_v1(jsonb)'
+  ];
+begin
+  select oid into v_service_role_oid
+  from pg_catalog.pg_roles
+  where rolname='service_role';
+  if v_service_role_oid is null
+     or not exists(select 1 from pg_catalog.pg_roles where rolname='anon')
+     or not exists(select 1 from pg_catalog.pg_roles where rolname='authenticated') then
+    raise exception 'weekly source ACL verification requires anon, authenticated and service_role';
+  end if;
+
+  if pg_catalog.to_regprocedure('private._weekly_source_acl_table_contract_v1()') is null
+     or pg_catalog.to_regprocedure('private._weekly_source_acl_lifecycle_column_contract_v1()') is null
+     or pg_catalog.to_regprocedure('private._weekly_source_acl_private_helper_contract_v1()') is null
+     or pg_catalog.to_regprocedure('private._weekly_source_acl_service_rpc_contract_v1()') is null
+     or pg_catalog.to_regprocedure('private._weekly_source_immutable_record_guard_v1()') is null
+     or pg_catalog.to_regprocedure('private._weekly_source_immutable_fact_guard_v1()') is null then
+    raise exception 'weekly source ACL contract helper is missing';
+  end if;
+
+  select count(*),count(distinct table_name),
+         count(*) filter(where record_class='IMMUTABLE_APPEND_ONLY'),
+         count(*) filter(where record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'),
+         count(*) filter(where record_class='STATEFUL_SERVER_OWNED')
+    into v_contract_count,v_distinct_contract_count,v_immutable_count,v_lifecycle_count,v_stateful_count
+  from private._weekly_source_acl_table_contract_v1();
+  -- Plan 6.2 Gate 1 adds four relations (decision bundles, heads, head
+  -- components, pending bundles) and moves two existing relations from
+  -- IMMUTABLE_APPEND_ONLY to IMMUTABLE_FACTS_WITH_LIFECYCLE
+  -- (weekly_source_row_timesheet_lineages per proof/34 section 4,
+  -- weekly_exceptional_payment_approvals per proof/36 section 5 step 7).
+  -- Gate 5 then classifies weekly_source_pending_entitlement_bundles as
+  -- IMMUTABLE_FACTS_WITH_LIFECYCLE rather than STATEFUL_SERVER_OWNED: the
+  -- stored request, digest and member identity are frozen, and only the lease,
+  -- backoff clock, failure counter, census blob and release marks of
+  -- proof/32 sections 2 and 10 may move.
+  -- Decision D8 adds weekly_source_root_authorisations and returns
+  -- weekly_source_row_timesheet_lineages to IMMUTABLE_APPEND_ONLY because the
+  -- authorisation record and its movable columns left it.  The later approved
+  -- source-rate-disparity journey adds weekly_source_charge_acceptances as an
+  -- immutable append-only ledger.  Stage 5 / PHD-017 does not add a new table:
+  -- it uses the pre-existing weekly_completed_pack_copy_events relation and
+  -- classifies its provider_command_id/state pair as the only mutable delivery
+  -- lifecycle on that otherwise frozen record.  The exact final independent
+  -- sets below are therefore 36 immutable, 19 lifecycle and 44 stateful tables
+  -- (99 total).  Lifecycle columns remain 67: 64 - 3 + 4 = 65 for the Gate 1
+  -- movement, then +2 for the head supersession reason and predecessor link of
+  -- HANDOVER 2 round-5 ruling A3 step 3 (package WP-07c), with the completed-
+  -- pack pair already represented in the sealed set.
+  if v_contract_count<>105
+     or v_distinct_contract_count<>105
+     or v_immutable_count<>39
+     or v_lifecycle_count<>19
+     or v_stateful_count<>47 then
+    raise exception 'weekly source table contract count mismatch: total %, distinct %, immutable %, lifecycle %, stateful %',
+      v_contract_count,v_distinct_contract_count,v_immutable_count,v_lifecycle_count,v_stateful_count;
+  end if;
+
+  if exists(
+    select expected_name
+    from pg_catalog.unnest(v_expected_immutable) expected_name
+    where not exists(
+      select 1
+      from private._weekly_source_acl_table_contract_v1() actual
+      where actual.table_name=expected_name
+        and actual.record_class='IMMUTABLE_APPEND_ONLY'
+    )
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_table_contract_v1() actual
+    where actual.record_class='IMMUTABLE_APPEND_ONLY'
+      and actual.table_name<>all(v_expected_immutable)
+  ) then
+    raise exception 'weekly source immutable table contract differs from the independent expected set';
+  end if;
+
+  if exists(
+    select expected_name
+    from pg_catalog.unnest(v_expected_stateful) expected_name
+    where not exists(
+      select 1
+      from private._weekly_source_acl_table_contract_v1() actual
+      where actual.table_name=expected_name
+        and actual.record_class='STATEFUL_SERVER_OWNED'
+    )
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_table_contract_v1() actual
+    where actual.record_class='STATEFUL_SERVER_OWNED'
+      and actual.table_name<>all(v_expected_stateful)
+  ) then
+    raise exception 'weekly source stateful table contract differs from the independent expected set';
+  end if;
+
+  select count(*) into v_lifecycle_column_count
+  from private._weekly_source_acl_lifecycle_column_contract_v1();
+  if v_lifecycle_column_count<>67
+     or (
+       select count(distinct (table_name,column_name))
+       from private._weekly_source_acl_lifecycle_column_contract_v1()
+     )<>67
+     or exists(
+       select 1
+       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+       left join private._weekly_source_acl_table_contract_v1() expected
+         on expected.table_name=allowed.table_name
+       where expected.record_class is distinct from 'IMMUTABLE_FACTS_WITH_LIFECYCLE'
+     )
+     or exists(
+       select 1
+       from private._weekly_source_acl_table_contract_v1() expected
+       where expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'
+         and not exists(
+           select 1
+           from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+           where allowed.table_name=expected.table_name
+         )
+     )
+     or exists(
+       select 1
+       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+       left join pg_catalog.pg_attribute a
+         on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))
+        and a.attname=allowed.column_name
+        and a.attnum>0
+        and not a.attisdropped
+       where a.attrelid is null
+     )
+     or exists(
+       select 1
+       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+       group by allowed.table_name
+       having pg_catalog.min(allowed.column_ordinal)<>1
+          or pg_catalog.max(allowed.column_ordinal)<>count(*)
+          or count(distinct allowed.column_ordinal)<>count(*)
+     ) then
+    raise exception 'weekly source lifecycle-column contract is malformed';
+  end if;
+
+
+  if exists(
+    select expected_key
+    from pg_catalog.unnest(v_expected_lifecycle_columns) expected_key
+    where not exists(
+      select 1
+      from private._weekly_source_acl_lifecycle_column_contract_v1() actual
+      where actual.table_name||'.'||actual.column_name=expected_key
+    )
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_lifecycle_column_contract_v1() actual
+    where actual.table_name||'.'||actual.column_name<>all(v_expected_lifecycle_columns)
+  ) then
+    raise exception 'weekly source lifecycle-column contract differs from the independent expected set';
+  end if;
+
+  select pg_catalog.string_agg(expected.table_name,',' order by expected.table_name)
+    into v_names
+  from private._weekly_source_acl_table_contract_v1() expected
+  where pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name)) is null;
+  if v_names is not null then
+    raise exception 'weekly source contracted table(s) missing: %',v_names;
+  end if;
+
+  select pg_catalog.string_agg(c.relname,',' order by c.relname)
+    into v_names
+  from pg_catalog.pg_class c
+  join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public'
+    and c.relkind in ('r','p')
+    and (
+      pg_catalog.left(c.relname,7)='weekly_'
+      or c.relname='office_action_notifications'
+    )
+    and not exists(
+      select 1
+      from private._weekly_source_acl_table_contract_v1() expected
+      where expected.table_name=c.relname
+    );
+  if v_names is not null then
+    raise exception 'unclassified weekly source table(s): %',v_names;
+  end if;
+
+  -- The role policy is deliberately separate from relation privileges. Miget's
+  -- service role needs the canonical policy for SECURITY DEFINER RPCs, while
+  -- the absence of every direct table privilege keeps the table surface shut.
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  where not c.relrowsecurity
+     or not c.relforcerowsecurity
+     or c.relowner<>(current_user::pg_catalog.regrole)::oid
+     or exists(
+       select 1
+       from pg_catalog.aclexplode(
+         coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))
+       ) acl
+       where acl.grantee<>c.relowner
+     )
+     or exists(
+       select 1
+       from pg_catalog.pg_attribute a
+       cross join lateral pg_catalog.aclexplode(a.attacl) acl
+       where a.attrelid=c.oid
+         and a.attnum>0
+         and not a.attisdropped
+         and acl.grantee<>c.relowner
+     )
+     or exists(
+       select 1
+       from pg_catalog.pg_roles r
+       cross join (values
+         ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
+         ('TRUNCATE'),('REFERENCES'),('TRIGGER')
+       ) privilege(privilege_name)
+       where r.rolname in ('anon','authenticated','service_role')
+         and pg_catalog.has_table_privilege(
+           r.oid,c.oid,privilege.privilege_name
+         )
+     );
+  if v_bad<>0 then
+    raise exception 'weekly source RLS/owner/direct-table ACL verification failed for % table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  where (
+    select count(*)
+    from pg_catalog.pg_policy p
+    where p.polrelid=c.oid
+  )<>1
+  or not exists(
+    select 1
+    from pg_catalog.pg_policy p
+    where p.polrelid=c.oid
+      and p.polname='cloudtms_miget_service_owner_all'
+      and p.polcmd='*'
+      and p.polpermissive
+      and p.polroles @> array[c.relowner,v_service_role_oid]::oid[]
+      and not exists(
+        select 1
+        from pg_catalog.unnest(p.polroles) role_oid
+        where role_oid<>c.relowner
+          and role_oid<>v_service_role_oid
+      )
+      and pg_catalog.pg_get_expr(p.polqual,p.polrelid)='true'
+      and pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid)='true'
+  );
+  if v_bad<>0 then
+    raise exception 'weekly source canonical Miget policy verification failed for % table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  where expected.record_class='IMMUTABLE_APPEND_ONLY'
+    and (
+      select count(*)
+      from pg_catalog.pg_trigger t
+      where t.tgrelid=c.oid
+        and t.tgname='weekly_source_immutable_record_guard'
+        and not t.tgisinternal
+        and t.tgenabled='O'
+        and t.tgfoid='private._weekly_source_immutable_record_guard_v1()'::pg_catalog.regprocedure
+        and t.tgtype::integer=27
+    )<>1;
+  if v_bad<>0 then
+    raise exception 'immutable guard missing or malformed for % table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  where expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'
+    and (
+      select count(*)
+      from pg_catalog.pg_trigger t
+      where t.tgrelid=c.oid
+        and t.tgname='weekly_source_immutable_fact_guard'
+        and not t.tgisinternal
+        and t.tgenabled='O'
+        and t.tgfoid='private._weekly_source_immutable_fact_guard_v1()'::pg_catalog.regprocedure
+        and t.tgtype::integer=27
+        and t.tgnargs=(
+          select count(*)
+          from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+          where allowed.table_name=expected.table_name
+        )
+        and pg_catalog.encode(t.tgargs,'escape')=(
+          select pg_catalog.string_agg(
+                   allowed.column_name||pg_catalog.chr(92)||'000',
+                   '' order by allowed.column_ordinal
+                 )
+          from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+          where allowed.table_name=expected.table_name
+        )
+    )<>1;
+  if v_bad<>0 then
+    raise exception 'immutable-fact lifecycle guard missing or malformed for % table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  where expected.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE')
+    and (
+      select count(*)
+      from pg_catalog.pg_trigger t
+      where t.tgrelid=c.oid
+        and t.tgname='weekly_source_immutable_truncate_guard'
+        and not t.tgisinternal
+        and t.tgenabled='O'
+        and t.tgfoid='private._weekly_source_immutable_record_guard_v1()'::pg_catalog.regprocedure
+        and t.tgtype::integer=34
+        and t.tgnargs=0
+    )<>1;
+  if v_bad<>0 then
+    raise exception 'immutable truncate guard missing or malformed for % table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  join pg_catalog.pg_trigger t on t.tgrelid=c.oid
+  where expected.record_class='STATEFUL_SERVER_OWNED'
+    and not t.tgisinternal
+    and (
+      t.tgname='weekly_source_immutable_record_guard'
+      or t.tgfoid='private._weekly_source_immutable_record_guard_v1()'::pg_catalog.regprocedure
+      or t.tgname='weekly_source_immutable_fact_guard'
+      or t.tgfoid='private._weekly_source_immutable_fact_guard_v1()'::pg_catalog.regprocedure
+      or t.tgname='weekly_source_immutable_truncate_guard'
+    );
+  if v_bad<>0 then
+    raise exception 'immutable guard incorrectly installed on % stateful table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from private._weekly_source_acl_table_contract_v1() expected
+  join pg_catalog.pg_class c
+    on c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',expected.table_name))
+  join pg_catalog.pg_trigger t on t.tgrelid=c.oid
+  where not t.tgisinternal
+    and (
+      (
+        expected.record_class='IMMUTABLE_APPEND_ONLY'
+        and t.tgtype::integer=27
+        and (
+          t.tgname='weekly_source_immutable_fact_guard'
+          or t.tgfoid='private._weekly_source_immutable_fact_guard_v1()'::pg_catalog.regprocedure
+        )
+      )
+      or (
+        expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'
+        and t.tgtype::integer=27
+        and (
+          t.tgname='weekly_source_immutable_record_guard'
+          or t.tgfoid='private._weekly_source_immutable_record_guard_v1()'::pg_catalog.regprocedure
+        )
+      )
+    );
+  if v_bad<>0 then
+    raise exception 'wrong immutable guard class installed on % table(s)',v_bad;
+  end if;
+
+  select count(*) into v_bad
+  from pg_catalog.pg_proc p
+  where p.oid='private._weekly_source_immutable_record_guard_v1()'::pg_catalog.regprocedure
+    and (
+      not p.prosecdef
+      or p.proowner<>(current_user::pg_catalog.regrole)::oid
+      or p.prorettype<>'pg_catalog.trigger'::pg_catalog.regtype
+      or not coalesce(p.proconfig,'{}'::text[]) @> array['search_path=pg_catalog, pg_temp']::text[]
+    );
+  if v_bad<>0 then
+    raise exception 'immutable guard function shape is unsafe';
+  end if;
+
+  select count(*) into v_bad
+  from pg_catalog.pg_proc p
+  where p.oid='private._weekly_source_immutable_fact_guard_v1()'::pg_catalog.regprocedure
+    and (
+      not p.prosecdef
+      or p.proowner<>(current_user::pg_catalog.regrole)::oid
+      or p.prorettype<>'pg_catalog.trigger'::pg_catalog.regtype
+      or not coalesce(p.proconfig,'{}'::text[]) @> array['search_path=pg_catalog, pg_temp']::text[]
+    );
+  if v_bad<>0 then
+    raise exception 'immutable-fact guard function shape is unsafe';
+  end if;
+
+  if pg_catalog.has_function_privilege('anon','private._weekly_source_immutable_record_guard_v1()','EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated','private._weekly_source_immutable_record_guard_v1()','EXECUTE')
+     or pg_catalog.has_function_privilege('service_role','private._weekly_source_immutable_record_guard_v1()','EXECUTE')
+     or pg_catalog.has_function_privilege('anon','private._weekly_source_immutable_fact_guard_v1()','EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated','private._weekly_source_immutable_fact_guard_v1()','EXECUTE')
+     or pg_catalog.has_function_privilege('service_role','private._weekly_source_immutable_fact_guard_v1()','EXECUTE') then
+    raise exception 'immutable guard is externally executable';
+  end if;
+
+  if exists(
+    select 1
+    from private._weekly_source_acl_service_rpc_contract_v1()
+    group by function_signature
+    having count(*)<>1
+  ) then
+    raise exception 'duplicate Weekly Source service RPC signature in ACL contract';
+  end if;
+
+  if (
+    select count(*)
+    from private._weekly_source_acl_service_rpc_contract_v1()
+  )<>pg_catalog.cardinality(v_expected_service_rpcs)
+  or exists(
+    select expected_signature
+    from pg_catalog.unnest(v_expected_service_rpcs) expected_signature
+    where not exists(
+      select 1
+      from private._weekly_source_acl_service_rpc_contract_v1() actual
+      where actual.function_signature=expected_signature
+    )
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_service_rpc_contract_v1() actual
+    where actual.function_signature<>all(v_expected_service_rpcs)
+  ) then
+    raise exception 'Weekly Source service RPC contract differs from the independent expected set';
+  end if;
+
+  -- The registered private-helper inventory must match the independent copy
+  -- above exactly, must be disjoint from the service RPC contract, and every
+  -- entry must be installed, owned by the release owner and withheld from
+  -- every browser and service role.
+  if exists(
+    select 1
+    from private._weekly_source_acl_private_helper_contract_v1()
+    group by function_signature
+    having count(*)<>1
+  ) then
+    raise exception 'duplicate Weekly Source private helper signature in ACL contract';
+  end if;
+
+  -- WP-56 (19 Sep 2026): count history for v_expected_private_helpers. WP-54's
+  -- repeatable (17092026_1500_weekly_source_row_admission_guards_v1.sql) added
+  -- two owner-only admission-guard helpers to the installed
+  -- private._weekly_source_acl_private_helper_contract_v1() at 23:39Z --
+  -- weekly_source_cutoff_admission_assert_v1(uuid,text,timestamp with time
+  -- zone) and weekly_source_overlap_admission_assert_v1(uuid) -- without this
+  -- verifier's independent expected copy being updated in the same edit (this
+  -- file was last touched at 20:48Z). A run against the resulting installed
+  -- state (48 registered helpers) with the pre-existing 46-entry expected copy
+  -- therefore failed "Weekly Source private helper contract differs from the
+  -- independent expected set", reported against build wp52_build4 in
+  -- WP-52_NHSP_ROW_ORDER_PAY.md section 8. Both routines were confirmed
+  -- installed, owned by the release owner and executable by no role (anon,
+  -- authenticated, service_role all denied) before this entry was trusted; the
+  -- repeatable was not the stale side. This verifier's expected copy is
+  -- therefore corrected here: 46 -> 48, adding exactly those two signatures
+  -- (see the "WP-54:" entries in v_expected_private_helpers above). Proved by
+  -- re-running this file standalone against codex-ws-plan62-pg1711: it now
+  -- passes (registered_private_helper_count=48) against a database built with
+  -- the two helpers installed, and a reverted 46-entry copy of this array was
+  -- proved to still fail the same way against that same database, and this
+  -- unmodified 48-entry copy was proved to still fail against an earlier build
+  -- that genuinely lacks both routines -- so the fix is additive, not a
+  -- weakening of the check.
+  if (
+    select count(*)
+    from private._weekly_source_acl_private_helper_contract_v1()
+  )<>pg_catalog.cardinality(v_expected_private_helpers)
+  or exists(
+    select expected_signature
+    from pg_catalog.unnest(v_expected_private_helpers) expected_signature
+    where not exists(
+      select 1
+      from private._weekly_source_acl_private_helper_contract_v1() actual
+      where actual.function_signature=expected_signature
+    )
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_private_helper_contract_v1() actual
+    where actual.function_signature<>all(v_expected_private_helpers)
+  ) then
+    raise exception 'Weekly Source private helper contract differs from the independent expected set';
+  end if;
+
+  select pg_catalog.string_agg(helper.function_signature,',' order by helper.function_signature)
+    into v_names
+  from private._weekly_source_acl_private_helper_contract_v1() helper
+  join private._weekly_source_acl_service_rpc_contract_v1() service
+    on service.function_signature=helper.function_signature;
+  if v_names is not null then
+    raise exception 'Weekly Source private helper listed as a service RPC: %',v_names;
+  end if;
+
+  select pg_catalog.string_agg(expected_signature,',' order by expected_signature)
+    into v_names
+  from pg_catalog.unnest(v_expected_private_helpers) expected_signature
+  where pg_catalog.to_regprocedure(expected_signature) is null;
+  if v_names is not null then
+    raise exception 'registered Weekly Source private helper missing: %',v_names;
+  end if;
+
+  select pg_catalog.string_agg(expected_signature,',' order by expected_signature)
+    into v_names
+  from pg_catalog.unnest(v_expected_private_helpers) expected_signature
+  cross join lateral (
+    select pg_catalog.to_regprocedure(expected_signature)::pg_catalog.oid as helper_oid
+  ) resolved
+  where (select p.proowner from pg_catalog.pg_proc p where p.oid=resolved.helper_oid)
+          <>(current_user::pg_catalog.regrole)::oid
+     or pg_catalog.has_function_privilege('anon',resolved.helper_oid,'EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated',resolved.helper_oid,'EXECUTE')
+     or pg_catalog.has_function_privilege('service_role',resolved.helper_oid,'EXECUTE')
+     or exists(
+       select 1
+       from pg_catalog.pg_proc p
+       cross join lateral pg_catalog.aclexplode(
+         coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))
+       ) acl
+       where p.oid=resolved.helper_oid
+         and acl.grantee<>p.proowner
+     );
+  if v_names is not null then
+    raise exception 'registered Weekly Source private helper is not owner-only: %',v_names;
+  end if;
+
+  -- Existing private weekly relations retain their native mutation/policy
+  -- contracts. Their literal source migrations deny every direct application
+  -- role; verify that access without inventing an RLS or lifecycle successor.
+  select pg_catalog.string_agg(expected_name,',' order by expected_name)
+    into v_names
+  from pg_catalog.unnest(v_expected_private_native_tables) expected_name
+  left join pg_catalog.pg_class relation
+    on relation.oid=pg_catalog.to_regclass(expected_name)
+  where relation.oid is null
+    or relation.relkind not in ('r','p')
+    or relation.relowner<>(current_user::pg_catalog.regrole)::oid
+    or exists(
+      select 1 from pg_catalog.aclexplode(
+        coalesce(relation.relacl,pg_catalog.acldefault('r',relation.relowner))
+      ) acl where acl.grantee<>relation.relowner
+    )
+    or exists(
+      select 1 from pg_catalog.pg_attribute attribute
+      cross join lateral pg_catalog.aclexplode(attribute.attacl) acl
+      where attribute.attrelid=relation.oid and attribute.attnum>0
+        and not attribute.attisdropped and acl.grantee<>relation.relowner
+    )
+    or pg_catalog.has_table_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+    or pg_catalog.has_table_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+    or pg_catalog.has_table_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+    or pg_catalog.has_any_column_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+    or pg_catalog.has_any_column_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+    or pg_catalog.has_any_column_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,REFERENCES');
+  if v_names is not null then
+    raise exception 'existing private Weekly Source table owner-only access changed: %',v_names;
+  end if;
+
+  -- Every Plan 6 routine is owner-only unless its exact OID appears in the
+  -- service allowlist. PUBLIC, anon and authenticated are always denied.
+  select count(*) into v_bad
+  from pg_catalog.pg_proc p
+  join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  cross join lateral (
+    select exists(
+      select 1
+      from private._weekly_source_acl_service_rpc_contract_v1() allowed
+      where pg_catalog.to_regprocedure(allowed.function_signature)=p.oid
+    ) as service_allowed
+  ) expected
+  where n.nspname in ('public','private')
+    and (
+      p.proname like 'weekly\_source\_%' escape '\'
+      or p.proname like '\_weekly\_source\_%' escape '\'
+      or p.proname like '\_ctms\_weekly\_source\_%' escape '\'
+      or p.proname like 'weekly\_exceptional\_%' escape '\'
+    )
+    and (
+      p.proowner<>(current_user::pg_catalog.regrole)::oid
+      or pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE')
+      or pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE')
+      or pg_catalog.has_function_privilege('service_role',p.oid,'EXECUTE')<>expected.service_allowed
+      or exists(
+        select 1
+        from pg_catalog.aclexplode(
+          coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))
+        ) acl
+        where acl.grantee<>p.proowner
+          and not (
+            expected.service_allowed
+            and acl.grantee=v_service_role_oid
+            and acl.privilege_type='EXECUTE'
+          )
+      )
+      or (expected.service_allowed and not p.prosecdef)
+      or (p.prosecdef and not exists(
+        select 1
+        from pg_catalog.unnest(coalesce(p.proconfig,'{}'::text[])) setting
+        where setting like 'search_path=%'
+      ))
+    );
+  if v_bad<>0 then
+    raise exception 'weekly source function ACL/owner/search-path verification failed for % routine(s)',v_bad;
+  end if;
+
+  select pg_catalog.string_agg(allowed.function_signature,',' order by allowed.function_signature)
+    into v_names
+  from private._weekly_source_acl_service_rpc_contract_v1() allowed
+  where pg_catalog.to_regprocedure(allowed.function_signature) is not null
+    and not pg_catalog.has_function_privilege(
+      'service_role',pg_catalog.to_regprocedure(allowed.function_signature),'EXECUTE'
+    );
+  if v_names is not null then
+    raise exception 'contracted service RPC grant missing: %',v_names;
+  end if;
+
+  -- Plan 6 must not rewrite the pre-existing Weekly import API. These five
+  -- legacy routines deliberately retain the exact grants they had before this
+  -- closure was installed.
+  if not pg_catalog.has_function_privilege(
+       'service_role','public.weekly_import_apply_phase2(uuid,text)','EXECUTE'
+     )
+     or not pg_catalog.has_function_privilege(
+       'authenticated','public.weekly_import_apply_phase2(uuid,text)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'anon','public.weekly_import_apply_phase2(uuid,text)','EXECUTE'
+     )
+     or not pg_catalog.has_function_privilege(
+       'service_role','public.weekly_import_phase2(uuid,text)','EXECUTE'
+     )
+     or not pg_catalog.has_function_privilege(
+       'authenticated','public.weekly_import_phase2(uuid,text)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'anon','public.weekly_import_phase2(uuid,text)','EXECUTE'
+     )
+     or not pg_catalog.has_function_privilege(
+       'service_role','public.weekly_import_changed_hours_phase3(uuid,text)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'authenticated','public.weekly_import_changed_hours_phase3(uuid,text)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'anon','public.weekly_import_changed_hours_phase3(uuid,text)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'service_role','public.weekly_import_apply_cancellations(uuid,jsonb,uuid)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'authenticated','public.weekly_import_apply_cancellations(uuid,jsonb,uuid)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'anon','public.weekly_import_apply_cancellations(uuid,jsonb,uuid)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'service_role','public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'authenticated','public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)','EXECUTE'
+     )
+     or pg_catalog.has_function_privilege(
+       'anon','public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)','EXECUTE'
+     ) then
+    raise exception 'legacy Weekly import routine grants changed';
+  end if;
+end;
+$verify_weekly_source_acl$;
+
+-- Exercise the two guard implementations, independently from the catalog
+-- shape checks above. Lifecycle-only updates must succeed; fact rewrites,
+-- UPDATE/DELETE on append-only rows and DELETE on lifecycle facts must fail.
+create temp table weekly_source_acl_lifecycle_probe(
+  immutable_fact text not null,
+  ordinary_source_entitlement_projection_state text not null
+);
+create trigger weekly_source_immutable_fact_guard
+before update or delete on weekly_source_acl_lifecycle_probe
+for each row execute function private._weekly_source_immutable_fact_guard_v1(
+  'ordinary_source_entitlement_projection_state'
+);
+insert into weekly_source_acl_lifecycle_probe values ('sealed','PENDING');
+update weekly_source_acl_lifecycle_probe
+set ordinary_source_entitlement_projection_state='PUBLISHED';
+do $lifecycle_fact_rewrite$
+begin
+  begin
+    update weekly_source_acl_lifecycle_probe set immutable_fact='changed';
+    raise exception 'LIFECYCLE_FACT_REWRITE_WAS_ACCEPTED';
+  exception when object_not_in_prerequisite_state then
+    if sqlerrm<>'WEEKLY_SOURCE_IMMUTABLE_FACT' then raise; end if;
+  end;
+  begin
+    delete from weekly_source_acl_lifecycle_probe;
+    raise exception 'LIFECYCLE_DELETE_WAS_ACCEPTED';
+  exception when object_not_in_prerequisite_state then
+    if sqlerrm<>'WEEKLY_SOURCE_IMMUTABLE_RECORD' then raise; end if;
+  end;
+end;
+$lifecycle_fact_rewrite$;
+
+create temp table weekly_source_acl_append_probe(immutable_fact text not null);
+create trigger weekly_source_immutable_record_guard
+before update or delete on weekly_source_acl_append_probe
+for each row execute function private._weekly_source_immutable_record_guard_v1();
+insert into weekly_source_acl_append_probe values ('sealed');
+do $append_only_rewrite$
+begin
+  begin
+    update weekly_source_acl_append_probe set immutable_fact='changed';
+    raise exception 'APPEND_ONLY_UPDATE_WAS_ACCEPTED';
+  exception when object_not_in_prerequisite_state then
+    if sqlerrm<>'WEEKLY_SOURCE_IMMUTABLE_RECORD' then raise; end if;
+  end;
+  begin
+    delete from weekly_source_acl_append_probe;
+    raise exception 'APPEND_ONLY_DELETE_WAS_ACCEPTED';
+  exception when object_not_in_prerequisite_state then
+    if sqlerrm<>'WEEKLY_SOURCE_IMMUTABLE_RECORD' then raise; end if;
+  end;
+end;
+$append_only_rewrite$;
+
+select pg_catalog.jsonb_build_object(
+  'ok',true,
+  'verification','weekly_source_acl_contract_v1',
+  'table_count',(select count(*) from private._weekly_source_acl_table_contract_v1()),
+  'immutable_table_count',(
+    select count(*)
+    from private._weekly_source_acl_table_contract_v1()
+    where record_class='IMMUTABLE_APPEND_ONLY'
+  ),
+  'immutable_facts_with_lifecycle_table_count',(
+    select count(*)
+    from private._weekly_source_acl_table_contract_v1()
+    where record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'
+  ),
+  'lifecycle_column_count',(
+    select count(*)
+    from private._weekly_source_acl_lifecycle_column_contract_v1()
+  ),
+  'stateful_server_owned_table_count',(
+    select count(*)
+    from private._weekly_source_acl_table_contract_v1()
+    where record_class='STATEFUL_SERVER_OWNED'
+  ),
+  'weekly_source_routine_count',(
+    select count(*)
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    where n.nspname in ('public','private')
+      and (
+        p.proname like 'weekly\_source\_%' escape '\'
+        or p.proname like '\_weekly\_source\_%' escape '\'
+        or p.proname like '\_ctms\_weekly\_source\_%' escape '\'
+        or p.proname like 'weekly\_exceptional\_%' escape '\'
+      )
+  ),
+  'present_service_rpc_count',(
+    select count(*)
+    from private._weekly_source_acl_service_rpc_contract_v1() allowed
+    where pg_catalog.to_regprocedure(allowed.function_signature) is not null
+  ),
+  'registered_private_helper_count',(
+    select count(*)
+    from private._weekly_source_acl_private_helper_contract_v1()
+  ),
+  'direct_table_roles',pg_catalog.jsonb_build_array('PUBLIC','anon','authenticated','service_role'),
+  'direct_table_access',false,
+  'browser_rpc_access',false
+) as result;
+
+rollback;

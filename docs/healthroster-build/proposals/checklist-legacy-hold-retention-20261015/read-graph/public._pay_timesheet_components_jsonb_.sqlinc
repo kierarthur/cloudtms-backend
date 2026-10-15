@@ -1,0 +1,220 @@
+CREATE OR REPLACE FUNCTION public._pay_timesheet_components(p_snapshot_json jsonb)
+RETURNS TABLE (
+  key_type text,
+  key_value text,
+  amount_ex_vat numeric,
+  amount_inc_vat numeric
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+with
+seg_raw as (
+  select
+    nullif(btrim(coalesce(seg->>'segment_id','')), '') as segment_id,
+    nullif(btrim(coalesce(seg->>'date','')), '') as seg_date_raw,
+    coalesce(nullif(seg->>'exclude_from_pay','')::boolean, false) as exclude_from_pay,
+    case
+      when coalesce(seg->>'pay_amount','') ~ '^-?\d+(\.\d+)?$' then (seg->>'pay_amount')::numeric
+      else 0::numeric
+    end as pay_amount_ex
+  from jsonb_array_elements(coalesce(p_snapshot_json->'segments','[]'::jsonb)) as seg
+  where seg is not null and jsonb_typeof(seg) = 'object'
+),
+seg_norm as (
+  select
+    case
+      when sr.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then 'TS_DAY'
+      else 'TS_TOTAL'
+    end as key_type,
+    case
+      when sr.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sr.seg_date_raw
+      else 'TOTAL'
+    end as key_value,
+    round(
+      sum(
+        case
+          when sr.exclude_from_pay then 0::numeric
+          else coalesce(sr.pay_amount_ex,0)
+        end
+      ),
+      2
+    ) as amount_ex_vat
+  from seg_raw sr
+  where sr.segment_id is not null
+  group by 1,2
+),
+add_kv as (
+  select
+    upper(btrim(e.key)) as code,
+    e.value as obj
+  from jsonb_each(coalesce(p_snapshot_json->'additional_units_json','{}'::jsonb)) as e
+  where e.key is not null
+    and btrim(e.key) <> ''
+    and e.value is not null
+    and jsonb_typeof(e.value) = 'object'
+),
+add_by_code as (
+  select
+    'ADDITIONAL_CODE'::text as key_type,
+    ak.code as key_value,
+    round(
+      coalesce(
+        case when coalesce(ak.obj->>'pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'pay_ex_vat')::numeric end,
+        case when coalesce(ak.obj->>'amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'amount_ex_vat')::numeric end,
+        (
+          coalesce(
+            case when coalesce(ak.obj->>'unit_count','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'unit_count')::numeric end,
+            case when coalesce(ak.obj->>'units_week','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'units_week')::numeric end,
+            0::numeric
+          )
+          *
+          coalesce(
+            case when coalesce(ak.obj->>'pay_rate','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'pay_rate')::numeric end,
+            case when coalesce(ak.obj->>'rate','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'rate')::numeric end,
+            0::numeric
+          )
+        ),
+        0::numeric
+      ),
+      2
+    ) as amount_ex_vat
+  from add_kv ak
+),
+add_sum as (
+  select
+    round(coalesce(sum(abc.amount_ex_vat),0),2) as sum_ex
+  from add_by_code abc
+),
+add_total_fallback as (
+  select
+    'ADDITIONAL_CODE'::text as key_type,
+    'TOTAL'::text as key_value,
+    round(
+      case
+        when coalesce(p_snapshot_json->>'additional_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (p_snapshot_json->>'additional_pay_ex_vat')::numeric
+        else 0::numeric
+      end,
+      2
+    ) as amount_ex_vat
+  where (select coalesce(a.sum_ex,0) from add_sum a) = 0
+    and (
+      coalesce(p_snapshot_json->>'additional_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+      and (p_snapshot_json->>'additional_pay_ex_vat')::numeric <> 0
+    )
+),
+exp_vals as (
+  select
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,travel_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,travel_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as travel_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as accom_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,other_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,other_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as other_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,mileage_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,mileage_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as mileage_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,expenses_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,expenses_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as expenses_rollup_ex
+),
+exp_has_cats as (
+  select
+    (coalesce(ev.travel_ex,0) <> 0)
+    or (coalesce(ev.accom_ex,0) <> 0)
+    or (coalesce(ev.other_ex,0) <> 0)
+    or (coalesce(ev.mileage_ex,0) <> 0) as has_any_cat
+  from exp_vals ev
+),
+exp_components as (
+  select 'EXPENSE_CODE'::text as key_type, 'TRAVEL'::text as key_value, ev.travel_ex as amount_ex_vat
+  from exp_vals ev
+  where coalesce(ev.travel_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'ACCOMMODATION'::text, ev.accom_ex
+  from exp_vals ev
+  where coalesce(ev.accom_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'OTHER'::text, ev.other_ex
+  from exp_vals ev
+  where coalesce(ev.other_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'MILEAGE'::text, ev.mileage_ex
+  from exp_vals ev
+  where coalesce(ev.mileage_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'EXPENSES'::text, ev.expenses_rollup_ex
+  from exp_vals ev
+  where (select eh.has_any_cat from exp_has_cats eh) = false
+    and coalesce(ev.expenses_rollup_ex,0) <> 0
+),
+adj_components as (
+  select
+    'ADJUSTMENT_CODE'::text as key_type,
+    nullif(btrim(coalesce(adj->>'id','')), '') as key_value,
+    round(
+      case
+        when coalesce(adj->>'delta_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (adj->>'delta_pay_ex_vat')::numeric
+        else 0::numeric
+      end,
+      2
+    ) as amount_ex_vat
+  from jsonb_array_elements(coalesce(p_snapshot_json->'adjustments','[]'::jsonb)) as adj
+  where adj is not null
+    and jsonb_typeof(adj)='object'
+    and nullif(btrim(coalesce(adj->>'id','')), '') is not null
+    and (
+      coalesce(adj->>'delta_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+      and (adj->>'delta_pay_ex_vat')::numeric <> 0
+    )
+)
+select
+  s.key_type,
+  s.key_value,
+  s.amount_ex_vat,
+  s.amount_ex_vat as amount_inc_vat
+from seg_norm s
+
+union all
+select
+  abc.key_type,
+  abc.key_value,
+  abc.amount_ex_vat,
+  abc.amount_ex_vat
+from add_by_code abc
+where abc.amount_ex_vat <> 0
+
+union all
+select
+  atf.key_type,
+  atf.key_value,
+  atf.amount_ex_vat,
+  atf.amount_ex_vat
+from add_total_fallback atf
+
+union all
+select
+  ec.key_type,
+  ec.key_value,
+  ec.amount_ex_vat,
+  ec.amount_ex_vat
+from exp_components ec
+
+union all
+select
+  ac.key_type,
+  ac.key_value,
+  ac.amount_ex_vat,
+  ac.amount_ex_vat
+from adj_components ac;
+$$;

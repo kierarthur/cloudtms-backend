@@ -1,0 +1,275 @@
+create or replace function private.weekly_source_healthroster_checklist_leaf_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  v_actor uuid; v_client uuid; v_week date; v_today date; v_admin boolean; v_rule jsonb;
+  v_route text; v_actual jsonb; v_facts jsonb; v_unproved jsonb; v_gate jsonb:='[]'::jsonb;
+  v_latest_week date; v_latest_timesheet_week date; v_calendar_authority jsonb;
+  v_open integer; v_earlier_open integer; v_count integer; v_wait integer:=0; v_wait_fact jsonb; v_event record;
+  v_read_scope record; v_page jsonb; v_cursor text; v_rows jsonb; v_revision text; v_query_revision text;
+  v_scope_count integer; v_scope_open integer; v_retention_reads jsonb:='[]'::jsonb;
+  v_money jsonb;v_legacy jsonb;v_money_row jsonb;v_money_scope jsonb;v_scope_money jsonb;v_scope_money_facts jsonb;
+  v_financial_items jsonb:='[]'::jsonb;v_financial_facts jsonb:='[]'::jsonb;
+begin
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_cycle_id','source_group_id','client_id','week_ending','command','cursor','limit'],
+    'WEEKLY_SOURCE_CHECKLIST_LEAF_REQUEST_INVALID');
+  v_actor:=(p_request->>'actor_user_id')::uuid; v_client:=(p_request->>'client_id')::uuid;
+  if coalesce(p_request->>'command','CONTEXT') not in('CONTEXT','ISSUES') then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_LEAF_REQUEST_INVALID' using errcode='22023';
+  end if;
+  v_week:=(p_request->>'week_ending')::date;
+  select * into c from public.weekly_source_cycles where id=(p_request->>'source_cycle_id')::uuid;
+  select * into g from public.weekly_source_groups where id=c.source_group_id and active;
+  if c.id is null or g.id is null or v_client is null or v_week is null
+    or v_week not between c.finalisation_week_ending-6 and c.finalisation_week_ending
+    or (c.scope_client_id is not null and c.scope_client_id<>v_client)
+    or (nullif(p_request->>'source_group_id','') is not null and (p_request->>'source_group_id')::uuid<>g.id)
+    or not exists(select 1 from public.weekly_source_group_clients membership where membership.source_group_id=g.id
+      and membership.client_id=v_client and v_week between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)) then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='22023';
+  end if;
+  select lower(btrim(coalesce(role,'')))='admin' into v_admin from public.tms_users where id=v_actor and is_active;
+  perform private.weekly_source_office_authority_v1(v_actor,case when v_admin then 'VIEW_SOURCE_PROGRESS' else 'VIEW_PAY_WORK' end,g.id,v_client,v_week);
+  v_today:=(statement_timestamp() at time zone g.timezone)::date;
+  if g.source_family<>'ROSTER' then return jsonb_build_object('applies',false,'preserve_native',true); end if;
+  v_rule:=private.weekly_source_effective_rule_set_v1(v_client,c.id);
+  v_route:=case when v_rule is not null then case when v_rule#>>'{values,invoice_sender}'='AGENCY_INVOICE'
+    then 'AGENCY_INVOICE' else 'SELF_BILL' end end;
+  if v_route is null and exists(select 1 from public.weekly_source_group_rule_assignments a
+    join public.weekly_source_client_policies p on p.source_group_id=a.source_group_id and p.client_id=v_client
+    where a.source_group_id=g.id and a.feature_enabled and a.feature_purpose='SIGNED_CHECK_ONLY' and a.rule_set_version_id is null
+      and v_week between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)
+      and v_week between p.effective_from and coalesce(p.effective_to,'infinity'::date)
+      and p.authority_mode='TIMESHEET_AUTHORITY' and p.document_mode='INVOICE_EVIDENCE_REQUIRED' and not p.self_bill_enabled) then
+    v_route:='SIGNED_TIMESHEETS';
+  end if;
+  if v_route is null then return jsonb_build_object('applies',false,'preserve_native',true); end if;
+  -- R-252 retains the client's latest ended calendar week, not its latest
+  -- week containing a Timesheet. A completed old week must disappear even
+  -- when no worker submitted a newer week. Reuse the native settings owner.
+  v_calendar_authority:=private.weekly_source_checklist_client_calendar_v1(v_client,v_today);
+  v_latest_week:=(v_calendar_authority->>'latest_ended_week')::date;
+  -- Only actual Client authority narrows the witness scan. There is no booked
+  -- Client/booking-name or live current-setting substitute for nullable Daily.
+  with scoped as materialized (
+    select t.*,s.witness,rctx.route_read,tv.status::text validation_status,tv.last_source validation_import_id,tf.processing_status::text processing_status,
+      exists(select 1 from private.timesheet_correction_requests r where r.state='WAITING'
+        and r.reversed_timesheet_id=t.timesheet_id) correction_waiting
+    from public.timesheets t left join public.contracts con on con.id=t.contract_id
+    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current and tf.timesheet_version=t.version
+    cross join lateral(select case when v_route='SIGNED_TIMESHEETS'
+      then private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,g.id)
+      else jsonb_build_object('eligible',true,'submission_witness',private.weekly_source_actual_timesheet_submission_v1(t.timesheet_id)) end route_read) rctx
+    cross join lateral(select rctx.route_read->'submission_witness' witness) s
+    left join lateral(select * from public.timesheet_validations v where v.timesheet_id=t.timesheet_id
+      order by v.updated_at desc,v.created_at desc,v.id desc limit 1) tv on true
+    where t.is_current and t.archived_at_utc is null and t.revoked_at is null
+      and coalesce(con.client_id,case when t.contract_id is null and t.sheet_scope::text='DAILY' then tf.client_id end)=v_client
+      and t.week_ending_date<v_today
+      and exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=g.id and m.client_id=v_client
+        and t.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))
+  ), counted as (
+    select * from scoped where (witness->>'actual_submitted')::boolean is true and (route_read->>'eligible')::boolean is true
+  ) select max(week_ending_date),count(*) filter(where week_ending_date=v_week)::integer,
+    null::integer,
+    coalesce(jsonb_agg(jsonb_build_object('timesheet_id',timesheet_id,'witness',witness,'submission_read_context',route_read,
+      'ordinary_authorised',authorised_at_server is not null,'validation_status',validation_status,
+      'processing_status',processing_status,'correction_waiting',correction_waiting)
+      order by timesheet_id) filter(where week_ending_date=v_week),'[]'::jsonb),
+    null::integer,
+    coalesce((select jsonb_agg(jsonb_build_object('code',reason,'unproved_timesheet_count',number) order by reason)
+      from(select witness->>'reason' reason,count(distinct timesheet_id) number from scoped
+        where week_ending_date=v_week and witness->>'support_state'='UNPROVED'
+        group by witness->>'reason') unproved),'[]'::jsonb)
+    into v_latest_timesheet_week,v_count,v_open,v_actual,v_earlier_open,v_unproved from counted;
+  v_gate:=v_gate||v_unproved;
+  if v_route='SIGNED_TIMESHEETS' then
+    -- P1-CHECKLIST-RETENTION1: obtain open work from the actual raw owner
+    -- before old-week admission. Discover real submitted weeks/cycles only;
+    -- no fixed lookback, fake cycle or R254 information-only admission.
+    v_count:=0; v_open:=0; v_earlier_open:=0; v_actual:='[]'::jsonb; v_latest_timesheet_week:=null;
+    for v_read_scope in
+      with signed_weeks as materialized (
+        select distinct t.week_ending_date from public.timesheets t
+        cross join lateral(select private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,g.id) context) signed_read
+        where signed_read.context->'eligible'='true'::jsonb
+          and signed_read.context#>'{submission_witness,actual_submitted}'='true'::jsonb
+          and signed_read.context#>>'{submission_witness,client_id}'=v_client::text and t.week_ending_date<v_today
+          and exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=g.id and m.client_id=v_client
+            and t.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))
+      ) select week.week_ending_date,owner.cycle_id,owner.owner_count from signed_weeks week
+      cross join lateral(select count(*) owner_count,(array_agg(cycle.id order by cycle.id))[1] cycle_id
+        from public.weekly_source_cycles cycle where cycle.source_group_id=g.id
+          and week.week_ending_date between cycle.finalisation_week_ending-6 and cycle.finalisation_week_ending
+          and (cycle.scope_client_id=v_client or (cycle.scope_client_id is null and not exists(
+            select 1 from public.weekly_source_cycles preferred where preferred.source_group_id=g.id
+              and preferred.scope_client_id=v_client
+              and week.week_ending_date between preferred.finalisation_week_ending-6 and preferred.finalisation_week_ending)))) owner
+      order by week.week_ending_date
+    loop
+      if v_read_scope.owner_count<>1 then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+      if v_read_scope.week_ending_date=v_week and v_read_scope.cycle_id<>c.id then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+      end if;
+      v_cursor:=null; v_revision:=null; v_rows:='[]'::jsonb;
+      loop
+        v_page:=private.weekly_source_check_only_query_rows_v1(v_read_scope.cycle_id,v_client,
+          jsonb_strip_nulls(jsonb_build_object('actor_user_id',v_actor,'source_group_id',g.id,
+            'week_ending',v_read_scope.week_ending_date,'limit',100,'cursor',v_cursor)));
+        if v_page->'ok' is distinct from 'true'::jsonb then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000'; end if;
+        if v_revision is not null and v_revision is distinct from v_page->>'read_revision' then
+          raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+        end if;
+        v_revision:=v_page->>'read_revision'; v_rows:=v_rows||v_page->'rows';
+        exit when v_page->'has_more'='false'::jsonb;
+        if v_cursor is not distinct from v_page->>'next_cursor' then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000'; end if;
+        v_cursor:=v_page->>'next_cursor';
+      end loop;
+      if exists(select 1 from jsonb_array_elements(v_rows) r where r->>'item_kind'='ACTUAL_TIMESHEET'
+        and jsonb_typeof(r->'open_read_item') is distinct from 'boolean') then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000';
+      end if;
+      select count(*)::integer,count(*) filter(where r->'open_read_item'='true'::jsonb)::integer
+        into v_scope_count,v_scope_open from jsonb_array_elements(v_rows) r
+        where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'{submission_witness,actual_submitted}'='true'::jsonb;
+      v_money_scope:=jsonb_build_object('source_group_id',g.id,'source_cycle_id',v_read_scope.cycle_id,
+        'client_id',v_client,'week_ending',v_read_scope.week_ending_date);
+      v_scope_money:='[]'::jsonb;v_scope_money_facts:='[]'::jsonb;
+      for v_money_row in select r from jsonb_array_elements(v_rows) r
+        where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'{submission_witness,actual_submitted}'='true'::jsonb loop
+        v_money:=private.weekly_source_checklist_ordinary_next_hold_money_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);
+        v_scope_money_facts:=v_scope_money_facts||jsonb_build_array(v_money->'native_facts');
+        if v_money->'known'='true'::jsonb then
+          v_scope_money:=v_scope_money||jsonb_build_array(v_money-'native_facts');
+          -- Retain the week using the SAME native financial truth. No R254
+          -- information row can enter this authentic counted-Timesheet arm.
+          v_scope_open:=v_scope_open+1;
+        end if;
+        v_legacy:=private.weekly_source_checklist_legacy_hold_review_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);
+        v_scope_money_facts:=v_scope_money_facts||jsonb_build_array(v_legacy->'native_facts');
+        if v_legacy->'review_required'='true'::jsonb then
+          v_scope_money:=v_scope_money||jsonb_build_array((v_legacy-'native_facts')||jsonb_build_object('native_financial_kind','LEGACY_REVIEW'));
+          v_scope_open:=v_scope_open+1;
+        end if;
+      end loop;
+      if v_read_scope.week_ending_date=v_week then
+        v_financial_items:=v_scope_money;v_financial_facts:=v_scope_money_facts;
+      end if;
+      if v_scope_count>0 then v_latest_timesheet_week:=v_read_scope.week_ending_date; end if;
+      if v_scope_count>0 and v_scope_open>0 and v_read_scope.week_ending_date<v_latest_week then v_earlier_open:=v_earlier_open+1; end if;
+      if v_read_scope.week_ending_date=v_week then
+        v_count:=v_scope_count; v_open:=v_scope_open; v_query_revision:=v_revision;
+        select coalesce(jsonb_agg(r order by r->>'timesheet_id'),'[]'::jsonb) into v_actual from jsonb_array_elements(v_rows) r
+          where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'{submission_witness,actual_submitted}'='true'::jsonb;
+      end if;
+      v_retention_reads:=v_retention_reads||jsonb_build_array(jsonb_build_object('week_ending',v_read_scope.week_ending_date,
+        'source_cycle_id',v_read_scope.cycle_id,'read_revision',v_revision,'actual_timesheet_count',v_scope_count,'open_read_items',v_scope_open,
+        'native_financial_facts',v_scope_money_facts));
+    end loop;
+  end if;
+  if v_route='AGENCY_INVOICE' then
+    v_money_scope:=jsonb_build_object('source_group_id',g.id,'source_cycle_id',c.id,'client_id',v_client,'week_ending',v_week);
+    for v_money_row in select value from jsonb_array_elements(v_actual) loop
+      v_money:=private.weekly_source_checklist_ordinary_next_hold_money_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);
+      v_financial_facts:=v_financial_facts||jsonb_build_array(v_money->'native_facts');
+      if v_money->'known'='true'::jsonb then v_financial_items:=v_financial_items||jsonb_build_array(v_money-'native_facts'); end if;
+      v_legacy:=private.weekly_source_checklist_legacy_hold_review_v1((v_money_row->>'timesheet_id')::uuid,v_money_scope,v_actor);
+      v_financial_facts:=v_financial_facts||jsonb_build_array(v_legacy->'native_facts');
+      if v_legacy->'review_required'='true'::jsonb then
+        v_financial_items:=v_financial_items||jsonb_build_array((v_legacy-'native_facts')||jsonb_build_object('native_financial_kind','LEGACY_REVIEW'));end if;
+    end loop;
+  end if;
+  if v_route='SIGNED_TIMESHEETS' and (v_count=0 or (v_week<>v_latest_week and v_open=0)) then
+    return jsonb_build_object('applies',true,'admitted',false,'route',v_route,'preserve_native',false,
+      'actual_timesheet_count',v_count,'engineering_gates',v_gate);
+  end if;
+  -- This cell duty is process completion, not cash settlement. Keep every
+  -- final scope/revision receipt; a CURRENT client completion is not enough
+  -- for separate export pay plus invoice report history.
+  select jsonb_build_object(
+    'expected_contract_weeks',coalesce((select jsonb_agg(jsonb_build_object('contract_week_id',cw.id,
+      'contract_id',cw.contract_id,'status',cw.status,'week_ending',cw.week_ending_date,'timesheet_id',cw.timesheet_id) order by cw.id)
+      from public.contract_weeks cw join public.contracts con on con.id=cw.contract_id and con.client_id=v_client
+      where cw.week_ending_date=v_week and cw.additional_seq=0 and not cw.is_adjustment
+        and cw.status::text in('PLANNED','OPEN','SUBMITTED')),'[]'::jsonb),
+    'accepted_checking_uploads',coalesce((select jsonb_agg(jsonb_build_object('upload_id',u.id,'uploaded_at_utc',u.uploaded_at_utc,
+      'coverage_start',u.confirmed_coverage_start_local_date,'coverage_end',u.confirmed_coverage_end_local_date,
+      'coverage_confirmed_at_utc',u.coverage_confirmed_at_utc,'coverage_confirmed_by',u.coverage_confirmed_by_user_id,
+      'covers_whole_week',u.confirmed_coverage_start_local_date<=v_week-6 and u.confirmed_coverage_end_local_date>=v_week,
+      'state',u.state,'accepted_attempt_id',attempt.id,'import_use',u.file_metadata_json->'import_use') order by u.uploaded_at_utc desc,u.id)
+      from public.weekly_source_uploads u
+      join lateral(select a.id from public.weekly_source_upload_attempts a where a.logical_upload_id=u.id and a.result='ACCEPTED'
+        order by a.attempted_at_utc desc,a.id desc limit 1) attempt on true
+      where u.source_cycle_id=c.id and u.report_scope_id is null and u.state in('CURRENT','SUPERSEDED')
+        and upper(coalesce(u.file_metadata_json->>'import_use','CHECKING'))='CHECKING'
+        and (c.scope_client_id=v_client or exists(select 1 from public.weekly_source_row_resolutions rr
+          where rr.upload_row_id in(select ur.id from public.weekly_source_upload_rows ur where ur.upload_id=u.id)
+            and rr.client_id=v_client and rr.mapping_state='RESOLVED'))),'[]'::jsonb),
+    'completion_history',coalesce((select jsonb_agg(to_jsonb(completion) order by completion.completion_generation,completion.id)
+      from public.weekly_source_client_cycle_completions completion where completion.source_cycle_id=c.id and completion.client_id=v_client),'[]'::jsonb),
+    'final_revision_history',coalesce((select jsonb_agg(jsonb_build_object('final_revision_id',fr.id,'authority_scope_kind',fr.authority_scope_kind,
+      'report_scope_id',fr.report_scope_id,'state',fr.state,'revision_number',fr.revision_number,'finalised_at_utc',fr.finalised_at_utc,
+      'manifest_hash',encode(fr.manifest_hash,'hex'),'client_manifest_id',cm.id,'invoice_state',cm.invoice_state) order by fr.revision_number,fr.id)
+      from public.weekly_source_final_revisions fr join public.weekly_source_client_manifests cm on cm.final_revision_id=fr.id and cm.client_id=v_client
+      where fr.source_cycle_id=c.id),'[]'::jsonb),
+    'report_scopes',coalesce((select jsonb_agg(jsonb_build_object('report_scope_id',rs.id,'self_bill_report_id',rs.self_bill_report_id,
+      'version',rs.version,'current_complete_upload_id',rs.current_complete_upload_id,'current_projection_publication_id',rs.current_projection_publication_id,
+      'current_final_revision_id',rs.current_final_revision_id) order by rs.id) from public.weekly_source_report_scopes rs
+      where rs.source_cycle_id=c.id and rs.client_id=v_client),'[]'::jsonb)
+  ) into v_facts;
+  if v_week>=v_today then return jsonb_build_object('applies',true,'admitted',false,'route',v_route); end if;
+  if v_route<>'SIGNED_TIMESHEETS' and jsonb_array_length(v_facts->'expected_contract_weeks')=0
+    and jsonb_array_length(v_facts->'accepted_checking_uploads')=0 and jsonb_array_length(v_facts->'completion_history')=0
+    and jsonb_array_length(v_facts->'report_scopes')=0 then
+    return jsonb_build_object('applies',true,'admitted',false,'route',v_route);
+  end if;
+  if v_route='SIGNED_TIMESHEETS' and coalesce(p_request->>'command','CONTEXT')='ISSUES' then
+    return private.weekly_source_check_only_query_rows_v1(c.id,v_client,jsonb_build_object('actor_user_id',v_actor,
+      'source_group_id',g.id,'week_ending',v_week,'cursor',p_request->'cursor','limit',coalesce(p_request->'limit','50'::jsonb)));
+  end if;
+  -- A proved WAIT is an approved Source decision, never paid=true. Missing or
+  -- partial proof stays unknown; it is not quietly reduced to zero waiting.
+  if to_regprocedure('private.weekly_source_protected_wait_witness_v1(uuid,uuid)') is null then
+    v_wait:=null; v_gate:=v_gate||jsonb_build_array('QUALIFIED_WAIT_READER_UNAVAILABLE');
+  else
+    for v_event in select e.id from public.weekly_work_events e where e.client_id=v_client
+      and e.first_source_group_id=g.id and e.work_date between v_week-6 and v_week order by e.id loop
+      begin
+        execute 'select private.weekly_source_protected_wait_witness_v1($1,$2)' into v_wait_fact using v_event.id,c.id;
+        if v_wait_fact is not null then
+          if v_wait_fact->>'state' is distinct from 'QUALIFIED_WAIT' then raise exception 'WAIT'; end if;
+          v_wait:=v_wait+1;
+        end if;
+      exception when sqlstate '55000' then
+        v_wait:=null; v_gate:=v_gate||jsonb_build_array(jsonb_build_object('code','QUALIFIED_WAIT_WITNESS_UNAVAILABLE','work_event_id',v_event.id));
+      end;
+    end loop;
+  end if;
+  return jsonb_build_object('applies',true,'admitted',true,'contract','WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',
+    'scope',jsonb_build_object('source_group_id',g.id,'source_cycle_id',c.id,'client_id',v_client,
+      'week_ending',v_week,'cycle_week_ending',c.finalisation_week_ending),'route',v_route,
+    'permission_view',case when v_admin then 'ADMIN' else 'PAY_READONLY' end,
+    'source_cycle_version',c.version,'effective_rule',v_rule,'native_process_facts',v_facts,
+    'checking_due_local_date',v_week+(8-extract(isodow from v_week)::integer),
+    'checking_due',v_today>=v_week+(8-extract(isodow from v_week)::integer),
+    'actual_timesheet_count',v_count,'actual_timesheet_authority_hash',
+      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_ACTUAL_SET_V1',v_actual),'hex'),
+    'most_recent_ended_timesheet_week',v_latest_timesheet_week,
+    'most_recent_ended_client_week',v_latest_week,
+    'client_week_authority_fingerprint',v_calendar_authority->>'authority_fingerprint','open_timesheet_read_items',v_open,
+    'earlier_open_weeks',v_earlier_open,'native_query_read_revision',v_query_revision,
+    'qualified_waiting_count',v_wait,'engineering_gates',v_gate,
+    'native_financial_items',v_financial_items,'native_financial_facts',v_financial_facts,
+    'pay_financial_evidence_required',true,'root_checklist_union_required',true,
+    'read_revision',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',
+      jsonb_build_object('scope',p_request-'cursor'-'limit','cycle_version',c.version,'actual',v_actual,'facts',v_facts,
+        'latest_week',v_latest_week,'latest_timesheet_week',v_latest_timesheet_week,
+        'client_week_authority_fingerprint',v_calendar_authority->>'authority_fingerprint',
+        'earlier_open_weeks',v_earlier_open,'actual_count',v_count,'open_read_items',v_open,'retention_reads',v_retention_reads,
+        'wait_count',v_wait,'gates',v_gate,'native_financial_items',v_financial_items,'native_financial_facts',v_financial_facts)),'hex'));
+end;
+$function$;
+alter function private.weekly_source_healthroster_checklist_leaf_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_healthroster_checklist_leaf_v1(jsonb) from public,anon,authenticated,service_role;

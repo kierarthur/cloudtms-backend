@@ -1,0 +1,34 @@
+CREATE OR REPLACE FUNCTION private.bpay_settled_financial_scope_v1(p_timesheet_ids uuid[])
+ RETURNS TABLE(requested_timesheet_id uuid, booking_id text, canonical_timesheet_id uuid, family_timesheet_id uuid, family_is_current boolean, family_version integer, requested_is_canonical boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+WITH requested AS (
+ SELECT DISTINCT t.timesheet_id,t.booking_id,t.bpay_work_key_v1
+ FROM unnest(coalesce(p_timesheet_ids,'{}'::uuid[])) i(id)
+ JOIN public.timesheets t ON t.timesheet_id=i.id
+), roots AS (
+ SELECT r.*, c.timesheet_id AS current_id
+ FROM requested r
+ LEFT JOIN public.timesheets c ON c.booking_id=r.booking_id AND c.is_current
+ WHERE r.booking_id IS NOT NULL AND btrim(r.booking_id)<>''
+), relevant AS (
+ SELECT r.timesheet_id,r.booking_id,r.current_id,x.physical_id
+ FROM roots r CROSS JOIN LATERAL (
+   SELECT r.timesheet_id AS physical_id
+   UNION SELECT r.current_id WHERE r.current_id IS NOT NULL
+   UNION SELECT i.bpay_direct_source_timesheet_id_v1
+     FROM public.pay_batch_items i WHERE i.bpay_direct_work_key_v1=r.bpay_work_key_v1
+   UNION SELECT c.linked_timesheet_id
+     FROM public.pay_finance_case_components c WHERE c.bpay_work_key_v1=r.bpay_work_key_v1
+ ) x
+)
+SELECT r.timesheet_id,r.booking_id,r.current_id,t.timesheet_id,t.is_current,t.version,
+ coalesce(r.timesheet_id=r.current_id,false)
+FROM relevant r JOIN public.timesheets t ON t.timesheet_id=r.physical_id
+UNION ALL
+SELECT i.id,NULL::text,i.id,i.id,NULL::boolean,NULL::integer,false
+FROM (SELECT DISTINCT id FROM unnest(coalesce(p_timesheet_ids,'{}'::uuid[])) i(id) WHERE id IS NOT NULL) i
+WHERE NOT EXISTS(SELECT 1 FROM public.timesheets t WHERE t.timesheet_id=i.id);
+$function$;

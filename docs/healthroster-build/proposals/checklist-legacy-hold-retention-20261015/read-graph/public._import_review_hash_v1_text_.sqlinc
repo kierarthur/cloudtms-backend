@@ -1,0 +1,9 @@
+create or replace function public._import_review_hash_v1(p_value text)
+returns text
+language sql
+immutable
+security definer
+set search_path to 'public', 'extensions', 'pg_temp'
+as $function$
+  select encode(extensions.digest(convert_to(coalesce(p_value,''),'UTF8'),'sha256'::text),'hex')
+$function$;
