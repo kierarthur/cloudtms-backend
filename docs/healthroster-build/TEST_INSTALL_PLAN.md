@@ -146,3 +146,14 @@ The dedicated Kier1978 rollback tool works in this chat, and AGENTS.md records i
 Complete the Agency/preset lifecycle, NHSP negative-first/NONE pipeline, ordinary calendar/current-owner composition and final generated contract, private registries, security and verifier checks. Then run one clean rehearsal on the exact pushed commit and retain the same SEND7 turn through protected database installation, normal backend, real private Worker, synthetic private Worker, broker and Office publication. Activate only eligible TEST features and use a genuinely vacant past open client/week for acceptance. NEXT checks require Banking's actual F-17 install. Merge fresh MyTMS main and rerun app checks before TestFlight; complete the genuine phone and final critic checks.
 
 Allow several active implementation hours plus the actual rehearsal, release and acceptance/device work. This is an estimate, not a finish promise or a reason to wait for 22 October.
+
+
+## Current Install 2 sequence — 15 October 2026
+
+Source candidate 62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9 includes reviewed Candidate worker-only runtime and corrected recovery outcomes; 246 existing mounted regressions and 23 new recovery cases pass. The Source scanner recognises native daterange without relaxing unknown types; db:check passes 400/1063. These source checks do not establish final readiness.
+
+Finish the 17 current Agency shared-owner unions, prospective Contract writer persistence, full Money/NHSP/NONE/correction/prepared/Report/Office/OFF and Native Legacy/calendar/treatment/process integration. Then qualify the final actual native/security/role/private-registry/verifier/contract union. Reconcile the exact full rehearsal with Kier1978's authorised 2 MB/250-statement tool and required isolation; no split, truncation, hidden compression, assertion reduction, envelope expansion or borrowed route by inference. Keep source work running while that dependency is resolved.
+
+Install 1 remains complete. Only the final normal Install 2 remains. Hold SEND7 across the clean exact-commit rehearsal and protected database, normal backend, real private Worker, synthetic private Worker, broker and Office release. Keep background writers running and use the owner's restoration-attribution rule. Enable only eligible TEST features, use a genuine vacant past open week/client and real earlier file, run non-NEXT acceptance first if F-17 is not ready, and record NEXT waiting truthfully. Refresh/merge MyTMS main non-forcibly and rerun checks before TestFlight; complete real phone tests and both final critics.
+
+The remaining coupled implementation and full-rehearsal route gate prevent a reliable Install 2 time estimate. No calendar-week delay or pending owner business response is assumed. No extra normal install, piecemeal post-acceptance fixes or Banking chat message is authorised.
