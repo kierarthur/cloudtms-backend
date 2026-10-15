@@ -1,0 +1,76 @@
+create or replace function private.weekly_source_invoice_line_amounts_v1(p_row_resolution_id uuid,p_final_revision_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_source_row_resolutions%rowtype; s public.weekly_source_upload_rows%rowtype;
+  e public.weekly_source_row_economic_snapshots%rowtype; revision public.weekly_source_final_revisions%rowtype;
+  rules jsonb; release_row public.weekly_source_invoice_hold_releases%rowtype;
+  net bigint; vat bigint; gross bigint; rate numeric; exact_net numeric; price text; held boolean:=false; fingerprint bytea;
+  acceptance_id uuid; check_id uuid;
+begin
+  select * into strict r from public.weekly_source_row_resolutions where weekly_source_row_resolutions.id=p_row_resolution_id;
+  select * into strict s from public.weekly_source_upload_rows where weekly_source_upload_rows.id=r.upload_row_id;
+  select * into strict revision from public.weekly_source_final_revisions where weekly_source_final_revisions.id=p_final_revision_id;
+  select * into strict e from public.weekly_source_row_economic_snapshots where row_resolution_id=r.id;
+  if r.mapping_state<>'RESOLVED' or e.source_mode<>'HEALTHROSTER_WEEKLY' or e.row_sign<>1
+    or not exists(select 1 from public.weekly_source_uploads u where u.id=s.upload_id and u.id=revision.upload_id
+      and u.source_cycle_id=revision.source_cycle_id)
+    or private.weekly_source_finalisation_economic_assert_v1(r.id,revision.source_cycle_id,'HEALTHROSTER_WEEKLY') is distinct from e.id then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MONEY_SCOPE_INVALID' using errcode='55000';
+  end if;
+  rules:=private.weekly_source_frozen_rule_values_v1(revision.id);
+  rate:=case when e.invoice_vat_chargeable then e.invoice_vat_rate_pct else 0 end;
+  net:=e.calculated_charge_pence; price:='NOT_APPLICABLE'; vat:=round(net::numeric*rate/100)::bigint; gross:=net+vat;
+  if rules is not null and rules->>'invoice_sender'='CLIENT_SELF_BILL' then
+    if rules->>'invoice_amount_basis'='SOURCE_AMOUNT' and rules->>'source_amount_basis'='REPORT_LINE_NET' then
+      -- Checking exports carry pay-only canonical economics. The report owner
+      -- alone reads report line money and applies its report VAT method.
+      null;
+    elsif rules->>'invoice_amount_basis'='SOURCE_AMOUNT' then
+      if s.source_money_parse_state<>'VALID' or s.source_qualification_profile_version<>'SOURCE_INVOICE_MONEY_PENCE_V1'
+        or s.source_shift_charge_pence is null or s.source_gross_pence is null or s.source_vat_pence is null
+        or s.source_shift_charge_pence<0 or s.source_shift_charge_pence+s.source_vat_pence<>s.source_gross_pence
+        or e.calculated_charge_pence<=0 then raise exception 'WEEKLY_SOURCE_INVOICE_SOURCE_MONEY_INVALID' using errcode='55000'; end if;
+      net:=s.source_shift_charge_pence;
+      select comparison_result,id into strict price,check_id from public.weekly_source_charge_checks
+        where upload_row_id=s.id and row_resolution_id=r.id and generation=r.generation
+          and comparison_profile_version='SOURCE_INVOICE_MONEY_PENCE_V1'
+          and source_shift_charge_pence=s.source_shift_charge_pence and calculated_segment_charge_pence=e.calculated_charge_pence
+          and charge_calculation_fingerprint=e.calculation_fingerprint and blocker_code is null;
+      if price is distinct from (case when net=e.calculated_charge_pence then 'EXACT'
+        when abs(net-e.calculated_charge_pence)=1 then 'SOURCE_ROUNDING_EQUIVALENT' else 'SOURCE_AMOUNT_DIFFERS' end) then
+        raise exception 'WEEKLY_SOURCE_INVOICE_SOURCE_PRICE_STALE' using errcode='40001'; end if;
+      if price='SOURCE_AMOUNT_DIFFERS' then
+        select a.id into acceptance_id from public.weekly_source_charge_acceptances a join public.weekly_source_uploads u on u.id=s.upload_id
+          where a.charge_check_id=check_id and a.upload_row_id=s.id and a.row_resolution_id=r.id and a.source_upload_id=u.id
+            and a.contract_id=r.contract_id and a.acceptance_kind='ACCEPTED_DISPARITY' and a.source_upload_hash=u.content_sha256
+            and a.source_row_fingerprint=r.source_row_fingerprint and a.contract_and_rate_fingerprint=e.contract_and_rate_fingerprint
+            and a.effective_policy_fingerprint=e.effective_policy_fingerprint and a.charge_calculation_fingerprint=e.calculation_fingerprint
+            and a.acceptance_policy_fingerprint=private.weekly_source_source_amount_acceptance_policy_fingerprint_v1();
+        if found then price:='ACCEPTED_DISPARITY'; end if;
+      end if;
+      fingerprint:=private.weekly_source_invoice_economics_fingerprint_v1(jsonb_build_object(
+        'source_shift_charge_pence',s.source_shift_charge_pence,'source_gross_pence',s.source_gross_pence,'source_vat_pence',s.source_vat_pence),rules->>'line_vat_method',rate);
+      held:=rules->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+        and abs(5::numeric*s.source_gross_pence-6::numeric*s.source_shift_charge_pence)>5;
+      select * into release_row from public.weekly_source_invoice_hold_releases where upload_row_id=s.id and hold_kind='VAT_FIT';
+      if found then net:=release_row.net_pence; vat:=release_row.vat_pence; gross:=release_row.gross_pence; held:=false;
+      elsif rules->>'line_vat_method' in ('LINE_GROSS_MINUS_NET_FROM_SOURCE','LINE_VAT_FROM_REPORT') then
+        vat:=s.source_vat_pence; gross:=s.source_gross_pence;
+      else vat:=round(net::numeric*rate/100)::bigint; gross:=net+vat; end if;
+    elsif rules->>'line_vat_method'='ROUND_TOTAL_FROM_EXACT_NET' then
+      exact_net:=(e.minutes_day::numeric*e.charge_day+e.minutes_night::numeric*e.charge_night
+        +e.minutes_sat::numeric*e.charge_sat+e.minutes_sun::numeric*e.charge_sun+e.minutes_bh::numeric*e.charge_bh)/60;
+      gross:=round(exact_net*(1+rate/100)*100)::bigint; vat:=gross-net;
+    elsif rules->>'line_vat_method'<>'ROUND_EACH_LINE_FROM_NET' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_LINE_VAT_SCOPE_INVALID' using errcode='55000';
+    end if;
+  end if;
+  return jsonb_build_object('net_pence',net,'vat_pence',vat,'gross_pence',gross,'vat_rate_pct',rate,
+    'price_check_result',price,'charge_acceptance_id',acceptance_id,'source_amount',rules is not null and rules->>'invoice_sender'='CLIENT_SELF_BILL' and rules->>'invoice_amount_basis'='SOURCE_AMOUNT'
+      and rules->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY',
+    'pay_only',rules is not null and rules->>'invoice_sender'='CLIENT_SELF_BILL' and rules->>'source_amount_basis'='REPORT_LINE_NET',
+    'invoice_hold',case when held then 'VAT_FIT' else null end,'hold_release_id',release_row.id,
+    'invoice_economics_sha256',case when fingerprint is null then null else encode(fingerprint,'hex') end,
+    'rule_set_version_id',revision.rule_set_version_id);
+end;
+$function$;

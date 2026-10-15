@@ -1,0 +1,96 @@
+{
+  "schema_version": "PAID_MATCH_NHSP_NATIVE_INVOICE_VALUES_CONSTRUCTION_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 17,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSES_AND_INPUT_PINS.json",
+      "bytes": 16992,
+      "sha256": "940a70825ffdf81c6cce25cc46561a6f41dcc24fdcdba6015461d00370746a6c"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 2169,
+      "sha256": "7d05ed9eb1f000be9fb6289c016f58ab97a17e6a15f54ad750c06a989838fc72"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 6842,
+      "sha256": "cc9ee9fd9238faae720f22ade4302e01150b7680578bb2ffc1b2ec121fa78e0f"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 592,
+      "sha256": "d58390e2da67d5227e3760567f935016688ee51c3ad2765ca56fcf40c41eca07"
+    },
+    {
+      "file": "before/02_complete_native_movement_factory.sqlinc",
+      "bytes": 15899,
+      "sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c"
+    },
+    {
+      "file": "before/04_complete_fin4.sqlinc",
+      "bytes": 120060,
+      "sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 9943,
+      "sha256": "9549019ecf7a6ae42560bd70f3905ad407479d1cb01a9923a3e70036c0337e4c"
+    },
+    {
+      "file": "forward/01_native_line_vat.sqlinc",
+      "bytes": 1125,
+      "sha256": "9d9f36f53d66ac88ccd38872d8ce14881a13b41ecedb59b4bb10a7e890af616c"
+    },
+    {
+      "file": "forward/02_complete_native_movement_factory.sqlinc",
+      "bytes": 15963,
+      "sha256": "c52293ad192309fdfc49d040df02621187c2316c483f4eff85cda8a9e0f2ca63"
+    },
+    {
+      "file": "forward/03_nhsp_price_admission.sqlinc",
+      "bytes": 7001,
+      "sha256": "f84627e8c6878cc745834925ccf796f77b2887cb78a4d70a0a31a0450e84ff90"
+    },
+    {
+      "file": "forward/04_complete_fin4.sqlinc",
+      "bytes": 115756,
+      "sha256": "10ed70cdb810dd79513569910ddbd8c193336cb24bf6140c6f360fc694a7ba4e"
+    },
+    {
+      "file": "forward/05_nhsp_native_invoice_values.sqlinc",
+      "bytes": 3260,
+      "sha256": "4046f609cf4df621d4c8ee3159a7f9de18ba6abed6ddd7b10a77d3752f2f79f5"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5970,
+      "sha256": "055f2fe604ab182f438e150af95ef364a9d0bbe7a907ee0cabcd639e66bdd1f2"
+    },
+    {
+      "file": "input/current_economic_assert.sqlinc",
+      "bytes": 12030,
+      "sha256": "050c417af4f30105cc8b6c7de9b36baff478ecce7a5532800804d8875c6f50a4"
+    },
+    {
+      "file": "input/current_healthroster_invoice_amount_owner.sqlinc",
+      "bytes": 6873,
+      "sha256": "6c3d48298542d6ed068d7b4f6f50263c55165b0f0af7f496a93c77e9ea2cf15e"
+    },
+    {
+      "file": "input/current_source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "invoice-values-source.test.mjs",
+      "bytes": 9884,
+      "sha256": "77e1f2dd479025c56eed67bc4d60c68c229a90ae7126a9711c2aad2f7744cd1f"
+    }
+  ]
+}

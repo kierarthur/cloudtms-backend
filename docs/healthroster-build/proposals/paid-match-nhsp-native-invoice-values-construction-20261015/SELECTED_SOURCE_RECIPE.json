@@ -1,0 +1,127 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_order": [
+    "forward/01_native_line_vat.sqlinc",
+    "forward/02_complete_native_movement_factory.sqlinc",
+    "forward/03_nhsp_price_admission.sqlinc",
+    "forward/04_complete_fin4.sqlinc",
+    "forward/05_nhsp_native_invoice_values.sqlinc"
+  ],
+  "existing_complete_native_owners": [
+    {
+      "file": "02_complete_native_movement_factory.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "before_sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c",
+      "after_sha256": "c52293ad192309fdfc49d040df02621187c2316c483f4eff85cda8a9e0f2ca63",
+      "unique_reverse_hunks": 2
+    },
+    {
+      "file": "04_complete_fin4.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "before_sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025",
+      "after_sha256": "10ed70cdb810dd79513569910ddbd8c193336cb24bf6140c6f360fc694a7ba4e",
+      "unique_reverse_hunks": 2
+    }
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+    "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)"
+  ],
+  "new_public_signatures": [],
+  "new_table_column_classifier": 0,
+  "VAT_and_NHSP_price_native_blocks_single_exact_extractions": true,
+  "original_NATIVE_signed_pence_C1_acceptance_VAT_totals_hash_insert_security_unchanged": true,
+  "existing_complete_leaves": "BODY_ONLY; atomic final composition immediately retains unchanged current logical owner/private ACL",
+  "unqualified_Source_values": "PURE CURRENT NHSP POSITIVE ROW/C1/PRICE/LINE VAT ONLY; paid_writer_permission NULL",
+  "schema_source_prerequisites": "Existing source/native schemas plus selected original Money predecessors, including physical identity/Legacy prior-state/expense/paid choice integration. This replaces the complete FIN4 Legacy30 leaf only for its NHSP price block, retains all other selected later-owner hunks; never overwrites root canonical successor.",
+  "exact_current_owner_and_guarded_body_amendments_must_be_recomposed": true,
+  "inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "saved": "before/02_complete_native_movement_factory.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "source_bytes": 206075,
+      "source_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "definition_sha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4",
+      "body_sha256": "36f365daa85ee035a2b2d8296d718b053dc8a9f25ab28f9076801b3d07b3af6a",
+      "bytes": 15899,
+      "sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c"
+    },
+    {
+      "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/01_complete_fin4_prior_selector.sqlinc",
+      "saved": "before/04_complete_fin4.sqlinc",
+      "bytes": 120060,
+      "sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "saved": "input/current_healthroster_invoice_amount_owner.sqlinc",
+      "signature": "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+      "source_bytes": 83915,
+      "source_sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "definition_sha256": "c7bed4eee1dbe8bee440a0efe7d8e44056d98fbc4c617808bcd75b2446343af9",
+      "body_sha256": "be973e497ce637cf7cede079bc426e51b645127e9893b8d009104220638adbd5",
+      "bytes": 6873,
+      "sha256": "6c3d48298542d6ed068d7b4f6f50263c55165b0f0af7f496a93c77e9ea2cf15e"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "saved": "input/current_economic_assert.sqlinc",
+      "signature": "private.weekly_source_finalisation_economic_assert_v1(uuid,uuid,text)",
+      "source_bytes": 93531,
+      "source_sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "definition_sha256": "1936fd624560bc1e1b504496809109634010a0a56a63f99b2b53bf70b45d7934",
+      "body_sha256": "6ea6a4b977525bfae2c705c1bcec4c2008e162ac43d8a3885c39e2dc2a3b5b1d",
+      "bytes": 12030,
+      "sha256": "050c417af4f30105cc8b6c7de9b36baff478ecce7a5532800804d8875c6f50a4"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "saved": "input/current_source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    }
+  ],
+  "preserved": [
+    {
+      "packet": "paid-match-nhsp-negative-population-construction-20261015",
+      "artifacts": 21,
+      "manifest_sha256": "6c4961914bed7df9ab36e177d908ff1d27abb562eba193283e80769670ebaca3"
+    },
+    {
+      "packet": "paid-match-nhsp-current-native-basis-construction-20261015",
+      "artifacts": 16,
+      "manifest_sha256": "67c33d965c537452c16ab52313ced8801429eb30f7f16a654e5b1bb35519f75c"
+    },
+    {
+      "packet": "paid-match-nhsp-separate-event-writer-construction-20261015",
+      "artifacts": 14,
+      "manifest_sha256": "2e5864cb22b9e1a86525b1c430b048b0613f9cab278c189f23df9f061c1fa89f"
+    },
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "artifacts": 30,
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+    },
+    {
+      "packet": "paid-match-source-expense-native-construction-20261014",
+      "artifacts": 26,
+      "manifest_sha256": "d2a7f3da4be601b31c7f951864ccb367dfa831b48991aeb5478eddec6ba5153e"
+    }
+  ],
+  "complete_NHSP_NONE_origin_writer_capture_prepared_Office_OFF_Report_and_negative_recheck_integration_still_unimplemented": true,
+  "final_private_registry_mandatory_verifier_contract_catalogue_REQUIRED": true,
+  "SQL_compiled": false,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}

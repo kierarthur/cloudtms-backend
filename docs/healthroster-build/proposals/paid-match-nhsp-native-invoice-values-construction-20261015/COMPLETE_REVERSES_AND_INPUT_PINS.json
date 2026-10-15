@@ -1,0 +1,114 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+  "inputs": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "saved": "before/02_complete_native_movement_factory.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "source_bytes": 206075,
+      "source_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "definition_sha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4",
+      "body_sha256": "36f365daa85ee035a2b2d8296d718b053dc8a9f25ab28f9076801b3d07b3af6a",
+      "bytes": 15899,
+      "sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c"
+    },
+    {
+      "commit": "b326d7033c0916217d16fde6c3b839f94a1f9ce9",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/01_complete_fin4_prior_selector.sqlinc",
+      "saved": "before/04_complete_fin4.sqlinc",
+      "bytes": 120060,
+      "sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "saved": "input/current_healthroster_invoice_amount_owner.sqlinc",
+      "signature": "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+      "source_bytes": 83915,
+      "source_sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "definition_sha256": "c7bed4eee1dbe8bee440a0efe7d8e44056d98fbc4c617808bcd75b2446343af9",
+      "body_sha256": "be973e497ce637cf7cede079bc426e51b645127e9893b8d009104220638adbd5",
+      "bytes": 6873,
+      "sha256": "6c3d48298542d6ed068d7b4f6f50263c55165b0f0af7f496a93c77e9ea2cf15e"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "saved": "input/current_economic_assert.sqlinc",
+      "signature": "private.weekly_source_finalisation_economic_assert_v1(uuid,uuid,text)",
+      "source_bytes": 93531,
+      "source_sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "definition_sha256": "1936fd624560bc1e1b504496809109634010a0a56a63f99b2b53bf70b45d7934",
+      "body_sha256": "6ea6a4b977525bfae2c705c1bcec4c2008e162ac43d8a3885c39e2dc2a3b5b1d",
+      "bytes": 12030,
+      "sha256": "050c417af4f30105cc8b6c7de9b36baff478ecce7a5532800804d8875c6f50a4"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "saved": "input/current_source_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    }
+  ],
+  "complete_reverses": [
+    {
+      "file": "02_complete_native_movement_factory.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "before_sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c",
+      "after_sha256": "c52293ad192309fdfc49d040df02621187c2316c483f4eff85cda8a9e0f2ca63",
+      "hunks": [
+        {
+          "name": "row-local native VAT result only",
+          "before": "  v_vat_rate numeric(5,2);",
+          "after": "  v_vat_values jsonb;\n  v_vat_rate numeric(5,2);"
+        },
+        {
+          "name": "same exact native VAT assembly once; following frozen invoice amounts override unchanged",
+          "before": "  v_vat_rate:=case when v_economic.invoice_vat_chargeable\n    then v_economic.invoice_vat_rate_pct else 0 end;\n  v_vat:=pg_catalog.round((p_invoice_presentation_charge_pence::numeric/100)*(v_vat_rate/100),2);\n  v_total:=(p_invoice_presentation_charge_pence::numeric/100)+v_vat;\n",
+          "after": "  v_vat_values:=private.weekly_source_native_line_vat_v1(p_invoice_presentation_charge_pence,v_economic.invoice_vat_chargeable,v_economic.invoice_vat_rate_pct);\n  v_vat_rate:=(v_vat_values->>'vat_rate_pct')::numeric;\n  v_vat:=(v_vat_values->>'vat_amount')::numeric;\n  v_total:=(v_vat_values->>'total_inc_vat')::numeric;\n"
+        }
+      ]
+    },
+    {
+      "file": "04_complete_fin4.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "before_sha256": "76cbef54199684d31418347e1d899b4bc4382a3b115c22fe03010ffa3134e025",
+      "after_sha256": "10ed70cdb810dd79513569910ddbd8c193336cb24bf6140c6f360fc694a7ba4e",
+      "hunks": [
+        {
+          "name": "local exact price owner output only",
+          "before": "  v_price_admission_result text;",
+          "after": "  v_price_admission_result text;\n  v_nhsp_price_admission jsonb;"
+        },
+        {
+          "name": "one exact price admission before unchanged native NHSP physical movement constructor",
+          "before": "      select * into v_charge_check\n      from public.weekly_source_charge_checks charge_check\n      where charge_check.upload_row_id=v_row.id\n        and charge_check.row_resolution_id=v_row.resolution_id\n        and charge_check.generation=v_generation;\n      v_charge_acceptance.id:=null;\n      if found and v_charge_check.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE') then\n        select * into v_charge_acceptance\n        from public.weekly_source_charge_acceptances acceptance\n        where acceptance.charge_check_id=v_charge_check.id\n          and acceptance.upload_row_id=v_row.id\n          and acceptance.row_resolution_id=v_row.resolution_id\n          and acceptance.source_upload_id=v_upload.id\n          and acceptance.contract_id=v_row.contract_id\n          and acceptance.acceptance_kind=case v_charge_check.comparison_result\n            when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO' else 'ACCEPTED_DISPARITY' end\n          and acceptance.source_upload_hash=v_upload.content_sha256\n          and acceptance.source_row_fingerprint=(select resolution.source_row_fingerprint\n            from public.weekly_source_row_resolutions resolution where resolution.id=v_row.resolution_id)\n          and acceptance.contract_and_rate_fingerprint=v_economic.contract_and_rate_fingerprint\n          and acceptance.effective_policy_fingerprint=v_economic.effective_policy_fingerprint\n          and acceptance.charge_calculation_fingerprint=v_economic.calculation_fingerprint\n          and acceptance.acceptance_policy_fingerprint=\n            private.weekly_source_charge_acceptance_policy_fingerprint_v1();\n      end if;\n      v_price_admission_result:=case v_charge_check.comparison_result\n        when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO'\n        when 'MISMATCH' then 'ACCEPTED_DISPARITY'\n        else v_charge_check.comparison_result end;\n      if not found or (select pg_catalog.count(*)\n          from public.weekly_source_charge_checks charge_check\n          where charge_check.upload_row_id=v_row.id\n            and charge_check.row_resolution_id=v_row.resolution_id\n            and charge_check.generation=v_generation)<>1\n         or v_charge_check.source_commission_pence is distinct from v_row.source_commission_pence\n         or v_charge_check.source_total_cost_pence is distinct from v_row.source_total_cost_pence\n         or v_charge_check.source_shift_charge_pence is distinct from v_row.source_shift_charge_pence\n         or v_charge_check.calculated_segment_charge_pence is distinct from v_economic.calculated_charge_pence\n         or v_charge_check.source_charge_difference_pence is distinct from\n              (v_row.source_shift_charge_pence-v_economic.calculated_charge_pence)\n         or v_charge_check.charge_calculation_fingerprint is distinct from\n              v_economic.calculation_fingerprint\n         or v_charge_check.comparison_profile_version<>'NHSP_TWO_COMPONENT_PENCE_V1'\n         or v_charge_check.comparison_result not in (\n              'EXACT','SOURCE_ROUNDING_EQUIVALENT','MISMATCH','ZERO_SOURCE_CHARGE'\n            )\n         or not (\n           (v_charge_check.comparison_result='EXACT'\n             and v_charge_check.source_charge_difference_pence=0)\n           or (v_charge_check.comparison_result='SOURCE_ROUNDING_EQUIVALENT'\n             and v_charge_check.row_sign_kind in ('POSITIVE','FULL_NEGATIVE')\n             and (v_charge_check.source_charge_difference_pence=1\n               or v_charge_check.source_charge_difference_pence=-1)\n             and ((v_charge_check.source_shift_charge_pence>0\n                   and v_charge_check.calculated_segment_charge_pence>0)\n               or (v_charge_check.source_shift_charge_pence<0\n                   and v_charge_check.calculated_segment_charge_pence<0)))\n           or (v_charge_check.comparison_result='MISMATCH'\n             and v_charge_acceptance.id is not null\n             and v_charge_acceptance.acceptance_kind='ACCEPTED_DISPARITY')\n           or (v_charge_check.comparison_result='ZERO_SOURCE_CHARGE'\n             and v_charge_check.source_commission_pence=0\n             and v_charge_check.source_total_cost_pence=0\n             and v_charge_check.source_shift_charge_pence=0\n             and v_charge_check.calculated_segment_charge_pence>0\n             and v_charge_acceptance.id is not null\n             and v_charge_acceptance.acceptance_kind='ACCEPTED_ZERO')\n         )\n         or v_charge_check.row_sign_kind is distinct from (case\n              when v_economic.row_sign=1 then 'POSITIVE' else 'FULL_NEGATIVE' end)\n         or v_charge_check.phase_severity='FINALISATION_BLOCKER'\n         or v_charge_check.blocker_code is not null then\n        raise exception 'WEEKLY_SOURCE_NHSP_PRICE_GATE_FAILED'\n          using errcode='55000',detail=v_row.source_row_ordinal::text;\n      end if;\n",
+          "after": "      v_nhsp_price_admission:=private.weekly_source_nhsp_price_admission_v1(v_row.resolution_id,v_cycle.id);\n      v_charge_check:=pg_catalog.jsonb_populate_record(null::public.weekly_source_charge_checks,v_nhsp_price_admission->'charge_check');\n      v_charge_acceptance:=pg_catalog.jsonb_populate_record(null::public.weekly_source_charge_acceptances,v_nhsp_price_admission->'charge_acceptance');\n      v_price_admission_result:=v_nhsp_price_admission->>'price_admission_result';\n"
+        }
+      ]
+    }
+  ],
+  "native_VAT_block": "  v_vat_rate:=case when v_economic.invoice_vat_chargeable\n    then v_economic.invoice_vat_rate_pct else 0 end;\n  v_vat:=pg_catalog.round((p_invoice_presentation_charge_pence::numeric/100)*(v_vat_rate/100),2);\n  v_total:=(p_invoice_presentation_charge_pence::numeric/100)+v_vat;\n",
+  "extracted_VAT_block": "  v_vat_rate:=case when p_vat_chargeable\n    then p_vat_rate_pct else 0 end;\n  v_vat:=pg_catalog.round((p_invoice_presentation_charge_pence::numeric/100)*(v_vat_rate/100),2);\n  v_total:=(p_invoice_presentation_charge_pence::numeric/100)+v_vat;\n",
+  "original_NHSP_price_gate": "      select * into v_charge_check\n      from public.weekly_source_charge_checks charge_check\n      where charge_check.upload_row_id=v_row.id\n        and charge_check.row_resolution_id=v_row.resolution_id\n        and charge_check.generation=v_generation;\n      v_charge_acceptance.id:=null;\n      if found and v_charge_check.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE') then\n        select * into v_charge_acceptance\n        from public.weekly_source_charge_acceptances acceptance\n        where acceptance.charge_check_id=v_charge_check.id\n          and acceptance.upload_row_id=v_row.id\n          and acceptance.row_resolution_id=v_row.resolution_id\n          and acceptance.source_upload_id=v_upload.id\n          and acceptance.contract_id=v_row.contract_id\n          and acceptance.acceptance_kind=case v_charge_check.comparison_result\n            when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO' else 'ACCEPTED_DISPARITY' end\n          and acceptance.source_upload_hash=v_upload.content_sha256\n          and acceptance.source_row_fingerprint=(select resolution.source_row_fingerprint\n            from public.weekly_source_row_resolutions resolution where resolution.id=v_row.resolution_id)\n          and acceptance.contract_and_rate_fingerprint=v_economic.contract_and_rate_fingerprint\n          and acceptance.effective_policy_fingerprint=v_economic.effective_policy_fingerprint\n          and acceptance.charge_calculation_fingerprint=v_economic.calculation_fingerprint\n          and acceptance.acceptance_policy_fingerprint=\n            private.weekly_source_charge_acceptance_policy_fingerprint_v1();\n      end if;\n      v_price_admission_result:=case v_charge_check.comparison_result\n        when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO'\n        when 'MISMATCH' then 'ACCEPTED_DISPARITY'\n        else v_charge_check.comparison_result end;\n      if not found or (select pg_catalog.count(*)\n          from public.weekly_source_charge_checks charge_check\n          where charge_check.upload_row_id=v_row.id\n            and charge_check.row_resolution_id=v_row.resolution_id\n            and charge_check.generation=v_generation)<>1\n         or v_charge_check.source_commission_pence is distinct from v_row.source_commission_pence\n         or v_charge_check.source_total_cost_pence is distinct from v_row.source_total_cost_pence\n         or v_charge_check.source_shift_charge_pence is distinct from v_row.source_shift_charge_pence\n         or v_charge_check.calculated_segment_charge_pence is distinct from v_economic.calculated_charge_pence\n         or v_charge_check.source_charge_difference_pence is distinct from\n              (v_row.source_shift_charge_pence-v_economic.calculated_charge_pence)\n         or v_charge_check.charge_calculation_fingerprint is distinct from\n              v_economic.calculation_fingerprint\n         or v_charge_check.comparison_profile_version<>'NHSP_TWO_COMPONENT_PENCE_V1'\n         or v_charge_check.comparison_result not in (\n              'EXACT','SOURCE_ROUNDING_EQUIVALENT','MISMATCH','ZERO_SOURCE_CHARGE'\n            )\n         or not (\n           (v_charge_check.comparison_result='EXACT'\n             and v_charge_check.source_charge_difference_pence=0)\n           or (v_charge_check.comparison_result='SOURCE_ROUNDING_EQUIVALENT'\n             and v_charge_check.row_sign_kind in ('POSITIVE','FULL_NEGATIVE')\n             and (v_charge_check.source_charge_difference_pence=1\n               or v_charge_check.source_charge_difference_pence=-1)\n             and ((v_charge_check.source_shift_charge_pence>0\n                   and v_charge_check.calculated_segment_charge_pence>0)\n               or (v_charge_check.source_shift_charge_pence<0\n                   and v_charge_check.calculated_segment_charge_pence<0)))\n           or (v_charge_check.comparison_result='MISMATCH'\n             and v_charge_acceptance.id is not null\n             and v_charge_acceptance.acceptance_kind='ACCEPTED_DISPARITY')\n           or (v_charge_check.comparison_result='ZERO_SOURCE_CHARGE'\n             and v_charge_check.source_commission_pence=0\n             and v_charge_check.source_total_cost_pence=0\n             and v_charge_check.source_shift_charge_pence=0\n             and v_charge_check.calculated_segment_charge_pence>0\n             and v_charge_acceptance.id is not null\n             and v_charge_acceptance.acceptance_kind='ACCEPTED_ZERO')\n         )\n         or v_charge_check.row_sign_kind is distinct from (case\n              when v_economic.row_sign=1 then 'POSITIVE' else 'FULL_NEGATIVE' end)\n         or v_charge_check.phase_severity='FINALISATION_BLOCKER'\n         or v_charge_check.blocker_code is not null then\n        raise exception 'WEEKLY_SOURCE_NHSP_PRICE_GATE_FAILED'\n          using errcode='55000',detail=v_row.source_row_ordinal::text;\n      end if;\n",
+  "price_gate_exact": true,
+  "new_private_signatures": [
+    "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+    "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+    "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)"
+  ],
+  "new_public_signatures": [],
+  "core_sha256": "9d9f36f53d66ac88ccd38872d8ce14881a13b41ecedb59b4bb10a7e890af616c",
+  "price_sha256": "f84627e8c6878cc745834925ccf796f77b2887cb78a4d70a0a31a0450e84ff90",
+  "values_sha256": "4046f609cf4df621d4c8ee3159a7f9de18ba6abed6ddd7b10a77d3752f2f79f5",
+  "no_new_financial_classifier": true,
+  "no_native_payment_or_row_creation": true,
+  "native_calls": 0,
+  "canonical_mounted": false,
+  "NHSP_NONE_writer_pipeline_complete": false
+}

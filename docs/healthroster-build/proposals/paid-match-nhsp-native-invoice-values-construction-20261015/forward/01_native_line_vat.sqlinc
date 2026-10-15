@@ -1,0 +1,17 @@
+-- Single exact native line VAT assembly, including its original numeric
+-- typmods and signed pence. No invoice/pay authority is granted here.
+create or replace function private.weekly_source_native_line_vat_v1(
+  p_invoice_presentation_charge_pence bigint,p_vat_chargeable boolean,p_vat_rate_pct numeric
+) returns jsonb language plpgsql immutable security definer
+set search_path to 'public','private','pg_catalog','pg_temp' as $function$
+declare v_vat_rate numeric(5,2);v_vat numeric(12,2);v_total numeric(12,2);
+begin
+  v_vat_rate:=case when p_vat_chargeable
+    then p_vat_rate_pct else 0 end;
+  v_vat:=pg_catalog.round((p_invoice_presentation_charge_pence::numeric/100)*(v_vat_rate/100),2);
+  v_total:=(p_invoice_presentation_charge_pence::numeric/100)+v_vat;
+  return pg_catalog.jsonb_build_object('vat_rate_pct',v_vat_rate,'vat_amount',v_vat,'total_inc_vat',v_total);
+end;
+$function$;
+alter function private.weekly_source_native_line_vat_v1(bigint,boolean,numeric) owner to postgres;
+revoke all on function private.weekly_source_native_line_vat_v1(bigint,boolean,numeric) from public,anon,authenticated,service_role;
