@@ -1,0 +1,20 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_full_kernel_retry": "PENDING",
+  "input_commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+  "input_path": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/00_source_token_grammar.sqlinc",
+  "before_sha256": "bccccd390cd6d5e70b3fb6b0f0b7e0fa3dfc1e31a99fc784bd7dea13b95a26ff",
+  "after_sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+  "hunks": [
+    {
+      "before": "jsonb_array_length(identity)<>case when kind='SOURCE_RESOLUTION_SLOT' then 3 else 2 end then",
+      "after": "jsonb_array_length(identity)<>(case when kind='SOURCE_RESOLUTION_SLOT' then 3 else 2 end) then"
+    }
+  ],
+  "scope": "Parenthesise the exact CASE expression in the IF condition so PL/pgSQL does not consume its internal THEN as the IF terminator. All token domains/arity/type/canonical identity and authority checks unchanged.",
+  "initial_native_sqlstate": "42601",
+  "initial_native_statement": 11,
+  "initial_native_sql_sha256": "b6e73e99cc047276f987ac44c42ed3e5c8c6be6993c9b0fadd3dacd993e669ad",
+  "initial_native_rollback_fresh_absence": true
+}

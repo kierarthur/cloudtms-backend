@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "forward/00_source_token_grammar.sqlinc",
+      "bytes": 5580,
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "file": "before/00_source_token_grammar.sqlinc",
+      "bytes": 5578,
+      "sha256": "bccccd390cd6d5e70b3fb6b0f0b7e0fa3dfc1e31a99fc784bd7dea13b95a26ff"
+    },
+    {
+      "file": "COMPLETE_CURRENT_REVERSE.json",
+      "bytes": 1170,
+      "sha256": "f5750d8a9febc63b7cb95839bf482308cf72a6e010ee6bd86e4262492f66b147"
+    },
+    {
+      "file": "BOUNDARY.md",
+      "bytes": 571,
+      "sha256": "aa67af876cb72f7c98ea3f3ae28010a524aafbf8db3b902ef185f0681e3a48aa"
+    }
+  ]
+}

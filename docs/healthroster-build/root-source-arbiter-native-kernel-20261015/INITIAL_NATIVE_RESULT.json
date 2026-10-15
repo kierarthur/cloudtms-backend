@@ -1,0 +1,155 @@
+{
+  "result": {
+    "accepted": false,
+    "database": "cloudtms_test_clone",
+    "label": "Source arbiter exact d48 scalar coverage kernel",
+    "sqlSha256": "b6e73e99cc047276f987ac44c42ed3e5c8c6be6993c9b0fadd3dacd993e669ad",
+    "statementCount": 28,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "error": {
+          "message": "syntax error at end of input",
+          "code": "42601",
+          "position": "2509",
+          "routine": "scanner_yyerror"
+        }
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "DO",
+          "rowCount": null,
+          "fields": [],
+          "rows": [],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 2,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "table_and_five_functions_absent"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "table_and_five_functions_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ],
+    "fatalError": {
+      "message": "syntax error at end of input",
+      "code": "42601",
+      "position": "2509",
+      "routine": "scanner_yyerror"
+    }
+  },
+  "shared_turn": {
+    "key": [
+      20261013,
+      1
+    ],
+    "backend_pid": 54488,
+    "taken_at_utc": "2026-10-15T00:55:32.051Z",
+    "released_at_utc": "2026-10-15T00:55:50.707Z",
+    "explicit_unlock_confirmed": true,
+    "connection_closed": true
+  },
+  "status": "NATIVE_COMPILE_FAILED_ROLLED_BACK_ABSENT",
+  "not_full_rehearsal": true
+}

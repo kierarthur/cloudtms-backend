@@ -373,3 +373,28 @@ SEND_7 turn: {"chat":"HealthRoster","task":"Install1 exact pushed WP-PP full reh
 SEND_7 turn: {"chat":"HealthRoster","task":"Fresh restoration proof after own interrupted Install1 rehearsal","status":"TAKEN","takenAt":"2026-10-14T01:17:04.156Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"Fresh restoration proof after own interrupted Install1 rehearsal","status":"RELEASED","takenAt":"2026-10-14T01:17:04.156Z","releasedAt":"2026-10-14T01:21:15.400Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"kier1978-native-tool-pickup-20261015","status":"TAKEN","takenAt":"2026-10-15T00:50:18.375Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"kier1978-native-tool-pickup-20261015","status":"RELEASED","takenAt":"2026-10-15T00:50:18.375Z","releasedAt":"2026-10-15T00:50:18.534Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"kier1978-native-tool-pickup-20261015","status":"TAKEN","takenAt":"2026-10-15T00:50:26.295Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"kier1978-native-tool-pickup-20261015","status":"RELEASED","takenAt":"2026-10-15T00:50:26.295Z","releasedAt":"2026-10-15T00:50:43.765Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"source-arbiter-kernel-native-20261015","status":"TAKEN","takenAt":"2026-10-15T00:55:32.051Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"source-arbiter-kernel-native-20261015","status":"RELEASED","takenAt":"2026-10-15T00:55:32.051Z","releasedAt":"2026-10-15T00:55:50.707Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"source-arbiter-kernel-native-case-fix-r1-20261015","status":"TAKEN","takenAt":"2026-10-15T00:56:37.642Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"source-arbiter-kernel-native-case-fix-r1-20261015","status":"RELEASED","takenAt":"2026-10-15T00:56:37.642Z","releasedAt":"2026-10-15T00:56:53.866Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+
+## Native Source kernel and exact compilation fix —15October2026
+
+Exact Kier1978 native pickup is proved; see connector539e8fb7. Native Source arbiter trial used exact d48 schema/grammar/selected complete scalar core/coverage owner with only the repository logical-postgres-to-current-owner adapter. Initial28-statement/33,972-byte trial failed compiling grammar statement11, SQLSTATE42601. Rollback/fresh table+five-function absence passed; SEND7 turn54488 explicitly unlocked/closed00:55:50.707Z. This is a real Source compilation defect, not an owner decision or one-transaction verifier artefact.
+
+The complete forward successor a0-source-grammar-case-compilation-fix-20261015 changes only parentheses around the exact existing CASE expression inside IF. One unique full reverse reproduces d48 raw grammar exactly; domains/tuple arity/types/canonical identity/authority are unchanged. Retry uses the same28 statements/assertions and original33,972-byte trial plus two parentheses. Native accepted=true on cloudtms_test_clone; all kernel assertions pass: identical retained range dedupe/touch, overlapping ranges retained separately, Contract/policy kind separation, ordinary overlap preserves retained rows, disjoint date/foreign Client leaves no ordinary intents, exact scalar/global/object dispatch, invalid whole envelope refuses before partial admission, kind whitelist, timeout restoration and all five private ACLs. The final native result reports five retained intents within the rollback transaction.
+
+Retry rollback/fresh table+five-function absence pass. SEND7 turn54562 held00:56:37.642Z–00:56:53.866Z, explicit unlock/connection close true. The first native failure and exact source/executable hashes/owner policy/SQL/verification/generators/journals are retained in root-source-arbiter-native-kernel-20261015. One native compilation fix applied, zero rejected in this package; independent source closure PENDING. No application writer, financial owner, claimant, external effect, durable source installation, feature activation, app upload, other-account route or background pause. This qualifies the actual scalar/range kernel only; all concurrency/RR/fullcaller/RAW/ACTIVE/contract/fullrehearsal/financial/acceptance gates remain held. Canonical399/1060 unchanged.

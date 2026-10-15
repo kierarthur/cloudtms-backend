@@ -1,0 +1,50 @@
+{
+  "native_kernel_only": true,
+  "artifacts": [
+    {
+      "file": "ABSENCE.sql",
+      "bytes": 743,
+      "sha256": "638aa7355ed65e387a6455a4456ec61bea19427ad63dc54e774ed2fa2ce221ae"
+    },
+    {
+      "file": "fix-source-grammar-case-20261015.mjs",
+      "bytes": 2906,
+      "sha256": "cdfead533560da2e9127118c85fb74d2b28ea67c3fbdbe378312e0971d7e0607"
+    },
+    {
+      "file": "INITIAL_NATIVE_RESULT.json",
+      "bytes": 3821,
+      "sha256": "6841432c8814310ba4f186e52d169a41de25e599b863700fa26532cdbc521c85"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 4488,
+      "sha256": "bdc5ed578fdc5954b18dcbc7b5ac9760b75d7c831af6333b3bd7e5aaf46e529c"
+    },
+    {
+      "file": "prepare-source-arbiter-native-20261015.mjs",
+      "bytes": 9290,
+      "sha256": "6fda146b2189f97367f7b3be98328e35fb19c2a5515f23db690d8843fa40c49e"
+    },
+    {
+      "file": "RETRY_01.sql",
+      "bytes": 33974,
+      "sha256": "e1ffc8921a246c09c11b35233a3d812e50f699cd5adca1c9c4c90af6c60a3479"
+    },
+    {
+      "file": "RETRY_01_NATIVE_RESULT.json",
+      "bytes": 7029,
+      "sha256": "723ce1d144824e74457a21c24bb1403f404567a786a3cca3ee8fa487d43c12f7"
+    },
+    {
+      "file": "SHARED_TURN_JOURNAL.txt",
+      "bytes": 1724,
+      "sha256": "fd32b9fc288f653e6a4f11876c222f100496f7c7f0344ee83e96856bb6ec593f"
+    },
+    {
+      "file": "TRIAL.sql",
+      "bytes": 33972,
+      "sha256": "b6e73e99cc047276f987ac44c42ed3e5c8c6be6993c9b0fadd3dacd993e669ad"
+    }
+  ]
+}

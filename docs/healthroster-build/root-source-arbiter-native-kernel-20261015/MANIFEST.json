@@ -1,0 +1,83 @@
+{
+  "source_only_preparation": true,
+  "native_status": "PENDING",
+  "source_commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+  "inputs": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/01_complete_same_arbiter_schema.sqlinc",
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "bytes": 6436,
+      "raw_sha256": "e934e1f6f425c23a02f70d16c1039d8104965d8c725efb3f40688de8728e9ddf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/00_source_token_grammar.sqlinc",
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "bytes": 5578,
+      "raw_sha256": "bccccd390cd6d5e70b3fb6b0f0b7e0fa3dfc1e31a99fc784bd7dea13b95a26ff"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "bytes": 23386,
+      "raw_sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-policy-selector-successor-20261015/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "commit": "d48f05205ae9ce066762be8a307d87b304ce71da",
+      "bytes": 7703,
+      "raw_sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+    }
+  ],
+  "selected_scalar_statements": 3,
+  "selected_scalar_sha256": "f36f8a653808907e9af42efca2b3abddc858e0645dc6d4d77b9a822f48ff7db5",
+  "logical_owner_policy": {
+    "version": "CLOUDTMS_LOGICAL_POSTGRES_EXECUTABLE_POLICY_V1",
+    "mode": "CURRENT_USER",
+    "dynamicSources": [
+      {
+        "path": "supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql",
+        "canonicalSourceSha256": "d7d5203449912201df726bff02b81d00c219e75f9acc90104150cca32cc19bdb",
+        "literal": "'alter table private.%I owner to postgres'",
+        "replacement": "'alter table private.%I owner to CURRENT_USER'",
+        "policyLiteral": "'create policy cloudtms_miget_service_owner_all on private.%I to postgres using(true) with check(true)'",
+        "policyReplacement": "'create policy cloudtms_miget_service_owner_all on private.%I to CURRENT_USER using(true) with check(true)'"
+      },
+      {
+        "path": "supabase/migrations/09102026_2153_banking_pay_next_accepted_input_v1.sql",
+        "canonicalSourceSha256": "0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182",
+        "literal": "'alter table private.%I owner to postgres'",
+        "replacement": "'alter table private.%I owner to CURRENT_USER'"
+      },
+      {
+        "path": "supabase/migrations/04102026_1827_banking_pay_next_candidate_destination_group.sql",
+        "canonicalSourceSha256": "af9849f6e83784b0064ee58179aabc740d396764c3639ef7132967f394c9512d",
+        "literal": "'alter table private.%I owner to postgres'",
+        "replacement": "'alter table private.%I owner to CURRENT_USER'"
+      },
+      {
+        "path": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+        "canonicalSourceSha256": "33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c",
+        "literal": "'alter function %s owner to postgres'",
+        "replacement": "'alter function %s owner to CURRENT_USER'"
+      }
+    ]
+  },
+  "selected_definitions_sha256": "49147c3266e25583bbd3f62335c0d96547945396b8bc7506be9846c08f7b24a0",
+  "mapped_definitions_sha256": "beadd718a9b394fd4e59f4b9d8041e69db115daac2e65bc6baf15e72e40974da",
+  "sql_sha256": "b6e73e99cc047276f987ac44c42ed3e5c8c6be6993c9b0fadd3dacd993e669ad",
+  "verification_sha256": "638aa7355ed65e387a6455a4456ec61bea19427ad63dc54e774ed2fa2ce221ae",
+  "sql_bytes": 33972,
+  "packaging_statements": 28,
+  "functions": [
+    "private.timesheet_correction_a0_source_token_assert_v1(jsonb)",
+    "private.timesheet_correction_a0_fence_scalar_acquire_core_v1(jsonb,boolean)",
+    "private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean)",
+    "private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean)",
+    "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)"
+  ],
+  "scope": "Actual scalar/range kernel and schema compilation/truth only. No financial, claimant, business writer, RAW/ACTIVE or RR/concurrency/full release proof.",
+  "shared_lock_required": [
+    20261013,
+    1
+  ]
+}
