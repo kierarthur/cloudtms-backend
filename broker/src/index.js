@@ -66,7 +66,9 @@ import { handleBpayNextBackgroundMessage, runBpayNextRecoveryTick, runBpayNextAc
 import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './bpay-next-legacy-retirement.js';
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
-import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
+import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';
+import { createPushTimingOfficeHandler } from './weekly-source/push-timing-office.mjs';
+const handlePushTimingOffice = createPushTimingOfficeHandler({ requireAdmin: requireMyTmsOfficeAdmin, rpc: sbRpc, deploymentContext: weeklySourceDeploymentContext });
 import { weeklySourceUnauthoriseRouting, weeklySourceUnauthoriseResultFields, weeklySourceUnauthorisePairPreflight } from './weekly-source/unauthorise-routing.mjs';
 // WP-23 / Gate 13 hostile finance review F2: the Weekly Source first-authorisation
 // routing decision for the real Office Authorise route (and, through it, Bulk
@@ -200324,6 +200326,7 @@ if (req.method === 'GET' && p === '/api/settings/defaults')           return han
 if (req.method === 'PUT' && p === '/api/settings/defaults')           return handleUpdateSettings(env, req);
 if (req.method === 'GET' && p === '/api/mytms/settings')              return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'GET'));
 if (req.method === 'PUT' && p === '/api/mytms/settings')              return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'SET'));
+if (['GET','PUT'].includes(req.method) && p === '/api/mytms/push-timing') return withCORS(env, req, await handlePushTimingOffice(env, req));
 if (req.method === 'POST' && p === '/api/mytms/settings/preview')     return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'PREVIEW'));
 if (req.method === 'GET' && p === '/api/mytms/agency-logo')          return withCORS(env, req, await handleMyTmsAgencyLogo(env, req, 'GET'));
 if (req.method === 'PUT' && p === '/api/mytms/agency-logo')          return withCORS(env, req, await handleMyTmsAgencyLogo(env, req, 'SET'));

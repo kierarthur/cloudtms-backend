@@ -1,5 +1,15 @@
 # HealthRoster TEST setup manifest
 
+## QT-ADMIN-RB-16102026 — bounded V6 administration proof
+
+Manifested before mutation. Current account kier@arthur-rai.co.uk; only native cloudtms-miget-operations-kier-codex rollback tool, explicit agency_test/cloudtms_test_clone. Hold existing shared turn(20261013,1) through before/trial/rollback/fresh proof. No durable bootstrap, feature activation, provider/send, queue drain, payment/settlement or full release rehearsal.
+
+Exact pushed sourcebb8f129d61d4b6549773bdf3baa6598564e14192: new QT authority migration/repeatable plus tests/weekly-source/push-timing-admin-native.sql. Prepared40statement27474byte SHA256d26436e41bd3306044b740000b512b412283abe3674d9025b761e570a1d1ef3b; source pins/fingerprint in .codex-tmp/qt-admin-native-20261016/MANIFEST.json. Repository logical postgres owner mapping only, original outer wrappers removed; server owns the sole rollback. Collector/JIT off, actual body checking retained.
+
+Require before absence of both new QT tables and all seven exact new routines, unchanged TEST/LEGACY1 and fixture userIDf7160000-0000-4000-8000-000000000001 / healthroster-qt-rollback-only@example.invalid. The fixture's unusable non-login password placeholder is artificial test data, not a credential. Fixture agencyf7160000-0000-4000-8000-000000000019 and request IDs ending002/003/004 exist only inside the rollback; this is not the reviewed real deployment seed. Existing admin predicate, table/RLS/ACL/triggers stay enabled. No real user or existing policy is changed.
+
+Temporary expected after: one fixture admin and policy, two accepted immutable save receipts; real GET/SAVE/unchanged+changed revision/exact replay/changed-body conflict/stale/permission-loss/foreign deployment/schema/closed policy/bigint/ACL assertions. Expected fresh after: every fixture and new object absent, complete before ledger fingerprints equal, LEGACY1. This bounded administration proof cannot close actual Worker/UI/bootstrap/dispatch/provider/race/full implementation acceptance.
+
 No durable setup mutation has occurred. D9 standing authority covers narrowly scoped agency TEST setup required by acceptance, but each mutation must first have an exact entry below with fresh identifier vacancy/current-state proof, lawful owner/creation route, expected after state and verification. No fabricated paid/issued/SENT markers, provider/payment/settlement action or real external-recipient email is permitted.
 
 Reserved logical groups remain JS-1 to JS-7 and CN-1 to CN-8 from the WP-0 report/ledgers. Native booking, Timesheet, finance, workflow, signature, invoice and document identifiers will be fixed only against the actual implemented owner contract. A proposed or reserved identifier is not proof of vacancy.

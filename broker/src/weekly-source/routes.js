@@ -397,7 +397,7 @@ async function withRefusalRecording(dependencies, caller, actorUserId, attempt) 
   }
 }
 
-function weeklySourceDeploymentContext(env) {
+export function weeklySourceDeploymentContext(env) {
   const agencyId = canonicalUuid(
     env?.MYTMS_OFFICE_AGENCY_ID,
     'WEEKLY_SOURCE_SETTINGS_DEPLOYMENT_UNAVAILABLE',
