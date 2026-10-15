@@ -1,0 +1,11 @@
+# Independent NHSP IF/CASE source review
+
+Verdict: PASS for root commit `b46eed23eb97a595cd15ab4a8b2d0f950bec3f84`. No concrete P0/P1/P2 finding in this bounded successor. This review does not qualify the complete NHSP owners or final Part B.
+
+The independent pure checker verifies all 20 payload artifacts and their manifest against raw Git and saved disk before and after review. Each of three complete preimages also equals its exact `1e54ff551d48b6d6e7b7de5aaf825a6b08ac4622` Git blob. Each complete forward reverses uniquely to that preimage by removing only the two added parentheses surrounding its existing CASE expression. This preserves all predicates, branches, null semantics, actor/proof/CAS checks, locks, ACL tails, economic values and owner distinctions.
+
+The initial three probe constructors reconstruct byte for byte from those actual expressions. Their recorded responses each contain SQLSTATE 42601, despite the outer accepted flag. The retry reconstructs from the three wrapped expressions plus exactly three pure default-unavailable calls; all six recorded statements succeed. Both result hashes match the exact SQL bytes, both report rollback, and both fresh-connection responses establish all three named probes absent in `cloudtms_test_clone`. The four saved turn records contain two corresponding taken/released pairs with explicit unlock and closed connection. The retained preparer refusal precedes the retry and describes its corrected batch-global uniqueness assumption; its correction does not broaden the production change.
+
+Wrapping a CASE expression preserves the existing expression and makes its boundary explicit to the PL/pgSQL IF parser. The recorded retry supports this finite expression result and default unavailable behavior. It does not prove complete business-owner compilation, positive NHSP facts, seven-owner composition, race/C1/NONE behavior, compiled purity, financial/security/API/Office acceptance, full rehearsal, installation or release. The reviewer made no database call, changed no shared I2 file and preserved the existing untracked calendar work.
+
+Reproduce with `node docs/healthroster-build/proposals/checklist-nhsp-if-case-review-20261015/check-source.mjs` from the Native worktree. The optional first argument is the I2 worktree path.
