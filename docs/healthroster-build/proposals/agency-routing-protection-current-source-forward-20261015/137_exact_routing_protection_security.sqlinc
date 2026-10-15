@@ -1,0 +1,28 @@
+-- Exact selected owner/table checks; native execution still mandatory.
+do $routing_protection_security$
+declare item record;oid_value oid;
+begin
+ for item in select * from(values
+  ('private.weekly_source_agency_change_capture_v1(uuid,uuid)',false),
+  ('private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)',false),
+  ('public.weekly_source_office_authorise_scope_v1(jsonb)',true),
+  ('private.weekly_source_check_only_protection_identity_guard_v1()',false),
+  ('private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)',false)
+ ) selected(signature,service_execute) loop
+  oid_value:=to_regprocedure(item.signature);
+  if oid_value is null or not exists(select 1 from pg_proc p where p.oid=oid_value and p.prosecdef
+   and p.proowner=(select oid from pg_roles where rolname=current_user) and exists(select 1 from unnest(p.proconfig) setting where setting like 'search_path=%'))
+   or has_function_privilege('anon',oid_value,'EXECUTE') or has_function_privilege('authenticated',oid_value,'EXECUTE')
+   or has_function_privilege('service_role',oid_value,'EXECUTE') is distinct from item.service_execute
+   or exists(select 1 from pg_proc p cross join lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+    where p.oid=oid_value and acl.grantee=0 and acl.privilege_type='EXECUTE') then
+   raise exception 'AGENCY_ROUTING_PROTECTION_OWNER_SECURITY_INVALID: %',item.signature;end if;
+ end loop;
+ if not exists(select 1 from pg_class c where c.oid='private.weekly_source_check_only_shift_protections'::regclass and c.relrowsecurity and c.relforcerowsecurity
+  and c.relowner=(select oid from pg_roles where rolname=current_user)) then raise exception 'AGENCY_PROTECTION_STORE_OWNER_SECURITY_INVALID';end if;
+ foreach oid_value in array array[(select oid from pg_roles where rolname='anon'),(select oid from pg_roles where rolname='authenticated'),(select oid from pg_roles where rolname='service_role')] loop
+  if has_table_privilege(oid_value,'private.weekly_source_check_only_shift_protections','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+   raise exception 'AGENCY_PROTECTION_STORE_RAW_ROLE_ACCESS_FORBIDDEN';end if;
+ end loop;
+end;
+$routing_protection_security$;

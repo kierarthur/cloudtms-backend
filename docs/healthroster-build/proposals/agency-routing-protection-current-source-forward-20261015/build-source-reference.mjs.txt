@@ -1,0 +1,117 @@
+// Actual current owner successors and the already planned private store.
+// No database, network or other-worktree mutation.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import{scanManagedSql}from'../../../../scripts/cloudtms-managed-release-sql.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),out=path.join(here,'agency-routing-protection-dependencies-construction-20261015');
+const pins={root:'f500d7615d471a5bc4c030913bc71f861a7f2393',report:'ffaf93b0b62c6693aa3d90333d39bec48714bca9'},core='docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/',old='docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014/';
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex'),git=(pin,file)=>execFileSync('git',['show',`${pin}:${file}`],{cwd:repo,maxBuffer:32*1024*1024}),inputs=[];
+function write(file,value){const dest=path.join(out,file);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,value);}function json(file,value){write(file,JSON.stringify(value,null,2)+'\n');}
+function read(pin,file){const b=git(pin,file);inputs.push({pin,path:file,bytes:b.length,sha256:sha(b)});write('reference/'+path.basename(file),b);return b.toString('utf8');}
+function once(s,before,after){assert.equal(s.split(before).length,2,before.slice(0,90));return s.replace(before,()=>after);}
+function def(s,name){const p=scanManagedSql(s),rows=p.statements.map(st=>p.source.slice(st.start,st.end)).filter(st=>new RegExp('^create\\s+(?:or\\s+replace\\s+)?function\\s+'+name.replace('.','\\.')+'\\s*\\(','i').test(st));assert.equal(rows.length,1,name);return rows[0];}
+const records=[];function save(file,name,before,after,hunks,input){write('before/'+file,before+'\n');write('forward/'+file,after+'\n');records.push({name,file,input,whole_function_hunk:{before,after},hunks,before_sha256:sha(before),after_sha256:sha(after)});}
+const captureInput=core+'repeatable/05_actual_native_capture_and_digest.sqlinc',captureRaw=read(pins.report,captureInput);let capture=def(captureRaw,'private.weekly_source_agency_change_capture_v1');const captureBefore=capture,hunks=[];
+const early=`  v_scope:=public.weekly_source_office_authorise_scope_v1(jsonb_build_object(
+    'actor_user_id',p_actor_user_id,'timesheet_id',v_requested_timesheet_id));
+  if v_scope->>'contract' is distinct from 'WEEKLY_SOURCE_AUTHORISE_SCOPE_V1'
+    or v_scope->>'applicable' is distinct from 'true'
+    or private.weekly_source_agency_invoice_check_only_v1(v_requested_timesheet_id) is distinct from true then`;
+const earlyAfter=`  -- Source routing answers which authoriser to call; Agency deliberately
+  -- routes to the ordinary owner. Actual Agency admission remains the native
+  -- Candidate/fence owner, preset predicate and dated scoped authority below.
+  if private.weekly_source_agency_invoice_check_only_v1(v_requested_timesheet_id) is distinct from true then`;
+capture=once(capture,early,earlyAfter);hunks.push({before:early,after:earlyAfter});
+const later=`  v_scope:=public.weekly_source_office_authorise_scope_v1(jsonb_build_object(
+    'actor_user_id',p_actor_user_id,'timesheet_id',v_ts.timesheet_id));
+  if v_scope->>'contract' is distinct from 'WEEKLY_SOURCE_AUTHORISE_SCOPE_V1'
+    or v_scope->>'applicable' is distinct from 'true' then
+    raise exception 'AGENCY_CHANGE_SOURCE_SCOPE_REFUSED' using errcode='42501'; end if;
+`;
+capture=once(capture,later,'');hunks.push({before:later,after:''});save('132_complete_capture_with_native_agency_admission.sqlinc','private.weekly_source_agency_change_capture_v1',captureBefore,capture,hunks,{pin:pins.report,path:captureInput});
+// The selected05 page also owns the unchanged request-digest function. Keep
+// that COMPLETE page when substituting it in the once-only module.
+// scanManagedSql returns canonical LF offsets. Map its one complete function
+// back to the raw mixed-ending input; preserve the unchanged digest verbatim.
+const canonicalCapture=captureRaw.replaceAll('\r\n','\n'),rawOffsets=[];for(let n=0;n<captureRaw.length;n++){if(captureRaw[n]==='\r'&&captureRaw[n+1]==='\n')continue;rawOffsets.push(n);}rawOffsets.push(captureRaw.length);
+const canonicalStart=canonicalCapture.indexOf(captureBefore);assert.ok(canonicalStart>=0);const rawStart=rawOffsets[canonicalStart],rawEnd=rawOffsets[canonicalStart+captureBefore.length],rawCaptureFunction=captureRaw.slice(rawStart,rawEnd);assert.equal(rawCaptureFunction.replaceAll('\r\n','\n'),captureBefore);
+const completeCaptureAfter=captureRaw.slice(0,rawStart)+capture+captureRaw.slice(rawEnd);
+records[0].whole_function_hunk.before=rawCaptureFunction;records[0].before_sha256=sha(rawCaptureFunction);records[0].delta_anchors_canonical_only=true;records[0].unchanged_digest_raw_bytes_preserved=true;
+write('before/132_complete_capture_with_native_agency_admission.sqlinc',captureRaw+'-- End exact complete capture/digest component.\n');
+write('forward/132_complete_capture_with_native_agency_admission.sqlinc',completeCaptureAfter+'-- End exact complete capture/digest component.\n');
+const assertInput=core+'repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc',assertRaw=read(pins.report,assertInput),assertBefore=def(assertRaw,'private.weekly_source_agency_change_request_assert_v1');
+const completed=`    v_scope:=public.weekly_source_office_authorise_scope_v1(jsonb_build_object(
+      'actor_user_id',p_actor_user_id,'timesheet_id',v_ts.timesheet_id));
+    if v_scope->>'contract' is distinct from 'WEEKLY_SOURCE_AUTHORISE_SCOPE_V1'
+      or v_scope->>'applicable' is distinct from 'true' then
+      raise exception 'AGENCY_CHANGE_SOURCE_SCOPE_REFUSED' using errcode='42501'; end if;
+`;
+const completedAfter=`    -- Candidate/fence admission, actual current main-week/root, exact dated
+    -- membership and scoped VIEW_PAY_WORK were rechecked above. The Source
+    -- router correctly returns false for Agency and grants no action authority.
+`;
+const assertion=once(assertBefore,completed,completedAfter);save('133_complete_request_assert_without_source_router_gate.sqlinc','private.weekly_source_agency_change_request_assert_v1',assertBefore,assertion,[{before:completed,after:completedAfter}],{pin:pins.report,path:assertInput});
+const routeInput='supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql',routeRaw=read(pins.root,routeInput),routeBefore=def(routeRaw,'public.weekly_source_office_authorise_scope_v1');let route=routeBefore;assert.equal((route.match(/'VIEW_SOURCE_PROGRESS'/g)||[]).length,2);route=route.replaceAll("'VIEW_SOURCE_PROGRESS'","'VIEW_PAY_WORK'");
+const anchor="  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_PAY_WORK',\n    v_group,v_contract.client_id,v_root.week_ending_date);",addition=`  -- Primary26.3: this ordinary preset must not enter Source authorisation.
+  if private.weekly_source_agency_invoice_check_only_v1(v_root.timesheet_id) then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_AUTHORISE_SCOPE_V1','applicable',false);
+  end if;
+`;
+route=once(route,anchor,addition+anchor);save('134_complete_current_authorise_router_with_agency_ordinary_route.sqlinc','public.weekly_source_office_authorise_scope_v1',routeBefore,route,[{before:routeBefore,after:route}],{pin:pins.root,path:routeInput});
+const storeInput=old+'native/07_check_only_shift_protection_store.sqlinc',store=read(pins.report,storeInput),split=store.indexOf('create or replace function private.weekly_source_check_only_protection_identity_guard_v1()');assert.ok(split>0);
+write('migration/01_same_planned_check_only_protection_store.sqlinc',store.slice(0,split).replace(/\n+$/,'\n'));write('forward/135_same_protection_identity_guard.sqlinc',store.slice(split));
+json('STORE_SPLIT_PROVENANCE.json',{source_only:true,native:false,input:{pin:pins.report,path:storeInput,sha256:sha(store)},migration:'migration/01_same_planned_check_only_protection_store.sqlinc',repeatable:'forward/135_same_protection_identity_guard.sqlinc',combined_raw_reproduction:'migration + one boundary newline + repeatable exactly reproduce raw planned07',new_store_beyond_primary:false,new_protection_actions:false});
+const matcherInput='supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql',matcherRaw=read(pins.root,matcherInput),matcherBefore=def(matcherRaw,'private.weekly_source_protected_match_candidates_v1');let matcher=def(read(pins.report,old+'lineage/native/08_complete_native_protected_match.sqlinc'),'private.weekly_source_protected_match_candidates_v1');
+assert.ok(matcher.includes(matcherBefore.slice(matcherBefore.indexOf('\n  select'),matcherBefore.lastIndexOf('$function$;')).trimEnd().replace(/;$/,'')),'Original Source query remains exact inside CTE (terminal statement semicolon becomes CTE close)');
+const wrong="      and private._weekly_source_effective_policy_v1(p_client_id,contract.id,source_row.work_date)->>'authority_mode'='TIMESHEET_AUTHORITY'",right=`      and private._weekly_source_effective_policy_v1(p_client_id,contract.id,source_row.work_date)->>'authority_mode'='SOURCE_AUTHORITY'
+      and private._weekly_source_effective_policy_v1(p_client_id,contract.id,source_row.work_date)->>'document_mode'='CHECK_ONLY'
+      and coalesce((private._weekly_source_effective_policy_v1(p_client_id,contract.id,source_row.work_date)->>'self_bill_enabled')::boolean,true) is false
+      and private.weekly_source_configured_agency_invoice_v1(p_client_id,source_group.id,source_group.agency_id,source_group.environment,source_row.work_date) is true`;
+matcher=once(matcher,wrong,right);save('136_complete_current_protected_match_with_actual_agency_policy.sqlinc','private.weekly_source_protected_match_candidates_v1',matcherBefore,matcher,[{before:matcherBefore,after:matcher}],{pin:pins.root,path:matcherInput});
+write('reference/pinned-source-parser.mjs',git(pins.root,'scripts/cloudtms-managed-release-sql.mjs'));
+const moneyProjectionPath='docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/forward/06_complete_projection_rows.sqlinc';
+const moneyProjection=read('c4435202881de34dadba27f308e2c2a2737fd4a2',moneyProjectionPath);assert.ok(/if v_source_authority and v_paid_choice is null then\s+v_protected_matches:=private\.weekly_source_protected_match_candidates_v1\(/.test(moneyProjection));
+const imports=[],visited=new Set();function mount(file){if(visited.has(file))return;visited.add(file);const b=git(pins.root,file),text=b.toString('utf8');write('test-mount/'+file,b);imports.push({pin:pins.root,path:file,bytes:b.length,sha256:sha(b)});
+ for(const m of text.matchAll(/(?:\bimport\s+(?:[\s\S]*?\s+from\s+)?|\bexport\s+[^;]*?\s+from\s+)['"](\.[^'"]+)['"]/g)){const child=path.posix.normalize(path.posix.join(path.posix.dirname(file),m[1]));mount(child);}}
+mount('broker/src/weekly-source/upload-publication-owner.mjs');json('ACTUAL_CURRENT_MAPPER_IMPORTS.json',{source_only:true,native:false,unchanged_current_mapper:true,imports});
+write('137_exact_routing_protection_security.sqlinc',`-- Exact selected owner/table checks; native execution still mandatory.
+do $routing_protection_security$
+declare item record;oid_value oid;
+begin
+ for item in select * from(values
+  ('private.weekly_source_agency_change_capture_v1(uuid,uuid)',false),
+  ('private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)',false),
+  ('public.weekly_source_office_authorise_scope_v1(jsonb)',true),
+  ('private.weekly_source_check_only_protection_identity_guard_v1()',false),
+  ('private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)',false)
+ ) selected(signature,service_execute) loop
+  oid_value:=to_regprocedure(item.signature);
+  if oid_value is null or not exists(select 1 from pg_proc p where p.oid=oid_value and p.prosecdef
+   and p.proowner=(select oid from pg_roles where rolname=current_user) and exists(select 1 from unnest(p.proconfig) setting where setting like 'search_path=%'))
+   or has_function_privilege('anon',oid_value,'EXECUTE') or has_function_privilege('authenticated',oid_value,'EXECUTE')
+   or has_function_privilege('service_role',oid_value,'EXECUTE') is distinct from item.service_execute
+   or exists(select 1 from pg_proc p cross join lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+    where p.oid=oid_value and acl.grantee=0 and acl.privilege_type='EXECUTE') then
+   raise exception 'AGENCY_ROUTING_PROTECTION_OWNER_SECURITY_INVALID: %',item.signature;end if;
+ end loop;
+ if not exists(select 1 from pg_class c where c.oid='private.weekly_source_check_only_shift_protections'::regclass and c.relrowsecurity and c.relforcerowsecurity
+  and c.relowner=(select oid from pg_roles where rolname=current_user)) then raise exception 'AGENCY_PROTECTION_STORE_OWNER_SECURITY_INVALID';end if;
+ foreach oid_value in array array[(select oid from pg_roles where rolname='anon'),(select oid from pg_roles where rolname='authenticated'),(select oid from pg_roles where rolname='service_role')] loop
+  if has_table_privilege(oid_value,'private.weekly_source_check_only_shift_protections','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+   raise exception 'AGENCY_PROTECTION_STORE_RAW_ROLE_ACCESS_FORBIDDEN';end if;
+ end loop;
+end;
+$routing_protection_security$;
+`);
+json('COMPLETE_OWNER_REVERSES.json',{source_only:true,native:false,records});json('INPUTS.json',{source_only:true,native:false,inputs});
+write('00_routing_protection_dependencies.sql',`-- After the SAME planned protection store migration and current ffaf runtime.
+begin;
+${records.map(r=>'\\ir forward/'+r.file).join('\n')}
+\\ir forward/135_same_protection_identity_guard.sqlinc
+\\ir 137_exact_routing_protection_security.sqlinc
+notify pgrst, 'reload schema';
+commit;
+`);
+json('SELECTED_RECIPE.json',{source_only:true,native:false,mounted:false,predecessor_module:pins.report,new_business_deltas:['Source router sends Agency to ordinary authorise with shared pay-role read scope','Capture and completed replay retain genuine native Agency authority without misusing the Source router','Actual planned protection store is now explicit required once-only dependency','Native matcher uses actual SOURCE_AUTHORITY/CHECK_ONLY non-self-bill Agency policy rather than wrong TIMESHEET_AUTHORITY'],
+ schema_before_runtime:'migration/01_same_planned_check_only_protection_store.sqlinc',runtime:'00_routing_protection_dependencies.sql',replaces_in_ffaf:['05 capture with132','115 request assert with133'],adds_current_existing_owners:['134 public routing owner','136 private existing protected-match owner'],adds_same_planned_private_guard:'135 identity guard',new_public_signatures:[],new_protection_store_beyond_plan:false,
+ no_later_replay:['ffaf old05/115','Old Source router','Old08 TIMESHEET_AUTHORITY Agency arm','Old09/Worker TIMESHEET authority widening; current SourceAuthority call branches already reach matcher'],
+ critical_remaining:['Root actual protection-store Source/A0 raw/current effect allocation and full native role/RC/old-RR schedules','Protect/Amend/Unprotect real action/intent/economic-target producers and exact genuine NX-AI-6 interface/receipt/netting','First Original/no-T0 existing manual constructor and single-request capture/admission source lifecycle','Full current Money/Native/Office and whole-module compiled/security/API/application qualification']});
+console.log(JSON.stringify({out,complete_current_owner_reversals:records.length,same_planned_store_parts:2,new_public_signatures:0,source_only:true,native:false}));

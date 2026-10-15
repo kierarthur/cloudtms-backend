@@ -1,0 +1,48 @@
+{
+  "source_only": true,
+  "native": false,
+  "inputs": [
+    {
+      "pin": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+      "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/repeatable/05_actual_native_capture_and_digest.sqlinc",
+      "bytes": 23550,
+      "sha256": "8826b9ebc41fe9124d9333e2c2cfe321d7ac4486b9d9c902a2ea455accce9be7"
+    },
+    {
+      "pin": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+      "path": "docs/healthroster-build/proposals/agency-current-source-callers-lifecycle-module-20261015/repeatable/115_complete_current_request_assert_with_original_claim_recheck.sqlinc",
+      "bytes": 16489,
+      "sha256": "c88602f08cffa93133bfb46ef335cdcd3e665e3d2d74c1804077d36e2d164197"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "bytes": 3735,
+      "sha256": "a839de0fa33b9ec4d0047a7199c5746b1365d90d99535b73e0979b912d7a504e"
+    },
+    {
+      "pin": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+      "path": "docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014/native/07_check_only_shift_protection_store.sqlinc",
+      "bytes": 6712,
+      "sha256": "0e5deb3c57ff9ac05dd1a07e421aa7e3189ea954995a1c3476018e2312525ab1"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "bytes": 105442,
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "pin": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+      "path": "docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014/lineage/native/08_complete_native_protected_match.sqlinc",
+      "bytes": 5960,
+      "sha256": "21eb2084a7cf530525312234f9db6502226139c75ff9a9ecc108591d7d677622"
+    },
+    {
+      "pin": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/forward/06_complete_projection_rows.sqlinc",
+      "bytes": 78302,
+      "sha256": "1fededa8f39494a786a82a3dd47058b7ca983620ae88ce952221359c0fb024aa"
+    }
+  ]
+}

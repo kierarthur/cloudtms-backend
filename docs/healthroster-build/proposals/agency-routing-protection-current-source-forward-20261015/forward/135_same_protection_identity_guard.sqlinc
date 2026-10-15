@@ -1,0 +1,24 @@
+create or replace function private.weekly_source_check_only_protection_identity_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$
+declare v_mutable constant text[]:=array['protected_start_at_local','protected_end_at_local',
+  'protected_break_minutes','protected_net_minutes','state','version','updated_by_user_id','updated_at_utc',
+  'latest_request_key','latest_request_sha256','latest_native_receipt','latest_audit_event_id',
+  'ended_at_utc','ended_by_user_id','end_reason'];
+begin
+  if tg_op='DELETE' then raise exception 'CHECK_ONLY_PROTECTION_HISTORY_DELETE_FORBIDDEN' using errcode='55000'; end if;
+  if to_jsonb(new)-v_mutable is distinct from to_jsonb(old)-v_mutable then
+    raise exception 'CHECK_ONLY_PROTECTION_IMMUTABLE_CLAIM_CHANGED' using errcode='55000'; end if;
+  if old.state<>'ACTIVE' and to_jsonb(new) is distinct from to_jsonb(old) then
+    raise exception 'CHECK_ONLY_PROTECTION_ENDED_HISTORY_IMMUTABLE' using errcode='55000'; end if;
+  if to_jsonb(new) is distinct from to_jsonb(old) and new.version<>old.version+1 then
+    raise exception 'CHECK_ONLY_PROTECTION_VERSION_CHANGED' using errcode='40001'; end if;
+  return new;
+end;
+$function$;
+alter function private.weekly_source_check_only_protection_identity_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_check_only_protection_identity_guard_v1() from public,anon,authenticated,service_role;
+create trigger weekly_source_check_only_protection_identity_guard_v1
+  before update or delete on private.weekly_source_check_only_shift_protections
+  for each row execute function private.weekly_source_check_only_protection_identity_guard_v1();

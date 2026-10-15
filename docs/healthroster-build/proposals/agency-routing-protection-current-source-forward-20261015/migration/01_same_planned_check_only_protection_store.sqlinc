@@ -1,0 +1,62 @@
+-- The ONE protection intent store explicitly planned by primary26.5(3)/(13).
+-- Actual NEXT positions, cash and Source approval stores retain their owners.
+create table private.weekly_source_check_only_shift_protections (
+  id uuid primary key default gen_random_uuid(),
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  contract_id uuid not null references public.contracts(id) on delete restrict,
+  client_id uuid not null references public.clients(id) on delete restrict,
+  contract_week_id uuid not null references public.contract_weeks(id) on delete restrict,
+  week_ending_date date not null,
+  work_date date not null,
+  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,
+  source_group_id uuid not null references public.weekly_source_groups(id) on delete restrict,
+  rule_set_version_id uuid not null references public.weekly_source_rule_set_versions(id) on delete restrict,
+  protected_start_at_local timestamp without time zone not null,
+  protected_end_at_local timestamp without time zone not null,
+  protected_break_minutes integer not null,
+  protected_net_minutes integer not null,
+  state text not null default 'ACTIVE' check(state in('ACTIVE','CLEARED','UNPROTECTED')),
+  version bigint not null default 1 check(version>=1),
+  -- The comparison is audit only. It never supplies the economic identity.
+  comparison_row_id uuid references public.weekly_timesheet_source_comparisons(id) on delete restrict,
+  immutable_submission_sha256 bytea not null check(octet_length(immutable_submission_sha256)=32),
+  claim_evidence jsonb not null check(coalesce(jsonb_typeof(claim_evidence)='object'
+    and octet_length(claim_evidence::text)<=65536,false)),
+  created_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  updated_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  created_at_utc timestamptz not null default transaction_timestamp(),
+  updated_at_utc timestamptz not null default transaction_timestamp(),
+  latest_request_key text not null check(length(latest_request_key) between 1 and 200
+    and latest_request_key=btrim(latest_request_key)),
+  latest_request_sha256 bytea not null check(octet_length(latest_request_sha256)=32),
+  latest_native_receipt jsonb not null check(coalesce(jsonb_typeof(latest_native_receipt)='object'
+    and octet_length(latest_native_receipt::text)<=16384,false)),
+  latest_audit_event_id uuid not null references public.audit_events(id) on delete restrict,
+  ended_at_utc timestamptz,
+  ended_by_user_id uuid references public.tms_users(id) on delete restrict,
+  end_reason text check(end_reason is null or end_reason in('RECONCILED_BY_IMPORT','UNPROTECTED_WHILE_WAITING')),
+  check(work_date between week_ending_date-6 and week_ending_date),
+  check(protected_start_at_local::date=work_date and protected_end_at_local>protected_start_at_local
+    and protected_end_at_local<=protected_start_at_local+interval '24 hours'
+    and date_trunc('minute',protected_start_at_local)=protected_start_at_local
+    and date_trunc('minute',protected_end_at_local)=protected_end_at_local),
+  check(protected_break_minutes>=0 and protected_net_minutes>0
+    and extract(epoch from(protected_end_at_local-protected_start_at_local))/60
+      -protected_break_minutes=protected_net_minutes),
+  check(coalesce((state='ACTIVE' and ended_at_utc is null and ended_by_user_id is null and end_reason is null)
+    or(state='CLEARED' and ended_at_utc is not null and ended_by_user_id is not null and end_reason='RECONCILED_BY_IMPORT')
+    or(state='UNPROTECTED' and ended_at_utc is not null and ended_by_user_id is not null and end_reason='UNPROTECTED_WHILE_WAITING'),false))
+);
+alter table private.weekly_source_check_only_shift_protections owner to postgres;
+alter table private.weekly_source_check_only_shift_protections enable row level security;
+alter table private.weekly_source_check_only_shift_protections force row level security;
+create policy cloudtms_miget_service_owner_all on private.weekly_source_check_only_shift_protections
+  for all to current_user using(true) with check(true);
+revoke all on private.weekly_source_check_only_shift_protections from public,anon,authenticated,service_role;
+grant all on private.weekly_source_check_only_shift_protections to postgres;
+create unique index weekly_source_check_only_shift_protections_active_v1
+  on private.weekly_source_check_only_shift_protections(candidate_id,work_event_id) where state='ACTIVE';
+create index weekly_source_check_only_shift_protections_week_v1
+  on private.weekly_source_check_only_shift_protections(contract_week_id,work_event_id,state);
+comment on table private.weekly_source_check_only_shift_protections is
+  'Primary26.5 planned check-only protection intent and signed-claim witness. Candidate/work_event is the economic key; main Contract-week is resolution only. No physical Timesheet, segment, booking, rate, money, invoice or payment ledger.';

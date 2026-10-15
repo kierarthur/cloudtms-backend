@@ -1,0 +1,73 @@
+{
+  "source_only": true,
+  "native": false,
+  "unchanged_current_mapper": true,
+  "imports": [
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "bytes": 12480,
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/money.js",
+      "bytes": 7889,
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/errors.js",
+      "bytes": 340,
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "bytes": 3588,
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "pin": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    }
+  ]
+}

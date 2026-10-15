@@ -1,0 +1,217 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "files": [
+    {
+      "path": "00_routing_protection_dependencies.sql",
+      "bytes": 537,
+      "sha256": "c2a66a1ef1e5f214e3f015c61130466f5d72d2245acd1a51181104102cf79771"
+    },
+    {
+      "path": "137_exact_routing_protection_security.sqlinc",
+      "bytes": 2240,
+      "sha256": "40884469db77f91964bd8b97c2747852705bbc72e1df4bf4ceca696aaf569ea4"
+    },
+    {
+      "path": "ACTUAL_CURRENT_MAPPER_IMPORTS.json",
+      "bytes": 2736,
+      "sha256": "3b63c7cdb65454bec19def8f3bbd771a059c0b5f7b9b2e3d3896282319e4dc3c"
+    },
+    {
+      "path": "before/132_complete_capture_with_native_agency_admission.sqlinc",
+      "bytes": 23598,
+      "sha256": "e77f25bc6b5ce5f97dbefb9c879f71ca0f75f066e8d3cfb0d57235197f4050f7"
+    },
+    {
+      "path": "before/133_complete_request_assert_without_source_router_gate.sqlinc",
+      "bytes": 16072,
+      "sha256": "29318cac6094edd798f8150df9df627a2e872763de2bd57ae64d91425d2f2987"
+    },
+    {
+      "path": "before/134_complete_current_authorise_router_with_agency_ordinary_route.sqlinc",
+      "bytes": 2945,
+      "sha256": "5f2ca3463d814cc2046acc7dd33621b9a042d87c2ecb7e754238a5a1bc4e1f64"
+    },
+    {
+      "path": "before/136_complete_current_protected_match_with_actual_agency_policy.sqlinc",
+      "bytes": 2494,
+      "sha256": "74cf86ded0e00edbc90747f98e2af684a81e221304677e659ddac52487c9be69"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 15727,
+      "sha256": "6e41c46c4b4754b90878016d9c5174b82d14c3d440014ee4c9b64c9dc53a8a79"
+    },
+    {
+      "path": "COMPLETE_OWNER_REVERSES.json",
+      "bytes": 112009,
+      "sha256": "2e9818642d761f094039c826458596aeb7f5899146ef73741fd9508e59de6a8d"
+    },
+    {
+      "path": "EXACT_ROLE_SIGNATURES.json",
+      "bytes": 1729,
+      "sha256": "eaf0b00dbe2d1af8b72437d2829a3c50d68fbb611c21656d96750e4a8851cf4c"
+    },
+    {
+      "path": "forward/132_complete_capture_with_native_agency_admission.sqlinc",
+      "bytes": 23135,
+      "sha256": "2f28dff9d1817a9782b47ae775fa54a18d2f4da9d578e851f4c3d1166087d4e8"
+    },
+    {
+      "path": "forward/133_complete_request_assert_without_source_router_gate.sqlinc",
+      "bytes": 15921,
+      "sha256": "f89e3949bc14f16f9964f73f0126a269433ea7956b178d2be221cfdf3ff988fa"
+    },
+    {
+      "path": "forward/134_complete_current_authorise_router_with_agency_ordinary_route.sqlinc",
+      "bytes": 3196,
+      "sha256": "9886140a6eea733de7ddfcd99d76a7130f7d79e479737811079fe33dcbb1a565"
+    },
+    {
+      "path": "forward/135_same_protection_identity_guard.sqlinc",
+      "bytes": 1720,
+      "sha256": "ccdae7116940df03e15aafec7fc8282e788f6d46d2fa2588969ad553ee6ff191"
+    },
+    {
+      "path": "forward/136_complete_current_protected_match_with_actual_agency_policy.sqlinc",
+      "bytes": 6410,
+      "sha256": "42ce54d5028e042e523473ae322285187f6431f52f5300129c7cd82f7a6fc44a"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 7597,
+      "sha256": "7f61fe235515f697136dee7b7b42a247a8c8a420a74af9591b5573b8eb833ddd"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 3809,
+      "sha256": "caf8ffd34e4ec1f40d731ea595161d7fb4baa648e6672c8c3ce5b4dbd7b49d6e"
+    },
+    {
+      "path": "INPUTS.json",
+      "bytes": 2293,
+      "sha256": "15760f441e7298f11cfa44609e8eef2b528900a82305c8a002a1c00c5a5a6a6d"
+    },
+    {
+      "path": "migration/01_same_planned_check_only_protection_store.sqlinc",
+      "bytes": 4991,
+      "sha256": "550fb9dea5abd9953dc17ef883033c7776591ebe2f0de07917c98a9396a150a9"
+    },
+    {
+      "path": "reference/01102026_1201_weekly_source_combined_workspace.sql",
+      "bytes": 105442,
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "path": "reference/05_actual_native_capture_and_digest.sqlinc",
+      "bytes": 23550,
+      "sha256": "8826b9ebc41fe9124d9333e2c2cfe321d7ac4486b9d9c902a2ea455accce9be7"
+    },
+    {
+      "path": "reference/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "bytes": 3735,
+      "sha256": "a839de0fa33b9ec4d0047a7199c5746b1365d90d99535b73e0979b912d7a504e"
+    },
+    {
+      "path": "reference/06_complete_projection_rows.sqlinc",
+      "bytes": 78302,
+      "sha256": "1fededa8f39494a786a82a3dd47058b7ca983620ae88ce952221359c0fb024aa"
+    },
+    {
+      "path": "reference/07_check_only_shift_protection_store.sqlinc",
+      "bytes": 6712,
+      "sha256": "0e5deb3c57ff9ac05dd1a07e421aa7e3189ea954995a1c3476018e2312525ab1"
+    },
+    {
+      "path": "reference/08_complete_native_protected_match.sqlinc",
+      "bytes": 5960,
+      "sha256": "21eb2084a7cf530525312234f9db6502226139c75ff9a9ecc108591d7d677622"
+    },
+    {
+      "path": "reference/115_complete_current_request_assert_with_original_claim_recheck.sqlinc",
+      "bytes": 16489,
+      "sha256": "c88602f08cffa93133bfb46ef335cdcd3e665e3d2d74c1804077d36e2d164197"
+    },
+    {
+      "path": "reference/pinned-source-parser.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "routing-protection.test.mjs",
+      "bytes": 10131,
+      "sha256": "01e7087bfc0218fd4a226bcd36c7cd48c786105609ddfc9b6fb48e08dc9046e3"
+    },
+    {
+      "path": "SELECTED_RECIPE.json",
+      "bytes": 1784,
+      "sha256": "1de1ea5ac6bac74ca17d306dbcef438537cf980a4b199cac66f92150bbbb586f"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 7772,
+      "sha256": "c6298f1863b7688503b4b9d57ff0329e524cf2f8d3a531966c23bccf6203c9b9"
+    },
+    {
+      "path": "STORE_SPLIT_PROVENANCE.json",
+      "bytes": 684,
+      "sha256": "7040c96b706f8413725a3ff4e627b2dc62178ee3e8457556381d81f3d2ddcdc1"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/coverage-warnings.mjs",
+      "bytes": 3588,
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/errors.js",
+      "bytes": 340,
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/money.js",
+      "bytes": 7889,
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/report-upload-provenance.mjs",
+      "bytes": 12480,
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    }
+  ]
+}

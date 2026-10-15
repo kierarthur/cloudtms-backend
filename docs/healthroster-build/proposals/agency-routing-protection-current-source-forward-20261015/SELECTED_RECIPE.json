@@ -1,0 +1,37 @@
+{
+  "source_only": true,
+  "native": false,
+  "mounted": false,
+  "predecessor_module": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+  "new_business_deltas": [
+    "Source router sends Agency to ordinary authorise with shared pay-role read scope",
+    "Capture and completed replay retain genuine native Agency authority without misusing the Source router",
+    "Actual planned protection store is now explicit required once-only dependency",
+    "Native matcher uses actual SOURCE_AUTHORITY/CHECK_ONLY non-self-bill Agency policy rather than wrong TIMESHEET_AUTHORITY"
+  ],
+  "schema_before_runtime": "migration/01_same_planned_check_only_protection_store.sqlinc",
+  "runtime": "00_routing_protection_dependencies.sql",
+  "replaces_in_ffaf": [
+    "05 capture with132",
+    "115 request assert with133"
+  ],
+  "adds_current_existing_owners": [
+    "134 public routing owner",
+    "136 private existing protected-match owner"
+  ],
+  "adds_same_planned_private_guard": "135 identity guard",
+  "new_public_signatures": [],
+  "new_protection_store_beyond_plan": false,
+  "no_later_replay": [
+    "ffaf old05/115",
+    "Old Source router",
+    "Old08 TIMESHEET_AUTHORITY Agency arm",
+    "Old09/Worker TIMESHEET authority widening; current SourceAuthority call branches already reach matcher"
+  ],
+  "critical_remaining": [
+    "Root actual protection-store Source/A0 raw/current effect allocation and full native role/RC/old-RR schedules",
+    "Protect/Amend/Unprotect real action/intent/economic-target producers and exact genuine NX-AI-6 interface/receipt/netting",
+    "First Original/no-T0 existing manual constructor and single-request capture/admission source lifecycle",
+    "Full current Money/Native/Office and whole-module compiled/security/API/application qualification"
+  ]
+}

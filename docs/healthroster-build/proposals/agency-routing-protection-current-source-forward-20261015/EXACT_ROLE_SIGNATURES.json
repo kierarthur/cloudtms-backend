@@ -1,0 +1,56 @@
+{
+  "source_only": true,
+  "native": false,
+  "existing_replacements": [
+    {
+      "signature": "private.weekly_source_agency_change_capture_v1(uuid,uuid)",
+      "result": "jsonb",
+      "volatility": "VOLATILE",
+      "security_definer": true,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)",
+      "result": "private.weekly_source_agency_timesheet_change_requests",
+      "volatility": "VOLATILE",
+      "security_definer": true,
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_office_authorise_scope_v1(jsonb)",
+      "result": "jsonb",
+      "volatility": "STABLE",
+      "security_definer": true,
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+      "result": "jsonb",
+      "volatility": "STABLE",
+      "security_definer": true,
+      "service_execute": false
+    }
+  ],
+  "same_planned_new_private_guard": {
+    "signature": "private.weekly_source_check_only_protection_identity_guard_v1()",
+    "result": "trigger",
+    "volatility": "VOLATILE",
+    "security_definer": true,
+    "service_execute": false
+  },
+  "all_owner": "postgres logical owner mapped only through current release adapter; verify CURRENT_USER effective owner",
+  "all_deny": [
+    "PUBLIC",
+    "anon",
+    "authenticated"
+  ],
+  "raw_protection_table_deny": [
+    "PUBLIC",
+    "anon",
+    "authenticated",
+    "service_role"
+  ],
+  "private_table_owner_only": "private.weekly_source_check_only_shift_protections",
+  "final_verifier": "137_exact_routing_protection_security.sqlinc",
+  "native_verification": "NOT_EXECUTED"
+}

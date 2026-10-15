@@ -1,0 +1,14 @@
+{
+  "source_only": true,
+  "native": false,
+  "input": {
+    "pin": "ffaf93b0b62c6693aa3d90333d39bec48714bca9",
+    "path": "docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014/native/07_check_only_shift_protection_store.sqlinc",
+    "sha256": "0e5deb3c57ff9ac05dd1a07e421aa7e3189ea954995a1c3476018e2312525ab1"
+  },
+  "migration": "migration/01_same_planned_check_only_protection_store.sqlinc",
+  "repeatable": "forward/135_same_protection_identity_guard.sqlinc",
+  "combined_raw_reproduction": "migration + one boundary newline + repeatable exactly reproduce raw planned07",
+  "new_store_beyond_primary": false,
+  "new_protection_actions": false
+}
