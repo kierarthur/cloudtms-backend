@@ -1,0 +1,1 @@
+{"source_only":true,"SQL_executed":false,"raw_Git_pins":140,"saved_compared":140,"before_after":true,"whole_reversals":5,"unique_hunks":13,"Native_selected_functions":48,"Report_selected_functions":94,"combined_unique_functions":142,"Report_original_ACL_tail_preserved":true,"current_SP12_and_Native_and_prospective_worker_only_preserved":true,"whole_union_native_qualified":false}
