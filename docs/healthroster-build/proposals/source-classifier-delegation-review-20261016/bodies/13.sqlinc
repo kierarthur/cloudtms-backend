@@ -1,0 +1,10 @@
+create or replace function private.timesheet_contract_native_booking_bound_v1(
+ p_operation_id uuid,p_member_key text,p_booking_id text,p_contract_id uuid,p_week date)
+returns boolean language sql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+ select exists(select 1 from public.timesheets allocated
+  join private.timesheet_contract_family_aliases a on a.timesheet_id=allocated.timesheet_id
+  where allocated.booking_id=p_booking_id and allocated.contract_id=p_contract_id and allocated.week_ending_date=p_week
+   and a.accepted_operation_id=p_operation_id and a.member_key=p_member_key
+   and private.timesheet_contract_native_allocation_alias_v1(to_jsonb(a)))
+$function$;

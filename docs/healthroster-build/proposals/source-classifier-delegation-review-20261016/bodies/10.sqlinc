@@ -1,0 +1,45 @@
+create or replace function private.timesheet_contract_native_allocation_binding_v1(p_placement jsonb,p_same_transaction boolean default false)
+returns boolean language sql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+ select count(*)=1 from public.audit_events a
+ join private.timesheet_contract_current_placements actual on actual.family_root_id=(p_placement->>'family_root_id')::uuid
+  and actual.member_key=p_placement->>'member_key'
+ join private.timesheet_contract_move_operations o on o.id=(p_placement->>'operation_id')::uuid
+  and o.state='COMPLETE' and o.receipt_json is not null and o.purpose='CONTRACT_CORRECTION'
+ join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=p_placement->>'member_key'
+ join public.timesheets t on t.timesheet_id=(p_placement->>'current_timesheet_id')::uuid
+ join public.contract_weeks cw on cw.id=(a.after_json->>'contract_week_id')::uuid and cw.timesheet_id=t.timesheet_id
+ join public.contracts c on c.id=cw.contract_id and c.id=t.contract_id and c.candidate_id=o.candidate_id and c.client_id=o.actual_client_id
+ join public.audit_events withdrawn on withdrawn.id=(a.before_json->>'withdrawal_audit_id')::uuid
+ where a.object_type='timesheet' and a.object_id_text=t.timesheet_id::text
+  and a.action='CONTRACT_WEEK_NATIVE_TIMESHEET_ALLOCATED' and a.actor_user_id is not null
+  and a.after_json#>>'{native_contract_placement,version}'='CANDIDATE_NATIVE_ALLOCATION_PLACEMENT_V1'
+  and a.after_json#>'{native_contract_placement,placement}'=p_placement
+  and a.after_json->>'timesheet_id'=t.timesheet_id::text and a.after_json->>'booking_id'=t.booking_id
+  and a.after_json->>'timesheet_version'=t.version::text and a.after_json->'created_now'='true'::jsonb
+  and t.is_current and t.archived_at_utc is null and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+  and cw.week_ending_date=t.week_ending_date and m.role='WORK' and p_placement->>'role'=m.role
+  and m.family_root_id=(p_placement->>'family_root_id')::uuid and m.to_contract_id=t.contract_id
+  and p_placement->>'current_contract_id'=t.contract_id::text
+  and p_placement->>'candidate_id'=o.candidate_id::text and p_placement->>'actual_client_id'=o.actual_client_id::text
+  and o.placement_receipt_json->>'receipt_id'=p_placement->>'placement_receipt_id'
+  and withdrawn.action='CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK'
+  and withdrawn.after_json#>>'{native_contract_placement,version}'='CANDIDATE_NATIVE_PENDING_PLACEMENT_V1'
+  and withdrawn.after_json#>'{native_contract_placement,placement}'=a.before_json->'pending_placement'
+  and withdrawn.after_json->>'contract_week_id'=cw.id::text
+  and (a.before_json#>>'{pending_placement,placement_revision}')::bigint+1=(p_placement->>'placement_revision')::bigint
+  and (a.before_json->'pending_placement')-array['current_timesheet_id','placement_revision']
+     =p_placement-array['current_timesheet_id','placement_revision']
+  and a.before_json#>'{pending_placement,current_timesheet_id}'='null'::jsonb
+  and (case when p_same_transaction then
+    a.after_json#>>'{native_contract_placement,backend_pid}'=pg_backend_pid()::text
+    and a.after_json#>>'{native_contract_placement,transaction_id}'=pg_current_xact_id_if_assigned()::text
+    and to_jsonb(actual) in(p_placement,a.before_json->'pending_placement')
+   else to_jsonb(actual)=p_placement and exists(select 1 from public.audit_events processed
+     where processed.object_type='contract_week' and processed.object_id_text=cw.id::text
+      and processed.action='CONTRACT_WEEK_MANUAL_TIMESHEET_CREATED_PROCESSED'
+      and processed.after_json->>'native_allocation_audit_id'=a.id::text
+      and processed.after_json->>'timesheet_id'=t.timesheet_id::text
+      and processed.after_json->>'contract_week_id'=cw.id::text and processed.after_json->'created_now'='true'::jsonb
+      and processed.actor_user_id=a.actor_user_id) end)
+$function$;
