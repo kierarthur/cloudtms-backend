@@ -1,0 +1,235 @@
+{
+  "version": "CONTACT_FIXED_LOCAL_METADATA_MCP_QUALIFICATION_V1",
+  "status": "PASS_EXPECTED_EXACT_LOCK_REFUSAL_AND_FULL_CANONICAL_LIVE_RESTORATION",
+  "caseId": "contact20-lock1",
+  "sqlSha256": "c3cb9f90e5df098efb57d7f32a33ef882584880157cad2ba0e8360965320befd",
+  "expectedFailedStatement": 12,
+  "errorCode": "55P03",
+  "rolledBack": true,
+  "connectedFresh": true,
+  "markerAbsent": true,
+  "legacy": "LEGACY:1",
+  "fixtures": 0,
+  "backgroundPaused": false,
+  "readerPids": {
+    "before": 193182,
+    "after": 193237,
+    "nativeB": 193235,
+    "holder": 193181
+  },
+  "canonicalSqlSha256": "aa7992bc8191360badf852439eda58308216ee31bb9b60b36aa6dd8f43c8e968",
+  "localTransport": {
+    "before": {
+      "stdoutBytes": 27983234,
+      "snapshotUtf8Bytes": 27983058,
+      "snapshotSha256": "51398a7febe62632a06fb3e9cb126df097faa3400aed1f898845a0f6b0da69df"
+    },
+    "after": {
+      "stdoutBytes": 27983617,
+      "snapshotUtf8Bytes": 27983441,
+      "snapshotSha256": "563831a9e84d28532af75998aea9fc498465eb6f3fe6f795abc7e7b1c7bbba9f"
+    }
+  },
+  "before": {
+    "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+    "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+    "relationCensus": "d218384b4af31d657debf47ebe71a181208430b758d53ea832cc520195d0ac26",
+    "businessCountsFingerprint": "6dc679246a2666bc05b2f73414fbd1144b2b0c6fc216367d90b8803af39b3837",
+    "businessRowsFingerprint": "4bee29d028a0ee674c59bf95e4dd3e86cdf06679f65afb8e9045854623b4aab3",
+    "businessRelations": [
+      {
+        "hash": "2f505efeb1f1d8496ae0ac02c62cc78ece425b4e83bdab77dfe95fde6df724ba",
+        "count": 73267,
+        "relation": "private.candidate_daily_batch_receipts"
+      },
+      {
+        "hash": "d484da95b94563d0f7e939b2117d5c4ee077373bbe729620b1c8da8a4f1f43b0",
+        "count": 20,
+        "relation": "public.ts_financials_outbox"
+      },
+      {
+        "hash": "cf5b970eac9000dd9b037a59a7e555b00d80c0b122e1f0e183224b539a38b3a1",
+        "count": 1,
+        "relation": "public.weekly_candidate_cohorts"
+      },
+      {
+        "hash": "5bdd16b03cad5e93f1cbe00120c983b2fbceb263523ba94a381bc08ba65cf272",
+        "count": 3,
+        "relation": "public.weekly_candidate_outreach_generations"
+      },
+      {
+        "hash": "738e19e72d607031f25a2dffcd694c3cc1b6d4218d3da3e2b5a191bc28f5898a",
+        "count": 4,
+        "relation": "public.weekly_manager_recipient_generations"
+      },
+      {
+        "hash": "caf15144624be820c2009800597f3b458b4248b0d7ad50eea7f5f95f08db8769",
+        "count": 10,
+        "relation": "public.weekly_message_dispatch_commands"
+      },
+      {
+        "hash": "20c3eb6e80e1bdbdc7c2753eb44edc7f9588e30bbd0c5b825b7a3946f2fa7188",
+        "count": 2,
+        "relation": "public.weekly_timesheet_submission_request_memberships"
+      },
+      {
+        "hash": "22a0390f73d1a15133dd655047dbaa37fe10c7139fbb58b1549c795cb077ccb2",
+        "count": 2,
+        "relation": "public.weekly_timesheet_submission_requests"
+      }
+    ],
+    "otherActivityCount": 0
+  },
+  "after": {
+    "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+    "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+    "relationCensus": "d218384b4af31d657debf47ebe71a181208430b758d53ea832cc520195d0ac26",
+    "businessCountsFingerprint": "4b209aa3c056cc1dff64d743bdcd819fdb95f1ac8ba694ba2e96a70bf5d6acf8",
+    "businessRowsFingerprint": "901a07a5d8a81ed7dd28d584ee442655ec2104c00b569c1c570279aecc2f5e8f",
+    "businessRelations": [
+      {
+        "hash": "cfcfb133ab5eb667700610cc40b41f1446d675f81dddabc1cdb715e85be17569",
+        "count": 73268,
+        "relation": "private.candidate_daily_batch_receipts"
+      },
+      {
+        "hash": "d484da95b94563d0f7e939b2117d5c4ee077373bbe729620b1c8da8a4f1f43b0",
+        "count": 20,
+        "relation": "public.ts_financials_outbox"
+      },
+      {
+        "hash": "cf5b970eac9000dd9b037a59a7e555b00d80c0b122e1f0e183224b539a38b3a1",
+        "count": 1,
+        "relation": "public.weekly_candidate_cohorts"
+      },
+      {
+        "hash": "5bdd16b03cad5e93f1cbe00120c983b2fbceb263523ba94a381bc08ba65cf272",
+        "count": 3,
+        "relation": "public.weekly_candidate_outreach_generations"
+      },
+      {
+        "hash": "738e19e72d607031f25a2dffcd694c3cc1b6d4218d3da3e2b5a191bc28f5898a",
+        "count": 4,
+        "relation": "public.weekly_manager_recipient_generations"
+      },
+      {
+        "hash": "caf15144624be820c2009800597f3b458b4248b0d7ad50eea7f5f95f08db8769",
+        "count": 10,
+        "relation": "public.weekly_message_dispatch_commands"
+      },
+      {
+        "hash": "20c3eb6e80e1bdbdc7c2753eb44edc7f9588e30bbd0c5b825b7a3946f2fa7188",
+        "count": 2,
+        "relation": "public.weekly_timesheet_submission_request_memberships"
+      },
+      {
+        "hash": "22a0390f73d1a15133dd655047dbaa37fe10c7139fbb58b1549c795cb077ccb2",
+        "count": 2,
+        "relation": "public.weekly_timesheet_submission_requests"
+      }
+    ],
+    "otherActivityCount": 0
+  },
+  "restoration": {
+    "connectedFresh": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "module": "LEGACY:1",
+    "markerAbsent": true,
+    "compared": [
+      "ledgerFingerprint",
+      "catalogueFingerprint",
+      "businessCountsFingerprint",
+      "businessRowsFingerprint"
+    ],
+    "liveRestoration": {
+      "status": "LIVE_TEST_RESTORATION_QUALIFIED",
+      "ownerRuling": "14 October 2026: background changes require attribution, never job pause",
+      "relationCount": 8,
+      "unchangedBusinessRelations": 7,
+      "qualifiedBusinessChanges": [
+        {
+          "relation": "private.candidate_daily_batch_receipts",
+          "beforeCount": 73267,
+          "afterCount": 73268,
+          "beforeHash": "2f505efeb1f1d8496ae0ac02c62cc78ece425b4e83bdab77dfe95fde6df724ba",
+          "afterHash": "cfcfb133ab5eb667700610cc40b41f1446d675f81dddabc1cdb715e85be17569",
+          "created": 1,
+          "updated": 0,
+          "attribution": "NATIVE_SIGNED_SYSTEM_PROJECTION_CLAIM_RECEIPT",
+          "fixtureMatches": 0
+        }
+      ],
+      "parentRollback": {
+        "database": "cloudtms_test_clone",
+        "backendPid": 193235,
+        "xid": "414568730",
+        "status": "aborted",
+        "connectedFresh": true
+      },
+      "fixtureAbsence": {
+        "allUnchangedRelationsBound": true,
+        "exceptionCaptureUnits": 1,
+        "observedExceptionFixtureKeys": 0,
+        "remaining": 0
+      },
+      "writerProof": {
+        "matched": true,
+        "routines": [
+          {
+            "schema": "private",
+            "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+            "definitionSha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+          },
+          {
+            "schema": "public",
+            "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+            "definitionSha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+          },
+          {
+            "schema": "public",
+            "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+            "definitionSha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+          },
+          {
+            "schema": "public",
+            "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+            "definitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+          }
+        ],
+        "authority": "Exact reviewed four source records equal complete genuine native C-before and fresh C-after catalogue records"
+      },
+      "backgroundPaused": false,
+      "proofSha256": "b843042dab6c018c2ab7a73a032c51cf39aa5d684a17151acace71e75029c77a"
+    },
+    "otherActivityCountObserved": 0,
+    "activityIsRestorationEvidence": false
+  },
+  "originalAssertionsBodyLedgerSent": false,
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+  "outerRepeatableReadSnapshotCurrentness": "NOT_QUALIFIED",
+  "positiveMigrationBodies": "NOT_RUN",
+  "PartB": "NOT_RUN",
+  "elapsedMilliseconds": 86962,
+  "wholeSequenceBudgetMilliseconds": 180000,
+  "workBudgetMilliseconds": 120000,
+  "witnessLocksGone": true,
+  "canonicalSharedTurnUnlockedAndClosed": true,
+  "completeMapsPersisted": false,
+  "source": {
+    "rootHead": "59c50419ff9502407641d859423860e4a1608c86",
+    "adapterCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
+    "adapterManifestSha256": "f44c56b51d85ee4c63099d1c233004ae78307c438c573fa7fc435daa2ac58d4d",
+    "readerCommit": "7fda1321502f1576487dd86889aa22ebe7896766",
+    "adapterFilesVerified": 14,
+    "predecessorsVerified": 8,
+    "rootAdapterSourceTests": 31,
+    "rootFixedReaderTests": 10
+  },
+  "turn": {
+    "takenAt": "2026-10-16T12:56:35.481Z",
+    "releasedAt": "2026-10-16T12:58:02.804Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "scope": "ONE_EXPECTED_LOCK_REFUSAL_ONLY_NOT_POSITIVE_CONSTRUCTORS_OR_FULL_INSTALL_REHEARSAL"
+}

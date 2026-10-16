@@ -6948,5 +6948,21 @@
     "native": "NOT_RUN",
     "finalPartB": "NOT_RUN",
     "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_INDEPENDENT_PEER_ADOPTION_20261016.json"
+  },
+  "contact_fixed_metadata_lock_native_continuation_20261016": {
+    "status": "ONE_OF_SIX_EXPECTED_LOCK_CASES_PASS",
+    "caseReceipts": [
+      "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock1.json"
+    ],
+    "adapterCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
+    "adapterManifestSha256": "f44c56b51d85ee4c63099d1c233004ae78307c438c573fa7fc435daa2ac58d4d",
+    "completeCanonicalMaps": "PROCESS_MEMORY_ONLY_NOT_PERSISTED",
+    "restoration": "FULL_ORIGINAL_CANONICAL_LIVE_QUALIFIER_PASS",
+    "backgroundJobsPaused": false,
+    "sharedLockReleased": true,
+    "positiveConstructors": "NOT_RUN",
+    "outerRepeatableReadCurrentness": "NOT_QUALIFIED",
+    "fullInstallRehearsal": "NOT_RUN",
+    "finalPartB": "NOT_RUN"
   }
 }
