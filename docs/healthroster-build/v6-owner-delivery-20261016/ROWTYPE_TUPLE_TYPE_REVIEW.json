@@ -3461,7 +3461,7 @@
     },
     {
       "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
-      "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "sha256": "304c56dcd2015e4dab934f2e20d3d9616a038c460d8145132a9e5cd18dd26063",
       "rows": [
         {
           "keySha256": "2cf71d859433e5a3b37a58f38ac90fc2a246a9e66503a26fa666028b617b0e8d",
@@ -4985,7 +4985,7 @@
     },
     {
       "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
-      "sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "sha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
       "rows": [
         {
           "keySha256": "2cf71d859433e5a3b37a58f38ac90fc2a246a9e66503a26fa666028b617b0e8d",
@@ -10351,5 +10351,15 @@
   "native": "NOT_RUN",
   "testMutation": false,
   "deployment": false,
-  "bankingMessage": false
+  "bankingMessage": false,
+  "finitePredicateCorrection": {
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_PRESENTATION_CARDINALITY_CORRECTION.json",
+    "sourceParent": "ef5468b5288e2d4ffef61edb20b703583fe2b66c",
+    "files": [
+      "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc"
+    ],
+    "tupleKeysAndCountsUnchanged": true,
+    "additionalCardinalityRefusal": true
+  }
 }

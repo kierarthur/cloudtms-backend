@@ -43,6 +43,18 @@ begin
     v_manifest.client_id,v_manifest.finalisation_week_ending
   );
 
+  -- A multi-movement NET presentation is valid only when all CURRENT
+  -- bindings identify the same real invoice line. Never choose an arbitrary
+  -- line UUID when the recorded presentation identity is ambiguous.
+  if exists(
+    select 1 from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_id=v_invoice.id and binding.state='CURRENT'
+    group by binding.presentation_line_id
+    having pg_catalog.count(distinct binding.invoice_line_id)<>1
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_BINDING_AMBIGUOUS' using errcode='23514';
+  end if;
+
   v_adjustment_authority:=private.weekly_source_invoice_adjustment_authority_v1(v_invoice.id,null);
   v_adjustments_allowed:=coalesce(v_adjustment_authority->>'allowed'='true',false)
     and v_invoice.status='DRAFT' and v_invoice.issued_at_utc is null and v_invoice.paid_at_utc is null

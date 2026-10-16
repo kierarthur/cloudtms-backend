@@ -35,5 +35,12 @@
     "heldSession": false,
     "deployment": false,
     "bankingMessage": false
+  },
+  "finitePredicateCorrection": {
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_PRESENTATION_CARDINALITY_CORRECTION.json",
+    "previousReviewSha256": "85a1035ea1232c9f1346e15e6bedad351b15820368f5805502dfc381aeceb7bc",
+    "currentReviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+    "allTupleKeysAndCountsUnchanged": true,
+    "changedFiles": 2
   }
 }

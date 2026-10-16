@@ -567,6 +567,18 @@ begin
     v_manifest.client_id,v_manifest.finalisation_week_ending
   );
 
+  -- A multi-movement NET presentation is valid only when all CURRENT
+  -- bindings identify the same real invoice line. Never choose an arbitrary
+  -- line UUID when the recorded presentation identity is ambiguous.
+  if exists(
+    select 1 from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_id=v_invoice.id and binding.state='CURRENT'
+    group by binding.presentation_line_id
+    having pg_catalog.count(distinct binding.invoice_line_id)<>1
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_BINDING_AMBIGUOUS' using errcode='23514';
+  end if;
+
   select pg_catalog.jsonb_build_object(
     'is_weekly_source_invoice',true,
     'invoice_id',v_invoice.id,'invoice_number',v_invoice.invoice_no,

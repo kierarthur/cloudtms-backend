@@ -1,0 +1,1194 @@
+{
+  "version": "HEALTH_F23_UUID_CARDINALITY_READ_REVIEW_V1",
+  "status": "SOURCE_REVIEW_ONLY_NO_GATE_OR_PRODUCT_CHANGE",
+  "census_source_commit": "3b9f5ab8cf5ed3bc93f3075f1f0b92483be3ad9c",
+  "census_diagnostic_sha256": "b41e99f03a2040b1efe071051e3716cd0539ea3ee63fc2d8e713c082090dbdb9",
+  "saved_current_root_commit_at_extraction": "742a3b4c6190537c9e87086bd0f20765344e8798",
+  "source_worktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "review_worktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+  "review_source_checkpoint": "e4661d28219b85c66b854d99c6522b55aae33139",
+  "scope": "All19 exact UUID_CARDINALITY_UNCLASSIFIED diagnostics only; read complete aggregate sources, relevant guards before first use, selected complete native writer/caller/DDL dependencies. No DB, execution, provider, ACL or data-health proof.",
+  "counts": {
+    "diagnostics": 19,
+    "scanner_statement_keys": 21,
+    "direct_uuid_casts": 23,
+    "qualified_diagnostics": 17,
+    "diagnostics_with_real_gap": 2,
+    "changed_or_missing_census_files": 0
+  },
+  "hash_definitions": {
+    "file_sha256": "SHA256 UTF8 exact git-show census bytes; current equality compares saved disk string byte content. LF file pin also supplied.",
+    "body_sha256": "SHA256 UTF8 executableParts function text trimmed, comments masked by Root current scanner; pins control-flow guard shape.",
+    "statement_sha256": "SHA256 UTF8 JSON.parse(F23 violation.key)[2], exact comments-masked LF trimmed statement. Repeated same SHA in separate files remains a separate classified occurrence; no borrowing across signatures/files."
+  },
+  "schema_inputs": [
+    {
+      "file": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    }
+  ],
+  "additional_complete_source_inputs": [
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb"
+    }
+  ],
+  "native_relation_evidence": [
+    {
+      "relation": "public.nhsp_shifts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "nhsp_shifts_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_invoice_presentation_lines",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "weekly_source_invoice_presentation_lines_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "weekly_source_final_revisions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_exceptional_pay_family_events",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "weekly_exceptional_pay_family_events_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_billing_movements",
+      "columns": [
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "invoice_timesheet_id",
+          "type": "uuid",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "weekly_source_billing_movements_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "columns": [
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "not_null": false
+        },
+        {
+          "name": "mapping_state",
+          "type": "text",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "weekly_source_row_resolutions_check",
+          "type": "c",
+          "definition": "CHECK ((mapping_state = 'RESOLVED'::text) = (candidate_id IS NOT NULL AND client_id IS NOT NULL AND contract_id IS NOT NULL AND work_event_id IS NOT NULL AND blocker_code IS NULL))"
+        },
+        {
+          "name": "weekly_source_row_resolutions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_invoice_line_bindings",
+      "columns": [
+        {
+          "name": "billing_movement_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "invoice_line_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "presentation_line_id",
+          "type": "uuid",
+          "not_null": true
+        }
+      ],
+      "relevant_constraints": [
+        {
+          "name": "weekly_source_invoice_line_bi_billing_movement_id_binding_v_key",
+          "type": "u",
+          "definition": "UNIQUE (billing_movement_id, binding_version)"
+        },
+        {
+          "name": "weekly_source_invoice_line_bindings_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "all_indexes": [
+        "CREATE UNIQUE INDEX weekly_source_invoice_line_bi_billing_movement_id_binding_v_key ON public.weekly_source_invoice_line_bindings USING btree (billing_movement_id, binding_version)",
+        "CREATE INDEX weekly_source_invoice_line_bindings_current_line_idx ON public.weekly_source_invoice_line_bindings USING btree (invoice_line_id) WHERE (state = 'CURRENT'::text)",
+        "CREATE UNIQUE INDEX weekly_source_invoice_line_bindings_current_movement_uq ON public.weekly_source_invoice_line_bindings USING btree (billing_movement_id) WHERE (state = 'CURRENT'::text)",
+        "CREATE INDEX weekly_source_invoice_line_bindings_line_history_idx ON public.weekly_source_invoice_line_bindings USING btree (invoice_line_id, binding_version, billing_movement_id)",
+        "CREATE UNIQUE INDEX weekly_source_invoice_line_bindings_pkey ON public.weekly_source_invoice_line_bindings USING btree (id)"
+      ],
+      "all_triggers": []
+    }
+  ],
+  "overall_recommendation": "Do not allow all19 or the entire UUID hazard class.17 diagnostics have finite source cardinality proof; exact guard/body/type pins must survive any later classification. Two invoice-edit statements mix a safe timesheet CASE with unguarded invoice-line minimum and should stay refused pending finite owner fixes. The report grants no authority to edit Banking, source gates, historical migrations or current Root files.",
+  "rows": [
+    {
+      "number": 1,
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sqlinc",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "frozen_file_sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101",
+      "frozen_file_lf_sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101",
+      "current_file_sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+          "statement_sha256": "dac0fc36c09498a8cd4fa9481f6903668ad5cad92b3d826e9639824fe38e187d",
+          "key_sha256": "d28217620175462340ab421775fab507a1148eac3c8b1ec7688bde6b223fa309",
+          "statement_length": 112363,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "0f4b3e94acf9dbe34ae45e63bd0f99badb7e33fce6161d58fbbe93346aca9d1a",
+      "direct_uuid_casts": [
+        "min(ranked.shift_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "SINGLE_WINNING_NATIVE_REFERENCE",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(ranked.shift_id::text)::uuid",
+        "native_column": "public.nhsp_shifts.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "count(*)=1 after ranked.match_priority=ranked.winning_priority",
+        "zero": "CASE returns SQL NULL; reference_match_count=0 is emitted as MISSING; source_record_id can retain the original row unique_id as existing display provenance.",
+        "multiple": "CASE returns SQL NULL; reference_match_count>1 is emitted as AMBIGUOUS; no UUID representative is emitted.",
+        "use": "Only the guarded shift_id feeds source_record_id in this invoice presentation snapshot. booking_reference has the same count=1 guard.",
+        "recommendation": "Eligible for finite file+signature+whole-body/statement-pin classification of this one CASE expression only. Preserve ranking/filter, count, CASE and native column type evidence; do not allow general MIN(TEXT)::UUID."
+      },
+      "evidence": [
+        {
+          "text": "case when count(*)=1 then min(ranked.shift_id::text)::uuid end shift_id",
+          "sha256": "afb057c0d9eb8db5cb2f8d3edbcafad2604affab68235120a792cc7e829c00e2"
+        },
+        {
+          "text": "where ranked.match_priority=ranked.winning_priority",
+          "sha256": "46e098ea0309c6a20029c21a2f003f3378379c47f576d8d5bb57f600e7589f9d"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)>1\n                  then 'AMBIGUOUS'",
+          "sha256": "24a0443d19020a8a15a90db5d30621760bbeaed8c19920bfdde6e51fdd1579f3"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)=0\n                  then 'MISSING'",
+          "sha256": "f8a1885d63951066fe62faee941ce393c1b7b9edfef8a494eb4a07a83a9a8b33"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "frozen_file_sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+      "frozen_file_lf_sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+      "current_file_sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+          "statement_sha256": "4361ae3ffa098ec9508923b756eef87a423c84c59ccdef365c22bab5f506d4d7",
+          "key_sha256": "220fefb889842de4991fa3350e3b02b17d6465eb1c4f74b1ab7de10f1b7d1915",
+          "statement_length": 3176,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "2ae72818798f0d0dc40e5e4724a6418b449ce61de4cbb53432c38694f6b60f4b",
+      "direct_uuid_casts": [
+        "min(shift_line.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "SINGLE_EXPENSE_COMPANION",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "pg_catalog.min(shift_line.id::text)::uuid",
+        "native_column": "public.weekly_source_invoice_presentation_lines.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "Nested scalar aggregate HAVING pg_catalog.count(*)=1, over same manifest/work-event/non-expense/correction-role rows.",
+        "zero": "HAVING excludes the aggregate row; scalar subquery returns SQL NULL (no companion).",
+        "multiple": "HAVING excludes the aggregate row; scalar subquery returns SQL NULL (no arbitrary companion).",
+        "use": "Only the optional companion_presentation_line_id of an actual v_is_expense presentation INSERT. This review proves no arbitrary selection, not any stronger business claim that an absent companion is an error.",
+        "recommendation": "Eligible for finite file+signature+statement-pin classification of this nested scalar aggregate with its complete predicates and HAVING. Never remove HAVING or infer cardinality from a LIMIT."
+      },
+      "evidence": [
+        {
+          "text": "case when v_is_expense then (\n        select pg_catalog.min(shift_line.id::text)::uuid\n        from public.weekly_source_invoice_presentation_lines shift_line\n        where shift_line.client_manifest_id=v_manifest.id\n          and shift_line.work_event_id=v_movement.work_event_id\n          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'\n          and shift_line.correction_role is not distinct from v_correction_role\n        having pg_catalog.count(*)=1\n      ) end",
+          "sha256": "aeaf15ea5ac499e498b8551e1b3ed108e9a484552830e07b617b44c4513e8d92"
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+      "frozen_file_sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190",
+      "frozen_file_lf_sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190",
+      "current_file_sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+          "statement_sha256": "3c1c23d6593b402f47c9243f965212ad72a1b2b07fa72d3a5001f9d064006394",
+          "key_sha256": "3969a577e824051b13b1001e634abc5efc4f18e18515db51ecef87686def7e45",
+          "statement_length": 2515,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        },
+        {
+          "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+          "statement_sha256": "b450a304eb0dc2cc51d11be83e60c4198acec5cbd203797d099ae251624965e0",
+          "key_sha256": "d908b443780b1bd22f0fc020fb8357c23c436d3ddf54b0e840043e7fb4837d3e",
+          "statement_length": 1069,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "c86da80cbef74fc6af27eee28934df5d5f5f1a666611b5e8a49610656d8b07ed",
+      "direct_uuid_casts": [
+        "min(head.id::text)::uuid",
+        "min(head.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_SOURCE_LADDER_HEAD",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "native_column": "public.weekly_source_final_revisions.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "aggregates": [
+          {
+            "aggregate": "pg_catalog.min(head.id::text)::uuid",
+            "count": "First ladder SELECT count(*) into v_source_head_count; count>1 raises before any use of v_source_head_revision.",
+            "zero": "COUNT=0 makes min NULL. The following if v_source_head_revision is not null skips the native live projection; existing observed-absence path remains.",
+            "multiple": "WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_LADDER_HEAD / SQLSTATE 55000.",
+            "first_use": "if v_source_head_revision is not null then; the native live movement function is below that branch."
+          },
+          {
+            "aggregate": "pg_catalog.min(head.id::text)::uuid",
+            "count": "Later NEXT selected-ladder SELECT count(*); v_source_head_count<>1 raises immediately.",
+            "zero": "WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT / 55000.",
+            "multiple": "WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT / 55000.",
+            "first_use": "weekly_source_ordinary_projection_current_segments_v1(root_timesheet_id,v_source_head_revision), only after exact-count refusal and non-null guard."
+          }
+        ],
+        "adjacent_filtered_uuid_max": {
+          "expression": "(pg_catalog.max(row_state.final_revision_id::text) filter (where row_state.work_event_id=v_event_id and row_state.source_present))::uuid",
+          "scanner_note": "Not a UUID_CARDINALITY occurrence under the current immediate-post-parenthesis scanner because FILTER/outer parentheses intervene. Independently reviewed; no generic scanner classification proposed.",
+          "count": "row_state live_count=count(live.id) over(partition by scope.work_event_id); v_ambiguous_event_count counts distinct work events with live_count>1.",
+          "refusal": "v_ambiguous_event_count>0 raises WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD /55000 before any selected UUID or corresponding source vectors are used. If live_count<=1, the selected event has at most one non-null native final_revision_id; no match gives NULL."
+        },
+        "recommendation": "Eligible only with both exact statement hashes plus full function/body pins and count/refusal control flow. Do not classify the whole signature or a generic min(head.id)."
+      },
+      "evidence": [
+        {
+          "text": "if v_source_head_count>1 then\n      raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_LADDER_HEAD'\n        using errcode='55000',\n        detail=pg_catalog.jsonb_build_object(\n          'family_id',v_family.id,'work_event_id',v_event_id,\n          'current_ladder_head_count',v_source_head_count)::text;\n    end if;",
+          "sha256": "0fe3dccf128eb0188883d5cd35258d4b32d0afc6577b061031cc506afa7f7546"
+        },
+        {
+          "text": "if v_source_head_count<>1 then\n        raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT' using errcode='55000';\n      end if;",
+          "sha256": "6da79d5f8efe6985d670f40b3bfef6144c754488b7f8bea33ef4172ff73e4672"
+        },
+        {
+          "text": "if v_ambiguous_event_count>0 then\n         \n         \n         \n         \n         \n        raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD'\n          using errcode='55000',\n          detail=pg_catalog.jsonb_build_object(\n            'family_id',v_family.id,'work_event_id',v_event_id,\n            'ambiguous_work_event_count',v_ambiguous_event_count)::text;\n      end if;",
+          "sha256": "101b42a402fccfcfc5f37be4b713eb6fa54e5c18cbbf1986747982ded17b7abd"
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "signature": "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+      "frozen_file_sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b",
+      "frozen_file_lf_sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b",
+      "current_file_sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+          "statement_sha256": "25fe7948b359818c738576969acb1b0b878e099ea4fc5079245c9e9ab0172866",
+          "key_sha256": "fd681a301e17327a89c4044f1735400195eb38b0ece9a255c7410bf20600b072",
+          "statement_length": 758,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "48b041b73c67627bb6fd2f83f7190f6f94cedf335a1a5518b1380c98043acba2",
+      "direct_uuid_casts": [
+        "min(event.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_WAIT_EVENT",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(event.id::text)::uuid",
+        "native_column": "public.weekly_exceptional_pay_family_events.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "count(*) into v_count over actual candidate/client/work/family latest WAIT rows.",
+        "zero": "Never looks up NULL event UUID. Contradictory published WAIT evidence raises WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE /55000; otherwise returns NULL.",
+        "multiple": "v_count<>1 raises WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE /55000 before SELECT ... WHERE id=v_event_id.",
+        "use": "The first selected-UUID use is strict native family-event lookup, then exact family/current generation/approval/signed schedule/receipt checks.",
+        "recommendation": "Eligible for finite statement+whole-body pin classification preserving both zero branch and exact-one refusal before lookup."
+      },
+      "evidence": [
+        {
+          "text": "if v_count=0 then\n     \n     \n     \n     \n    if exists(select 1\n      from public.weekly_exceptional_pay_target_families family\n      join public.contracts contract on contract.id=family.contract_id and contract.client_id=v_work.client_id\n      join public.weekly_exceptional_pay_generations generation\n        on generation.id=family.current_generation_id and generation.family_id=family.id\n      where family.candidate_id=v_work.candidate_id\n        and v_work.work_date between family.week_start_date and family.week_ending_date\n        and generation.lifecycle_state='PUBLISHED'\n        and ((generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_TARGET_VECTOR_V1'\n          and exists(select 1 from jsonb_array_elements(case\n            when jsonb_typeof(generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}')='array'\n            then generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}' else '[]'::jsonb end) item\n            where item->>'work_event_id'=v_work.id::text and item->>'protected_target_state'='WAIT'))\n          or (generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_NEXT_TARGET_V1'\n          and exists(select 1 from jsonb_array_elements(case\n            when jsonb_typeof(generation.complete_next_vector_json->'components')='array'\n            then generation.complete_next_vector_json->'components' else '[]'::jsonb end) item\n            where item->>'kind'='WORK' and item->>'work_event_id'=v_work.id::text and item->'protected'='true'::jsonb)))\n    ) then raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;\n    return null;\n  end if;",
+          "sha256": "76b400015ea1caf30a62d9da6569ef91996f864ce4b44ccb067de151f09987a1"
+        },
+        {
+          "text": "if v_count<>1 then raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;",
+          "sha256": "8dcdea4de541a59dfdda62e28a92eb699a56fbdb8b0d373f9b6667e1d3797e2d"
+        },
+        {
+          "text": "select * into strict v_event from public.weekly_exceptional_pay_family_events where id=v_event_id;",
+          "sha256": "7e58e473f2e4d6fd5b5dae0b5c2f75941aca5d17712892c5c9e5263650bf87ca"
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "frozen_file_sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "frozen_file_lf_sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "current_file_sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+          "statement_sha256": "40cfc3e00317f59cb11fc7c90ee95f2b68618ce00fa0c4a7b0b1d85f3a9e19cd",
+          "key_sha256": "d708aae85ef4f4fa23bbba159ad2c410e44537745bcced6f82c2ce87035e0e42",
+          "statement_length": 481,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "d09964194a205484a5696259e80bb03c9d7a288fa42d2de0235923a8abef2a85",
+      "direct_uuid_casts": [
+        "min(event.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_STAGED_WAIT_EVENT",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(event.id::text)::uuid",
+        "native_column": "public.weekly_exceptional_pay_family_events.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "count(*) into v_count over exact family/evidence-approval/durable-work/latest WAIT.",
+        "zero": "v_count<>1 raises WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE /55000.",
+        "multiple": "Same exact-one refusal /55000, combined with signed protected clock equality.",
+        "use": "v_event UUID is not consumed after assignment in this complete body. The function still refuses non-singleton event rows before source CAS and return; no arbitrary event identity is exposed.",
+        "recommendation": "Eligible for finite statement+whole-body pin classification preserving exact-one refusal; unused UUID could be removed only through a separately reviewed owner successor, not by a gate change."
+      },
+      "evidence": [
+        {
+          "text": "if v_count<>1 or (a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)\n    is distinct from ((v_claim#>>'{claim,work_date}')::date,(v_claim#>>'{claim,start_at_local}')::timestamp,\n      (v_claim#>>'{claim,end_at_local}')::timestamp,(v_claim#>>'{claim,break_minutes}')::integer) then\n    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;",
+          "sha256": "7b622f89559f7012beea106d79a248ea6c14e95c1ae2487877729a7a96f2abcd"
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "frozen_file_sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "frozen_file_lf_sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "current_file_sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+          "statement_sha256": "c242ed2389d7dfd29a64dc3fc2be471fc2c2214200dcebefc0f13d0f0bf053dd",
+          "key_sha256": "3a0ce926d98f5930e3792f67f4bf38060e5d6fcc7907138c2f02b5ddb6774d0a",
+          "statement_length": 3229,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "79f25dddfc454ad92ed3ec969f9c4344d5b47492450b8aa4c06b61f2931b82e3",
+      "direct_uuid_casts": [
+        "min(shift_line.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "SINGLE_EXPENSE_COMPANION",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "pg_catalog.min(shift_line.id::text)::uuid",
+        "native_column": "public.weekly_source_invoice_presentation_lines.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "Nested scalar aggregate HAVING pg_catalog.count(*)=1, over same manifest/work-event/non-expense/correction-role rows.",
+        "zero": "HAVING excludes the aggregate row; scalar subquery returns SQL NULL (no companion).",
+        "multiple": "HAVING excludes the aggregate row; scalar subquery returns SQL NULL (no arbitrary companion).",
+        "use": "Only the optional companion_presentation_line_id of an actual v_is_expense presentation INSERT. This review proves no arbitrary selection, not any stronger business claim that an absent companion is an error.",
+        "recommendation": "Eligible for finite file+signature+statement-pin classification of this nested scalar aggregate with its complete predicates and HAVING. Never remove HAVING or infer cardinality from a LIMIT."
+      },
+      "evidence": [
+        {
+          "text": "case when v_is_expense then (\n        select pg_catalog.min(shift_line.id::text)::uuid\n        from public.weekly_source_invoice_presentation_lines shift_line\n        where shift_line.client_manifest_id=v_manifest.id\n          and shift_line.work_event_id=v_movement.work_event_id\n          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'\n          and shift_line.correction_role is not distinct from v_correction_role\n        having pg_catalog.count(*)=1\n      ) end",
+          "sha256": "aeaf15ea5ac499e498b8551e1b3ed108e9a484552830e07b617b44c4513e8d92"
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+      "frozen_file_sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "frozen_file_lf_sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "current_file_sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+          "statement_sha256": "1302a11db9edad395f4c1a2e2f69d6365faabffc445164a6fedeb2df56a2ca69",
+          "key_sha256": "578fce4d7b6537d0300bc77a87d9fbc2d9718d3711176abd0b67dc99d6cc6c2d",
+          "statement_length": 7114,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "e51a07de2219fa2e3d2d0123e4138a79e98cd83663f587c4251634aa58b0c103",
+      "direct_uuid_casts": [
+        "min(binding.invoice_line_id::text)::uuid",
+        "min(movement.invoice_timesheet_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "INVOICE_EDIT_UNGUARDED_LINE_WITH_GUARDED_TIMESHEET",
+        "verdict": "REAL_SOURCE_CARDINALITY_GAP_DO_NOT_CLASSIFY",
+        "aggregates": [
+          {
+            "aggregate": "pg_catalog.min(binding.invoice_line_id::text)::uuid",
+            "native_column": "public.weekly_source_invoice_line_bindings.invoice_line_id",
+            "native_type": "uuid NOT NULL with FK to invoice_lines.id",
+            "count": "NONE for this scalar. count(*) is separately displayed as bound_movement_count/indivisible_presentation; it is not an identity singleton guard.",
+            "zero": "Inner-join group absent, no movable row emitted.",
+            "multiple": "Two CURRENT bindings for the same invoice+presentation and distinct invoice_line_id are silently collapsed to lexical minimum UUID. Different movement IDs can satisfy the current-movement unique index; that index does not prove presentation->line.",
+            "first_use": "The unguarded representative is emitted directly in public movable_lines[].invoice_line_id.",
+            "recommendation": "Keep F23 refusal for this exact statement until a finite owner successor rejects selected-invoice CURRENT presentation groups with count(distinct invoice_line_id)<>1 before JSON construction. Preserve legitimate two-movement NET presentations bound to ONE line; count(*)<>1 would be wrong. No generic waiver, stale owner replacement, or fabricated UUID."
+          },
+          {
+            "aggregate": "pg_catalog.min(movement.invoice_timesheet_id::text)::uuid",
+            "native_column": "public.weekly_source_billing_movements.invoice_timesheet_id",
+            "native_type": "uuid; nullable for actual invoice-only kinds under1430",
+            "count": "CASE WHEN pg_catalog.count(distinct movement.invoice_timesheet_id)=1 THEN min(...)::uuid ELSE NULL END.",
+            "zero": "NULL (intentional optional display).",
+            "multiple": "NULL (intentional optional display).",
+            "recommendation": "This adjacent expression has valid singleton guarding; it does not repair invoice_line_id. Do not classify the enclosing mixed statement while the first aggregate remains unsafe."
+          }
+        ],
+        "writer_and_caller_review": {
+          "admission": "Complete native admission creates one invoice_line per presentation then uses that returned actual line UUID for every v_ids member. This procedural invariant is expected but the reader does not verify it.",
+          "move": "Complete native move preserves invoice_line_id/presentation_line_id while creating successor CURRENT bindings and checks complete selected line/presentation membership. It does not add a declarative presentation->line constraint.",
+          "read": "1700/08 does not call an allocation cardinality assertion before movable_lines.1705/05 calls invoice_adjustment_authority, which checks rule/VAT and receipt/member scope, not presentation->invoice_line cardinality.",
+          "allocation_assert": "Native allocation assertion groups by invoice_line_id and checks one/two movement NET membership. That inverse grouping does not establish one invoice_line_id per presentation; the edit reader does not call it anyway.",
+          "schema": "No unique index or constraint ties CURRENT (invoice_id,presentation_line_id) to one invoice_line_id. Baseline current contract records no weekly_source_invoice_line_bindings trigger; migration1430 changes nullable money identities, not this dependency."
+        },
+        "recommendation": "Both historical/current owner occurrences require a finite source fix or independent exact proven invariant before any source-gate exception. This is source review, not evidence that such corrupted data currently exists."
+      },
+      "evidence": [
+        {
+          "text": "'invoice_line_id',pg_catalog.min(binding.invoice_line_id::text)::uuid",
+          "sha256": "3b7b129233ce765c266aadc0ea2185eb12e1d9832af02d51c007b924252616d5"
+        },
+        {
+          "text": "'timesheet_id',case when pg_catalog.count(distinct movement.invoice_timesheet_id)=1\n              then pg_catalog.min(movement.invoice_timesheet_id::text)::uuid else null end",
+          "sha256": "77e79a4dd9685c2f9e8e9c83e53e0312f4c79fd5baeeee15c683bc27085ce7fb"
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+      "frozen_file_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "frozen_file_lf_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "current_file_sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+          "statement_sha256": "3c1c23d6593b402f47c9243f965212ad72a1b2b07fa72d3a5001f9d064006394",
+          "key_sha256": "3969a577e824051b13b1001e634abc5efc4f18e18515db51ecef87686def7e45",
+          "statement_length": 2515,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        },
+        {
+          "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+          "statement_sha256": "b450a304eb0dc2cc51d11be83e60c4198acec5cbd203797d099ae251624965e0",
+          "key_sha256": "d908b443780b1bd22f0fc020fb8357c23c436d3ddf54b0e840043e7fb4837d3e",
+          "statement_length": 1069,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "c86da80cbef74fc6af27eee28934df5d5f5f1a666611b5e8a49610656d8b07ed",
+      "direct_uuid_casts": [
+        "min(head.id::text)::uuid",
+        "min(head.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_SOURCE_LADDER_HEAD",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "native_column": "public.weekly_source_final_revisions.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "aggregates": [
+          {
+            "aggregate": "pg_catalog.min(head.id::text)::uuid",
+            "count": "First ladder SELECT count(*) into v_source_head_count; count>1 raises before any use of v_source_head_revision.",
+            "zero": "COUNT=0 makes min NULL. The following if v_source_head_revision is not null skips the native live projection; existing observed-absence path remains.",
+            "multiple": "WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_LADDER_HEAD / SQLSTATE 55000.",
+            "first_use": "if v_source_head_revision is not null then; the native live movement function is below that branch."
+          },
+          {
+            "aggregate": "pg_catalog.min(head.id::text)::uuid",
+            "count": "Later NEXT selected-ladder SELECT count(*); v_source_head_count<>1 raises immediately.",
+            "zero": "WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT / 55000.",
+            "multiple": "WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT / 55000.",
+            "first_use": "weekly_source_ordinary_projection_current_segments_v1(root_timesheet_id,v_source_head_revision), only after exact-count refusal and non-null guard."
+          }
+        ],
+        "adjacent_filtered_uuid_max": {
+          "expression": "(pg_catalog.max(row_state.final_revision_id::text) filter (where row_state.work_event_id=v_event_id and row_state.source_present))::uuid",
+          "scanner_note": "Not a UUID_CARDINALITY occurrence under the current immediate-post-parenthesis scanner because FILTER/outer parentheses intervene. Independently reviewed; no generic scanner classification proposed.",
+          "count": "row_state live_count=count(live.id) over(partition by scope.work_event_id); v_ambiguous_event_count counts distinct work events with live_count>1.",
+          "refusal": "v_ambiguous_event_count>0 raises WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD /55000 before any selected UUID or corresponding source vectors are used. If live_count<=1, the selected event has at most one non-null native final_revision_id; no match gives NULL."
+        },
+        "recommendation": "Eligible only with both exact statement hashes plus full function/body pins and count/refusal control flow. Do not classify the whole signature or a generic min(head.id)."
+      },
+      "evidence": [
+        {
+          "text": "if v_source_head_count>1 then\n      raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_LADDER_HEAD'\n        using errcode='55000',\n        detail=pg_catalog.jsonb_build_object(\n          'family_id',v_family.id,'work_event_id',v_event_id,\n          'current_ladder_head_count',v_source_head_count)::text;\n    end if;",
+          "sha256": "0fe3dccf128eb0188883d5cd35258d4b32d0afc6577b061031cc506afa7f7546"
+        },
+        {
+          "text": "if v_source_head_count<>1 then\n        raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT' using errcode='55000';\n      end if;",
+          "sha256": "6da79d5f8efe6985d670f40b3bfef6144c754488b7f8bea33ef4172ff73e4672"
+        },
+        {
+          "text": "if v_ambiguous_event_count>0 then\n         \n         \n         \n         \n         \n        raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD'\n          using errcode='55000',\n          detail=pg_catalog.jsonb_build_object(\n            'family_id',v_family.id,'work_event_id',v_event_id,\n            'ambiguous_work_event_count',v_ambiguous_event_count)::text;\n      end if;",
+          "sha256": "101b42a402fccfcfc5f37be4b713eb6fa54e5c18cbbf1986747982ded17b7abd"
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "frozen_file_sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "frozen_file_lf_sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "current_file_sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+          "statement_sha256": "2b02f3745c8cbe9d278d33f8c4b3a584e958fc6f959731e370c773d7eb5c2173",
+          "key_sha256": "aad84e78ab2321e0960f086f7a3c5ff84ff7ab5d39464e963302be60e9e0f777",
+          "statement_length": 112020,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "54efc10606f6bd702f0c00a26d6fc8c128c2cddc508b0d20c07a0373a8f16f23",
+      "direct_uuid_casts": [
+        "min(ranked.shift_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "SINGLE_WINNING_NATIVE_REFERENCE",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(ranked.shift_id::text)::uuid",
+        "native_column": "public.nhsp_shifts.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "count(*)=1 after ranked.match_priority=ranked.winning_priority",
+        "zero": "CASE returns SQL NULL; reference_match_count=0 is emitted as MISSING; source_record_id can retain the original row unique_id as existing display provenance.",
+        "multiple": "CASE returns SQL NULL; reference_match_count>1 is emitted as AMBIGUOUS; no UUID representative is emitted.",
+        "use": "Only the guarded shift_id feeds source_record_id in this invoice presentation snapshot. booking_reference has the same count=1 guard.",
+        "recommendation": "Eligible for finite file+signature+whole-body/statement-pin classification of this one CASE expression only. Preserve ranking/filter, count, CASE and native column type evidence; do not allow general MIN(TEXT)::UUID."
+      },
+      "evidence": [
+        {
+          "text": "case when count(*)=1 then min(ranked.shift_id::text)::uuid end shift_id",
+          "sha256": "afb057c0d9eb8db5cb2f8d3edbcafad2604affab68235120a792cc7e829c00e2"
+        },
+        {
+          "text": "where ranked.match_priority=ranked.winning_priority",
+          "sha256": "46e098ea0309c6a20029c21a2f003f3378379c47f576d8d5bb57f600e7589f9d"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)>1\n                  then 'AMBIGUOUS'",
+          "sha256": "24a0443d19020a8a15a90db5d30621760bbeaed8c19920bfdde6e51fdd1579f3"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)=0\n                  then 'MISSING'",
+          "sha256": "f8a1885d63951066fe62faee941ce393c1b7b9edfef8a494eb4a07a83a9a8b33"
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+      "frozen_file_sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "frozen_file_lf_sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "current_file_sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+          "statement_sha256": "f9e61dca47294be32ba1b57de7dbe7ff025220894f506e952f946d0c4397969e",
+          "key_sha256": "c2476ab439c6631074427a3adb9b56cab1e8c04c0595ceecdf0f6338e7487705",
+          "statement_length": 7414,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "386fc1e0e2ac5f8d01a8a11d4f8a2b085275bbffefc9856a53798e033e56485a",
+      "direct_uuid_casts": [
+        "min(binding.invoice_line_id::text)::uuid",
+        "min(movement.invoice_timesheet_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "INVOICE_EDIT_UNGUARDED_LINE_WITH_GUARDED_TIMESHEET",
+        "verdict": "REAL_SOURCE_CARDINALITY_GAP_DO_NOT_CLASSIFY",
+        "aggregates": [
+          {
+            "aggregate": "pg_catalog.min(binding.invoice_line_id::text)::uuid",
+            "native_column": "public.weekly_source_invoice_line_bindings.invoice_line_id",
+            "native_type": "uuid NOT NULL with FK to invoice_lines.id",
+            "count": "NONE for this scalar. count(*) is separately displayed as bound_movement_count/indivisible_presentation; it is not an identity singleton guard.",
+            "zero": "Inner-join group absent, no movable row emitted.",
+            "multiple": "Two CURRENT bindings for the same invoice+presentation and distinct invoice_line_id are silently collapsed to lexical minimum UUID. Different movement IDs can satisfy the current-movement unique index; that index does not prove presentation->line.",
+            "first_use": "The unguarded representative is emitted directly in public movable_lines[].invoice_line_id.",
+            "recommendation": "Keep F23 refusal for this exact statement until a finite owner successor rejects selected-invoice CURRENT presentation groups with count(distinct invoice_line_id)<>1 before JSON construction. Preserve legitimate two-movement NET presentations bound to ONE line; count(*)<>1 would be wrong. No generic waiver, stale owner replacement, or fabricated UUID."
+          },
+          {
+            "aggregate": "pg_catalog.min(movement.invoice_timesheet_id::text)::uuid",
+            "native_column": "public.weekly_source_billing_movements.invoice_timesheet_id",
+            "native_type": "uuid; nullable for actual invoice-only kinds under1430",
+            "count": "CASE WHEN pg_catalog.count(distinct movement.invoice_timesheet_id)=1 THEN min(...)::uuid ELSE NULL END.",
+            "zero": "NULL (intentional optional display).",
+            "multiple": "NULL (intentional optional display).",
+            "recommendation": "This adjacent expression has valid singleton guarding; it does not repair invoice_line_id. Do not classify the enclosing mixed statement while the first aggregate remains unsafe."
+          }
+        ],
+        "writer_and_caller_review": {
+          "admission": "Complete native admission creates one invoice_line per presentation then uses that returned actual line UUID for every v_ids member. This procedural invariant is expected but the reader does not verify it.",
+          "move": "Complete native move preserves invoice_line_id/presentation_line_id while creating successor CURRENT bindings and checks complete selected line/presentation membership. It does not add a declarative presentation->line constraint.",
+          "read": "1700/08 does not call an allocation cardinality assertion before movable_lines.1705/05 calls invoice_adjustment_authority, which checks rule/VAT and receipt/member scope, not presentation->invoice_line cardinality.",
+          "allocation_assert": "Native allocation assertion groups by invoice_line_id and checks one/two movement NET membership. That inverse grouping does not establish one invoice_line_id per presentation; the edit reader does not call it anyway.",
+          "schema": "No unique index or constraint ties CURRENT (invoice_id,presentation_line_id) to one invoice_line_id. Baseline current contract records no weekly_source_invoice_line_bindings trigger; migration1430 changes nullable money identities, not this dependency."
+        },
+        "recommendation": "Both historical/current owner occurrences require a finite source fix or independent exact proven invariant before any source-gate exception. This is source review, not evidence that such corrupted data currently exists."
+      },
+      "evidence": [
+        {
+          "text": "'invoice_line_id',pg_catalog.min(binding.invoice_line_id::text)::uuid",
+          "sha256": "3b7b129233ce765c266aadc0ea2185eb12e1d9832af02d51c007b924252616d5"
+        },
+        {
+          "text": "'timesheet_id',case when pg_catalog.count(distinct movement.invoice_timesheet_id)=1\n              then pg_catalog.min(movement.invoice_timesheet_id::text)::uuid else null end",
+          "sha256": "77e79a4dd9685c2f9e8e9c83e53e0312f4c79fd5baeeee15c683bc27085ce7fb"
+        }
+      ]
+    },
+    {
+      "number": 11,
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "frozen_file_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "frozen_file_lf_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "current_file_sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+          "statement_sha256": "d935b005b631243b0ec6c76836f8c7a285c66f407cb365fc2e32835f5343ab7d",
+          "key_sha256": "817578b429c92ea0a9626ea30f247d4fa6fdc20dd332f2ddfd18e316f00687ea",
+          "statement_length": 446,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "cfcdb9404b10769c70af286027b94bb642c4f3878fa9fafd8e2ef8f3704e4581",
+      "direct_uuid_casts": [
+        "min(resolution.client_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_SINGLE_CLIENT_FINALISATION",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "pg_catalog.min(resolution.client_id::text)::uuid",
+        "native_column": "public.weekly_source_row_resolutions.client_id",
+        "native_type": "uuid nullable; mapping_state=RESOLVED CHECK requires non-null candidate/client/contract/work and null blocker. The preceding complete resolution census requires RESOLVED for every upload row at exact generation.",
+        "count": "count(distinct resolution.client_id) into v_resolved_client_count, scoped exact upload+generation.",
+        "zero": "min is NULL, then coalesce with actual previously scoped upload Client. If no genuine scoped Client or no active source-group membership, WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED /55000; no representative Client is invented.",
+        "multiple": "v_resolved_client_count>1 raises WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED /55000 before UUID comparison/assignment/use.",
+        "use": "COUNT=1 first checks existing scope equality (UPLOAD_CLIENT_MISMATCH55000), then assigns Client, checks current cycle/client/group membership and calls genuine Office authority. All initial resolution census failures are RESOLUTION_CENSUS_NOT_FINALISABLE55000.",
+        "recommendation": "Eligible for finite exact statement+whole-body/source-column CHECK pins with preceding complete resolution census and following count>1 refusal. Preserve legal zero-row scoped Client behavior."
+      },
+      "evidence": [
+        {
+          "text": "if (select pg_catalog.count(*)\n      from public.weekly_source_row_resolutions resolution\n      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n      where source_row.upload_id=v_upload.id and resolution.generation=v_generation)\n       <>v_upload.accepted_count\n     or exists(\n       select 1\n       from public.weekly_source_upload_rows source_row\n       left join public.weekly_source_row_resolutions resolution\n         on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n       where source_row.upload_id=v_upload.id\n         and (resolution.id is null or resolution.mapping_state<>'RESOLVED')\n     )\n     or (v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT' and exists(\n       select 1\n       from public.weekly_source_row_resolutions resolution\n       join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then\n    raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';\n  end if;",
+          "sha256": "04c847a2f4b05a031a39b0de270979c8863f12afcb04725db7d00863b7ee0d65"
+        },
+        {
+          "text": "if v_resolved_client_count>1 then\n      raise exception 'WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "6ab62e505c4246fdf70bcdfcc8f52a9da6ea40fd23a9968eebcc939c55b2f93e"
+        },
+        {
+          "text": "if v_client_id is null or not exists(\n      select 1\n      from public.weekly_source_group_clients group_client\n      where group_client.source_group_id=v_group.id\n        and group_client.client_id=v_client_id\n        and v_cycle.finalisation_week_ending between group_client.valid_from\n          and coalesce(group_client.valid_to,'infinity'::date)\n    ) then\n      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "d7b39e62eb2adb23c4bf302463fc9471ae73360289f65541fc60214b6febed9b"
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "frozen_file_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "frozen_file_lf_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "current_file_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "statement_sha256": "5f853cfc46b6700b525c19e4048c2cf6101c6fc370a15b46789ee87d3dcb6590",
+          "key_sha256": "59deb5109e613e31199fb845da416d0c661f017343d2c2bde0efb5718a653cd8",
+          "statement_length": 13256,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "9141a94c6b671e6ccd9a83e26aef3334d7fba78caeb077395f93a9a7db90e6ca",
+      "direct_uuid_casts": [
+        "min(m.contract_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_RECEIPT_CONTRACT_IDENTITY",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(m.contract_id::text)::uuid",
+        "native_column": "public.weekly_source_billing_movements.contract_id",
+        "native_type": "uuid; base NOT NULL is dropped by1430, but its replacement invoice_contract CHECK requires non-null for every filtered included movement kind.",
+        "count": "Correlated scalar HAVING count(distinct m.contract_id)=1; repeats of the same actual contract are permitted, different contracts are not selected.",
+        "zero": "HAVING omits row, scalar contract_id becomes NULL; published financial receipt validation then raises WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID /55000.",
+        "multiple": "HAVING omits row, scalar contract_id becomes NULL; same complete receipt/member and financial/root/contract identity validation raises55000 before return.",
+        "use": "financial_identities projection is sealed into facts, but every published receipt unit must match that contract and financial candidate plus actual movement hash/revision/root/client. A further current root Contract/Candidate/Client equality guard precedes return facts.",
+        "recommendation": "Eligible for finite exact scalar subquery + complete post-projection identity-refusal/body-pin classification. Pin1430 filtered-nullability CHECK as well; do not claim global NOT NULL or count every repeated movement as ambiguity."
+      },
+      "evidence": [
+        {
+          "text": "(select min(m.contract_id::text)::uuid\n        from pay_receipts receipt\n        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'\n          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit\n        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid\n          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id\n          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id\n          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n          and m.source_profile_kind<>'SELF_BILL_REPORT'\n          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        where receipt.published_timesheet_financial_id=financial.id\n        having count(distinct m.contract_id)=1) as contract_id",
+          "sha256": "1ae5ab0e74b67fece83cb13eb79b4f3c267610258dff8eeba0f537204b08e92c"
+        },
+        {
+          "text": "if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n    where receipt->>'published_timesheet_financial_id' is not null and (\n      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'\n      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end\n      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit\n        where not exists(select 1 from public.weekly_source_billing_movements m\n          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid\n            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid\n            and m.actual_client_id=(receipt->>'client_id')::uuid\n            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial\n              where financial->>'id'=receipt->>'published_timesheet_financial_id'\n                and financial->>'candidate_id'=m.candidate_id::text\n                and financial->>'contract_id'=m.contract_id::text)\n            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n            and m.source_profile_kind<>'SELF_BILL_REPORT'\n            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "5f885c9f0181422bc02338bc582b8ac120222e9c2c84210b285b1293d48e2d7c"
+        },
+        {
+          "text": "if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)\n    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n      where receipt->>'published_timesheet_financial_id' is not null and not exists(\n        select 1 from jsonb_array_elements(facts->'financial_identities') financial\n          where financial->>'id'=receipt->>'published_timesheet_financial_id'\n            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'\n            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root\n              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'\n              where root->>'timesheet_id'=financial->>'timesheet_id'\n                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'\n                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')\n                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "e67c0971424d578230f3ef95666cb40d643f916dc695a57a8aa3cd89589ca9d8"
+        }
+      ]
+    },
+    {
+      "number": 13,
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+      "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "frozen_file_sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "frozen_file_lf_sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "current_file_sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+          "statement_sha256": "40cfc3e00317f59cb11fc7c90ee95f2b68618ce00fa0c4a7b0b1d85f3a9e19cd",
+          "key_sha256": "d708aae85ef4f4fa23bbba159ad2c410e44537745bcced6f82c2ce87035e0e42",
+          "statement_length": 481,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "8bb21fa6e57798308d8b0f70399e31891e122514f89f10a3d79063cfcf1dfde3",
+      "direct_uuid_casts": [
+        "min(event.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_STAGED_WAIT_EVENT",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(event.id::text)::uuid",
+        "native_column": "public.weekly_exceptional_pay_family_events.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "count(*) into v_count over exact family/evidence-approval/durable-work/latest WAIT.",
+        "zero": "v_count<>1 raises WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE /55000.",
+        "multiple": "Same exact-one refusal /55000, combined with signed protected clock equality.",
+        "use": "v_event UUID is not consumed after assignment in this complete body. The function still refuses non-singleton event rows before source CAS and return; no arbitrary event identity is exposed.",
+        "recommendation": "Eligible for finite statement+whole-body pin classification preserving exact-one refusal; unused UUID could be removed only through a separately reviewed owner successor, not by a gate change."
+      },
+      "evidence": [
+        {
+          "text": "if v_count<>1 or (a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)\n    is distinct from ((v_claim#>>'{claim,work_date}')::date,(v_claim#>>'{claim,start_at_local}')::timestamp,\n      (v_claim#>>'{claim,end_at_local}')::timestamp,(v_claim#>>'{claim,break_minutes}')::integer) then\n    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;",
+          "sha256": "7b622f89559f7012beea106d79a248ea6c14e95c1ae2487877729a7a96f2abcd"
+        }
+      ]
+    },
+    {
+      "number": 14,
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "frozen_file_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "frozen_file_lf_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "current_file_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "statement_sha256": "5f853cfc46b6700b525c19e4048c2cf6101c6fc370a15b46789ee87d3dcb6590",
+          "key_sha256": "59deb5109e613e31199fb845da416d0c661f017343d2c2bde0efb5718a653cd8",
+          "statement_length": 13256,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "9141a94c6b671e6ccd9a83e26aef3334d7fba78caeb077395f93a9a7db90e6ca",
+      "direct_uuid_casts": [
+        "min(m.contract_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_RECEIPT_CONTRACT_IDENTITY",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(m.contract_id::text)::uuid",
+        "native_column": "public.weekly_source_billing_movements.contract_id",
+        "native_type": "uuid; base NOT NULL is dropped by1430, but its replacement invoice_contract CHECK requires non-null for every filtered included movement kind.",
+        "count": "Correlated scalar HAVING count(distinct m.contract_id)=1; repeats of the same actual contract are permitted, different contracts are not selected.",
+        "zero": "HAVING omits row, scalar contract_id becomes NULL; published financial receipt validation then raises WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID /55000.",
+        "multiple": "HAVING omits row, scalar contract_id becomes NULL; same complete receipt/member and financial/root/contract identity validation raises55000 before return.",
+        "use": "financial_identities projection is sealed into facts, but every published receipt unit must match that contract and financial candidate plus actual movement hash/revision/root/client. A further current root Contract/Candidate/Client equality guard precedes return facts.",
+        "recommendation": "Eligible for finite exact scalar subquery + complete post-projection identity-refusal/body-pin classification. Pin1430 filtered-nullability CHECK as well; do not claim global NOT NULL or count every repeated movement as ambiguity."
+      },
+      "evidence": [
+        {
+          "text": "(select min(m.contract_id::text)::uuid\n        from pay_receipts receipt\n        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'\n          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit\n        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid\n          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id\n          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id\n          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n          and m.source_profile_kind<>'SELF_BILL_REPORT'\n          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        where receipt.published_timesheet_financial_id=financial.id\n        having count(distinct m.contract_id)=1) as contract_id",
+          "sha256": "1ae5ab0e74b67fece83cb13eb79b4f3c267610258dff8eeba0f537204b08e92c"
+        },
+        {
+          "text": "if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n    where receipt->>'published_timesheet_financial_id' is not null and (\n      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'\n      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end\n      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit\n        where not exists(select 1 from public.weekly_source_billing_movements m\n          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid\n            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid\n            and m.actual_client_id=(receipt->>'client_id')::uuid\n            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial\n              where financial->>'id'=receipt->>'published_timesheet_financial_id'\n                and financial->>'candidate_id'=m.candidate_id::text\n                and financial->>'contract_id'=m.contract_id::text)\n            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n            and m.source_profile_kind<>'SELF_BILL_REPORT'\n            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "5f885c9f0181422bc02338bc582b8ac120222e9c2c84210b285b1293d48e2d7c"
+        },
+        {
+          "text": "if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)\n    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n      where receipt->>'published_timesheet_financial_id' is not null and not exists(\n        select 1 from jsonb_array_elements(facts->'financial_identities') financial\n          where financial->>'id'=receipt->>'published_timesheet_financial_id'\n            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'\n            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root\n              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'\n              where root->>'timesheet_id'=financial->>'timesheet_id'\n                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'\n                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')\n                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "e67c0971424d578230f3ef95666cb40d643f916dc695a57a8aa3cd89589ca9d8"
+        }
+      ]
+    },
+    {
+      "number": 15,
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "frozen_file_sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "frozen_file_lf_sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "current_file_sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "statement_sha256": "7a03eeb5942af82b6b2d3e4b9b8ed307878ec16b4d5263f2517c03e983cbf83f",
+          "key_sha256": "23433039a28c2d46bdb1303e19adcc967ae891c4cfddb6c40e949ca3ffd95ac3",
+          "statement_length": 13268,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "fabf1bbc14f5e184945ae36add0b2b398cb72b79b9075b85d06ef3d4849519a8",
+      "direct_uuid_casts": [
+        "min(m.contract_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_RECEIPT_CONTRACT_IDENTITY",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(m.contract_id::text)::uuid",
+        "native_column": "public.weekly_source_billing_movements.contract_id",
+        "native_type": "uuid; base NOT NULL is dropped by1430, but its replacement invoice_contract CHECK requires non-null for every filtered included movement kind.",
+        "count": "Correlated scalar HAVING count(distinct m.contract_id)=1; repeats of the same actual contract are permitted, different contracts are not selected.",
+        "zero": "HAVING omits row, scalar contract_id becomes NULL; published financial receipt validation then raises WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID /55000.",
+        "multiple": "HAVING omits row, scalar contract_id becomes NULL; same complete receipt/member and financial/root/contract identity validation raises55000 before return.",
+        "use": "financial_identities projection is sealed into facts, but every published receipt unit must match that contract and financial candidate plus actual movement hash/revision/root/client. A further current root Contract/Candidate/Client equality guard precedes return facts.",
+        "recommendation": "Eligible for finite exact scalar subquery + complete post-projection identity-refusal/body-pin classification. Pin1430 filtered-nullability CHECK as well; do not claim global NOT NULL or count every repeated movement as ambiguity."
+      },
+      "evidence": [
+        {
+          "text": "(select min(m.contract_id::text)::uuid\n        from pay_receipts receipt\n        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'\n          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit\n        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid\n          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id\n          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id\n          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n          and m.source_profile_kind<>'SELF_BILL_REPORT'\n          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        where receipt.published_timesheet_financial_id=financial.id\n        having count(distinct m.contract_id)=1) as contract_id",
+          "sha256": "1ae5ab0e74b67fece83cb13eb79b4f3c267610258dff8eeba0f537204b08e92c"
+        },
+        {
+          "text": "if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n    where receipt->>'published_timesheet_financial_id' is not null and (\n      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'\n      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end\n      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit\n        where not exists(select 1 from public.weekly_source_billing_movements m\n          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid\n            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid\n            and m.actual_client_id=(receipt->>'client_id')::uuid\n            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial\n              where financial->>'id'=receipt->>'published_timesheet_financial_id'\n                and financial->>'candidate_id'=m.candidate_id::text\n                and financial->>'contract_id'=m.contract_id::text)\n            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n            and m.source_profile_kind<>'SELF_BILL_REPORT'\n            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "5f885c9f0181422bc02338bc582b8ac120222e9c2c84210b285b1293d48e2d7c"
+        },
+        {
+          "text": "if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)\n    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n      where receipt->>'published_timesheet_financial_id' is not null and not exists(\n        select 1 from jsonb_array_elements(facts->'financial_identities') financial\n          where financial->>'id'=receipt->>'published_timesheet_financial_id'\n            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'\n            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root\n              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'\n              where root->>'timesheet_id'=financial->>'timesheet_id'\n                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'\n                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')\n                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "e67c0971424d578230f3ef95666cb40d643f916dc695a57a8aa3cd89589ca9d8"
+        }
+      ]
+    },
+    {
+      "number": 16,
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "frozen_file_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "frozen_file_lf_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "current_file_sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+          "statement_sha256": "d935b005b631243b0ec6c76836f8c7a285c66f407cb365fc2e32835f5343ab7d",
+          "key_sha256": "817578b429c92ea0a9626ea30f247d4fa6fdc20dd332f2ddfd18e316f00687ea",
+          "statement_length": 446,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "e093741aaceabfbfd3717db3b3410cb3b873163106519cf835e9816cd8ae687e",
+      "direct_uuid_casts": [
+        "min(resolution.client_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_SINGLE_CLIENT_FINALISATION",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "pg_catalog.min(resolution.client_id::text)::uuid",
+        "native_column": "public.weekly_source_row_resolutions.client_id",
+        "native_type": "uuid nullable; mapping_state=RESOLVED CHECK requires non-null candidate/client/contract/work and null blocker. The preceding complete resolution census requires RESOLVED for every upload row at exact generation.",
+        "count": "count(distinct resolution.client_id) into v_resolved_client_count, scoped exact upload+generation.",
+        "zero": "min is NULL, then coalesce with actual previously scoped upload Client. If no genuine scoped Client or no active source-group membership, WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED /55000; no representative Client is invented.",
+        "multiple": "v_resolved_client_count>1 raises WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED /55000 before UUID comparison/assignment/use.",
+        "use": "COUNT=1 first checks existing scope equality (UPLOAD_CLIENT_MISMATCH55000), then assigns Client, checks current cycle/client/group membership and calls genuine Office authority. All initial resolution census failures are RESOLUTION_CENSUS_NOT_FINALISABLE55000.",
+        "recommendation": "Eligible for finite exact statement+whole-body/source-column CHECK pins with preceding complete resolution census and following count>1 refusal. Preserve legal zero-row scoped Client behavior."
+      },
+      "evidence": [
+        {
+          "text": "if (select pg_catalog.count(*)\n      from public.weekly_source_row_resolutions resolution\n      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n      where source_row.upload_id=v_upload.id and resolution.generation=v_generation)\n       <>v_upload.accepted_count\n     or exists(\n       select 1\n       from public.weekly_source_upload_rows source_row\n       left join public.weekly_source_row_resolutions resolution\n         on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n       where source_row.upload_id=v_upload.id\n         and (resolution.id is null or resolution.mapping_state<>'RESOLVED')\n     )\n     or (v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT' and exists(\n       select 1\n       from public.weekly_source_row_resolutions resolution\n       join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then\n    raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';\n  end if;",
+          "sha256": "04c847a2f4b05a031a39b0de270979c8863f12afcb04725db7d00863b7ee0d65"
+        },
+        {
+          "text": "if v_resolved_client_count>1 then\n      raise exception 'WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "6ab62e505c4246fdf70bcdfcc8f52a9da6ea40fd23a9968eebcc939c55b2f93e"
+        },
+        {
+          "text": "if v_client_id is null or not exists(\n      select 1\n      from public.weekly_source_group_clients group_client\n      where group_client.source_group_id=v_group.id\n        and group_client.client_id=v_client_id\n        and v_cycle.finalisation_week_ending between group_client.valid_from\n          and coalesce(group_client.valid_to,'infinity'::date)\n    ) then\n      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "d7b39e62eb2adb23c4bf302463fc9471ae73360289f65541fc60214b6febed9b"
+        }
+      ]
+    },
+    {
+      "number": 17,
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "frozen_file_sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "frozen_file_lf_sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "current_file_sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+          "statement_sha256": "4df31231e0267063a169e6735ff2f5fe29b60248f35c435604a4855814857f2b",
+          "key_sha256": "966de9f253b95a02722689251d76d53d357e8a6b6b093a5b8b9a3c0c8128adc2",
+          "statement_length": 3420,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "884dc8effdaa298428d8941c8a102ae8423df51c1ec589db1f51ff26d9a740a9",
+      "direct_uuid_casts": [
+        "min(shift_line.id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "SINGLE_EXPENSE_COMPANION",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "pg_catalog.min(shift_line.id::text)::uuid",
+        "native_column": "public.weekly_source_invoice_presentation_lines.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "Nested scalar aggregate HAVING pg_catalog.count(*)=1, over same manifest/work-event/non-expense/correction-role rows.",
+        "zero": "HAVING excludes the aggregate row; scalar subquery returns SQL NULL (no companion).",
+        "multiple": "HAVING excludes the aggregate row; scalar subquery returns SQL NULL (no arbitrary companion).",
+        "use": "Only the optional companion_presentation_line_id of an actual v_is_expense presentation INSERT. This review proves no arbitrary selection, not any stronger business claim that an absent companion is an error.",
+        "recommendation": "Eligible for finite file+signature+statement-pin classification of this nested scalar aggregate with its complete predicates and HAVING. Never remove HAVING or infer cardinality from a LIMIT."
+      },
+      "evidence": [
+        {
+          "text": "case when v_is_expense then (\n        select pg_catalog.min(shift_line.id::text)::uuid\n        from public.weekly_source_invoice_presentation_lines shift_line\n        where shift_line.client_manifest_id=v_manifest.id\n          and shift_line.work_event_id=v_movement.work_event_id\n          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'\n          and shift_line.correction_role is not distinct from v_correction_role\n        having pg_catalog.count(*)=1\n      ) end",
+          "sha256": "aeaf15ea5ac499e498b8551e1b3ed108e9a484552830e07b617b44c4513e8d92"
+        }
+      ]
+    },
+    {
+      "number": 18,
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "frozen_file_sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "frozen_file_lf_sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "current_file_sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+          "statement_sha256": "f6922dbb3d6e6f707af9eb327f22959fb5a2c05e357b89668ec5f8e812e7b74f",
+          "key_sha256": "918c8765711e7eeeb5cbd45ec75fdaff46ac9a1eb8b686ca588fa53f4a060d6c",
+          "statement_length": 113794,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "87a9b1170e17fdd0603be8203ee8c153d99a1aeddf338674ca2e0d99560ae14e",
+      "direct_uuid_casts": [
+        "min(ranked.shift_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "SINGLE_WINNING_NATIVE_REFERENCE",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "min(ranked.shift_id::text)::uuid",
+        "native_column": "public.nhsp_shifts.id",
+        "native_type": "uuid NOT NULL PRIMARY KEY",
+        "count": "count(*)=1 after ranked.match_priority=ranked.winning_priority",
+        "zero": "CASE returns SQL NULL; reference_match_count=0 is emitted as MISSING; source_record_id can retain the original row unique_id as existing display provenance.",
+        "multiple": "CASE returns SQL NULL; reference_match_count>1 is emitted as AMBIGUOUS; no UUID representative is emitted.",
+        "use": "Only the guarded shift_id feeds source_record_id in this invoice presentation snapshot. booking_reference has the same count=1 guard.",
+        "recommendation": "Eligible for finite file+signature+whole-body/statement-pin classification of this one CASE expression only. Preserve ranking/filter, count, CASE and native column type evidence; do not allow general MIN(TEXT)::UUID."
+      },
+      "evidence": [
+        {
+          "text": "case when count(*)=1 then min(ranked.shift_id::text)::uuid end shift_id",
+          "sha256": "afb057c0d9eb8db5cb2f8d3edbcafad2604affab68235120a792cc7e829c00e2"
+        },
+        {
+          "text": "where ranked.match_priority=ranked.winning_priority",
+          "sha256": "46e098ea0309c6a20029c21a2f003f3378379c47f576d8d5bb57f600e7589f9d"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)>1\n                  then 'AMBIGUOUS'",
+          "sha256": "24a0443d19020a8a15a90db5d30621760bbeaed8c19920bfdde6e51fdd1579f3"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)=0\n                  then 'MISSING'",
+          "sha256": "f8a1885d63951066fe62faee941ce393c1b7b9edfef8a494eb4a07a83a9a8b33"
+        }
+      ]
+    },
+    {
+      "number": 19,
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "frozen_file_sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+      "frozen_file_lf_sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+      "current_file_sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+      "current_equal": true,
+      "violations": [
+        {
+          "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+          "statement_sha256": "d935b005b631243b0ec6c76836f8c7a285c66f407cb365fc2e32835f5343ab7d",
+          "key_sha256": "817578b429c92ea0a9626ea30f247d4fa6fdc20dd332f2ddfd18e316f00687ea",
+          "statement_length": 446,
+          "statement_hash_definition": "SHA256 UTF8 F23 exact raw statement key operand: comments masked by executableParts, LF, trimmed; not the complete function SQL."
+        }
+      ],
+      "frozen_body_sha256": "4aeef4bea21ff775ac889427ab78088695ca5c92090934c31adb30730bd143d2",
+      "direct_uuid_casts": [
+        "min(resolution.client_id::text)::uuid"
+      ],
+      "qualification": {
+        "id": "EXACT_SINGLE_CLIENT_FINALISATION",
+        "verdict": "SOURCE_CARDINALITY_PROVED",
+        "aggregate": "pg_catalog.min(resolution.client_id::text)::uuid",
+        "native_column": "public.weekly_source_row_resolutions.client_id",
+        "native_type": "uuid nullable; mapping_state=RESOLVED CHECK requires non-null candidate/client/contract/work and null blocker. The preceding complete resolution census requires RESOLVED for every upload row at exact generation.",
+        "count": "count(distinct resolution.client_id) into v_resolved_client_count, scoped exact upload+generation.",
+        "zero": "min is NULL, then coalesce with actual previously scoped upload Client. If no genuine scoped Client or no active source-group membership, WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED /55000; no representative Client is invented.",
+        "multiple": "v_resolved_client_count>1 raises WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED /55000 before UUID comparison/assignment/use.",
+        "use": "COUNT=1 first checks existing scope equality (UPLOAD_CLIENT_MISMATCH55000), then assigns Client, checks current cycle/client/group membership and calls genuine Office authority. All initial resolution census failures are RESOLUTION_CENSUS_NOT_FINALISABLE55000.",
+        "recommendation": "Eligible for finite exact statement+whole-body/source-column CHECK pins with preceding complete resolution census and following count>1 refusal. Preserve legal zero-row scoped Client behavior."
+      },
+      "evidence": [
+        {
+          "text": "if (select pg_catalog.count(*)\n      from public.weekly_source_row_resolutions resolution\n      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n      where source_row.upload_id=v_upload.id and resolution.generation=v_generation)\n       <>v_upload.accepted_count\n     or exists(\n       select 1\n       from public.weekly_source_upload_rows source_row\n       left join public.weekly_source_row_resolutions resolution\n         on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n       where source_row.upload_id=v_upload.id\n         and (resolution.id is null or resolution.mapping_state<>'RESOLVED')\n     )\n     or (v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT' and exists(\n       select 1\n       from public.weekly_source_row_resolutions resolution\n       join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then\n    raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';\n  end if;",
+          "sha256": "04c847a2f4b05a031a39b0de270979c8863f12afcb04725db7d00863b7ee0d65"
+        },
+        {
+          "text": "if v_resolved_client_count>1 then\n      raise exception 'WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "6ab62e505c4246fdf70bcdfcc8f52a9da6ea40fd23a9968eebcc939c55b2f93e"
+        },
+        {
+          "text": "if v_client_id is null or not exists(\n      select 1\n      from public.weekly_source_group_clients group_client\n      where group_client.source_group_id=v_group.id\n        and group_client.client_id=v_client_id\n        and v_cycle.finalisation_week_ending between group_client.valid_from\n          and coalesce(group_client.valid_to,'infinity'::date)\n    ) then\n      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "d7b39e62eb2adb23c4bf302463fc9471ae73360289f65541fc60214b6febed9b"
+        }
+      ]
+    }
+  ]
+}

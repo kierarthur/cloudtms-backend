@@ -1,0 +1,99 @@
+{
+  "version": "HEALTHROSTER_INVOICE_PRESENTATION_CARDINALITY_CORRECTION_V1",
+  "status": "SOURCE_CORRECTED_NATIVE_NOT_RUN",
+  "sourceParent": "ef5468b5288e2d4ffef61edb20b703583fe2b66c",
+  "finding": "Both current Health Invoice-edit reader definitions used MIN(invoice_line_id::text)::uuid without proving one distinct line per selected-invoice CURRENT presentation. Existing per-movement uniqueness is insufficient. No runtime corrupt data is asserted.",
+  "review": {
+    "json": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json",
+    "sha256": "22f8ade4e2dd6bde62e559c6b75f363e71f04935540e012c3a05d2a44008c4da",
+    "markdown": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.md"
+  },
+  "corrections": [
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+      "beforeLfSha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "afterLfSha256": "304c56dcd2015e4dab934f2e20d3d9616a038c460d8145132a9e5cd18dd26063",
+      "beforeRoutineSha256": "6cfc992a69890906f0218b3f02939eeb921071bf979982f323313f9a05fd6436",
+      "afterRoutineSha256": "8e283c90141f4da8fdfe4f5acdb3925ab7dbaf786dce18b69e2f6f3f1477bcad",
+      "change": "One identical selected-invoice CURRENT presentation distinct-line count refusal after existing VIEW permission; all original bytes retained around it."
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+      "beforeLfSha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "afterLfSha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
+      "beforeRoutineSha256": "ec20437ed638c21080fcb5175e9d708ce3200695870e6408d1f27de6ce999201",
+      "afterRoutineSha256": "967b2e826ff0f197a954448bc2e18eb011412e4324c3ecef18c44c5f2e921ddd",
+      "change": "One identical selected-invoice CURRENT presentation distinct-line count refusal after existing VIEW permission; all original bytes retained around it."
+    }
+  ],
+  "insertedGuard": "  -- A multi-movement NET presentation is valid only when all CURRENT\n  -- bindings identify the same real invoice line. Never choose an arbitrary\n  -- line UUID when the recorded presentation identity is ambiguous.\n  if exists(\n    select 1 from public.weekly_source_invoice_line_bindings binding\n    where binding.invoice_id=v_invoice.id and binding.state='CURRENT'\n    group by binding.presentation_line_id\n    having pg_catalog.count(distinct binding.invoice_line_id)<>1\n  ) then\n    raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_BINDING_AMBIGUOUS' using errcode='23514';\n  end if;\n\n",
+  "behavior": "After existing service/Office VIEW authorization, refuse CURRENT presentation groups with distinct-line count other than one before constructing any movable line. Legitimate multiple movements bound to one line remain accepted. No group is filtered, and all original projection/DTO/calculation/permission bytes remain unchanged.",
+  "preserved": {
+    "signature": true,
+    "stableSecurityDefinerSearchPath": true,
+    "acl": true,
+    "completeOriginalBodiesOutsideOneInsertion": true,
+    "oldHistory": true,
+    "nativePricesAndRounding": true,
+    "immutableMigrations": true,
+    "bankingBodies": true
+  },
+  "tupleReviewContinuation": {
+    "previousReviewSha256": "85a1035ea1232c9f1346e15e6bedad351b15820368f5805502dfc381aeceb7bc",
+    "currentReviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+    "changedFilePins": 2,
+    "allTupleKeysAndCountsUnchanged": true
+  },
+  "verification": {
+    "offlinePg17": {
+      "qualification": "OFFLINE_PG17_GRAMMAR_ONLY",
+      "native": "NOT_RUN",
+      "pglast": "v7.20",
+      "checks": [
+        {
+          "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+          "statements": 5,
+          "bodies": 5,
+          "innerExpressions": 92,
+          "rowtypeParserAliasOnly": true
+        },
+        {
+          "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+          "statements": 1,
+          "bodies": 1,
+          "innerExpressions": 20,
+          "rowtypeParserAliasOnly": true
+        }
+      ]
+    },
+    "sourceEffects": "READ_ONLY_REFUSAL_ONLY",
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "existingInvoiceEvidenceAndBatchTests": {
+      "tests": 13,
+      "status": "PASS"
+    },
+    "finiteTupleRefusalTests": {
+      "tests": 22,
+      "status": "PASS"
+    },
+    "integrity": {
+      "migrations": 407,
+      "repeatables": 1076,
+      "status": "PASS"
+    }
+  },
+  "pending": "This source correction does not itself grant UUID_CARDINALITY classification; full exact guard/type review remains required.",
+  "effects": {
+    "databaseMutation": false,
+    "heldSession": false,
+    "deployment": false,
+    "bankingMessage": false,
+    "secretsPrinted": false
+  }
+}

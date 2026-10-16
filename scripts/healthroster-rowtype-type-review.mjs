@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {scanManagedSql} from './cloudtms-managed-release-sql.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 export const reviewPath='docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json';
-export const reviewSha256='85a1035ea1232c9f1346e15e6bedad351b15820368f5805502dfc381aeceb7bc';
+export const reviewSha256='5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc';
 const hash=text=>createHash('sha256').update(text).digest('hex');
 const fail=()=>{throw Error('HEALTHROSTER_ROWTYPE_TYPE_REVIEW_CHANGED');};
 // This proves the complete declared table tuple, never a joined/partial tuple.
