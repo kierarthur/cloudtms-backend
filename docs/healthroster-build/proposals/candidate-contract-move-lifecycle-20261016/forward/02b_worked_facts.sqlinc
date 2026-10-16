@@ -14,7 +14,8 @@ as $function$
     select coalesce(w->'worked_facts',private.candidate_contract_move_signature_facts_v1(
       coalesce(nullif(w->'input_snapshot_json','null'::jsonb),nullif(w->'immutable_submission_json','null'::jsonb),'{}'::jsonb))) facts
     from jsonb_array_elements(p_workflows) w
-   ) projected where facts<>private.candidate_contract_move_signature_facts_v1('{}'::jsonb)),'[]'::jsonb));
+   ) projected where facts<>private.candidate_contract_move_signature_facts_v1('{}'::jsonb)
+    and facts<>private.candidate_contract_move_signature_facts_v1(p_timesheet)),'[]'::jsonb));
 $function$;
 alter function private.candidate_contract_move_facts_v1(jsonb,jsonb) owner to postgres;
 revoke all on function private.candidate_contract_move_facts_v1(jsonb,jsonb) from public,anon,authenticated,service_role;

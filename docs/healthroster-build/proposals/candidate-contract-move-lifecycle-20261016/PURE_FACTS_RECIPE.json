@@ -24,19 +24,19 @@
     },
     {
       "path": "forward/02b_worked_facts.sqlinc",
-      "sha256": "8b75ed2e0cd2d3194bfc2d7fa1ea822de2144ffc874ee2b2cb4a4845ebf91895",
-      "bytes": 1805
+      "sha256": "ac2e65b546ef6c3b33c85eebafe67cea626fbc607597737e502d18b0a92dba15",
+      "bytes": 1884
     },
     {
       "path": "tests/pure-facts-native.sql",
-      "sha256": "d76b76841fe8cccb18a2ef4e90c08e30f2d9dd156a57a554fd53a7b7c117e29e",
-      "bytes": 7359
+      "sha256": "b7fa7b3440b7743a3b8d04fa1d53d5843f6829e1a3c84b36e4a9a204837576a0",
+      "bytes": 8205
     }
   ],
   "preparedSql": {
     "path": "prepared/pure-facts.sql",
-    "sha256": "3a303992fac227d45dd5d473f868d299d379a051834b5537961b2dbbcb29507b",
-    "bytes": 16087,
+    "sha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+    "bytes": 17012,
     "parsedTopLevelStatements": 11
   },
   "baselineAndFresh": {
@@ -45,6 +45,7 @@
     "required": "Capture exact result before; existing expense-number helper present, two proposed Move helpers absent. After server-owned rollback, fresh result must match every prior present/definition_md5/owner/ACL field exactly; both proposed Move helpers absent. No baseline substitution."
   },
   "rootExecutionGate": "Root reviews exact bytes and SEND7/current Kier native rollback route; map only audited logical postgres owner with existing provider-neutral mapper. Server owns transaction. No BEGIN/COMMIT, local DB, Bank seed, business tables, audit injection, authority stubs or provider effects.",
-  "assertions": 24,
-  "qualification": "Only actual pure JSON helper native grammar/scalar semantics. No Move/financial producer/permission/API/native lifecycle acceptance claim."
+  "assertions": 25,
+  "qualification": "Only actual pure JSON helper native grammar/scalar semantics. No Move/financial producer/permission/API/native lifecycle acceptance claim.",
+  "supersedesPureSource": "5f5e4bb60967563a80c72d632d46b90dc4baecc2"
 }

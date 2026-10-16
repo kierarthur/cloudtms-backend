@@ -47,6 +47,14 @@ begin
   if before_facts=private.candidate_contract_move_facts_v1(variant,jsonb_build_array(jsonb_build_object('input_snapshot_json',raw))) then
    raise exception 'FACTS_NATIVE_LIVE_PHYSICAL_EDIT_OMITTED';end if;
  end loop;
+ -- An empty native draft can refer to an already-worked physical Timesheet.
+ -- Adding the exact same worked body is not a new worked fact or signature.
+ raw:='{"actual_schedule_json":[{"date":"2026-10-12","start":"09:00","end":"17:00","break_minutes":0}],"additional_units_week":{"ONCALL":1}}';
+ original_t:=raw||jsonb_build_object('week_ending_date','2026-10-18','worked_minutes',480);
+ canonical:=jsonb_build_object('timesheet_patch_json',raw,'canonical_tsfin_snapshot','{}'::jsonb);
+ if private.candidate_contract_move_facts_v1(original_t,jsonb_build_array(jsonb_build_object('input_snapshot_json','{}'::jsonb)))
+  is distinct from private.candidate_contract_move_facts_v1(original_t,jsonb_build_array(jsonb_build_object('input_snapshot_json',canonical))) then
+  raise exception 'FACTS_NATIVE_EXISTING_PHYSICAL_BODY_DUPLICATE_CHURN';end if;
  -- Native first-submit normalizers: explicit duration and midnight break window.
  raw:='{"actual_schedule_json":[{"date":"2026-10-12","start":"20:00","end":"08:00","break_entry":{"kind":"START_END_TIMES","break_start":"23:45","break_end":"00:15","calculated_break_minutes":30}}]}';
  canonical:='{"timesheet_patch_json":{"actual_schedule_json":[{"date":"2026-10-12","start":"20:00","end":"08:00","break_start":"23:45","break_end":"00:15","break_minutes":30}]}}';
@@ -70,4 +78,4 @@ begin
   raise exception 'FACTS_NATIVE_INVALID_BREAK_ACCEPTED';exception when invalid_parameter_value then null;end;
 end;
 $facts_native$;
-select jsonb_build_object('version','CANDIDATE_MOVE_PURE_FACTS_NATIVE_V1','assertions',24,'native','PASS_IF_REACHED') as pure_facts_scalar_result;
+select jsonb_build_object('version','CANDIDATE_MOVE_PURE_FACTS_NATIVE_V1','assertions',25,'native','PASS_IF_REACHED') as pure_facts_scalar_result;
