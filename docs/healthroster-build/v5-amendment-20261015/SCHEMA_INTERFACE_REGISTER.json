@@ -6066,5 +6066,36 @@
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
       }
     }
-  ]
+  ],
+  "daily_runtime_source_continuation_20261016": {
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_RATE_SOURCE_INTEGRATION.json",
+    "owner": "HEALTH",
+    "existing_returns": [
+      "DAILY-RATE-ADMISSION-01",
+      "DY02",
+      "DY04",
+      "DY05",
+      "DY06",
+      "DY10"
+    ],
+    "runtime_sources": [
+      {
+        "file": "broker/src/contract-correction-v3.mjs",
+        "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+      },
+      {
+        "file": "broker/src/daily-canonical-authority.js",
+        "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+      },
+      {
+        "file": "broker/src/daily-rate-correction.js",
+        "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+      }
+    ],
+    "sql_objects_added_by_this_checkpoint": [],
+    "native": "REQUIRED_NOT_RUN",
+    "fetch_and_office_mount": "DEPENDENCY_HELD",
+    "installed": false,
+    "original_objects_and_statuses_unchanged": true
+  }
 }

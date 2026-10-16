@@ -1,0 +1,70 @@
+{
+  "version": "HEALTH_DAILY_RATE_SOURCE_INTEGRATION_V1",
+  "source_parent": "994909f80b932a2c89099c65fcb3c6658de27350",
+  "producer_commit": "00f25571ac7fb65f44351a52beced0710211138e",
+  "producer_worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "producer_closure_sha256": "7b9e4714bc1e0bf09c804448d773d6555210bb26dd049588fc0558a520e13e06",
+  "reviewed_final_content_sha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "record": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_RATE_SOURCE_INTEGRATION.json",
+  "files": [
+    {
+      "file": "broker/src/contract-correction-v3.mjs",
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "file": "broker/src/daily-canonical-authority.js",
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "broker/src/daily-rate-correction.js",
+      "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "tests/contract-correction-v3.test.mjs",
+      "sha256": "198f5743e3c7fbf587fe3b11cfcabd016202cc7e5e693313162302053f0eb1ef"
+    },
+    {
+      "file": "tests/daily-rate-calculator.test.mjs",
+      "sha256": "d4a61133d01dc4f20ea254513c7e047a6632ddfc2d5961069b2edb2daffcce7d"
+    },
+    {
+      "file": "tests/daily-rate-http.test.mjs",
+      "sha256": "d974bbafa15373dcc09d78b3a157c3e772b0d7822b0b62865fcb77154ee2b62e"
+    }
+  ],
+  "changes": [
+    "Single Health closed Contract/Daily decoder is now runtime source broker/src/contract-correction-v3.mjs, byte-identical to reviewed payload.",
+    "Daily HTTP module imports that sole runtime decoder instead of a proposal path. No exported default.fetch route or Office More action is mounted before native dependency qualification.",
+    "Sole existing Daily calculator gains reviewed explicit rateCorrectionContext argument and exact native role helpers. Ordinary default branch/golden arithmetic remains unchanged.",
+    "Active source tests consume actual runtime modules, not evidence/proposal copies."
+  ],
+  "qualification": {
+    "tests": {
+      "command": "node --test tests/daily-canonical-authority.test.mjs tests/daily-rate-calculator.test.mjs tests/daily-rate-http.test.mjs tests/contract-correction-v3.test.mjs",
+      "passed": 44,
+      "failed": 0,
+      "scope": "closed DTO, canonical original arithmetic, explicit used-rate/mileage/currentness checks and HTTP protocol with mocked RPC responses"
+    },
+    "syntax": "node --check on both new runtime modules PASS",
+    "native_sql": "REQUIRED_NOT_RUN",
+    "fetch_mount": "DEPENDENCY_HELD",
+    "office_mount": "DEPENDENCY_HELD",
+    "bank_financial_acceptance": "REQUIRED_NOT_RUN",
+    "installed": false
+  },
+  "dependency_holds": [
+    "Actual native Banking paid/frozen/freeze-admission/canonical SummaryDTO preview and result interfaces; no schema or nominal zero valuation invented.",
+    "Exact Health/Bank six-root, seven-module native composition and public Daily wrappers qualified, including invoice authority and one native publisher.",
+    "Real current shared V3 parent action dispatcher and actual current Office More integration."
+  ],
+  "bank_named_record_observation": {
+    "head": "9da5a29692c1ff7733b4c5022621486259402138",
+    "file": "docs/bpay-next/IMPLEMENTATION_CHECKLIST.csv",
+    "scope": "Named CM-02/CM-16/CM-17/F-17 rows only; original and revised child evidence kept distinct.",
+    "cm02_cm16_cm17": "Revised rows OPEN, no implementation commit recorded in these named records.",
+    "f17": "Some original baseline children built/reviewed at b73133e/ed1034e; revised/other rows remain open and install/app boxes not recorded complete.",
+    "b051": "No exact Item ID B-051 row found in this named CSV; this is not a whole-repository absence claim."
+  },
+  "install2": "NOT_INSTALLED",
+  "external_effects": false
+}
