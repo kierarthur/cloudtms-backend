@@ -1,0 +1,168 @@
+{
+  "version": "HEALTH_DAILY_PUBLIC_SOURCE_PEER_MANIFEST_V1",
+  "reviewedCommit": "6ba4c06ed5843231fab10c16fb6273ea1f640908",
+  "files": [
+    {
+      "file": "EXISTING_ACTOR_PREDICATE.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "file": "EXISTING_OPERATION_REQUEST_DDL.sqlinc",
+      "bytes": 4567,
+      "sha256": "ce89a6271d21861e13dcb391b821428350f3d9ad2f3bf4ba618b1b63bf0d03d7"
+    },
+    {
+      "file": "EXISTING_REQUEST_HELPERS.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "frozen/ASSEMBLY.json",
+      "bytes": 13118,
+      "sha256": "ca68d5078ed849e8f6c807e0336156ef5d00ad1c02845c76dee4d96716c6a1a2"
+    },
+    {
+      "file": "frozen/dependency-review.mjs",
+      "bytes": 4322,
+      "sha256": "30aa55b1ad0fcb28b5d41208e3d23d4b009345b6864d85990db3019f971c9160"
+    },
+    {
+      "file": "frozen/DEPENDENCY_REVIEW.json",
+      "bytes": 5556,
+      "sha256": "7c33b6d00669af5e72576a0a2e5538543a676de7b5eb9f1746959547bdace4b7"
+    },
+    {
+      "file": "frozen/existing-exact/broker/src/contract-correction-v3.mjs",
+      "bytes": 12418,
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "file": "frozen/existing-exact/broker/src/daily-canonical-authority.js",
+      "bytes": 18725,
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "frozen/existing-exact/broker/src/daily-rate-correction.js",
+      "bytes": 14101,
+      "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "frozen/forward/daily_public_services_v1.sql",
+      "bytes": 284,
+      "sha256": "1b76e78b1baad084f4d48ce914a1b1dae50254f2071132ed9b9b9ae2b27b05a7"
+    },
+    {
+      "file": "frozen/forward/host/daily-rate-correction.dispatch.jsinc",
+      "bytes": 728,
+      "sha256": "3873a7fa533febfd19fc0bd945671c58054483a4a85ecf8e58e29ce6e5dc0e73"
+    },
+    {
+      "file": "frozen/forward/host/daily-rate-correction.import.jsinc",
+      "bytes": 108,
+      "sha256": "9c12a999a7ef6e1f7d3ff70bb220e34deeddadfc1a8044ebe4f0a267f9502c1b"
+    },
+    {
+      "file": "frozen/forward/sql/01_public_services.sqlinc",
+      "bytes": 18959,
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "frozen/forward/sql/99_acl.sqlinc",
+      "bytes": 1256,
+      "sha256": "939c5ae6782b76183f18a65d16be9eada916db846cad23de879c9988394c7235"
+    },
+    {
+      "file": "frozen/freeze-source.mjs",
+      "bytes": 2294,
+      "sha256": "c4b8e397bfe629cb823b0ca2ec8ecee66911501066ddb3806667a260606eb28f"
+    },
+    {
+      "file": "frozen/grammar-review.py",
+      "bytes": 2125,
+      "sha256": "0f6d26904545e946c03430cfb61b9520b00fa175121d9a2aacfa0d4738a0e99f"
+    },
+    {
+      "file": "frozen/GRAMMAR_RESULT.json",
+      "bytes": 1832,
+      "sha256": "e6fbae045b5b50454a7ec4b403aafca924995d122d5883f970c9d0b491d34ddc"
+    },
+    {
+      "file": "frozen/integration.test.mjs",
+      "bytes": 7289,
+      "sha256": "77902ccba4c81197a35707285cf5cb3eca307e7d2fa1f375893838e8575088c4"
+    },
+    {
+      "file": "frozen/original-http.test.mjs",
+      "bytes": 11172,
+      "sha256": "75e8f82c58a1d0ae723a63fcd2e3ffbb19cfd86af408701fb3de3ad5e25f9022"
+    },
+    {
+      "file": "frozen/prepare.mjs",
+      "bytes": 9872,
+      "sha256": "a7220000605714a8db64ed8d571d7b02c7fa00f1e27b24f8f2c32bd7cf219457"
+    },
+    {
+      "file": "frozen/README.md",
+      "bytes": 9279,
+      "sha256": "5a89ade4918fa8f462d56689b4286615951c3dd427253354bebd403de8f5a245"
+    },
+    {
+      "file": "frozen/REGISTRY_ADDITIONS.json",
+      "bytes": 1533,
+      "sha256": "45c62aa72300b2296f172b6367b1bd38357e90d8d5453f74b94d479317b7ce46"
+    },
+    {
+      "file": "frozen/SOURCE_CHECKS.json",
+      "bytes": 514,
+      "sha256": "bb16e25c4d1ca4ec273e6e4f9bb2910c5064c5122a278afb96e1e0f6163630bf"
+    },
+    {
+      "file": "frozen/SOURCE_MANIFEST.json",
+      "bytes": 3547,
+      "sha256": "7930fc6884d3571f45bf28b8ee67dbf7a54fb96776c6a0298cc334e75011e42f"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 1234,
+      "sha256": "e88f953d536e62439f2d5f97159e61f31f9c81bd9ca43f08c5c81ba3744d9a3a"
+    },
+    {
+      "file": "GRAMMAR_INDEPENDENT.json",
+      "bytes": 374,
+      "sha256": "7b68194a61a918babffc5b10c5cf38e0b898236b17857246cae25c7da47e29d6"
+    },
+    {
+      "file": "peer.test.mjs",
+      "bytes": 4134,
+      "sha256": "50f601cc9f9efc58f3c4159fccf01fdaba6382c7c3d2c23d6fc8ee192fef1b86"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3059,
+      "sha256": "b76e703e52bb75e5c7c05c169237907267fa5a63df3d2c4c00f7c106819d43fb"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 7807,
+      "sha256": "5fbd046b4ced4761546accd3781ca65f38c4a1d1cad56b6f44cf75bd916e58f7"
+    },
+    {
+      "file": "review.mjs",
+      "bytes": 11524,
+      "sha256": "c77d65e1301c399dae336753a855d844a9f6c53808f23c4accebaf65087636b5"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 1051,
+      "sha256": "20b2d9b1d648a046a552939a6edf3dc0acc324c1ad9182de658b2a0e3f61034c"
+    },
+    {
+      "file": "TEST_RESULT.json",
+      "bytes": 660,
+      "sha256": "dc03e0b043454070b597ad67f408e54c586f83992466ec2232e52f93efa4a5a5"
+    }
+  ],
+  "native": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}

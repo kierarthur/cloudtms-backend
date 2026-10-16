@@ -1,0 +1,66 @@
+create table private.timesheet_contract_move_operations (
+  id uuid primary key,
+  accept_request_id uuid unique,
+  accept_request_hash bytea check(accept_request_hash is null or octet_length(accept_request_hash)=32),
+  purpose text not null check(purpose in('CONTRACT_CORRECTION','DAILY_RATE_CORRECTION')),
+  state text not null check(state in('REVIEWED','COMPLETE','SUPERSEDED')),
+  state_revision bigint not null check(state_revision>0),
+  family_root_id uuid not null references public.timesheets(timesheet_id),
+  from_timesheet_id uuid not null references public.timesheets(timesheet_id),
+  to_timesheet_id uuid references public.timesheets(timesheet_id) deferrable initially deferred,
+  from_contract_id uuid references public.contracts(id),
+  to_contract_id uuid references public.contracts(id),
+  candidate_id uuid not null references public.candidates(id),
+  actual_client_id uuid not null references public.clients(id),
+  -- NULL is allowed only while this preview transaction assembles the genuine sealed review.
+  -- The deferred commit guard requires real hashes plus the matching immutable review.
+  expected_scope_hash bytea check(expected_scope_hash is null or octet_length(expected_scope_hash)=32),
+  before_pay_cut_hash bytea check(before_pay_cut_hash is null or octet_length(before_pay_cut_hash)=32),
+  before_invoice_hash bytea check(before_invoice_hash is null or octet_length(before_invoice_hash)=32),
+  after_invoice_hash bytea check(after_invoice_hash is null or octet_length(after_invoice_hash)=32),
+  invoice_authority text not null check(invoice_authority in('SOURCE_FINANCIAL','CONTRACT_PRICED','MIXED','UNRESOLVED')),
+  invoice_move_policy text not null check(invoice_move_policy in('PRESERVE_SOURCE','ORDINARY_CORRECTION','MIXED','REVIEW_REQUIRED')),
+  financial_state text not null check(financial_state in('NOT_APPROVED','QUALIFIED','REVIEW_REQUIRED')),
+  reason text check(reason is null or length(btrim(reason)) between 1 and 2000),
+  created_by_user_id uuid not null references public.tms_users(id),
+  created_at_utc timestamptz not null,
+  completed_at_utc timestamptz,
+  financial_command_id uuid,
+  current_financial_cut_id uuid,
+  accepted_review_id uuid,
+  accepted_review_digest bytea check(accepted_review_digest is null or octet_length(accepted_review_digest)=32),
+  billing_revision bigint not null default 0 check(billing_revision>=0),
+  unchanged_work_sha256 bytea check(unchanged_work_sha256 is null or octet_length(unchanged_work_sha256)=32),
+  placement_receipt_json jsonb,
+  accepted_valuation_json jsonb,
+  preparation_operation_id uuid,
+  receipt_json jsonb check(receipt_json is null or jsonb_typeof(receipt_json)='object'),
+  unique(id,family_root_id),
+  check((accept_request_id is null)=(accept_request_hash is null)),
+  check((state='REVIEWED' and accept_request_id is null
+    and completed_at_utc is null and receipt_json is null)
+    or (state<>'REVIEWED' and accept_request_id is not null and to_timesheet_id is not null
+    and completed_at_utc is not null and receipt_json is not null and reason is not null and after_invoice_hash is not null)),
+  check((purpose='CONTRACT_CORRECTION' and from_contract_id is not null and to_contract_id is not null
+    and from_contract_id<>to_contract_id and (to_timesheet_id is null or to_timesheet_id<>from_timesheet_id))
+    or (purpose='DAILY_RATE_CORRECTION' and from_contract_id is null and to_contract_id is null
+      and (to_timesheet_id is null or to_timesheet_id=from_timesheet_id))),
+  check(state='REVIEWED' or (accepted_review_id is not null and accepted_review_digest is not null
+    and unchanged_work_sha256 is not null and placement_receipt_json is not null and billing_revision>0)),
+  check(invoice_authority<>'SOURCE_FINANCIAL' or invoice_move_policy='PRESERVE_SOURCE'),
+  check(invoice_authority<>'SOURCE_FINANCIAL' or after_invoice_hash is null or before_invoice_hash=after_invoice_hash)
+);
+
+create table private.timesheet_contract_move_requests (
+  request_id uuid primary key,
+  operation_id uuid not null references private.timesheet_contract_move_operations(id) deferrable initially deferred,
+  request_kind text not null check(request_kind in('PREVIEW','ACCEPT','RESUME_FINANCIAL')),
+  request_hash bytea not null check(octet_length(request_hash)=32),
+  review_id uuid,
+  state_revision bigint not null check(state_revision>0),
+  receipt_json jsonb check(receipt_json is null or jsonb_typeof(receipt_json)='object'),
+  created_at_utc timestamptz not null,
+  unique(operation_id,request_id),
+  unique(operation_id,request_id,request_hash)
+);
+

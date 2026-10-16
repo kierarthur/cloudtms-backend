@@ -1,0 +1,14 @@
+{
+  "scope": "INDEPENDENT_OFFLINE_PG17_GRAMMAR_ONLY",
+  "pglast": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "completeFunctions": 4,
+  "completePlpgsqlBodies": 4,
+  "aclStatements": 11,
+  "expandedStatements": 18,
+  "sqlSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+  "nativeCatalogueTypeResolutionRolesAclApi": "NOT_RUN"
+}

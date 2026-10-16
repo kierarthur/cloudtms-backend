@@ -1,0 +1,24 @@
+{
+  "frozenAuthorTests": {
+    "tests": 22,
+    "pass": 22,
+    "fail": 0,
+    "skipped": 0
+  },
+  "outputSha256": "3b57eb4e73673043a07d2a66c98e76687f76bf0a55e6a538a9467b28d8521fd8",
+  "adaptation": {
+    "originalTestSha256": "77902ccba4c81197a35707285cf5cb3eca307e7d2fa1f375893838e8575088c4",
+    "changes": 1,
+    "kind": "OWNED_TEMP_FROZEN_39AA_BASELINE_ROOT_ONLY",
+    "fullReverseEqual": true
+  },
+  "fixtureNativeCalls": false,
+  "ownedFixtureRemoved": true,
+  "independentHttpCases": {
+    "tests": 7,
+    "pass": 7,
+    "fail": 0,
+    "skipped": 0
+  },
+  "independentOutputSha256": "57e373d95d823faf07fc2d3660ec50006c9c89c75c074ffd890512d66a91d101"
+}

@@ -1,0 +1,10 @@
+      // Health-owned Daily entry: private economics may truthfully be unavailable.
+      // The sole current calculator and native service wrappers own preparation.
+      if (/^\/api\/timesheets\/(?:[^/]+\/daily-rate-correction\/(?:preview|accept)|daily-rate-correction\/operations\/[^/]+)$/.test(p)) {
+        const dailyRateCorrectionResponse = await dispatchDailyRateCorrectionRequest(req, env, ctx, {
+          requireUser,
+          rpc: createDailyRateCorrectionRpc({baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)}),
+          toLocalParts, subtractBreak, classifyMinutes, resolveEffectivePayChannel
+        });
+        if (dailyRateCorrectionResponse) return withCORS(env, req, dailyRateCorrectionResponse);
+      }

@@ -1,0 +1,33 @@
+{
+  "mode": "ADDITIVE_FOUR_SIGNATURES_ONLY_PRESERVE_ALL_CURRENT_COMPANIONS_EDITOR_METADATA",
+  "definitions": [
+    {
+      "signature": "private.daily_rate_correction_public_assert_v1(jsonb,text)",
+      "physicalSource": "forward/sql/01_public_services.sqlinc",
+      "sourceSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "new": true,
+      "registration": "Root assigns actual finalRoot/finalPhysical from approved mount"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_preview_v1(jsonb)",
+      "physicalSource": "forward/sql/01_public_services.sqlinc",
+      "sourceSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "new": true,
+      "registration": "Root assigns actual finalRoot/finalPhysical from approved mount"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_accept_v1(jsonb)",
+      "physicalSource": "forward/sql/01_public_services.sqlinc",
+      "sourceSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "new": true,
+      "registration": "Root assigns actual finalRoot/finalPhysical from approved mount"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_result_v1(jsonb)",
+      "physicalSource": "forward/sql/01_public_services.sqlinc",
+      "sourceSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "new": true,
+      "registration": "Root assigns actual finalRoot/finalPhysical from approved mount"
+    }
+  ]
+}

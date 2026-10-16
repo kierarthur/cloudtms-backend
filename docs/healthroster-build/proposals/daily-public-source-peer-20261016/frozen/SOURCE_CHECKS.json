@@ -1,0 +1,18 @@
+{
+  "scope": "LOCAL_SOURCE_ONLY_ISOLATED_TRANSPORT_FIXTURES_NOT_NATIVE_RECEIPTS",
+  "tests": 22,
+  "pass": 22,
+  "fail": 0,
+  "originalHttpWholeImportReverse": true,
+  "wholeCurrentParentRawReverse": true,
+  "wholeProposedParentNodeSyntax": "PASS",
+  "soleOfficeDtoWholeGenerationExact": true,
+  "currentNative15Unchanged": true,
+  "newFunctions": 4,
+  "expandedPG17Statements": 18,
+  "databaseCalls": 0,
+  "credentialFilesRead": 0,
+  "freshEconomicsComplete": false,
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN"
+}

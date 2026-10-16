@@ -1,0 +1,12 @@
+-- Exact four new owners only; existing0858 ACL and companions are preserved.
+alter function private.daily_rate_correction_public_assert_v1(jsonb,text) owner to current_user;
+revoke all on function private.daily_rate_correction_public_assert_v1(jsonb,text) from public,anon,authenticated,service_role;
+alter function public.timesheet_daily_rate_correction_preview_v1(jsonb) owner to current_user;
+revoke all on function public.timesheet_daily_rate_correction_preview_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.timesheet_daily_rate_correction_preview_v1(jsonb) to service_role;
+alter function public.timesheet_daily_rate_correction_accept_v1(jsonb) owner to current_user;
+revoke all on function public.timesheet_daily_rate_correction_accept_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.timesheet_daily_rate_correction_accept_v1(jsonb) to service_role;
+alter function public.timesheet_daily_rate_correction_result_v1(jsonb) owner to current_user;
+revoke all on function public.timesheet_daily_rate_correction_result_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.timesheet_daily_rate_correction_result_v1(jsonb) to service_role;

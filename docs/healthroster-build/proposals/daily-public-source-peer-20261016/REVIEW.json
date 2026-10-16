@@ -1,0 +1,182 @@
+{
+  "version": "HEALTH_DAILY_PUBLIC_INDEPENDENT_SOURCE_PEER_V1",
+  "reviewedCommit": "6ba4c06ed5843231fab10c16fb6273ea1f640908",
+  "proposal": "docs/healthroster-build/proposals/v6-daily-public-integration-20261016/",
+  "sourceManifestSha256": "7930fc6884d3571f45bf28b8ee67dbf7a54fb96776c6a0298cc334e75011e42f",
+  "verifiedFrozenSavedAndGitFiles": 20,
+  "functions": [
+    {
+      "name": "private.daily_rate_correction_public_assert_v1",
+      "signature": "private.daily_rate_correction_public_assert_v1(p_value jsonb,p_shape text)",
+      "startLine": 5,
+      "bytes": 12600,
+      "sha256": "ba3df30ace474bb25d617a92ee1fae3a61c1f0383360460c7ab1502d281719b5"
+    },
+    {
+      "name": "public.timesheet_daily_rate_correction_preview_v1",
+      "signature": "public.timesheet_daily_rate_correction_preview_v1(p_args jsonb)",
+      "startLine": 123,
+      "bytes": 1783,
+      "sha256": "48c04e0d084352f6a7422d3dda37a0112f947a99ea54b7dd8f3ec3775e2156e6"
+    },
+    {
+      "name": "public.timesheet_daily_rate_correction_accept_v1",
+      "signature": "public.timesheet_daily_rate_correction_accept_v1(p_args jsonb)",
+      "startLine": 148,
+      "bytes": 2735,
+      "sha256": "34f413e4613db01f35aeb33678b9bbeb822ed2a9858f4802260192a269370978"
+    },
+    {
+      "name": "public.timesheet_daily_rate_correction_result_v1",
+      "signature": "public.timesheet_daily_rate_correction_result_v1(p_args jsonb)",
+      "startLine": 179,
+      "bytes": 1526,
+      "sha256": "651f193920a2e9c41c55767670b75e730057a953a0eafe780b7d5ae1013a428d"
+    }
+  ],
+  "acl": {
+    "sha256": "939c5ae6782b76183f18a65d16be9eada916db846cad23de879c9988394c7235",
+    "statements": 11,
+    "ownerOnlyPrivateHelpers": 1,
+    "serviceOnlyPublicRpc": 3,
+    "broaderGrants": false
+  },
+  "mounted": {
+    "root": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+    "rootSha256": "21f4e30d2660b45cf3b6fa807b2dd96220b6f90f169095d4e88dded1a02c1ac3",
+    "onlyTwoIncludePathSubstitutions": true,
+    "sqlSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+    "aclSha256": "939c5ae6782b76183f18a65d16be9eada916db846cad23de879c9988394c7235",
+    "unchangedInputFiles": [
+      {
+        "file": "broker/src/daily-rate-correction.js",
+        "bytes": 14101,
+        "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+      },
+      {
+        "file": "broker/src/daily-canonical-authority.js",
+        "bytes": 18725,
+        "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+      },
+      {
+        "file": "broker/src/contract-correction-v3.mjs",
+        "bytes": 12418,
+        "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+        "bytes": 717,
+        "sha256": "00d7ed67ac696e84ac7867b56662495589267300a7acec32b556237c74f1f3dc"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+        "bytes": 15693,
+        "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+        "bytes": 38065,
+        "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+        "bytes": 4862,
+        "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+        "bytes": 3852,
+        "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8"
+      }
+    ],
+    "actualParentWholeRawReverseTo39aa": true,
+    "parentReverseSha256": "640645a70afa96e0d88bbb407666d854d8ddd8d5477e5919562b591cce727335"
+  },
+  "predecessor": {
+    "requestHelpers": {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    "operationRequestDdl": {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "spanSha256": "ce89a6271d21861e13dcb391b821428350f3d9ad2f3bf4ba618b1b63bf0d03d7"
+    },
+    "actorPredicate": {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "spanSha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    }
+  },
+  "acceptedReplayPrivacy": {
+    "currentActiveOriginalActor": true,
+    "exactOperationRequestKindHash": true,
+    "rawSavedReceiptReturned": false,
+    "currentActorPassedToPrivateResult": true,
+    "missingPrivateResultRaises55000BeforeContent": true,
+    "currentReaderAuthorizationAndRedaction": "REQUIRED_IN_REAL_PRIVATE_COMPOSITOR_NOT_SUPPLIED_OR_INVENTED",
+    "workerChangedRolePostRefusedBeforeRpc": true,
+    "getAllowsOnlyAuthenticatedActiveCurrentReaderThenPrivatePermissionOwner": true
+  },
+  "previewReplay": {
+    "currentAdminAndWpPredicateBeforeSavedReplay": true,
+    "sameOriginalActorPurposeRequestHashTimesheet": true,
+    "immutableSavedPreviewReturned": true,
+    "newRoleWithoutAdminRefused": true,
+    "currentRoleResultDoesNotReuseSavedPreviewAsAcceptedResult": true
+  },
+  "structuralBoundary": {
+    "exactDailyVersionPurposeAndSamePhysicalResult": true,
+    "exactCanonicalUuidAndInt63StringRevision": true,
+    "closedNestedShapesAndActionVariantTuples": true,
+    "sourcePrivateOuterRejected": true,
+    "fullWorkerDecoderStillRequired": true,
+    "sqlHelperIsNotCurrentRoleAuthority": true,
+    "workerAddsControlTextNonemptyFieldAndActionDuplicateChecks": true
+  },
+  "httpBinding": {
+    "threeRoutesUnchanged": true,
+    "workerActorDerivedFromFreshRequireUser": true,
+    "browserActorSpoofRefused": true,
+    "getNoRequestIdOrQueryChange": true,
+    "acceptAuthority": "EXACT_OPERATION_REVIEW_DIGEST_REVISION_REQUEST; IMMUTABLE_SAME_DAILY_NATIVE_OWNER",
+    "urlTimesheetIdentityCheck": "EXISTING_POST_NATIVE_RESULT_BINDING; NO_NEW_SERVICE_PATH_ID_FIELD_OR_COMPOSITOR_INVENTED",
+    "requestUncertaintyPreserved": true
+  },
+  "sourceVerdict": "NO_NEW_SOURCE_BLOCKER_IN_EXACT_FOUR_CALLER_PARTIAL_PROPOSAL",
+  "sourceBlockers": [],
+  "requiredHolds": [
+    "Real private Daily review/atomic accept/current-role-safe result composers",
+    "Genuine approved Daily paid/frozen/history/current Summary preflight and exact delegate ABI",
+    "Real Banking Daily publisher plus exact same-TX once-only publication/Invoice preparation/completion and immutable old evidence",
+    "Actual role/redaction/currentness/concurrency/native/API/installed acceptance; to_regprocedure existence is not release qualification"
+  ],
+  "tests": {
+    "frozenAuthorTests": {
+      "tests": 22,
+      "pass": 22,
+      "fail": 0,
+      "skipped": 0
+    },
+    "outputSha256": "3b57eb4e73673043a07d2a66c98e76687f76bf0a55e6a538a9467b28d8521fd8",
+    "adaptation": {
+      "originalTestSha256": "77902ccba4c81197a35707285cf5cb3eca307e7d2fa1f375893838e8575088c4",
+      "changes": 1,
+      "kind": "OWNED_TEMP_FROZEN_39AA_BASELINE_ROOT_ONLY",
+      "fullReverseEqual": true
+    },
+    "fixtureNativeCalls": false,
+    "ownedFixtureRemoved": true,
+    "independentHttpCases": {
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0
+    },
+    "independentOutputSha256": "57e373d95d823faf07fc2d3660ec50006c9c89c75c074ffd890512d66a91d101"
+  },
+  "native": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "dbCalls": 0,
+  "bankComponentAudit": false,
+  "officeEdits": false,
+  "i2Edits": false
+}
