@@ -39,6 +39,9 @@ as $function$
   join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
   join public.weekly_work_events w on w.id=i.work_event_id
   join public.timesheets t on t.timesheet_id=c.candidate_timesheet_id
+   and t.version=c.candidate_timesheet_revision and t.contract_id=c.contract_id
+  join public.contracts contract on contract.id=t.contract_id
+   and contract.candidate_id=i.candidate_id and contract.client_id=i.client_id
   where i.id=p_incident_id and i.state='OPEN' and c.candidate_timesheet_id is not null
    and c.source_presence='UNFINALISED' and c.candidate_start_at_local is not null and c.candidate_end_at_local is not null
    and exists(select 1 from private.weekly_source_candidate_current_rows_v1(
