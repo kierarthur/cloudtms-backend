@@ -1,0 +1,77 @@
+{
+  "version": "CONTACT_MANUAL_ENQUIRY_WORKER_COMPONENT_SOURCE_V1",
+  "status": "SOURCE_IMPLEMENTED_NOT_ROUTED_NATIVE_NOT_RUN",
+  "parentBackend": "1e40fc6c",
+  "source": {
+    "commit": "7161b1732fb682f78f9387e8ed9c9fe89c4e59f5",
+    "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+    "recipe": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\MANUAL_RUNTIME_CONTRACT_RECEIPT.json",
+    "receiptSha256": "d44c85da06303b2df16a9695a427a2422662a695bcf593a630d6bc14b1bc9d4d",
+    "requestLeafSha256": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51",
+    "typesLeafSha256": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e"
+  },
+  "files": [
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-request.mjs",
+      "sha256": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-types.d.ts",
+      "sha256": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-office.mjs",
+      "sha256": "d024eb3eea52595ab08cb796f6a87a6f19f594279bb07a6d6982cf3537b58411"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
+      "sha256": "f6c5f6f2335f3e2ea69f36bcdd4a2b3b19315d1d8a6f9831e9355db43e3ffe23"
+    },
+    {
+      "path": "tests/contact-manual-enquiry-office.test.mjs",
+      "sha256": "fd82d7f802a62ec53d76a86b23787526d61f0d27f168994248ad9c12ee502d21"
+    }
+  ],
+  "refusalHttpStatus": {
+    "CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID": 400,
+    "WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED": 403,
+    "CONTACT_SCOPE_NOT_FOUND": 403,
+    "CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT": 409,
+    "CONTACT_MANUAL_ENQUIRY_REVISION_CONFLICT": 409,
+    "CONTACT_MANUAL_ENQUIRY_REVIEW_STALE": 409,
+    "CONTACT_MANUAL_ENQUIRY_REVIEW_EXPIRED": 409,
+    "CONTACT_MANUAL_ENQUIRY_NOT_ELIGIBLE": 409,
+    "CONTACT_SOURCE_ORDINAL_EXHAUSTED": 409,
+    "CONTACT_CHECKING_REVISION_EXHAUSTED": 409,
+    "CONTACT_DEPLOYMENT_UNAVAILABLE": 503,
+    "CONTACT_MANUAL_ENQUIRY_DEPENDENCY_UNAVAILABLE": 503
+  },
+  "semantics": [
+    "Strict duplicate-key parser and closed nested request; actual actor/deployment injected only by trusted host.",
+    "One invocation makes one RPC; no hidden ACCEPT retry, new UUID, send ordinal or provider side effect.",
+    "Native failure codes exposed only for exact selected RPC and finite published vocabulary; all unknown/native detail/malformed result failures return bounded dependency503.",
+    "Preview/receipt passed through the complete current strict decoder; receipt binds the original request revision tuple without consulting later state/time.",
+    "Saved acknowledgement means queued native intent, never provider submission or delivery."
+  ],
+  "checks": {
+    "workerTransportCases": 31,
+    "strictReplyCases": 27,
+    "result": "PASS_58_OF_58",
+    "native": "NOT_RUN",
+    "httpRpcReplies": "ISOLATED_MOCKS_NOT_DATABASE_PROOF",
+    "requestLeafByteIdentical": true,
+    "typesLeafByteIdentical": true
+  },
+  "sharedCommandRoute": "NOT_MOUNTED",
+  "combinedRead": "NOT_MOUNTED",
+  "officeParent": "NOT_MOUNTED",
+  "requiredBeforeMount": [
+    "Complete commissioned native preview/accept/capture/recheck/followup package review",
+    "Actual new journals, immutable guards, current owner/final definer/ACL registry and exact contract proof",
+    "Genuine full native fixture/rollback/restore proof and current acceptance gates"
+  ],
+  "databaseCalls": 0,
+  "providerCalls": 0,
+  "deployments": 0,
+  "bankingMessages": 0
+}

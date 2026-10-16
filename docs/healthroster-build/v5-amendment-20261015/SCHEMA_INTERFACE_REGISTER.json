@@ -6298,9 +6298,15 @@
     ],
     "runtimeDecoder": {
       "file": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
-      "sha256": "7a09db1979fb176f2c954aea6a5f2d097047f53523245cc16c4a9ba636afe0da"
+      "sha256": "f6c5f6f2335f3e2ea69f36bcdd4a2b3b19315d1d8a6f9831e9355db43e3ffe23"
     },
     "nativeMount": "REQUIRED_NOT_RUN",
-    "historicalObjectsPreserved": true
+    "historicalObjectsPreserved": true,
+    "receiptBindingSuccessor": "docs/healthroster-build/v6-owner-delivery-20261016/MANUAL_ENQUIRY_RECEIPT_BINDING_FIX.json",
+    "workerTransportComponent": {
+      "status": "SOURCE_IMPLEMENTED_NOT_ROUTED_NATIVE_NOT_RUN",
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/MANUAL_ENQUIRY_WORKER_COMPONENT_SOURCE.json",
+      "requestProducerCommit": "7161b1732fb682f78f9387e8ed9c9fe89c4e59f5"
+    }
   }
 }
