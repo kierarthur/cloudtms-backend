@@ -9,6 +9,7 @@ import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs'
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 import { validateRuleSetValues } from './rule-set-validation.js';
 import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
+import {CONTACT_PAUSE_RPC_COMMANDS,isContactPauseCommand,parseContactPauseCommandBody,handleContactPauseOfficeCommand} from './contact-pause-office.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -245,7 +246,7 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
   }
   let text;
   try {
-    text = await req.text();
+    text = new TextDecoder('utf-8',{fatal:true}).decode(await req.arrayBuffer());
   } catch {
     fail('WEEKLY_SOURCE_REQUEST_INVALID', 'The request could not be read.', 400);
   }
@@ -253,7 +254,9 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
     fail('WEEKLY_SOURCE_REQUEST_TOO_LARGE', 'The request is too large.', 413);
   }
   try {
-    return plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');
+    const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');
+    return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)
+      ? parseContactPauseCommandBody(text) : parsed;
   } catch (error) {
     if (error instanceof WeeklySourceRouteError) throw error;
     fail('WEEKLY_SOURCE_REQUEST_INVALID', 'The request must be valid JSON.', 400);
@@ -680,6 +683,12 @@ async function handleCommand(req, env, ctx, dependencies, user) {
       fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
     }
     if (action === 'COMBINED_REVIEW_WORKSPACE') request.tab = 'queries';
+  }
+
+  if (isContactPauseCommand(action)) {
+    return handleContactPauseOfficeCommand({body,user,search:new URL(req.url).search,
+      deploymentContext:()=>weeklySourceDeploymentContext(env),
+      rpc:(name,request)=>callRpc(dependencies,name,request,20_000)});
   }
 
   if (action === 'LATER_CHANGE_DECISION') {
@@ -1351,6 +1360,7 @@ export const WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT = Object.freeze({
   version: 'WEEKLY_SOURCE_OFFICE_HTTP_V1',
   prefix: '/api/weekly-source/v1',
   directRpcCommands: DIRECT_RPC_COMMANDS,
+  contactPauseRpcCommands: CONTACT_PAUSE_RPC_COMMANDS,
   // WP-23.  The commands whose owners do not take the Weekly Source
   // jsonb-request shape, kept separate so a reader can see at a glance which
   // owner signature each one is bound to.

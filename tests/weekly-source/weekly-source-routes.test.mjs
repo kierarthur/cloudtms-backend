@@ -370,7 +370,9 @@ test('the exported route contract is narrow and contains no Banking route', () =
 
 test('the Worker mounts the single route before legacy import review and outside Banking Pay', () => {
   const worker = fs.readFileSync(path.join(REPOSITORY_ROOT, 'broker/src/index.js'), 'utf8');
-  assert.match(worker, /import \{ dispatchWeeklySourceRequest \} from '\.\/weekly-source\/routes\.js';/);
+  const routeImport=worker.match(/import\s*\{([^}]+)\}\s*from ['"]\.\/weekly-source\/routes\.js['"]/);
+  assert.ok(routeImport, 'actual Weekly Source dispatcher import is required');
+  assert.equal(routeImport[1].split(',').map(value=>value.trim()).filter(value=>value==='dispatchWeeklySourceRequest').length,1);
   const mount = worker.indexOf('const weeklySourceResponse = await dispatchWeeklySourceRequest');
   const legacy = worker.indexOf('const importReviewResponse = await dispatchImportReviewRequest');
   const banking = worker.indexOf("if (p.startsWith('/api/banking/'))");
