@@ -1,0 +1,54 @@
+-- A workflow's captured paper source may be original A or a genuine
+-- intermediate B. The immutable family evidence origin remains A separately.
+create or replace function private.candidate_contract_move_paper_source_lock_v1(
+ p_environment text,p_candidate_id uuid,p_workflow_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare w public.candidate_submission_workflows%rowtype; source_t public.timesheets%rowtype;
+ source_alias private.timesheet_contract_family_aliases%rowtype; source_id uuid; ctx jsonb; captures jsonb; captured jsonb;
+begin
+ select v.* into w from public.candidate_submission_workflows v
+  where v.id=p_workflow_id and v.environment=p_environment and v.candidate_id=p_candidate_id;
+ if not found or w.workflow_kind not in('CONTRACT_HOURS','CONTRACT_COMBINED') or w.scope<>'WEEKLY' then return null;end if;
+ source_id:=coalesce(w.target_timesheet_id,w.anchor_timesheet_id);
+ select a.* into source_alias from private.timesheet_contract_family_aliases a where a.timesheet_id=source_id;
+ if not found then return null;end if;
+ ctx:=private.candidate_contract_move_context_v1(p_environment,p_candidate_id,source_id,w.id);
+ if ctx#>>'{dto,current_timesheet_id}'=source_id::text then return null;end if;
+ if source_alias.family_root_id::text is distinct from ctx#>>'{dto,family_root_id}'
+  or source_alias.member_key is distinct from ctx#>>'{source_member,member_key}' then
+  raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';end if;
+ perform private.timesheet_contract_move_family_lock_v1(source_id);
+ if private.candidate_contract_move_context_v1(p_environment,p_candidate_id,source_id,w.id) is distinct from ctx then
+  raise exception 'CANDIDATE_WORKFLOW_CONTEXT_CONFLICT' using errcode='40001';end if;
+ select t.* into strict source_t from public.timesheets t where t.timesheet_id=source_id;
+ if source_t.is_current or source_t.archived_at_utc is null or source_t.archived_reason_code is distinct from 'CONTRACT_MOVE'
+  or source_t.contract_id is distinct from w.contract_id or source_t.week_ending_date is distinct from w.week_ending_date
+  or not exists(select 1 from public.contract_weeks cw where cw.id=w.contract_week_id
+    and cw.contract_id=w.contract_id and cw.week_ending_date=w.week_ending_date and cw.timesheet_id=source_t.timesheet_id) then
+  raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';end if;
+ -- Exactly one real accepted Move archived this particular physical source.
+ -- Its immutable reviewed member captured this exact workflow identity. A
+ -- neighbouring family workflow or matching label/Contract/date is insufficient.
+ select coalesce(jsonb_agg(v),'[]'::jsonb) into captures
+  from private.timesheet_contract_move_members member
+  join private.timesheet_contract_move_operations op on op.id=member.operation_id
+   and op.state in('COMPLETE','SUPERSEDED') and op.receipt_json is not null and op.candidate_id=p_candidate_id
+  join private.timesheet_contract_move_reviews review on review.id=op.accepted_review_id and review.operation_id=op.id
+  cross join lateral jsonb_array_elements(review.manifest_json#>'{physical,members}') v
+  where member.from_timesheet_id=source_t.timesheet_id and member.member_key=source_alias.member_key
+   and member.family_root_id=source_alias.family_root_id and member.role='WORK'
+   and v->>'member_key'=member.member_key and member.member_hash=private.timesheet_contract_move_row_hash_v1(v)
+   and v->>'from_timesheet_id'=source_t.timesheet_id::text
+   and exists(select 1 from jsonb_array_elements(v#>'{from_evidence,workflows}') captured_workflow
+     where captured_workflow->>'id'=w.id::text and captured_workflow->>'contract_id'=w.contract_id::text
+      and captured_workflow->>'contract_week_id'=w.contract_week_id::text
+      and coalesce(captured_workflow->>'target_timesheet_id',captured_workflow->>'anchor_timesheet_id')=source_t.timesheet_id::text);
+ if jsonb_array_length(captures)<>1 then
+  raise exception 'CANDIDATE_PAPER_CAPTURED_SOURCE_UNBOUND' using errcode='55000';end if;
+ captured:=captures->0;
+ perform private.candidate_contract_move_evidence_snapshot_assert_v1(source_t.timesheet_id,captured->'from_evidence');
+ return ctx;
+end;
+$function$;

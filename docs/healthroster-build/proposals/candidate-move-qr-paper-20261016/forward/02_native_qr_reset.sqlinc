@@ -1,0 +1,448 @@
+create or replace function public.timesheet_qr_refuse_and_reset(
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_reason text,
+  p_actor_user_id uuid
+)
+returns table (
+  timesheet_id uuid,
+  old_version int,
+  new_version int,
+  sheet_scope text,
+  submission_mode text,
+  qr_status text,
+  qr_token text,
+  processing_status text
+)
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_now timestamptz := now();
+
+  v_any public.timesheets%rowtype;
+  v_current public.timesheets%rowtype;
+
+  v_fin public.timesheets_financials%rowtype;
+
+  v_booking_id text;          -- timesheets.booking_id is TEXT
+  v_new_version int;
+  v_new_timesheet_id uuid;
+  v_weekly_source_guard jsonb;
+  v_move jsonb;
+  v_old_placement jsonb;
+  v_candidate_rejection_enabled boolean := private._candidate_feature_enabled_current_v1('candidate_paper_qr');
+begin
+  if p_timesheet_id is null then
+    raise exception 'timesheet_id is required';
+  end if;
+
+  if p_expected_timesheet_id is null then
+    raise exception '%',
+      jsonb_build_object('error','EXPECTED_TIMESHEET_ID_REQUIRED')::text;
+  end if;
+
+  if exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=p_timesheet_id) then
+    v_move:=private.timesheet_contract_move_family_lock_v1(p_timesheet_id);
+    if v_move->>'current_timesheet_id' is distinct from p_expected_timesheet_id::text then
+      raise exception 'TIMESHEET_MOVED' using errcode='40001';end if;
+    select to_jsonb(p) into strict v_old_placement from private.timesheet_contract_current_placements p
+      join private.timesheet_contract_family_aliases a on a.family_root_id=p.family_root_id and a.member_key=p.member_key
+      where a.timesheet_id=p_timesheet_id;
+    if v_old_placement->>'role' is distinct from 'WORK' or exists(select 1 from private.timesheet_contract_current_placements sibling
+      where sibling.family_root_id=(v_old_placement->>'family_root_id')::uuid and sibling.role='CORRECTION_MEMBER') then
+      raise exception 'CANDIDATE_NATIVE_CORRECTION_PAIR_REQUIRED' using errcode='55000';end if;
+  end if;
+  -- 0) Resolve booking_id from ANY row (stale or current)
+  select t.*
+  into v_any
+  from public.timesheets t
+  where t.timesheet_id = p_timesheet_id
+  limit 1;
+
+  if not found then
+    raise exception 'Timesheet not found';
+  end if;
+
+  v_booking_id := v_any.booking_id;
+  if v_booking_id is null or btrim(v_booking_id) = '' then
+    raise exception 'Timesheet booking_id is missing; cannot rotate versions';
+  end if;
+
+  -- 1) Lock CURRENT timesheet row for this booking_id
+  select t.*
+  into v_current
+  from public.timesheets t
+  where t.booking_id = v_booking_id
+    and t.is_current = true
+  for update;
+
+  if not found then
+    raise exception 'Current timesheet not found for booking_id';
+  end if;
+
+  -- ✅ ATOMIC expected-guard (no side effects beyond row lock)
+  if p_expected_timesheet_id <> v_current.timesheet_id then
+    raise exception '%',
+      jsonb_build_object(
+        'error','TIMESHEET_MOVED',
+        'current_timesheet_id', v_current.timesheet_id
+      )::text;
+  end if;
+
+  -- 2) Lock CURRENT TSFIN row (keyed to CURRENT timesheet_id) and block if paid/invoiced
+  select f.*
+  into v_fin
+  from public.timesheets_financials f
+  where f.timesheet_id = v_current.timesheet_id
+    and f.is_current = true
+  for update;
+
+  if found then
+    if v_fin.locked_by_invoice_id is not null or v_fin.paid_at_utc is not null then
+      raise exception 'Cannot refuse hours: timesheet is invoiced/locked or paid';
+    end if;
+  end if;
+
+  -- Plan 6.2 G6-11 (proof/34 section 3): refuse for an authorised
+  -- Weekly-Source-managed root, before this owner's first write and while it
+  -- holds the current timesheet and TSFIN row locks taken above.  An unmanaged
+  -- family is unaffected.
+  if v_old_placement is not null then
+  v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(
+    (select a.original_timesheet_id from private.timesheet_contract_family_aliases a where a.timesheet_id=v_current.timesheet_id)
+  );
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+       and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+    raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      using errcode = '55000',
+            detail = jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E4:public.timesheet_qr_refuse_and_reset',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis', case
+                -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                -- canonical booking-reference collision and must be named as one.
+                -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                -- which Office stops seeing the ruled name.
+                when v_weekly_source_guard->>'reason' in (
+                       'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                  then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                  then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                  then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+              'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+              'timesheet_id', v_current.timesheet_id,
+              'reason', v_weekly_source_guard->>'reason'
+            )::text;
+  end if;
+
+  end if;
+  v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(
+    v_current.timesheet_id
+  );
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+       and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+    raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      using errcode = '55000',
+            detail = jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E4:public.timesheet_qr_refuse_and_reset',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis', case
+                -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                -- canonical booking-reference collision and must be named as one.
+                -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                -- which Office stops seeing the ruled name.
+                when v_weekly_source_guard->>'reason' in (
+                       'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                  then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                  then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                  then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+              'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+              'timesheet_id', v_current.timesheet_id,
+              'reason', v_weekly_source_guard->>'reason'
+            )::text;
+  end if;
+
+  v_new_version := coalesce(v_current.version, 1) + 1;
+
+  -- 3) Rotate CURRENT version -> history (invalidate QR on historical)
+  update public.timesheets as t
+  set
+    is_current      = false,
+    status          = 'REVOKED'::public.timesheet_status_enum,
+    revoked_reason  = nullif(btrim(p_reason), ''),
+    revoked_by      = case when p_actor_user_id is null then null else p_actor_user_id::text end,
+    qr_status       = 'CANCELLED'::public.timesheet_qr_status_enum,
+    updated_at      = v_now
+  where t.timesheet_id = v_current.timesheet_id
+    and t.is_current = true;
+
+  -- 4) Insert NEW current version = Scenario 1
+  insert into public.timesheets as nt (
+    booking_id,
+    version,
+    is_current,
+    status,
+    revoked_reason,
+    revoked_by,
+    contract_id,
+    submission_mode,
+    line_type,
+    sheet_scope,
+
+    occupant_key_norm,
+    hospital_norm,
+    ward_norm,
+    job_title_norm,
+    shift_label_norm,
+    week_ending_date,
+
+    worked_start_iso,
+    worked_end_iso,
+    break_start_iso,
+    break_end_iso,
+    break_minutes,
+
+    actual_schedule_json,
+    additional_units_week,
+    additional_units_per_day,
+
+    manual_pdf_r2_key,
+    authorised_at_server,
+    reference_number,
+    day_references_json,
+
+    qr_token,
+    qr_status,
+    qr_payload_json,
+    qr_generated_at,
+    qr_scanned_at,
+    qr_scan_info_json,
+    qr_r2_key,
+
+    created_at,
+    updated_at
+  )
+  values (
+    v_current.booking_id,
+    v_new_version,
+    true,
+    'RECEIVED'::public.timesheet_status_enum,
+    null,
+    null,
+    v_current.contract_id,
+    'MANUAL'::public.submission_mode_enum,
+    v_current.line_type,
+    v_current.sheet_scope,
+
+    v_current.occupant_key_norm,
+    v_current.hospital_norm,
+    v_current.ward_norm,
+    v_current.job_title_norm,
+    v_current.shift_label_norm,
+    v_current.week_ending_date,
+
+    null::timestamptz,
+    null::timestamptz,
+    null::timestamptz,
+    null::timestamptz,
+    null::int,
+
+    null::jsonb,
+    CASE WHEN v_candidate_rejection_enabled THEN '{}'::jsonb ELSE COALESCE(v_current.additional_units_week, '{}'::jsonb) END,
+    CASE WHEN v_candidate_rejection_enabled THEN '{}'::jsonb ELSE COALESCE(v_current.additional_units_per_day, '{}'::jsonb) END,
+
+    null::text,
+    null::timestamptz,
+    null::text,
+    null::jsonb,
+
+    null::text,
+    'PENDING'::public.timesheet_qr_status_enum,
+    '{}'::jsonb,
+    null::timestamptz,
+    null::timestamptz,
+    null::jsonb,
+    null::text,
+
+    v_now,
+    v_now
+  )
+  returning nt.timesheet_id into v_new_timesheet_id;
+
+  if v_new_timesheet_id is null then
+    raise exception 'Insert succeeded but no new timesheet_id returned';
+  end if;
+
+  -- 5) Move contract_week pointer (if any) from OLD current id -> NEW current id
+  update public.contract_weeks as cw
+  set timesheet_id = v_new_timesheet_id,
+      status       = CASE WHEN v_candidate_rejection_enabled THEN 'OPEN'::public.contract_week_status_enum ELSE cw.status END,
+      day_entries_json = CASE WHEN v_candidate_rejection_enabled THEN '[]'::jsonb ELSE cw.day_entries_json END,
+      totals_json  = CASE WHEN v_candidate_rejection_enabled THEN '{}'::jsonb ELSE cw.totals_json END,
+      updated_at   = v_now
+  where cw.timesheet_id = v_current.timesheet_id;
+
+  if v_old_placement is not null then
+    perform private.timesheet_contract_native_qr_rotation_publish_v1(v_old_placement,v_new_timesheet_id,p_reason,p_actor_user_id,v_now);
+  end if;
+  -- 6) Reset TSFIN in-place and MOVE it to new timesheet_id
+  if v_fin.id is not null then
+    update public.timesheets_financials as f
+    set
+      timesheet_id             = v_new_timesheet_id,
+      timesheet_version        = v_new_version,
+      processing_status        = CASE
+        WHEN v_candidate_rejection_enabled THEN 'UNPROCESSED'::public.ts_fin_processing_status_enum
+        ELSE 'UNASSIGNED'::public.ts_fin_processing_status_enum
+      END,
+
+      worked_start_iso         = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.worked_start_iso END,
+      worked_end_iso           = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.worked_end_iso END,
+      break_start_iso          = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.break_start_iso END,
+      break_end_iso            = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.break_end_iso END,
+      break_minutes            = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.break_minutes END,
+      actual_schedule_json     = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.actual_schedule_json END,
+      actual_minutes_by_day_json = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.actual_minutes_by_day_json END,
+
+      hours_day                = 0,
+      hours_night              = 0,
+      hours_sat                = 0,
+      hours_sun                = 0,
+      hours_bh                 = 0,
+      total_hours              = 0,
+
+      total_pay_ex_vat         = 0,
+      total_charge_ex_vat      = 0,
+      margin_ex_vat            = 0,
+      additional_pay_ex_vat    = 0,
+      additional_charge_ex_vat = 0,
+      additional_margin_ex_vat = 0,
+      additional_units_json    = CASE WHEN v_candidate_rejection_enabled THEN '{}'::jsonb ELSE f.additional_units_json END,
+
+      expenses_pay_ex_vat      = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.expenses_pay_ex_vat END,
+      expenses_charge_ex_vat   = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.expenses_charge_ex_vat END,
+      expenses_description     = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.expenses_description END,
+      expenses_evidence_r2_key = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.expenses_evidence_r2_key END,
+      expenses_evidence_manifest = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.expenses_evidence_manifest END,
+      mileage_units            = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.mileage_units END,
+      mileage_pay_ex_vat       = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.mileage_pay_ex_vat END,
+      mileage_charge_ex_vat    = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.mileage_charge_ex_vat END,
+      mileage_evidence_r2_key  = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.mileage_evidence_r2_key END,
+      mileage_evidence_manifest = CASE WHEN v_candidate_rejection_enabled THEN null ELSE f.mileage_evidence_manifest END,
+      travel_pay_ex_vat        = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.travel_pay_ex_vat END,
+      travel_charge_ex_vat     = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.travel_charge_ex_vat END,
+      accommodation_pay_ex_vat = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.accommodation_pay_ex_vat END,
+      accommodation_charge_ex_vat = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.accommodation_charge_ex_vat END,
+      other_pay_ex_vat         = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.other_pay_ex_vat END,
+      other_charge_ex_vat      = CASE WHEN v_candidate_rejection_enabled THEN 0 ELSE f.other_charge_ex_vat END,
+
+      authorised_at_utc        = null,
+      authorised_by_user_id    = null,
+      locked_by_invoice_id     = null,
+      locked_at_utc            = null,
+      paid_at_utc              = null,
+      paid_by_user_id          = null,
+      payment_reference        = null,
+
+      updated_at               = v_now
+    where f.id = v_fin.id;
+
+    -- 7) Enqueue TSFIN recompute (optional)
+    -- ✅ FIX: use constraint name to avoid ambiguous (timesheet_id, reason)
+    insert into public.ts_financials_outbox(timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at)
+    values (v_new_timesheet_id, 'REVOKED'::public.ts_fin_reason_enum, 0, v_now, null, v_now)
+    on conflict on constraint uq_tsfin_outbox do nothing;
+  end if;
+
+  IF v_candidate_rejection_enabled THEN
+    update public.timesheet_evidence as evidence_row
+    set processing_state='SUPERSEDED'
+    where evidence_row.timesheet_id=v_current.timesheet_id
+      and evidence_row.processing_state<>'SUPERSEDED';
+  END IF;
+
+  -- The genuine moved QR event was emitted before native financial callbacks.
+  if v_old_placement is null then
+  -- 8) Audit event
+  insert into public.audit_events(
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason,
+    actor_user_id,
+    ts_utc
+  )
+  values(
+    'timesheet',
+    v_new_timesheet_id::text,
+    'QR_HOURS_REFUSED',
+    jsonb_build_object(
+      'booking_id', v_booking_id,
+      'old_timesheet_id', v_current.timesheet_id::text,
+      'old_version', v_current.version
+    ),
+    jsonb_build_object(
+      'new_timesheet_id', v_new_timesheet_id::text,
+      'new_version', v_new_version
+    ),
+    nullif(btrim(p_reason), ''),
+    p_actor_user_id,
+    v_now
+  );
+
+  end if;
+  -- Return
+  timesheet_id := v_new_timesheet_id;
+  old_version := v_current.version;
+  new_version := v_new_version;
+  sheet_scope := v_current.sheet_scope::text;
+  submission_mode := 'MANUAL';
+  qr_status := 'PENDING';
+  qr_token := null;
+  processing_status := CASE WHEN v_candidate_rejection_enabled THEN 'UNPROCESSED' ELSE 'UNASSIGNED' END;
+  return next;
+end;
+$function$;

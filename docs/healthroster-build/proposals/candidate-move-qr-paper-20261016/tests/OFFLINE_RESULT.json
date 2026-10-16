@@ -1,0 +1,73 @@
+{
+  "status": "PASS_GRAMMAR_FIELD_ONLY",
+  "native": "NOT_RUN",
+  "rowVariables": 51,
+  "results": [
+    {
+      "file": "00_native_rotation_bindings.sqlinc",
+      "exit": 0,
+      "output": "00_native_rotation_bindings.sqlinc: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "01_native_qr_publish.sqlinc",
+      "exit": 0,
+      "output": "01_native_qr_publish.sqlinc: grammar parsed\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "02_native_qr_reset.sqlinc",
+      "exit": 0,
+      "output": "02_native_qr_reset.sqlinc: grammar parsed\n3 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "03_captured_paper_source_lock.sqlinc",
+      "exit": 0,
+      "output": "03_captured_paper_source_lock.sqlinc: grammar parsed\n3 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "04_captured_paper_constructor.sqlinc",
+      "exit": 0,
+      "output": "04_captured_paper_constructor.sqlinc: grammar parsed\n5 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "05_native_paper_source.sqlinc",
+      "exit": 0,
+      "output": "05_native_paper_source.sqlinc: grammar parsed\n20 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "07_captured_paper_retire.sqlinc",
+      "exit": 0,
+      "output": "07_captured_paper_retire.sqlinc: grammar parsed\n4 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "08_captured_paper_retire_set.sqlinc",
+      "exit": 0,
+      "output": "08_captured_paper_retire_set.sqlinc: grammar parsed\n4 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "09_captured_paper_proof_v2.sqlinc",
+      "exit": 0,
+      "output": "09_captured_paper_proof_v2.sqlinc: grammar parsed\n2 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "10_captured_paper_proof_v1.sqlinc",
+      "exit": 0,
+      "output": "10_captured_paper_proof_v1.sqlinc: grammar parsed\n2 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "11_acl.sqlinc",
+      "exit": 0,
+      "output": "11_acl.sqlinc: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    }
+  ]
+}

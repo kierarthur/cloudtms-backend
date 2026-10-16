@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "build.mjs",
+      "sha256": "375ad4a198b292acc9f2fb6011bb5c0926c593ec3455754083a1621b54e1f345",
+      "bytes": 21195
+    },
+    {
+      "path": "forward/00_native_rotation_bindings.sqlinc",
+      "sha256": "02781ed6af610fc94db87ba7102b8a6ab8df7220aa3b32805aedee1f4bb09dcb",
+      "bytes": 5566
+    },
+    {
+      "path": "forward/01_native_qr_publish.sqlinc",
+      "sha256": "6bcb59fa5cf4eab31bb475138b565adc5264812ed4d78dad016c5adef3296636",
+      "bytes": 5615
+    },
+    {
+      "path": "forward/02_native_qr_reset.sqlinc",
+      "sha256": "a78138589203c4c448cec785e957eb72009847f78b79ea6438cdb92ec1b43754",
+      "bytes": 19404
+    },
+    {
+      "path": "forward/03_captured_paper_source_lock.sqlinc",
+      "sha256": "b1c6af63d810419295177510a9401cd46fae21b23f6f653bc5ba313f167cd88f",
+      "bytes": 4339
+    },
+    {
+      "path": "forward/04_captured_paper_constructor.sqlinc",
+      "sha256": "5427e7a15e7d9118edb1ec27f65d9553ea33012c550b77a4fbf65d4f2f921253",
+      "bytes": 12158
+    },
+    {
+      "path": "forward/05_native_paper_source.sqlinc",
+      "sha256": "0008134cb1234687e310c284c4f3be37f571b7b841429f77d3d163edb82aaf9e",
+      "bytes": 259028
+    },
+    {
+      "path": "forward/06_captured_paper_context.mjsinc",
+      "sha256": "a1b7a08e163c7e1c72614b5c1c282e0de09c3289607e015f571b0740fd77d749",
+      "bytes": 13205
+    },
+    {
+      "path": "forward/07_captured_paper_retire.sqlinc",
+      "sha256": "b6cc6ff9030690fee40603b9ce4c2516e6f1e36e1901be8996215da28d2fdfef",
+      "bytes": 24212
+    },
+    {
+      "path": "forward/08_captured_paper_retire_set.sqlinc",
+      "sha256": "68679bcc1eef5226a2ebef5fcef26775b8b54e102b867cbee9c3d22a4f1f7721",
+      "bytes": 28718
+    },
+    {
+      "path": "forward/09_captured_paper_proof_v2.sqlinc",
+      "sha256": "19d9d06c9b333fc1158cdaba97018c55341ef849d2fab88d97d30db75d168b27",
+      "bytes": 7338
+    },
+    {
+      "path": "forward/10_captured_paper_proof_v1.sqlinc",
+      "sha256": "d55861e390418f334ec9e33833494b31df8b568b4823c22b307beb9bde63e539",
+      "bytes": 5871
+    },
+    {
+      "path": "forward/11_acl.sqlinc",
+      "sha256": "18a60ecd4c0beb614e6b81c3c005fb51bfc903efd7192b3fe0c12cf2ada73a62",
+      "bytes": 3653
+    },
+    {
+      "path": "MOUNT_RECIPE.json",
+      "sha256": "cc3b5ed185e2ca23e266b0457c809b82303696703cdd0b291afe8884257d58ed",
+      "bytes": 9568
+    },
+    {
+      "path": "README.md",
+      "sha256": "f35539c1bd3a8bd9a17f8e7dedd03c82fc544441c52321c182e490a8ad1f38ad",
+      "bytes": 4846
+    },
+    {
+      "path": "tests/native-source.test.mjs",
+      "sha256": "098c2038778a47d83e9386f50b2b60957aaecb7388fa8e53ac51d801bfd194ba",
+      "bytes": 4065
+    },
+    {
+      "path": "tests/OFFLINE_RESULT.json",
+      "sha256": "a12ac574a4349e20e7067b5d40da1eb0667bb66c18fd5b14eb454e48071aed6b",
+      "bytes": 3264
+    },
+    {
+      "path": "tests/paper.test.mjs",
+      "sha256": "752fb5a7ddc4d43050b9e8f53396f961a2645ab42c7e85a4466970a0b71fa9ae",
+      "bytes": 5490
+    }
+  ]
+}
