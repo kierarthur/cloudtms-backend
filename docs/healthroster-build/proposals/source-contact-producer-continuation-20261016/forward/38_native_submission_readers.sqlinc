@@ -1086,6 +1086,14 @@ begin
     'WEEKLY_SOURCE_CANDIDATE_CHECK_MATERIALISATION_V1',
     p_request-'request_idempotency_key'
   );
+  if v_kind<>'SELF_SUBMIT' then
+    -- Plain discovery before workflow/generation/family locks. Existing
+    -- materialisation replay/current actor/work checks remain in their order.
+    select * into strict v_generation from public.weekly_candidate_outreach_generations
+      where id=v_candidate_generation_id and candidate_id=v_candidate_id and request_kind=v_kind;
+    select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+    perform private.weekly_contact_source_submission_lock_v1(v_cycle.id,null,'[]',v_projection_publication_id);
+  end if;
   -- SP-12: existing admission only; no producer/version evidence.
   if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
     perform private.weekly_source_pay_query_admit_v2();
@@ -1638,6 +1646,7 @@ begin
       or not(v_publication_i1_context->'root_ids' ? p_timesheet_id::text) then
       raise exception 'WEEKLY_SOURCE_PUBLICATION_SIGNED_ROOT_SET_CHANGED' using errcode='40001'; end if;
   end if;
+  perform private.weekly_contact_source_submission_lock_v1(v_discovered_cycle_id,null,'[]',p_projection_publication_id);
   perform private.weekly_source_pay_query_admit_v2();
   v_family_lock:=private.weekly_source_lock_family_rows_v1(array[p_timesheet_id],null);
   if v_family_lock->>'ok' is distinct from 'true' then

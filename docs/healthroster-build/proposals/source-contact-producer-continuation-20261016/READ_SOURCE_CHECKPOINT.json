@@ -206,7 +206,7 @@
     },
     {
       "path": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "eccb7d852306356ecc5280fbc63778b78c90e341af76b60403ec410ad7fc5205"
+      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82"
     },
     {
       "path": "forward/37_submission_partition.sqlinc",
@@ -214,15 +214,19 @@
     },
     {
       "path": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba"
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac"
     },
     {
       "path": "forward/39_native_submission_callers.sqlinc",
       "sha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074"
     },
     {
+      "path": "forward/40_candidate_contact_entry_owners.sqlinc",
+      "sha256": "a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594"
+    },
+    {
       "path": "forward/99_acl.sqlinc",
-      "sha256": "409e0cb992d20c22ef48142c2203e57c92d7a709da4775cb28f98edade1a43cf"
+      "sha256": "a589d60345ed8e892a0f5330451fcdc086848fdb0a28682f36f2f33fcd972f5a"
     },
     {
       "path": "runtime/contact-manual-enquiry.mjs",
@@ -246,7 +250,7 @@
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "5ea3a8d99cf22d8170c4291dc945c07d5eca2ae272171e408559eb75e536d8a8"
+      "sha256": "c08c156d9a065e359fb42c3da7dfa39cc93480d803ea3ebb97c8d746588d6034"
     },
     {
       "path": "MANAGER_ACTION_OWNER_INPUTS.json",
@@ -270,7 +274,7 @@
     },
     {
       "path": "SUBMISSION_READER_OWNER_INPUTS.json",
-      "sha256": "ed5569ff6dd5bcfe500c7583730f0ed55d9427f660ad3f89c618c865400852b7"
+      "sha256": "16de57a6ba26bd067acb895ccc1571bf732e3ce3b0e659ea66675aef72f49499"
     },
     {
       "path": "SUBMISSION_CALLER_OWNER_INPUTS.json",
@@ -279,6 +283,14 @@
     {
       "path": "SUBMISSION_COHORT_DELTA_PROPOSAL.md",
       "sha256": "94026850a02c08464520af9c0022f9a18ed35a743d282680e176e780e18015eb"
+    },
+    {
+      "path": "CANDIDATE_CONTACT_ENTRY_INPUTS.json",
+      "sha256": "a84bf9b68c181773f6bc47f4ddec9e3e3ce4f5ce49a8257f946b52a734309a59"
+    },
+    {
+      "path": "build-candidate-contact-entry-owners.mjs",
+      "sha256": "a38d31c1f22c20221838247215fe0b1eec46f62ddf868e461aa0e71a9bc38736"
     },
     {
       "path": "build-current-owners.mjs",
@@ -290,7 +302,7 @@
     },
     {
       "path": "build-read-checkpoint.mjs",
-      "sha256": "79387c671216164d1d788a06147779acc2eb04b5b77c7d99e608003c2c60e4a6"
+      "sha256": "639ab014d44c7501f8fa75d93a8b466dae95c1e2abdfa230a50479fa9b05750a"
     },
     {
       "path": "build-register-delta.mjs",
@@ -318,11 +330,11 @@
     },
     {
       "path": "build-submission-readers.mjs",
-      "sha256": "277f453fc77e0aef0b097e17ff24326ff7379173cae5bac1401c05d98a109cde"
+      "sha256": "4f0e2ee9f4a02964bbf9f2f2cf7bb595cab2fe6e13b78acbf3f761374776b852"
     },
     {
       "path": "build-wip-receipt.mjs",
-      "sha256": "02a261febab82a3c91e451d1bc0c5eb6180bce2533154767595299f0d3d370e5"
+      "sha256": "22adc587d804d08e633577304057376c5bb7335dc5b134dd1e24c6744fac6637"
     },
     {
       "path": "runtime/contact-recheck-runtime.mjs",
@@ -345,8 +357,8 @@
       "sha256": "2c07397a89c45c55776e8b7215199680dd2266dd57037b8a36377c91c787eda9"
     }
   ],
-  "sql_statement_count": 297,
-  "private_owner_declarations": 78,
+  "sql_statement_count": 305,
+  "private_owner_declarations": 80,
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
   "readonly_row_owner": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
   "native": "NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque",

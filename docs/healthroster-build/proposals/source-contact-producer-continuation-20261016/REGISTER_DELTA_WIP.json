@@ -883,7 +883,7 @@
     {
       "signature": "private.weekly_contact_source_submission_lock_v1(uuid,uuid,jsonb,uuid)",
       "source": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "eccb7d852306356ecc5280fbc63778b78c90e341af76b60403ec410ad7fc5205",
+      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -896,7 +896,7 @@
     {
       "signature": "private.weekly_contact_submission_request_for_generation_v1(uuid)",
       "source": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "eccb7d852306356ecc5280fbc63778b78c90e341af76b60403ec410ad7fc5205",
+      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -909,7 +909,7 @@
     {
       "signature": "private.weekly_contact_submission_view_request_v1(uuid,uuid,date,uuid)",
       "source": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "eccb7d852306356ecc5280fbc63778b78c90e341af76b60403ec410ad7fc5205",
+      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -922,7 +922,7 @@
     {
       "signature": "private.weekly_contact_submission_request_assert_v1(uuid)",
       "source": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "eccb7d852306356ecc5280fbc63778b78c90e341af76b60403ec410ad7fc5205",
+      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -935,7 +935,7 @@
     {
       "signature": "private.weekly_contact_submission_identity_deferred_v1()",
       "source": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "eccb7d852306356ecc5280fbc63778b78c90e341af76b60403ec410ad7fc5205",
+      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -961,7 +961,7 @@
     {
       "signature": "public.weekly_source_candidate_query_get_v1(jsonb)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "public",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -974,7 +974,7 @@
     {
       "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "public",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -987,7 +987,7 @@
     {
       "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "public",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -1000,7 +1000,7 @@
     {
       "signature": "private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamptz)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -1013,7 +1013,7 @@
     {
       "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "public",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -1026,7 +1026,7 @@
     {
       "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamptz)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -1039,7 +1039,7 @@
     {
       "signature": "private.weekly_source_candidate_notification_intent_v1()",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -1052,7 +1052,7 @@
     {
       "signature": "private.weekly_source_candidate_view_request_v1(jsonb)",
       "source": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba",
+      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac",
       "schema": "private",
       "owner": "audited logical postgres mapped only by root managed-release owner adapter",
       "security_definer": true,
@@ -1087,6 +1087,32 @@
       "anon": false,
       "authenticated": false,
       "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+      "source": "forward/40_candidate_contact_entry_owners.sqlinc",
+      "sha256": "a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594",
+      "schema": "public",
+      "owner": "audited logical postgres mapped only by root managed-release owner adapter",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz)",
+      "source": "forward/40_candidate_contact_entry_owners.sqlinc",
+      "sha256": "a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594",
+      "schema": "public",
+      "owner": "audited logical postgres mapped only by root managed-release owner adapter",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
     }
   ],
   "root_mount_requirements": [
@@ -1095,7 +1121,7 @@
     "Preserve original92 approved plan items; this is an additive current contact implementation delta only",
     "No shared root/Office/Bank edit is made by this lane"
   ],
-  "function_signature_count": 78,
+  "function_signature_count": 80,
   "deferred_integrity_triggers": [
     {
       "table": "weekly_contact_source_intent_captures",

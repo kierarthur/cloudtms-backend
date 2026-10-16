@@ -1,15 +1,15 @@
 {
   "version": "CONTACT_NATIVE_CONTINUATION_WIP_SUCCESSOR_RECEIPT_V1",
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
-  "prior_source_checkpoint": "91dff912f96d8e8546c9b9347c049bbeac8e3ed6",
+  "prior_source_checkpoint": "745d19a30488a0604d4f93dfa0a8c612b420bf64",
   "source_files": [
     {
       "path": "READ_SOURCE_CHECKPOINT.json",
-      "sha256": "e542a4b85ba675eb156f6a7905b9ac4730d1d9b7a63a243d0e1bac911b622c5b"
+      "sha256": "c0569b16a5017897495f1f5cb7bb38d502a51e9379c87ae0db5066bd479eb31d"
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "5ea3a8d99cf22d8170c4291dc945c07d5eca2ae272171e408559eb75e536d8a8"
+      "sha256": "c08c156d9a065e359fb42c3da7dfa39cc93480d803ea3ebb97c8d746588d6034"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -33,7 +33,7 @@
     },
     {
       "path": "SUBMISSION_READER_OWNER_INPUTS.json",
-      "sha256": "ed5569ff6dd5bcfe500c7583730f0ed55d9427f660ad3f89c618c865400852b7"
+      "sha256": "16de57a6ba26bd067acb895ccc1571bf732e3ce3b0e659ea66675aef72f49499"
     },
     {
       "path": "SUBMISSION_CALLER_OWNER_INPUTS.json",
@@ -46,6 +46,10 @@
     {
       "path": "SUBMISSION_COHORT_DELTA_PROPOSAL.md",
       "sha256": "94026850a02c08464520af9c0022f9a18ed35a743d282680e176e780e18015eb"
+    },
+    {
+      "path": "CANDIDATE_CONTACT_ENTRY_INPUTS.json",
+      "sha256": "a84bf9b68c181773f6bc47f4ddec9e3e3ce4f5ce49a8257f946b52a734309a59"
     }
   ],
   "frozen_7161": {
@@ -58,7 +62,7 @@
     "scope": "Request/shared parser, strict service reply and actual finite current host orchestration with mocked RPC/senders"
   },
   "sql_scan": {
-    "statements": 297,
+    "statements": 305,
     "PLpgSQL": "OPAQUE_NOT_PARSED",
     "fixtures_excluded": true
   },

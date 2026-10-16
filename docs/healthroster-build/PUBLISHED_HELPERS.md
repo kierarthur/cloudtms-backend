@@ -148,6 +148,14 @@ Open Health owners remain explicit in SOURCE_PACKAGE_RECEIPT.json: run-free cont
 
 No HealthRoster helper is installed/published yet. WP-PP produces `private.weekly_source_pay_actor_allowed_v1` and `broker/src/payment-actor-permission.js`.
 
+## Contact reminder entry/refusal source backup — 16 October 2026
+
+Successor of745d19a30488a0604d4f93dfa0a8c612b420bf64 remains **NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN**. The same Money proposal now includes complete native reminder and authenticated Candidate submit entry successors in `forward/40_candidate_contact_entry_owners.sqlinc` SHA256 `a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594`, pinned by `CANDIDATE_CONTACT_ENTRY_INPUTS.json` SHA256 `a84bf9b68c181773f6bc47f4ddec9e3e3ce4f5ce49a8257f946b52a734309a59`. Current materialise/comparison entry prefixes are also authored in38; ordinary SELF_SUBMIT gains no contact dependency. Original reply access, immutable replay, current actor/publication/native ownership and cooldown checks retain their behavior; a pause does not reject a reply.
+
+The existing reminder success receipt is unchanged. Its only new refusal is exact function `public.weekly_source_candidate_reminder_atomic_v1`, SQLSTATE55000, message CONTACT_PAUSED, closed six-key DETAIL `{version:CONTACT_PAUSE_REFUSAL_V1,candidate_id,client_id,audience:WORKER,next_allowed_utc,next_allowed_local}`. UTC is actual native guard UTC6; local uses the existing pause-shape London formatter `YYYY-MM-DD HH:mm Europe/London` for that same expiry. It precedes reminder intent/cooldown/audit effects. Root owns the narrow HTTP409 adapter and presentation; current pause GET remains authority for refreshed state.
+
+READ_SOURCE_CHECKPOINT SHA256 `c0569b16a5017897495f1f5cb7bb38d502a51e9379c87ae0db5066bd479eb31d`; REGISTER_DELTA SHA256 `c08c156d9a065e359fb42c3da7dfa39cc93480d803ea3ebb97c8d746588d6034`; WIP receipt SHA256 `8a50c68ddb9edd8a67ad680ac5d5ff0786337fd803ce8e0d9f99c188e36226ed`. Nine tables/80signatures/305packaging statements;33 focused source/request/runtime tests PASS, PostgreSQL/native/concurrency/ACL/API qualification NOT_RUN. Frozen7161 and financiald863 unchanged. Work continues on bounded scheduler prefixes, capture integrity and actual grouped automatic followups. No DB/lab/Docker/provider/deploy/credential action occurred.
+
 ## Contact submission cohort continuation source backup — 16 October 2026
 
 Authoritative source is the registered Money worktree, branch `codex/healthroster-v2-money-build-13102026`. The successor of `91dff912f96d8e8546c9b9347c049bbeac8e3ed6` is isolated proposal source at `proposals/source-contact-producer-continuation-20261016/`, explicitly **NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN**. Root approved the finite technical direction in `SUBMISSION_COHORT_DELTA_PROPOSAL.md`; this is not native qualification, installation or release approval. The frozen7161 request/types and financial d863 package remain unchanged.

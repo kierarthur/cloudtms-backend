@@ -34,6 +34,7 @@ const outputs=[...readdirSync(path.join(base,'one-time')).filter(x=>x.endsWith('
  'MANAGER_ACTION_OWNER_INPUTS.json','SCHEDULER_NOTIFICATION_OWNER_INPUTS.json','RUNTIME_CONTRIBUTION.json',
  'SUBMISSION_CONSUMER_INVENTORY.json','SUBMISSION_PAUSE_OWNER_INPUTS.json','SUBMISSION_READER_OWNER_INPUTS.json',
  'SUBMISSION_CALLER_OWNER_INPUTS.json','SUBMISSION_COHORT_DELTA_PROPOSAL.md',
+ 'CANDIDATE_CONTACT_ENTRY_INPUTS.json',
  ...readdirSync(base).filter(file=>file.startsWith('build-')&&file.endsWith('.mjs')).sort(),
  ...readdirSync(path.join(base,'runtime')).filter(file=>file!=='contact-manual-enquiry.mjs'&&file!=='contact-manual-enquiry.d.ts').sort().map(file=>'runtime/'+file),
  ...readdirSync(path.join(base,'tests')).sort().map(file=>'tests/'+file)].map(file=>({path:file,sha256:sha(readFileSync(path.join(base,file)))}));

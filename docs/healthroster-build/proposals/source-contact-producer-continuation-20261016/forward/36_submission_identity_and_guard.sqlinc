@@ -135,12 +135,14 @@ begin
  elsif tg_table_name='weekly_candidate_cohorts' then
   cohort_id:=new.id;
   for request_id in select id from public.weekly_timesheet_submission_requests where candidate_cohort_id=cohort_id
+   and source_cycle_id=new.source_cycle_id and candidate_id=new.candidate_id
    and state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') order by id loop
    perform private.weekly_contact_submission_request_assert_v1(request_id);end loop;
  elsif tg_table_name='weekly_candidate_outreach_generations' then
   if new.request_kind='SUBMIT_TIMESHEET' then
    generation_id:=new.id;
    for request_id in select id from public.weekly_timesheet_submission_requests where candidate_cohort_id=new.candidate_cohort_id
+    and source_cycle_id=new.source_cycle_id and candidate_id=new.candidate_id
     and request_generation=new.generation_number order by id loop
     perform private.weekly_contact_submission_request_assert_v1(request_id);end loop;
   end if;

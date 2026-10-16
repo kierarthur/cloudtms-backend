@@ -167,4 +167,10 @@ revoke all on function private.weekly_source_import_outreach_v1(uuid) from publi
 alter function public.weekly_source_projection_publish_atomic_v1(jsonb) owner to postgres;
 revoke all on function public.weekly_source_projection_publish_atomic_v1(jsonb) from public,anon,authenticated,service_role;
 grant execute on function public.weekly_source_projection_publish_atomic_v1(jsonb) to service_role;
+alter function public.weekly_source_candidate_reminder_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_candidate_reminder_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_candidate_reminder_atomic_v1(jsonb) to service_role;
+alter function public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz) owner to postgres;
+revoke all on function public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz) to service_role;
 notify pgrst, 'reload schema';

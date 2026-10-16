@@ -1,0 +1,34 @@
+{
+  "version": "CONTACT_CANDIDATE_ENTRY_INPUTS_V1",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "abc874b2d4ed90529ad591ea08a0a5131a6bc32c86109911631c8516e18b2e94"
+    }
+  ],
+  "output": {
+    "path": "forward/40_candidate_contact_entry_owners.sqlinc",
+    "sha256": "a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594"
+  },
+  "refusal": {
+    "sqlstate": "55000",
+    "message": "CONTACT_PAUSED",
+    "http_status": 409,
+    "success_shape_changed": false,
+    "detail": {
+      "version": "CONTACT_PAUSE_REFUSAL_V1",
+      "candidate_id": "canonical UUID",
+      "client_id": "canonical UUID",
+      "audience": "WORKER",
+      "next_allowed_utc": "actual native guard canonical UTC6 future timestamp",
+      "next_allowed_local": "same actual expiry through existing native pause_shape formatter: YYYY-MM-DD HH:mm Europe/London"
+    }
+  },
+  "qualification": "Finite complete current owners; replies remain available while paused; native first-use/replay/order/concurrency NOT_RUN."
+}
