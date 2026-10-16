@@ -1,0 +1,1731 @@
+{
+  "version": "HEALTH_SOURCE_MANAGED_GUARD_FINITE_REVIEW_V1",
+  "qualification": "SOURCE_ONLY_PG17GRAMMAR_NOT_NATIVE_COMPILATION_REAPPLY_OR_PERMISSION_PROOF",
+  "parser": {
+    "pglast": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ]
+  },
+  "manifestSha256": "8518dd4e5267238ffdc352ab6e3e26eaf301679fa7ad218bfdf4a685a486c50e",
+  "managedGrammar": [
+    {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "sqlStatements": 12,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "sqlStatements": 3,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "sqlStatements": 5,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "sqlStatements": 6,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "sqlStatements": 14,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "sqlStatements": 6,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "sqlStatements": 197,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "sqlStatements": 30,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "sqlStatements": 3,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "sqlStatements": 18,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "sqlStatements": 3,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "sqlStatements": 1,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "sqlStatements": 3,
+      "qualification": "PG17SQLgrammaronly; function bodies opaque, actual native dependencies unresolved"
+    }
+  ],
+  "triggerReview": [
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decisions",
+        "qualifiedTable": "private.weekly_source_pay_decisions",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decisions for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "cba06daef22fd195d7995e6f42d797c956477b6b959f44d5ed2f1593c9b206f6",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_requests",
+        "qualifiedTable": "private.weekly_source_pay_decision_requests",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_requests for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "fd10ede4b3211cef669ddf6eed0aacd0bda1efff476c5e1a4b00704efa1b4abf",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_preview_assemblies",
+        "qualifiedTable": "private.weekly_source_pay_decision_preview_assemblies",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_preview_assemblies for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "933a6c7f5cd0e083e91fea470107954f89788367b62e7cf69b8fb13f2587664f",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_preview_quotes",
+        "qualifiedTable": "private.weekly_source_pay_decision_preview_quotes",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_preview_quotes for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "1c7d767ff4830ca785486914c863549a77f6df2d62ce60244a1e425f5e8c9acb",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_reviews",
+        "qualifiedTable": "private.weekly_source_pay_decision_reviews",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_reviews for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "cb1e790c7f8a877127b1ae68674179c238fe2ef2adee70e109ab0621bfcda17d",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_members",
+        "qualifiedTable": "private.weekly_source_pay_decision_members",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_members for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "b94d08e937bf7f91facad0576ecd9f3364a0d2d55f0a37037719ae19c5aa7de5",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_bindings",
+        "qualifiedTable": "private.weekly_source_pay_decision_bindings",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_bindings for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "fb5daedff75638116f1bc11d9a5f885bcd40c0fc42311e7553222d589cfa1c6c",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_unprotect_preparations",
+        "qualifiedTable": "private.weekly_source_pay_decision_unprotect_preparations",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_unprotect_preparations for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "08c10436b1997f03ce7e0ce614b76f9372b87dddda4e71bd388a16e2de8e4f67",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_acceptance_applications",
+        "qualifiedTable": "private.weekly_source_pay_decision_acceptance_applications",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_acceptance_applications for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "4479586944387b0133c176b4f378c22b90bb9dc43382fd0d217e73a256c030ec",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_native_adoptions",
+        "qualifiedTable": "private.weekly_source_pay_decision_native_adoptions",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_native_adoptions for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "d583280bb651b14c86b1ae83a8373b51651985ca151c3effdfd2c8e62e599d28",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_metadata_immutable",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_publication_adoptions",
+        "qualifiedTable": "private.weekly_source_pay_decision_publication_adoptions",
+        "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_publication_adoptions for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194",
+          "derivation": "Exact11constant FOREACH names and original native FORMAT template"
+        }
+      },
+      "nativeCreateAstSha256": "3f194908c29893635efe9a08dcbe2beed717da4a4f19d1049c90c13a00111f9c",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_application_must_commit",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_acceptance_applications",
+        "qualifiedTable": "private.weekly_source_pay_decision_acceptance_applications",
+        "function": "private.weekly_source_pay_decision_application_commit_guard_v1()",
+        "type": 21,
+        "deferred": true,
+        "createSql": "create constraint trigger source_pay_application_must_commit\n after insert or update on private.weekly_source_pay_decision_acceptance_applications\n deferrable initially deferred for each row\n execute function private.weekly_source_pay_decision_application_commit_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "38bae185dc4a9508a9a130114f478924fc9584e5c84af9618f8ad77e689ad6bd",
+          "derivation": "Exact complete native CREATE TRIGGER statement"
+        }
+      },
+      "nativeCreateAstSha256": "636db93460b06c781db17705dbdbd64b0a83d810ce3b5ff7ade79f10603afb95",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_assembly_must_have_one_cut",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_preview_assemblies",
+        "qualifiedTable": "private.weekly_source_pay_decision_preview_assemblies",
+        "function": "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+        "type": 21,
+        "deferred": true,
+        "createSql": "create constraint trigger source_pay_assembly_must_have_one_cut\n after insert or update on private.weekly_source_pay_decision_preview_assemblies\n deferrable initially deferred for each row\n execute function private.weekly_source_pay_decision_assembly_commit_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+          "statementSha256": "c379cd76851d07249eea8a9a1887a08f8776c11f65170ad156d808611ea81242",
+          "derivation": "Exact complete native CREATE TRIGGER statement"
+        }
+      },
+      "nativeCreateAstSha256": "9aad8610edde2f6ad423d7281d4f6f485d0b95eef98938cc2c8fd0dd757d7090",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_publication_adoption_exact",
+        "schema": "private",
+        "table": "weekly_source_pay_decision_publication_adoptions",
+        "qualifiedTable": "private.weekly_source_pay_decision_publication_adoptions",
+        "function": "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+        "type": 7,
+        "deferred": false,
+        "createSql": "create trigger source_pay_publication_adoption_exact\n before insert on private.weekly_source_pay_decision_publication_adoptions\n for each row execute function private.weekly_source_pay_decision_publication_adoption_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/04_exact_publication_adoption_bridge.sqlinc",
+          "statementSha256": "f9026f3aef35a83884c0a5ac666e41fa4cfa4bd5b78bfd5b94ea69a386176d7b",
+          "derivation": "Exact complete native CREATE TRIGGER statement"
+        }
+      },
+      "nativeCreateAstSha256": "e0e525ea8fb93b63097dc624299e42934a4971e8712edef030c20255d02901fb",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    },
+    {
+      "trigger": {
+        "name": "source_pay_decision_incident_guard",
+        "schema": "public",
+        "table": "weekly_discrepancy_incidents",
+        "qualifiedTable": "public.weekly_discrepancy_incidents",
+        "function": "private.weekly_source_pay_decision_incident_guard_v1()",
+        "type": 31,
+        "deferred": false,
+        "createSql": "create trigger source_pay_decision_incident_guard before insert or update or delete on public.weekly_discrepancy_incidents\n for each row execute function private.weekly_source_pay_decision_incident_guard_v1();",
+        "origin": {
+          "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+          "statementSha256": "96de75b59a43e089b3b4234d20efa470a51eb7245c3814211c8acfa64a36bb00",
+          "derivation": "Exact complete native CREATE TRIGGER statement"
+        }
+      },
+      "nativeCreateAstSha256": "d35573b2c5269a7a0f12647bfe1f8a5323b7dd970d9e37e4a9eb62e4d2375436",
+      "verdict": "EXACT_NATIVE_DDL_AST_AND_BOUNDED_REPLAY_GUARD_SOURCE_REVIEWED",
+      "limits": "Actual pg_trigger/pg_constraint values, first installation, exact reapplication and mismatched existing-trigger refusal need genuine PG17 native proof."
+    }
+  ],
+  "incidentReview": {
+    "predecessorContract": {
+      "commit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "constraint": {
+        "name": "weekly_discrepancy_incidents_resolution_kind_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (resolution_kind IS NULL OR (resolution_kind = ANY (ARRAY['SOURCE_MATCHED'::text, 'OFFICE_ACCEPTED_SYSTEM_HOURS'::text, 'CANDIDATE_CORRECTED'::text, 'MANAGER_CONFIRMED_SYSTEM_HOURS'::text, 'RECORDED_NOT_WORKED'::text, 'CORRECT_FINAL_SOURCE'::text])))"
+      }
+    },
+    "nativeMigration": {
+      "commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "oldValues": [
+        "SOURCE_MATCHED",
+        "OFFICE_ACCEPTED_SYSTEM_HOURS",
+        "CANDIDATE_CORRECTED",
+        "MANAGER_CONFIRMED_SYSTEM_HOURS",
+        "RECORDED_NOT_WORKED",
+        "CORRECT_FINAL_SOURCE"
+      ]
+    },
+    "newValues": [
+      "SOURCE_MATCHED",
+      "OFFICE_ACCEPTED_SYSTEM_HOURS",
+      "CANDIDATE_CORRECTED",
+      "MANAGER_CONFIRMED_SYSTEM_HOURS",
+      "RECORDED_NOT_WORKED",
+      "CORRECT_FINAL_SOURCE",
+      "SOURCE_PAY_DECISION"
+    ],
+    "guardSha256": "5fc6666ed1c07950a91761ed297ff53ef871e14d5c1b0ad9741ead08adaa89c2",
+    "verdict": "EXACT_PREDECESSOR_AND_ONE_MEMBER_EXTENSION_SOURCE_REVIEWED",
+    "limits": "Actual catalog pretty definition, lock/rollback, historical row preservation and rejected unexpected predecessor require genuine PG17 native acceptance."
+  },
+  "checks": [
+    {
+      "name": "All13managed files SQL grammar parses",
+      "result": "PASS"
+    },
+    {
+      "name": "All15static trigger DO bodies PLpgSQL grammar parses",
+      "result": "PASS"
+    },
+    {
+      "name": "15locks plus15DO blocks",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decisions",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decisions.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_requests",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_requests.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_preview_assemblies",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_preview_assemblies.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_preview_quotes",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_preview_quotes.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_reviews",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_reviews.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_members",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_members.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_bindings",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_bindings.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_unprotect_preparations",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_unprotect_preparations.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_acceptance_applications",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_acceptance_applications.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_native_adoptions",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_native_adoptions.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Metadata table belongs to exact native FOREACH weekly_source_pay_decision_publication_adoptions",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_publication_adoptions.source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_metadata_immutable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_metadata_immutable.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact original direct trigger statement source_pay_application_must_commit",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_acceptance_applications.source_pay_application_must_commit",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_application_must_commit",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_application_must_commit",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_application_must_commit",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_application_must_commit.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact original direct trigger statement source_pay_assembly_must_have_one_cut",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_preview_assemblies.source_pay_assembly_must_have_one_cut",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_assembly_must_have_one_cut",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_assembly_must_have_one_cut",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_assembly_must_have_one_cut",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_assembly_must_have_one_cut.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact original direct trigger statement source_pay_publication_adoption_exact",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal private.weekly_source_pay_decision_publication_adoptions.source_pay_publication_adoption_exact",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_publication_adoption_exact",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_publication_adoption_exact",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_publication_adoption_exact",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_publication_adoption_exact.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact original direct trigger statement source_pay_decision_incident_guard",
+      "result": "PASS"
+    },
+    {
+      "name": "Whole native trigger CREATE AST equal public.weekly_discrepancy_incidents.source_pay_decision_incident_guard",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact trigger catalog type/deferral source_pay_decision_incident_guard",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact relation/function binding source_pay_decision_incident_guard",
+      "result": "PASS"
+    },
+    {
+      "name": "Absent-create/existing-mismatch raise branch source_pay_decision_incident_guard",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgfoid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgtype",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgisinternal",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgenabled",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgparentid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgattr",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgnargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgargs",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgqual",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgoldtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgnewtable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgconstrrelid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgconstrindid",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgdeferrable",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tginitdeferred",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit existing-trigger field source_pay_decision_incident_guard.tgconstraint",
+      "result": "PASS"
+    },
+    {
+      "name": "Incident predecessor guard SQL and PL grammar",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact native named CHECK definition is required",
+      "result": "PASS"
+    },
+    {
+      "name": "Six exact prior values plus sole SOURCE_PAY_DECISION",
+      "result": "PASS"
+    },
+    {
+      "name": "Table lock and predecessor guard precede complete unchanged native addition",
+      "result": "PASS"
+    },
+    {
+      "name": "Guard neither silently drops CHECK nor accepts its new form",
+      "result": "PASS"
+    }
+  ],
+  "passed": 323,
+  "native": "NOT_RUN",
+  "databaseConnections": 0
+}

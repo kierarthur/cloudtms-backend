@@ -1,0 +1,300 @@
+-- Complete finite setup for the exact15Health-owned d863 triggers.
+-- Existing mismatches fail; no existing trigger is dropped, rewritten or enabled.
+
+lock table private.weekly_source_pay_decisions in share row exclusive mode;
+do $source_trigger_01$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decisions'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decisions for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decisions'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_01$;
+
+lock table private.weekly_source_pay_decision_requests in share row exclusive mode;
+do $source_trigger_02$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_requests'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_requests for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_requests'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_02$;
+
+lock table private.weekly_source_pay_decision_preview_assemblies in share row exclusive mode;
+do $source_trigger_03$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_preview_assemblies'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_preview_assemblies for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_preview_assemblies'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_03$;
+
+lock table private.weekly_source_pay_decision_preview_quotes in share row exclusive mode;
+do $source_trigger_04$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_preview_quotes'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_preview_quotes for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_preview_quotes'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_04$;
+
+lock table private.weekly_source_pay_decision_reviews in share row exclusive mode;
+do $source_trigger_05$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_reviews'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_reviews for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_reviews'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_05$;
+
+lock table private.weekly_source_pay_decision_members in share row exclusive mode;
+do $source_trigger_06$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_members'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_members for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_members'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_06$;
+
+lock table private.weekly_source_pay_decision_bindings in share row exclusive mode;
+do $source_trigger_07$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_bindings'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_bindings for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_bindings'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_07$;
+
+lock table private.weekly_source_pay_decision_unprotect_preparations in share row exclusive mode;
+do $source_trigger_08$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_unprotect_preparations'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_unprotect_preparations for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_unprotect_preparations'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_08$;
+
+lock table private.weekly_source_pay_decision_acceptance_applications in share row exclusive mode;
+do $source_trigger_09$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_acceptance_applications'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_acceptance_applications for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_acceptance_applications'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_09$;
+
+lock table private.weekly_source_pay_decision_native_adoptions in share row exclusive mode;
+do $source_trigger_10$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_native_adoptions'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_native_adoptions for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_native_adoptions'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_10$;
+
+lock table private.weekly_source_pay_decision_publication_adoptions in share row exclusive mode;
+do $source_trigger_11$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_publication_adoptions'::regclass and x.tgname='source_pay_metadata_immutable') then
+  create trigger source_pay_metadata_immutable before insert or update or delete on private.weekly_source_pay_decision_publication_adoptions for each row execute function private.weekly_source_pay_decision_metadata_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_publication_adoptions'::regclass and x.tgname='source_pay_metadata_immutable'
+   and x.tgfoid='private.weekly_source_pay_decision_metadata_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_11$;
+
+lock table private.weekly_source_pay_decision_acceptance_applications in share row exclusive mode;
+do $source_trigger_12$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_acceptance_applications'::regclass and x.tgname='source_pay_application_must_commit') then
+  create constraint trigger source_pay_application_must_commit
+ after insert or update on private.weekly_source_pay_decision_acceptance_applications
+ deferrable initially deferred for each row
+ execute function private.weekly_source_pay_decision_application_commit_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_acceptance_applications'::regclass and x.tgname='source_pay_application_must_commit'
+   and x.tgfoid='private.weekly_source_pay_decision_application_commit_guard_v1()'::regprocedure and x.tgtype=21
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=true and x.tginitdeferred=true
+   and x.tgconstraint<>0 and exists(select 1 from pg_catalog.pg_constraint c where c.oid=x.tgconstraint
+    and c.conname='source_pay_application_must_commit' and c.contype='t' and c.conrelid=x.tgrelid
+    and c.condeferrable and c.condeferred and c.convalidated)) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_12$;
+
+lock table private.weekly_source_pay_decision_preview_assemblies in share row exclusive mode;
+do $source_trigger_13$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_preview_assemblies'::regclass and x.tgname='source_pay_assembly_must_have_one_cut') then
+  create constraint trigger source_pay_assembly_must_have_one_cut
+ after insert or update on private.weekly_source_pay_decision_preview_assemblies
+ deferrable initially deferred for each row
+ execute function private.weekly_source_pay_decision_assembly_commit_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_preview_assemblies'::regclass and x.tgname='source_pay_assembly_must_have_one_cut'
+   and x.tgfoid='private.weekly_source_pay_decision_assembly_commit_guard_v1()'::regprocedure and x.tgtype=21
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=true and x.tginitdeferred=true
+   and x.tgconstraint<>0 and exists(select 1 from pg_catalog.pg_constraint c where c.oid=x.tgconstraint
+    and c.conname='source_pay_assembly_must_have_one_cut' and c.contype='t' and c.conrelid=x.tgrelid
+    and c.condeferrable and c.condeferred and c.convalidated)) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_13$;
+
+lock table private.weekly_source_pay_decision_publication_adoptions in share row exclusive mode;
+do $source_trigger_14$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='private.weekly_source_pay_decision_publication_adoptions'::regclass and x.tgname='source_pay_publication_adoption_exact') then
+  create trigger source_pay_publication_adoption_exact
+ before insert on private.weekly_source_pay_decision_publication_adoptions
+ for each row execute function private.weekly_source_pay_decision_publication_adoption_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='private.weekly_source_pay_decision_publication_adoptions'::regclass and x.tgname='source_pay_publication_adoption_exact'
+   and x.tgfoid='private.weekly_source_pay_decision_publication_adoption_guard_v1()'::regprocedure and x.tgtype=7
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_14$;
+
+lock table public.weekly_discrepancy_incidents in share row exclusive mode;
+do $source_trigger_15$
+begin
+ if not exists(select 1 from pg_catalog.pg_trigger x where x.tgrelid='public.weekly_discrepancy_incidents'::regclass and x.tgname='source_pay_decision_incident_guard') then
+  create trigger source_pay_decision_incident_guard before insert or update or delete on public.weekly_discrepancy_incidents
+ for each row execute function private.weekly_source_pay_decision_incident_guard_v1();
+ elsif not exists(select 1 from pg_catalog.pg_trigger x
+  where x.tgrelid='public.weekly_discrepancy_incidents'::regclass and x.tgname='source_pay_decision_incident_guard'
+   and x.tgfoid='private.weekly_source_pay_decision_incident_guard_v1()'::regprocedure and x.tgtype=31
+   and not x.tgisinternal and x.tgenabled='O' and x.tgparentid=0
+   and x.tgattr=''::int2vector and x.tgnargs=0 and x.tgargs=''::bytea
+   and x.tgqual is null and x.tgoldtable is null and x.tgnewtable is null
+   and x.tgconstrrelid=0 and x.tgconstrindid=0
+   and x.tgdeferrable=false and x.tginitdeferred=false
+   and x.tgconstraint=0) then
+  raise exception 'SOURCE_HEALTH_TRIGGER_PREDECESSOR_MISMATCH' using errcode='55000';
+ end if;
+end;
+$source_trigger_15$;
