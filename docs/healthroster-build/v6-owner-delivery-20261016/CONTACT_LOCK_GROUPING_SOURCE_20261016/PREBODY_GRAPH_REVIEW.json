@@ -1,0 +1,58 @@
+{
+  "version": "CONTACT_ACTUAL_PREBODY_COMPILER_GRAPH_REDERIVATION_V1",
+  "qualification": "EXACT_UNCHANGED_SOURCE_AND_PACKET_EQUALITY_ONLY",
+  "actualSavedHead": "1f2824aa954ae81ec348777ac533858e700c0aa0",
+  "contactMount": "ACTUAL_SAVED_SOURCE_UNCOMMITTED_AT_REVIEW",
+  "historicalClassificationSha256": "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0",
+  "relativeModuleFiles": 56,
+  "completeBoundInputs": 95,
+  "allGraphFilesAndHashesExactlyUnchanged": true,
+  "allBoundInputsExactlyUnchanged": true,
+  "runtime": [
+    {
+      "file": "broker/src/weekly-source/delivery-runtime.mjs",
+      "actualSha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+      "inCompilerGraph": false
+    },
+    {
+      "file": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+      "actualSha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff",
+      "inCompilerGraph": false
+    }
+  ],
+  "packets": [
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "mapping": "RAW",
+      "releasePacketSha256": "c85992c830a6a1b185063fff3b1c98424285c9d9ceb63a0e5204ac7dad0f3d08",
+      "rehearsalReceiptSha256": "9c37627b4baf0becd34da0d036a4f50082597cfcb28dfb39e98ebc9477179a17",
+      "exactHistoricalEquality": true
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "mapping": "AUDITED_CURRENT_USER",
+      "releasePacketSha256": "526dd53c1a45773ce05dad8940f92cbc085005e20b3ef472b7563fb205f48b82",
+      "rehearsalReceiptSha256": "15e0fa708d4350a815d3043a860796e56fd111cd20ac911f0069b40f9e27db2b",
+      "exactHistoricalEquality": true
+    },
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "mapping": "RAW",
+      "releasePacketSha256": "54b521c7424a3539cfeafcf409607ca0a8b344e4300fa6b5f2ea3c2fa2b98a24",
+      "rehearsalReceiptSha256": "86ef8c9f545d8a69f3a9eda7dfe44a7d75d0bbd25c0d41243012d245249127e0",
+      "exactHistoricalEquality": true
+    },
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "mapping": "AUDITED_CURRENT_USER",
+      "releasePacketSha256": "54b521c7424a3539cfeafcf409607ca0a8b344e4300fa6b5f2ea3c2fa2b98a24",
+      "rehearsalReceiptSha256": "86ef8c9f545d8a69f3a9eda7dfe44a7d75d0bbd25c0d41243012d245249127e0",
+      "exactHistoricalEquality": true
+    }
+  ],
+  "successorRequired": false,
+  "reason": "No bound source or import graph changed; no pin was renewed and historical classification remains unchanged.",
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0
+}

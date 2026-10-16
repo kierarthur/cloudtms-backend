@@ -1,0 +1,3161 @@
+{
+  "version": "CONTACT_REPAIRED_FINAL_DEFINER_CONTRIBUTION_V1",
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "registryPath": "docs/bpay-next/final-definer-closures.json",
+  "baseSha256": "8c2d26a3ec001409976ab98c90cfcc6def620ec33f8c94b095c22fe48fac9c7f",
+  "before": 1462,
+  "after": 1561,
+  "updated": 12,
+  "added": 99,
+  "editorChainsUnchanged": true,
+  "unrelatedChainsUnchanged": true,
+  "everyPriorCompanionAndFieldRetained": true,
+  "fullRegistryReplacementProvided": false,
+  "application": "Apply exactly these111 rows onto the matching actual registry; later changes require exact before-row reconciliation. Never restore the stale2d74 full registry.",
+  "rows": [
+    {
+      "signature": "private.weekly_contact_checking_logical_keys_v1(uuid,text,uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_checking_logical_keys_v1(uuid,text,uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/00_current_logical_closure.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/00_current_logical_closure.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "421dcb29356219278aed87f948417282d6abf65360d5af2a22ae6ce022a583d3"
+    },
+    {
+      "signature": "private.weekly_contact_checking_pair_facts_v1(uuid,text,uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_checking_pair_facts_v1(uuid,text,uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "d110c1d41f5878108ebd4b65671efc6820c2f73b91bb4232e9ed12222d4ef390"
+    },
+    {
+      "signature": "private.weekly_contact_checking_scope_facts_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_checking_scope_facts_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "fc466e785bd40657801ddd1a005fb2739e847520a221fd4de39767213d82e179"
+    },
+    {
+      "signature": "private.weekly_contact_checking_scope_revision_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_checking_scope_revision_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "e38c13714a367663319f4630140e4ed9e27d75246b923daac76079f595813623"
+    },
+    {
+      "signature": "private.weekly_contact_checking_version_guard_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_checking_version_guard_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "1a2a1f603b462b330c4ee9e7d8344125e1e1b918d364b380a7fa5035f77ebb24"
+    },
+    {
+      "signature": "private.weekly_contact_manual_enqueue_v1(jsonb,jsonb,jsonb,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_enqueue_v1(jsonb,jsonb,jsonb,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "119a8227833a143c7beb64191e91918df45db09316b2a5e6af4812aeabd808f9"
+    },
+    {
+      "signature": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "141d2868eca3d61054d198c2f3d255bf82c9d4e8fb35950fc9813001dc0ed990"
+    },
+    {
+      "signature": "private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "7610f1f8aea2710549ecb1a03b5c34f2987cbf13ae95ea442c3d209ad912080f"
+    },
+    {
+      "signature": "private.weekly_contact_manual_manifest_seal_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_manifest_seal_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "6752d57cb30fa914bdbc77ee42e0476e8d9bb68bb4886827ac832a7f41b48855"
+    },
+    {
+      "signature": "private.weekly_contact_manual_manifest_v1(jsonb,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_manifest_v1(jsonb,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "54b36aff256a5a18f25e9c9d0e1ccdbe5b713f1fc693da6a0de76fa1a4c1a874"
+    },
+    {
+      "signature": "private.weekly_contact_manual_member_facts_v1(uuid,text,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_member_facts_v1(uuid,text,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "5175d20d61a971eedda13a37bd654aec37b3fb898093543f48af3dccd876bdef"
+    },
+    {
+      "signature": "private.weekly_contact_manual_raise_public_v1(text,text)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_raise_public_v1(text,text)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "974ae9ed7818e20a672f318336b8dc1c92771e5658566ca26e67d36ba80d1d7e"
+    },
+    {
+      "signature": "private.weekly_contact_manual_request_assert_v1(jsonb,boolean)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_request_assert_v1(jsonb,boolean)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "cb664ba9fcfd93939383973ad7c890ba0ce81cb39ba921dfe7efb2029d11467b"
+    },
+    {
+      "signature": "private.weekly_contact_manual_scopes_lock_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_manual_scopes_lock_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "1fd71766bd991067d10a364ffb07e09d5f8d6121e432254dab4f838c0d4bfa4e"
+    },
+    {
+      "signature": "private.weekly_contact_producer_immutable_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_producer_immutable_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "662c7dba8020f1ac5466698fade5a91c3d45d7ed49e0bea9fd9fe63b76fd801d"
+    },
+    {
+      "signature": "private.weekly_contact_push_dispatch_context_v1(uuid,uuid,text,bytea,uuid,text)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_push_dispatch_context_v1(uuid,uuid,text,bytea,uuid,text)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/26_native_push_context.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/26_native_push_context.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_contact_push_dispatch_context_v1(uuid,uuid,text,bytea,uuid,text)",
+          "physical": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+          "statementSha256": "bd31376d5971e8df237ee9c71b1ff2cfbb819b460d7c3878297f1627f29f27db",
+          "line": 5,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "48597768e5f6a1cd420dcce5abbd68235f3d2d55addc80f9b89ca3e2af49bda9"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_native_ids_v1(uuid,text,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_native_ids_v1(uuid,text,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "d630f463dc3edd6c77eb92af56304a29c0924c66d4ae276e790248bc5e800ca6"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_next_due_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_next_due_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "e211c5352f440d1ff7ade56143154212d0a313c6e455e717dbc0676171ce2952"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_progress_guard_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_progress_guard_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "f9232a079085e515b48059245aef2fb716c1861583d6f3a2bcc7f3dcbae4b8f7"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_record_v1(uuid,text,uuid,bigint,bigint,bytea,jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_record_v1(uuid,text,uuid,bigint,bigint,bytea,jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "b0b4e57a6a5f6f5cd5bf59c1383d8e7fefa86d44ce3dd1580e4687e49b8bdb2a"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/46_recheck_selection_scope_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "4975d36ccb19666fe32f02857a420e6d935ded00155a490e8dc0be3545a74907"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_task_selected_v1(uuid,jsonb,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_task_selected_v1(uuid,jsonb,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "7dba03627b6a0f26a4db61f9323657e02d259e1429fd914f94fc9aae77b695f8"
+    },
+    {
+      "signature": "private.weekly_contact_recheck_task_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_recheck_task_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "d7682c7c91a4a2a71b2d7ad34928078b53cf40e657bb16252468c5abb37e1548"
+    },
+    {
+      "signature": "private.weekly_contact_source_activation_lock_v1(uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_activation_lock_v1(uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "989e6a27e019b89222e7993defbedc9f5bbd13790d0f10de619c37649f606442"
+    },
+    {
+      "signature": "private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "7dc653e042533db72698cd2de1958a8e46338c335316e1c4d610a5d1fa35b824"
+    },
+    {
+      "signature": "private.weekly_contact_source_budget_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_budget_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/24_native_budget.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/24_native_budget.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_contact_source_budget_v1(uuid)",
+          "physical": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+          "statementSha256": "2b8e12b4b91ddd9d2b1222c145e0c4d55be64863884918909f281a605b79336a",
+          "line": 4,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "c5c9e32aaafc93bd8926ab8de98277338230cfa60cdfd54e3078f6ef6cd0a2bc"
+    },
+    {
+      "signature": "private.weekly_contact_source_bulk_lock_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_bulk_lock_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "99fd97d5e0882bd48c563aab1ec53d54935318931d9480b83d59350bf4da7e5b"
+    },
+    {
+      "signature": "private.weekly_contact_source_bulk_scope_facts_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_bulk_scope_facts_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "ea7490f44a88beb7cb56e77954fe629b13635c582b988e58ffdb38c5c82c6152"
+    },
+    {
+      "signature": "private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "c7d54bbd048a52f1d8c7c48d86da753ba44412083654a23072ee1f672d782bb3"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_assert_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_assert_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "057b27910842ab4daf04ac1f75781fad411568341842ac06f019cff69294fe60"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_current_v1(uuid,timestamp with time zone,boolean)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_current_v1(uuid,timestamp with time zone,boolean)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "44e818845644e9ce7311124d24e8b73ea4f36ce871ba8823a02413e3af386804"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_deferred_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_deferred_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "69e05a07dd61396bd4494b70dd2f1d07cd75e2fa70fa307a6df4f1277a555430"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_dispatch_membership_v1(uuid,uuid,text)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_dispatch_membership_v1(uuid,uuid,text)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "c05f4d414ef540888a824f7bada383d86a6d4ec73ff17dd6504f96554ef1dac3"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_insert_v1(uuid,text,uuid,uuid,jsonb,jsonb,integer,uuid,timestamp with time zone,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_insert_v1(uuid,text,uuid,uuid,jsonb,jsonb,integer,uuid,timestamp with time zone,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "b95dcd83acc58613e7fc6a39018a71f5db598463c8d7489ab20bcee6e7633a43"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_logical_members_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_logical_members_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "2e8436abefe1d48a2a96dae5fbe03a988d8cd1b919db781727efd2f47045db3d"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_notification_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_notification_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/18_capture_question_presentation.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/18_capture_question_presentation.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "76d6cfde3ebe379845012990d0bfa2902530729170b16e6da0b12ae426782952"
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_pairs_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_capture_pairs_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "780b507099e397208c778565a4660021e4dd54af6307ca9e894c16385702f970"
+    },
+    {
+      "signature": "private.weekly_contact_source_cutoff_classification_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_cutoff_classification_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/02_cutoff_classification.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/02_cutoff_classification.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "a9ca692a7159bc88ffd3b4d0cd347eee1c83c2efd7bd4945fbf4621ba73fad33"
+    },
+    {
+      "signature": "private.weekly_contact_source_cycle_lock_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_cycle_lock_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/35_native_cycle_scope_lock.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/35_native_cycle_scope_lock.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "0c32caad4467a3f86c17c3feaabb4c6b3e67f70ad8ec6e71a03b9204e13f4dae"
+    },
+    {
+      "signature": "private.weekly_contact_source_due_rebase_assert_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_due_rebase_assert_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "f8bf9db4bc63b445aca9a5ed91dfa2a77a600c599345a930bdc7eba70fbe788c"
+    },
+    {
+      "signature": "private.weekly_contact_source_expected_week_fact_v1(uuid,uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_expected_week_fact_v1(uuid,uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "e62e749d7f3e26fdb5021262613bc028cebefc42637f37716acb86e3472bbd4e"
+    },
+    {
+      "signature": "private.weekly_contact_source_followup_candidate_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_followup_candidate_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/31_current_followup_candidate.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/31_current_followup_candidate.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "be3acd6ef7bbcae6a371d6571aa6d08bffb18ed2fd9e7199c807caaeb585383c"
+    },
+    {
+      "signature": "private.weekly_contact_source_generation_lock_v1(uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_generation_lock_v1(uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "a52ef25748f622f9aa62051c22489f3cc1d227b96cb7fd0da1f43836a26ac708"
+    },
+    {
+      "signature": "private.weekly_contact_source_generation_scope_facts_v1(uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_generation_scope_facts_v1(uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "282cbcdb87e31d25ee8bbfebafc7daf6bb4a329d65d348112cd97030f2673660"
+    },
+    {
+      "signature": "private.weekly_contact_source_identity_v1(uuid,text,uuid,uuid,text,text,jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_identity_v1(uuid,text,uuid,uuid,text,text,jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "023168e5d10ca7993923a9d07a43df39ce3bbcf8aa46a39549052823b45b4192"
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_composition_lock_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_intent_composition_lock_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "56b9212339d8bb33d8278eb3b7ac9abaf886861e802a328681bf3cacbe74bab2"
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_composition_scope_facts_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_intent_composition_scope_facts_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "fa5055243467bd92d67cc11dc24f173b7ddd2ed8ac21053cc340d48079444f7a"
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_current_subset_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_intent_current_subset_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "9786f0485447485bc117078785bc46dc5c51675043b7060f5644bfcf028164e4"
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_lock_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_intent_lock_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "54c83a60e89cf9c584e6744a0bf0a73dca09768d5f83fd1325b9fcf0100984d8"
+    },
+    {
+      "signature": "private.weekly_contact_source_logical_history_v1(uuid,text,uuid,uuid,bytea)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_logical_history_v1(uuid,text,uuid,uuid,bytea)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "b0e2f0fa9aee6f9f4c6b2343667f98a74c93855a1d9a29cc649cd49f2dec1edf"
+    },
+    {
+      "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/23_native_logical_members.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/23_native_logical_members.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+          "physical": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+          "statementSha256": "dad4816133c2289fda826bcd58e68b6e0f4fe17fce042a48bbedfeceb85ecedf",
+          "line": 4,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "e86f21c8d6fc790f42d183f17cab47c5a1986e7151ad656b682d9155e7c57eba"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_action_lock_v1(uuid,uuid,uuid,jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_action_lock_v1(uuid,uuid,uuid,jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "b531eeae22cae80b409cac437b1b079a952d84d9c30abbdbb2f90208fe55ac5a"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_action_v1(uuid,uuid,uuid,jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_action_v1(uuid,uuid,uuid,jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "b97cccbee87a0a78f859c872ddf6870441e7c867a0fc50660616a71fbd8fa11d"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "4ff854c06eb693c390bc2ede6ca7e91ed94192943b30f8d89fa4e27666d46c43"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_followup_enqueue_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_followup_enqueue_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "7e1daec3344fda023b2c2133ba881e1ee4c9253a5175062a73baf6014d18eed4"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/49_grouped_automatic_followup.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/49_grouped_automatic_followup.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "5c7b81d4038003fac196a2a1ae4619c4a3fc8addc2518f514440d604a625dbbb"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_followup_state_v1(uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_followup_state_v1(uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "68d1c50a0ffb01f84124a6f5e33060896a37fccaafa0c58aa6dd54ec709958d2"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "6ecf46eb3c847a7850b611e91ae293134d349f680a3a81849e1956955eb66a65"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_manual_step_v1(uuid,uuid,uuid,uuid[],text)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_manual_step_v1(uuid,uuid,uuid,uuid[],text)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/15_configured_manual_step.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/15_configured_manual_step.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "53c76b71afa7fb134011e4a5b508a5b3e5a4ecbc7ebcb6745583a936f8277c74"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "897e57ce9196358c591251b07197cfd9b9135b30ef21225cadb09389aa3c2efc"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_members_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_members_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/20_native_manager_members.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/20_native_manager_members.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "c2f9ad82498e1e5c59171da7c6f9d4f0174dfc8a2126c893913e7185cdb108a0"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_recompose_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_recompose_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "507388e4f4a2472f03330de04701e82888180535f44f008a8cd7e4e3122c8a0c"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_row_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_row_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "f0befc6072d43fa4e3069425200ee4883234796d49bf088e9d49a083aeab0fdb"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/50_manager_selection_capture.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/50_manager_selection_capture.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "4ea12f9b29cbfb613e3701e52aded423dcb9251877a776a8f70f8676a0ef674c"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_selection_lock_v1(uuid[],jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_selection_lock_v1(uuid[],jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "c2f43e8805143df2dc21bb54307f176569a46969f2cadf22fa9c49377a8a1ed4"
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_selection_scope_facts_v1(uuid[])",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_manager_selection_scope_facts_v1(uuid[])",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "cadeb4761c71d2b90c7c5c853aec7617ec7fca46167dac9fdbe29c57e0068d3d"
+    },
+    {
+      "signature": "private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/25_native_current_membership.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/25_native_current_membership.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+          "physical": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+          "statementSha256": "aebfa0573e4716bc1cb1fb7362c7ef66a623498665565ca932985c74f3ecd790",
+          "line": 11,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "9143649a4d836734e42fac694b4385b0c7f53d9f301c09ba39bfcf551983f7a9"
+    },
+    {
+      "signature": "private.weekly_contact_source_ordinal_owner_guard_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_ordinal_owner_guard_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/98_manual_selection_ordinal_guard.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "44c8b6e5915767fa351a3e7be3172f454c6b1ddd8ab72d0eabfc927a36b6e4d3"
+    },
+    {
+      "signature": "private.weekly_contact_source_recompose_intent_v1(uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_recompose_intent_v1(uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/13_recompose_native_intents.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/13_recompose_native_intents.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "6aab25318bc80af914431beb7ec06403c5f9907b5ff1d3b88833dfcc6d199e0c"
+    },
+    {
+      "signature": "private.weekly_contact_source_render_attempted_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_render_attempted_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "deba2fa62884eaf3bc0cacb3a5c0e5f9b2d06cae362eca82a2d6cfa3cb257075"
+    },
+    {
+      "signature": "private.weekly_contact_source_retire_unsubmitted_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_retire_unsubmitted_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "b3b433e0cddd273d211c5aade75ed1f575809d2dd0daf729b82424b6eda2086f"
+    },
+    {
+      "signature": "private.weekly_contact_source_route_lock_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_route_lock_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "2860b27ed67091442ec88b33b6dfb34759bc23b32154018f9264daa58628da65"
+    },
+    {
+      "signature": "private.weekly_contact_source_route_scope_facts_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_route_scope_facts_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "345d1bd1893f71b465b774ca778b9484b86b4beddf0adc7f73459779db98c3c5"
+    },
+    {
+      "signature": "private.weekly_contact_source_scheduler_selection_lock_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_scheduler_selection_lock_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "efd40b8f7b14cf18ad6c20de35f7b3ec8f735077485203645d4b7cbf1ddf0fa7"
+    },
+    {
+      "signature": "private.weekly_contact_source_scheduler_selection_v1(timestamp with time zone,integer)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_scheduler_selection_v1(timestamp with time zone,integer)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/47_native_scheduler_selection.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/47_native_scheduler_selection.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "73eb489e44569103b604c0e953b5862c5b4b31167dc7e8ed320330cea613e3f5"
+    },
+    {
+      "signature": "private.weekly_contact_source_scheduler_work_facts_v1(text,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_scheduler_work_facts_v1(text,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "779b65adbb0f97c80b1dcca0e4ab65dddf8a51a3daeb2f527b59990142ce368f"
+    },
+    {
+      "signature": "private.weekly_contact_source_scope_first_activation_v1(uuid,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_scope_first_activation_v1(uuid,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/34_scope_first_activation.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/34_scope_first_activation.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "80a489158933efc147da317dcd4f88cdb1cfa091996eb314995aeb9db81bdf85"
+    },
+    {
+      "signature": "private.weekly_contact_source_submission_lock_v1(uuid,uuid,jsonb,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_submission_lock_v1(uuid,uuid,jsonb,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "0c8e8215961058605b5992e5345cfddea2090a731279f5c53a71ae26f2d3c149"
+    },
+    {
+      "signature": "private.weekly_contact_source_submission_partition_v1(jsonb,boolean)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_source_submission_partition_v1(jsonb,boolean)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/37_submission_partition.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/37_submission_partition.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "40c8e582a1030323648c4328b4efafb413fc1532b92e04a222ab30ea98e595be"
+    },
+    {
+      "signature": "private.weekly_contact_submission_identity_deferred_v1()",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_submission_identity_deferred_v1()",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "afed9ed0d26a89c5fb6136e9f90546fcb299225798fafc7cfd0c2355c6786bb4"
+    },
+    {
+      "signature": "private.weekly_contact_submission_request_assert_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_submission_request_assert_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "c8e90b4c0d275aead26a2d79df5e56db01fe0f0e5fab52e2416f31a6f240ba5b"
+    },
+    {
+      "signature": "private.weekly_contact_submission_request_for_generation_v1(uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_submission_request_for_generation_v1(uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "25b3a199fcdd15f46952b88e55f13b1fad522486515c4f31caff09b71a77a8e1"
+    },
+    {
+      "signature": "private.weekly_contact_submission_view_request_v1(uuid,uuid,date,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_submission_view_request_v1(uuid,uuid,date,uuid)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "1d3b12c8f87e6676ad7e015141dff202c89ad91b450373c3820619f28de922a9"
+    },
+    {
+      "signature": "private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamp with time zone)",
+          "physical": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "statementSha256": "8c792fe986754782a3e6ce5183ff9206e71e86853f60f741028c49520002735f",
+          "line": 288,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "bb23c9741ab7468ad642c679255c207db1101c2bb1be556c7cdb4ae38b589c3d"
+    },
+    {
+      "signature": "private.weekly_source_candidate_notification_intent_v1()",
+      "before": {
+        "signature": "private.weekly_source_candidate_notification_intent_v1()",
+        "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      },
+      "after": {
+        "signature": "private.weekly_source_candidate_notification_intent_v1()",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_candidate_notification_intent_v1()",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "4ab85b6ee2146a4a011598fe695c026646138b05cc4750a2641be271348d1c43",
+          "line": 1030,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_notification_intent_v1()",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "4ab85b6ee2146a4a011598fe695c026646138b05cc4750a2641be271348d1c43",
+          "line": 1030,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_notification_intent_v1()",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "4ab85b6ee2146a4a011598fe695c026646138b05cc4750a2641be271348d1c43",
+          "line": 1030,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "0547bf0afd88d3e3bef7783d2b15659f3f3462fd7d0cb030487690cc6e72d9f5"
+    },
+    {
+      "signature": "private.weekly_source_candidate_notification_retire_v1()",
+      "before": {
+        "signature": "private.weekly_source_candidate_notification_retire_v1()",
+        "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      },
+      "after": {
+        "signature": "private.weekly_source_candidate_notification_retire_v1()",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/30_native_notification_retirement.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/30_native_notification_retirement.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_candidate_notification_retire_v1()",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "a29c03bc465263b804559b628f4fde6365595fa6e8c00c55a7e7791341a7f3eb",
+          "line": 1169,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_notification_retire_v1()",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "a29c03bc465263b804559b628f4fde6365595fa6e8c00c55a7e7791341a7f3eb",
+          "line": 1169,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_notification_retire_v1()",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "a29c03bc465263b804559b628f4fde6365595fa6e8c00c55a7e7791341a7f3eb",
+          "line": 1169,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "67f76a0d445f434d7293d10ec812bac5e2064ef2d4b1e026769c67844c64564e"
+    },
+    {
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "before": {
+        "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+        "finalPhysical": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql"
+        ],
+        "owner": "F-25 BD019 parked protocol; latest surviving original authority; SP15 BD125 post-write refresh",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      },
+      "after": {
+        "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "F-25 BD019 parked protocol; latest surviving original authority; SP15 BD125 post-write refresh",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+          "physical": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "statementSha256": "8d312292dffb581b13241a8148b389f4c645c4a69ce4e84f99b353f2f2cc84ca",
+          "line": 1224,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+          "physical": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+          "statementSha256": "8c5dba0fd51cb20504c3a06f6bca0f4e15c9bb7e36753cf48b9c7d251969539a",
+          "line": 1648,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+          "physical": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+          "statementSha256": "08683fdc5a0d4db93942a54563e9e6c1f84747410115c2f980fc9186435d2d72",
+          "line": 2,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+          "physical": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "statementSha256": "570ef77bc826fbfca46c4ecda1f88ed2fd4768d8eea5d4edd674214e585e5c4b",
+          "line": 43,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+          "physical": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+          "statementSha256": "7250c2aa5be9d9ee2fc45165a0297402cf3f92f539f712fb41df919c749e891b",
+          "line": 1,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "16ca0be09f7cb42d3d30daad383f382dd36ee98f5b34743b48ab9abf26ff286c"
+    },
+    {
+      "signature": "private.weekly_source_candidate_view_request_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_source_candidate_view_request_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_candidate_view_request_v1(jsonb)",
+          "physical": "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+          "statementSha256": "c88779a17d0a35ad4abc9bdb0130cc120e38dfdf55d72b61c818b276a0f4d47d",
+          "line": 142,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "4bbf8b7d01f8806ca9db7143b58d41e62398369d5e6a284fd4e6d0d9f89b9902"
+    },
+    {
+      "signature": "private.weekly_source_import_outreach_v1(uuid)",
+      "before": {
+        "signature": "private.weekly_source_import_outreach_v1(uuid)",
+        "finalRoot": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+        "finalPhysical": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      },
+      "after": {
+        "signature": "private.weekly_source_import_outreach_v1(uuid)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_import_outreach_v1(uuid)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "statementSha256": "0cfaa11b346b53a147d8698f6a5e37eae3df116d5c9552cb6534009ac0a4e160",
+          "line": 5700,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_import_outreach_v1(uuid)",
+          "physical": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+          "statementSha256": "7d79aaf98a8477b410fa2c65c9e7d21c1eb585cbfa49e52a300644a59e65496b",
+          "line": 2,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "028c161332c28997c0aca05ce8e2de353dcc8c836bc9363cd5c296cfc8df84a0"
+    },
+    {
+      "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+      "before": {
+        "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+        "finalPhysical": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      },
+      "after": {
+        "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+          "physical": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+          "statementSha256": "b12e667863c3f05f66b7d39c864bd759f06e63c40f3146f11b601c00f91f38a0",
+          "line": 65,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+          "physical": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+          "statementSha256": "b12e667863c3f05f66b7d39c864bd759f06e63c40f3146f11b601c00f91f38a0",
+          "line": 65,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "0592f9d3051760aea94ed39b75e7fe23272e0911e9a44cf9e82616d4929682b2"
+    },
+    {
+      "signature": "private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamp with time zone)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "e2344a414fd57e4119d0d91cf766384344fb161ea2c36040a440a18f16f0ebd4",
+          "line": 4151,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "a07b1339d7d2ddf229dc895c979f4b081203d1e02c6f1e6f351a8ac690944a85"
+    },
+    {
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "before": {
+        "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+        "finalRoot": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+        "finalPhysical": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      },
+      "after": {
+        "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "4ac21e3e7525362f8de4f8e395e5dd5234df57e4b41fe4a1e9b1b70d9d92d0c6",
+          "line": 3589,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+          "physical": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+          "statementSha256": "0b823ffba70688ef6033b7000597ee5ad4d0b8350507e03fa48d8aff12601faa",
+          "line": 2,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql"
+        },
+        {
+          "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+          "physical": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+          "statementSha256": "0b823ffba70688ef6033b7000597ee5ad4d0b8350507e03fa48d8aff12601faa",
+          "line": 2,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "952a7feb8f999cfd52de87aa056f89dd156ff47aa06c3a842723e763d5b34270"
+    },
+    {
+      "signature": "private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamp with time zone)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamp with time zone)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/27_native_manager_intent.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/27_native_manager_intent.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamp with time zone)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "9146d14d1c9b323d201a17fff81cc34cb07ea74820c3d0c6d780400277a09b11",
+          "line": 3904,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "5e1b7bb3b6f9acc22cadae2e19cedbe1e5b05312337ef30c214ae9b479bf25bd"
+    },
+    {
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/33_native_submission_pause.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/33_native_submission_pause.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "186ec8f5eabbefcd11fb0db2051f1b99abf3a6a9698a337776f67d36b51dd896",
+          "line": 3326,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "68f9bb40b4dc00b29f5ca2194264cf83b6b9a88cfeec8939fd51dc267135be7b"
+    },
+    {
+      "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+      "before": {
+        "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "finalPhysical": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        ],
+        "owner": "SP-12 existing admission before original outer business locks; SP-07/WB-02/WB-05/SP-15/SP-09/SP-28 merge latest",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      },
+      "after": {
+        "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "SP-12 existing admission before original outer business locks; SP-07/WB-02/WB-05/SP-15/SP-09/SP-28 merge latest",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+          "physical": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "statementSha256": "bacebf22fe592c5ae522133a29c329d6b3438b1e7e6efecd00b443629bd78715",
+          "line": 2755,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+          "physical": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+          "statementSha256": "c3a28a848ff55983143e2e1d231aea062fee9bb2b86bd2a21c6c2a4ac551e965",
+          "line": 8,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "a24d45382b173e1313e64e2217fc7a736097b56cc10f8cf70f293d971353870e"
+    },
+    {
+      "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "before": {
+        "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "finalPhysical": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        ],
+        "owner": "SP-12 existing admission before original outer business locks; SP-07/WB-02/WB-05/SP-15/SP-09/SP-28 merge latest",
+        "baselineSource": "3241f945773bccf64f13f6258ad126c52f17c8ab"
+      },
+      "after": {
+        "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "SP-12 existing admission before original outer business locks; SP-07/WB-02/WB-05/SP-15/SP-09/SP-28 merge latest",
+        "baselineSource": "3241f945773bccf64f13f6258ad126c52f17c8ab",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+          "physical": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+          "statementSha256": "4b7db1c22bb8e0d9d8c13b783f6c031f31b464ed61261ff5860f03e12cf93d69",
+          "line": 2188,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+          "physical": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+          "statementSha256": "d4b13c8ff109290882f34a0cffa9cf8fa2bfd1abbb20ef2446ac51f0acf9ef64",
+          "line": 405,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "b356068688301a4e8f099917cb8fd3e2653fa88023f37c93d286ce43d779b4f0"
+    },
+    {
+      "signature": "public.weekly_source_candidate_query_get_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_candidate_query_get_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_candidate_query_get_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "46059b63043ab511e85a9a547fcf2a92ebff591c9a2f8a93ba4a9e40c5f658a7",
+          "line": 144,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "df874209632c5db3b41934cf5439979aa486a57fed31805061b937e0c2ac5742"
+    },
+    {
+      "signature": "public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "0026a8ce78c9ceb9ec23da4b7e392b52d46e1b44b0e05dd9096830a9aa875e7c",
+          "line": 3134,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "4af7ee339eff30df8ecf231f793e0a8e5cf3da0145da9d51fafa9ad926b4ecdc"
+    },
+    {
+      "signature": "public.weekly_source_contact_manual_enquiry_accept_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_contact_manual_enquiry_accept_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "1308d2d650d1368b198e25d63196c3c9b9483789bc3018940aa3eb1d18794dae"
+    },
+    {
+      "signature": "public.weekly_source_contact_manual_enquiry_preview_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_contact_manual_enquiry_preview_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "5ebe82f16f7e3e59b88bae7801dc02c7b60174b42dddb0679da18d7e13bfa2fe"
+    },
+    {
+      "signature": "public.weekly_source_contact_recheck_batch_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_contact_recheck_batch_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [],
+      "completeFinalStatementSha256": "775bb5d47214802a3db91cf217b645f457623dd42b8d8da54009a24363a807f2"
+    },
+    {
+      "signature": "public.weekly_source_manager_route_prepare_atomic_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_manager_route_prepare_atomic_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_manager_route_prepare_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "414f26600c4a02862bffaa34673fb5d1ac468ccce7fe87f2cf26e17b1a1d3fac",
+          "line": 1759,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "0cd45559440bdbf012bb7f77f7fab0b0326cc484645584989f59c11b4ff89e01"
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "before": {
+        "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      },
+      "after": {
+        "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "18278c03607d1f9136d217a784b0f4304734f8f0170f9aece95cf2341b2ca5df",
+          "line": 1383,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "3ed687440c198d4c70c7b730f07bc6d9e684cf9fa0947d6c93606bd91f5f810e",
+          "line": 5214,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+          "line": 230,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+          "line": 230,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "statementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+          "line": 230,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+      "completeNativeClosedStartRepair": true
+    },
+    {
+      "signature": "public.weekly_source_message_render_input_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_message_render_input_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/21_native_render_input.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/21_native_render_input.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_message_render_input_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "4739d058b3e0467002f34dd2987945b939106dbafe4ccc97dc1b5aceb876bac6",
+          "line": 245,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "6c89e5908eb868f6b034cee74d3aa496917319e9cfdc15d4d554bdfa22550af5"
+    },
+    {
+      "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/22_native_render_stage.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/22_native_render_stage.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "d2b5229d4fc87d38e54550138f3a975efd1406efde055c0a27e653b5558209d9",
+          "line": 1906,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "770279ef007d387f7c4507a9fb204ced97762fd8ee801d4556280caf12974731"
+    },
+    {
+      "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+      "before": {
+        "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "finalPhysical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        ],
+        "owner": "F-25 BD019 parked protocol; latest surviving original authority",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      },
+      "after": {
+        "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/29_native_contact_bulk.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/29_native_contact_bulk.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "F-25 BD019 parked protocol; latest surviving original authority",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "statementSha256": "fb0aa68eb6ca46a8f9b4d4ee46e1784b0401dc57056c4e30f278bf03e8cfa126",
+          "line": 4951,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "2c36bdec57f737997e815d87dabe0ed479c8bd699ad215c3e1aa42add0bde21b"
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "before": {
+        "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+          "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+          "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+        ],
+        "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+        "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      },
+      "after": {
+        "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/28_native_contact_workspace.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+          "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/28_native_contact_workspace.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+          "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+        "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+          "statementSha256": "bcc16d8455a7c3f55268f84f609040bbd0627e0f26a91bc5e43f8e5f15bfd699",
+          "line": 763,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+          "physical": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "statementSha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+          "line": 1765,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+          "physical": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+          "statementSha256": "072f7940d65af9ff9cf42dfb046d5e1446514b78df1e15feaff8c3026c9499b8",
+          "line": 32,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+          "physical": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+          "statementSha256": "a90ff894c594e2c74a12851d8f31ad67620038ca716967833bd43698c584874f",
+          "line": 2,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+          "physical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "statementSha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+          "line": 1745,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "74b3e3a0c11459012d9ff3a1e791dbb21c22d697ac13dfbe3756de2a15bc2367"
+    },
+    {
+      "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "before": {
+        "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+        "finalPhysical": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+          "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+          "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      },
+      "after": {
+        "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+          "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+          "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+          "statementSha256": "287194b8aca049aa6827d429d3aeaef3d65afdf4345b688057d7b33198629d24",
+          "line": 2739,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+          "statementSha256": "a0b7cddbc3e40c688540d02dc921a57fe9bdbcf36dfa039580270c7005f8f4ec",
+          "line": 2,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql"
+        },
+        {
+          "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+          "statementSha256": "5f595cf2ff14c774518a95aa921f17bf3a0a306e17fa9fcc9b085c8792bb36b3",
+          "line": 955,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "743c2b9cca40fdb4957e6b451d2d02116f546b1e8a259057e39b3f6f43470097"
+    },
+    {
+      "signature": "public.weekly_source_query_scheduler_tick_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_query_scheduler_tick_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/32_native_scheduler_followups.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/32_native_scheduler_followups.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_query_scheduler_tick_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "8d6d3e2d7ba44fab2bbb22e411bf944bd032f3da56bfd1296bc8d8b16b522968",
+          "line": 2284,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "896a43ea6cdebbba62de1160c5f699dd93f118f07c4e3ab15c28cbc676b44a08"
+    },
+    {
+      "signature": "public.weekly_source_query_send_manager_now_atomic_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_query_send_manager_now_atomic_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/51_native_initial_manager_owner.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/51_native_initial_manager_owner.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_query_send_manager_now_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "d624ada8889d5e77efc63f42d2cacc19ea8c19ac6d6861a5e59dfc4543112f1f",
+          "line": 2873,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "7bbed0a031cf90876b4d5266c3296ca9dbc778f25a1f3154cc93451e7d2e7281"
+    },
+    {
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "before": null,
+      "after": {
+        "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+        "owner": "Health V6 complete Contact native producer; source-only proposal, native qualification required",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql"
+        ],
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md"
+      },
+      "actualPredecessors": [
+        {
+          "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "1af77213fc5b04c89df295a4712740569393674133ff42cba4b6c0cad23bb508",
+          "line": 388,
+          "language": "PLPGSQL",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+        }
+      ],
+      "completeFinalStatementSha256": "1be32b056ca5e7c76de4926598872fea9e1c3a750272eca2f2d2cbea36399b25"
+    }
+  ]
+}

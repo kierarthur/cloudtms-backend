@@ -1,0 +1,24 @@
+{
+  "version": "CONTACT_LOCK_GROUPING_INDEPENDENT_PEER_MANIFEST_V1",
+  "reviewedCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+  "sourceVerdict": "NO_BLOCKER_IDENTIFIED_IN_EXACT_THREE_FILE_SUCCESSOR",
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN",
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "bytes": 6303,
+      "sha256": "07998491d02ff49fab45bafe2a8091c2fe6d2097709f241a130110106aa48222"
+    },
+    {
+      "path": "EVIDENCE.json",
+      "bytes": 6551,
+      "sha256": "cbcaf03021f90551b6352f7f9a911a5793c7c162a1dc017d4e76fcf2a7fa4f3f"
+    },
+    {
+      "path": "peer-check.py",
+      "bytes": 5211,
+      "sha256": "b7b9f6958bbcd595c4b2401d804da8fedee921a1034b5a6e1af924b3348413e9"
+    }
+  ]
+}

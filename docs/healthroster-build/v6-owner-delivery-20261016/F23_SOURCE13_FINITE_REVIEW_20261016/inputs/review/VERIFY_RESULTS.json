@@ -1,0 +1,7 @@
+{
+  "qualification": "EXACT_PIN_AND_FINITE_MULTIPLICITY_VERIFICATION_ONLY",
+  "extensionMapSha256": "a4a9fbd8b83a5e31051b578b52efe6653147c7683f797ea4d10d37531b1723f7",
+  "passed": 69,
+  "failed": 0,
+  "native": "NOT_RUN"
+}

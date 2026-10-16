@@ -1,0 +1,24 @@
+{
+  "file": "scripts/bpay-next-source-gates.mjs",
+  "beforeSha256": "2a785685248edbd5eaad51b39c51edbb667b9843550f0a57dff9cf2ed849881d",
+  "afterSha256": "9c3bfc1f294216ecab1f428337e724891a519a39840040edb47e97acb8a6da09",
+  "baseProposalCommit": "bdc7946972e7c5182e7295acd5dc5002e4ecb9ec",
+  "edits": [
+    {
+      "from": "import {reviewedPrebodyDynamicHazards} from './healthroster-prebody-dynamic-review.mjs';",
+      "to": "import {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';\nimport {reviewedPrebodyDynamicHazards} from './healthroster-prebody-dynamic-review.mjs';",
+      "count": 1
+    },
+    {
+      "from": "assertSpecialConstructs(source,file,reviewedPrebodyDynamicHazards(source,file,",
+      "to": "assertSpecialConstructs(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,",
+      "count": 1
+    },
+    {
+      "from": "specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}",
+      "to": "specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}",
+      "count": 1
+    }
+  ],
+  "fullReverseEquality": true
+}

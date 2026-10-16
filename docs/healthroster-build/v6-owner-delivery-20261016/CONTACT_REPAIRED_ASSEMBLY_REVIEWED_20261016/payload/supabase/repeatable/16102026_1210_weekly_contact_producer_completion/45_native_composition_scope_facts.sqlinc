@@ -1,0 +1,110 @@
+-- Full native composition footprint, independent of eligibility and send
+-- ordinal allocation. Reading these facts creates no route, question or clock.
+create or replace function private.weekly_contact_source_intent_composition_scope_facts_v1(p_intent uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare intent public.weekly_message_intents%rowtype;facts jsonb;selected uuid[];pairs jsonb;generation jsonb;original_pairs jsonb;
+begin
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ if intent.audience_kind='CANDIDATE' then
+  generation:=private.weekly_contact_source_generation_scope_facts_v1(intent.candidate_generation_id,
+   (select candidate_id from public.weekly_candidate_outreach_generations where id=intent.candidate_generation_id));
+  return jsonb_build_object('version','CONTACT_INTENT_COMPOSITION_SCOPE_FACTS_V1','intent',to_jsonb(intent),'native_facts',generation,
+   'pairs',generation->'pairs');
+ elsif intent.audience_kind<>'MANAGER' then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=intent.id) then
+  select array_agg(distinct member.incident_id order by member.incident_id) into selected
+   from public.weekly_contact_source_intent_capture_members member where member.message_intent_id=intent.id;
+  original_pairs:=private.weekly_contact_source_capture_pairs_v1(intent.id);
+ elsif exists(select 1 from public.weekly_message_renders where message_intent_id=intent.id) then
+  select array_agg(distinct item.incident_id order by item.incident_id) into selected from public.weekly_message_renders render
+   join public.weekly_manager_review_batches batch on batch.message_render_id=render.id
+   join public.weekly_manager_review_items item on item.review_batch_id=batch.id where render.message_intent_id=intent.id
+    and render.render_sequence=(select max(render_sequence) from public.weekly_message_renders where message_intent_id=intent.id);
+ else
+  select array_agg(distinct member.incident_id order by member.incident_id) into selected
+   from public.weekly_manager_recipient_memberships member where member.recipient_generation_id=intent.recipient_generation_id;
+ end if;
+ facts:=private.weekly_contact_source_manager_selection_scope_facts_v1(coalesce(selected,'{}'));
+ generation:=private.weekly_contact_source_route_scope_facts_v1(intent.recipient_route_id);
+ select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id),'[]') into pairs
+  from(select distinct(value->>'candidate_id')::uuid candidate_id,(value->>'client_id')::uuid client_id
+   from jsonb_array_elements((facts->'pairs')||(generation->'pairs')||coalesce(original_pairs,'[]')))actual;
+ return jsonb_build_object('version','CONTACT_INTENT_COMPOSITION_SCOPE_FACTS_V1','intent',to_jsonb(intent),'native_facts',facts,
+  'original_route',generation,'pairs',pairs);
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_activation_lock_v1(p_scope uuid,p_cycle uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare scope public.weekly_contact_pause_scopes%rowtype;facts jsonb;pair jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ perform private.weekly_contact_deployment_lock_v1(scope.agency_id,scope.environment);
+ perform private.weekly_contact_context_v1(scope.agency_id,scope.environment);
+ facts:=private.weekly_contact_source_activation_scope_facts_v1(p_scope,p_cycle);
+ for pair in select value from jsonb_array_elements(facts->'pairs')order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(scope.agency_id,scope.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_activation_scope_facts_v1(p_scope,p_cycle)is distinct from facts then
+  raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_intent_composition_lock_v1(p_intent uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare intent public.weekly_message_intents%rowtype;facts jsonb;pair jsonb;
+begin
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ perform private.weekly_contact_deployment_lock_v1(intent.agency_id,intent.environment);
+ perform private.weekly_contact_context_v1(intent.agency_id,intent.environment);
+ facts:=private.weekly_contact_source_intent_composition_scope_facts_v1(intent.id);
+ if(facts->'intent'->>'agency_id',facts->'intent'->>'environment')is distinct from(intent.agency_id::text,intent.environment) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+ for pair in select value from jsonb_array_elements(facts->'pairs')order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(intent.agency_id,intent.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_intent_composition_scope_facts_v1(intent.id)is distinct from facts then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+end;
+$function$;
+
+-- A never-started activation can touch its exact selected business scope,
+-- an overlapping original mixed request and the real native manager route.
+-- Unrelated workers and closed requests do not enter this footprint.
+create or replace function private.weekly_contact_source_activation_scope_facts_v1(p_scope uuid,p_cycle uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare scope public.weekly_contact_pause_scopes%rowtype;cycle public.weekly_source_cycles%rowtype;
+ source_group public.weekly_source_groups%rowtype;route_id uuid;routes jsonb:='[]';pairs jsonb;requests jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ select * into strict cycle from public.weekly_source_cycles where id=p_cycle;
+ select * into strict source_group from public.weekly_source_groups where id=cycle.source_group_id;
+ if(source_group.agency_id,source_group.environment)is distinct from(scope.agency_id,scope.environment) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('request',to_jsonb(request),'members',(
+  select jsonb_agg(to_jsonb(member)order by member.id)from public.weekly_timesheet_submission_request_memberships member
+   where member.submission_request_id=request.id))order by request.id),'[]') into requests
+  from public.weekly_timesheet_submission_requests request where request.source_cycle_id=cycle.id
+   and request.candidate_id=scope.candidate_id and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+   and exists(select 1 from public.weekly_timesheet_submission_request_memberships selected where selected.submission_request_id=request.id
+    and selected.client_id=scope.client_id);
+ for route_id in select distinct route.id from public.weekly_manager_recipient_routes route where route.source_cycle_id=cycle.id and(
+  exists(select 1 from public.weekly_candidate_cohorts cohort where cohort.source_cycle_id=cycle.id
+   and cohort.candidate_id=scope.candidate_id and cohort.client_id=scope.client_id
+   and cohort.manager_recipient_route_key=route.normalised_recipient_hash)
+  or exists(select 1 from private.weekly_source_office_query_groups_v1(cycle.id,cycle.current_projection_publication_id,'{}')groups
+   where groups.candidate_id=scope.candidate_id and groups.client_id=scope.client_id and groups.manager_eligible
+    and groups.manager_recipient_route_key=route.normalised_recipient_hash))order by route.id loop
+  routes:=routes||jsonb_build_array(private.weekly_contact_source_route_scope_facts_v1(route_id));end loop;
+ select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id)into pairs from(
+  select scope.candidate_id candidate_id,scope.client_id client_id
+  union select scope.candidate_id,(member->>'client_id')::uuid from jsonb_array_elements(requests)request
+   cross join lateral jsonb_array_elements(request->'members')member
+  union select(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid from jsonb_array_elements(routes)route
+   cross join lateral jsonb_array_elements(route->'pairs')pair)actual;
+ return jsonb_build_object('version','CONTACT_ACTIVATION_SCOPE_FACTS_V1','scope_id',scope.id,'source_cycle_id',cycle.id,
+  'projection_publication_id',cycle.current_projection_publication_id,'original_requests',requests,'route_facts',routes,'pairs',pairs);
+end;
+$function$;

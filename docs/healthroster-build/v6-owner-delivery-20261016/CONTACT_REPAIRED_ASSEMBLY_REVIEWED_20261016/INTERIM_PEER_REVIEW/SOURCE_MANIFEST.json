@@ -1,0 +1,25 @@
+{
+  "version": "REPAIRED_CONTACT_INDEPENDENT_REVIEW_MANIFEST_V1",
+  "reviewedSourceCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "reviewedSourceManifestSha256": "ae26eb84189eb9a87c8f758b3bcb6f0eff806d338f313d48dc0a13f3251d6f50",
+  "sourceVerdict": "NO_BLOCKER_IDENTIFIED_IN_BOUNDED_COMPLETE_SOURCE_REPAIR",
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN",
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "bytes": 8465,
+      "sha256": "cd86986c96048d4b94ec873e59a1f2c9175accdfdc7de32bd391350b859dbaf2"
+    },
+    {
+      "path": "EVIDENCE.json",
+      "bytes": 19888,
+      "sha256": "a2f4c08dcc4fd517ab5c34c2a55e49fdd1d5c50148609ba3a6e48317a040eec6"
+    },
+    {
+      "path": "check-frozen-successor.mjs",
+      "bytes": 10616,
+      "sha256": "877e8cc847c8897152dff7b04c934eab6399601881244df98fce6925fad351bb"
+    }
+  ]
+}

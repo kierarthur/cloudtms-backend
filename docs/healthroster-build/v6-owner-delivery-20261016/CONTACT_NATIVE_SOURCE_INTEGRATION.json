@@ -1,0 +1,1400 @@
+{
+  "version": "HEALTH_CONTACT_REPAIRED_MANAGED_SOURCE_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_NOT_RELEASE_READY",
+  "baseRootCommit": "1f2824aa954ae81ec348777ac533858e700c0aa0",
+  "producerCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "independentOriginalAssemblyReview": "f4bc3669e2090d194dbf28f0bc6eb746d0477350",
+  "assemblyManifestSha256": "67b7c30b5076cd32d5745139c0adea9edcd82ca5e65691393dd248bccdf04dc4",
+  "allocatedBy": "canonical db:new generators at actual UK12:05; original proposal paths retained as history only",
+  "outputFiles": [
+    {
+      "phase": "schema",
+      "path": "supabase/migrations/16102026_1200_weekly_contact_producer_journals.sql",
+      "sha256": "a6af48dac55e25dbf98a420e4171c30fc5dad767236dcca98b93e6676fca3875",
+      "bytes": 11797,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+      "originalPath": "supabase/migrations/16102026_1200_weekly_contact_producer_journals.sql",
+      "actualSha256": "a6af48dac55e25dbf98a420e4171c30fc5dad767236dcca98b93e6676fca3875",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 11797,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "schema",
+      "path": "supabase/migrations/16102026_1201_weekly_contact_automatic_followup_tranche.sql",
+      "sha256": "f721b4ef62f7066b9224843d6c46cd88531b66ef7d7fb503723c661757e0ab59",
+      "bytes": 5714,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "originalPath": "supabase/migrations/16102026_1201_weekly_contact_automatic_followup_tranche.sql",
+      "actualSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "pathOnlyIncludeRebinding": false,
+      "beforeReviewedSuccessorSha256": "f721b4ef62f7066b9224843d6c46cd88531b66ef7d7fb503723c661757e0ab59",
+      "reviewedSuccessorCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+      "originalAssemblyBytesRetainedInHistoricalPayload": true,
+      "actualBytes": 6187,
+      "actualEqualsReviewedAssembly": false
+    },
+    {
+      "phase": "schema",
+      "path": "supabase/migrations/16102026_1202_weekly_contact_submission_cohort_identity.sql",
+      "sha256": "e756703a139a9e2087d124fb09fba6b08d903481e6d76fd029a8bdf743b50fd5",
+      "bytes": 6943,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "originalPath": "supabase/migrations/16102026_1202_weekly_contact_submission_cohort_identity.sql",
+      "actualSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "pathOnlyIncludeRebinding": false,
+      "beforeReviewedSuccessorSha256": "e756703a139a9e2087d124fb09fba6b08d903481e6d76fd029a8bdf743b50fd5",
+      "reviewedSuccessorCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+      "originalAssemblyBytesRetainedInHistoricalPayload": true,
+      "actualBytes": 7563,
+      "actualEqualsReviewedAssembly": false
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/00_current_logical_closure.sqlinc",
+      "sha256": "dfacbe3cbcd9be1a3d9ebff6d590ef98fde8cddf9b4760b67c0d298cf8347623",
+      "bytes": 1958,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/00_current_logical_closure.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/00_current_logical_closure.sqlinc",
+      "actualSha256": "dfacbe3cbcd9be1a3d9ebff6d590ef98fde8cddf9b4760b67c0d298cf8347623",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 1958,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+      "sha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161",
+      "bytes": 18229,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/01_checking_revision_and_history.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+      "actualSha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 18229,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/02_cutoff_classification.sqlinc",
+      "sha256": "47583ccd2c125de4ab5da7d61c758284a814b58441a2427cfdd92256d928e2de",
+      "bytes": 3857,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/02_cutoff_classification.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/02_cutoff_classification.sqlinc",
+      "actualSha256": "47583ccd2c125de4ab5da7d61c758284a814b58441a2427cfdd92256d928e2de",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 3857,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc",
+      "sha256": "69aefcf3e9f2609d83fef79126639a4d58313ad21603e99d7cc3a7781320fac3",
+      "bytes": 5721,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/03_manual_request_validation.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc",
+      "actualSha256": "69aefcf3e9f2609d83fef79126639a4d58313ad21603e99d7cc3a7781320fac3",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 5721,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc",
+      "sha256": "bfed563a5d80a0ed884daea971cf0ac1e681834461a9750d8254edfdb4e13efe",
+      "bytes": 12116,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/04_original_logical_history.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc",
+      "actualSha256": "bfed563a5d80a0ed884daea971cf0ac1e681834461a9750d8254edfdb4e13efe",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 12116,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc",
+      "sha256": "3457f7ce340a7c279d345dc8945f2dfe8beab85caecd5a367cab827c2a6bc3b2",
+      "bytes": 15612,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/05_manual_member_facts.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc",
+      "actualSha256": "3457f7ce340a7c279d345dc8945f2dfe8beab85caecd5a367cab827c2a6bc3b2",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 15612,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "sha256": "d8af98736b140ffc7b93671d001ec6c836b1d9a73a7b18622b386c6b881bbc51",
+      "bytes": 10559,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "actualSha256": "d8af98736b140ffc7b93671d001ec6c836b1d9a73a7b18622b386c6b881bbc51",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 10559,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc",
+      "sha256": "5e65426dcb61a1779bea321eaf249e9f72dd2954739d523be79de41af04f431c",
+      "bytes": 20681,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/07_capture_native_reads.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc",
+      "actualSha256": "5e65426dcb61a1779bea321eaf249e9f72dd2954739d523be79de41af04f431c",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 20681,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc",
+      "sha256": "fd5e001fed0d5967708fb5e69a3e7aede7ce30ed454a6b2d1069408fce621b16",
+      "bytes": 20854,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/08_manual_native_enqueue.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc",
+      "actualSha256": "fd5e001fed0d5967708fb5e69a3e7aede7ce30ed454a6b2d1069408fce621b16",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 20854,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc",
+      "sha256": "02cd82e8b7b4a50454310dc32d8978fa985ae6c873c95321dc7ec015571851fa",
+      "bytes": 7067,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/09_manual_accept_and_errors.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc",
+      "actualSha256": "02cd82e8b7b4a50454310dc32d8978fa985ae6c873c95321dc7ec015571851fa",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 7067,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "sha256": "2b3465c98b5da5e2ea4cfdb4fe3b95e62c29b73508ca93e6c164b53191c18aa8",
+      "bytes": 6801,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "actualSha256": "2b3465c98b5da5e2ea4cfdb4fe3b95e62c29b73508ca93e6c164b53191c18aa8",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 6801,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "sha256": "5620a8f4bc6320b269c84e16b6faf2fe82328d96c59a2dda06eccb2dac94e895",
+      "bytes": 6914,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "actualSha256": "5620a8f4bc6320b269c84e16b6faf2fe82328d96c59a2dda06eccb2dac94e895",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 6914,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc",
+      "sha256": "96cfe9f5e5972f0d6387faaa6401dccbd546c7a9d309b7b568421eb4a46b19c4",
+      "bytes": 14329,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/12_current_native_subset.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc",
+      "actualSha256": "96cfe9f5e5972f0d6387faaa6401dccbd546c7a9d309b7b568421eb4a46b19c4",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 14329,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/13_recompose_native_intents.sqlinc",
+      "sha256": "240401001f4e4508b7e77c477af86f48812a4ce20010fd65ac493396fa120ce5",
+      "bytes": 8734,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/13_recompose_native_intents.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/13_recompose_native_intents.sqlinc",
+      "actualSha256": "240401001f4e4508b7e77c477af86f48812a4ce20010fd65ac493396fa120ce5",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 8734,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc",
+      "sha256": "29d417aac44be428ccd894e907095dc2477618069d3eb4be823d5c1d667fe0b5",
+      "bytes": 7165,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/14_manager_action_current_witness.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc",
+      "actualSha256": "29d417aac44be428ccd894e907095dc2477618069d3eb4be823d5c1d667fe0b5",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 7165,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/15_configured_manual_step.sqlinc",
+      "sha256": "e56965f591f49e559831c107ab9b29d187f5b17189a1b94d99ec86214e6e9d1b",
+      "bytes": 866,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/15_configured_manual_step.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/15_configured_manual_step.sqlinc",
+      "actualSha256": "e56965f591f49e559831c107ab9b29d187f5b17189a1b94d99ec86214e6e9d1b",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 866,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+      "sha256": "520ec0cb5e7846e421b48ff5e1371c8f9d7b50ef7888d10a00b4abf07f8ffca9",
+      "bytes": 13047,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/16_recheck_native_progress.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+      "actualSha256": "520ec0cb5e7846e421b48ff5e1371c8f9d7b50ef7888d10a00b4abf07f8ffca9",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 13047,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc",
+      "sha256": "1af69cd9e77e78610fde3d9f742c413889492eeab3d2d0e55569f25efdf75614",
+      "bytes": 11395,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/17_common_recheck_consumer.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc",
+      "actualSha256": "1af69cd9e77e78610fde3d9f742c413889492eeab3d2d0e55569f25efdf75614",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 11395,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/18_capture_question_presentation.sqlinc",
+      "sha256": "b049b5744ba1dae58cebdab3510f9d9c33c8e39e310a8506b5b20b846a3e84da",
+      "bytes": 3718,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/18_capture_question_presentation.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/18_capture_question_presentation.sqlinc",
+      "actualSha256": "b049b5744ba1dae58cebdab3510f9d9c33c8e39e310a8506b5b20b846a3e84da",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 3718,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+      "sha256": "b4061f936d97648bf1d83cf354976042da6b993ec158f1398043bd6145632ef0",
+      "bytes": 3404,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+      "actualSha256": "b4061f936d97648bf1d83cf354976042da6b993ec158f1398043bd6145632ef0",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 3404,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/20_native_manager_members.sqlinc",
+      "sha256": "422ba86657f3f7d6aa30e317dbbe4c7fda7c107d543b6125138731ec15f609a2",
+      "bytes": 4267,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/20_native_manager_members.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/20_native_manager_members.sqlinc",
+      "actualSha256": "422ba86657f3f7d6aa30e317dbbe4c7fda7c107d543b6125138731ec15f609a2",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 4267,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/21_native_render_input.sqlinc",
+      "sha256": "bf0dc43d725483075d2abf7c6b37d67cb36a5bab9e533f21f882ccd693eccede",
+      "bytes": 6661,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/21_native_render_input.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/21_native_render_input.sqlinc",
+      "actualSha256": "bf0dc43d725483075d2abf7c6b37d67cb36a5bab9e533f21f882ccd693eccede",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 6661,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/22_native_render_stage.sqlinc",
+      "sha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4",
+      "bytes": 18562,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/22_native_render_stage.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/22_native_render_stage.sqlinc",
+      "actualSha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 18562,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/23_native_logical_members.sqlinc",
+      "sha256": "9c39a2b814d74013d4aa64366ee2cc82d720ab10dd44e565751c2bac9f14ab74",
+      "bytes": 10625,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/23_native_logical_members.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/23_native_logical_members.sqlinc",
+      "actualSha256": "9c39a2b814d74013d4aa64366ee2cc82d720ab10dd44e565751c2bac9f14ab74",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 10625,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/24_native_budget.sqlinc",
+      "sha256": "7cddbe5a12062e8861ed52e61cd2d52f9bf988e79ba9596b58beaa57a9203f53",
+      "bytes": 4725,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/24_native_budget.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/24_native_budget.sqlinc",
+      "actualSha256": "7cddbe5a12062e8861ed52e61cd2d52f9bf988e79ba9596b58beaa57a9203f53",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 4725,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/25_native_current_membership.sqlinc",
+      "sha256": "8e7058cf427263941898f6e3898ff31a01128e91954e6f083082f990c0b60f41",
+      "bytes": 9361,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/25_native_current_membership.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/25_native_current_membership.sqlinc",
+      "actualSha256": "8e7058cf427263941898f6e3898ff31a01128e91954e6f083082f990c0b60f41",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 9361,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/26_native_push_context.sqlinc",
+      "sha256": "f99fd42da4f7da8cc430f99a81abd1a956994bf0e0559b4b6b16f1a232bb6fd9",
+      "bytes": 6543,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/26_native_push_context.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/26_native_push_context.sqlinc",
+      "actualSha256": "f99fd42da4f7da8cc430f99a81abd1a956994bf0e0559b4b6b16f1a232bb6fd9",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 6543,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/27_native_manager_intent.sqlinc",
+      "sha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4",
+      "bytes": 2490,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/27_native_manager_intent.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/27_native_manager_intent.sqlinc",
+      "actualSha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 2490,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/28_native_contact_workspace.sqlinc",
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028",
+      "bytes": 118581,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/28_native_contact_workspace.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/28_native_contact_workspace.sqlinc",
+      "actualSha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 118581,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/29_native_contact_bulk.sqlinc",
+      "sha256": "75d3a54270939e2a1d23bdf3cdfca193a383e0cd528b462d5389c75342db9f93",
+      "bytes": 27591,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/29_native_contact_bulk.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/29_native_contact_bulk.sqlinc",
+      "actualSha256": "75d3a54270939e2a1d23bdf3cdfca193a383e0cd528b462d5389c75342db9f93",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 27591,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/30_native_notification_retirement.sqlinc",
+      "sha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea",
+      "bytes": 3073,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/30_native_notification_retirement.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/30_native_notification_retirement.sqlinc",
+      "actualSha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 3073,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/31_current_followup_candidate.sqlinc",
+      "sha256": "8dd820ed75dc2d1faefec5f5899c2ceea1c2438e3631524018fffa28b317ab0c",
+      "bytes": 723,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/31_current_followup_candidate.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/31_current_followup_candidate.sqlinc",
+      "actualSha256": "8dd820ed75dc2d1faefec5f5899c2ceea1c2438e3631524018fffa28b317ab0c",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 723,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/32_native_scheduler_followups.sqlinc",
+      "sha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf",
+      "bytes": 17708,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/32_native_scheduler_followups.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/32_native_scheduler_followups.sqlinc",
+      "actualSha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 17708,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/33_native_submission_pause.sqlinc",
+      "sha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2",
+      "bytes": 14912,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/33_native_submission_pause.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/33_native_submission_pause.sqlinc",
+      "actualSha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 14912,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/34_scope_first_activation.sqlinc",
+      "sha256": "3f9d9378978436b10d6104a5c518083151bb2329478a6693572fb656116e2946",
+      "bytes": 9714,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/34_scope_first_activation.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/34_scope_first_activation.sqlinc",
+      "actualSha256": "3f9d9378978436b10d6104a5c518083151bb2329478a6693572fb656116e2946",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 9714,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/35_native_cycle_scope_lock.sqlinc",
+      "sha256": "a01a4f8f6958252972d61e8aaf8b134c9d97a3d52acb6d705c9c45c274f04aff",
+      "bytes": 572,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/35_native_cycle_scope_lock.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/35_native_cycle_scope_lock.sqlinc",
+      "actualSha256": "a01a4f8f6958252972d61e8aaf8b134c9d97a3d52acb6d705c9c45c274f04aff",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 572,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "sha256": "258ed5e3acab342c3f01bc72dc1bea2300d4308f997bb801f7a96cff87f0e3ad",
+      "bytes": 15235,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "actualSha256": "258ed5e3acab342c3f01bc72dc1bea2300d4308f997bb801f7a96cff87f0e3ad",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 15235,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/37_submission_partition.sqlinc",
+      "sha256": "8834b29001502cdacd2c30075f2674f6e3487f539679f38d426e9a7ffcaca86a",
+      "bytes": 6082,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/37_submission_partition.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/37_submission_partition.sqlinc",
+      "actualSha256": "8834b29001502cdacd2c30075f2674f6e3487f539679f38d426e9a7ffcaca86a",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 6082,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+      "sha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+      "bytes": 118736,
+      "equalsOriginal2d74": false,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+      "actualSha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 118736,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc",
+      "sha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074",
+      "bytes": 29167,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/39_native_submission_callers.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc",
+      "actualSha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 29167,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "sha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5",
+      "bytes": 21498,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "actualSha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 21498,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "sha256": "2b7eb1aee7b876382c6aae78e7e01fd2720080198bc32cab292f81ebca324b7c",
+      "bytes": 11661,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "actualSha256": "2b7eb1aee7b876382c6aae78e7e01fd2720080198bc32cab292f81ebca324b7c",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 11661,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "sha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4",
+      "bytes": 45687,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "actualSha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 45687,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+      "sha256": "7f1f8e98060f7c45b2eeb0cf374c54e22752ebffa0e0c51c180eba7e2d7b82a9",
+      "bytes": 5333,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+      "actualSha256": "7f1f8e98060f7c45b2eeb0cf374c54e22752ebffa0e0c51c180eba7e2d7b82a9",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 5333,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "sha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+      "bytes": 3988,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "actualSha256": "3de091d35163e0b7a1fb7b98d4b4685e70792d0a257a1315a04d4aa268b0b301",
+      "pathOnlyIncludeRebinding": false,
+      "beforeReviewedSuccessorSha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+      "reviewedSuccessorCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+      "originalAssemblyBytesRetainedInHistoricalPayload": true,
+      "actualBytes": 3990,
+      "actualEqualsReviewedAssembly": false
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "sha256": "7cc08d77765b6a6da9356696e2c8417b11cafc64e5f6db64084f1b0ab950db38",
+      "bytes": 9103,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "actualSha256": "7cc08d77765b6a6da9356696e2c8417b11cafc64e5f6db64084f1b0ab950db38",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 9103,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+      "sha256": "290dd8ed5ba712c0b0c9f1e585d3c7f8a1b893660890050003d5a2fd0b482985",
+      "bytes": 4113,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+      "actualSha256": "290dd8ed5ba712c0b0c9f1e585d3c7f8a1b893660890050003d5a2fd0b482985",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 4113,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/47_native_scheduler_selection.sqlinc",
+      "sha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0",
+      "bytes": 7598,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/47_native_scheduler_selection.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/47_native_scheduler_selection.sqlinc",
+      "actualSha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 7598,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+      "sha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1",
+      "bytes": 7261,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+      "actualSha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 7261,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/49_grouped_automatic_followup.sqlinc",
+      "sha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513",
+      "bytes": 7689,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/49_grouped_automatic_followup.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/49_grouped_automatic_followup.sqlinc",
+      "actualSha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 7689,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/50_manager_selection_capture.sqlinc",
+      "sha256": "fab1d2d7885bead48ca5c4e9df27e5ac4cd975c081e7dc5c6f4e4ca7c9963f51",
+      "bytes": 8034,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/50_manager_selection_capture.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/50_manager_selection_capture.sqlinc",
+      "actualSha256": "fab1d2d7885bead48ca5c4e9df27e5ac4cd975c081e7dc5c6f4e4ca7c9963f51",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 8034,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/51_native_initial_manager_owner.sqlinc",
+      "sha256": "962d5bc5aad71a333bd1134a11ee876c9a4ed5e9f7402239c0426df40e68b04d",
+      "bytes": 17840,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/51_native_initial_manager_owner.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/51_native_initial_manager_owner.sqlinc",
+      "actualSha256": "962d5bc5aad71a333bd1134a11ee876c9a4ed5e9f7402239c0426df40e68b04d",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 17840,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "repeatable",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/99_acl.sqlinc",
+      "sha256": "007857838e847fc6c51f61a778f7a2c7c0ca523ae960f42d0c766237d3f7d197",
+      "bytes": 26322,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/99_acl.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/99_acl.sqlinc",
+      "actualSha256": "007857838e847fc6c51f61a778f7a2c7c0ca523ae960f42d0c766237d3f7d197",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 26322,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "complete-successor",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+      "sha256": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796",
+      "bytes": 1601,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+      "actualSha256": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 1601,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "root",
+      "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+      "sha256": "691fca0880748fec3f9ee5a80d43b43ebed1ce6550c49c6d6e97b13fb92c233e",
+      "bytes": 5051,
+      "equalsOriginal2d74": false,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql",
+      "originalPath": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion_v1.sql",
+      "actualSha256": "6fd0844122be2463bbd00e598a19e8753a01b7b811465301e52e59ec9cb2cc67",
+      "pathOnlyIncludeRebinding": true,
+      "actualBytes": 5213,
+      "actualEqualsReviewedAssembly": false
+    },
+    {
+      "phase": "explicit-native-prerequisite",
+      "path": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "sha256": "122fcfc460ced0ac3037bab34207261dedee4018a0cdd8800c9e358ff176cd14",
+      "bytes": 9891,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "actualSha256": "122fcfc460ced0ac3037bab34207261dedee4018a0cdd8800c9e358ff176cd14",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 9891,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "explicit-native-prerequisite",
+      "path": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/02_original_private_acl.sqlinc",
+      "sha256": "32e6cdaa74acf44ea336670d14b3e7a6ce4a1fb08ecfd5171d79ba478d5657aa",
+      "bytes": 1184,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites/02_original_private_acl.sqlinc",
+      "originalPath": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/02_original_private_acl.sqlinc",
+      "actualSha256": "32e6cdaa74acf44ea336670d14b3e7a6ce4a1fb08ecfd5171d79ba478d5657aa",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 1184,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "explicit-native-prerequisite",
+      "path": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+      "sha256": "b6ad3564dcfd01290e5d74b8ba9139b83894ed09fd48f1f894db06f58ce1cbfd",
+      "bytes": 386,
+      "equalsOriginal2d74": true,
+      "actualPath": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites_v1.sql",
+      "originalPath": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+      "actualSha256": "4f533b0efa81e36f7f72eb150b4ab85c9fd6793bea1dec30d3d7536caaf07609",
+      "pathOnlyIncludeRebinding": true,
+      "actualBytes": 392,
+      "actualEqualsReviewedAssembly": false
+    },
+    {
+      "phase": "runtime-parent",
+      "path": "broker/src/weekly-source/delivery-runtime.mjs",
+      "sha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+      "bytes": 31815,
+      "equalsOriginal2d74": true,
+      "actualPath": "broker/src/weekly-source/delivery-runtime.mjs",
+      "originalPath": "broker/src/weekly-source/delivery-runtime.mjs",
+      "actualSha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 31815,
+      "actualEqualsReviewedAssembly": true
+    },
+    {
+      "phase": "runtime-leaf",
+      "path": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+      "sha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff",
+      "bytes": 3857,
+      "equalsOriginal2d74": true,
+      "actualPath": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+      "originalPath": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+      "actualSha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff",
+      "pathOnlyIncludeRebinding": false,
+      "actualBytes": 3857,
+      "actualEqualsReviewedAssembly": true
+    }
+  ],
+  "roots": [
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites_v1.sql",
+      "rootSha256": "4f533b0efa81e36f7f72eb150b4ab85c9fd6793bea1dec30d3d7536caaf07609",
+      "closureSha256": "c43bbc6d13bdcbeb51ef9d2cc855ebc77cdfe11a20b569b93a613ff10fb77f79",
+      "expandedSha256": "61c602722ea660d8cbaf2644cd4f3c750ae5fd827def69f0558426d4127d4014",
+      "files": 3,
+      "statementCount": 17,
+      "definitionCount": 5
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql",
+      "rootSha256": "6fd0844122be2463bbd00e598a19e8753a01b7b811465301e52e59ec9cb2cc67",
+      "closureSha256": "ce8ff2975c00d67b404a86bcd571d3ef0297d1d9621007ac173c1de1b69de293",
+      "expandedSha256": "a68496e1afb0b8e88c49148e87cfe2c264b75e0b38ceddbe90043f7234d69187",
+      "files": 55,
+      "statementCount": 361,
+      "definitionCount": 107
+    }
+  ],
+  "counts": {
+    "files": 63,
+    "sqlFiles": 61,
+    "completeDeclarations": 113,
+    "uniqueSignatures": 111,
+    "correctedManagedStatements": 417,
+    "reviewedAssemblyManagedStatements": 411,
+    "addedLockStatements": 6
+  },
+  "producerSourceProofs": [
+    {
+      "target": "supabase/migrations/16102026_1200_weekly_contact_producer_journals.sql",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/one-time/01_contact_producer_journals.sqlinc",
+      "sourceSha256": "e88cd29710eb391a0a2c80ae1ab9bb62e1f75e5e0a494b389300e7f870ff0f89",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/migrations/16102026_1201_weekly_contact_automatic_followup_tranche.sql",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/one-time/02_automatic_followup_tranche.sqlinc",
+      "sourceSha256": "d81e1f7a541dd38261fe661c9e692ad44245015b0184d1b49b7267565747f33e",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/migrations/16102026_1202_weekly_contact_submission_cohort_identity.sql",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/one-time/03_submission_cohort_identity.sqlinc",
+      "sourceSha256": "ab68a320c2e2627d82e241e8e4fe3d6b8ac5daac5c70284f88c52605aba48125",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/00_current_logical_closure.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/00_current_logical_closure.sqlinc",
+      "sourceSha256": "dfacbe3cbcd9be1a3d9ebff6d590ef98fde8cddf9b4760b67c0d298cf8347623",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/01_checking_revision_and_history.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/01_checking_revision_and_history.sqlinc",
+      "sourceSha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/02_cutoff_classification.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/02_cutoff_classification.sqlinc",
+      "sourceSha256": "47583ccd2c125de4ab5da7d61c758284a814b58441a2427cfdd92256d928e2de",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/03_manual_request_validation.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/03_manual_request_validation.sqlinc",
+      "sourceSha256": "69aefcf3e9f2609d83fef79126639a4d58313ad21603e99d7cc3a7781320fac3",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/04_original_logical_history.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/04_original_logical_history.sqlinc",
+      "sourceSha256": "bfed563a5d80a0ed884daea971cf0ac1e681834461a9750d8254edfdb4e13efe",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/05_manual_member_facts.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/05_manual_member_facts.sqlinc",
+      "sourceSha256": "3457f7ce340a7c279d345dc8945f2dfe8beab85caecd5a367cab827c2a6bc3b2",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/06_manual_manifest_and_preview.sqlinc",
+      "sourceSha256": "d8af98736b140ffc7b93671d001ec6c836b1d9a73a7b18622b386c6b881bbc51",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/07_capture_native_reads.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/07_capture_native_reads.sqlinc",
+      "sourceSha256": "5e65426dcb61a1779bea321eaf249e9f72dd2954739d523be79de41af04f431c",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/08_manual_native_enqueue.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/08_manual_native_enqueue.sqlinc",
+      "sourceSha256": "fd5e001fed0d5967708fb5e69a3e7aede7ce30ed454a6b2d1069408fce621b16",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/09_manual_accept_and_errors.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/09_manual_accept_and_errors.sqlinc",
+      "sourceSha256": "02cd82e8b7b4a50454310dc32d8978fa985ae6c873c95321dc7ec015571851fa",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/10_capture_dispatch_lineage.sqlinc",
+      "sourceSha256": "2b3465c98b5da5e2ea4cfdb4fe3b95e62c29b73508ca93e6c164b53191c18aa8",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/11_followup_state_and_enqueue.sqlinc",
+      "sourceSha256": "5620a8f4bc6320b269c84e16b6faf2fe82328d96c59a2dda06eccb2dac94e895",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/12_current_native_subset.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/12_current_native_subset.sqlinc",
+      "sourceSha256": "96cfe9f5e5972f0d6387faaa6401dccbd546c7a9d309b7b568421eb4a46b19c4",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/13_recompose_native_intents.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/13_recompose_native_intents.sqlinc",
+      "sourceSha256": "240401001f4e4508b7e77c477af86f48812a4ce20010fd65ac493396fa120ce5",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/14_manager_action_current_witness.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/14_manager_action_current_witness.sqlinc",
+      "sourceSha256": "29d417aac44be428ccd894e907095dc2477618069d3eb4be823d5c1d667fe0b5",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/15_configured_manual_step.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/15_configured_manual_step.sqlinc",
+      "sourceSha256": "e56965f591f49e559831c107ab9b29d187f5b17189a1b94d99ec86214e6e9d1b",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/16_recheck_native_progress.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/16_recheck_native_progress.sqlinc",
+      "sourceSha256": "520ec0cb5e7846e421b48ff5e1371c8f9d7b50ef7888d10a00b4abf07f8ffca9",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/17_common_recheck_consumer.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/17_common_recheck_consumer.sqlinc",
+      "sourceSha256": "1af69cd9e77e78610fde3d9f742c413889492eeab3d2d0e55569f25efdf75614",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/18_capture_question_presentation.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/18_capture_question_presentation.sqlinc",
+      "sourceSha256": "b049b5744ba1dae58cebdab3510f9d9c33c8e39e310a8506b5b20b846a3e84da",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/19_capture_and_rebase_integrity.sqlinc",
+      "sourceSha256": "b4061f936d97648bf1d83cf354976042da6b993ec158f1398043bd6145632ef0",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/20_native_manager_members.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/20_native_manager_members.sqlinc",
+      "sourceSha256": "422ba86657f3f7d6aa30e317dbbe4c7fda7c107d543b6125138731ec15f609a2",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/21_native_render_input.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/21_native_render_input.sqlinc",
+      "sourceSha256": "bf0dc43d725483075d2abf7c6b37d67cb36a5bab9e533f21f882ccd693eccede",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/22_native_render_stage.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/22_native_render_stage.sqlinc",
+      "sourceSha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/23_native_logical_members.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/23_native_logical_members.sqlinc",
+      "sourceSha256": "9c39a2b814d74013d4aa64366ee2cc82d720ab10dd44e565751c2bac9f14ab74",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/24_native_budget.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/24_native_budget.sqlinc",
+      "sourceSha256": "7cddbe5a12062e8861ed52e61cd2d52f9bf988e79ba9596b58beaa57a9203f53",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/25_native_current_membership.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/25_native_current_membership.sqlinc",
+      "sourceSha256": "8e7058cf427263941898f6e3898ff31a01128e91954e6f083082f990c0b60f41",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/26_native_push_context.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/26_native_push_context.sqlinc",
+      "sourceSha256": "f99fd42da4f7da8cc430f99a81abd1a956994bf0e0559b4b6b16f1a232bb6fd9",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/27_native_manager_intent.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/27_native_manager_intent.sqlinc",
+      "sourceSha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/28_native_contact_workspace.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/28_native_contact_workspace.sqlinc",
+      "sourceSha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/29_native_contact_bulk.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/29_native_contact_bulk.sqlinc",
+      "sourceSha256": "75d3a54270939e2a1d23bdf3cdfca193a383e0cd528b462d5389c75342db9f93",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/30_native_notification_retirement.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/30_native_notification_retirement.sqlinc",
+      "sourceSha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/31_current_followup_candidate.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/31_current_followup_candidate.sqlinc",
+      "sourceSha256": "8dd820ed75dc2d1faefec5f5899c2ceea1c2438e3631524018fffa28b317ab0c",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/32_native_scheduler_followups.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/32_native_scheduler_followups.sqlinc",
+      "sourceSha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/33_native_submission_pause.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/33_native_submission_pause.sqlinc",
+      "sourceSha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/34_scope_first_activation.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/34_scope_first_activation.sqlinc",
+      "sourceSha256": "3f9d9378978436b10d6104a5c518083151bb2329478a6693572fb656116e2946",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/35_native_cycle_scope_lock.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/35_native_cycle_scope_lock.sqlinc",
+      "sourceSha256": "a01a4f8f6958252972d61e8aaf8b134c9d97a3d52acb6d705c9c45c274f04aff",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/36_submission_identity_and_guard.sqlinc",
+      "sourceSha256": "258ed5e3acab342c3f01bc72dc1bea2300d4308f997bb801f7a96cff87f0e3ad",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/37_submission_partition.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/37_submission_partition.sqlinc",
+      "sourceSha256": "8834b29001502cdacd2c30075f2674f6e3487f539679f38d426e9a7ffcaca86a",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/38_native_submission_readers.sqlinc",
+      "sourceSha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/39_native_submission_callers.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/39_native_submission_callers.sqlinc",
+      "sourceSha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/40_candidate_contact_entry_owners.sqlinc",
+      "sourceSha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/41_exact_native_scope_locks.sqlinc",
+      "sourceSha256": "2b7eb1aee7b876382c6aae78e7e01fd2720080198bc32cab292f81ebca324b7c",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/42_exact_native_lock_owners.sqlinc",
+      "sourceSha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/43_exact_bulk_scope_locks.sqlinc",
+      "sourceSha256": "7f1f8e98060f7c45b2eeb0cf374c54e22752ebffa0e0c51c180eba7e2d7b82a9",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/44_manager_selection_scope_locks.sqlinc",
+      "sourceSha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/45_native_composition_scope_facts.sqlinc",
+      "sourceSha256": "7cc08d77765b6a6da9356696e2c8417b11cafc64e5f6db64084f1b0ab950db38",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/46_recheck_selection_scope_facts.sqlinc",
+      "sourceSha256": "290dd8ed5ba712c0b0c9f1e585d3c7f8a1b893660890050003d5a2fd0b482985",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/47_native_scheduler_selection.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/47_native_scheduler_selection.sqlinc",
+      "sourceSha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/48_native_scheduler_selection_locks.sqlinc",
+      "sourceSha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/49_grouped_automatic_followup.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/49_grouped_automatic_followup.sqlinc",
+      "sourceSha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/50_manager_selection_capture.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/50_manager_selection_capture.sqlinc",
+      "sourceSha256": "fab1d2d7885bead48ca5c4e9df27e5ac4cd975c081e7dc5c6f4e4ca7c9963f51",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/51_native_initial_manager_owner.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/51_native_initial_manager_owner.sqlinc",
+      "sourceSha256": "962d5bc5aad71a333bd1134a11ee876c9a4ed5e9f7402239c0426df40e68b04d",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/99_acl.sqlinc",
+      "sourceCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/99_acl.sqlinc",
+      "sourceSha256": "007857838e847fc6c51f61a778f7a2c7c0ca523ae960f42d0c766237d3f7d197",
+      "completeEqualityOrExplicitFullRepair": true
+    },
+    {
+      "target": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "sourcePath": "docs/healthroster-build/proposals/contact-manual-selection-ordinal-guard-20261016/COMPLETE_GUARD_SUCCESSOR.sqlinc",
+      "sourceSha256": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796",
+      "completeEqualityOrExplicitFullRepair": true
+    }
+  ],
+  "registry": {
+    "before": 1462,
+    "updates": 12,
+    "adds": 99,
+    "afterContact": 1561,
+    "afterSeparateOfficeAddition": 1562,
+    "allUnrelatedChainsAndSourceRowsUnchanged": true,
+    "editorAndOtherFieldsRetained": true,
+    "fullStaleRegistryReplacement": false
+  },
+  "runtime": {
+    "file": "broker/src/weekly-source/delivery-runtime.mjs",
+    "beforeSha256": "cda0983c5292f6f86c6c812cccd176057ce8dc34059753e3009d25bcf398ea75",
+    "afterSha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+    "contributionEdits": 3,
+    "wholeFileReverseEqual": true,
+    "leaf": {
+      "source_path": "runtime/contact-recheck-runtime.mjs",
+      "mount_path": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+      "sha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff"
+    },
+    "actualTargetStartCommonPermitResultAndRecoveryOwnersRetained": true
+  },
+  "corrections": {
+    "originalAssemblyClosedLegacyStart": {
+      "leaf": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+      "sha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+      "completeStatementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d"
+    },
+    "unpublishedSuccessor": {
+      "producerCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+      "peerCommit": "7297352399dd7afe21abdf459e0b438f836e6cfb",
+      "peerReview": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_PEER_REVIEW_20261016/REVIEW.md",
+      "peerReviewSha256": "07998491d02ff49fab45bafe2a8091c2fe6d2097709f241a130110106aa48222",
+      "files": [
+        {
+          "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+          "beforeSha256": "f721b4ef62f7066b9224843d6c46cd88531b66ef7d7fb503723c661757e0ab59",
+          "afterSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+          "edits": 1,
+          "fullFileReverse": true
+        },
+        {
+          "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+          "beforeSha256": "e756703a139a9e2087d124fb09fba6b08d903481e6d76fd029a8bdf743b50fd5",
+          "afterSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+          "edits": 1,
+          "fullFileReverse": true
+        },
+        {
+          "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+          "beforeSha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+          "afterSha256": "3de091d35163e0b7a1fb7b98d4b4685e70792d0a257a1315a04d4aa268b0b301",
+          "edits": 1,
+          "fullFileReverse": true
+        }
+      ],
+      "sourceTests": 12,
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/PROPOSAL.json",
+      "groupingFunction": {
+        "signature": "private.weekly_contact_source_manager_selection_lock_v1(uuid[],jsonb)",
+        "beforeSha256": "c2f43e8805143df2dc21bb54307f176569a46969f2cadf22fa9c49377a8a1ed4",
+        "afterSha256": "d28372e7e4550cce1fb1b5fdcd6e3efa0cc0645d36ae43cc2b1fb4be7f50d565",
+        "completeFunctionReverseEquality": true
+      },
+      "snapshotLimit": "Writer check may establish outer RR snapshot before new locks; locks freeze witnesses without refreshing an older snapshot. Native currentness/contention still required."
+    }
+  },
+  "tests": {
+    "contactRuntimeAndActualScheduler": {
+      "path": "tests/healthroster-contact-recheck-runtime.test.mjs",
+      "originalSource": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\tests\\contact-recheck-runtime.test.mjs",
+      "originalSha256": "2bb1261112f497bef5e8413a6eac63761b5beebc7f2de605038fbcf2ba21a32e",
+      "mountedSha256": "0134ad4f903cb3437b9b5a6fa061eb2ad632c5fe1a279bb98c218f0030ee28a9",
+      "retainedOriginalTests": 12,
+      "additionalActualSchedulerTests": 3,
+      "passed": 15,
+      "providers": "MOCKED_ONLY_NO_EXTERNAL_EFFECTS"
+    },
+    "officeParentRoute": {
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_MANUAL_ENQUIRY_NATIVE_SOURCE_INTEGRATION.json",
+      "passed": 5
+    },
+    "protectedContactPublication": {
+      "passed": 4
+    },
+    "deliveryContractAndTransport": {
+      "passed": 29,
+      "mytmsSourceRoot": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-mytms-13102026",
+      "initialRun": "28PASS/1FAIL missing default sibling path; existing explicit source-root option corrected for this process only, with no application or test edit"
+    },
+    "compilerAndFiniteSource": {
+      "passed": 88
+    }
+  },
+  "sourceGate": {
+    "status": "FAILED_CLOSED_REVIEW_REQUIRED",
+    "earlyDiagnostic": "BPAY_NEXT_ROUTINE_HISTORY_DELEGATION: private._candidate_expense_source_family_v1(uuid) (private.timesheet_contract_native_pending_for_v1)",
+    "diagnosticSha256": "a9755cc2949c179814e7b236210e1ed2d353ffae69f5570d663ccf6d6715801d",
+    "laterContactConstructClassification": "REVIEW_IN_PROGRESS_NOT_PASSED"
+  },
+  "migrationLock": {
+    "before": 414,
+    "after": 417,
+    "allPriorEntriesUnchanged": true,
+    "appended": [
+      {
+        "path": "supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+        "sha256": "a6af48dac55e25dbf98a420e4171c30fc5dad767236dcca98b93e6676fca3875"
+      },
+      {
+        "path": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+        "sha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17"
+      },
+      {
+        "path": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+        "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f"
+      }
+    ]
+  },
+  "integrity": {
+    "status": "PASS_SOURCE_ONLY",
+    "migrations": 417,
+    "repeatableRoots": 1085
+  },
+  "native": "NOT_RUN",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "bankingBodiesSelected": 0,
+  "bankingMessageSent": false
+}

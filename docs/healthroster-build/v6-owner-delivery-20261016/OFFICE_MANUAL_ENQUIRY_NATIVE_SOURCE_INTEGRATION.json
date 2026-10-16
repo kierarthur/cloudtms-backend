@@ -1,0 +1,75 @@
+{
+  "version": "HEALTH_OFFICE_MANUAL_ENQUIRY_NATIVE_SOURCE_INTEGRATION_V1",
+  "baseRootCommit": "1f2824aa954ae81ec348777ac533858e700c0aa0",
+  "producerCommit": "ea64a53c5c8e0aeb568030a4b62b055fb12576ca",
+  "officeCommit": "045c95cecf2dcbb632c0a5827f19c38548ee3a11",
+  "root": "supabase/repeatable/16102026_1205_weekly_contact_30_manual_enquiry_office_read_v1.sql",
+  "rootSha256": "efd31694fa1f2e08be313fb5a1dc71c57c3696919644ca740a03c7eda9627d32",
+  "leaf": "supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc",
+  "leafSha256": "d9f357da000be10590e85df31f2704bcbcdfe4b0e7e8b05821035496102a8001",
+  "proposedRoot": "supabase/repeatable/16102026_1220_contact_manual_enquiry_office_read_v1.sql",
+  "allocatedBy": "canonical db:new repeatable generator at actualUK12:05",
+  "rootBytesUnchanged": true,
+  "route": {
+    "file": "broker/src/weekly-source/routes.js",
+    "beforeRawSha256": "ed92abc085aaac15fc72aa58de649ebced8e1ae580d0bfac9d8c3a2078ac0242",
+    "afterRawSha256": "34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121",
+    "afterLfSha256": "e2aae8ebce5d2d8b48544540ca1d2b007087adf796f39f8803e942664b3e10a6",
+    "exactEdits": 4,
+    "wholeRawReverseEqual": true,
+    "mixedLineEndingsPreserved": true
+  },
+  "read": {
+    "signature": "private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid)",
+    "beforeSha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b",
+    "afterSha256": "d9f357da000be10590e85df31f2704bcbcdfe4b0e7e8b05821035496102a8001",
+    "exactEdits": 1,
+    "wholeFileReverseEqual": true,
+    "unchangedAcl": true,
+    "unchangedPauseDto": true
+  },
+  "registry": {
+    "before": 1561,
+    "add": 1,
+    "after": 1562,
+    "allPriorRowsUnchanged": true
+  },
+  "installedTest": {
+    "file": "tests/healthroster-manual-enquiry-parent-wiring.test.mjs",
+    "originalSha256": "c9ef70b49cb058d7e87e2e98edc7dc6f2855424c18f27c23c666dab9deee7cd0",
+    "afterSha256": "046dd813dd65a40790f2a6846306c0fa26f30326a8700b42cde6f8549e853e8e",
+    "edits": [
+      {
+        "from": "import {fixture,copy} from './reference/fixture.mjs';",
+        "to": "import {fixture,copy} from '../docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_MANUAL_ENQUIRY_PARENT_REVIEW_20261016/reference/fixture.mjs';"
+      },
+      {
+        "from": "const dir=path.dirname(fileURLToPath(import.meta.url));",
+        "to": "const repoRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),dir=path.join(repoRoot,'docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_MANUAL_ENQUIRY_PARENT_REVIEW_20261016');"
+      },
+      {
+        "from": "const proof=JSON.parse(fs.readFileSync(path.join(dir,'REVERSE_PROOF.json'))),root=proof.rootWorktree;",
+        "to": "const proof=JSON.parse(fs.readFileSync(path.join(dir,'REVERSE_PROOF.json'))),root=repoRoot;"
+      },
+      {
+        "from": "for(const input of proof.inputs)assert.equal(hash(fs.readFileSync(path.join(root,input.path))),input.rawSha256,input.path);",
+        "to": "for(const input of proof.inputs)assert.equal(hash(fs.readFileSync(path.join(root,input.path))),input.path===proof.routes.source?'34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121':input.rawSha256,input.path);"
+      },
+      {
+        "from": "const proposed=read('proposed/broker/src/weekly-source/routes.js');",
+        "to": "const proposed=fs.readFileSync(path.join(root,proof.routes.source),'utf8').replaceAll('\\r\\n','\\n');\nassert.equal(hash(proposed),proof.routes.afterLfSha256);"
+      },
+      {
+        "from": "const sql=read('proposed/supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc');",
+        "to": "const sql=fs.readFileSync(path.join(root,'supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc'),'utf8').replaceAll('\\r\\n','\\n');\n assert.equal(hash(sql),proof.read.afterLfSha256);"
+      }
+    ],
+    "fullReverseEquality": true,
+    "executes": "ACTUAL_MOUNTED_COMPLETE_ROUTE_AND_READ_FILES"
+  },
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}

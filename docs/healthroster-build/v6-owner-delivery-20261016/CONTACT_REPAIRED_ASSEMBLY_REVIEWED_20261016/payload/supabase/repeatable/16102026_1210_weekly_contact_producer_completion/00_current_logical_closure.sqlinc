@@ -1,0 +1,20 @@
+-- Complete current business closure. Historical sends for unrelated closed
+-- questions are not a lifetime capacity gate on this worker/client's open work.
+create or replace function private.weekly_contact_checking_logical_keys_v1(p_agency uuid,p_environment text,p_candidate uuid,p_client uuid)
+returns table(logical_contact_key bytea) language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',p_environment,
+  'agency_id',p_agency,'candidate_id',p_candidate,'client_id',p_client,'purpose','CHECK_HOURS','audience',audience,
+  'identity',jsonb_build_object('work_event_id',incident.work_event_id,'incident_id',incident.id,'incident_episode',incident.episode_number)))
+ from public.weekly_discrepancy_incidents incident join public.weekly_source_groups source_group on source_group.id=incident.source_group_id
+ cross join(values('WORKER'),('MANAGER'))a(audience)
+ where incident.candidate_id=p_candidate and incident.client_id=p_client and incident.state='OPEN'
+  and source_group.agency_id=p_agency and source_group.environment=p_environment
+ union
+ select private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',p_environment,
+  'agency_id',p_agency,'candidate_id',p_candidate,'client_id',p_client,'purpose','SUBMIT_TIMESHEET','audience','WORKER',
+  'identity',jsonb_build_object('contract_id',member.contract_id,'week_ending',member.week_ending)))
+ from public.weekly_timesheet_submission_requests request join public.weekly_timesheet_submission_request_memberships member
+  on member.submission_request_id=request.id where request.candidate_id=p_candidate and member.client_id=p_client
+   and request.agency_id=p_agency and request.environment=p_environment and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+$function$;

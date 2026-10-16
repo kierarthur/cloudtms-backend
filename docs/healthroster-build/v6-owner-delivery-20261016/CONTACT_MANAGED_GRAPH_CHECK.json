@@ -1,0 +1,9 @@
+{
+  "version": "HEALTH_CONTACT_MOUNTED_GRAPH_CHECK_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "signatures": 2960,
+  "registered": 1562,
+  "roots": 1085,
+  "pendingRoots": 315,
+  "native": "NOT_RUN"
+}

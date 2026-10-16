@@ -1,0 +1,83 @@
+-- All operands are actual IDs selected by the existing native scheduler.
+-- This does not choose extra work or impose a global route/history capacity.
+create or replace function private.weekly_contact_source_scheduler_work_facts_v1(p_kind text,p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare cycle_id uuid;agency uuid;deployment_environment text;facts jsonb;pairs jsonb;generation uuid;candidate uuid;
+ request public.weekly_timesheet_submission_requests%rowtype;incident public.weekly_discrepancy_incidents%rowtype;followup jsonb;
+begin
+ if p_kind='GENERATION'then
+  select source_cycle_id,candidate_id into strict cycle_id,candidate from public.weekly_candidate_outreach_generations where id=p_id;
+  facts:=private.weekly_contact_source_generation_scope_facts_v1(p_id,candidate);pairs:=facts->'pairs';
+ elsif p_kind='REQUEST'then
+  select * into strict request from public.weekly_timesheet_submission_requests where id=p_id;
+  cycle_id:=request.source_cycle_id;
+  perform private.weekly_contact_submission_request_assert_v1(request.id);
+  select id into strict generation from public.weekly_candidate_outreach_generations where candidate_cohort_id=request.candidate_cohort_id
+   and generation_number=request.request_generation and request_kind='SUBMIT_TIMESHEET';
+  facts:=jsonb_build_object('request',to_jsonb(request),'generation',private.weekly_contact_source_generation_scope_facts_v1(generation,request.candidate_id));
+  pairs:=facts->'generation'->'pairs';
+ elsif p_kind='ROUTE'then
+  select source_cycle_id into strict cycle_id from public.weekly_manager_recipient_routes where id=p_id;
+  facts:=private.weekly_contact_source_route_scope_facts_v1(p_id);pairs:=facts->'pairs';
+ elsif p_kind='INTENT'then
+  select source_cycle_id into strict cycle_id from public.weekly_message_intents where id=p_id;
+  facts:=private.weekly_contact_source_intent_composition_scope_facts_v1(p_id);pairs:=facts->'pairs';
+ elsif p_kind='FOLLOWUP'then
+  select * into strict incident from public.weekly_discrepancy_incidents where id=p_id;cycle_id:=incident.source_cycle_id;
+  followup:=private.weekly_contact_source_followup_candidate_v1(incident.id,statement_timestamp());
+  if followup->>'reason'='HELD_DEPENDENCY'then
+   facts:=jsonb_build_object('incident',to_jsonb(incident),'held',true);
+   pairs:=jsonb_build_array(jsonb_build_object('candidate_id',incident.candidate_id,'client_id',incident.client_id));
+  else facts:=private.weekly_contact_source_manager_selection_scope_facts_v1(array[incident.id]);pairs:=facts->'pairs';end if;
+ else raise exception 'CONTACT_SOURCE_SCHEDULER_SELECTION_INVALID' using errcode='22023';end if;
+ select source_group.agency_id,source_group.environment into strict agency,deployment_environment from public.weekly_source_cycles cycle
+  join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id where cycle.id=cycle_id;
+ return jsonb_build_object('version','CONTACT_SCHEDULER_WORK_SCOPE_FACTS_V1','kind',p_kind,'native_id',p_id,
+  'agency_id',agency,'environment',deployment_environment,'facts',facts,'pairs',pairs);
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_scheduler_selection_lock_v1(p_selection jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare selected_work record;deployment record;pair record;work jsonb:='[]';facts jsonb;all_facts jsonb:='[]';cycle_id uuid;
+begin
+ -- Discover only deployment identities first. Full body discovery occurs
+ -- after all selected deployment mutexes, before any pause/native row lock.
+ for selected_work in
+  select 'GENERATION'kind,(value->>'id')::uuid id from jsonb_array_elements(p_selection->'candidate_generations')
+  union select 'REQUEST',(value->>'id')::uuid from jsonb_array_elements(p_selection->'overdue_requests')
+  union select 'ROUTE',(value->>'route_id')::uuid from jsonb_array_elements(p_selection->'manager_routes')
+  union select 'INTENT',(value->>'id')::uuid from jsonb_array_elements(p_selection->'collapse_intents')
+  union select 'FOLLOWUP',(value->>'id')::uuid from jsonb_array_elements(p_selection->'followups')order by 1,2 loop
+  if selected_work.kind='GENERATION'then select source_cycle_id into strict cycle_id from public.weekly_candidate_outreach_generations where id=selected_work.id;
+  elsif selected_work.kind='REQUEST'then select source_cycle_id into strict cycle_id from public.weekly_timesheet_submission_requests where id=selected_work.id;
+  elsif selected_work.kind='ROUTE'then select source_cycle_id into strict cycle_id from public.weekly_manager_recipient_routes where id=selected_work.id;
+  elsif selected_work.kind='INTENT'then select source_cycle_id into strict cycle_id from public.weekly_message_intents where id=selected_work.id;
+  else select source_cycle_id into strict cycle_id from public.weekly_discrepancy_incidents where id=selected_work.id;end if;
+  select jsonb_build_object('kind',selected_work.kind,'native_id',selected_work.id,'agency_id',source_group.agency_id,'environment',source_group.environment)
+   into facts from public.weekly_source_cycles cycle join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id where cycle.id=cycle_id;
+  if facts is null then raise exception 'CONTACT_SOURCE_SCHEDULER_SELECTION_STALE'using errcode='40001';end if;
+  work:=work||jsonb_build_array(facts);
+ end loop;
+ for deployment in select distinct(value->>'agency_id')::uuid agency_id,value->>'environment' environment from jsonb_array_elements(work)order by 1,2 loop
+  perform private.weekly_contact_deployment_lock_v1(deployment.agency_id,deployment.environment);
+  perform private.weekly_contact_context_v1(deployment.agency_id,deployment.environment);end loop;
+ for facts in select value from jsonb_array_elements(work)loop
+  facts:=private.weekly_contact_source_scheduler_work_facts_v1(facts->>'kind',(facts->>'native_id')::uuid);
+  if not exists(select 1 from jsonb_array_elements(work)selected where selected->>'kind'=facts->>'kind'
+   and selected->>'native_id'=facts->>'native_id'and selected->>'agency_id'=facts->>'agency_id'and selected->>'environment'=facts->>'environment')then
+   raise exception 'CONTACT_SOURCE_SCHEDULER_SELECTION_STALE'using errcode='40001';end if;
+  all_facts:=all_facts||jsonb_build_array(facts);
+ end loop;
+ for pair in select distinct(selected.value->>'agency_id')::uuid agency_id,selected.value->>'environment' environment,
+  (native_pair.value->>'candidate_id')::uuid candidate_id,(native_pair.value->>'client_id')::uuid client_id
+  from jsonb_array_elements(all_facts)selected(value)cross join lateral jsonb_array_elements(selected.value->'pairs')native_pair(value)order by 1,2,3,4 loop
+  perform private.weekly_contact_scope_lock_v1(pair.agency_id,pair.environment,pair.candidate_id,pair.client_id);end loop;
+ for facts in select value from jsonb_array_elements(all_facts)loop
+  if private.weekly_contact_source_scheduler_work_facts_v1(facts->>'kind',(facts->>'native_id')::uuid)is distinct from facts then
+   raise exception 'CONTACT_SOURCE_SCHEDULER_SELECTION_STALE'using errcode='40001';end if;
+ end loop;
+end;
+$function$;

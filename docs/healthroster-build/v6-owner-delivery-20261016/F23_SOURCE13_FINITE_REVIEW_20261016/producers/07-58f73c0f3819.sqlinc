@@ -1,0 +1,56 @@
+declare actor uuid;body jsonb;ref jsonb;fingerprint bytea;manifest jsonb;private_manifest jsonb;result jsonb;
+ a private.weekly_source_pay_decision_preview_assemblies%rowtype;d private.weekly_source_pay_decisions%rowtype;
+ r private.weekly_source_pay_decision_reviews%rowtype;j private.weekly_source_pay_decision_requests%rowtype;
+ c private.bpay_next_source_pay_decision_cut%rowtype;review_id uuid;review_no bigint;review_hash bytea;scope jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not(p_request ?& array['actor_user_id','preview_assembly_ref','unprotect_preparations']) or p_request->'unprotect_preparations' is distinct from '[]'::jsonb then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;ref:=p_request->'preview_assembly_ref';
+ body:=private.weekly_source_pay_decision_request_v1(p_request-array['actor_user_id','preview_assembly_ref','unprotect_preparations'],'PREVIEW');
+ if not private.weekly_exceptional_json_keys_exact_v1(ref,array['assembly_id','assembly_sha256']) or not(ref ?& array['assembly_id','assembly_sha256'])
+   or coalesce(ref->>'assembly_sha256','') !~ '^[0-9a-f]{64}$' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ fingerprint:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_PREVIEW_REQUEST_V1',body);
+ select x.* into strict j from private.weekly_source_pay_decision_requests x where x.request_id=(body->>'request_id')::uuid
+  and x.decision_id=(body->>'decision_id')::uuid and x.request_kind='PREVIEW' and x.actor_user_id=actor;
+ if j.request_hash is distinct from fingerprint or j.request_json is distinct from body then raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=(ref->>'assembly_id')::uuid and x.preview_request_id=j.request_id
+  and x.decision_id=j.decision_id and x.actor_user_id=actor and x.assembly_sha256=decode(ref->>'assembly_sha256','hex');
+ if a.state='SEALED' then
+  for scope in select value from jsonb_array_elements(a.draft_scope_json->'selection') loop
+   perform private.weekly_source_pay_decision_scope_access_v1(actor,(scope->>'source_group_id')::uuid,(scope->>'actual_client_id')::uuid,(scope->>'scope_date')::date);
+  end loop;
+  if j.metadata_state<>'SEALED' or j.receipt_json is null or j.review_id is distinct from a.review_id then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='23514';end if;
+  return j.receipt_json;
+ end if;
+ manifest:=private.weekly_source_pay_decision_assembly_assert_v1(a.id,actor);
+ if a.state<>'READY' or private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ASSEMBLY_MANIFEST_V1',manifest) is distinct from a.assembly_sha256 then
+  raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ select x.* into strict d from private.weekly_source_pay_decisions x where x.id=a.decision_id for update;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=a.id and x.state='READY' for update;
+ select x.* into strict c from private.bpay_next_source_pay_decision_cut x where x.id=(a.draft_scope_json->>'cut_id')::uuid and x.preview_assembly_id=a.id and x.review_id is null;
+ if d.accept_request_id is not null and (d.decision_kind<>a.decision_kind or encode(d.accepted_selection_sha256,'hex')<>a.draft_scope_json->>'selection_sha256') then
+  raise exception 'SOURCE_PAY_DECISION_ACCEPTED_SELECTION_IMMUTABLE' using errcode='40001';end if;
+ review_id:=gen_random_uuid();
+ select coalesce(max(x.review_no),0)+1 into review_no from private.weekly_source_pay_decision_reviews x where x.decision_id=d.id;
+ private_manifest:=a.draft_scope_json||jsonb_build_object('state_revision',d.state_revision::text,'assembly_manifest',manifest,'quote_manifest',manifest->'quote_manifest');
+ review_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_REVIEW_V1',jsonb_build_object(
+  'review_id',review_id,'decision_id',d.id,'preview_request_id',j.request_id,'preview_request_hash',encode(j.request_hash,'hex'),
+  'assembly_id',a.id,'assembly_sha256',encode(a.assembly_sha256,'hex'),'cut_id',c.id,'manifest',private_manifest));
+ insert into private.weekly_source_pay_decision_reviews(id,decision_id,preview_assembly_id,review_no,preview_request_id,preview_request_hash,
+  review_digest,pay_cut_hash,source_invoice_hash,issue_set_hash,private_manifest_json,financial_history_refs_json,financial_history_manifest_sha256,history_qualification_json)
+ values(review_id,d.id,a.id,review_no,j.request_id,j.request_hash,review_hash,c.pay_cut_sha256,c.source_invoice_sha256,c.issue_set_sha256,
+  private_manifest,body->'financial_history_refs',private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_HISTORY_REFERENCE_MANIFEST_V1',body->'financial_history_refs'),
+  jsonb_build_object('qualification_state',c.qualification_state,'issue_code',c.issue_code,'cut_id',c.id)) returning * into r;
+ update private.bpay_next_source_pay_decision_cut x set review_id=r.id where x.id=c.id and x.review_id is null and x.preview_assembly_id=a.id and x.decision_id=d.id;
+ if not found then raise exception 'SOURCE_PAY_DECISION_CUT_SEAL_CAS_FAILED' using errcode='40001';end if;
+ update private.weekly_source_pay_decision_preview_assemblies x set state='SEALED',review_id=r.id where x.id=a.id and x.state='READY' and x.review_id is null;
+ if not found then raise exception 'SOURCE_PAY_DECISION_ASSEMBLY_CAS_FAILED' using errcode='40001';end if;
+ result:=private.weekly_source_pay_decision_review_projection_v1(r.id);
+ update private.weekly_source_pay_decision_requests x set review_id=r.id,metadata_state='SEALED',receipt_json=result
+  where x.request_id=j.request_id and x.metadata_state='ASSEMBLING' and x.receipt_json is null;
+ if not found then raise exception 'SOURCE_PAY_DECISION_REQUEST_CAS_FAILED' using errcode='40001';end if;
+ return result;
+exception when no_data_found or too_many_rows or invalid_text_representation then raise exception 'SOURCE_PAY_DECISION_PREVIEW_INVALID' using errcode='22023';
+end;

@@ -1,0 +1,10 @@
+create or replace function private.weekly_contact_source_cycle_lock_v1(p_cycle_id uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ -- Whole-publication callers only. Single question/render/route entries use
+ -- exact generation/intent/route footprints, never this broader operation.
+ perform private.weekly_contact_source_submission_lock_v1(p_cycle_id,null,'[]',
+  (select current_projection_publication_id from public.weekly_source_cycles where id=p_cycle_id));
+end;
+$function$;

@@ -1,0 +1,419 @@
+create or replace function public.weekly_source_candidate_reminder_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_contact_pair record;
+  v_contact_guard jsonb;
+  v_generation_id uuid;
+  v_publication_id uuid;
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_settings public.weekly_source_global_settings%rowtype;
+  v_intent_id uuid;
+  v_tranche text;
+  v_sequence integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('actor_user_id','candidate_generation_id','projection_publication_id')) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_generation_id:=(p_request->>'candidate_generation_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_REQUEST_INVALID' using errcode='22023';
+  end;
+  -- Plain actor/current scope validation precedes shared contact locks.
+  select * into strict v_generation from public.weekly_candidate_outreach_generations where id=v_generation_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(v_actor,'ASK_CANDIDATES',v_cycle.source_group_id,
+    v_generation.client_id,v_cycle.finalisation_week_ending);
+  perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_generation.candidate_id);
+  -- Original native locking/currentness/authority/cooldown checks revalidate.
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+  where id=v_generation_id for update;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'ASK_CANDIDATES',v_cycle.source_group_id,v_generation.client_id,
+    v_cycle.finalisation_week_ending
+  );
+  if not private.weekly_source_candidate_generation_current_v1(v_generation.id)
+    or pg_catalog.transaction_timestamp()<v_generation.manual_reminder_available_at_utc
+    or (v_generation.request_kind='CHECK_HOURS' and not exists(
+      select 1 from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+      where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
+        and incident.state='OPEN' and incident.candidate_action_state='ASKED'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
+        and membership.comparison_revision_id=incident.current_comparison_revision_id))
+    or (v_generation.request_kind='SUBMIT_TIMESHEET' and not exists(
+      select 1 from public.weekly_timesheet_submission_requests request
+      join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+      where request.candidate_cohort_id=v_generation.candidate_cohort_id
+        and request.request_generation=v_generation.generation_number and request.membership_hash=v_generation.membership_hash
+        and request.source_cycle_id=v_generation.source_cycle_id and request.candidate_id=v_generation.candidate_id
+        and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING')) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_UNAVAILABLE' using errcode='55000';
+  end if;
+  for v_contact_pair in
+    select v_generation.candidate_id candidate_id,v_generation.client_id client_id where v_generation.request_kind='CHECK_HOURS'
+    union select request.candidate_id,member.client_id from public.weekly_timesheet_submission_requests request
+      join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+      where v_generation.request_kind='SUBMIT_TIMESHEET'
+        and request.candidate_cohort_id=v_generation.candidate_cohort_id and request.request_generation=v_generation.generation_number
+        and request.candidate_id=v_generation.candidate_id and request.source_cycle_id=v_generation.source_cycle_id
+        and request.membership_hash=v_generation.membership_hash and request.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and member.state='WAITING'
+    order by candidate_id,client_id
+  loop
+    v_contact_guard:=private.weekly_contact_scope_guard_v1(v_contact_pair.candidate_id,v_contact_pair.client_id,'WORKER',clock_timestamp());
+    if v_contact_guard->'allow' is distinct from 'true'::jsonb then
+      raise exception 'CONTACT_PAUSED' using errcode='55000',detail=jsonb_build_object('version','CONTACT_PAUSE_REFUSAL_V1',
+        'candidate_id',v_contact_pair.candidate_id,'client_id',v_contact_pair.client_id,'audience','WORKER',
+        'next_allowed_utc',v_contact_guard->'next_allowed_utc',
+        'next_allowed_local',to_char((v_contact_guard->>'next_allowed_utc')::timestamptz at time zone 'Europe/London',
+          'YYYY-MM-DD HH24:MI')||' Europe/London')::text;
+    end if;
+  end loop;
+  select * into strict v_settings from public.weekly_source_global_settings where singleton;
+  select coalesce(pg_catalog.max(tranche_sequence),0)+1 into v_sequence
+  from public.weekly_message_intents
+  where candidate_generation_id=v_generation.id
+    and tranche_kind in ('CANDIDATE_MANUAL_REMINDER','TIMESHEET_SUBMISSION_REMINDER_6H');
+  v_tranche:=case when v_generation.request_kind='SUBMIT_TIMESHEET'
+    then 'TIMESHEET_SUBMISSION_REMINDER_6H' else 'CANDIDATE_MANUAL_REMINDER' end;
+  v_intent_id:=private.weekly_source_query_candidate_intent_v1(
+    v_generation.id,v_tranche,v_sequence,pg_catalog.transaction_timestamp()
+  );
+  update public.weekly_candidate_outreach_generations
+  set manual_reminder_available_at_utc=pg_catalog.transaction_timestamp()+v_settings.candidate_manual_reminder_cooldown
+  where id=v_generation.id;
+  perform public._audit_insert(
+    'weekly_source_candidate_reminder',v_intent_id::text,'WEEKLY_SOURCE_CANDIDATE_REMINDER_STAGED',
+    null,pg_catalog.jsonb_build_object('candidate_generation_id',v_generation.id),
+    'Candidate reminder staged',v_actor
+  );
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'message_intent_id',v_intent_id,
+    'next_manual_reminder_at_utc',pg_catalog.transaction_timestamp()+v_settings.candidate_manual_reminder_cooldown
+  );
+end;
+$function$;
+
+
+create or replace function public.weekly_source_candidate_app_submit_atomic_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_request_id uuid,
+  p_body jsonb,
+  p_now_utc timestamptz default pg_catalog.transaction_timestamp()
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_context jsonb;
+  v_candidate_id uuid;
+  v_kind text;
+  v_key uuid;
+  v_hash bytea;
+  v_replay jsonb;
+  v_projection jsonb;
+  v_scope jsonb;
+  v_internal jsonb;
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_workflow_result jsonb;
+  v_response_result jsonb;
+  v_result jsonb;
+  v_next_generation integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  -- Plain auth/input; original locking context revalidates below.
+  v_context:=private._candidate_session_context_v1(
+    p_session_id,p_environment,null,p_now_utc,false
+  );
+  v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+  if v_candidate_id is null then
+    raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000';
+  end if;
+  if p_body is null or pg_catalog.jsonb_typeof(p_body)<>'object'
+     or pg_catalog.jsonb_typeof(p_body->'responses')<>'array'
+     or coalesce(p_body->>'request_fingerprint','') !~ '^[0-9a-f]{64}$'
+     or coalesce(p_body->>'scope_fingerprint','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+  end if;
+  v_kind:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_body->>'submission_kind','')));
+  if v_kind='RESPONSES_ONLY' then
+    if exists(select 1 from pg_catalog.jsonb_object_keys(p_body) key
+              where key not in (
+                'submission_kind','request_version','request_fingerprint','scope_id',
+                'scope_version','scope_fingerprint','responses','idempotency_key'
+              )) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+    end if;
+  elsif v_kind='WHOLE_WEEK_REVISION' then
+    if exists(select 1 from pg_catalog.jsonb_object_keys(p_body) key
+              where key not in (
+                'submission_kind','request_version','request_fingerprint','scope_id',
+                'scope_version','scope_fingerprint','workflow_id','generation',
+                'candidate_signature_component_id','candidate_signed_at_utc',
+                'immutable_submission','responses','idempotency_key'
+              )) or pg_catalog.jsonb_typeof(p_body->'immutable_submission')<>'object' then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+    end if;
+  else
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_key:=(p_body->>'idempotency_key')::uuid;
+    perform (p_body->>'request_version')::integer;
+    perform (p_body->>'scope_id')::uuid;
+    perform (p_body->>'scope_version')::integer;
+    if v_kind='WHOLE_WEEK_REVISION' then
+      perform (p_body->>'workflow_id')::uuid;
+      perform (p_body->>'generation')::integer;
+      perform (p_body->>'candidate_signature_component_id')::uuid;
+      perform (p_body->>'candidate_signed_at_utc')::timestamptz;
+    end if;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+  end;
+
+  -- Current authenticated Candidate and real original generation supply only
+  -- contact lock scope. Do not pause replies, change replay ordering, allocate
+  -- a question or introduce contact dependencies into ordinary self-submit.
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+    where id=p_request_id and candidate_id=v_candidate_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+  perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_candidate_id);
+  -- SP-12: existing admission only; no producer/version evidence.
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.weekly_source_pay_query_admit_v2();
+  end if;
+
+  v_context:=private._candidate_session_context_v1(
+    p_session_id,p_environment,null,p_now_utc,true
+  );
+  v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+  if v_candidate_id is null then
+    raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000';
+  end if;
+  if p_body is null or pg_catalog.jsonb_typeof(p_body)<>'object'
+     or pg_catalog.jsonb_typeof(p_body->'responses')<>'array'
+     or coalesce(p_body->>'request_fingerprint','') !~ '^[0-9a-f]{64}$'
+     or coalesce(p_body->>'scope_fingerprint','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+  end if;
+  v_kind:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_body->>'submission_kind','')));
+  if v_kind='RESPONSES_ONLY' then
+    if exists(select 1 from pg_catalog.jsonb_object_keys(p_body) key
+              where key not in (
+                'submission_kind','request_version','request_fingerprint','scope_id',
+                'scope_version','scope_fingerprint','responses','idempotency_key'
+              )) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+    end if;
+  elsif v_kind='WHOLE_WEEK_REVISION' then
+    if exists(select 1 from pg_catalog.jsonb_object_keys(p_body) key
+              where key not in (
+                'submission_kind','request_version','request_fingerprint','scope_id',
+                'scope_version','scope_fingerprint','workflow_id','generation',
+                'candidate_signature_component_id','candidate_signed_at_utc',
+                'immutable_submission','responses','idempotency_key'
+              )) or pg_catalog.jsonb_typeof(p_body->'immutable_submission')<>'object' then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+    end if;
+  else
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_key:=(p_body->>'idempotency_key')::uuid;
+    perform (p_body->>'request_version')::integer;
+    perform (p_body->>'scope_id')::uuid;
+    perform (p_body->>'scope_version')::integer;
+    if v_kind='WHOLE_WEEK_REVISION' then
+      perform (p_body->>'workflow_id')::uuid;
+      perform (p_body->>'generation')::integer;
+      perform (p_body->>'candidate_signature_component_id')::uuid;
+      perform (p_body->>'candidate_signed_at_utc')::timestamptz;
+    end if;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_INVALID' using errcode='22023';
+  end;
+  v_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CANDIDATE_APP_SUBMIT_V1',pg_catalog.jsonb_build_object(
+      'candidate_id',v_candidate_id,'request_id',p_request_id,
+      'body',p_body-'idempotency_key'
+    )
+  );
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'WEEKLY_SOURCE_CANDIDATE_APP:'||v_key::text,0
+  ));
+  v_replay:=private.weekly_source_candidate_app_receipt_v1(
+    v_candidate_id,p_request_id,'FINAL_SUBMIT',v_key,v_hash
+  );
+  if v_replay is not null then
+    return pg_catalog.jsonb_set(v_replay,'{idempotent_replay}','true'::jsonb,false);
+  end if;
+
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+  where id=p_request_id and candidate_id=v_candidate_id for update;
+  if v_generation.state<>'ACTIVE' or p_now_utc>v_generation.deadline_at_utc then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE' using errcode='40001';
+  end if;
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_generation.source_cycle_id;
+  v_projection:=private.weekly_source_candidate_app_projection_v1(
+    v_candidate_id,p_request_id,p_now_utc
+  );
+  if (p_body->>'request_version')::integer<>(v_projection->>'request_version')::integer
+     or p_body->>'request_fingerprint'<>v_projection->>'request_fingerprint' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE' using errcode='40001';
+  end if;
+  select value into v_scope from pg_catalog.jsonb_array_elements(v_projection->'scopes')
+  where value->>'scope_id'=p_body->>'scope_id';
+  if v_scope is null
+     or (p_body->>'scope_version')::integer<>(v_scope->>'scope_version')::integer
+     or p_body->>'scope_fingerprint'<>v_scope->>'scope_fingerprint'
+     or v_scope->>'completion_state'='COMPLETE' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SCOPE_STALE' using errcode='40001';
+  end if;
+  v_internal:=private.weekly_source_candidate_app_responses_v1(
+    v_scope,p_body->'responses',true
+  );
+
+  if v_kind='RESPONSES_ONLY' then
+    if v_scope->>'request_kind'<>'CHECK_HOURS'
+       or pg_catalog.jsonb_array_length(v_internal)=0
+       or exists(
+         select 1 from pg_catalog.jsonb_array_elements(v_internal) item
+         where item->>'choice'<>'CANDIDATE_CORRECT'
+       ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_RESPONSES_ONLY_INVALID' using errcode='22023';
+    end if;
+    v_response_result:=public.weekly_source_candidate_response_submit_atomic_v1(
+      pg_catalog.jsonb_build_object(
+        'candidate_id',v_candidate_id,'candidate_generation_id',p_request_id,
+        'projection_publication_id',v_cycle.current_projection_publication_id,
+        'request_idempotency_key',v_key,'responses',v_internal
+      )
+    );
+    v_next_generation:=null;
+  else
+    if v_scope->>'request_kind'='CHECK_HOURS' and (
+      pg_catalog.jsonb_array_length(v_internal)=0
+      or not exists(
+        select 1 from pg_catalog.jsonb_array_elements(v_internal) item
+        where item->>'choice'<>'CANDIDATE_CORRECT'
+      )
+    ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_REVISION_NOT_REQUIRED' using errcode='22023';
+    end if;
+    if v_scope->>'request_kind'='SUBMIT_TIMESHEET'
+       and pg_catalog.jsonb_array_length(p_body->'responses')<>0 then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMIT_TIMESHEET_RESPONSES_INVALID' using errcode='22023';
+    end if;
+    if v_scope->>'request_kind'='CHECK_HOURS' then
+      perform private.weekly_source_candidate_app_assert_week_revision_v1(
+        v_scope,p_body->'responses',v_internal,p_body->'immutable_submission'
+      );
+    else
+      perform private.weekly_source_candidate_app_assert_new_week_submission_v1(
+        v_scope,p_body->'immutable_submission'
+      );
+    end if;
+    select * into strict v_workflow from public.candidate_submission_workflows
+    where id=(p_body->>'workflow_id')::uuid
+      and candidate_id=v_candidate_id
+      and environment=pg_catalog.upper(pg_catalog.btrim(p_environment))
+      and contract_id=(v_scope->>'contract_id')::uuid
+      and week_ending_date=(v_scope->>'week_ending_date')::date;
+    if v_workflow.generation<>(p_body->>'generation')::integer
+       or v_workflow.state<>'WORKER_DRAFT' then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    v_workflow_result:=public.weekly_source_candidate_check_materialise_atomic_v1(
+      pg_catalog.jsonb_build_object(
+        'account_id',(v_context->>'account_id')::uuid,
+        'candidate_id',v_candidate_id,
+        'candidate_generation_id',p_request_id,
+        'projection_publication_id',v_cycle.current_projection_publication_id,
+        'request_version',(p_body->>'request_version')::integer,
+        'request_fingerprint',p_body->>'request_fingerprint',
+        'scope_id',(p_body->>'scope_id')::uuid,
+        'scope_version',(p_body->>'scope_version')::integer,
+        'scope_fingerprint',p_body->>'scope_fingerprint',
+        'request_kind',v_scope->>'request_kind',
+        'workflow_id',v_workflow.id,
+        'expected_workflow_generation',v_workflow.generation,
+        'candidate_signature_component_id',
+          (p_body->>'candidate_signature_component_id')::uuid,
+        'candidate_signed_at_utc',(p_body->>'candidate_signed_at_utc')::timestamptz,
+        'immutable_submission',p_body->'immutable_submission',
+        'request_idempotency_key',v_key
+      ),p_now_utc
+    );
+    v_next_generation:=(v_workflow_result->>'generation')::integer;
+    if v_scope->>'request_kind'='CHECK_HOURS' then
+      select coalesce(pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_set(
+          value,'{expected_timesheet_hash}',
+          pg_catalog.to_jsonb(v_workflow_result->>'timesheet_hash'),false
+        ) order by value->>'incident_id'
+      ),'[]'::jsonb) into v_internal
+      from pg_catalog.jsonb_array_elements(v_internal);
+      v_response_result:=public.weekly_source_candidate_response_submit_atomic_v1(
+        pg_catalog.jsonb_build_object(
+          'candidate_id',v_candidate_id,'candidate_generation_id',p_request_id,
+          'projection_publication_id',v_cycle.current_projection_publication_id,
+          'request_idempotency_key',v_key,'responses',v_internal
+        )
+      );
+    end if;
+  end if;
+  update public.weekly_candidate_response_drafts
+  set state='SUPERSEDED',updated_at_utc=p_now_utc
+  where candidate_generation_id=p_request_id and candidate_id=v_candidate_id
+    and state='DRAFT';
+  v_projection:=private.weekly_source_candidate_app_projection_v1(
+    v_candidate_id,p_request_id,p_now_utc
+  );
+  perform private.weekly_source_candidate_app_assert_request_shape_v1(v_projection);
+  v_result:=pg_catalog.jsonb_build_object(
+    'ok',true,'idempotent_replay',false,
+    'processed_scope_id',(p_body->>'scope_id')::uuid,
+    'next_outstanding_scope_id',v_projection->'earliest_outstanding_scope_id',
+    'workflow_id',case when v_kind='WHOLE_WEEK_REVISION'
+      then (p_body->>'workflow_id')::uuid else null end,
+    'generation',v_next_generation,'request',v_projection
+  );
+  if exists(select 1 from pg_catalog.jsonb_object_keys(v_result) key
+            where key not in (
+              'ok','idempotent_replay','processed_scope_id','next_outstanding_scope_id',
+              'workflow_id','generation','request'
+            )) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_RESPONSE_SHAPE_INVALID' using errcode='55000';
+  end if;
+  insert into public.weekly_candidate_app_mutation_receipts(
+    candidate_generation_id,candidate_id,mutation_kind,idempotency_key,
+    request_hash,response_json,created_at_utc
+  ) values (
+    p_request_id,v_candidate_id,'FINAL_SUBMIT',v_key,v_hash,v_result,p_now_utc
+  );
+  return v_result;
+end;
+$function$;

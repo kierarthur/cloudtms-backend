@@ -1,0 +1,45 @@
+create or replace function private.weekly_source_candidate_notification_retire_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+begin
+  if new.audience_kind='CANDIDATE' and new.state='RETIRED' and old.state<>'RETIRED' then
+    -- Retiring an alert alone cannot retire the original still-current in-app
+    -- question. A real replacement notification, when present, owns the one
+    -- useful alert; otherwise retain the genuine native question fallback.
+    if exists(select 1 from public.weekly_candidate_message_notifications link
+      join public.candidate_notifications notification on notification.id=link.notification_id
+      where link.message_intent_id=new.id and private.candidate_notification_visible_v1(notification,clock_timestamp()))
+      and not exists(select 1 from public.weekly_candidate_message_notifications link
+        join public.weekly_message_intents intent on intent.id=link.message_intent_id
+        join public.candidate_notifications notification on notification.id=link.notification_id
+        where link.candidate_generation_id=new.candidate_generation_id and intent.id<>new.id and intent.state in('DUE','RENDERED')
+          and private.candidate_notification_visible_v1(notification,clock_timestamp())) then
+      update public.candidate_notifications notification set
+        push_state=case when notification.push_state in('PENDING','CLAIMED','FAILED') then 'SKIPPED' else notification.push_state end,
+        last_error=case when notification.push_state in('PENDING','CLAIMED','FAILED') then 'ALERT_RETIRED_QUESTION_CURRENT' else notification.last_error end
+      from public.weekly_candidate_message_notifications link where link.message_intent_id=new.id and notification.id=link.notification_id;
+      update public.weekly_candidate_message_notifications set retired_at_utc=coalesce(retired_at_utc,clock_timestamp())
+        where message_intent_id=new.id;
+      return new;
+    end if;
+    update public.candidate_notifications notification
+    set state=case when notification.state='UNREAD' then 'DISMISSED' else notification.state end,
+        dismissed_at_utc=case when notification.state='UNREAD'
+          then pg_catalog.transaction_timestamp() else notification.dismissed_at_utc end,
+        push_state=case when notification.push_state in ('PENDING','CLAIMED','FAILED')
+          then 'SKIPPED' else notification.push_state end,
+        last_error=case when notification.push_state in ('PENDING','CLAIMED','FAILED')
+          then 'REQUEST_RETIRED' else notification.last_error end,
+        deep_link_json=notification.deep_link_json||pg_catalog.jsonb_build_object('obsolete',true)
+    from public.weekly_candidate_message_notifications link
+    where link.message_intent_id=new.id and notification.id=link.notification_id;
+    update public.weekly_candidate_message_notifications
+    set retired_at_utc=coalesce(retired_at_utc,pg_catalog.transaction_timestamp())
+    where message_intent_id=new.id;
+  end if;
+  return new;
+end;
+$function$;

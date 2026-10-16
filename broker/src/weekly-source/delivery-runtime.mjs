@@ -6,6 +6,7 @@ import { renderWeeklyManagerQueryEmail } from './manager-email.js';
 import { runPendingEntitlementRelease } from './pending-entitlement-release-worker.mjs';
 import { runWeeklySourceCompletedPackCopies } from './completed-pack-copy.mjs';
 import { weeklySourceDeploymentContext } from './routes.js';
+import { runWeeklySourceContactRecheck } from './contact-recheck-runtime.mjs';
 
 const encoder = new TextEncoder();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -703,6 +704,17 @@ export async function runWeeklySourceDelivery(env, dependencies = {}, options = 
     now_utc: scheduledStartedAtUtc,
     limit: Math.min(1000, limit * 4),
   });
+  // This consumes the existing contact tasks after actual native due-step
+  // creation. An unavailable item/RPC cannot interrupt unrelated safe targets;
+  // every original final START still independently enforces current admission.
+  let contactRecheck;
+  try {
+    contactRecheck = await runWeeklySourceContactRecheck(dependencies, {
+      deployment: weeklySourceDeploymentContext(env), workerId, limit,
+    });
+  } catch {
+    contactRecheck = { ok: false, error_code: 'CONTACT_RECHECK_UNAVAILABLE', processed: 0, held: 0, results: [] };
+  }
   const renders = await renderDueIntents(env, dependencies, limit);
   const preparation = await prepareDispatchTargets(env, dependencies, workerId, limit);
   const delivery = await deliverTargets(env, dependencies, workerId, limit * 2);
@@ -746,6 +758,7 @@ export async function runWeeklySourceDelivery(env, dependencies = {}, options = 
   return {
     ok: true,
     scheduler,
+    contact_recheck: contactRecheck,
     renders,
     preparation,
     delivery,

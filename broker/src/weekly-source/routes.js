@@ -12,6 +12,7 @@ import { validateRuleSetValues } from './rule-set-validation.js';
 import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
 import {CONTACT_PAUSE_RPC_COMMANDS,isContactPauseCommand,parseContactPauseCommandBody,handleContactPauseOfficeCommand} from './contact-pause-office.mjs';
 import { contactReminderRefusal } from './contact-reminder-refusal.mjs';
+import {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -257,6 +258,7 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
   }
   try {
     const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');
+    if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))return parseContactManualEnquiryBody(text);
     return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)
       ? parseContactPauseCommandBody(text) : parsed;
   } catch (error) {
@@ -689,6 +691,12 @@ async function handleCommand(req, env, ctx, dependencies, user) {
 
   if (isContactPauseCommand(action)) {
     return handleContactPauseOfficeCommand({body,user,search:new URL(req.url).search,
+      deploymentContext:()=>weeklySourceDeploymentContext(env),
+      rpc:(name,request)=>callRpc(dependencies,name,request,20_000)});
+  }
+
+  if(isContactManualEnquiryCommand(action)){
+    return handleContactManualEnquiryOfficeCommand({body,user,search:new URL(req.url).search,
       deploymentContext:()=>weeklySourceDeploymentContext(env),
       rpc:(name,request)=>callRpc(dependencies,name,request,20_000)});
   }
@@ -1367,6 +1375,7 @@ export const WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT = Object.freeze({
   prefix: '/api/weekly-source/v1',
   directRpcCommands: DIRECT_RPC_COMMANDS,
   contactPauseRpcCommands: CONTACT_PAUSE_RPC_COMMANDS,
+  contactManualEnquiryRpcCommands: CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,
   // WP-23.  The commands whose owners do not take the Weekly Source
   // jsonb-request shape, kept separate so a reader can see at a glance which
   // owner signature each one is bound to.

@@ -1,0 +1,922 @@
+-- Full e8cc certified pending/current consumers and dedicated immutable Invoice duty scope.
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/01_source_family.sqlinc
+CREATE OR REPLACE FUNCTION private._candidate_expense_source_family_v1(p_timesheet_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+DECLARE
+  v_source boolean;
+  v_pending jsonb;v_physical jsonb;v_original_invoice boolean:=false;
+  v_alias private.timesheet_contract_family_aliases%rowtype;
+BEGIN
+  -- The accessor validates the complete native withdrawal/CW/workflow proof.
+  -- A registered revoked B cannot become an ordinary claim by returning false.
+  v_pending:=private.timesheet_contract_native_pending_for_v1(p_timesheet_id);
+  select alias.* into v_alias from private.timesheet_contract_family_aliases alias where alias.timesheet_id=p_timesheet_id;
+  if found then
+    v_physical:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+    if v_pending is not null and v_alias.original_timesheet_id is distinct from p_timesheet_id then
+      raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+    if v_alias.original_timesheet_id=p_timesheet_id
+      and v_physical->>'requested_timesheet_id'=p_timesheet_id::text
+      and v_physical->>'family_root_id'=v_alias.family_root_id::text
+      and v_physical->'legacy_origin'='false'::jsonb then
+      v_original_invoice:=private.timesheet_contract_source_original_eligible_v1(p_timesheet_id)
+        and exists(
+    select 1 from private.timesheet_contract_move_operations operation
+    join private.timesheet_contract_move_members member on member.operation_id=operation.id
+    join public.timesheets original on original.timesheet_id=p_timesheet_id
+    join public.contracts original_contract on original_contract.id=original.contract_id
+    where operation.id=v_alias.accepted_operation_id
+      and (operation.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(operation.id))
+      and operation.purpose='CONTRACT_CORRECTION' and operation.accepted_review_id is not null
+      and operation.invoice_authority in('SOURCE_FINANCIAL','MIXED')
+      and operation.family_root_id=v_alias.family_root_id
+      and operation.candidate_id=original_contract.candidate_id and operation.actual_client_id=original_contract.client_id
+      and member.member_key=v_alias.member_key and member.family_root_id=v_alias.family_root_id
+      and member.role=v_alias.member_role and member.from_timesheet_id=p_timesheet_id
+      and member.from_version=original.version and member.from_contract_id is not distinct from original.contract_id
+      and member.original_booking_id=original.booking_id
+  );
+    end if;
+  end if;
+  SELECT EXISTS (
+    SELECT 1 FROM public.timesheets t
+    WHERE t.timesheet_id=p_timesheet_id
+      AND t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+      AND t.line_type='HOURS'::public.timesheet_line_type_enum
+      AND NOT t.is_adjustment
+      -- Ownership is not payment eligibility. Withdrawal/archive does not
+      -- turn an imported Timesheet into an ordinary expense-claim carrier.
+      AND t.settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1'
+      AND t.settings_authority_resolved_at IS NOT NULL
+      AND (
+        t.settings_authority_json#>'{applicability,import_authoritative}'='true'::jsonb
+        -- User-confirmed domain: self_bill IS import-authoritative. An import
+        -- label or separate-expense preference alone is not sufficient.
+        OR t.settings_authority_json#>'{values,self_bill}'='true'::jsonb
+        OR EXISTS (
+          SELECT 1 FROM public.weekly_source_row_timesheet_lineages l
+          WHERE l.family_booking_id=t.booking_id
+            AND t.booking_id IS NOT NULL AND t.booking_id<>''
+        )
+      )
+      AND (EXISTS (
+        SELECT 1 FROM public.contract_weeks cw
+        WHERE cw.contract_id=t.contract_id AND cw.week_ending_date=t.week_ending_date
+          AND cw.additional_seq=0 AND NOT cw.is_adjustment
+          AND cw.timesheet_id=t.timesheet_id
+      ) OR v_original_invoice)
+  ) INTO v_source;
+  IF v_source AND EXISTS (
+    SELECT 1 FROM public.candidate_expense_components c
+    WHERE c.owning_timesheet_id=p_timesheet_id
+      AND c.lifecycle_state NOT IN
+        ('MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED')
+  ) THEN
+    RAISE EXCEPTION 'SOURCE_ROOT_HAS_SEPARATE_CLAIM_COMPONENT'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN v_source;
+END;
+$function$;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/01_source_family.sqlinc
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/02_root_identity.sqlinc
+create or replace function private.weekly_source_resolve_root_identity_v1(
+  p_timesheet_id uuid
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_result jsonb;
+begin
+  if p_timesheet_id is null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+      'reason','ROOT_ID_REQUIRED','timesheet_id',null,
+      -- A null id is a "cannot tell", so bound fails CLOSED here.
+      'weekly_source_bound',true,
+      'authorisation_record_without_authorised_timesheet',false,
+      'protected_target_ownership_state',null
+    );
+  end if;
+
+  -- Actual native pending has no current row. Never let the old booking's
+  -- canonical representative or historical original A masquerade as current.
+  if private.timesheet_contract_native_pending_for_v1(p_timesheet_id) is not null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+      'reason','CURRENT_ROW_CARDINALITY','timesheet_id',p_timesheet_id,
+      'family_booking_id',(select t.booking_id from public.timesheets t where t.timesheet_id=p_timesheet_id)
+    );
+  end if;
+
+  with scope as (
+    select * from public._pay_timesheet_rotation_scope(array[p_timesheet_id]::uuid[])
+  ),
+  split_family as (
+    -- WP-08a review F3: a sibling whose btrim(booking_id) matches but whose raw
+    -- value differs splits one logical family in two.  HANDOVER 2 round-5
+    -- Part E names this a canonical booking-reference collision.
+    select pg_catalog.count(*) as split_count
+    from public.timesheets requested
+    where requested.timesheet_id=p_timesheet_id
+      and exists(
+        select 1
+        from public.timesheets sibling
+        where pg_catalog.btrim(sibling.booking_id)=pg_catalog.btrim(requested.booking_id)
+          and sibling.booking_id<>requested.booking_id
+      )
+  ),
+  aggregated as (
+    select
+      (select split_family.split_count from split_family) as split_count,
+      pg_catalog.min(resolved.booking_id) as family_booking_id,
+      pg_catalog.count(distinct resolved.booking_id) as booking_count,
+      pg_catalog.min(resolved.canonical_timesheet_id::text)::uuid as canonical_timesheet_id,
+      pg_catalog.count(distinct resolved.canonical_timesheet_id::text) as canonical_count,
+      pg_catalog.bool_or(resolved.requested_is_canonical) as requested_is_canonical,
+      pg_catalog.count(*) as member_count,
+      pg_catalog.count(*) filter (where resolved.family_is_current) as current_count,
+      pg_catalog.count(distinct resolved.family_version) as distinct_version_count,
+      pg_catalog.count(*) filter (where resolved.family_version is null) as null_version_count,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=p_timesheet_id
+      ) as requested_member_count,
+      pg_catalog.bool_or(
+        resolved.family_timesheet_id=p_timesheet_id and resolved.family_is_current
+      ) as family_is_current,
+      pg_catalog.min(resolved.family_version) filter (
+        where resolved.family_timesheet_id=p_timesheet_id
+      ) as requested_version,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_member_count,
+      pg_catalog.min(resolved.family_version) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_version,
+      pg_catalog.array_agg(
+        resolved.family_timesheet_id
+        order by resolved.family_version,resolved.family_timesheet_id
+      ) as member_timesheet_ids
+    from scope resolved
+  )
+  select
+    case
+      when aggregated.family_booking_id is null
+        or pg_catalog.btrim(aggregated.family_booking_id)=''
+        or aggregated.booking_count<>1
+        or aggregated.member_count=0
+        or aggregated.requested_member_count<>1
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','BOOKING_IDENTITY_MISSING','timesheet_id',p_timesheet_id
+        )
+      when coalesce(aggregated.split_count,0)>0
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','BOOKING_REFERENCE_CANONICAL_COLLISION','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      when aggregated.canonical_timesheet_id is null
+        or aggregated.canonical_count<>1
+        or aggregated.canonical_member_count<>1
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','CANONICAL_AMBIGUOUS','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      when aggregated.current_count<>1
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','CURRENT_ROW_CARDINALITY','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      when aggregated.null_version_count>0
+        or aggregated.distinct_version_count<>aggregated.member_count
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','VERSION_NOT_UNIQUE','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      else pg_catalog.jsonb_build_object(
+        'ok',true,
+        'timesheet_id',p_timesheet_id,
+        'family_booking_id',aggregated.family_booking_id,
+        'canonical_timesheet_id',aggregated.canonical_timesheet_id,
+        'canonical_version',aggregated.canonical_version,
+        'requested_version',aggregated.requested_version,
+        'requested_is_canonical',coalesce(aggregated.requested_is_canonical,false),
+        'family_is_current',coalesce(aggregated.family_is_current,false),
+        'member_timesheet_ids',pg_catalog.to_jsonb(aggregated.member_timesheet_ids)
+      )
+    end
+  into v_result
+  from aggregated;
+
+  return coalesce(v_result,pg_catalog.jsonb_build_object(
+    'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+    'reason','BOOKING_IDENTITY_MISSING','timesheet_id',p_timesheet_id
+  ));
+end;
+$function$;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/02_root_identity.sqlinc
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/03_family_rows.sqlinc
+create or replace function private.weekly_source_lock_family_rows_v1(
+  p_requested_timesheet_ids uuid[],
+  p_candidate_id uuid default null
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_ids uuid[];
+  v_before jsonb:='{}'::jsonb;
+  v_after jsonb:='{}'::jsonb;
+  v_missing_count integer;
+  v_foreign_count integer;
+  v_split_count integer;
+  v_unresolved_count integer;
+  v_family record;
+  v_families jsonb;
+  v_failure text;
+  v_requested uuid;v_physical jsonb;
+  v_physical_before jsonb:='{}'::jsonb;v_physical_after jsonb:='{}'::jsonb;
+begin
+  -- Review F6: a NULL element or a duplicate must fail closed, never be dropped
+  -- silently.  A caller that builds the array from a nullable variable would
+  -- otherwise get ok:true and believe every root it named is locked.
+  if p_requested_timesheet_ids is null
+     or pg_catalog.cardinality(p_requested_timesheet_ids)=0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','NO_REQUESTED_ROOTS'
+    );
+  end if;
+  if pg_catalog.array_position(p_requested_timesheet_ids,null::uuid) is not null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','REQUESTED_ROOT_NULL_ELEMENT'
+    );
+  end if;
+  if (select pg_catalog.count(distinct requested.timesheet_id)
+      from pg_catalog.unnest(p_requested_timesheet_ids) as requested(timesheet_id))
+     <>pg_catalog.cardinality(p_requested_timesheet_ids) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','REQUESTED_ROOT_DUPLICATE'
+    );
+  end if;
+
+  select pg_catalog.array_agg(requested.timesheet_id order by requested.ord)
+  into v_ids
+  from pg_catalog.unnest(p_requested_timesheet_ids)
+    with ordinality as requested(timesheet_id,ord);
+
+  -- Native Candidate serial admission remains with the existing caller.
+  -- Read only certified direct aliases here; preserve the native booking/row
+  -- lock order below and compare all eight H103 facts after those waits.
+  for v_requested in select id from pg_catalog.unnest(v_ids) id order by id loop
+    if private.timesheet_contract_native_pending_for_v1(v_requested) is not null then
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+        'reason','CURRENT_ROW_CARDINALITY');
+    end if;
+    if exists(select 1 from private.timesheet_contract_family_aliases alias where alias.timesheet_id=v_requested) then
+      v_physical:=private.timesheet_contract_current_placement_v1(v_requested);
+      v_physical_before:=v_physical_before||pg_catalog.jsonb_build_object(v_requested::text,v_physical);
+    end if;
+  end loop;
+
+  -- Step 2 (first half): the booking identity of every requested row, read
+  -- before any lock is taken so the re-read in step 3 has something to compare.
+  select
+    coalesce(pg_catalog.jsonb_object_agg(
+      timesheet.timesheet_id::text,timesheet.booking_id
+    ),'{}'::jsonb),
+    pg_catalog.count(*) filter (
+      where timesheet.booking_id is null
+         or pg_catalog.btrim(timesheet.booking_id)=''
+    )
+  into v_before,v_missing_count
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=any(v_ids);
+
+  -- WP-08a review F1: the installed resolver returns NO row at all for a
+  -- Timesheet that exists but whose booking_id is blank or whitespace-only, so
+  -- a guard that only inspects returned rows never fires.  Every requested id is
+  -- therefore accounted for here, explicitly, before any lock is taken.
+  if v_missing_count>0
+     or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_before))
+        <>pg_catalog.array_length(v_ids,1) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_IDENTITY_MISSING'
+    );
+  end if;
+
+  -- Every requested root must belong to the Candidate the caller pinned at the
+  -- serial gate.  A root from another Candidate would be serialised under the
+  -- wrong Candidate key, so it fails closed rather than proceeding.
+  if p_candidate_id is not null then
+    select pg_catalog.count(*)
+    into v_foreign_count
+    from public.timesheets timesheet
+    left join public.contracts contract on contract.id=timesheet.contract_id
+    where timesheet.timesheet_id=any(v_ids)
+      and contract.candidate_id is distinct from p_candidate_id;
+    if v_foreign_count>0 then
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+        'reason','ROOT_CANDIDATE_MISMATCH'
+      );
+    end if;
+  end if;
+
+  -- Step 2 (second half): the exact lock set, in the exact order.
+  for v_family in
+    select distinct_family.trimmed_booking_id,distinct_family.booking_id
+    from (
+      select distinct
+        pg_catalog.btrim(timesheet.booking_id) as trimmed_booking_id,
+        timesheet.booking_id as booking_id
+      from public.timesheets timesheet
+      where timesheet.timesheet_id=any(v_ids)
+    ) distinct_family
+    order by distinct_family.trimmed_booking_id,distinct_family.booking_id
+  loop
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtext(v_family.trimmed_booking_id)
+    );
+    if v_family.booking_id<>v_family.trimmed_booking_id then
+      perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(v_family.booking_id));
+    end if;
+    perform 1
+    from public.timesheets timesheet
+    where timesheet.booking_id=v_family.booking_id
+    for update;
+  end loop;
+
+  for v_requested in select id from pg_catalog.unnest(v_ids) id order by id loop
+    if private.timesheet_contract_native_pending_for_v1(v_requested) is not null then
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+        'reason','CURRENT_ROW_CARDINALITY');
+    end if;
+    if exists(select 1 from private.timesheet_contract_family_aliases alias where alias.timesheet_id=v_requested) then
+      v_physical:=private.timesheet_contract_current_placement_v1(v_requested);
+      v_physical_after:=v_physical_after||pg_catalog.jsonb_build_object(v_requested::text,v_physical);
+    end if;
+  end loop;
+  if v_physical_after is distinct from v_physical_before then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_REPOINTED_DURING_LOCK');
+  end if;
+
+  -- Step 3: the booking identity must be unchanged since step 2.
+  select coalesce(pg_catalog.jsonb_object_agg(
+    timesheet.timesheet_id::text,timesheet.booking_id
+  ),'{}'::jsonb)
+  into v_after
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=any(v_ids);
+
+  if v_after is distinct from v_before then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_REPOINTED_DURING_LOCK'
+    );
+  end if;
+
+  -- WP-08a review F3: the confirmed rotation route serialises on the trimmed
+  -- key and the schema package keys the one-current-head index on the trimmed
+  -- family booking id, but family membership in the installed resolver is by
+  -- the exact raw value.  A sibling row whose btrim() matches but whose raw
+  -- value differs therefore splits one logical family in two.  That is
+  -- ambiguous, not resolvable, so it fails closed.  A single padded booking id
+  -- with no such sibling is unaffected (the R37 case).
+  --
+  -- HANDOVER 2 round-5 Part E, "Rotation readings": this case is a canonical
+  -- booking-reference collision and must be named as one, never described
+  -- merely as a non-unique family (WP-09b handoff N2, WP-03 handoff N20).  It
+  -- is a change of NAME only: the case keeps its own outcome and is never
+  -- merged with blank, null, unknown or all-revoked, which keep
+  -- BOOKING_IDENTITY_MISSING, ROOT_ID_REQUIRED and CANONICAL_AMBIGUOUS.
+  select pg_catalog.count(*)
+  into v_split_count
+  from (
+    select distinct requested.booking_id
+    from public.timesheets requested
+    where requested.timesheet_id=any(v_ids)
+  ) family
+  where exists(
+    select 1
+    from public.timesheets sibling
+    where pg_catalog.btrim(sibling.booking_id)=pg_catalog.btrim(family.booking_id)
+      and sibling.booking_id<>family.booking_id
+  );
+  if v_split_count>0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_REFERENCE_CANONICAL_COLLISION'
+    );
+  end if;
+
+  -- Step 4 (completeness, WP-08a review F1): the resolver must return at least
+  -- one row for every requested id.  Never return ok:true with fewer families
+  -- than the request implies.
+  select pg_catalog.count(*)
+  into v_unresolved_count
+  from pg_catalog.unnest(v_ids) as requested(timesheet_id)
+  where not exists(
+    select 1
+    from public._pay_timesheet_rotation_scope(v_ids) resolved
+    where resolved.requested_timesheet_id=requested.timesheet_id
+  );
+  if v_unresolved_count>0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','ROOT_NOT_RETURNED_BY_RESOLVER'
+    );
+  end if;
+
+  -- Step 4: resolve through the installed Workbench rotation resolver only.
+  with requested as (
+    select input.timesheet_id,input.ord
+    from pg_catalog.unnest(v_ids) with ordinality as input(timesheet_id,ord)
+  ),
+  scope as (
+    select * from public._pay_timesheet_rotation_scope(v_ids)
+  ),
+  per_request as (
+    select
+      requested.ord as ord,
+      requested.timesheet_id as requested_timesheet_id,
+      pg_catalog.min(resolved.booking_id) as family_booking_id,
+      pg_catalog.count(distinct resolved.booking_id) as booking_count,
+      pg_catalog.min(resolved.canonical_timesheet_id::text)::uuid as canonical_timesheet_id,
+      pg_catalog.count(distinct resolved.canonical_timesheet_id::text) as canonical_count,
+      pg_catalog.bool_or(resolved.requested_is_canonical) as requested_is_canonical,
+      pg_catalog.count(*) as member_count,
+      pg_catalog.count(*) filter (where resolved.family_is_current) as current_count,
+      pg_catalog.count(distinct resolved.family_version) as distinct_version_count,
+      pg_catalog.count(*) filter (where resolved.family_version is null) as null_version_count,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=requested.timesheet_id
+      ) as requested_member_count,
+      pg_catalog.bool_or(
+        resolved.family_timesheet_id=requested.timesheet_id
+        and resolved.family_is_current
+      ) as family_is_current,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_member_count,
+      pg_catalog.min(resolved.family_version) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_version,
+      pg_catalog.array_agg(
+        resolved.family_timesheet_id
+        order by resolved.family_version,resolved.family_timesheet_id
+      ) as member_timesheet_ids
+    from requested
+    left join scope resolved
+      on resolved.requested_timesheet_id=requested.timesheet_id
+    group by requested.ord,requested.timesheet_id
+  ),
+  checked as (
+    select
+      per_request.*,
+      case
+        when per_request.family_booking_id is null
+          or per_request.booking_count<>1
+          or per_request.member_count=0
+          or per_request.requested_member_count<>1
+          then 'FAMILY_UNRESOLVED'
+        when per_request.family_booking_id is distinct from (v_before->>per_request.requested_timesheet_id::text)
+          then 'BOOKING_REPOINTED_DURING_LOCK'
+        when per_request.canonical_timesheet_id is null
+          or per_request.canonical_count<>1
+          or per_request.canonical_member_count<>1
+          then 'CANONICAL_AMBIGUOUS'
+        when per_request.current_count<>1 then 'CURRENT_ROW_CARDINALITY'
+        when per_request.null_version_count>0
+          or per_request.distinct_version_count<>per_request.member_count
+          then 'VERSION_NOT_UNIQUE'
+        else null
+      end as failure_reason
+    from per_request
+  )
+  select
+    pg_catalog.min(checked.failure_reason),
+    coalesce(pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'requested_timesheet_id',checked.requested_timesheet_id,
+        'family_booking_id',checked.family_booking_id,
+        'canonical_timesheet_id',checked.canonical_timesheet_id,
+        'canonical_version',checked.canonical_version,
+        'requested_is_canonical',coalesce(checked.requested_is_canonical,false),
+        'family_is_current',coalesce(checked.family_is_current,false),
+        'member_timesheet_ids',pg_catalog.to_jsonb(checked.member_timesheet_ids)
+      ) order by checked.ord
+    ) filter (where checked.failure_reason is null),'[]'::jsonb)
+  into v_failure,v_families
+  from checked;
+
+  if v_failure is not null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason',v_failure
+    );
+  end if;
+
+  -- Final completeness assertion: one family per distinct requested id, always.
+  if pg_catalog.jsonb_array_length(v_families)
+     is distinct from pg_catalog.array_length(v_ids,1) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','FAMILY_RESULT_INCOMPLETE'
+    );
+  end if;
+
+  return pg_catalog.jsonb_build_object('ok',true,'families',v_families);
+end;
+$function$;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/03_family_rows.sqlinc
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/04_current_pay_query.sqlinc
+create or replace function private.weekly_source_pay_query_scope_v1(
+  p_root_timesheet_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_root public.timesheets%rowtype;
+  v_contract public.contracts%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_identity jsonb;
+  v_booking text;
+  v_source boolean;
+  v_count integer;v_placement jsonb;
+begin
+  if p_root_timesheet_id is null then
+    raise exception 'WEEKLY_SOURCE_PAY_QUERY_ROOT_REQUIRED' using errcode='22023';
+  end if;
+  if private.timesheet_contract_native_pending_for_v1(p_root_timesheet_id) is not null then
+    raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+  -- This existing identity owner refuses raw/trimmed collisions, multiple
+  -- current roots and duplicate family versions. Do not guess a successor.
+  v_identity:=private.weekly_source_resolve_root_identity_v1(p_root_timesheet_id);
+  if (v_identity->>'ok') is distinct from 'true'
+     or (v_identity->>'canonical_timesheet_id')::uuid is distinct from p_root_timesheet_id
+     or (v_identity->>'requested_is_canonical') is distinct from 'true'
+     or (v_identity->>'family_is_current') is distinct from 'true' then return null; end if;
+  select t.* into v_root from public.timesheets t where t.timesheet_id=p_root_timesheet_id;
+  if not found or v_root.is_current is distinct from true
+     or v_root.revoked_at is not null or v_root.archived_at_utc is not null
+     or v_root.sheet_scope is distinct from 'WEEKLY'
+     or v_root.line_type is distinct from 'HOURS'
+     or v_root.is_adjustment is distinct from false
+     or v_root.week_ending_date is null or v_root.version is null or v_root.version<1
+     or nullif(btrim(v_root.booking_id),'') is null then return null; end if;
+  v_booking:=btrim(v_root.booking_id);
+  if btrim(v_identity->>'family_booking_id') is distinct from v_booking then return null; end if;
+  select c.* into v_contract from public.contracts c where c.id=v_root.contract_id;
+  if not found or v_contract.candidate_id is null or v_contract.client_id is null then return null; end if;
+  -- Preserve the established Source route's self-bill domain, including real
+  -- first-authorisation transitions. Always execute the installed classifier:
+  -- its integrity/permission errors must not be short-circuited or swallowed.
+  v_source:=private._candidate_expense_source_family_v1(p_root_timesheet_id);
+  if v_source is distinct from true and exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=p_root_timesheet_id) then
+    v_family:=private.weekly_source_target_family_for_root_v1(p_root_timesheet_id);
+    if v_family.id is not null and v_family.root_timesheet_id is distinct from p_root_timesheet_id then
+      v_placement:=private.timesheet_contract_current_placement_v1(v_family.root_timesheet_id);
+      if v_placement->>'current_timesheet_id' is distinct from p_root_timesheet_id::text
+       or v_placement->>'current_contract_id' is distinct from v_root.contract_id::text then
+       raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+      -- Source classification stays with the real immutable original owner;
+      -- this certified current financial B scope does not change that owner.
+      v_source:=private._candidate_expense_source_family_v1(v_family.root_timesheet_id);
+    end if;
+  end if;
+  if v_contract.self_bill is distinct from true and v_source is distinct from true then
+    return null;
+  end if;
+  select count(*) into v_count from public.contract_weeks cw
+    where cw.contract_id=v_root.contract_id and cw.week_ending_date=v_root.week_ending_date
+      and cw.additional_seq=0 and cw.is_adjustment is false
+      and cw.timesheet_id=p_root_timesheet_id;
+  if v_count<>1 then return null; end if;
+  select count(*) into v_count from public.weekly_exceptional_pay_target_families f
+    where btrim(f.root_family_booking_id)=v_booking;
+  if v_count>1 then return null; end if;
+  if v_count=1 then
+    select f.* into strict v_family from public.weekly_exceptional_pay_target_families f
+      where btrim(f.root_family_booking_id)=v_booking;
+    if v_family.root_timesheet_id is distinct from p_root_timesheet_id
+       or v_family.root_family_booking_id is distinct from v_root.booking_id
+       or v_family.candidate_id is distinct from v_contract.candidate_id
+       or v_family.contract_id is distinct from v_root.contract_id
+       or v_family.week_ending_date is distinct from v_root.week_ending_date
+       or v_family.week_start_date is distinct from (v_root.week_ending_date-6)
+       or v_family.bound_version is null or v_family.bound_version<1 then return null; end if;
+  end if;
+  if v_count=0 then
+    v_family:=private.weekly_source_target_family_for_root_v1(p_root_timesheet_id);
+    if v_family.id is not null then
+      v_placement:=private.timesheet_contract_current_placement_v1(v_family.root_timesheet_id);
+      if v_placement->>'current_timesheet_id' is distinct from p_root_timesheet_id::text
+        or v_placement->>'current_contract_id' is distinct from v_contract.id::text
+        or v_placement->'legacy_origin' is distinct from 'false'::jsonb
+        or v_family.candidate_id is distinct from v_contract.candidate_id
+        or v_family.week_ending_date is distinct from v_root.week_ending_date or v_family.bound_version<1 then
+        raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+    end if;
+  end if;
+  -- Ordinary Source publication does not create an exceptional target family.
+  -- Its absence remains NULL on both genuine initial TSFIN and normal HEAD
+  -- paths. Never manufacture protected identity to satisfy a query reader.
+  return jsonb_build_object('root_timesheet_id',v_root.timesheet_id,
+    'family_booking_id',v_root.booking_id,'target_family_id',v_family.id,
+    'candidate_id',v_contract.candidate_id,'client_id',v_contract.client_id,
+    'contract_id',v_contract.id,'week_ending_date',v_root.week_ending_date,
+    'root_version',v_root.version::text,'family_bound_version',v_family.bound_version::text);
+end;
+$function$;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/04_current_pay_query.sqlinc
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/05_decision_scope.sqlinc
+create or replace function private.weekly_source_pay_decision_resolved_scope_v1(p_browser jsonb,p_actor uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare body jsonb;selection jsonb:='[]';entry jsonb;subject jsonb;resolved jsonb;first_client uuid;root uuid;
+ family public.weekly_exceptional_pay_target_families%rowtype;lineage public.weekly_source_row_timesheet_lineages%rowtype;
+ primary_scope jsonb;required jsonb:='[]';active record;issues jsonb;issue_ids jsonb;invoice jsonb;
+ invoices uuid[];prior jsonb:='[]';old_member record;component text;member_key text;old_decisions uuid[]:='{}';
+ candidate uuid;scope_item jsonb;witnesses jsonb:='[]';invoice_witnesses jsonb:='[]';prior_count integer;original_row uuid;selection_identity jsonb;
+begin
+ body:=private.weekly_source_pay_decision_request_v1(p_browser,'PREVIEW');
+ -- Pure discovery first. Do not take a metadata/FK parent lock before all
+ -- Candidate gates and real roots have been acquired in their native order.
+ for entry in select value from jsonb_array_elements(body->'selection') loop
+  subject:=private.weekly_source_pay_decision_source_subject_v1((entry->>'source_row_id')::uuid);
+  select count(distinct d.original_source_row_id),(array_agg(distinct d.original_source_row_id))[1] into prior_count,original_row
+   from private.bpay_next_worker_pay_disposition_subject_binding binding join private.bpay_next_worker_pay_disposition d on d.id=binding.disposition_id
+   where binding.accepted_source_resolution_id=(subject->>'source_resolution_id')::uuid
+    and binding.original_source_row_id=d.original_source_row_id and d.candidate_id=(subject->>'candidate_id')::uuid
+    and d.actual_client_id=(subject->>'actual_client_id')::uuid;
+  if prior_count>1 then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+  subject:=subject||jsonb_build_object('observed_source_row_id',subject->'source_row_id',
+    'source_row_id',coalesce(original_row,(subject->>'source_row_id')::uuid));
+  perform private.weekly_source_pay_decision_scope_access_v1(p_actor,(subject->>'source_group_id')::uuid,
+   (subject->>'actual_client_id')::uuid,(subject->>'scope_date')::date);
+  if first_client is null then first_client:=(subject->>'actual_client_id')::uuid;
+  elsif first_client::text is distinct from subject->>'actual_client_id' then
+   raise exception 'SOURCE_PAY_DECISION_CROSS_CLIENT_SELECTION' using errcode='22023';end if;
+  if (entry->'source_work_event_id' is distinct from subject->'source_work_event_id'
+      and not(entry->>'scope_kind'='SOURCE_ROW' and entry->'source_work_event_id'='null'::jsonb))
+    or not(entry->'work_dates' @> jsonb_build_array(subject->>'work_date')) then
+   raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+  root:=(entry->>'family_root_id')::uuid;
+  if root is not null then
+   -- Exact accepted lineage/native event membership only; no date/name join
+   -- creates a subject association. Direct physical H103 resolves moved roots.
+   if private.timesheet_contract_native_pending_for_v1(root) is not null then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   primary_scope:=private.timesheet_contract_current_placement_v1(root);
+   if primary_scope->>'current_timesheet_id' is null then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   if primary_scope->>'family_root_id' is null then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   select l.* into lineage from public.weekly_source_row_timesheet_lineages l
+    where l.row_resolution_id=(subject->>'source_resolution_id')::uuid and l.upload_row_id=(subject->>'observed_source_row_id')::uuid
+     and l.candidate_id=(subject->>'candidate_id')::uuid and l.client_id=first_client;
+   if (select count(*) from public.weekly_exceptional_pay_target_families f where f.root_timesheet_id=(primary_scope->>'family_root_id')::uuid
+     and f.candidate_id=(subject->>'candidate_id')::uuid)>1 then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   select f.* into family from public.weekly_exceptional_pay_target_families f
+    where f.root_timesheet_id=(primary_scope->>'family_root_id')::uuid and f.candidate_id=(subject->>'candidate_id')::uuid;
+   if not((lineage.id is not null and (private.timesheet_contract_current_placement_v1(lineage.timesheet_id)->>'family_root_id')
+      =primary_scope->>'family_root_id') or (family.id is not null and exists(
+      select 1 from public.weekly_exceptional_pay_family_events e where e.family_id=family.id
+       and e.durable_work_event_id=(subject->>'source_work_event_id')::uuid))) then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   root:=(primary_scope->>'family_root_id')::uuid;
+  else lineage:=null;family:=null;primary_scope:=null;
+  end if;
+  selection_identity:=private.weekly_source_pay_decision_selection_identity_v1(entry||subject||jsonb_build_object('family_root_id',root));
+  member_key:='source:'||encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_MEMBER_ID_V1',selection_identity),'hex');
+  resolved:=entry||subject||jsonb_build_object('member_key',member_key,'family_root_id',root,
+   'current_placement',primary_scope,'native_family_id',family.id);
+  selection:=selection||jsonb_build_array(resolved);
+ end loop;
+ if exists(select 1 from jsonb_array_elements(selection) lhs join jsonb_array_elements(selection) rhs
+   on lhs.value->>'member_key'<rhs.value->>'member_key' and lhs.value->>'source_row_id'=rhs.value->>'source_row_id'
+   where lhs.value->>'scope_mode'='WHOLE_SHIFT' or rhs.value->>'scope_mode'='WHOLE_SHIFT' or exists(
+    select 1 from jsonb_array_elements_text(lhs.value->'component_keys') l join jsonb_array_elements_text(rhs.value->'component_keys') r on r.value=l.value)) then
+  raise exception 'SOURCE_PAY_DECISION_SELECTION_OVERLAP' using errcode='22023';end if;
+ if p_lock then
+  perform private.weekly_source_pay_query_admit_v2();
+  for candidate in select distinct (x.value->>'candidate_id')::uuid from jsonb_array_elements(selection) x order by 1 loop
+   perform private.weekly_source_candidate_serial_gate_v1(candidate,'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+    (body->>'decision_id')::uuid,'SOURCE_PAY_DECISION');
+  end loop;
+  for scope_item in select distinct jsonb_build_object('root',x.value->'family_root_id','candidate',x.value->'candidate_id')
+    from jsonb_array_elements(selection) x where x.value->>'family_root_id' is not null order by 1 loop
+   perform private.timesheet_contract_move_family_lock_v1((scope_item->>'root')::uuid);
+  end loop;
+  -- Fresh exact facts after any native wait, before own metadata locks.
+  for scope_item in select value from jsonb_array_elements(selection) loop
+   if scope_item->>'family_root_id' is not null then
+    if private.timesheet_contract_native_pending_for_v1((scope_item#>>'{current_placement,requested_timesheet_id}')::uuid) is not null
+      or private.timesheet_contract_current_placement_v1((scope_item#>>'{current_placement,requested_timesheet_id}')::uuid)
+        is distinct from scope_item->'current_placement' then
+     raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+   end if;
+   subject:=private.weekly_source_pay_decision_source_subject_v1((scope_item->>'observed_source_row_id')::uuid);
+   if scope_item->'source_witness' is distinct from subject->'source_witness' then
+    raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+  end loop;
+ end if;
+ -- Enrich only factual invoice/contact/protection and current aggregate facts.
+ -- Native financial quantities/amounts remain the genuine Banking cut's owner.
+ resolved:='[]';
+ for scope_item in select value from jsonb_array_elements(selection) order by value->>'member_key' loop
+  perform private.weekly_source_pay_decision_scope_access_v1(p_actor,(scope_item->>'source_group_id')::uuid,
+   first_client,(scope_item->>'scope_date')::date);
+  select coalesce(array_agg(distinct l.timesheet_id order by l.timesheet_id),'{}'::uuid[]) into invoices
+   from public.weekly_source_row_timesheet_lineages l where l.upload_row_id=any(array[(scope_item->>'source_row_id')::uuid,(scope_item->>'observed_source_row_id')::uuid])
+    and l.candidate_id=(scope_item->>'candidate_id')::uuid and l.client_id=first_client;
+  invoice:=private.weekly_source_invoice_certificate_v1(invoices,array(select distinct x from unnest(array[(scope_item->>'source_row_id')::uuid,(scope_item->>'observed_source_row_id')::uuid]) x),p_lock);
+  select coalesce(jsonb_agg(jsonb_build_object('incident',to_jsonb(i),'comparison',to_jsonb(c)) order by i.id),'[]'::jsonb),
+    coalesce(jsonb_agg(i.id order by i.id),'[]'::jsonb) into issues,issue_ids
+   from public.weekly_discrepancy_incidents i join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
+   where i.candidate_id=(scope_item->>'candidate_id')::uuid and i.client_id=first_client and i.state='OPEN'
+    and i.source_cycle_id=(scope_item->>'source_cycle_id')::uuid and c.source_row_id=(scope_item->>'observed_source_row_id')::uuid
+    and i.work_event_id=(scope_item->>'source_work_event_id')::uuid
+    and (not exists(select 1 from private.weekly_source_pay_decisions accepted_decision where accepted_decision.id=(body->>'decision_id')::uuid and accepted_decision.accept_request_id is not null)
+      or exists(select 1 from private.weekly_source_pay_decision_members accepted_member where accepted_member.decision_id=(body->>'decision_id')::uuid
+       and accepted_member.member_key=scope_item->>'member_key' and i.id=any(accepted_member.contact_issue_ids)))
+    and c.issue_family in('SOURCE_MISSING_OR_NOT_AUTHORISED','SOURCE_HOURS_DIFFER','HEALTHROSTER_NOT_FINALISED')
+    and (scope_item->>'scope_mode'='WHOLE_SHIFT' or exists(
+     select 1 from private.bpay_next_approved_line line join private.bpay_next_work work on work.current_revision_id=line.revision_id
+      join public.contracts contract on contract.id=work.contract_id
+     where work.candidate_id=i.candidate_id and contract.client_id=i.client_id and line.component_kind in('WORK','PROTECTED_WORK')
+      and line.work_date=(scope_item->>'work_date')::date and scope_item->'component_keys' ? line.component_key
+      and (private.timesheet_contract_current_placement_v1(work.original_timesheet_id)->>'family_root_id')=scope_item->>'family_root_id')
+     or exists(select 1 from public.weekly_source_entitlement_heads head join public.weekly_source_entitlement_head_components component on component.head_id=head.id
+      where head.state='COMMITTED_CURRENT' and component.component_kind='WORKED_TIME'
+       and component.component_member_identity=scope_item->>'source_work_event_id'
+       and scope_item->'component_keys' ? ('SOURCE:'||component.component_id::text)
+       and (private.timesheet_contract_current_placement_v1(head.root_timesheet_id)->>'family_root_id')=scope_item->>'family_root_id'));
+  if body->>'decision'='EXCLUDE_FUTURE_WORK_PAY' and scope_item->>'source_work_event_id' is not null then
+   for active in select distinct f.id as family_id,t.durable_work_event_id as work_event_id
+     from public.weekly_exceptional_pending_reconciliation_targets t
+     join public.weekly_exceptional_payment_approvals a on a.id=t.approval_id and a.pay_target_family_id=t.family_id
+      and a.work_event_id=t.durable_work_event_id and a.withdrawn_at_utc is null
+     join public.weekly_exceptional_pay_target_families f on f.id=t.family_id and f.ownership_state='TARGET_MANAGED'
+      and f.candidate_id=(scope_item->>'candidate_id')::uuid and a.client_id=first_client
+     where t.state='ACTIVE' and t.durable_work_event_id=(scope_item->>'source_work_event_id')::uuid loop
+    if scope_item->>'family_root_id' is not null and not exists(select 1 from public.weekly_exceptional_pay_target_families f
+      where f.id=active.family_id and (private.timesheet_contract_current_placement_v1(f.root_timesheet_id)->>'family_root_id')=scope_item->>'family_root_id') then
+     raise exception 'SOURCE_PAY_DECISION_PROTECTION_SCOPE_INVALID' using errcode='23514';end if;
+    if exists(select 1 from jsonb_array_elements(required) q where q.value->>'member_key'=scope_item->>'member_key') then
+     raise exception 'SOURCE_PAY_DECISION_PROTECTION_SCOPE_AMBIGUOUS' using errcode='23514';end if;
+    required:=required||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','family_id',active.family_id,'work_event_id',active.work_event_id));
+   end loop;
+  end if;
+  for component in select value from jsonb_array_elements_text(case when jsonb_array_length(scope_item->'component_keys')=0
+    then '[null]'::jsonb else scope_item->'component_keys' end) loop
+   select count(*) into prior_count from (select distinct p.id,m.member_decision_id,p.current_version
+    from private.bpay_next_worker_pay_disposition p join private.bpay_next_worker_pay_disposition_member m
+      on m.disposition_id=p.id and m.version_no=p.current_version
+    where p.candidate_id=(scope_item->>'candidate_id')::uuid and p.actual_client_id=first_client
+     and p.original_source_row_id=(scope_item->>'source_row_id')::uuid and m.component_key is not distinct from component) native_prior;
+   if prior_count>1 then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   select distinct p.id as disposition_id,m.member_decision_id as decision_id,p.current_version into old_member
+    from private.bpay_next_worker_pay_disposition p join private.bpay_next_worker_pay_disposition_member m
+      on m.disposition_id=p.id and m.version_no=p.current_version
+    where p.candidate_id=(scope_item->>'candidate_id')::uuid and p.actual_client_id=first_client
+     and p.original_source_row_id=(scope_item->>'source_row_id')::uuid and m.component_key is not distinct from component;
+   if found then old_decisions:=array_append(old_decisions,old_member.decision_id);end if;
+   prior:=prior||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','component_key',component,
+    'disposition_id',old_member.disposition_id,'decision_id',old_member.decision_id,'disposition_version',old_member.current_version::text));
+  end loop;
+  resolved:=resolved||jsonb_build_array(scope_item||jsonb_build_object('invoice_certificate',invoice,
+   'selected_issue_ids',issue_ids,'issue_witnesses',issues));
+  invoice_witnesses:=invoice_witnesses||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','certificate',invoice));
+  witnesses:=witnesses||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','issues',issues));
+ end loop;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_DRAFT_SCOPE_V1','decision',body->'decision','selection',resolved,
+  'selection_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ACCEPTED_SELECTION_V1',
+    (select jsonb_agg(private.weekly_source_pay_decision_selection_identity_v1(x.value) order by x.value->>'member_key') from jsonb_array_elements(resolved) x)),'hex'),
+  'evidence_refs',body->'evidence_refs','financial_history_refs',body->'financial_history_refs','actual_client_id',first_client,
+  'required_quote_members',required,'prior_dispositions',prior,
+  'prior_dispositions_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_PRIOR_DISPOSITIONS_V1',prior),'hex'),
+  'supersedes_decision_id',case when cardinality(array(select distinct x from unnest(old_decisions) x))=1 then old_decisions[1] else null end,
+  'source_invoice_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_INVOICE_SET_V1',invoice_witnesses),'hex'),
+  'issue_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ISSUE_SET_V1',witnesses),'hex'));
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';
+end;
+$function$;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/05_decision_scope.sqlinc
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/06_invoice_duty_scope.sqlinc
+-- The current PAY placement never substitutes for immutable original invoice duty.
+create or replace function private.weekly_source_invoice_duty_scope_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+declare
+  v_root public.timesheets%rowtype;v_contract public.contracts%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_alias private.timesheet_contract_family_aliases%rowtype;v_physical jsonb;v_booking text;v_count integer;
+begin
+  select alias.* into v_alias from private.timesheet_contract_family_aliases alias where alias.timesheet_id=p_timesheet_id;
+  if not found or v_alias.original_timesheet_id is distinct from p_timesheet_id then
+    -- Ordinary current scope retains its complete native owner; pending B
+    -- refuses there, before NULL/unmatched/current fallback.
+    return private.weekly_source_pay_query_scope_v1(p_timesheet_id);
+  end if;
+  if private.timesheet_contract_source_original_eligible_v1(p_timesheet_id) is distinct from true then return null;end if;
+  v_physical:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+  if v_physical->>'requested_timesheet_id' is distinct from p_timesheet_id::text
+    or v_physical->>'family_root_id' is distinct from v_alias.family_root_id::text
+    or v_physical->'legacy_origin' is distinct from 'false'::jsonb
+    or not exists(
+    select 1 from private.timesheet_contract_move_operations operation
+    join private.timesheet_contract_move_members member on member.operation_id=operation.id
+    join public.timesheets original on original.timesheet_id=p_timesheet_id
+    join public.contracts original_contract on original_contract.id=original.contract_id
+    where operation.id=v_alias.accepted_operation_id
+      and (operation.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(operation.id))
+      and operation.purpose='CONTRACT_CORRECTION' and operation.accepted_review_id is not null
+      and operation.invoice_authority in('SOURCE_FINANCIAL','MIXED')
+      and operation.family_root_id=v_alias.family_root_id
+      and operation.candidate_id=original_contract.candidate_id and operation.actual_client_id=original_contract.client_id
+      and member.member_key=v_alias.member_key and member.family_root_id=v_alias.family_root_id
+      and member.role=v_alias.member_role and member.from_timesheet_id=p_timesheet_id
+      and member.from_version=original.version and member.from_contract_id is not distinct from original.contract_id
+      and member.original_booking_id=original.booking_id
+  ) then
+    raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+  -- Retain every native Source ownership condition and the separate-component
+  -- refusal. Original eligibility alone never makes a Timesheet Source-owned.
+  if private._candidate_expense_source_family_v1(p_timesheet_id) is distinct from true then return null;end if;
+  select t.* into strict v_root from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  select c.* into strict v_contract from public.contracts c where c.id=v_root.contract_id;
+  if v_root.sheet_scope is distinct from 'WEEKLY'
+    or v_root.line_type is distinct from 'HOURS' or v_root.is_adjustment is distinct from false
+    or v_root.week_ending_date is null or v_root.version is null or v_root.version<1
+    or nullif(btrim(v_root.booking_id),'') is null or v_contract.candidate_id is null or v_contract.client_id is null then return null;end if;
+  v_booking:=btrim(v_root.booking_id);
+  select count(*) into v_count from public.weekly_exceptional_pay_target_families f where btrim(f.root_family_booking_id)=v_booking;
+  if v_count>1 then raise exception 'WEEKLY_SOURCE_TARGET_FAMILY_AMBIGUOUS' using errcode='55000';end if;
+  if v_count=1 then
+    select f.* into strict v_family from public.weekly_exceptional_pay_target_families f where btrim(f.root_family_booking_id)=v_booking;
+    if v_family.root_timesheet_id is distinct from p_timesheet_id
+      or v_family.root_family_booking_id is distinct from v_root.booking_id
+      or v_family.candidate_id is distinct from v_contract.candidate_id or v_family.contract_id is distinct from v_root.contract_id
+      or v_family.week_ending_date is distinct from v_root.week_ending_date
+      or v_family.week_start_date is distinct from (v_root.week_ending_date-6)
+      or v_family.bound_version is null or v_family.bound_version<1 then
+      raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+  end if;
+  return jsonb_build_object('root_timesheet_id',v_root.timesheet_id,
+    'family_booking_id',v_root.booking_id,'target_family_id',v_family.id,
+    'candidate_id',v_contract.candidate_id,'client_id',v_contract.client_id,
+    'contract_id',v_contract.id,'week_ending_date',v_root.week_ending_date,
+    'root_version',v_root.version::text,'family_bound_version',v_family.bound_version::text);
+end;
+$function$;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/06_invoice_duty_scope.sqlinc
+
+-- BEGIN exact selected e8cc61559dd4a16fc9c9dd088fc5ad96f48af342:docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/99_acl.sqlinc
+alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;
+revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_resolve_root_identity_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_resolve_root_identity_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_lock_family_rows_v1(uuid[],uuid) owner to postgres;
+revoke all on function private.weekly_source_lock_family_rows_v1(uuid[],uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_pay_query_scope_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_pay_query_scope_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;
+alter function private.weekly_source_invoice_duty_scope_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_duty_scope_v1(uuid) from public,anon,authenticated,service_role;
+
+-- END exact selected docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/99_acl.sqlinc

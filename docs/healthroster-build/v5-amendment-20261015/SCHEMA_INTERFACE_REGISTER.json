@@ -6656,5 +6656,88 @@
     "currentSourceProducerReturn": "docs/healthroster-build/v6-owner-delivery-20261016/CURRENT_SOURCE_PRODUCER_RECEIPT_20261016.json",
     "original92ObjectsUnchanged": true,
     "fullContractAndRehearsalAndInstall2AndPartB": "NOT_RUN"
+  },
+  "contact_native_sql_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NOT_RELEASE_READY",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_NATIVE_SOURCE_INTEGRATION.json",
+    "producerCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+    "originalPeerCommit": "f4bc3669e2090d194dbf28f0bc6eb746d0477350",
+    "lockSuccessorCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+    "lockSuccessorPeerCommit": "7297352399dd7afe21abdf459e0b438f836e6cfb",
+    "completeDeclarations": 113,
+    "uniqueSignatures": 111,
+    "migrations": [
+      {
+        "path": "supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+        "sha256": "a6af48dac55e25dbf98a420e4171c30fc5dad767236dcca98b93e6676fca3875"
+      },
+      {
+        "path": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+        "sha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17"
+      },
+      {
+        "path": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+        "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f"
+      }
+    ],
+    "roots": [
+      {
+        "path": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites_v1.sql",
+        "rootSha256": "4f533b0efa81e36f7f72eb150b4ab85c9fd6793bea1dec30d3d7536caaf07609",
+        "closureSha256": "c43bbc6d13bdcbeb51ef9d2cc855ebc77cdfe11a20b569b93a613ff10fb77f79",
+        "expandedSha256": "61c602722ea660d8cbaf2644cd4f3c750ae5fd827def69f0558426d4127d4014",
+        "files": 3,
+        "statementCount": 17,
+        "definitionCount": 5
+      },
+      {
+        "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql",
+        "rootSha256": "6fd0844122be2463bbd00e598a19e8753a01b7b811465301e52e59ec9cb2cc67",
+        "closureSha256": "ce8ff2975c00d67b404a86bcd571d3ef0297d1d9621007ac173c1de1b69de293",
+        "expandedSha256": "a68496e1afb0b8e88c49148e87cfe2c264b75e0b38ceddbe90043f7234d69187",
+        "files": 55,
+        "statementCount": 361,
+        "definitionCount": 107
+      }
+    ],
+    "selectedClosedLegacyStart": {
+      "leaf": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+      "sha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+      "completeStatementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d"
+    },
+    "actualCommonPermitAndPerTargetOwnersRetained": true,
+    "original92ObjectsUnchanged": true,
+    "native": "NOT_RUN",
+    "fullRehearsalAndInstall2AndPartB": "NOT_RUN"
+  },
+  "office_manual_enquiry_parent_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NATIVE_AND_UI_ACCEPTANCE_REQUIRED",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_MANUAL_ENQUIRY_NATIVE_SOURCE_INTEGRATION.json",
+    "officeCommit": "045c95cecf2dcbb632c0a5827f19c38548ee3a11",
+    "backendProducerCommit": "ea64a53c5c8e0aeb568030a4b62b055fb12576ca",
+    "root": "supabase/repeatable/16102026_1205_weekly_contact_30_manual_enquiry_office_read_v1.sql",
+    "closureSha256": "35c9483fff1683014a32299486cc98710b67a4f0ca2f397a44e73d286ca8606b",
+    "leaf": "supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc",
+    "leafSha256": "d9f357da000be10590e85df31f2704bcbcdfe4b0e7e8b05821035496102a8001",
+    "actualRouteTestsPass": 5,
+    "officeAuthorTestsPass": 125,
+    "isolatedBrowserWidths": [
+      1366,
+      390
+    ],
+    "isolatedBrowserIsNotNativeAcceptance": true,
+    "native": "NOT_RUN",
+    "install2AndFinalPartB": "NOT_RUN"
+  },
+  "source13_finite_source_review_continuation_20261016": {
+    "status": "FINITE_SOURCE_CLASSIFIER_INTEGRATED_FULL_GATE_REVIEW_REQUIRED",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE13_FINITE_CLASSIFIER_INTEGRATION.json",
+    "producerCommit": "87436bc98ceba4a7112a342fe69906af585bd114",
+    "finiteNewKeys": 23,
+    "newOccurrences": 26,
+    "retainedBaselineOccurrences": 12,
+    "actualTestsPass": 15,
+    "nativeApproval": false,
+    "original92ObjectsUnchanged": true
   }
 }
