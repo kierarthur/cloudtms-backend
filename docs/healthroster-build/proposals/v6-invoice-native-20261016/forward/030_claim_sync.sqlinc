@@ -35,6 +35,9 @@ begin
   end if;
   v_document_generation:=case when v_workflow.state='FINALISED'
     then greatest(v_workflow.generation-1,1) else v_workflow.generation end;
+  if exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=v_workflow.target_timesheet_id) then
+    perform private.timesheet_contract_move_family_lock_v1(v_workflow.target_timesheet_id);
+  end if;
   v_current_owner:=coalesce(private._candidate_expense_current_timesheet_id_v1(v_workflow.id,v_workflow.target_timesheet_id),v_workflow.target_timesheet_id);
   if v_current_owner is not null then
     select * into v_fin from public.timesheets_financials financial
@@ -80,6 +83,7 @@ begin
     else 'NOT_AUTHORISED' end;
 
   v_base_agency:=v_agency_state;
+  v_current_owner:=coalesce(private._candidate_expense_current_timesheet_id_v1(v_workflow.id,v_workflow.target_timesheet_id),v_workflow.target_timesheet_id);
   for v_value in select * from private._candidate_expense_component_values_v1(v_workflow.id) loop
     select exists(
       select 1 from public.candidate_submission_components evidence
@@ -97,7 +101,18 @@ begin
     if found then
       v_current_owner:=coalesce(private.timesheet_contract_claim_placement_v1(v_workflow.id,
         v_component.owning_timesheet_id,v_component.expense_component_id),v_component.owning_timesheet_id);
-      v_agency_state:=case when v_component.agency_authorisation_state='PAID' then 'PAID' else v_base_agency end;
+      select * into v_fin from public.timesheets_financials financial
+       where financial.timesheet_id=v_current_owner and financial.is_current
+       order by financial.computed_at_utc desc nulls last,financial.updated_at desc,financial.id desc limit 1;
+      select * into strict v_timesheet from public.timesheets timesheet
+       where timesheet.timesheet_id=v_current_owner and timesheet.is_current and timesheet.archived_at_utc is null;
+      v_agency_state:=case
+       when v_component.agency_authorisation_state='PAID' then 'PAID'
+       when v_fin.paid_at_utc is not null or upper(coalesce(v_timesheet.status::text,''))='PAID' then 'PAID'
+       when v_fin.locked_by_invoice_id is not null or upper(coalesce(v_timesheet.status::text,''))='INVOICED' then 'INVOICED'
+       when v_fin.authorised_at_utc is not null or v_timesheet.authorised_at_server is not null
+        or upper(coalesce(v_timesheet.status::text,'')) in('AUTHORISED','AUTHORIZED') then 'AUTHORISED'
+       else 'NOT_AUTHORISED' end;
     end if;
     if v_component.expense_component_id is null then
       v_before:='{}'::jsonb;

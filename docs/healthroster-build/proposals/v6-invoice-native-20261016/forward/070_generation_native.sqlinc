@@ -12,6 +12,7 @@ declare
   v_part jsonb;
   v_scope_claim jsonb;
 begin
+  perform private.invoice_source_original_claim_enter_v1(p_claims,v_now);
   -- The optional scoped arm remains in this pipeline. Ordinary and whole
   -- commands retain the existing owner; QUEUE_DOCUMENT/issue is shared below.
   for v_scope_claim in select x.value from jsonb_array_elements(p_claims) x(value)
@@ -109,7 +110,7 @@ begin
           (select ts_vat.week_ending_date::text
              from public.timesheets ts_vat
             where ts_vat.timesheet_id=m.timesheet_id
-              and ts_vat.is_current
+              and (ts_vat.is_current or private.timesheet_contract_source_original_eligible_v1(ts_vat.timesheet_id))
             limit 1)))
         order by m.chunk_id,m.ordinality)
       from members m
@@ -156,7 +157,7 @@ begin
         coalesce(tf.invoice_breakdown_json::text,'')),'sha256'),'hex') row_revision,
       array_remove(array[
         case when ts.timesheet_id is null then 'TIMESHEET_NOT_FOUND' end,
-        case when ts.timesheet_id is not null and (not ts.is_current or ts.revoked_at is not null) then 'TIMESHEET_NOT_CURRENT' end,
+        case when ts.timesheet_id is not null and ((not ts.is_current and not private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id)) or ts.revoked_at is not null) then 'TIMESHEET_NOT_CURRENT' end,
         case when tf.id is null then 'CURRENT_FINANCIALS_MISSING' end,
         case when tf.id is not null and tf.is_stale then 'FINANCIALS_STALE' end,
         case when tf.id is not null and tf.processing_status::text<>'READY_FOR_INVOICE' then 'NOT_READY_FOR_INVOICE' end,
@@ -467,7 +468,7 @@ begin
       ) settings_snapshot
     from members m join public.invoice_operation_chunks c on c.id=m.chunk_id
     join public.timesheets_financials tf on tf.timesheet_id=m.timesheet_id and tf.is_current
-    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and ts.is_current
+    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and (ts.is_current or private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id))
     cross join lateral (
       select private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
         authority_json
@@ -634,7 +635,7 @@ begin
           (select ts_vat.week_ending_date::text
              from public.timesheets ts_vat
             where ts_vat.timesheet_id=m.timesheet_id
-              and ts_vat.is_current
+              and (ts_vat.is_current or private.timesheet_contract_source_original_eligible_v1(ts_vat.timesheet_id))
             limit 1)))
         order by m.chunk_id,m.source_member_key)
       from members m),'[]'::jsonb)) v
@@ -818,7 +819,7 @@ begin
             and coalesce(tf.invoice_breakdown_json->>'mode','')<>'SEGMENTS')
       ) still_valid
     from members m join public.timesheets_financials tf on tf.timesheet_id=m.timesheet_id and tf.is_current
-    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and ts.is_current and ts.revoked_at is null
+    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and (ts.is_current or private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id)) and ts.revoked_at is null
     left join public.v_ts_invoice_precheck pc on pc.timesheet_id=m.timesheet_id
     left join public.v_timesheets_summary_base vs
       on vs.timesheet_id=m.timesheet_id
@@ -884,7 +885,7 @@ begin
       count(*)::integer source_count
     from valid_chunks vc join members m on m.chunk_id=vc.id
     join public.timesheets_financials tf on tf.timesheet_id=m.timesheet_id and tf.is_current
-    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and ts.is_current
+    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and (ts.is_current or private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id))
     cross join lateral (
       select private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
         authority_json
@@ -923,7 +924,7 @@ begin
         else '[]'::jsonb end schedule_refs
     from members m join valid_chunks vc on vc.id=m.chunk_id
     join public.timesheets_financials tf on tf.timesheet_id=m.timesheet_id and tf.is_current
-    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and ts.is_current
+    join public.timesheets ts on ts.timesheet_id=m.timesheet_id and (ts.is_current or private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id))
     cross join lateral (
       select private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
         authority_json
@@ -1027,6 +1028,9 @@ begin
         select 1
         from public.invoices existing_header
         where existing_header.id=s.planned_invoice_id)
+      and (not private.timesheet_contract_source_original_eligible_v1(s.timesheet_id)
+        or exists(select 1 from public.invoice_operation_chunks native_owner
+          where native_owner.id=s.chunk_id and native_owner.payload_json?'source_original_line_plan'))
   ),
   segment_lock_authority_pre as materialized (
     select r.*
@@ -1378,6 +1382,58 @@ begin
       select 1 from correction_failures_pre f
       where f.scope_key=vc.planned_invoice_id::text)
   ),
+  native_planned_lines as materialized (
+    select l.chunk_id,
+      l.planned_invoice_id as invoice_id,
+      l.timesheet_id as timesheet_id,
+      l.booking_id as booking_id,
+      l.description as description,
+      round(l.h_day,2) as hours_day,
+      round(l.h_night,2) as hours_night,
+      round(l.h_sat,2) as hours_sat,
+      round(l.h_sun,2) as hours_sun,
+      round(l.h_bh,2) as hours_bh,
+      l.pay_day as pay_day,
+      l.pay_night as pay_night,
+      l.pay_sat as pay_sat,
+      l.pay_sun as pay_sun,
+      l.pay_bh as pay_bh,
+      l.charge_day as charge_day,
+      l.charge_night as charge_night,
+      l.charge_sat as charge_sat,
+      l.charge_sun as charge_sun,
+      l.charge_bh as charge_bh,
+      round(l.pay_ex,2) as total_pay_ex_vat,
+      round(l.charge_ex,2) as total_charge_ex_vat,
+      round(l.charge_ex-l.pay_ex,2) as margin_ex_vat,
+      l.vat_rate as vat_rate_pct,
+      round(l.charge_ex*l.vat_rate/100,2) as vat_amount,
+      round(l.charge_ex+(l.charge_ex*l.vat_rate/100),2) as total_inc_vat,
+      null as paper_ts_r2_key,
+      jsonb_build_object('line_type',l.line_type,'timesheet_id',l.timesheet_id,
+        'candidate_display',l.description,'week_ending_date',
+        (select s.week_ending_date from source_rows s where s.timesheet_id=l.timesheet_id limit 1),
+        'schedule_references',
+        (select s.schedule_refs from source_rows s where s.timesheet_id=l.timesheet_id limit 1),
+        'totals',jsonb_build_object('line_pay_ex_vat',round(l.pay_ex,2),
+          'line_charge_ex_vat',round(l.charge_ex,2),'margin_ex_vat',round(l.charge_ex-l.pay_ex,2),
+          'vat_rate_pct',l.vat_rate,'vat_amount',round(l.charge_ex*l.vat_rate/100,2),
+          'total_inc_vat',round(l.charge_ex+(l.charge_ex*l.vat_rate/100),2)))||l.detail as meta_json,
+      l.source_key as source_key
+    from line_union l
+  ),
+  source_original_chunks as materialized (
+    select distinct vc.id from write_eligible_chunks vc join members m on m.chunk_id=vc.id
+    where private.timesheet_contract_source_original_eligible_v1(m.timesheet_id)
+  ),
+  source_original_plan_inputs as materialized (
+    select s.id chunk_id,jsonb_agg(to_jsonb(l)-'chunk_id' order by l.timesheet_id,l.source_key) lines
+    from source_original_chunks s join native_planned_lines l on l.chunk_id=s.id group by s.id
+  ),
+  source_original_missing_witness as materialized (
+    select s.id chunk_id from source_original_chunks s join public.invoice_operation_chunks c on c.id=s.id
+    where not(c.payload_json?'source_original_line_plan')
+  ),
   line_totals as materialized (
     select l.planned_invoice_id,
       round(sum(round(l.charge_ex,2)),2) subtotal_ex_vat,
@@ -1440,10 +1496,24 @@ begin
       select 1
       from inserted_headers h
       where h.id=e.invoice_id)
+      and not exists(select 1 from source_original_missing_witness missing where missing.chunk_id=e.chunk_id)
+  ),
+  deferred_existing_source_headers as (
+    update public.invoice_operation_chunks c set status='QUEUED',phase='COMMIT',
+      payload_json=jsonb_set(c.payload_json,'{source_original_line_plan}',private.invoice_source_original_line_plan_v1(c.id,p.lines),true),
+      progress_json=coalesce(c.progress_json,'{}'::jsonb)||jsonb_build_object('status_message','Original Source line plan recorded'),
+      error_json=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null,updated_at_utc=v_now
+    from source_original_missing_witness missing join source_original_plan_inputs p on p.chunk_id=missing.chunk_id
+    join existing_target_headers h on h.chunk_id=p.chunk_id
+    where c.id=p.chunk_id returning c.id
   ),
   deferred_new_headers as (
     update public.invoice_operation_chunks c
-    set status='QUEUED',
+    set payload_json=case when exists(select 1 from source_original_plan_inputs p where p.chunk_id=c.id)
+        then jsonb_set(c.payload_json,'{source_original_line_plan}',private.invoice_source_original_line_plan_v1(c.id,
+          (select p.lines from source_original_plan_inputs p where p.chunk_id=c.id)),true)
+        else c.payload_json end,
+      status='QUEUED',
       phase='COMMIT',
       progress_json=coalesce(c.progress_json,'{}'::jsonb)
         ||jsonb_build_object('status_message',
@@ -1459,29 +1529,39 @@ begin
     returning c.id
   ),
   inserted_lines as (
-    insert into public.invoice_lines(
-      invoice_id,timesheet_id,booking_id,description,hours_day,hours_night,hours_sat,hours_sun,hours_bh,
-      pay_day,pay_night,pay_sat,pay_sun,pay_bh,
-      charge_day,charge_night,charge_sat,charge_sun,charge_bh,
-      total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,
-      paper_ts_r2_key,meta_json,source_key
-    )
-    select l.planned_invoice_id,l.timesheet_id,l.booking_id,l.description,
-      round(l.h_day,2),round(l.h_night,2),round(l.h_sat,2),round(l.h_sun,2),round(l.h_bh,2),
-      l.pay_day,l.pay_night,l.pay_sat,l.pay_sun,l.pay_bh,
-      l.charge_day,l.charge_night,l.charge_sat,l.charge_sun,l.charge_bh,
-      round(l.pay_ex,2),round(l.charge_ex,2),round(l.charge_ex-l.pay_ex,2),l.vat_rate,
-      round(l.charge_ex*l.vat_rate/100,2),round(l.charge_ex+(l.charge_ex*l.vat_rate/100),2),
-      null,jsonb_build_object('line_type',l.line_type,'timesheet_id',l.timesheet_id,
-        'candidate_display',l.description,'week_ending_date',
-        (select s.week_ending_date from source_rows s where s.timesheet_id=l.timesheet_id limit 1),
-        'schedule_references',
-        (select s.schedule_refs from source_rows s where s.timesheet_id=l.timesheet_id limit 1),
-        'totals',jsonb_build_object('line_pay_ex_vat',round(l.pay_ex,2),
-          'line_charge_ex_vat',round(l.charge_ex,2),'margin_ex_vat',round(l.charge_ex-l.pay_ex,2),
-          'vat_rate_pct',l.vat_rate,'vat_amount',round(l.charge_ex*l.vat_rate/100,2),
-          'total_inc_vat',round(l.charge_ex+(l.charge_ex*l.vat_rate/100),2)))||l.detail,l.source_key
-    from line_union l join target_headers h on h.invoice_id=l.planned_invoice_id
+    insert into public.invoice_lines(invoice_id,timesheet_id,booking_id,description,hours_day,hours_night,hours_sat,hours_sun,hours_bh,pay_day,pay_night,pay_sat,pay_sun,pay_bh,charge_day,charge_night,charge_sat,charge_sun,charge_bh,total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,paper_ts_r2_key,meta_json,source_key)
+    select l.invoice_id,
+      l.timesheet_id,
+      l.booking_id,
+      l.description,
+      l.hours_day,
+      l.hours_night,
+      l.hours_sat,
+      l.hours_sun,
+      l.hours_bh,
+      l.pay_day,
+      l.pay_night,
+      l.pay_sat,
+      l.pay_sun,
+      l.pay_bh,
+      l.charge_day,
+      l.charge_night,
+      l.charge_sat,
+      l.charge_sun,
+      l.charge_bh,
+      l.total_pay_ex_vat,
+      l.total_charge_ex_vat,
+      l.margin_ex_vat,
+      l.vat_rate_pct,
+      l.vat_amount,
+      l.total_inc_vat,
+      l.paper_ts_r2_key,
+      l.meta_json||case when private.timesheet_contract_source_original_eligible_v1(l.timesheet_id)
+        then jsonb_build_object('source_original_generation_chunk_id',l.chunk_id,
+          'source_original_line_plan_sha256',(select c.payload_json#>>'{source_original_line_plan,sha256}' from public.invoice_operation_chunks c where c.id=l.chunk_id))
+        else '{}'::jsonb end,
+      l.source_key
+    from native_planned_lines l join target_headers h on h.invoice_id=l.invoice_id
     on conflict(invoice_id,source_key) do nothing
     returning invoice_id,timesheet_id,total_charge_ex_vat,vat_amount,total_inc_vat
   ),
@@ -1752,7 +1832,6 @@ begin
       on h.chunk_id=vc.id and h.invoice_id=vc.planned_invoice_id
     join public.invoice_operations o on o.id=vc.operation_id
     left join public.tms_users u on u.id=o.actor_user_id
-    where c.resume_invoice_id is null
     returning id
   ),
   correction_failures as materialized (
@@ -2237,6 +2316,9 @@ begin
   where x->>'phase'='QUEUE_DOCUMENT';
   v_result:=v_result||coalesce(v_part,'[]'::jsonb);
 
+  update public.invoice_operation_chunks c set payload_json=c.payload_json-'source_original_native_claim'
+    where c.id in(select (x->>'chunk_id')::uuid from jsonb_array_elements(p_claims) x)
+      and c.payload_json?'source_original_native_claim';
   return coalesce(v_result,'[]'::jsonb);
 end;
 $function$;

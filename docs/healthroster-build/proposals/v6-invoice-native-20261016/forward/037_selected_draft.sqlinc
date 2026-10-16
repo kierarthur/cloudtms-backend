@@ -1,0 +1,78 @@
+create or replace function private.invoice_contract_move_selected_financial_authorise_v1(p_old jsonb,p_new jsonb,p_invoice_id uuid)
+returns boolean language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype;o private.timesheet_contract_move_operations%rowtype;v_key text;
+begin
+ -- Existing native updates to a current, unarchived B retain ordinary admission.
+ if not exists(select 1 from public.timesheets t where t.timesheet_id=(p_old->>'timesheet_id')::uuid
+  and t.archived_at_utc is not null) then return true;end if;
+ c:=private.timesheet_contract_move_context_v1();
+ if c.id is null then return true;end if; -- The archived-row guard still refuses an unqualified call.
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=c.operation_id;
+ select distinct s.member_key into strict v_key from private.timesheet_contract_move_billing_slices s
+ where s.operation_id=o.id and s.billing_revision=o.billing_revision and s.original_invoice_id=p_invoice_id
+  and s.original_financial_id=(p_old->>'id')::uuid and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT');
+ perform private.timesheet_contract_move_event_register_v1(v_key,'private.timesheet_contract_move_financial_row_guard_v1',
+  'public.timesheets_financials'::regclass,'UPDATE',p_old,p_new,(o.placement_receipt_json->>'receipt_id')::uuid,p_invoice_id);
+ perform private.timesheet_contract_move_capability_issue_v1(o.id,v_key,c.phase,'private.timesheet_contract_move_financial_row_guard_v1');
+ return true;
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_selected_drafts_prepare_v1(p_operation_id uuid,p_actor_user_id uuid,p_now_utc timestamptz)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;i public.invoices%rowtype;v_invoice record;v_remove uuid[];v_add uuid[];
+ v_unselected jsonb;v_hold jsonb;v_context uuid;v_manifest jsonb;v_phase text;v_result jsonb;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id for update;
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  raise exception 'INVOICE_PREPARATION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ for v_invoice in select s.original_invoice_id,bool_or(s.disposition='RELOCATE_DRAFT') relocate
+  from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT')
+  group by s.original_invoice_id order by s.original_invoice_id loop
+  select x.* into strict i from public.invoices x where x.id=v_invoice.original_invoice_id for update;
+  if i.status::text not in('DRAFT','ON_HOLD') or i.paid_at_utc is not null or i.issued_at_utc is not null
+   or i.issued_document_version_id is not null or i.active_issue_operation_id is not null then
+   raise exception 'CONTRACT_MOVE_SELECTED_DRAFT_CHANGED' using errcode='40001';end if;
+  if exists(select 1 from public.audit_events a where a.object_id_text=i.id::text and a.action='INVOICE_ISSUED')
+   and not private.invoice_contract_move_verified_unissue_v1(i.id) then
+   raise exception 'CONTRACT_MOVE_VERIFIED_UNISSUE_REQUIRED' using errcode='55000';end if;
+  select array_agg(distinct (r.value->>'original_invoice_line_id')::uuid order by (r.value->>'original_invoice_line_id')::uuid) into v_remove
+  from private.timesheet_contract_move_reviews review cross join lateral jsonb_array_elements(review.manifest_json#>'{invoice,slices}') r(value)
+  where review.id=o.accepted_review_id and r.value->>'original_invoice_id'=i.id::text
+   and r.value->>'disposition' in('EDIT_DRAFT','RELOCATE_DRAFT');
+  select array_agg(distinct m.to_timesheet_id order by m.to_timesheet_id) into v_add from private.timesheet_contract_move_members m
+   join private.timesheet_contract_move_billing_slices s on s.operation_id=m.operation_id and s.member_key=m.member_key
+   where s.operation_id=o.id and s.original_invoice_id=i.id and s.disposition='EDIT_DRAFT';
+  if v_invoice.relocate and cardinality(v_add)>0 then raise exception 'CONTRACT_MOVE_DRAFT_DISPOSITION_PARTITION_INVALID' using errcode='55000';end if;
+  select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) into v_unselected from public.invoice_lines l
+   where l.invoice_id=i.id and not(l.id=any(v_remove));
+  v_hold:=jsonb_build_object('status',i.status,'on_hold_reason',i.on_hold_reason);
+  v_context:=gen_random_uuid();v_phase:=case when v_invoice.relocate then 'INVOICE_SELECTED_RELOCATE' else 'INVOICE_SELECTED_EDIT' end;
+  select jsonb_build_object('version','CORRECTION_NATIVE_EVENTS_V1','operation_id',o.id,'review_id',o.accepted_review_id,
+   'members',jsonb_agg(to_jsonb(m) order by m.member_key),'events','[]'::jsonb) into v_manifest
+   from private.timesheet_contract_move_members m where m.operation_id=o.id;
+  insert into private.timesheet_contract_move_execution_contexts(id,operation_id,backend_pid,transaction_id,actor_user_id,review_id,
+   manifest_sha256,billing_revision,event_no,phase,native_manifest_json,created_at_utc,expires_at_utc)
+  values(v_context,o.id,pg_backend_pid(),pg_current_xact_id(),p_actor_user_id,o.accepted_review_id,
+   private.timesheet_contract_move_row_hash_v1(v_manifest),o.billing_revision,0,v_phase,v_manifest,p_now_utc,p_now_utc+interval '120 seconds');
+  perform set_config('cloudtms.contract_move_execution_context',v_context::text,true);
+  v_result:=public.invoice_apply_edits(i.id,jsonb_build_object('remove_invoice_line_ids',to_jsonb(v_remove),
+   'add_timesheet_ids',coalesce(to_jsonb(v_add),'[]'::jsonb)),p_actor_user_id);
+  perform private.timesheet_contract_move_capability_cleanup_v1();
+  if exists(select 1 from public.invoice_lines l where l.id=any(v_remove))
+   or (select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from public.invoice_lines l
+    where l.invoice_id=i.id and l.id in(select (x->>'id')::uuid from jsonb_array_elements(v_unselected) x)) is distinct from v_unselected
+   or exists(select 1 from unnest(coalesce(v_add,'{}'::uuid[])) added(id) where not exists(select 1 from public.invoice_lines l
+    where l.invoice_id=i.id and l.timesheet_id=added.id))
+   or (select jsonb_build_object('status',live.status,'on_hold_reason',live.on_hold_reason) from public.invoices live where live.id=i.id) is distinct from v_hold then
+   raise exception 'CONTRACT_MOVE_NATIVE_SELECTED_DRAFT_RESULT_UNPROVED' using errcode='55000';end if;
+  perform public._audit_insert('invoices',i.id::text,'CONTRACT_MOVE_SELECTED_DRAFT_PREPARED',
+   jsonb_build_object('operation_id',o.id,'billing_revision',o.billing_revision::text,'removed_invoice_line_ids',v_remove),
+   jsonb_build_object('native_result',v_result,'current_timesheet_ids',coalesce(v_add,'{}'::uuid[]),'hold_purpose',v_hold),null,p_actor_user_id);
+ end loop;
+end;
+$function$;

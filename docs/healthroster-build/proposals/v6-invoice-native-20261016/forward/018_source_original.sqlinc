@@ -10,15 +10,33 @@ begin
   where v.timesheet_id=p_original_timesheet_id and v.original_timesheet_id=p_original_timesheet_id;
  if not found then return false;end if;
  select v.* into o from private.timesheet_contract_move_operations v where v.id=a.accepted_operation_id;
- if o.state not in('COMPLETE','SUPERSEDED') or o.invoice_authority not in('SOURCE_FINANCIAL','MIXED') then return false;end if;
+ if (o.state not in('COMPLETE','SUPERSEDED') and not private.timesheet_contract_move_accepting_v1(o.id))
+  or o.invoice_authority not in('SOURCE_FINANCIAL','MIXED') then return false;end if;
  select v.* into r from private.timesheet_contract_move_reviews v where v.id=o.accepted_review_id and v.operation_id=o.id;
- if not exists(select 1 from private.timesheet_contract_move_members m
+ if (not exists(select 1 from private.timesheet_contract_move_members m
   join public.weekly_source_row_timesheet_lineages l on l.id=any(m.source_lineage_ids)
   where m.operation_id=o.id and m.member_key=a.member_key and m.from_timesheet_id=p_original_timesheet_id
-   and l.timesheet_id=p_original_timesheet_id) or r.id is null then return false;end if;
+   and l.timesheet_id=p_original_timesheet_id)
+  and not exists(select 1 from public.nhsp_shifts s join public.hr_imports h on h.id=s.latest_import_id
+   where s.timesheet_id=p_original_timesheet_id and h.applied_at is not null and h.source_system=s.source_system
+    and h.client_id=s.client_id and s.charge_amount_snapshot is not null)) or r.id is null then return false;end if;
  p:=private.timesheet_contract_current_placement_v1(p_original_timesheet_id);
  return p->>'family_root_id'=a.family_root_id::text;
 end;
 $function$;
 alter function private.timesheet_contract_source_original_eligible_v1(uuid) owner to postgres;
 revoke all on function private.timesheet_contract_source_original_eligible_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_contract_source_pay_only_v1(p_timesheet_id uuid)
+returns boolean language sql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from private.timesheet_contract_family_aliases a
+  join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id
+  where a.timesheet_id=p_timesheet_id and a.original_timesheet_id<>p_timesheet_id
+   and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id))
+   and exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id
+    and s.member_key=a.member_key and s.authority='SOURCE_FINANCIAL')
+   and not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id
+    and s.member_key=a.member_key and s.authority='CONTRACT_PRICED'));
+$function$;

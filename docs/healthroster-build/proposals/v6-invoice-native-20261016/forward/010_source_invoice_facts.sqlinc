@@ -137,7 +137,7 @@ begin
  if v_unresolved then v_issues:=array_append(v_issues,'INVOICE_ORIGIN_REVIEW_REQUIRED');end if;
  v_phase:=case when cardinality(v_invoices)>0 then 'INVOICED'
   when cardinality(v_movements)>0 or exists(select 1 from public.nhsp_shifts s where s.id=any(v_legacy_shifts) and s.charge_amount_snapshot is not null) then 'ACCEPTED_UNINVOICED'
-  when cardinality(p_source_row_ids)>0 then 'NO_FINAL_REPORT_YET' else 'UNRESOLVED' end;
+  when cardinality(v_rows)>0 then 'NO_FINAL_REPORT_YET' else 'UNRESOLVED' end;
  select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_uploads native_row where id=any(v_uploads);
  if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
  v_witness:=v_witness||jsonb_build_object('source_uploads',v_part);

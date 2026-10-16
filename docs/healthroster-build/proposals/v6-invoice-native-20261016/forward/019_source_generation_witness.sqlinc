@@ -1,0 +1,147 @@
+-- Native generation claim provenance lives only on the already leased chunk.
+-- It is derived after validating that claim, never from transport/GUC/config.
+create or replace function private.invoice_source_original_claim_enter_v1(p_claims jsonb,p_now_utc timestamptz)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare q jsonb;c public.invoice_operation_chunks%rowtype;o public.invoice_operations%rowtype;v_stamp jsonb;
+begin
+ for q in select value from jsonb_array_elements(p_claims) where value->>'phase'='COMMIT' loop
+  select x.* into strict c from public.invoice_operation_chunks x where x.id=(q->>'chunk_id')::uuid for update;
+  if c.payload_json->>'command_type'='GENERATE_CREDIT_NOTE' or not exists(select 1
+   from jsonb_array_elements_text(coalesce(c.payload_json->'canonical_source_ids',c.payload_json->'source_ids','[]'::jsonb)) id
+   where private.timesheet_contract_source_original_eligible_v1(id::uuid)) then continue;end if;
+  select x.* into strict o from public.invoice_operations x where x.id=c.operation_id;
+  if c.status<>'RUNNING' or c.phase<>'COMMIT' or c.lease_token is distinct from (q->>'lease_token')::uuid
+   or c.fence_token::text is distinct from q->>'fence_token'
+   or c.operation_control_version::text is distinct from q->>'operation_control_version'
+   or c.operation_control_version<>o.control_version or c.lease_expires_at_utc<=coalesce(p_now_utc,clock_timestamp())
+   or o.operation_type<>'GENERATE_INVOICES' or o.status not in('QUEUED','RUNNING','WAITING','RETRY_WAIT') or not exists(select 1 from public.tms_users u
+    where u.id=o.actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+   raise exception 'SOURCE_ORIGINAL_GENERATION_CLAIM_STALE' using errcode='40001';end if;
+  v_stamp:=jsonb_build_object('chunk_id',c.id,'operation_id',o.id,'actor_user_id',o.actor_user_id,
+   'lease_token',c.lease_token,'fence_token',c.fence_token::text,'operation_control_version',c.operation_control_version::text,
+   'backend_pid',pg_backend_pid(),'transaction_id',pg_current_xact_id()::text);
+  update public.invoice_operation_chunks set payload_json=jsonb_set(payload_json,'{source_original_native_claim}',v_stamp,true) where id=c.id;
+ end loop;
+end;
+$function$;
+
+create or replace function private.invoice_source_original_claim_v1(p_chunk_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare c public.invoice_operation_chunks%rowtype;o public.invoice_operations%rowtype;s jsonb;
+begin
+ select x.* into strict c from public.invoice_operation_chunks x where x.id=p_chunk_id;
+ select x.* into strict o from public.invoice_operations x where x.id=c.operation_id;
+ s:=c.payload_json->'source_original_native_claim';
+ if s is null or s->>'chunk_id' is distinct from c.id::text or s->>'operation_id' is distinct from o.id::text
+  or s->>'actor_user_id' is distinct from o.actor_user_id::text or s->>'backend_pid' is distinct from pg_backend_pid()::text
+  or s->>'transaction_id' is distinct from pg_current_xact_id()::text or c.status<>'RUNNING' or c.phase<>'COMMIT'
+  or s->>'lease_token' is distinct from c.lease_token::text or s->>'fence_token' is distinct from c.fence_token::text
+  or s->>'operation_control_version' is distinct from c.operation_control_version::text
+  or c.operation_control_version<>o.control_version or c.lease_expires_at_utc<=clock_timestamp()
+  or o.status not in('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+  or not exists(select 1 from public.tms_users u where u.id=o.actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  raise exception 'SOURCE_ORIGINAL_GENERATION_CLAIM_STALE' using errcode='40001';end if;
+ return s;
+end;
+$function$;
+
+create or replace function private.invoice_source_original_line_plan_v1(p_chunk_id uuid,p_lines jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare c public.invoice_operation_chunks%rowtype;v_claim jsonb;v_origins jsonb:='[]';v_id uuid;v_origin jsonb;v_plan jsonb;
+ a private.timesheet_contract_family_aliases%rowtype;o private.timesheet_contract_move_operations%rowtype;
+ r private.timesheet_contract_move_reviews%rowtype;f public.timesheets_financials%rowtype;m jsonb;
+begin
+ v_claim:=private.invoice_source_original_claim_v1(p_chunk_id);
+ select x.* into strict c from public.invoice_operation_chunks x where x.id=p_chunk_id;
+ if jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines) not between 1 and 10000 then
+  raise exception 'SOURCE_ORIGINAL_LINE_PLAN_INVALID' using errcode='22023';end if;
+ for v_id in select distinct (line->>'timesheet_id')::uuid from jsonb_array_elements(p_lines) line
+  where private.timesheet_contract_source_original_eligible_v1((line->>'timesheet_id')::uuid) order by 1 loop
+  select x.* into strict a from private.timesheet_contract_family_aliases x where x.timesheet_id=v_id and x.original_timesheet_id=v_id;
+  select x.* into strict o from private.timesheet_contract_move_operations x where x.id=a.accepted_operation_id;
+  select x.* into strict r from private.timesheet_contract_move_reviews x where x.id=o.accepted_review_id and x.operation_id=o.id;
+  select value into strict m from jsonb_array_elements(r.manifest_json#>'{physical,members}') where value->>'member_key'=a.member_key;
+  select x.* into strict f from public.timesheets_financials x where x.id=(m->>'from_financial_id')::uuid;
+  if exists(select 1 from public.weekly_source_billing_movements movement where movement.invoice_timesheet_id=v_id)
+   or private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_financial_economics_v1(to_jsonb(f)))
+    is distinct from decode(m->>'financial_economics_sha256','hex')
+   or not(r.manifest_json#>'{invoice,source_certificate,original_invoice_timesheet_ids}'?v_id::text) then
+   raise exception 'SOURCE_ORIGINAL_INVOICE_BASIS_CHANGED' using errcode='40001';end if;
+  v_origin:=jsonb_build_object('timesheet_id',v_id,'financial_id',f.id,'financial_economics_sha256',m->>'financial_economics_sha256',
+   'correction_id',o.id,'review_id',r.id,'member_key',a.member_key,'source_certificate',r.manifest_json#>'{invoice,source_certificate}');
+  v_origins:=v_origins||jsonb_build_array(v_origin);
+ end loop;
+ if jsonb_array_length(v_origins)=0 then raise exception 'SOURCE_ORIGINAL_LINE_PLAN_NOT_REQUIRED' using errcode='22023';end if;
+ v_plan:=jsonb_build_object('version','SOURCE_ORIGINAL_NATIVE_LINE_PLAN_V1','chunk_id',c.id,'operation_id',c.operation_id,
+  'planned_invoice_id',c.payload_json#>'{plan,planned_invoice_id}','source_revision',c.payload_json->'source_revision',
+  'canonical_source_members',c.payload_json->'canonical_source_members','operation_control_version',c.operation_control_version::text,
+  'original_plan_claim',v_claim,'origins',v_origins,'lines',p_lines);
+ return v_plan||jsonb_build_object('sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_LINE_PLAN_V1',v_plan),'hex'));
+end;
+$function$;
+
+create or replace function private.invoice_source_original_line_allowed_v1(p_new jsonb)
+returns boolean language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare c public.invoice_operation_chunks%rowtype;w jsonb;expected jsonb;v_origin jsonb;f public.timesheets_financials%rowtype;
+ v_projection jsonb;v_compare jsonb;v_member jsonb;v_certificate jsonb;
+begin
+ if not private.timesheet_contract_source_original_eligible_v1((p_new->>'timesheet_id')::uuid)
+  or not pg_input_is_valid(p_new#>>'{meta_json,source_original_generation_chunk_id}','uuid') then return false;end if;
+ select x.* into strict c from public.invoice_operation_chunks x where x.id=(p_new#>>'{meta_json,source_original_generation_chunk_id}')::uuid;
+ perform private.invoice_source_original_claim_v1(c.id);
+ w:=c.payload_json->'source_original_line_plan';
+ if w->>'version' is distinct from 'SOURCE_ORIGINAL_NATIVE_LINE_PLAN_V1' or w->>'chunk_id' is distinct from c.id::text
+  or w->>'operation_id' is distinct from c.operation_id::text
+  or w->>'planned_invoice_id' is distinct from p_new->>'invoice_id'
+  or w->>'planned_invoice_id' is distinct from c.payload_json#>>'{plan,planned_invoice_id}'
+  or w->>'source_revision' is distinct from c.payload_json->>'source_revision'
+  or w->'canonical_source_members' is distinct from c.payload_json->'canonical_source_members'
+  or not pg_input_is_valid(w->>'operation_control_version','bigint')
+  or (w->>'operation_control_version')::bigint>c.operation_control_version
+  or w#>>'{original_plan_claim,operation_control_version}' is distinct from w->>'operation_control_version'
+  or w->>'sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_LINE_PLAN_V1',w-'sha256'),'hex') then
+  raise exception 'SOURCE_ORIGINAL_LINE_PLAN_STALE' using errcode='40001';end if;
+ select value into strict expected from jsonb_array_elements(w->'lines') where value->>'timesheet_id'=p_new->>'timesheet_id'
+  and value->>'source_key'=p_new->>'source_key';
+ select value into strict v_origin from jsonb_array_elements(w->'origins') where value->>'timesheet_id'=p_new->>'timesheet_id';
+ select m.value,r.manifest_json#>'{invoice,source_certificate}' into strict v_member,v_certificate
+ from private.timesheet_contract_family_aliases a
+ join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id
+ join private.timesheet_contract_move_reviews r on r.id=o.accepted_review_id and r.operation_id=o.id
+ cross join lateral jsonb_array_elements(r.manifest_json#>'{physical,members}') m(value)
+ where a.timesheet_id=(p_new->>'timesheet_id')::uuid and a.original_timesheet_id=a.timesheet_id
+  and o.id::text=v_origin->>'correction_id' and r.id::text=v_origin->>'review_id'
+  and m.value->>'member_key'=a.member_key;
+ if v_member->>'from_financial_id' is distinct from v_origin->>'financial_id'
+  or v_member->>'financial_economics_sha256' is distinct from v_origin->>'financial_economics_sha256'
+  or v_certificate is distinct from v_origin->'source_certificate' then
+  raise exception 'SOURCE_ORIGINAL_INVOICE_BASIS_CHANGED' using errcode='40001';end if;
+ select x.* into strict f from public.timesheets_financials x where x.id=(v_origin->>'financial_id')::uuid;
+ if private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_financial_economics_v1(to_jsonb(f)))
+  is distinct from decode(v_origin->>'financial_economics_sha256','hex') then
+  raise exception 'SOURCE_ORIGINAL_INVOICE_BASIS_CHANGED' using errcode='40001';end if;
+ -- Compare precisely the columns produced by the one unchanged native line
+ -- projection. Database identity/default columns are deliberately not inputs.
+ expected:=jsonb_set(expected,'{meta_json}',(expected->'meta_json')||jsonb_build_object(
+  'source_original_generation_chunk_id',c.id,'source_original_line_plan_sha256',w->>'sha256'));
+ select jsonb_object_agg(key,p_new->key) into v_projection from jsonb_object_keys(expected) key;
+ if v_projection is distinct from expected then raise exception 'SOURCE_ORIGINAL_INTENDED_LINE_CHANGED' using errcode='40001';end if;
+ if exists(select 1 from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
+  where l.timesheet_id=(p_new->>'timesheet_id')::uuid and i.type='INVOICE' and i.status::text not in('CANCELLED','VOID')
+   and l.invoice_id<>(p_new->>'invoice_id')::uuid) then
+  raise exception 'SOURCE_ORIGINAL_DUPLICATE_COVERAGE' using errcode='55000';end if;
+ select jsonb_object_agg(key,to_jsonb(l)->key) into v_compare from public.invoice_lines l
+  cross join lateral jsonb_object_keys(expected) key where l.invoice_id=(p_new->>'invoice_id')::uuid and l.source_key=p_new->>'source_key';
+ if v_compare is not null and v_compare is distinct from expected then
+  raise exception 'SOURCE_ORIGINAL_REPLAY_LINE_CHANGED' using errcode='40001';end if;
+ return true;
+end;
+$function$;

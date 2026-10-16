@@ -4,6 +4,8 @@ set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
 declare member jsonb;line record;v_original uuid;v_current uuid;v_ids uuid[]:='{}';v_sources uuid[]:='{}';
  v_slices jsonb:='[]';v_blockers jsonb:='[]';v_invoice jsonb;v_disposition text;v_source boolean;v_known boolean;
+ v_partition jsonb:='[]';v_entitlement jsonb;v_slice jsonb;
+ v_group_manifest jsonb;v_group_facts jsonb;v_invoice_certificate jsonb;v_ordinary_ids uuid[];
  v_facts jsonb;v_certificate jsonb;v_requires_admin boolean:=false;v_native record;v_digest text;
 begin
  if p_physical->>'version'<>'CONTRACT_MOVE_SCOPE_V1' or jsonb_typeof(p_physical->'members')<>'array'
@@ -19,7 +21,10 @@ begin
   if v_source then v_sources:=array_append(v_sources,v_original);end if;
   v_known:=false;
   for line in select l.*,to_jsonb(i) invoice_snapshot,
-    exists(select 1 from public.weekly_source_invoice_line_bindings b where b.invoice_line_id=l.id) source_line
+    (exists(select 1 from public.weekly_source_invoice_line_bindings b where b.invoice_line_id=l.id)
+     or exists(select 1 from public.invoice_hr_source_rows h where h.invoice_id=i.id and h.member_rows_json?l.timesheet_id::text
+      and exists(select 1 from public.timesheets_financials f where f.timesheet_id=l.timesheet_id
+       and f.basis::text in('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT','HEALTHROSTER_SELF_BILL')))) source_line
     from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
     where (l.timesheet_id=v_current or (v_source and l.timesheet_id=v_original))
       and i.type='INVOICE' and i.status::text not in('VOID','CANCELLED') order by i.id,l.id loop
@@ -34,13 +39,7 @@ begin
     v_disposition:='EDIT_DRAFT';v_requires_admin:=true;
    else v_disposition:='REPLACE_ISSUED';v_requires_admin:=true;
    end if;
-   if not line.source_line then
-    -- The current native CM producer has not yet supplied prospective B
-    -- invoice-group/admission facts. It must be integrated here, before Ready;
-    -- a later prepare failure must never masquerade as a successful preview.
-    v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','INVOICE_CONTEXT_UNAVAILABLE',
-     'native_owner','HEALTH','field_key',line.invoice_id::text,'permitted_action',null));
-   end if;
+
    if not line.source_line and exists(select 1 from public.invoices cn join public.invoice_lines cl on cl.invoice_id=cn.id
     where cn.original_invoice_id=line.invoice_id and cn.type='CREDIT_NOTE' and cn.status::text not in('VOID','CANCELLED')
      and (cl.meta_json->>'original_invoice_line_id'=line.id::text or cl.meta_json->>'credit_of_line_id'=line.id::text)) then
@@ -71,6 +70,46 @@ begin
     'original_line',null,'hold_purpose',jsonb_build_object('future_collection',true)));
   end if;
  end loop;
+ select array_agg(distinct (m->>'from_timesheet_id')::uuid order by (m->>'from_timesheet_id')::uuid) into v_ordinary_ids
+ from jsonb_array_elements(p_physical->'members') m where exists(select 1 from jsonb_array_elements(v_slices) s where s->>'member_key'=m->>'member_key'
+   and s->>'disposition' in('EDIT_DRAFT','REPLACE_ISSUED'));
+ if cardinality(v_ordinary_ids)>0 and exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  select jsonb_agg(to_jsonb(g) order by g.group_key) into v_group_manifest
+  from private._invoice_generation_resolve_command_groups(jsonb_build_array(jsonb_build_object('command_type','GENERATE_SELECTED',
+   'source_ids',to_jsonb(v_ordinary_ids),'allow_early',true,'invoice_contract_correction_id',p_physical->>'operation_id')),p_actor_user_id,now()) g;
+  v_group_facts:=private.invoice_contract_move_group_facts_v1((p_physical->>'operation_id')::uuid,v_group_manifest,true);
+  for v_native in select value g from jsonb_array_elements(v_group_manifest) where value->>'blocker_code' is not null loop
+   v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code',v_native.g->>'blocker_code',
+    'native_owner','HEALTH','field_key',null,'permitted_action',null));
+  end loop;
+  select jsonb_agg(case when slice->>'disposition'='EDIT_DRAFT' and exists(
+   select 1 from jsonb_array_elements(v_group_manifest) g where (select m->>'from_timesheet_id' from jsonb_array_elements(p_physical->'members') m where m->>'member_key'=slice->>'member_key') in(select jsonb_array_elements_text(g->'canonical_source_ids'))
+    and (g->>'consolidation_mode' is distinct from coalesce(slice#>>'{original_state,header_snapshot_json,meta,consolidation_mode}','NONE')
+     or g->>'invoice_stream' is distinct from coalesce(slice#>>'{original_state,header_snapshot_json,meta,invoice_stream}',
+      case when slice#>>'{original_state,header_snapshot_json,meta,self_bill}'='true' then 'SELF_BILL' else 'NORMAL' end)
+     or (g->>'consolidation_mode'<>'ANY_WEEK' and g->>'target_invoice_week' is distinct from slice#>>'{original_state,header_snapshot_json,meta,invoice_week_start}')
+     or g->>'invoice_stream'='EXPENSE')) then jsonb_set(slice,'{disposition}','"RELOCATE_DRAFT"'::jsonb) else slice end
+   order by slice->>'slice_key') into v_slices from jsonb_array_elements(v_slices) slice;
+  -- Partition current entitlement by the native groups, independently of
+  -- original invoice count. An original rounded line may back several current
+  -- groups; its original credit line remains deduplicated and credited once.
+  for v_slice in select value from jsonb_array_elements(v_slices) loop
+   if v_slice->>'disposition' in('EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED') then
+    for v_entitlement in select value from jsonb_array_elements(v_group_facts->'groups') g
+     where exists(select 1 from jsonb_array_elements(g.value->'members') m where m->>'member_key'=v_slice->>'member_key') loop
+     v_partition:=v_partition||jsonb_build_array(v_slice||jsonb_build_object(
+      'slice_key',(v_slice->>'slice_key')||':ENTITLEMENT:'||(v_entitlement->>'entitlement_digest'),'original_group',v_entitlement));
+    end loop;
+   else v_partition:=v_partition||jsonb_build_array(v_slice);end if;
+  end loop;
+  v_slices:=v_partition;
+  -- Genuine accepted B valuation is owned by the Banking/native bridge. The
+  -- grouping facts above are executable and sealed; they are not a price quote.
+  if not exists(select 1 from private.timesheet_contract_move_operations o where o.id=(p_physical->>'operation_id')::uuid
+   and o.accepted_valuation_json is not null) then
+   v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','INVOICE_CONTEXT_UNAVAILABLE',
+    'native_owner','BANKING','field_key','accepted_valuation','permitted_action',null));end if;
+ end if;
  if v_requires_admin and not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
   v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','INVOICE_PREPARATION_ACTOR_NOT_ALLOWED',
    'native_owner','HEALTH','field_key',null,'permitted_action',null));end if;
@@ -79,7 +118,7 @@ begin
   v_certificate:=private.weekly_source_invoice_certificate_v1(v_sources,'{}'::uuid[],p_lock);
  end if;
  v_facts:=jsonb_build_object('physical_scope_sha256',p_physical->>'scope_sha256','source_certificate',v_certificate,
-  'slices',v_slices,'required_capabilities',case when v_requires_admin then jsonb_build_array('INVOICE_PREPARE') else '[]'::jsonb end,
+  'native_group_manifest',v_group_manifest,'native_group_facts',v_group_facts,'slices',v_slices,'required_capabilities',case when v_requires_admin then jsonb_build_array('INVOICE_PREPARE') else '[]'::jsonb end,
   'known_blockers',v_blockers);
  v_digest:=encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_INVOICE_PREFLIGHT_V1',v_facts),'hex');
  if p_lock then
@@ -94,17 +133,21 @@ create or replace function private.invoice_contract_move_preflight_v1(p_review_i
 returns jsonb language plpgsql volatile security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
-declare r private.timesheet_contract_move_reviews%rowtype;v_facts jsonb;v_hash text;
+declare r private.timesheet_contract_move_reviews%rowtype;v_facts jsonb;v_hash text;v_invoice_certificate jsonb;
 begin
  select v.* into strict r from private.timesheet_contract_move_reviews v where v.id=p_review_id;
  v_facts:=private.invoice_contract_move_inspect_v1(r.manifest_json->'physical',p_actor_user_id,p_lock);
  if p_lock and v_facts is distinct from r.manifest_json->'invoice' then
   raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ v_invoice_certificate:=private.timesheet_contract_move_invoice_certificate_v1(r.operation_id,p_lock);
+ if v_invoice_certificate->'complete' is distinct from 'true'::jsonb then
+  v_facts:=jsonb_set(v_facts,'{known_blockers}',(v_facts->'known_blockers')||jsonb_build_array(jsonb_build_object(
+   'code','INVOICE_COVERAGE_UNPROVED','native_owner','HEALTH','field_key',null,'permitted_action',null)));end if;
  v_hash:=v_facts->>'certificate_digest';
  return jsonb_build_object('version','CONTRACT_CORRECTION_PREFLIGHT_V1','review_id',r.id,
   'ready_to_confirm',jsonb_array_length(v_facts->'known_blockers')=0,'required_capabilities',v_facts->'required_capabilities',
-  'source_digest',coalesce(v_facts#>>'{source_certificate,hash}',encode(private.weekly_source_sha256_jsonb_v1('EMPTY_SOURCE_INVOICE_V1','[]'::jsonb),'hex')),'group_digest',v_hash,'reference_digest',v_hash,
-  'evidence_digest',v_hash,'document_input_digest',v_hash,'known_blockers',v_facts->'known_blockers','certificate_digest',v_hash);
+  'source_digest',coalesce(v_facts#>>'{source_certificate,hash}',encode(private.weekly_source_sha256_jsonb_v1('EMPTY_SOURCE_INVOICE_V1','[]'::jsonb),'hex')),'group_digest',coalesce(v_facts#>>'{native_group_facts,digest}',v_hash),'reference_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_REFERENCE_V1',coalesce(v_facts->'native_group_manifest','[]'::jsonb)),'hex'),
+  'evidence_digest',v_invoice_certificate->>'current_evidence_digest','document_input_digest',v_invoice_certificate->>'document_input_digest','known_blockers',v_facts->'known_blockers','certificate_digest',v_hash);
 end;
 $function$;
 alter function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) owner to postgres;

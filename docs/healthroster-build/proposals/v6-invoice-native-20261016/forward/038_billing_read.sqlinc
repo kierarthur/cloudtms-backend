@@ -36,6 +36,10 @@ begin
    'placement_receipt_id',o.placement_receipt_json->'receipt_id','preparation_operation_id',o.preparation_operation_id,
    'slices',coalesce((select jsonb_agg(to_jsonb(s) order by s.slice_key) from private.timesheet_contract_move_billing_slices s
     where s.operation_id=o.id and s.billing_revision=o.billing_revision),'[]'::jsonb),
+   'selected_drafts',coalesce((select jsonb_agg(jsonb_build_object('invoice',to_jsonb(i),'lines',(select jsonb_agg(to_jsonb(l) order by l.id)
+     from public.invoice_lines l where l.invoice_id=i.id)) order by i.id) from public.invoices i
+    where i.id in(select s.original_invoice_id from private.timesheet_contract_move_billing_slices s
+     where s.operation_id=o.id and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT'))),'[]'::jsonb),
    'scopes',coalesce((select jsonb_agg(to_jsonb(s) order by s.id) from private.timesheet_contract_move_invoice_scopes s
     where s.operation_id=o.id and s.billing_revision=o.billing_revision),'[]'::jsonb),
    'groups',coalesce((select jsonb_agg(to_jsonb(g) order by g.group_key) from private.timesheet_contract_move_replacement_groups g
@@ -45,7 +49,7 @@ begin
     where c.operation_id=o.preparation_operation_id),'[]'::jsonb)) into v_facts;
   v_hash:=private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_AFTER_INVOICE_OBLIGATION_V1',v_facts);
  end if;
- update private.timesheet_contract_move_operations set after_invoice_hash=v_hash where id=o.id and after_invoice_hash is null;
+ update private.timesheet_contract_move_operations set after_invoice_hash=v_hash,state_revision=state_revision+1 where id=o.id and after_invoice_hash is null;
  return v_hash;
 end;
 $function$;
@@ -67,6 +71,8 @@ begin
  into v_expected,v_actual,v_issued from (
   select s.credit_note_id invoice_id from private.timesheet_contract_move_invoice_scopes s
    where s.operation_id=o.id and s.billing_revision=o.billing_revision
+  union all select distinct s.original_invoice_id from private.timesheet_contract_move_billing_slices s
+   where s.operation_id=o.id and s.billing_revision=o.billing_revision and s.disposition='EDIT_DRAFT'
   union all select coalesce(g.invoice_id,g.planned_invoice_id) from private.timesheet_contract_move_replacement_groups g
    where g.operation_id=o.id and g.billing_revision=o.billing_revision
  ) targets left join public.invoices i on i.id=targets.invoice_id;

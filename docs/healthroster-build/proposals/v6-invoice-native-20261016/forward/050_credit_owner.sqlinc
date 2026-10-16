@@ -6,7 +6,7 @@ declare c public.invoice_operation_chunks%rowtype;s private.timesheet_contract_m
 begin
  select r.* into strict c from public.invoice_operation_chunks r where r.id=p_chunk_id;
  v:=c.payload_json->'credit_scope';
- if not(v?'kind') then return false;end if;
+ if v is null or v='null'::jsonb or not(v?'kind') or v->>'kind'='SIGNED_CORRECTION' then return false;end if;
  if v->>'kind'<>'CONTRACT_MOVE' then raise exception 'CREDIT_SCOPE_PURPOSE_INVALID' using errcode='22023';end if;
  if jsonb_typeof(v)<>'object' or (select count(*) from jsonb_object_keys(v))<>6
   or exists(select 1 from jsonb_object_keys(v) k where k<>all(array['kind','correction_id','billing_revision','original_scope_id','accepted_scope_digest','preparation_mode']))
@@ -14,7 +14,7 @@ begin
   or not pg_input_is_valid(v->>'billing_revision','bigint') then
   raise exception 'CREDIT_SCOPE_PURPOSE_INVALID' using errcode='22023';end if;
  select r.* into s from private.timesheet_contract_move_invoice_scopes r
-  join private.timesheet_contract_move_operations o on o.id=r.operation_id and o.state='COMPLETE'
+  join private.timesheet_contract_move_operations o on o.id=r.operation_id and o.state in('COMPLETE','SUPERSEDED')
   where r.id=(v->>'original_scope_id')::uuid and r.operation_id=(v->>'correction_id')::uuid
    and r.billing_revision=(v->>'billing_revision')::bigint and r.original_invoice_id=c.entity_id
    and r.credit_operation_id=c.operation_id and encode(r.required_credit_scope_digest,'hex')=v->>'accepted_scope_digest';
@@ -111,6 +111,7 @@ begin
   raise exception 'CONTRACT_MOVE_PREPARATION_CLAIM_STALE' using errcode='40001';end if;
  v_phase:=c.phase;
  if v_phase not in('VALIDATE_SOURCES','PLAN','COMMIT') then raise exception 'CONTRACT_MOVE_CREDIT_PHASE_INVALID' using errcode='22023';end if;
+ perform private.invoice_credit_contract_move_scope_context_v1((c.payload_json#>>'{credit_scope,original_scope_id}')::uuid,v_phase='COMMIT');
  v_scope:=private.invoice_credit_contract_move_context_v1(c.id,v_phase='COMMIT');
  if not exists(select 1 from public.tms_users u where u.id=o.actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
   raise exception 'CONTRACT_MOVE_INVOICE_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
@@ -133,8 +134,8 @@ begin
    insert into public.invoices(id,type,client_id,status,status_date_utc,subtotal_ex_vat,vat_amount,total_inc_vat,
     original_invoice_id,notes,header_snapshot_json,document_revision,document_state,created_at,updated_at)
    values(v_id,'CREDIT_NOTE',i.client_id,'DRAFT',v_now,(v_scope->>'subtotal_ex_vat')::numeric,
-    (v_scope->>'vat_amount')::numeric,(v_scope->>'total_inc_vat')::numeric,i.id,'Correcting the Contract',
-    i.header_snapshot_json||jsonb_build_object('credit_operation_id',o.id,'credit_source_invoice_id',i.id,'credit_scope',v_scope),1,'STALE',v_now,v_now);
+    (v_scope->>'vat_amount')::numeric,(v_scope->>'total_inc_vat')::numeric,i.id,c.payload_json->>'credit_reason',
+    i.header_snapshot_json||jsonb_build_object('credit_operation_id',o.id,'credit_source_invoice_id',i.id,'credit_reason',c.payload_json->>'credit_reason','credit_scope',v_scope),1,'STALE',v_now,v_now);
    update private.timesheet_contract_move_invoice_scopes set credit_note_id=v_id,state='PREPARING_DRAFTS',state_revision=state_revision+1 where id=s.id and credit_note_id is null;
    insert into public.invoice_lines(invoice_id,timesheet_id,booking_id,description,
     hours_day,hours_night,hours_sat,hours_sun,hours_bh,pay_day,pay_night,pay_sat,pay_sun,pay_bh,
@@ -147,6 +148,20 @@ begin
     l.meta_json||jsonb_build_object('credit_note',true,'original_invoice_id',i.id,'original_invoice_line_id',l.id,'credit_of_line_id',l.id,
      'contract_move_scope_id',s.id,'line_type','CREDIT_'||coalesce(l.meta_json->>'line_type','LINE')),
     'CN:'||v_id::text||':LINE:'||l.id::text from public.invoice_lines l where l.id=any(s.original_line_ids);
+   insert into public.invoice_hr_source_rows(invoice_id,source_system,import_id,header_columns,rows_json,header_rows,member_rows_json)
+   select v_id,h.source_system,h.import_id,h.header_columns,
+    (select jsonb_agg(row.value order by row.value::text) from jsonb_each(h.member_rows_json) member
+     cross join lateral jsonb_array_elements(member.value) row(value)
+     where member.key in(select l.original_timesheet_id::text from private.timesheet_contract_move_invoice_scope_lines l where l.scope_id=s.id)),
+    h.header_rows,(select jsonb_object_agg(member.key,member.value order by member.key) from jsonb_each(h.member_rows_json) member
+     where member.key in(select l.original_timesheet_id::text from private.timesheet_contract_move_invoice_scope_lines l where l.scope_id=s.id))
+   from public.invoice_hr_source_rows h where h.invoice_id=i.id and jsonb_typeof(h.member_rows_json)='object'
+    and exists(select 1 from private.timesheet_contract_move_invoice_scope_lines l where l.scope_id=s.id and h.member_rows_json?l.original_timesheet_id::text);
+   insert into public.audit_events(ts_utc,actor_user_id,object_type,object_id_text,action,after_json,reason)
+   values(v_now,o.actor_user_id,'invoices',v_id::text,'CREDIT_NOTE_CREATED',jsonb_build_object('credit_note_id',v_id,
+    'original_invoice_id',i.id,'correction_id',s.operation_id,'billing_revision',s.billing_revision::text,'scope_id',s.id,
+    'creating_operation_id',o.id,'subtotal_ex_vat',v_scope->'subtotal_ex_vat','vat_amount',v_scope->'vat_amount','total_inc_vat',v_scope->'total_inc_vat'),
+    c.payload_json->>'credit_reason');
   elsif s.credit_note_id<>v_id then raise exception 'CONTRACT_MOVE_CREDIT_CHILD_MISMATCH' using errcode='55000';
   end if;
   update public.invoice_operation_chunks x set phase='QUEUE_DOCUMENT',status='QUEUED',result_json=jsonb_build_object(

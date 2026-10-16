@@ -100,3 +100,79 @@ test('new private helpers have owner-only ACLs; no new queue, lease or capabilit
  assert.doesNotMatch(acl,/grant .*to (?:anon|authenticated|public)/i);
  for(const row of manifest.files)assert.doesNotMatch(read(row.file),/pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i,row.file);
 });
+
+test('prospective grouping stays inside the native kernel and does not allocate a target',()=>{
+ const prospective=sql('032_prospective_group.sqlinc');
+ assert.match(prospective,/timesheet_contract_move_scope_v1\(o.id,false\)/);
+ assert.doesNotMatch(prospective,/gen_random_uuid|insert into|update public\.|total_charge_ex_vat\s*[:=]/i);
+ assert.match(sql('033_native_grouping.sqlinc'),/prospective\.fact->'settings_authority'/);
+ assert.match(sql('081_issue_registration.sqlinc'),/CONTRACT_MOVE_PROSPECTIVE_INPUT_OWNER_ONLY/);
+ assert.match(sql('040_prepare.sqlinc'),/CONTRACT_MOVE_NATIVE_GROUP_REVIEW_CHANGED/);
+});
+
+test('selected Drafts use native removal/addition and the actual attached financial guard',()=>{
+ const selected=sql('037_selected_draft.sqlinc');
+ assert.match(selected,/public\.invoice_apply_edits\(i.id/);
+ assert.match(selected,/private\.timesheet_contract_move_financial_row_guard_v1/);
+ assert.doesNotMatch(selected,/public\.timesheet_archived_evidence_guard_v1/);
+ assert.match(selected,/CONTRACT_MOVE_NATIVE_SELECTED_DRAFT_RESULT_UNPROVED/);
+ assert.match(selected,/v_unselected/);
+ assert.match(sql('036_native_selected_edit.sqlinc'),/invoice_contract_move_selected_financial_authorise_v1\(to_jsonb\(tfu_lock\)/);
+ assert.match(sql('036a_native_selected_unlock.sqlinc'),/limit 1 for update/);
+ assert.doesNotMatch(sql('040_prepare.sqlinc'),/SELECTED_DRAFT_NATIVE_ADMISSION_UNQUALIFIED/);
+});
+
+test('repeat correction retains original issued credit ownership and uses direct current placement',()=>{
+ const owner=sql('074_current_billing.sqlinc');
+ assert.match(owner,/timesheet_contract_current_placements/);
+ assert.match(owner,/s\.disposition='EDIT_DRAFT'/);
+ assert.doesNotMatch(owner,/with recursive|created_at.*desc|updated_at.*desc/i);
+ assert.match(sql('075_issue_owner.sqlinc'),/o\.state in\('COMPLETE','SUPERSEDED'\)/);
+ assert.match(sql('075_issue_owner.sqlinc'),/Include retained old credits\/groups/);
+ assert.match(sql('050_credit_owner.sqlinc'),/v is null.*SIGNED_CORRECTION/);
+ assert.match(sql('050_credit_owner.sqlinc'),/o\.state in\('COMPLETE','SUPERSEDED'\)/);
+});
+
+test('Source B cannot enter ordinary collection and original A uses certified eligibility',()=>{
+ assert.match(sql('033a_native_collection.sqlinc'),/not private\.timesheet_contract_source_pay_only_v1/);
+ assert.match(sql('033_native_grouping.sqlinc'),/SOURCE_ORIGINAL_INVOICE_SUBJECT_REQUIRED/);
+ assert.match(sql('070_generation_native.sqlinc'),/timesheet_contract_source_original_eligible_v1\(ts.timesheet_id\)/);
+ assert.match(sql('018_source_original.sqlinc'),/timesheet_contract_move_accepting_v1/);
+ assert.match(sql('021a_source_duty.sqlinc'),/timesheet_contract_source_original_eligible_v1\(v_root.timesheet_id\)/);
+});
+
+test('CM credit Issue validates frozen original inputs instead of requiring a current reversal row',()=>{
+ const admission=sql('079_native_issue_admission.sqlinc');
+ assert.match(admission,/cm_credits as materialized/);
+ assert.match(admission,/invoice_contract_move_credit_invoice_valid_v1\(s.invoice_id,false\)/);
+ assert.equal((admission.match(/not exists\(select 1 from cm_credits cm/g)||[]).length,3);
+ assert.match(sql('076_credit_issue_admission.sqlinc'),/CONTRACT_MOVE_CREDIT_INVOICE_CHANGED/);
+ assert.match(sql('055_credit_scope_projection.sqlinc'),/CONTRACT_MOVE_CREDIT_SCOPE_V1/);
+});
+
+test('legacy Source uses the one native projection, with a saved plan before any original-A line insertion',()=>{
+ const proof=JSON.parse(read('SOURCE_PARSE_RESULT.json')).native_projection;
+ assert.equal(proof.unchanged_native_projection,true);
+ assert.ok(proof.operand_count>20);
+ const core=sql('070_generation_native.sqlinc');
+ assert.match(core,/native_planned_lines as materialized/);
+ assert.match(core,/deferred_existing_source_headers as/);
+ assert.match(core,/not exists\(select 1 from source_original_missing_witness missing where missing.chunk_id=e.chunk_id\)/);
+ assert.match(core,/source_original_line_plan_sha256/);
+ assert.match(core,/payload_json=c.payload_json-'source_original_native_claim'/);
+ assert.match(sql('024_line_admission.sqlinc'),/invoice_source_original_line_allowed_v1\(p_new\)/);
+});
+
+test('native Source witness rejects stale owner, changed line/value, duplicate coverage and changed replay',()=>{
+ const guard=sql('019_source_generation_witness.sqlinc');
+ assert.match(guard,/s->>'backend_pid' is distinct from pg_backend_pid\(\)::text/);
+ assert.match(guard,/s->>'transaction_id' is distinct from pg_current_xact_id\(\)::text/);
+ assert.match(guard,/s->>'lease_token' is distinct from c.lease_token::text/);
+ assert.match(guard,/s->>'fence_token' is distinct from c.fence_token::text/);
+ assert.match(guard,/c.operation_control_version<>o.control_version/);
+ assert.match(guard,/SOURCE_ORIGINAL_INTENDED_LINE_CHANGED/);
+ assert.match(guard,/SOURCE_ORIGINAL_INVOICE_BASIS_CHANGED/);
+ assert.match(guard,/SOURCE_ORIGINAL_DUPLICATE_COVERAGE/);
+ assert.match(guard,/SOURCE_ORIGINAL_REPLAY_LINE_CHANGED/);
+ assert.doesNotMatch(guard,/set_config|current_setting|INVOICE_SOURCE_ORIGINAL|config_json/);
+});

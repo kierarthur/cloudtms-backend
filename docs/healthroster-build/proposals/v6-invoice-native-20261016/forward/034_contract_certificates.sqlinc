@@ -1,0 +1,94 @@
+create or replace function private.timesheet_contract_source_coverage_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare p jsonb;v_ids uuid[];f jsonb;v_members jsonb;v_result jsonb;
+begin
+ p:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ v_ids:=private.weekly_source_invoice_family_timesheet_ids_v1(p_timesheet_id);
+ -- Original invoice identities are retained directly by the certified aliases.
+ select array_agg(distinct id order by id) into v_ids from (
+  select coalesce(a.original_timesheet_id,id) id from unnest(v_ids) ids(id)
+  left join private.timesheet_contract_family_aliases a on a.timesheet_id=ids.id
+ ) original_ids;
+ f:=private.weekly_source_invoice_preservation_facts_v1(v_ids,'{}'::uuid[],false);
+ with original_members as (
+  select value member from jsonb_array_elements(f->'authority_members')
+ ), movement_units as (
+  select 'MOVEMENT:'||m.id::text||':'||coalesce(b.invoice_id::text,'UNINVOICED') coverage_key,
+   'SOURCE_FINANCIAL' authority,coalesce(m.nhsp_upload_row_id,m.self_bill_report_row_id) source_row_id,
+   m.work_event_id source_work_event_id,m.final_revision_id accepted_final_revision_id,m.invoice_timesheet_id original_invoice_timesheet_id,
+   b.invoice_id original_invoice_id,coalesce(array_agg(distinct b.invoice_line_id order by b.invoice_line_id)
+    filter(where b.invoice_line_id is not null),'{}'::uuid[]) original_invoice_line_ids
+  from public.weekly_source_billing_movements m left join public.weekly_source_invoice_line_bindings b on b.billing_movement_id=m.id
+  where m.invoice_timesheet_id=any(v_ids)
+  group by m.id,b.invoice_id
+ ), before_final_units as (
+  select 'ROW:'||r.upload_row_id||':'||l.timesheet_id coverage_key,'SOURCE_FINANCIAL' authority,r.upload_row_id source_row_id,
+   r.work_event_id source_work_event_id,null::uuid accepted_final_revision_id,l.timesheet_id original_invoice_timesheet_id,
+   null::uuid original_invoice_id,'{}'::uuid[] original_invoice_line_ids
+  from public.weekly_source_row_timesheet_lineages l join public.weekly_source_row_resolutions r on r.id=l.row_resolution_id
+  where l.timesheet_id=any(v_ids) and not exists(select 1 from public.weekly_source_billing_movements m
+   where m.work_event_id=r.work_event_id)
+ ), retained_units as (
+  select 'MEMBER:'||(n.member->>'original_timesheet_id')||':'||coalesce(l.invoice_id::text,'UNINVOICED') coverage_key,
+   n.member->>'invoice_authority' authority,null::uuid source_row_id,null::uuid source_work_event_id,
+   null::uuid accepted_final_revision_id,(n.member->>'original_timesheet_id')::uuid original_invoice_timesheet_id,
+   l.invoice_id original_invoice_id,coalesce(array_agg(l.id order by l.id) filter(where l.id is not null),'{}'::uuid[]) original_invoice_line_ids
+  from original_members n left join public.invoice_lines l on l.timesheet_id=(n.member->>'original_timesheet_id')::uuid
+  where n.member->>'invoice_authority' in('SOURCE_FINANCIAL','CONTRACT_PRICED') and not exists(select 1 from movement_units u where u.original_invoice_timesheet_id=(n.member->>'original_timesheet_id')::uuid)
+   and not exists(select 1 from before_final_units u where u.original_invoice_timesheet_id=(n.member->>'original_timesheet_id')::uuid)
+  group by n.member,l.invoice_id
+ ), units as (select * from movement_units union all select * from before_final_units union all select * from retained_units)
+ select coalesce(jsonb_agg(to_jsonb(u)||jsonb_build_object('original_authority_digest',f->>'certificate_hash') order by u.coverage_key),'[]'::jsonb)
+ into v_members from units u;
+ if (select count(*) from jsonb_array_elements(v_members))<>(select count(distinct value->>'coverage_key') from jsonb_array_elements(v_members)) then
+  raise exception 'CONTRACT_MOVE_SOURCE_COVERAGE_AMBIGUOUS' using errcode='55000';end if;
+ v_result:=jsonb_build_object('version','SOURCE_INVOICE_COVERAGE_V1','family_root_id',p->'family_root_id',
+  'current_timesheet_id',p->'current_timesheet_id','complete',jsonb_array_length(f->'issues')=0,
+  'members',v_members,'blockers',f->'issues');
+ return v_result||jsonb_build_object('coverage_digest',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_INVOICE_COVERAGE_V1',v_result),'hex'));
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_invoice_certificate_v1(p_operation_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;r private.timesheet_contract_move_reviews%rowtype;
+ v_physical jsonb;v_coverage jsonb;v_originals jsonb;v_evidence jsonb;v_docs jsonb;v_blockers jsonb;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ select x.* into strict r from private.timesheet_contract_move_reviews x where x.operation_id=o.id
+  and (o.accepted_review_id is null or x.id=o.accepted_review_id) order by x.review_no desc limit 1;
+ v_physical:=r.manifest_json->'physical';
+ v_coverage:=private.timesheet_contract_source_coverage_v1(o.from_timesheet_id);
+ if p_lock then
+  perform 1 from public.invoices i where i.id in(select (x->>'original_invoice_id')::uuid
+   from jsonb_array_elements(v_coverage->'members') x where x->>'original_invoice_id' is not null) order by i.id for share nowait;
+ end if;
+ select coalesce(jsonb_agg(jsonb_build_object('scope_id',s.id,'original_invoice_id',i.id,
+   'original_line_manifest_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ORIGINAL_LINES_V1',
+    (select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.invoice_id=i.id
+     and l.timesheet_id in(select (m->>'original_timesheet_id')::uuid from jsonb_array_elements(v_physical->'members') m))),'hex'),
+   'original_document_digest',case when d.id is not null then encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ORIGINAL_DOCUMENT_V1',to_jsonb(d)),'hex') end,
+   'original_settlement_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ORIGINAL_SETTLEMENT_V1',to_jsonb(i)),'hex'),
+   'issue_provenance_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ORIGINAL_ISSUE_V1',
+    (select coalesce(jsonb_agg(to_jsonb(a) order by a.id),'[]'::jsonb) from public.audit_events a
+     where a.object_id_text=i.id::text and a.action in('INVOICE_ISSUED','INVOICE_UNISSUED'))),'hex')) order by i.id),'[]'::jsonb)
+ into v_originals from public.invoices i left join public.invoice_document_versions d on d.id=i.issued_document_version_id
+ left join private.timesheet_contract_move_invoice_scopes s on s.operation_id=o.id and s.original_invoice_id=i.id
+ where i.id in(select (x->>'original_invoice_id')::uuid from jsonb_array_elements(v_coverage->'members') x
+  where x->>'original_invoice_id' is not null);
+ select coalesce(jsonb_agg(jsonb_build_object('member_key',m->>'member_key','immutable_evidence_hash',m->>'immutable_evidence_hash',
+  'approval_evidence_hash',m->>'approval_evidence_hash') order by m->>'member_key'),'[]'::jsonb) into v_evidence
+ from jsonb_array_elements(v_physical->'members') m;
+ select coalesce(jsonb_agg(to_jsonb(d) order by d.id),'[]'::jsonb) into v_docs from public.invoice_document_versions d
+ where d.entity_type='TIMESHEET' and d.entity_id in(select (m->>'original_timesheet_id')::uuid from jsonb_array_elements(v_physical->'members') m);
+ v_blockers:=v_coverage->'blockers';
+ return jsonb_build_object('version','CONTRACT_MOVE_INVOICE_CERTIFICATE_V1','operation_id',o.id,'review_id',r.id,
+  'scope_digest',v_physical->>'scope_sha256','complete',v_coverage->'complete','source_coverage',v_coverage,
+  'original_invoice_scopes',v_originals,'current_evidence_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_CURRENT_EVIDENCE_V1',v_evidence),'hex'),
+  'document_input_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_DOCUMENT_INPUTS_V1',v_docs),'hex'),'blockers',v_blockers);
+end;
+$function$;

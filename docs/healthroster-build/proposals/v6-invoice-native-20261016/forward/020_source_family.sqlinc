@@ -8,13 +8,13 @@ as $function$
     select a.family_root_id,a.member_key from private.timesheet_contract_family_aliases a
     join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id
     join private.timesheet_contract_current_placements p on p.family_root_id=a.family_root_id and p.member_key=a.member_key
-    join private.timesheet_contract_move_operations current_owner on current_owner.id=p.operation_id and current_owner.state='COMPLETE'
-    where a.timesheet_id=p_timesheet_id and o.state in('COMPLETE','SUPERSEDED')
+    join private.timesheet_contract_move_operations current_owner on current_owner.id=p.operation_id and (current_owner.state='COMPLETE' or private.timesheet_contract_move_accepting_v1(current_owner.id))
+    where a.timesheet_id=p_timesheet_id and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id))
       and current_owner.placement_receipt_json->>'receipt_id'=p.placement_receipt_id::text
   ), certified_aliases as (
     select a.timesheet_id from private.timesheet_contract_family_aliases a
     join certified_member m using(family_root_id,member_key)
-    join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id and o.state in('COMPLETE','SUPERSEDED')
+    join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id))
   ), canonical_split_siblings as (
     select sibling.timesheet_id
     from public.timesheets sibling

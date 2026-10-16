@@ -1,0 +1,14 @@
+-- Direct current placement + saved selected Draft membership. No move-chain or
+-- historical timestamp search; repeated Unissue retains the genuine old group.
+create or replace function private.invoice_contract_move_current_billing_operations_v1(p_invoice_id uuid)
+returns uuid[] language sql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+ select coalesce(array_agg(distinct s.operation_id order by s.operation_id),'{}'::uuid[])
+ from private.timesheet_contract_move_billing_slices s
+ join private.timesheet_contract_move_operations o on o.id=s.operation_id and o.state='COMPLETE' and o.billing_revision=s.billing_revision
+ join private.timesheet_contract_current_placements p on p.operation_id=o.id and p.member_key=s.member_key
+  and p.placement_receipt_id=(o.placement_receipt_json->>'receipt_id')::uuid
+ join public.invoice_lines l on l.invoice_id=p_invoice_id and l.timesheet_id=p.current_timesheet_id
+ where s.original_invoice_id=p_invoice_id and s.disposition='EDIT_DRAFT';
+$function$;

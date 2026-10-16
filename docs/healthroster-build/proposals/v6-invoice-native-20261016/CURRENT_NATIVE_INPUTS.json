@@ -10,6 +10,27 @@
       "sha256": "72c1961157763fd58b6468f99ac7968121fb668eec1986e0049396bd2084b5c0"
     },
     {
+      "name": "public._inv_lock_segments_for_invoice",
+      "path": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+      "signature": "p_invoice_id uuid, p_segment_refs jsonb",
+      "file": "reference/public__inv_lock_segments_for_invoice.sqlinc",
+      "sha256": "7b5824ca9c572aeb0310317b781d0c1099598fc9f4c1bac059b1aacc4b355dc6"
+    },
+    {
+      "name": "public._inv_unlock_segment_refs_for_invoice",
+      "path": "supabase/repeatable/18012026_invoice_ref_to_issue_client_setting_and_segment_helpers.sql",
+      "signature": "p_invoice_id uuid, p_segment_refs jsonb, p_actor_user_id uuid default null, p_ip text default null, p_user_agent text default null, p_correlation_id text default null",
+      "file": "reference/public__inv_unlock_segment_refs_for_invoice.sqlinc",
+      "sha256": "c9d46eadc4ea37f6a799a919a6cdd2f7a72870fc856aefeda1435e32203cc473"
+    },
+    {
+      "name": "public._inv_unlock_segments_for_invoice",
+      "path": "supabase/repeatable/13012026_invoice_edit_RPCs.sql",
+      "signature": "p_invoice_id uuid, p_timesheet_ids uuid[]",
+      "file": "reference/public__inv_unlock_segments_for_invoice.sqlinc",
+      "sha256": "ba25552f742431215d488aebad1766e4e7a0a6f12ffd4ad1a885ccc3d7854f48"
+    },
+    {
       "name": "public._pay_timesheet_rotation_scope",
       "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
       "signature": "p_timesheet_ids uuid[]",
@@ -59,11 +80,32 @@
       "sha256": "ef1aad2c0e3bba9e609fb1337b8b4bfa8423cfb013b6ed47f3bbab2ff6b87304"
     },
     {
+      "name": "public.invoice_unissue_batch",
+      "path": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "signature": "p_invoice_ids uuid[], p_actor_user_id uuid, p_clear_pdf boolean default false",
+      "file": "reference/public_invoice_unissue_batch.sqlinc",
+      "sha256": "2e97122694f343be54702be1b666e734a796e43a4aba8fc676669a03ef08cd23"
+    },
+    {
+      "name": "public.invoice_unissue_one",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_unissue_one.sql",
+      "signature": "p_invoice_id uuid, p_actor_user_id uuid, p_clear_pdf boolean default false",
+      "file": "reference/public_invoice_unissue_one.sqlinc",
+      "sha256": "be3df35e35c448598339a1b23ac82e7b3c0086e436e861d7688d6591ecb72aae"
+    },
+    {
       "name": "private._invoice_batch_generate_candidate_rows_v2",
       "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql",
       "signature": "p_query jsonb default '{}'::jsonb, p_now_utc timestamptz default now()",
       "file": "reference/private__invoice_batch_generate_candidate_rows_v2.sqlinc",
       "sha256": "33e1ffca466d864e135471ced428a9c34f16f700cb5bd4571c15f06cfe1b28a6"
+    },
+    {
+      "name": "private._invoice_batch_generate_classification_v2",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_ordinary_isolation_v1.sql",
+      "signature": "p_allow_early boolean default false, p_scope_keys text[] default null, p_now_utc timestamptz default now()",
+      "file": "reference/private__invoice_batch_generate_classification_v2.sqlinc",
+      "sha256": "edc27ca3ffb9c436aaea1dd726857256f34dd26f64656415affa96216d1bf8fa"
     },
     {
       "name": "private._invoice_batch_generate_group_rows_v2",
@@ -101,6 +143,13 @@
       "sha256": "bcb8555937926ea86dd23daaa70c22f239a99894f5fa28cd6044a4dc0aae9055"
     },
     {
+      "name": "private._invoice_generation_vat_policy_batch",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql",
+      "signature": "p_sources jsonb",
+      "file": "reference/private__invoice_generation_vat_policy_batch.sqlinc",
+      "sha256": "ff9d417aa70a509d0315271345f66463233d8358d2a03a5ccb143376fcd4a5a7"
+    },
+    {
       "name": "private._invoice_issue_advance_core_v8",
       "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
       "signature": "p_claims jsonb, p_now_utc timestamptz",
@@ -129,6 +178,27 @@
       "sha256": "c6b738e69a84b66083582592b09d386721f2b2a8c0515edd31f6adcffc9dd0f4"
     },
     {
+      "name": "private._invoice_reference_rows_batch",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_reference_rows_batch.sql",
+      "signature": "p_invoice_ids uuid[]",
+      "file": "reference/private__invoice_reference_rows_batch.sqlinc",
+      "sha256": "083698b02906377d9b712ac78929341c48c5ac590209aaf7c094c82c45988778"
+    },
+    {
+      "name": "private._invoice_segment_lock_batch",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_segment_lock_batch.sql",
+      "signature": "p_targets jsonb, p_now_utc timestamptz",
+      "file": "reference/private__invoice_segment_lock_batch.sqlinc",
+      "sha256": "2e6ebcb69915bb545c0c5abb2db788f7d17affb9ba94c375ad66ce66d6d6e747"
+    },
+    {
+      "name": "private._invoice_source_reference_validate_batch",
+      "path": "supabase/repeatable/08092026_1605_invoice_expense_source_revision_parity_v1.sql",
+      "signature": "p_source_members jsonb",
+      "file": "reference/private__invoice_source_reference_validate_batch.sqlinc",
+      "sha256": "0d2ed3c945f5ba57d181cad4abbb44ee346116e217956d1a94dbc0d47a3c9c01"
+    },
+    {
       "name": "public.tsfin_report_timesheets_v2",
       "path": "supabase/repeatable/19012026_extras.sql",
       "signature": "p_week_ending_from date default null, p_week_ending_to date default null, p_pay_method text default null, p_client_ids uuid[] default null, p_candidate_ids uuid[] default null, p_include_on_hold boolean default false, p_paid boolean default null, p_invoiced boolean default null",
@@ -141,6 +211,13 @@
       "signature": "p_week_ending_from date default null, p_week_ending_to date default null, p_pay_method text default null, p_client_id uuid default null, p_candidate_id uuid default null, p_include_on_hold boolean default false, p_paid boolean default null, p_invoiced boolean default null, p_sheet_scope text default null, p_qr_status text default null, p_booking_id text default null, p_occupant_key_norm text default null, p_hospital_norm text default null, p_worked_from timestamptz default null, p_worked_to timestamptz default null, p_created_from timestamptz default null, p_created_to timestamptz default null, p_statuses text[] default null, p_timesheet_ids uuid[] default null, p_order_by text default 'week_ending_date', p_order_dir text default 'desc', p_limit int default 50, p_offset int default 0",
       "file": "reference/public_tsfin_search_timesheets_v2.sqlinc",
       "sha256": "e9706a8edb3ec73b7ab86bef575459ce2e21bcb14c3aae37d31d84585bff3655"
+    },
+    {
+      "name": "private._contract_settings_effective_core_v1",
+      "path": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "signature": "p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid default null",
+      "file": "reference/private__contract_settings_effective_core_v1.sqlinc",
+      "sha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1"
     },
     {
       "name": "private.weekly_source_invoice_issue_validate_v1",
@@ -239,6 +316,13 @@
       "signature": "p_request jsonb",
       "file": "reference/public_weekly_source_invoice_admit_atomic_v1.sqlinc",
       "sha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0"
+    },
+    {
+      "name": "private.weekly_source_invoice_batch_rows_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "signature": "p_filters jsonb default '{}'::jsonb, p_selection jsonb default pg_catalog.jsonb_build_object( 'contract_version','INVOICE_BATCH_SELECTION_V2', 'mode','IMPLICIT_ALL','default_selected',true,'rules','[]'::jsonb )",
+      "file": "reference/private_weekly_source_invoice_batch_rows_v1.sqlinc",
+      "sha256": "fa89f1bc773db4a0c89aede82b50801ada372e96d03506ceb85c575be6f18ea6"
     },
     {
       "name": "public.weekly_source_invoice_batch_candidates_v1",

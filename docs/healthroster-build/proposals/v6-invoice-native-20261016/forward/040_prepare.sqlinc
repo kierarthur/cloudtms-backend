@@ -6,7 +6,7 @@ as $function$
 declare o private.timesheet_contract_move_operations%rowtype;r private.timesheet_contract_move_reviews%rowtype;
  slice jsonb;member private.timesheet_contract_move_members%rowtype;v_scope_id uuid;v_parent uuid;v_now timestamptz:=coalesce(p_now_utc,now());
  v_original record;v_group record;v_ids uuid[];v_current_ids uuid[];v_line_ids uuid[];v_plan jsonb;v_lines jsonb;v_digest bytea;
- v_groups integer:=0;v_sequence integer:=0;v_native_payload jsonb;v_planned_invoice uuid;v_children jsonb:='[]';v_result jsonb;
+ v_actual_groups jsonb;v_groups integer:=0;v_sequence integer:=0;v_native_payload jsonb;v_planned_invoice uuid;v_children jsonb:='[]';v_result jsonb;
 begin
  select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_move_operation_id for update;
  if o.billing_revision<>p_expected_billing_revision or o.accepted_review_id is null
@@ -38,14 +38,23 @@ begin
    authority,disposition,original_invoice_id,original_financial_id,issued_at,original_state_json,original_group_json,hold_purpose_json,source_sha256,billing_revision)
   values(o.id,member.member_key,slice->>'slice_key',slice->>'scope_kind',(slice->>'scope_id')::uuid,
    slice->>'authority',slice->>'disposition',(slice->>'original_invoice_id')::uuid,(slice->>'original_financial_id')::uuid,
-   (slice#>>'{original_state,issued_at_utc}')::timestamptz,slice->'original_state','{}'::jsonb,slice->'hold_purpose',
+   (slice#>>'{original_state,issued_at_utc}')::timestamptz,slice->'original_state',coalesce(slice->'original_group','{}'::jsonb),slice->'hold_purpose',
    private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_BILLING_SLICE_V1',slice),o.billing_revision);
-  if slice->>'disposition' in('EDIT_DRAFT','RELOCATE_DRAFT') then
-   -- This owner must receive the exact native selected-edit/relocation result;
-   -- do not turn a qualifying current Draft into another credit/replacement.
-   raise exception 'CONTRACT_MOVE_SELECTED_DRAFT_NATIVE_ADMISSION_UNQUALIFIED' using errcode='55000';end if;
+
  end loop;
- if not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition='REPLACE_ISSUED') then
+ select array_agg(distinct m.to_timesheet_id order by m.to_timesheet_id) into v_current_ids
+ from private.timesheet_contract_move_members m join private.timesheet_contract_move_billing_slices s
+ on s.operation_id=m.operation_id and s.member_key=m.member_key
+ where m.operation_id=o.id and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED');
+ if cardinality(v_current_ids)>0 then
+  select jsonb_agg(to_jsonb(g) order by g.group_key) into v_actual_groups from private._invoice_generation_resolve_command_groups(
+   jsonb_build_array(jsonb_build_object('command_type','GENERATE_SELECTED','source_ids',to_jsonb(v_current_ids),'allow_early',true)),p_actor_user_id,v_now) g;
+  if private.invoice_contract_move_group_facts_v1(o.id,v_actual_groups,false) is distinct from v_plan->'native_group_facts' then
+   raise exception 'CONTRACT_MOVE_NATIVE_GROUP_REVIEW_CHANGED' using errcode='40001';end if;
+ end if;
+ if exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT')) then
+  perform private.invoice_contract_move_selected_drafts_prepare_v1(o.id,p_actor_user_id,v_now);end if;
+ if not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT')) then
   v_result:=jsonb_build_object('version','CONTRACT_CORRECTION_PREPARATION_V1','operation_id',o.id,'billing_revision',o.billing_revision::text,
    'native_parent_operation_id',null,'state','DRAFTS_READY','children','[]'::jsonb,'coverage_digest',v_plan->>'certificate_digest',
    'result_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_PREPARATION_V1',v_plan),'hex'),'blocker',null);
@@ -54,6 +63,8 @@ begin
  end if;
  if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
   raise exception 'INVOICE_PREPARATION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ if jsonb_typeof(o.accepted_valuation_json) is distinct from 'object' or o.accepted_valuation_json='{}'::jsonb then
+  raise exception 'CONTRACT_MOVE_ACCEPTED_NATIVE_VALUATION_UNBOUND' using errcode='55000';end if;
  v_parent:=gen_random_uuid();
  insert into public.invoice_operations(id,operation_type,entity_type,entity_id,actor_user_id,idempotency_key,status,phase,
   priority,input_json,config_json,progress_json,total_units,chunk_count,control_version,change_seq,created_at_utc,updated_at_utc)
@@ -61,22 +72,24 @@ begin
   encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_PREPARE_V1',jsonb_build_object('correction_id',o.id,'billing_revision',o.billing_revision::text)),'hex'),
   'QUEUED','VALIDATE_SOURCES',600,jsonb_build_object('purpose','CONTRACT_CORRECTION_PREPARE','correction_id',o.id,'billing_revision',o.billing_revision::text),
   '{}'::jsonb,'{}'::jsonb,0,0,1,nextval('public.invoice_operation_change_seq'),v_now,v_now);
- update private.timesheet_contract_move_operations set preparation_operation_id=v_parent where id=o.id and preparation_operation_id is null;
+ update private.timesheet_contract_move_operations set preparation_operation_id=v_parent,state_revision=state_revision+1 where id=o.id and preparation_operation_id is null;
  for v_original in select distinct s.original_invoice_id from private.timesheet_contract_move_billing_slices s
   where s.operation_id=o.id and s.disposition='REPLACE_ISSUED' order by s.original_invoice_id loop
   v_scope_id:=gen_random_uuid();
   select array_agg((x->>'original_invoice_line_id')::uuid order by x->>'original_invoice_line_id'),
    jsonb_agg(x->'original_line' order by x->>'original_invoice_line_id') into v_line_ids,v_lines
-   from jsonb_array_elements(v_plan->'slices') x where x->>'disposition'='REPLACE_ISSUED' and x->>'original_invoice_id'=v_original.original_invoice_id::text;
+   from (select distinct on(value->>'original_invoice_line_id') value x from jsonb_array_elements(v_plan->'slices')
+    where value->>'disposition'='REPLACE_ISSUED' and value->>'original_invoice_id'=v_original.original_invoice_id::text
+    order by value->>'original_invoice_line_id') original_lines;
   v_digest:=private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ORIGINAL_SCOPE_V1',v_lines);
   insert into private.timesheet_contract_move_invoice_scopes(id,operation_id,original_invoice_id,family_root_id,original_timesheet_id,
    scope_kind,original_line_ids,original_lines_sha256,original_invoice_state_json,replacement_charge_certificate_json,replacement_charge_sha256,
    billing_revision,required_credit_scope_digest,state,credit_operation_id,parent_managed,state_revision,created_by_user_id,created_at_utc)
   values(v_scope_id,o.id,v_original.original_invoice_id,o.family_root_id,(v_lines->0->>'timesheet_id')::uuid,'CONTRACT_MOVE',v_line_ids,v_digest,
-   (select to_jsonb(i) from public.invoices i where i.id=v_original.original_invoice_id),coalesce(o.accepted_valuation_json,'{}'::jsonb),
-   private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ACCEPTED_VALUATION_V1',coalesce(o.accepted_valuation_json,'{}'::jsonb)),
+   (select to_jsonb(i) from public.invoices i where i.id=v_original.original_invoice_id),o.accepted_valuation_json,
+   private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ACCEPTED_VALUATION_V1',o.accepted_valuation_json),
    o.billing_revision,v_digest,'PREPARING_DRAFTS',v_parent,true,1,p_actor_user_id,v_now);
-  for slice in select x from jsonb_array_elements(v_plan->'slices') x where x->>'disposition'='REPLACE_ISSUED' and x->>'original_invoice_id'=v_original.original_invoice_id::text loop
+  for slice in select distinct on(x->>'original_invoice_line_id') x from jsonb_array_elements(v_plan->'slices') x where x->>'disposition'='REPLACE_ISSUED' and x->>'original_invoice_id'=v_original.original_invoice_id::text order by x->>'original_invoice_line_id' loop
    insert into private.timesheet_contract_move_invoice_scope_lines(scope_id,original_invoice_line_id,original_timesheet_id,current_timesheet_id,
     original_line_snapshot_json,original_line_sha256,replacement_component_key)
    select v_scope_id,(slice->>'original_invoice_line_id')::uuid,(slice->>'original_timesheet_id')::uuid,m.to_timesheet_id,slice->'original_line',
@@ -96,7 +109,7 @@ begin
  end loop;
  select array_agg(distinct m.to_timesheet_id order by m.to_timesheet_id) into v_current_ids
  from private.timesheet_contract_move_members m join private.timesheet_contract_move_billing_slices s
-  on s.operation_id=m.operation_id and s.member_key=m.member_key and s.disposition='REPLACE_ISSUED' where m.operation_id=o.id;
+  on s.operation_id=m.operation_id and s.member_key=m.member_key and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT') where m.operation_id=o.id;
  for v_group in select g.* from private._invoice_generation_resolve_command_groups(jsonb_build_array(jsonb_build_object(
    'command_type','GENERATE_SELECTED','source_ids',to_jsonb(v_current_ids),'allow_early',true)),p_actor_user_id,v_now) g order by g.group_key loop
   if v_group.blocker_code is not null or v_group.client_id<>o.actual_client_id
@@ -108,13 +121,21 @@ begin
    'source_revision',v_group.source_revision_hash,'correction_id',o.id,'billing_revision',o.billing_revision::text);
   insert into private.timesheet_contract_move_replacement_groups(operation_id,billing_revision,group_key,native_group_json,group_sha256,
    planned_invoice_id,accepted_valuation_json,required_credit_scope_digest,generation_operation_id,native_state)
-  values(o.id,o.billing_revision,v_group.group_key,to_jsonb(v_group),private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_GROUP_V1',to_jsonb(v_group)),
-   v_planned_invoice,coalesce(o.accepted_valuation_json,'{}'::jsonb),decode(v_plan->>'certificate_digest','hex'),v_parent,'PREPARING_DRAFTS');
+  values(o.id,o.billing_revision,v_group.group_key,to_jsonb(v_group)||jsonb_build_object('hold_purposes',(
+   select coalesce(jsonb_agg(distinct s.hold_purpose_json),'[]'::jsonb) from private.timesheet_contract_move_billing_slices s
+   join private.timesheet_contract_move_members m on m.operation_id=s.operation_id and m.member_key=s.member_key
+   where s.operation_id=o.id and m.to_timesheet_id=any(v_group.canonical_source_ids))),private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_GROUP_V1',to_jsonb(v_group)),
+   v_planned_invoice,o.accepted_valuation_json,decode(v_plan->>'certificate_digest','hex'),v_parent,'PREPARING_DRAFTS');
   insert into private.timesheet_contract_move_replacement_members(operation_id,billing_revision,group_key,slice_key,current_timesheet_id,
    current_financial_id,component_key,member_sha256)
-  select o.id,o.billing_revision,v_group.group_key,s.slice_key,m.to_timesheet_id,m.to_financial_id,m.member_key,m.member_hash
+  select o.id,o.billing_revision,v_group.group_key,s.slice_key,m.to_timesheet_id,m.to_financial_id,m.member_key||':'||(s.original_group_json->>'entitlement_digest'),m.member_hash
   from private.timesheet_contract_move_billing_slices s join private.timesheet_contract_move_members m on m.operation_id=s.operation_id and m.member_key=s.member_key
-  where s.operation_id=o.id and s.disposition='REPLACE_ISSUED' and m.to_timesheet_id=any(v_group.canonical_source_ids);
+  where s.operation_id=o.id and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT') and m.to_timesheet_id=any(v_group.canonical_source_ids)
+   and s.original_group_json->>'entitlement_digest'=(private.invoice_contract_move_group_facts_v1(o.id,jsonb_build_array(to_jsonb(v_group)),false)#>>'{groups,0,entitlement_digest}');
+  insert into private.timesheet_contract_move_scope_fences(operation_id,billing_revision,scope_key,scope_sha256,authority_receipt_id)
+  select distinct o.id,o.billing_revision,'REPLACEMENT:'||m.current_timesheet_id::text||':'||m.component_key,
+   m.member_sha256,(o.placement_receipt_json->>'receipt_id')::uuid from private.timesheet_contract_move_replacement_members m
+  where m.operation_id=o.id and m.billing_revision=o.billing_revision and m.group_key=v_group.group_key;
   insert into public.invoice_operation_chunks(operation_id,chunk_type,phase,sequence_no,work_key,entity_type,entity_id,status,priority,
    run_after_utc,payload_json,operation_control_version,created_at_utc,updated_at_utc)
   values(v_parent,'GENERATION_GROUP','VALIDATE_SOURCES',v_sequence,
@@ -122,7 +143,7 @@ begin
     'billing_revision',o.billing_revision::text,'group_key',v_group.group_key)),'hex'),'CLIENT',o.actual_client_id,'QUEUED',600,v_now,v_native_payload,1,v_now,v_now);
   v_sequence:=v_sequence+1;
  end loop;
- if v_groups=0 or exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition='REPLACE_ISSUED'
+ if v_groups=0 or exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT')
   and not exists(select 1 from private.timesheet_contract_move_replacement_members m where m.operation_id=s.operation_id and m.billing_revision=s.billing_revision and m.slice_key=s.slice_key)) then
   raise exception 'CONTRACT_MOVE_REPLACEMENT_PARTITION_INCOMPLETE' using errcode='55000';end if;
  insert into public.invoice_operation_chunks(operation_id,chunk_type,phase,sequence_no,work_key,entity_type,entity_id,status,priority,

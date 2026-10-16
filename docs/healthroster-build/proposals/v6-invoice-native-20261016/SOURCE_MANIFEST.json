@@ -4,11 +4,11 @@
   "files": [
     {
       "file": "forward/001_billing_schema.sqlinc",
-      "sha256": "e784ad288150267bb62b4b25de66e2b3e30bf28224968d70414cc4363b93d5ba"
+      "sha256": "7cf768b713f421248e62dbc23178efbf24adf6096eafe63d284eb316a4d81545"
     },
     {
       "file": "forward/010_source_invoice_facts.sqlinc",
-      "sha256": "703d55afc9cd8640e95a4a81e90f69ee14b5511ead0746a0924cbf5b7c093c83"
+      "sha256": "9078a3008fb77d0f5cb3d5c9c9a7667adf3fbd623ae266ec85d892c7b205fad8"
     },
     {
       "file": "forward/015_source_certificate.sqlinc",
@@ -16,15 +16,23 @@
     },
     {
       "file": "forward/018_source_original.sqlinc",
-      "sha256": "685af569c5874bf50955c2fdbf1c48dde93deedf2d7e1c1198072ea56a03a015"
+      "sha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854"
+    },
+    {
+      "file": "forward/019_source_generation_witness.sqlinc",
+      "sha256": "74f06fce83bb96c5a3d851b66d66d38918f976574c4e2044c227e35268f86603"
     },
     {
       "file": "forward/020_source_family.sqlinc",
-      "sha256": "d6ebe3b612e3c28fdb188544b2568a809fabd2cc4a1a19d68ac3d13ed524685c"
+      "sha256": "142e3216e23a5b41fb4f089bc67401a525b220ac1a85620947cf198cb2778598"
     },
     {
       "file": "forward/021_source_lineage.sqlinc",
       "sha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a"
+    },
+    {
+      "file": "forward/021a_source_duty.sqlinc",
+      "sha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99"
     },
     {
       "file": "forward/022_source_presentation.sqlinc",
@@ -36,7 +44,7 @@
     },
     {
       "file": "forward/024_line_admission.sqlinc",
-      "sha256": "5c774a746c479698d995f853fc2a4efd43a3690f19617f90dafc5fe6d1c1a1ec"
+      "sha256": "1269bcdc1b0c839d74c3f169e83bac0445e0a83c1ed6bd426e16918b0c41bbef"
     },
     {
       "file": "forward/025_claim_placement.sqlinc",
@@ -60,31 +68,75 @@
     },
     {
       "file": "forward/030_claim_sync.sqlinc",
-      "sha256": "37b5101b71391732c6f5e842901b9019066f0aa84868c8cc692b833baa20939b"
+      "sha256": "3ba92317e968970c17be22fa89d097a3d66da80b2a9cf316965b2f2cff4ab999"
     },
     {
       "file": "forward/031_source_line_owner.sqlinc",
       "sha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67"
     },
     {
+      "file": "forward/032_prospective_group.sqlinc",
+      "sha256": "5343c55dba260abe1e56f1d029583bec90546a8bc12d315ff523c4a6e382c487"
+    },
+    {
+      "file": "forward/033_native_grouping.sqlinc",
+      "sha256": "75835f855ab955d4c827ff93df6542eb18b38cfd05773838b2ce2284ab4c92bb"
+    },
+    {
+      "file": "forward/033a_native_collection.sqlinc",
+      "sha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19"
+    },
+    {
+      "file": "forward/033b_native_references.sqlinc",
+      "sha256": "d0826cba2ed9ccba0969dd9d3f828feada49e28295abb1ec5d4d06e5229d1d14"
+    },
+    {
+      "file": "forward/033c_native_vat_policy.sqlinc",
+      "sha256": "44c63c951b368d167131266a8220a64d5b3adee8c218844fc8c7ded7e759b217"
+    },
+    {
+      "file": "forward/033d_native_invoice_references.sqlinc",
+      "sha256": "c792009404507fb8a0719ee62accd9a0b55ec893bb75eaa4b003dc59d2a392e3"
+    },
+    {
+      "file": "forward/034_contract_certificates.sqlinc",
+      "sha256": "e0dc74daca0c61a5e397e8cc6c3e8be2e197231fa39fc6d8a939933a75d1a648"
+    },
+    {
       "file": "forward/035_preflight.sqlinc",
-      "sha256": "3600f7df3d6949efe7ccdb58d9ff9d5d3853cbd970f18122d9e595aedb846adf"
+      "sha256": "3b7f7926edb4043d99bcacab4e99a458e992015063b0d3cd4562e683eb6eb7ec"
+    },
+    {
+      "file": "forward/036_native_selected_edit.sqlinc",
+      "sha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b"
+    },
+    {
+      "file": "forward/036a_native_selected_unlock.sqlinc",
+      "sha256": "25af72528e6393f0f742c3c4ecf9674fff5869fc687842ef52fce090b5bff558"
+    },
+    {
+      "file": "forward/037_selected_draft.sqlinc",
+      "sha256": "015fd6ede7064aa39f015fef0f423a76d574317a40c335845810c18286620ec9"
     },
     {
       "file": "forward/038_billing_read.sqlinc",
-      "sha256": "f81da3ad64d2d691ca35b8fdf53bcfc97c77d17bfb926bb8ccd44edfa201e5eb"
+      "sha256": "6b547368acb9359c40a490ea931a7d367fbe15391dde4429bf1954146b04cea8"
     },
     {
       "file": "forward/040_prepare.sqlinc",
-      "sha256": "56df0a0509a0ea3a3d350d37e7eab4ad9e4625be924880916a23576586b42410"
+      "sha256": "5a3f37a792e709c0994ba3748addb0651d7f11bb4e4eb78542a0b24d4119c21a"
     },
     {
       "file": "forward/045_preparation_native.sqlinc",
-      "sha256": "6f070d179685739804b62802b9801a17e586429eeb0437788864f1a069bb9595"
+      "sha256": "7bfbef387a1881d24de79f54951c4414eab8212ae9e9b5099f24b2d021eab3f1"
     },
     {
       "file": "forward/050_credit_owner.sqlinc",
-      "sha256": "f488937f5cb7e51ee37f0bf8258a8e4c11e43358645b919bf0bfa6b456dfaadc"
+      "sha256": "9600e697a2580bc89165087623129da9f126322b1d385a239ded5a5d049edce6"
+    },
+    {
+      "file": "forward/055_credit_scope_projection.sqlinc",
+      "sha256": "d220d1a9d783aadecc7561f90428c510fb63ad2d52fbdea58c50987a7d80687b"
     },
     {
       "file": "forward/060_scoped_native.sqlinc",
@@ -92,15 +144,27 @@
     },
     {
       "file": "forward/070_generation_native.sqlinc",
-      "sha256": "b22cf445e197862cdbac1761cb8368f32c7e49c0298f1ef02980443626a27a50"
+      "sha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f"
     },
     {
       "file": "forward/071_generation_dispatch.sqlinc",
       "sha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202"
     },
     {
+      "file": "forward/074_current_billing.sqlinc",
+      "sha256": "a9fea1b29e9457aaf7c138d71a6d3d64d46ff2030d07859ee7f6c08aa2eda33c"
+    },
+    {
       "file": "forward/075_issue_owner.sqlinc",
-      "sha256": "8afe68cef36a48ad642ae4f7ce238a394f2b3222f847d2a8fbda9a24498f1f44"
+      "sha256": "4fb7492bae833baeb767e0df5799b79ff60371533a25ec3d2304a8dddc5f4921"
+    },
+    {
+      "file": "forward/076_credit_issue_admission.sqlinc",
+      "sha256": "9dc224c09c1ac3399fd922a067f8aa01bc8b600e9a39fff838c7362f153bb994"
+    },
+    {
+      "file": "forward/079_native_issue_admission.sqlinc",
+      "sha256": "accfebe57dbfadc8a2af15101000a7b01cca5a332379e1ab925f91576e7fbdb2"
     },
     {
       "file": "forward/080_issue_native.sqlinc",
@@ -108,7 +172,7 @@
     },
     {
       "file": "forward/081_issue_registration.sqlinc",
-      "sha256": "031fc7e990c19322f5a7b781b13740bdc1b0474410b28d75ef4b54bace2c5042"
+      "sha256": "4bf23818a6ade4d9fe6b319a45292af5c2deb5267e1694764c0a005cae7f291e"
     },
     {
       "file": "forward/082_issue_one.sqlinc",
@@ -116,7 +180,7 @@
     },
     {
       "file": "forward/099_new_private_acl.sqlinc",
-      "sha256": "a3b5c80aa1d0f858de0891c7ff5bbca3105af4797ef3aee7d7a7f4287cf14dad"
+      "sha256": "e3dc89f2799f9e5ad9f31ce083b339342490aa143fb7aedc6370b0dce6a7e43f"
     }
   ]
 }

@@ -1,0 +1,25 @@
+create or replace function private.invoice_contract_move_credit_invoice_valid_v1(p_invoice_id uuid,p_lock boolean)
+returns boolean language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.invoices%rowtype;s private.timesheet_contract_move_invoice_scopes%rowtype;v_context jsonb;
+begin
+ select x.* into i from public.invoices x where x.id=p_invoice_id;
+ if i.type<>'CREDIT_NOTE' or i.header_snapshot_json#>>'{credit_scope,kind}' is distinct from 'CONTRACT_MOVE' then return false;end if;
+ select x.* into strict s from private.timesheet_contract_move_invoice_scopes x
+  where x.id=(i.header_snapshot_json#>>'{credit_scope,original_scope_id}')::uuid and x.credit_note_id=i.id;
+ v_context:=private.invoice_credit_contract_move_scope_context_v1(s.id,p_lock);
+ if i.subtotal_ex_vat is distinct from (v_context#>>'{credit_totals,net}')::numeric
+  or i.vat_amount is distinct from (v_context#>>'{credit_totals,vat}')::numeric
+  or i.total_inc_vat is distinct from (v_context#>>'{credit_totals,gross}')::numeric
+  or (select count(*) from public.invoice_lines l where l.invoice_id=i.id)<>cardinality(s.original_line_ids)
+  or exists(select 1 from public.invoice_lines l where l.invoice_id=i.id and not exists(
+   select 1 from private.timesheet_contract_move_invoice_scope_lines frozen where frozen.scope_id=s.id
+    and l.meta_json->>'original_invoice_line_id'=frozen.original_invoice_line_id::text
+    and l.total_charge_ex_vat=-(frozen.original_line_snapshot_json->>'total_charge_ex_vat')::numeric
+    and l.vat_amount=-(frozen.original_line_snapshot_json->>'vat_amount')::numeric
+    and l.total_inc_vat=-(frozen.original_line_snapshot_json->>'total_inc_vat')::numeric)) then
+  raise exception 'CONTRACT_MOVE_CREDIT_INVOICE_CHANGED' using errcode='55000';end if;
+ return true;
+end;
+$function$;

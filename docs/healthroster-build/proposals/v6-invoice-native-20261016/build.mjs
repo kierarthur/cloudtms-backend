@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import {factorSourceWitness} from './factor-source-witness.mjs';
 import {fileURLToPath} from 'node:url';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const read=p=>fs.readFileSync(path.join(here,p),'utf8').replaceAll('\r\n','\n');
@@ -16,6 +17,7 @@ facts=replace(facts,"v_policy:=case when v_source and not v_ordinary", "v_policy
 facts=replace(facts," if v_source and v_ordinary then v_issues:=array_append(v_issues,'MIXED_INVOICE_AUTHORITY_REQUIRES_SCOPED_REVIEW');end if;", " -- Mixed authority is represented by exact original members, never a blanket Source classification.");
 facts=replace(facts,"select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_billing_movements", "select coalesce(jsonb_agg((to_jsonb(native_row)-'canonical_pay_vector_json'-'total_pay_ex_vat') order by id),'[]'::jsonb) into v_part from public.weekly_source_billing_movements");
 facts=replace(facts,"select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_work_events", "select coalesce(jsonb_agg(jsonb_build_object('id',native_row.id,'identity',to_jsonb(native_row)-array['current_pay_generation','pay_state','updated_at_utc','current_protected_run_id','current_candidate_timesheet_id']) order by id),'[]'::jsonb) into v_part from public.weekly_work_events");
+facts=replace(facts,"when cardinality(p_source_row_ids)>0 then 'NO_FINAL_REPORT_YET'","when cardinality(v_rows)>0 then 'NO_FINAL_REPORT_YET'");
 // No physical/current-placement or worker protection rows enter this witness.
 write('forward/010_source_invoice_facts.sqlinc',facts);
 let family=native('private.weekly_source_invoice_family_timesheet_ids_v1');
@@ -23,13 +25,13 @@ family=replace(family,'  with canonical_split_siblings as (',`  with certified_m
     select a.family_root_id,a.member_key from private.timesheet_contract_family_aliases a
     join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id
     join private.timesheet_contract_current_placements p on p.family_root_id=a.family_root_id and p.member_key=a.member_key
-    join private.timesheet_contract_move_operations current_owner on current_owner.id=p.operation_id and current_owner.state='COMPLETE'
-    where a.timesheet_id=p_timesheet_id and o.state in('COMPLETE','SUPERSEDED')
+    join private.timesheet_contract_move_operations current_owner on current_owner.id=p.operation_id and (current_owner.state='COMPLETE' or private.timesheet_contract_move_accepting_v1(current_owner.id))
+    where a.timesheet_id=p_timesheet_id and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id))
       and current_owner.placement_receipt_json->>'receipt_id'=p.placement_receipt_id::text
   ), certified_aliases as (
     select a.timesheet_id from private.timesheet_contract_family_aliases a
     join certified_member m using(family_root_id,member_key)
-    join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id and o.state in('COMPLETE','SUPERSEDED')
+    join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id))
   ), canonical_split_siblings as (`);
 family=replace(family,'    select p_timesheet_id as timesheet_id\r\n    union', '    select p_timesheet_id as timesheet_id\r\n    union select timesheet_id from certified_aliases\r\n    union');
 write('forward/020_source_family.sqlinc',family);
@@ -74,6 +76,10 @@ presentation=replace(presentation,'    from invoice_timesheet_rows group by invo
     from requested_invoices requested join public.invoices cn on cn.id=requested.invoice_id
     where cn.type='CREDIT_NOTE' and cn.header_snapshot_json?'credit_scope'`);
 write('forward/022_source_presentation.sqlinc',presentation);
+let duty=native('private.weekly_source_invoice_duty_v1');
+duty=replace(duty,'or not v_root.is_current or v_root.is_adjustment', 'or (not v_root.is_current and not private.timesheet_contract_source_original_eligible_v1(v_root.timesheet_id)) or v_root.is_adjustment');
+duty=replace(duty,"or v_root.archived_at_utc is not null or v_root.sheet_scope<>","or (v_root.archived_at_utc is not null and not private.timesheet_contract_source_original_eligible_v1(v_root.timesheet_id)) or v_root.sheet_scope<>");
+write('forward/021a_source_duty.sqlinc',duty);
 let archived=native('public.invoice_line_archived_timesheet_guard_v1');
 archived=replace(archived,`  IF v_current_timesheet_id IS NOT NULL
      AND v_archived_at_utc IS NOT NULL THEN`,`  IF v_current_timesheet_id IS NOT NULL
@@ -121,21 +127,104 @@ write('forward/029_claim_financial.sqlinc',claimFinancial);
 let claimSync=native('private._candidate_expense_components_sync_v1');
 claimSync=replace(claimSync,'  v_count integer:=0;','  v_count integer:=0;\n  v_current_owner uuid;\n  v_base_agency text;');
 claimSync=replace(claimSync,'  for v_value in','  v_base_agency:=v_agency_state;\n  for v_value in');
-claimSync=replace(claimSync,'  if v_workflow.target_timesheet_id is not null then',`  v_current_owner:=coalesce(private._candidate_expense_current_timesheet_id_v1(v_workflow.id,v_workflow.target_timesheet_id),v_workflow.target_timesheet_id);
+claimSync=replace(claimSync,'  if v_workflow.target_timesheet_id is not null then',`  if exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=v_workflow.target_timesheet_id) then
+    perform private.timesheet_contract_move_family_lock_v1(v_workflow.target_timesheet_id);
+  end if;
+  v_current_owner:=coalesce(private._candidate_expense_current_timesheet_id_v1(v_workflow.id,v_workflow.target_timesheet_id),v_workflow.target_timesheet_id);
   if v_current_owner is not null then`);
 // References used for mutable financial/carrier ownership only. The workflow
 // row and its immutable submitted/signed target are never updated.
 claimSync=claimSync.replaceAll('financial.timesheet_id=v_workflow.target_timesheet_id','financial.timesheet_id=v_current_owner').replaceAll('timesheet.timesheet_id=v_workflow.target_timesheet_id','timesheet.timesheet_id=v_current_owner');
+claimSync=replace(claimSync,'  for v_value in',`  v_current_owner:=coalesce(private._candidate_expense_current_timesheet_id_v1(v_workflow.id,v_workflow.target_timesheet_id),v_workflow.target_timesheet_id);
+  for v_value in`);
 claimSync=replace(claimSync,`    if not found then
       v_before:='{}'::jsonb;`,`    if found then
       v_current_owner:=coalesce(private.timesheet_contract_claim_placement_v1(v_workflow.id,
         v_component.owning_timesheet_id,v_component.expense_component_id),v_component.owning_timesheet_id);
-      v_agency_state:=case when v_component.agency_authorisation_state='PAID' then 'PAID' else v_base_agency end;
+      select * into v_fin from public.timesheets_financials financial
+       where financial.timesheet_id=v_current_owner and financial.is_current
+       order by financial.computed_at_utc desc nulls last,financial.updated_at desc,financial.id desc limit 1;
+      select * into strict v_timesheet from public.timesheets timesheet
+       where timesheet.timesheet_id=v_current_owner and timesheet.is_current and timesheet.archived_at_utc is null;
+      v_agency_state:=case
+       when v_component.agency_authorisation_state='PAID' then 'PAID'
+       when v_fin.paid_at_utc is not null or upper(coalesce(v_timesheet.status::text,''))='PAID' then 'PAID'
+       when v_fin.locked_by_invoice_id is not null or upper(coalesce(v_timesheet.status::text,''))='INVOICED' then 'INVOICED'
+       when v_fin.authorised_at_utc is not null or v_timesheet.authorised_at_server is not null
+        or upper(coalesce(v_timesheet.status::text,'')) in('AUTHORISED','AUTHORIZED') then 'AUTHORISED'
+       else 'NOT_AUTHORISED' end;
     end if;
     if v_component.expense_component_id is null then
       v_before:='{}'::jsonb;`);
 claimSync=claimSync.replaceAll('v_document_generation,v_value.expense_category,v_workflow.target_timesheet_id','v_document_generation,v_value.expense_category,v_current_owner').replaceAll('owning_timesheet_id is distinct from v_workflow.target_timesheet_id','owning_timesheet_id is distinct from v_current_owner').replaceAll('owning_timesheet_id=v_workflow.target_timesheet_id','owning_timesheet_id=v_current_owner');
 write('forward/030_claim_sync.sqlinc',claimSync);
+let selectedEdit=native('public.invoice_apply_edits');
+selectedEdit=replace(selectedEdit,'and tfu_lock.locked_by_invoice_id = p_invoice_id;',`and tfu_lock.locked_by_invoice_id = p_invoice_id
+        and private.invoice_contract_move_selected_financial_authorise_v1(to_jsonb(tfu_lock),
+          to_jsonb(tfu_lock)||jsonb_build_object('locked_by_invoice_id',null,'locked_at_utc',null,'updated_at',v_now),p_invoice_id);`);
+write('forward/036_native_selected_edit.sqlinc',selectedEdit);
+let unlock=native('public._inv_unlock_segments_for_invoice');
+unlock=replace(unlock,'order by tf.created_at desc\n    limit 1;', 'order by tf.created_at desc\n    limit 1 for update;');
+unlock=replace(unlock,'        locked_at_utc = v_new_locked_at\n      where tfu.id = r_tf.id;',`        locked_at_utc = v_new_locked_at
+      where tfu.id = r_tf.id and private.invoice_contract_move_selected_financial_authorise_v1(to_jsonb(tfu),
+        to_jsonb(tfu)||jsonb_build_object('updated_at',v_now,'invoice_breakdown_json',v_ib,
+         'locked_by_invoice_id',v_new_locked,'locked_at_utc',v_new_locked_at),p_invoice_id);`);
+unlock=replace(unlock,'        where tfu.id = r_tf.id;',`        where tfu.id = r_tf.id and private.invoice_contract_move_selected_financial_authorise_v1(to_jsonb(tfu),
+          to_jsonb(tfu)||jsonb_build_object('updated_at',v_now,'locked_by_invoice_id',null,'locked_at_utc',null),p_invoice_id);`);
+write('forward/036a_native_selected_unlock.sqlinc',unlock);
+let classification=native('private._invoice_batch_generate_classification_v2');
+assert.equal((classification.match(/and timesheet\.is_current/g)||[]).length,3);
+classification=classification.replaceAll('and timesheet.is_current','and (timesheet.is_current or private.timesheet_contract_source_original_eligible_v1(timesheet.timesheet_id))');
+classification=replace(classification,'where financial.is_current\n      and financial.client_id is not null',`where financial.is_current
+      and not private.timesheet_contract_source_pay_only_v1(financial.timesheet_id)
+      and financial.client_id is not null`);
+write('forward/033a_native_collection.sqlinc',classification);
+let grouping=native('private._invoice_generation_resolve_command_groups');
+grouping=replace(grouping,'ts.is_current timesheet_is_current','(ts.is_current or private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id)) timesheet_is_current');
+grouping=replace(grouping,"when b.timesheet_id is null then 'SOURCE_NOT_RESOLVED'","when b.timesheet_id is null then 'SOURCE_NOT_RESOLVED'\n      when private.timesheet_contract_source_pay_only_v1(b.timesheet_id) then 'SOURCE_ORIGINAL_INVOICE_SUBJECT_REQUIRED'");
+grouping=replace(grouping,'tf.processing_status::text processing_status,tf.locked_by_invoice_id,',"tf.processing_status::text processing_status,case when prospective.fact is null then tf.locked_by_invoice_id end locked_by_invoice_id,");
+grouping=replace(grouping,'coalesce(ts.contract_id,cw.contract_id) contract_id,',"coalesce((prospective.fact->>'contract_id')::uuid,ts.contract_id,cw.contract_id) contract_id,");
+grouping=replace(grouping,'coalesce(parent_ts.contract_id,parent_cw.contract_id) parent_contract_id,',"case when prospective.fact is null then coalesce(parent_ts.contract_id,parent_cw.contract_id) end parent_contract_id,");
+grouping=replace(grouping,'  left join lateral (\n    select private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)\n      authority_json',`  left join lateral (
+    select private.invoice_contract_move_prospective_source_v1(
+      (r.command_json->>'invoice_contract_correction_id')::uuid,r.timesheet_id,p_actor_user_id) fact
+  ) prospective on true
+  left join lateral (
+    select coalesce(prospective.fact->'settings_authority',private._timesheet_settings_authority_frozen_v1(ts.timesheet_id))
+      authority_json`);
+grouping=replace(grouping,"when seg.segment_json is not null\n        and nullif(seg.segment_json->>'invoice_locked_invoice_id','') is not null", "when seg.segment_json is not null\n        and not (b.command_json?'invoice_contract_correction_id')\n        and nullif(seg.segment_json->>'invoice_locked_invoice_id','') is not null");
+grouping=replace(grouping,"'source_member_key',b.source_member_key,","'source_member_key',b.source_member_key,'invoice_contract_correction_id',b.command_json->'invoice_contract_correction_id',");
+write('forward/033_native_grouping.sqlinc',grouping);
+let issueValidate=native('private._invoice_issue_validate_batch');
+issueValidate=replace(issueValidate,'request_counts as materialized (',`cm_credits as materialized (
+  select s.invoice_id from invoice_scope s
+  where private.invoice_contract_move_credit_invoice_valid_v1(s.invoice_id,false)
+),
+request_counts as materialized (`);
+issueValidate=replace(issueValidate,'  cross join lateral private._invoice_reference_rows_batch(i.ids) r',`  cross join lateral private._invoice_reference_rows_batch(i.ids) r
+  where not exists(select 1 from cm_credits cm where cm.invoice_id=r.invoice_id)`);
+issueValidate=replace(issueValidate,'  where r.invoice_id is not null\n),\ncorrections as materialized (',`  where r.invoice_id is not null
+    and not exists(select 1 from cm_credits cm where cm.invoice_id=r.invoice_id)
+),
+corrections as materialized (`);
+issueValidate=replace(issueValidate,'  where l.timesheet_id is not null\n  group by l.invoice_id,l.timesheet_id',`  where l.timesheet_id is not null
+    and not exists(select 1 from cm_credits cm where cm.invoice_id=l.invoice_id)
+  group by l.invoice_id,l.timesheet_id`);
+issueValidate=replace(issueValidate,'on t.timesheet_id=s.timesheet_id and t.is_current','on t.timesheet_id=s.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))');
+write('forward/079_native_issue_admission.sqlinc',issueValidate);
+let sourceReference=native('private._invoice_source_reference_validate_batch');
+sourceReference=replace(sourceReference,'t.updated_at,t.is_current,t.revoked_at,', 't.updated_at,(t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id)) is_current,t.revoked_at,');
+sourceReference=replace(sourceReference,'select private._timesheet_settings_authority_frozen_v1(t.timesheet_id)\n      authority_json',`select coalesce(private.invoice_contract_move_prospective_source_v1(
+      (s.member->>'invoice_contract_correction_id')::uuid,t.timesheet_id,
+      (select o.created_by_user_id from private.timesheet_contract_move_operations o where o.id=(s.member->>'invoice_contract_correction_id')::uuid))->'settings_authority',
+      private._timesheet_settings_authority_frozen_v1(t.timesheet_id)) authority_json`);
+write('forward/033b_native_references.sqlinc',sourceReference);
+let sourceVat=native('private._invoice_generation_vat_policy_batch');
+sourceVat=replace(sourceVat,'on t.timesheet_id=s.timesheet_id and t.is_current', 'on t.timesheet_id=s.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))');
+write('forward/033c_native_vat_policy.sqlinc',sourceVat);
+let invoiceReferences=native('private._invoice_reference_rows_batch');
+invoiceReferences=replace(invoiceReferences,'t.timesheet_id=it.timesheet_id and t.is_current', 't.timesheet_id=it.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))');
+write('forward/033d_native_invoice_references.sqlinc',invoiceReferences);
 let issue=native('private._invoice_issue_advance_core_v8');
 issue=replace(issue,"phase=case when s.exact_document_status='READY' then 'FINALISE'", "phase=case when s.exact_document_status='READY' and private.invoice_contract_move_credit_ready_v1(s.invoice_id,true) then 'FINALISE'");
 issue=replace(issue,"status=case when s.exact_document_status='READY' then 'QUEUED'", "status=case when s.exact_document_status='READY' and private.invoice_contract_move_credit_ready_v1(s.invoice_id,true) then 'QUEUED'");
@@ -145,7 +234,10 @@ issue=replace(issue,"      and c.payload_json->>'snapshot_hash'=v.snapshot_hash"
 issue=replace(issue,'    from eligible e where i.id=e.entity_id returning i.id', '    from eligible e where i.id=e.entity_id\n      and private.invoice_contract_move_credit_ready_v1(i.id,true) returning i.id');
 write('forward/080_issue_native.sqlinc',issue);
 let start=native('private._invoice_operation_start_core_v8');
-start=replace(start,'  with raw as materialized (','  p_commands:=private.invoice_contract_move_issue_commands_v1(p_commands,p_actor_user_id);\n\n  with raw as materialized (');
+start=replace(start,'  with raw as materialized (',`  if exists(select 1 from jsonb_array_elements(p_commands) command where command?'invoice_contract_correction_id' or exists(select 1 from jsonb_object_keys(command) key where key like 'source_original_%')) then raise exception 'CONTRACT_MOVE_PROSPECTIVE_INPUT_OWNER_ONLY' using errcode='42501';end if;
+  p_commands:=private.invoice_contract_move_issue_commands_v1(p_commands,p_actor_user_id);
+
+  with raw as materialized (`);
 write('forward/081_issue_registration.sqlinc',start);
 let issueOne=native('public.invoice_issue_one');
 issueOne=replace(issueOne,'  v_has_pdf_fresh boolean := false;','  v_has_pdf_fresh boolean := false;\n  v_move_context jsonb;\n  v_move_start jsonb;');
@@ -164,10 +256,12 @@ write('forward/082_issue_one.sqlinc',issueOne);
 // Explicit DRAFT_ONLY is validated by the scoped owner before shared document
 // dispatch. Only that exact purpose skips native automatic credit Issue.
 let generation=native('private._invoice_generation_advance_core_v8');
+generation=generation.replaceAll('and ts_vat.is_current','and (ts_vat.is_current or private.timesheet_contract_source_original_eligible_v1(ts_vat.timesheet_id))').replaceAll('not ts.is_current or ts.revoked_at','(not ts.is_current and not private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id)) or ts.revoked_at').replaceAll('and ts.is_current','and (ts.is_current or private.timesheet_contract_source_original_eligible_v1(ts.timesheet_id))');
 generation=replace(generation,"    where q.command_type='GENERATE_CREDIT_NOTE'\r\n    on conflict(idempotency_key)","    where q.command_type='GENERATE_CREDIT_NOTE'\n      and not private.invoice_contract_move_draft_only_v1(q.chunk_id)\n    on conflict(idempotency_key)");
 assert.equal(generation.split("where q.command_type<>'GENERATE_CREDIT_NOTE'").length,3);
 generation=generation.replaceAll("where q.command_type<>'GENERATE_CREDIT_NOTE'","where (q.command_type<>'GENERATE_CREDIT_NOTE' or private.invoice_contract_move_draft_only_v1(q.chunk_id))");
 generation=replace(generation,"and c.payload_json->>'command_type'='GENERATE_CREDIT_NOTE'\n    and i.id=", "and c.payload_json->>'command_type'='GENERATE_CREDIT_NOTE'\n    and not private.invoice_contract_move_draft_only_v1(c.id)\n    and i.id=");
+generation=factorSourceWitness(generation,replace);
 write('forward/070_generation_native.sqlinc',generation);
 let generationBatch=native('private._invoice_generation_advance_batch');
 generationBatch=replace(generationBatch,'  with claims as materialized (',`  -- Same native GENERATION_GROUP claim/lease; no extra scheduler or chunk type.

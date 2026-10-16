@@ -1,0 +1,168 @@
+create or replace function private.weekly_source_invoice_batch_rows_v1(
+  p_filters jsonb default '{}'::jsonb,
+  p_selection jsonb default pg_catalog.jsonb_build_object(
+    'contract_version','INVOICE_BATCH_SELECTION_V2',
+    'mode','IMPLICIT_ALL','default_selected',true,'rules','[]'::jsonb
+  )
+) returns table(
+  manifest_id uuid,
+  selection_key text,
+  source_revision text,
+  source_group_id uuid,
+  source_cycle_id uuid,
+  client_id uuid,
+  client_name text,
+  finalisation_week_ending date,
+  backing_report_number text,
+  movement_count integer,
+  candidate_ids uuid[],
+  candidate_names text[],
+  total_ex_vat numeric,
+  vat_amount numeric,
+  total_inc_vat numeric,
+  released_after_dispute boolean,
+  selectable boolean,
+  blocker_codes text[],
+  selected boolean
+)
+language sql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with rules as materialized (
+    select * from private._invoice_batch_selection_rules_v2(p_selection)
+  ),
+  raw as materialized (
+    select
+      manifest.id manifest_id,
+      'weekly-source-manifest:'||manifest.id::text selection_key,
+      pg_catalog.encode(manifest.manifest_hash,'hex') source_revision,
+      manifest.source_group_id,
+      manifest.source_cycle_id,
+      manifest.client_id,
+      coalesce(nullif(pg_catalog.btrim(client.name),''),manifest.client_id::text) client_name,
+      manifest.finalisation_week_ending,
+      nullif(pg_catalog.btrim(manifest.backing_report_number),'') backing_report_number,
+      manifest.movement_count,
+      coalesce(pg_catalog.array_agg(distinct movement.candidate_id order by movement.candidate_id)
+        filter(where movement.candidate_id is not null),'{}'::uuid[]) candidate_ids,
+      coalesce(pg_catalog.array_agg(distinct coalesce(
+        nullif(pg_catalog.btrim(candidate.display_name),''),
+        nullif(pg_catalog.btrim(pg_catalog.concat_ws(' ',candidate.first_name,candidate.last_name)),''),
+        candidate.tms_ref,movement.candidate_id::text
+      ) order by coalesce(
+        nullif(pg_catalog.btrim(candidate.display_name),''),
+        nullif(pg_catalog.btrim(pg_catalog.concat_ws(' ',candidate.first_name,candidate.last_name)),''),
+        candidate.tms_ref,movement.candidate_id::text
+      )) filter(where movement.candidate_id is not null),'{}'::text[]) candidate_names,
+      coalesce(pg_catalog.sum(movement.invoice_presentation_charge_pence),0)::numeric/100 total_ex_vat,
+      (private.weekly_source_invoice_manifest_admission_money_v1(manifest.id)->>'vat_pence')::numeric/100 vat_amount,
+      (private.weekly_source_invoice_manifest_admission_money_v1(manifest.id)->>'gross_pence')::numeric/100 total_inc_vat,
+      coalesce(pg_catalog.bool_or(exists(
+        select 1 from public.weekly_discrepancy_incidents incident
+        where incident.source_group_id=manifest.source_group_id
+          and incident.work_event_id=movement.work_event_id
+      )),false) released_after_dispute,
+      (
+        manifest.movement_count>0
+        and pg_catalog.count(member.billing_movement_id)=manifest.movement_count
+        and pg_catalog.bool_and(member.movement_hash=movement.movement_economic_hash)
+        and pg_catalog.bool_and(movement.final_revision_id=manifest.final_revision_id)
+        and pg_catalog.bool_and(movement.finalisation_cycle_id=manifest.source_cycle_id)
+        and pg_catalog.bool_and(movement.actual_client_id=manifest.client_id)
+        and pg_catalog.bool_and(movement.placement_state='UNPLACED')
+        and pg_catalog.bool_and(binding.id is null)
+        and not exists(select 1 from public.weekly_source_manifest_movements held
+          join public.weekly_source_billing_movements hm on hm.id=held.billing_movement_id
+          where held.client_manifest_id=manifest.id and hm.source_facts_json->>'invoice_hold'='VAT_FIT'
+            and not exists(select 1 from public.weekly_source_invoice_hold_releases receipt
+              where receipt.upload_row_id::text=hm.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT'))
+      ) integrity_ok
+    from public.weekly_source_client_manifests manifest
+    join public.weekly_source_final_revisions revision
+      on revision.id=manifest.final_revision_id and revision.state='CURRENT'
+    join public.weekly_source_client_cycle_completions completion
+      on completion.source_cycle_id=manifest.source_cycle_id
+     and completion.client_id=manifest.client_id
+     and completion.final_revision_id=manifest.final_revision_id
+     and completion.completion_kind='FINAL_SOURCE' and completion.state='CURRENT'
+    join public.clients client on client.id=manifest.client_id
+    left join public.weekly_source_manifest_movements member
+      on member.client_manifest_id=manifest.id
+    left join public.weekly_source_billing_movements movement
+      on movement.id=member.billing_movement_id
+    left join public.candidates candidate on candidate.id=movement.candidate_id
+    left join public.weekly_source_invoice_line_bindings binding
+      on binding.billing_movement_id=movement.id and binding.state='CURRENT'
+    where manifest.invoice_state='READY'
+      and manifest.movement_count>0
+    group by manifest.id,client.name
+  ),
+  filtered as materialized (
+    select raw.*,
+      case when raw.integrity_ok then '{}'::text[]
+        else array['SOURCE_MANIFEST_INVALID']::text[] end blocker_codes
+    from raw
+    where
+      (pg_catalog.jsonb_array_length(coalesce(p_filters->'client_ids','[]'::jsonb))=0
+        or raw.client_id::text in (select pg_catalog.jsonb_array_elements_text(p_filters->'client_ids')))
+      and (pg_catalog.jsonb_array_length(coalesce(p_filters->'candidate_ids','[]'::jsonb))=0
+        or exists(select 1 from pg_catalog.unnest(raw.candidate_ids) candidate_id
+          where candidate_id::text in (select pg_catalog.jsonb_array_elements_text(p_filters->'candidate_ids'))))
+      and (pg_catalog.jsonb_array_length(coalesce(p_filters->'week_endings','[]'::jsonb))=0
+        or raw.finalisation_week_ending::text in (select pg_catalog.jsonb_array_elements_text(p_filters->'week_endings')))
+      and (nullif(p_filters->>'week_ending_from','') is null
+        or raw.finalisation_week_ending>=nullif(p_filters->>'week_ending_from','')::date)
+      and (nullif(p_filters->>'week_ending_to','') is null
+        or raw.finalisation_week_ending<=nullif(p_filters->>'week_ending_to','')::date)
+      and (pg_catalog.jsonb_array_length(coalesce(p_filters->'status_codes','[]'::jsonb))=0
+        or case when raw.integrity_ok then 'READY' else 'BLOCKED' end
+          in (select pg_catalog.upper(pg_catalog.jsonb_array_elements_text(p_filters->'status_codes'))))
+      and (coalesce(pg_catalog.upper(nullif(p_filters->>'display_mode','')),'ALL')='ALL'
+        or coalesce(pg_catalog.upper(nullif(p_filters->>'display_mode','')),'ALL')=
+          case when raw.integrity_ok then 'READY' else 'BLOCKED' end)
+      and (pg_catalog.jsonb_array_length(coalesce(p_filters->'blocker_codes','[]'::jsonb))=0
+        or (not raw.integrity_ok and 'SOURCE_MANIFEST_INVALID'
+          in (select pg_catalog.upper(pg_catalog.jsonb_array_elements_text(p_filters->'blocker_codes')))))
+      and (nullif(pg_catalog.lower(pg_catalog.btrim(p_filters->>'search')),'') is null
+        or pg_catalog.lower(raw.client_name||' '||coalesce(raw.backing_report_number,'')||' '
+          ||pg_catalog.array_to_string(raw.candidate_names,' ')) like
+          '%'||pg_catalog.lower(pg_catalog.btrim(p_filters->>'search'))||'%')
+  ),
+  decided as (
+    select filtered.*,
+      coalesce((
+        select rule.action='INCLUDE'
+        from rules rule
+        where case rule.selector_type
+          when 'ROW' then rule.selection_key=filtered.selection_key
+          when 'WEEK' then rule.week_ending_date=filtered.finalisation_week_ending
+          when 'CLIENT' then rule.client_id=filtered.client_id
+          when 'CANDIDATE' then rule.candidate_id=any(filtered.candidate_ids)
+          when 'STATUS' then rule.status_code=case when filtered.integrity_ok then 'READY' else 'BLOCKED' end
+          when 'WEEK_CLIENT' then rule.week_ending_date=filtered.finalisation_week_ending and rule.client_id=filtered.client_id
+          when 'WEEK_CLIENT_CANDIDATE' then rule.week_ending_date=filtered.finalisation_week_ending
+            and rule.client_id=filtered.client_id and rule.candidate_id=any(filtered.candidate_ids)
+          when 'STATUS_WEEK' then rule.status_code=case when filtered.integrity_ok then 'READY' else 'BLOCKED' end
+            and rule.week_ending_date=filtered.finalisation_week_ending
+          when 'STATUS_WEEK_CLIENT' then rule.status_code=case when filtered.integrity_ok then 'READY' else 'BLOCKED' end
+            and rule.week_ending_date=filtered.finalisation_week_ending and rule.client_id=filtered.client_id
+          when 'DIMENSION_GROUP' then (rule.week_ending_date is null or rule.week_ending_date=filtered.finalisation_week_ending)
+            and (rule.client_id is null or rule.client_id=filtered.client_id)
+            and (rule.candidate_id is null or rule.candidate_id=any(filtered.candidate_ids))
+            and (rule.status_code is null or rule.status_code=case when filtered.integrity_ok then 'READY' else 'BLOCKED' end)
+          else false end
+        order by rule.rule_sequence desc limit 1
+      ),true) and filtered.integrity_ok is_selected
+    from filtered
+  )
+  select decided.manifest_id,decided.selection_key,decided.source_revision,
+    decided.source_group_id,decided.source_cycle_id,decided.client_id,
+    decided.client_name,decided.finalisation_week_ending,
+    decided.backing_report_number,decided.movement_count,
+    decided.candidate_ids,decided.candidate_names,decided.total_ex_vat,
+    decided.vat_amount,decided.total_inc_vat,decided.released_after_dispute,
+    decided.integrity_ok,decided.blocker_codes,decided.is_selected
+  from decided;
+$function$;

@@ -1,0 +1,46 @@
+create or replace function public.invoice_unissue_batch(
+  p_invoice_ids uuid[],
+  p_actor_user_id uuid,
+  p_clear_pdf boolean default false
+)
+returns table (
+  invoice_id uuid,
+  ok boolean,
+  status text,
+  cleared_pdf boolean,
+  error text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  if p_invoice_ids is null or coalesce(array_length(p_invoice_ids,1),0) = 0 then
+    raise exception 'invoice_ids[] required';
+  end if;
+
+  foreach v_id in array p_invoice_ids loop
+    begin
+      select
+        v_id,
+        true,
+        x.status,
+        x.cleared_pdf,
+        null::text
+      into invoice_id, ok, status, cleared_pdf, error
+      from public.invoice_unissue_one(v_id, p_actor_user_id, p_clear_pdf) x;
+
+      return next;
+    exception when others then
+      invoice_id := v_id;
+      ok := false;
+      status := null;
+      cleared_pdf := null;
+      error := sqlerrm;
+      return next;
+    end;
+  end loop;
+end;
+$$;

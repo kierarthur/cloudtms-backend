@@ -13,12 +13,22 @@ begin
   where s.operation_id=o.id and s.billing_revision=p_billing_revision)<>v_expected then
   raise exception 'CONTRACT_MOVE_BILLING_SLICE_PARTITION_INCOMPLETE' using errcode='55000';end if;
  if r.manifest_json#>'{invoice,source_certificate}'<>'null'::jsonb then
-  perform private.weekly_source_invoice_certificate_assert_v1(r.manifest_json#>'{invoice,source_certificate}',true);end if;
+  if o.state='REVIEWED' then perform private.weekly_source_invoice_certificate_assert_v1(r.manifest_json#>'{invoice,source_certificate}',true);end if;end if;
  if exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id
   and s.disposition in('PRESERVE_SOURCE','NO_INVOICE') and exists(select 1 from private.timesheet_contract_move_replacement_members m
    where m.operation_id=s.operation_id and m.slice_key=s.slice_key)) then
   raise exception 'CONTRACT_MOVE_SOURCE_OR_UNINVOICED_REPLACEMENT_FORBIDDEN' using errcode='55000';end if;
- if not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition='REPLACE_ISSUED') then
+ if exists(select 1 from private.timesheet_contract_move_billing_slices s
+  join private.timesheet_contract_move_members m on m.operation_id=s.operation_id and m.member_key=s.member_key
+  where s.operation_id=o.id and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT') and (
+   exists(select 1 from public.invoice_lines old where old.id=split_part(s.slice_key,':',2)::uuid)
+   or (s.disposition='EDIT_DRAFT' and not exists(select 1 from public.invoice_lines current_line
+    where current_line.invoice_id=s.original_invoice_id and current_line.timesheet_id=m.to_timesheet_id))
+   or not exists(select 1 from public.audit_events a where a.object_id_text=s.original_invoice_id::text
+    and a.action='CONTRACT_MOVE_SELECTED_DRAFT_PREPARED'
+    and a.before_json->>'operation_id'=o.id::text))) then
+  raise exception 'CONTRACT_MOVE_SELECTED_DRAFT_OBLIGATION_UNPROVED' using errcode='55000';end if;
+ if not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT')) then
   if o.preparation_operation_id is not null or exists(select 1 from private.timesheet_contract_move_invoice_scopes s where s.operation_id=o.id)
    or exists(select 1 from private.timesheet_contract_move_replacement_groups g where g.operation_id=o.id) then
    raise exception 'CONTRACT_MOVE_UNREQUESTED_INVOICE_JOB' using errcode='55000';end if;
@@ -27,7 +37,7 @@ begin
  if not exists(select 1 from public.invoice_operations p where p.id=o.preparation_operation_id and p.operation_type='GENERATE_INVOICES'
    and p.input_json->>'purpose'='CONTRACT_CORRECTION_PREPARE' and p.input_json->>'correction_id'=o.id::text
    and p.input_json->>'billing_revision'=p_billing_revision::text)
-  or exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition='REPLACE_ISSUED'
+  or exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT')
     and not exists(select 1 from private.timesheet_contract_move_replacement_members m where m.operation_id=s.operation_id and m.billing_revision=s.billing_revision and m.slice_key=s.slice_key))
   or exists(select 1 from private.timesheet_contract_move_invoice_scopes s where s.operation_id=o.id
     and not exists(select 1 from public.invoice_operation_chunks c where c.operation_id=s.credit_operation_id
@@ -54,8 +64,13 @@ begin
    or o.control_version<>c.operation_control_version or c.lease_expires_at_utc<=v_now then
    raise exception 'CONTRACT_MOVE_PREPARATION_CLAIM_STALE' using errcode='40001';end if;
   perform private.invoice_contract_move_obligation_assert_v1((c.payload_json->>'correction_id')::uuid,(c.payload_json->>'billing_revision')::bigint);
+  update public.invoices i set status='ON_HOLD',on_hold_reason=(select string_agg(distinct h->>'on_hold_reason','; ' order by h->>'on_hold_reason')
+    from jsonb_array_elements(g.native_group_json->'hold_purposes') h where h->>'on_hold_reason' is not null)
+  from private.timesheet_contract_move_replacement_groups g where g.generation_operation_id=o.id and i.id=g.planned_invoice_id
+   and i.status='DRAFT' and i.issued_at_utc is null and exists(select 1 from jsonb_array_elements(g.native_group_json->'hold_purposes') h
+    where h->>'status'='ON_HOLD');
   update private.timesheet_contract_move_replacement_groups g set invoice_id=i.id,native_state='DRAFTS_READY'
-   from public.invoices i where g.generation_operation_id=o.id and i.id=g.planned_invoice_id and i.type='INVOICE' and i.status='DRAFT';
+   from public.invoices i where g.generation_operation_id=o.id and i.id=g.planned_invoice_id and i.type='INVOICE' and i.status in('DRAFT','ON_HOLD');
   select jsonb_agg(jsonb_build_object('chunk_id',x.id,'status',x.status,'phase',x.phase,'result',x.result_json,'error',x.error_json) order by x.sequence_no)
    into v_children from public.invoice_operation_chunks x where x.operation_id=o.id and x.id<>c.id;
   v_blocker:=null;
@@ -93,6 +108,7 @@ begin
   join private.timesheet_contract_move_replacement_groups g using(operation_id,billing_revision,group_key)
   join private.timesheet_contract_move_scope_fences f on f.operation_id=m.operation_id and f.billing_revision=m.billing_revision
   where m.current_timesheet_id=(p_new->>'timesheet_id')::uuid and f.retired_by_native_receipt_id is null
+   and f.scope_key='REPLACEMENT:'||m.current_timesheet_id::text||':'||m.component_key
    and (p_new->>'invoice_id')::uuid is distinct from coalesce(g.invoice_id,g.planned_invoice_id)) then
   raise exception 'CONTRACT_MOVE_EXCLUSIVE_BILLING_OBLIGATION' using errcode='55000';end if;
 end;

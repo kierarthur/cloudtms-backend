@@ -11,9 +11,11 @@ begin
  if p_lock then perform 1 from private.timesheet_contract_move_replacement_groups x
   where x.operation_id=g.operation_id and x.billing_revision=g.billing_revision and x.group_key=g.group_key for update;end if;
  if not exists(select 1 from private.timesheet_contract_move_operations o where o.id=g.operation_id
-  and o.state='COMPLETE' and o.billing_revision=g.billing_revision) then return false;end if;
+  and o.state in('COMPLETE','SUPERSEDED') and o.billing_revision=g.billing_revision
+  and (o.state='COMPLETE' or cardinality(private.invoice_contract_move_current_billing_operations_v1(p_invoice_id))>0)) then return false;end if;
  for required in select s.* from private.timesheet_contract_move_invoice_scopes s
-  where s.operation_id=g.operation_id and s.billing_revision=g.billing_revision order by s.original_invoice_id loop
+  where (s.operation_id=g.operation_id and s.billing_revision=g.billing_revision)
+   or s.operation_id=any(private.invoice_contract_move_current_billing_operations_v1(p_invoice_id)) order by s.original_invoice_id loop
   if p_lock then perform 1 from public.invoices i where i.id=required.credit_note_id for update;end if;
   select i.* into credit from public.invoices i where i.id=required.credit_note_id;
   if credit.id is null or credit.type<>'CREDIT_NOTE' or credit.original_invoice_id is distinct from required.original_invoice_id
@@ -44,32 +46,42 @@ create or replace function private.invoice_contract_move_issue_context_v1(p_invo
 returns jsonb language plpgsql volatile security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
-declare v_operation uuid;v_revision bigint;v_ids uuid[];v_credits uuid[];v_count integer;
+declare v_operation uuid;v_operations uuid[];v_revision bigint;v_ids uuid[];v_credits uuid[];v_count integer;
 begin
- select count(*) into v_count from (
-  select x.operation_id,x.billing_revision from private.timesheet_contract_move_replacement_groups x where coalesce(x.invoice_id,x.planned_invoice_id)=p_invoice_id
-  union select x.operation_id,x.billing_revision from private.timesheet_contract_move_invoice_scopes x where x.credit_note_id=p_invoice_id) owners;
- if v_count=0 then return null;end if;
- if v_count<>1 then raise exception 'CONTRACT_MOVE_INVOICE_GROUP_AMBIGUOUS' using errcode='55000';end if;
- select operation_id,billing_revision into v_operation,v_revision from (
-  select x.operation_id,x.billing_revision from private.timesheet_contract_move_replacement_groups x where coalesce(x.invoice_id,x.planned_invoice_id)=p_invoice_id
-  union select x.operation_id,x.billing_revision from private.timesheet_contract_move_invoice_scopes x where x.credit_note_id=p_invoice_id) owners;
- if not found then return null;end if;
+ select array_agg(distinct id order by id) into v_operations from (
+  select x.operation_id id from private.timesheet_contract_move_replacement_groups x where coalesce(x.invoice_id,x.planned_invoice_id)=p_invoice_id
+  union select x.operation_id from private.timesheet_contract_move_invoice_scopes x where x.credit_note_id=p_invoice_id
+  union select unnest(private.invoice_contract_move_current_billing_operations_v1(p_invoice_id))) owners;
+ if cardinality(v_operations) is null or cardinality(v_operations)=0 then return null;end if;
+ -- Include retained old credits/groups referenced by this exact accepted edit.
+ select array_agg(distinct id order by id) into v_operations from (
+  select unnest(v_operations) id union select g.operation_id from private.timesheet_contract_move_billing_slices s
+   join private.timesheet_contract_move_replacement_groups g on coalesce(g.invoice_id,g.planned_invoice_id)=s.original_invoice_id
+   where s.operation_id=any(v_operations) and s.disposition='EDIT_DRAFT') retained;
+ v_operation:=v_operations[1];
+ select billing_revision into strict v_revision from private.timesheet_contract_move_operations where id=v_operation;
  if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
   raise exception 'INVOICE_ISSUE_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
  select array_agg(credit_note_id order by original_invoice_id) into v_credits
-  from private.timesheet_contract_move_invoice_scopes where operation_id=v_operation and billing_revision=v_revision;
+  from private.timesheet_contract_move_invoice_scopes where operation_id=any(v_operations);
  select array_agg(id order by id) into v_ids from (
   select unnest(v_credits) id union select coalesce(invoice_id,planned_invoice_id) from private.timesheet_contract_move_replacement_groups
-   where operation_id=v_operation and billing_revision=v_revision) members;
+   where operation_id=any(v_operations)
+  union select s.original_invoice_id from private.timesheet_contract_move_billing_slices s where s.operation_id=any(v_operations) and s.disposition='EDIT_DRAFT') members;
  if array_position(v_ids,null) is not null or cardinality(v_ids)=0 then
   raise exception 'CONTRACT_MOVE_NATIVE_DRAFT_PREPARATION_PENDING' using errcode='55000';end if;
  if p_lock then perform 1 from public.invoices i where i.id=any(v_ids) order by i.id for update;end if;
+ if (select count(distinct actual_client_id) from private.timesheet_contract_move_operations where id=any(v_operations))<>1 then
+  raise exception 'CONTRACT_MOVE_ISSUE_GROUP_CLIENT_CHANGED' using errcode='55000';end if;
+ if exists(select 1 from private.timesheet_contract_move_replacement_groups g where g.operation_id=any(v_operations)
+  and (g.invoice_id is null or g.native_state<>'DRAFTS_READY') and not exists(select 1 from public.invoices i
+   where i.id=g.invoice_id and i.issued_at_utc is not null)) then
+  raise exception 'CONTRACT_MOVE_NATIVE_DRAFT_PREPARATION_PENDING' using errcode='55000';end if;
  if (select count(*) from public.invoices i where i.id=any(v_ids) and i.client_id=(select actual_client_id
   from private.timesheet_contract_move_operations where id=v_operation))<>cardinality(v_ids) then
   raise exception 'CONTRACT_MOVE_ISSUE_GROUP_SCOPE_CHANGED' using errcode='55000';end if;
  return jsonb_build_object('version','INVOICE_CONTRACT_MOVE_ISSUE_CONTEXT_V1','operation_id',v_operation,
-  'billing_revision',v_revision::text,'invoice_ids',to_jsonb(v_ids),'required_credit_invoice_ids',to_jsonb(v_credits));
+  'operation_ids',to_jsonb(v_operations),'billing_revision',v_revision::text,'invoice_ids',to_jsonb(v_ids),'required_credit_invoice_ids',to_jsonb(v_credits));
 end;
 $function$;
 

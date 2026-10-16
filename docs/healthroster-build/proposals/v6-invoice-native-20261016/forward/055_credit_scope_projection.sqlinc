@@ -1,0 +1,29 @@
+create or replace function private.invoice_credit_contract_move_scope_context_v1(p_scope_id uuid,p_lock_rows boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s private.timesheet_contract_move_invoice_scopes%rowtype;c public.invoice_operation_chunks%rowtype;
+ v_native jsonb;v_lines jsonb;v_groups uuid[];
+begin
+ select x.* into strict s from private.timesheet_contract_move_invoice_scopes x where x.id=p_scope_id;
+ select x.* into strict c from public.invoice_operation_chunks x where x.operation_id=s.credit_operation_id
+  and x.payload_json#>>'{credit_scope,original_scope_id}'=s.id::text;
+ v_native:=private.invoice_credit_contract_move_context_v1(c.id,p_lock_rows);
+ select jsonb_agg(jsonb_build_object('original_invoice_line_id',l.original_invoice_line_id,
+  'original_timesheet_id',l.original_timesheet_id,'credit_unit_key',l.replacement_component_key||':'||l.original_invoice_line_id::text,
+  'net',(-(l.original_line_snapshot_json->>'total_charge_ex_vat')::numeric)::numeric(20,2)::text,
+  'vat',(-(l.original_line_snapshot_json->>'vat_amount')::numeric)::numeric(20,2)::text,
+  'gross',(-(l.original_line_snapshot_json->>'total_inc_vat')::numeric)::numeric(20,2)::text,
+  'allocation_digest',encode(l.original_line_sha256,'hex')) order by l.original_invoice_line_id) into v_lines
+ from private.timesheet_contract_move_invoice_scope_lines l where l.scope_id=s.id;
+ select array_agg(coalesce(g.invoice_id,g.planned_invoice_id) order by g.group_key) into v_groups
+ from private.timesheet_contract_move_replacement_groups g where g.operation_id=s.operation_id and g.billing_revision=s.billing_revision;
+ return jsonb_build_object('version','CONTRACT_MOVE_CREDIT_SCOPE_V1','scope_kind','CONTRACT_MOVE','preparation_mode','DRAFT_ONLY',
+  'correction_id',s.operation_id,'billing_revision',s.billing_revision::text,'scope_id',s.id,'original_invoice_id',s.original_invoice_id,
+  'original_family_root_id',s.family_root_id,'accepted_scope_digest',encode(s.required_credit_scope_digest,'hex'),
+  'credit_basis_revision',v_native->>'revision','original_lines',v_lines,
+  'credit_totals',jsonb_build_object('net',v_native->>'subtotal_ex_vat','vat',v_native->>'vat_amount','gross',v_native->>'total_inc_vat'),
+  'original_settlement_witness_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_ORIGINAL_SETTLEMENT_V1',s.original_invoice_state_json),'hex'),
+  'replacement_group_ids',coalesce(to_jsonb(v_groups),'[]'::jsonb));
+end;
+$function$;

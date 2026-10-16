@@ -1,10 +1,15 @@
 {
   "parser": "pglast v7.20",
   "database_execution": false,
+  "native_projection": {
+    "unchanged_native_projection": true,
+    "operand_count": 28,
+    "comparison": "PostgreSQL AST equality ignoring source locations"
+  },
   "checks": [
     {
       "file": "001_billing_schema.sqlinc",
-      "sql_statements": 13,
+      "sql_statements": 16,
       "plpgsql_functions": 0,
       "inner_sql_expressions": 0
     },
@@ -22,9 +27,15 @@
     },
     {
       "file": "018_source_original.sqlinc",
-      "sql_statements": 3,
-      "plpgsql_functions": 1,
+      "sql_statements": 4,
+      "plpgsql_functions": 2,
       "inner_sql_expressions": 11
+    },
+    {
+      "file": "019_source_generation_witness.sqlinc",
+      "sql_statements": 4,
+      "plpgsql_functions": 4,
+      "inner_sql_expressions": 58
     },
     {
       "file": "020_source_family.sqlinc",
@@ -37,6 +48,12 @@
       "sql_statements": 1,
       "plpgsql_functions": 1,
       "inner_sql_expressions": 19
+    },
+    {
+      "file": "021a_source_duty.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 202
     },
     {
       "file": "022_source_presentation.sqlinc",
@@ -54,7 +71,7 @@
       "file": "024_line_admission.sqlinc",
       "sql_statements": 6,
       "plpgsql_functions": 2,
-      "inner_sql_expressions": 10
+      "inner_sql_expressions": 12
     },
     {
       "file": "025_claim_placement.sqlinc",
@@ -90,7 +107,7 @@
       "file": "030_claim_sync.sqlinc",
       "sql_statements": 1,
       "plpgsql_functions": 1,
-      "inner_sql_expressions": 39
+      "inner_sql_expressions": 44
     },
     {
       "file": "031_source_line_owner.sqlinc",
@@ -99,10 +116,70 @@
       "inner_sql_expressions": 13
     },
     {
+      "file": "032_prospective_group.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 27
+    },
+    {
+      "file": "033_native_grouping.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0
+    },
+    {
+      "file": "033a_native_collection.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 9
+    },
+    {
+      "file": "033b_native_references.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0
+    },
+    {
+      "file": "033c_native_vat_policy.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0
+    },
+    {
+      "file": "033d_native_invoice_references.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0
+    },
+    {
+      "file": "034_contract_certificates.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 20
+    },
+    {
       "file": "035_preflight.sqlinc",
       "sql_statements": 6,
       "plpgsql_functions": 2,
-      "inner_sql_expressions": 56
+      "inner_sql_expressions": 73
+    },
+    {
+      "file": "036_native_selected_edit.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 858
+    },
+    {
+      "file": "036a_native_selected_unlock.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 70
+    },
+    {
+      "file": "037_selected_draft.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 35
     },
     {
       "file": "038_billing_read.sqlinc",
@@ -114,19 +191,25 @@
       "file": "040_prepare.sqlinc",
       "sql_statements": 1,
       "plpgsql_functions": 1,
-      "inner_sql_expressions": 63
+      "inner_sql_expressions": 71
     },
     {
       "file": "045_preparation_native.sqlinc",
       "sql_statements": 3,
       "plpgsql_functions": 3,
-      "inner_sql_expressions": 42
+      "inner_sql_expressions": 46
     },
     {
       "file": "050_credit_owner.sqlinc",
       "sql_statements": 3,
       "plpgsql_functions": 3,
-      "inner_sql_expressions": 67
+      "inner_sql_expressions": 70
+    },
+    {
+      "file": "055_credit_scope_projection.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 6
     },
     {
       "file": "060_scoped_native.sqlinc",
@@ -138,7 +221,7 @@
       "file": "070_generation_native.sqlinc",
       "sql_statements": 1,
       "plpgsql_functions": 1,
-      "inner_sql_expressions": 23
+      "inner_sql_expressions": 25
     },
     {
       "file": "071_generation_dispatch.sqlinc",
@@ -147,10 +230,28 @@
       "inner_sql_expressions": 17
     },
     {
+      "file": "074_current_billing.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0
+    },
+    {
       "file": "075_issue_owner.sqlinc",
       "sql_statements": 3,
       "plpgsql_functions": 3,
-      "inner_sql_expressions": 52
+      "inner_sql_expressions": 54
+    },
+    {
+      "file": "076_credit_issue_admission.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 8
+    },
+    {
+      "file": "079_native_issue_admission.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0
     },
     {
       "file": "080_issue_native.sqlinc",
@@ -162,7 +263,7 @@
       "file": "081_issue_registration.sqlinc",
       "sql_statements": 1,
       "plpgsql_functions": 1,
-      "inner_sql_expressions": 12
+      "inner_sql_expressions": 14
     },
     {
       "file": "082_issue_one.sqlinc",
@@ -172,7 +273,7 @@
     },
     {
       "file": "099_new_private_acl.sqlinc",
-      "sql_statements": 44,
+      "sql_statements": 72,
       "plpgsql_functions": 0,
       "inner_sql_expressions": 0
     }

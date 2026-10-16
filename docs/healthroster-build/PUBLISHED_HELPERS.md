@@ -17,3 +17,16 @@ was performed. Ordinary prospective grouping, native selected Draft/repeated
 Unissue reconciliation, H104/H105/H228 projections and integrated native proof
 remain required; ordinary preflight fails closed before Ready. This checkpoint
 does not replace the installed publication receipt or qualify Agency NX-AI6.
+
+16 October V6 invoice second source checkpoint: native selected Draft and
+verified repeated-Unissue owner logic, prospective native grouping/reference
+adapters, H104/H105/H228, direct current entitlement partition and Source
+original-A collection are now implemented in the same proposal. Legacy Source
+generation records exact intended lines from the single native projection,
+under its real fenced claim, before insertion. PostgreSQL AST equality proves
+all 28 projection operands unchanged; 45 SQL/PLpgSQL/inner grammar files and 17
+source regressions pass. No DB execution. Actual financial trigger taxonomy was
+reconciled with the physical owner; no new Move phase or Source config/GUC
+authority was added. Native qualification cases, current B evidence/document
+consumer, Daily integration and genuine Bank valuation/publisher are still
+required. See the proposal README and NATIVE_QUALIFICATION_CASES.md.

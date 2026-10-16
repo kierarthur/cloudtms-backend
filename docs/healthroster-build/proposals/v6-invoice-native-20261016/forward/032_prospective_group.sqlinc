@@ -1,0 +1,58 @@
+-- A trusted metadata-only input to the existing native grouping kernel.
+-- No B Timesheet, financial row, invoice UUID or valuation is allocated here.
+create or replace function private.invoice_contract_move_prospective_source_v1(p_operation_id uuid,p_timesheet_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;s jsonb;m jsonb;
+begin
+ if p_operation_id is null then return null;end if;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if o.state<>'REVIEWED' or o.created_by_user_id<>p_actor_user_id or o.placement_receipt_json is not null
+  or not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  raise exception 'CONTRACT_MOVE_PROSPECTIVE_GROUP_NOT_ALLOWED' using errcode='42501';end if;
+ s:=private.timesheet_contract_move_scope_v1(o.id,false);
+ select value into strict m from jsonb_array_elements(s->'members') where value->>'from_timesheet_id'=p_timesheet_id::text;
+ if jsonb_typeof(m->'destination_settings_authority')<>'object' then
+  raise exception 'CONTRACT_MOVE_DESTINATION_SETTINGS_UNBOUND' using errcode='55000';end if;
+ return jsonb_build_object('operation_id',o.id,'member_key',m->>'member_key','contract_id',o.to_contract_id,
+  'settings_authority',m->'destination_settings_authority');
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_group_facts_v1(p_operation_id uuid,p_groups jsonb,p_preview boolean)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;g jsonb;v_member jsonb;v_members jsonb;v_groups jsonb:='[]';v_key text;v_fact jsonb;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if jsonb_typeof(p_groups)<>'array' or jsonb_array_length(p_groups) not between 1 and 500 then
+  raise exception 'CONTRACT_MOVE_NATIVE_GROUP_MANIFEST_INVALID' using errcode='22023';end if;
+ for g in select value from jsonb_array_elements(p_groups) loop
+  v_members:='[]';
+  for v_member in select value from jsonb_array_elements(g->'canonical_source_members') loop
+   if p_preview then
+    select m->>'member_key' into strict v_key from jsonb_array_elements(private.timesheet_contract_move_scope_v1(o.id,false)->'members') m
+     where m->>'from_timesheet_id'=v_member->>'source_id';
+   else
+    select m.member_key into strict v_key from private.timesheet_contract_move_members m where m.operation_id=o.id
+     and m.to_timesheet_id=(v_member->>'source_id')::uuid;
+   end if;
+   v_members:=v_members||jsonb_build_array(jsonb_build_object('member_key',v_key,
+    'source_type',v_member->'source_type','segment_id',v_member->'segment_id',
+    'natural_week_start',v_member->'natural_week_start','target_invoice_week',v_member->'target_invoice_week'));
+  end loop;
+  select jsonb_agg(value order by value::text) into v_members from jsonb_array_elements(v_members);
+  v_fact:=jsonb_build_object('client_id',g->'client_id','contract_ids',g->'contract_ids',
+   'target_invoice_week',g->'target_invoice_week','natural_source_weeks',g->'natural_source_weeks',
+   'consolidation_mode',g->'consolidation_mode','invoice_stream',g->'invoice_stream','self_bill',g->'self_bill',
+   'members',v_members,'blocker_code',g->'blocker_code','blocker_detail',case when g->>'blocker_code' is null then null else g->'blocker_detail' end);
+  v_fact:=v_fact||jsonb_build_object('entitlement_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_ENTITLEMENT_V1',v_fact),'hex'));
+  v_groups:=v_groups||jsonb_build_array(v_fact);
+ end loop;
+ select jsonb_agg(value order by value::text) into v_groups from jsonb_array_elements(v_groups);
+ return jsonb_build_object('version','CONTRACT_MOVE_NATIVE_GROUP_FACTS_V1','groups',v_groups,
+  'digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_GROUP_FACTS_V1',v_groups),'hex'));
+end;
+$function$;

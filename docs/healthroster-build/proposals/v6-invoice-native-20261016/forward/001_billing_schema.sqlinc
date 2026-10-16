@@ -2,6 +2,7 @@
 -- allocated by this DDL. Physical operation/review/member DDL precedes it.
 create table private.timesheet_contract_move_invoice_scopes(
  id uuid primary key,operation_id uuid not null references private.timesheet_contract_move_operations(id),
+ accept_request_id uuid unique,accept_request_hash bytea check(accept_request_hash is null or octet_length(accept_request_hash)=32),
  original_invoice_id uuid not null references public.invoices(id),family_root_id uuid not null,
  original_timesheet_id uuid not null references public.timesheets(timesheet_id),current_timesheet_id uuid references public.timesheets(timesheet_id),
  scope_kind text not null check(scope_kind='CONTRACT_MOVE'),original_line_ids uuid[] not null,
@@ -79,3 +80,7 @@ begin
  end loop;
 end;
 $acl$;
+
+create index timesheet_contract_move_billing_slices_invoice_idx on private.timesheet_contract_move_billing_slices(original_invoice_id,operation_id,billing_revision,member_key);
+create index timesheet_contract_move_replacement_groups_invoice_idx on private.timesheet_contract_move_replacement_groups((coalesce(invoice_id,planned_invoice_id)));
+create index timesheet_contract_move_scopes_credit_idx on private.timesheet_contract_move_invoice_scopes(credit_note_id);
