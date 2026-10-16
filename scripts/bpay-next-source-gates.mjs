@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { repoRoot, inventory } from './cloudtms-db-release-lib.mjs';
 import { scanManagedSql, readManagedClosure } from './cloudtms-managed-release-sql.mjs';
 import { changedSourcePaths, routineDefinitions, definerInventory, verifyFinalDefiners } from './bpay-next-final-definers.mjs';
+import { assertContactClaimBoundary,CONTACT_CLAIM_CORE_PATH,CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_ROOT,CONTACT_CLAIM_CORE_SIGNATURE,CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor } from './healthroster-contact-claim-boundary.mjs';
 
 export const FROZEN_BASE='a6f7423eb71e6e7cd173e705c2290e5408a1d077';
 const FOUNDATION_RECONCILED='3c91e5e6ce35b5833a5c218b77b741261eeebafa';
@@ -2331,6 +2332,18 @@ export function verifyBpayNextSourceGates(){
       const previous=spawnSync('git',['show',`${FROZEN_BASE}:${definition.physical}`],{cwd:repoRoot,encoding:'utf8',maxBuffer:64*1024*1024,windowsHide:true});
       const currentSource=read(definition.physical).replaceAll('\r\n','\n');
       const exact=scanManagedSql(currentSource).statements.filter(row=>routineDefinitions(currentSource.slice(row.start,row.end),definition.physical).includes(signature)).map(row=>currentSource.slice(row.start,row.end).replaceAll('\r\n','\n'));
+      // Health's native contact bridge retains the complete frozen Banking
+      // owner in its actual final core. Compare both whole statements against
+      // finite reviewed edits, including both original LEGACY/factual branches.
+      if(signature==='public.email_outbox_claim_ready_batch(integer,text,integer)'&&[CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_MIGRATION.path].includes(definition.physical)){
+        const core=routines.get(CONTACT_CLAIM_CORE_SIGNATURE)?.at(-1);
+        if(exact.length!==1||(definition.physical===CONTACT_CLAIM_BRIDGE_PATH&&definition.root!==CONTACT_CLAIM_ROOT)||core?.root!==CONTACT_CLAIM_ROOT||core?.physical!==CONTACT_CLAIM_CORE_PATH)
+          throw Error('HEALTHROSTER_CONTACT_CLAIM_FINAL_OWNER_CHANGED');
+        assertContactClaimBoundary({parent:frozenSources.get(file),core:read(core.physical),bridge:exact[0]});
+        if(definition.physical===CONTACT_CLAIM_MIGRATION.path)
+          contactClaimMigrationCompanionFor(readManagedClosure(definition.physical,repoRoot),'migration',{root:repoRoot});
+        continue;
+      }
       // DY03's card extends only the NULL-safe immutable Work identity tuple.
       // Compare the entire statement to the frozen parent with exactly two
       // field-list extensions; every other guard branch remains byte-exact.

@@ -1,0 +1,88 @@
+{
+  "version": "HEALTHROSTER_CONTACT_CLAIM_BOUNDARY_CORRECTION_V1",
+  "status": "SOURCE_INTEGRATED_NATIVE_NOT_RUN_NOT_RELEASE_READY",
+  "rootParentCommit": "ccfabb9f0d62fc45ccba692d80324df31fca0ac4",
+  "proposalSource": "2180ba8c13ae534bbd1948f911c7a6a6f3fe00c0",
+  "proposalRecipeSha256": "6e33caad1c3057352073c47a2773f627e734541514c43b789e614acd9ed71aa6",
+  "frozenBankParent": {
+    "path": "supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql",
+    "commit": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+    "sha256": "fd5bc5ed576d81d02aade82b0111bb560e3ce51707259b76871b469f29e1fb9c",
+    "matchesProposal90ff": true,
+    "modified": false
+  },
+  "rootCause": "Earlier contact core copied the historical generic claim rather than the current complete LEGACY/NEXT owner. F23 caught this genuine boundary regression. Immutable migration0339 also embeds the historical core.",
+  "correction": {
+    "corePath": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+    "coreSha256": "3b013f5156a61a0b17a2f3545885f5cd0f89ba050d9418d71973b1003ef291ca",
+    "retained": "Whole true-LEGACY and indexed factual-only branches, original module owner lock, Candidate/Source/invoice authority, INVOKER/RLS/limits/order/lease/result recipe.",
+    "finiteAdditions": "Core name/three existing contact arguments; both exact query selectors; both current stamp CTEs before actual leases; bridge-only cleanup.",
+    "wrapper": "Unchanged existing public083 wrapper; exact entire function comparison required.",
+    "migration": {
+      "path": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "contentSha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7",
+      "closureSha256": "d995cc3c49873dc4fd85103a341d09447a67a043df09ccb390310aaf212d9f27",
+      "bytesUnchanged": true,
+      "execution": "Pinned corrected whole core is applied after original body and before SAME transaction ledger/COMMIT. No unsafe committed window, new install or edited migration.",
+      "statementSha256": "8c620a02dbb1aab07d07486b8a73562b330aef9160e67ad7736814d396a2bac0"
+    },
+    "manifest": "Companion version and all exact source pins enter existing managed manifest/admission. Old managed identity cannot resume as the new packet.",
+    "rehearsal": "Same audited companion appended inside rollback outer transaction, source census includes corrected core/parent/bridge. No commit or source assertion removed."
+  },
+  "checks": {
+    "focused": "88/88 PASS:contact15,existing managed31,reviewed envelopes10,full harness/protocol32",
+    "fullF23": "FAILED_CLOSED on wider unclassified SQL dynamic/rowtype/aggregate constructs and frozen ACL statements; original competing mail claim now passes.",
+    "integrity": "407migrations/1075repeatables PASS",
+    "oldInvoiceNativeGateSha256": "62bb8efc92cd8bbbb9a9a6b080107773bf4277fc3d38640cdd5be8db49f9b793",
+    "oldInvoiceGateLiteralUnchanged": true,
+    "reviewRepin": "Only existingNativeGate.ownerSourceHash changed after exact actual guard comparison; prior callee review unchanged."
+  },
+  "files": [
+    {
+      "file": "scripts/healthroster-contact-claim-boundary.mjs",
+      "sha256": "923242cfe09e81fc705a9f3d47e2b3d4c0b5f684f39ac4874d7b52be1844f6c8"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "e3b7eef147b56f0b349f8f0ae20a4cf87891d0f62a3c964c0c96f0c6bf58d12a"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "a52b9b1e1ad2f121096cebbcf514a06fac021069e8692fb28a86d52a512c1a8c"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "c645182b08c6e7b6d5af01ee88d4d24f86072a024c2ca68e01bc3da6cc0720ff"
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "46b8ec1ad483808c8e9ea17cc022ca32caea2f26f5588cd866571f4d3268fe0e"
+    },
+    {
+      "file": "tests/healthroster-contact-claim-boundary.test.mjs",
+      "sha256": "7c5b24b2fdf9cc1adcc4b892907825841a9fc050626a607c4e7ba84e065b6c81"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+      "sha256": "3b013f5156a61a0b17a2f3545885f5cd0f89ba050d9418d71973b1003ef291ca"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "sha256": "8ff793324b5c02a5081a4a1afc63a94b8624a8b7e4a23d5a34340654f0f49fda"
+    }
+  ],
+  "qualification": {
+    "native": "NOT_RUN",
+    "effectiveAcl": "NOT_RUN",
+    "contention": "NOT_RUN",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED"
+  },
+  "effects": {
+    "testMutation": false,
+    "dbSessionHeld": false,
+    "deploy": false,
+    "bankingChatMessage": false,
+    "secretsPrinted": false
+  }
+}

@@ -8,7 +8,7 @@ import {assertConnectionPreservingException,unitCheckpointSql} from './cloudtms-
 
 export const managedEnvelopeReviewPath='docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json';
 export const managedCalleeAuditPath='docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_CALLEE_AUDIT.json';
-const reviewHash='b43101eb42c2ec52a97f9925ff2b066985e44ae2ea1ad109dce2f106ebae39e1';
+const reviewHash='8ff793324b5c02a5081a4a1afc63a94b8624a8b7e4a23d5a34340654f0f49fda';
 const calleeHash='8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28';
 const requireThat=(value,code)=>{if(!value)throw Error(code);};
 const transactionHeads=new Set(['BEGIN','COMMIT','END','START','ABORT','PREPARE','ROLLBACK']);

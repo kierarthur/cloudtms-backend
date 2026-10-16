@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {inventory,mapExecutableSqlSource,logicalPostgresExecutablePolicy,canonicalContractHash} from './cloudtms-db-release-lib.mjs';
 import {pendingInventory,compileManagedUnit} from './cloudtms-managed-release.mjs';
+import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';
 import {closeFinalDefinerSelection} from './bpay-next-final-definers.mjs';
 import {readerReleasePhases,READER_PREPARATION,readerActivationSql} from './weekly-source-reader-release.mjs';
 import {canonical,digest,scanManagedSql,exactAtomicBody,literal} from './cloudtms-managed-release-sql.mjs';
@@ -205,8 +206,14 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   // A protected release's exception may contain transaction commits or gexec.
   // It cannot be silently flattened into this rollback-only outer transaction.
   requireThat(!compiled.exception&&!compiled.ownerRlsEnvelope&&!compiled.immutableGuardDependency,'REHEARSAL_SPECIAL_MANAGED_ENVELOPE_REVIEW_REQUIRED');
-  units.push({file:item.path,kind,sql:compiled.body,sqlHash:digest(compiled.body),sourceSqlHash:item.sha256,phase:kind,
-   sourceFiles:compiled.closure?.ordered.map(x=>({file:x.path,sha256:digest(x.source)}))??[]});
+  const companion=compiled.contactClaimCompanion||item.path===CONTACT_CLAIM_MIGRATION.path
+   ?contactClaimMigrationSql(compiled,mapExecutableSqlSource):'';
+  const sql=compiled.body+(companion?'\n'+companion:'');
+  units.push({file:item.path,kind,sql,sqlHash:digest(sql),sourceSqlHash:item.sha256,phase:kind,
+   sourceFiles:[...(compiled.closure?.ordered.map(x=>({file:x.path,sha256:digest(x.source)}))??[]),
+    ...(compiled.contactClaimCompanion?.sourceFiles??[])],
+   ...(companion?{atomicContactClaimCompanion:{version:compiled.contactClaimCompanion.version,
+    statementSha256:compiled.contactClaimCompanion.statementSha256,nativeProof:'NOT_RUN'}}:{})});
  }
  if(phases.readers.length){
   for(const item of phases.readers)compileUnit(item,'repeatable',options);
