@@ -1,0 +1,35 @@
+{
+  "version": "V6_MANUAL_ENQUIRY_EXISTING_OWNER_REGISTRATION_PROPOSAL_V1",
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "registryPath": "docs/bpay-next/final-definer-closures.json",
+  "baseSha256": "8c2d26a3ec001409976ab98c90cfcc6def620ec33f8c94b095c22fe48fac9c7f",
+  "beforeCount": 1462,
+  "proposedAddCount": 1,
+  "nativeFunctionsAdded": 0,
+  "slotStatus": "PROPOSED_1220_ROOT_RESERVATION_REQUIRED",
+  "rows": [
+    {
+      "signature": "private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid)",
+      "before": null,
+      "after": {
+        "signature": "private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid)",
+        "owner": "Health Office manual enquiry combined-read parent; source-only proposal, native NOT_RUN",
+        "baselineSource": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+        "finalRoot": "supabase/repeatable/16102026_1220_contact_manual_enquiry_office_read_v1.sql",
+        "finalPhysical": "supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/weekly_contact_office_rows_v1.sqlinc",
+          "supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1220_contact_manual_enquiry_office_read_v1.sql"
+        ],
+        "healthV6ManualEnquiryParentReview": "docs/healthroster-build/proposals/v6-office-manual-enquiry-parent-20261016/README.md"
+      }
+    }
+  ],
+  "allOtherChainsEditorMetadataCompanions": "PRESERVE_CURRENT_ROOT_VERBATIM_APPLY_DELTA_ONLY"
+}

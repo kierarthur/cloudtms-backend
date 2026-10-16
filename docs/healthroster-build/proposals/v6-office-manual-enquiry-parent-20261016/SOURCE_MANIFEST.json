@@ -1,0 +1,64 @@
+{
+  "version": "V6_OFFICE_MANUAL_ENQUIRY_PARENT_SOURCE_MANIFEST_V1",
+  "status": "SOURCE_ONLY_NATIVE_PARTB_NOT_RUN",
+  "files": [
+    {
+      "path": "FINAL_DEFINER_DELTA.json",
+      "bytes": 1730,
+      "sha256": "7ef6d375f82c5c2877be213f972be288843fa07718f65f4040fbc55ef7cd4702"
+    },
+    {
+      "path": "OFFICE_CONSUMER_SOURCE.json",
+      "bytes": 5067,
+      "sha256": "22966cf0f3833f92719439166297245661a2a96d33355a0f5fb82bb2f3137086"
+    },
+    {
+      "path": "parent-wiring.test.mjs",
+      "bytes": 5244,
+      "sha256": "c9ef70b49cb058d7e87e2e98edc7dc6f2855424c18f27c23c666dab9deee7cd0"
+    },
+    {
+      "path": "proposed/broker/src/weekly-source/routes.js",
+      "bytes": 68448,
+      "sha256": "e2aae8ebce5d2d8b48544540ca1d2b007087adf796f39f8803e942664b3e10a6"
+    },
+    {
+      "path": "proposed/supabase/repeatable/16102026_1220_contact_manual_enquiry_office_read_v1.sql",
+      "bytes": 183,
+      "sha256": "efd31694fa1f2e08be313fb5a1dc71c57c3696919644ca740a03c7eda9627d32"
+    },
+    {
+      "path": "proposed/supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc",
+      "bytes": 4045,
+      "sha256": "d9f357da000be10590e85df31f2704bcbcdfe4b0e7e8b05821035496102a8001"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5835,
+      "sha256": "33929b189b47cab95d15a6794a1c2d85bbaf8ca946d3fd67ca6eba89c628e8e7"
+    },
+    {
+      "path": "reference/fixture.mjs",
+      "bytes": 3264,
+      "sha256": "d6361f267b4e79db52924dbc6aa4f3acefa522e2f26f3e755e7c5ea214d8310c"
+    },
+    {
+      "path": "reference/office_rows.parent.sqlinc",
+      "bytes": 3809,
+      "sha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b"
+    },
+    {
+      "path": "reference/routes.parent.js.txt",
+      "bytes": 67750,
+      "sha256": "fd97a02e6fdc3554b9310aad90b949028aadd8de9f518af829dda7af9568a314"
+    },
+    {
+      "path": "REVERSE_PROOF.json",
+      "bytes": 5852,
+      "sha256": "a18f6356826abca868e61983d58d75511dd9c7705b6f6d450bced6d59a8c9f1e"
+    }
+  ],
+  "mountedFunctionCount": 1,
+  "wholeSourceReverseProof": true,
+  "sourceCopies": "Reference parents are audit inputs only; only proposed1220 leaf is selected for mount."
+}
