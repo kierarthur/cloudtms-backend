@@ -1,0 +1,83 @@
+{
+  "version": "CONTACT_MCP_FRAME_TRANSPORT_INDEPENDENT_SOURCE_EVIDENCE_V1",
+  "qualification": "SOURCE_AND_RECORDED_GEOMETRY_ONLY_NO_NATIVE_CALL_OR_DEPLOYMENT_ATTESTATION",
+  "savedBackendHead": "3ae9c929f1b9e94f406958bf75da10daa84bc275",
+  "savedSourcePins": [
+    {
+      "file": "infra/miget/cloudtms-miget-operations/src/rollback-transaction.ts",
+      "sha256": "27f7331b43623717db3a139ca269a644f1c06ef163f476f82919294ccc4c86eb",
+      "bytes": 9072,
+      "savedGitStatus": "?? infra/miget/cloudtms-miget-operations/src/rollback-transaction.ts",
+      "authority": "SAVED_SOURCE_ONLY_NOT_DEPLOYED_BYTE_ATTESTATION"
+    },
+    {
+      "file": "infra/miget/cloudtms-miget-operations/src/index.ts",
+      "sha256": "1835e3bea23240d4f09cbbfb4ee1265487def08fcdfe157fcf5f064471802ac0",
+      "bytes": 112374,
+      "savedGitStatus": "M infra/miget/cloudtms-miget-operations/src/index.ts",
+      "authority": "SAVED_SOURCE_ONLY_NOT_DEPLOYED_BYTE_ATTESTATION"
+    },
+    {
+      "file": "infra/miget/cloudtms-miget-operations-kier-codex/wrangler.jsonc",
+      "sha256": "4df92e793e63a7f1c1370b17ed36afc7be208b39fadc5f164207458fb082ac3e",
+      "bytes": 911,
+      "savedGitStatus": "?? infra/miget/cloudtms-miget-operations-kier-codex/wrangler.jsonc",
+      "authority": "SAVED_SOURCE_ONLY_NOT_DEPLOYED_BYTE_ATTESTATION"
+    }
+  ],
+  "sourceBounds": {
+    "scalarTextUtf16Units": 20000,
+    "truncatedStringAddsEllipsis": true,
+    "rowTruncationFlagDoesNotDescribeCellTruncation": true,
+    "maximumObjectDepth": 8,
+    "maxRows": 100,
+    "sqlUtf16Units": 8000000,
+    "verificationSqlUtf16Units": 1000000
+  },
+  "safeChunkProof": {
+    "pgCharacters": 8000,
+    "maximumUtf16Units": 16000,
+    "lessThanScalarCap": true,
+    "maximumUtf8Bytes": 32000,
+    "flatFrameObjectAvoidsDepthSentinel": true
+  },
+  "historicalResult": {
+    "path": ".codex-tmp/contact-six-mcp-20261016-contact20-lock1-attempt1/NATIVE_RESULT.json",
+    "sha256": "9c769b8ced39a53a1db7fec88dd5cedc6a45283d25356a18094d250655139d2d",
+    "accepted": false,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "failedStatement": 13,
+    "errorCode": "55P03",
+    "beforeSnapshot": {
+      "statement": 7,
+      "rowCount": 1,
+      "rowsTruncated": false,
+      "utf16Units": 20001,
+      "unicodeCodepoints": 20001,
+      "utf8Bytes": 20003,
+      "sha256": "20ce7beb94db8f85d0872093560cdcc2d348b240f3474db4d644da660f10f29e",
+      "endsWithEllipsis": true,
+      "jsonParsed": false
+    },
+    "freshSnapshot": {
+      "statement": 2,
+      "rowCount": 1,
+      "rowsTruncated": false,
+      "utf16Units": 20001,
+      "unicodeCodepoints": 20001,
+      "utf8Bytes": 20003,
+      "sha256": "20ce7beb94db8f85d0872093560cdcc2d348b240f3474db4d644da660f10f29e",
+      "endsWithEllipsis": true,
+      "jsonParsed": false
+    },
+    "qualification": "HOLD_NO_CANONICAL_SNAPSHOT_OR_RESTORATION_PASS",
+    "holderCompletion": "HOLD_ABORTED_WITHOUT_NATIVE_QUALIFICATION",
+    "holderCompletionSha256": "e99f722873545306d0f25b531c08350708d9b87f5ff708c975fff3ab44e51c6e",
+    "inputReceiptSha256": "d51b5e406b57b82aca34b087f2a341e76e0afe259dd8d278fd4d5390ce096f8b"
+  },
+  "remainingBoundary": "Actual new native framed round trip and deployment-byte identity have not been executed/attested by this lane.",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "native": "NOT_RUN"
+}

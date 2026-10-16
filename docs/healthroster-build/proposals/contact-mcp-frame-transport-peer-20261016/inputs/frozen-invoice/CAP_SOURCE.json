@@ -1,0 +1,14 @@
+{
+  "scope": "SAVED_SOURCE_EVIDENCE_NOT_DEPLOYED_BYTE_ATTESTATION",
+  "sourcePath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\infra\\miget\\cloudtms-miget-operations\\src\\rollback-transaction.ts",
+  "sha256": "27f7331b43623717db3a139ca269a644f1c06ef163f476f82919294ccc4c86eb",
+  "maxCellText": 20000,
+  "stringTruncation": "JavaScript UTF16 slice followed by U+2026 ellipsis",
+  "rowsTruncated": "Reports row count truncation, not scalar truncation",
+  "depthLimit": 8,
+  "observedNativeScalarUnits": 20001,
+  "newChunkCodepoints": 8000,
+  "maxUtf16UnitsPerChunk": 16000,
+  "maxRows": 100,
+  "connectorEdited": false
+}

@@ -1,0 +1,83 @@
+{
+  "version": "CONTACT_FULL_CANONICAL_FRAME_TRANSPORT_SUCCESSOR_V1",
+  "priorAttempt": "Expected13/55P03 rolledBack/freshtrue; qualificationHELD; holderABORTreleased",
+  "files": [
+    {
+      "path": "CAP_SOURCE.json",
+      "sha256": "48b579fc754211245c9b4f7dcc3853506748eb86a2b82d34153c7aebad422f38",
+      "bytes": 662
+    },
+    {
+      "path": "frame-transport.mjs",
+      "sha256": "192063cb223108c5b73de521382e0bb0c4de0c65c625fbc5f084819e9fda0fec",
+      "bytes": 4942
+    },
+    {
+      "path": "GRAMMAR_RESULT.json",
+      "sha256": "cd23e996696518be6256fb3361ec2796287ea754eb2ad5107a15ca6c231c0c8a",
+      "bytes": 1005
+    },
+    {
+      "path": "hold-case.mjs",
+      "sha256": "c2e0dbcb77a23a70d72e7b6b46be2bc27770241c957d34a3e63142faddc10cc3",
+      "bytes": 6155
+    },
+    {
+      "path": "INCIDENT.json",
+      "sha256": "cb040e7abb7e2f9797823fd7d0f01224375af6fbe1c0a450dd0a1f9480395e7e",
+      "bytes": 1373
+    },
+    {
+      "path": "input-builder.mjs",
+      "sha256": "39d7a29a827048330c9a900726132b8d00adc01390e3f2438e22bc658bf3e81f",
+      "bytes": 2000
+    },
+    {
+      "path": "inputs/saved-kier-source/infra/miget/cloudtms-miget-operations/src/rollback-transaction.ts",
+      "sha256": "27f7331b43623717db3a139ca269a644f1c06ef163f476f82919294ccc4c86eb",
+      "bytes": 9072
+    },
+    {
+      "path": "OFFLINE_GRAMMAR_INPUTS.json",
+      "sha256": "17977d7216240fd084498e549da0ee9b05bf9fac6d8ac373bc00d349b0b2a7d5",
+      "bytes": 339920
+    },
+    {
+      "path": "README.md",
+      "sha256": "f1bf2bfd76ffd7460fe1897b17a0959abba4cfd9374032fee09272c98942e878",
+      "bytes": 5003
+    },
+    {
+      "path": "result-validator.mjs",
+      "sha256": "ac14c5474bb1424160a3bc04cbf374ae743f8823cfed60413c8dd3356253c55a",
+      "bytes": 8036
+    },
+    {
+      "path": "source.test.mjs",
+      "sha256": "9db2a7eb097f710419beda58e2155808a384e0a17e4eaef2c7de99ad594c5ee5",
+      "bytes": 7973
+    },
+    {
+      "path": "SUCCESSOR_REVERSE.json",
+      "sha256": "490e818a68796798c18452df40e6f7874bd62bf4fd3547560aa7384f0588845f",
+      "bytes": 921
+    },
+    {
+      "path": "test-frames.mjs",
+      "sha256": "885fa8b86b0b58051a651c4df86b460277e1674f9812243aa84235b026967f09",
+      "bytes": 835
+    },
+    {
+      "path": "transport.test.mjs",
+      "sha256": "3317d69234bb2d88d40b7ea268cf9e8a8755caf042ff15bdea3ec97c75269701",
+      "bytes": 5043
+    }
+  ],
+  "offlineTests": 39,
+  "offlinePg17Cases": 6,
+  "wrappedFixtureGrammar": "PASS",
+  "newNative": "NOT_RUN",
+  "databaseCallsByThisLane": 0,
+  "I2Edits": 0,
+  "BankingEdits": 0
+}

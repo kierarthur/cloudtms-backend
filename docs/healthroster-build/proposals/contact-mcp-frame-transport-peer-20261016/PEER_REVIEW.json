@@ -1,0 +1,44 @@
+{
+  "version": "CONTACT_MCP_FRAME_TRANSPORT_INDEPENDENT_PEER_VERDICT_V1",
+  "verdict": "NO_SOURCE_BLOCKER_IN_EXACT_FROZEN_TRANSPORT_SUCCESSOR",
+  "reviewedCommit": "737b82cadea8d9e73b73421de1d4f36565e5b29e",
+  "sourceManifestSha256": "74740bd3045faf6c25258c17ca8de60c3bfbfbb8ad485e07bf4c8c54d2852b11",
+  "transportSha256": "192063cb223108c5b73de521382e0bb0c4de0c65c625fbc5f084819e9fda0fec",
+  "builderSha256": "39d7a29a827048330c9a900726132b8d00adc01390e3f2438e22bc658bf3e81f",
+  "validatorSha256": "ac14c5474bb1424160a3bc04cbf374ae743f8823cfed60413c8dd3356253c55a",
+  "frozenSourceReviewSha256": "3d914686f9e106eb3a2fd1d6144b5abbda3cd88de2eba583d883542989ac85fa",
+  "grammarReviewSha256": "a710ee3cbe73863fcd39cfe0b396ca4ff2e29c7063fb29309bbaaed03899e055",
+  "sourceCapEvidenceSha256": "0042ead3a29c3b9be9e040b91241e3213f824f322fe1c5123cb283c6ed8b4b6b",
+  "tests": {
+    "authorSuiteIndependentlyRerun": {
+      "tests": 39,
+      "passed": 39,
+      "failed": 0,
+      "scope": "OFFLINE_SOURCE_AND_SYNTHETIC_TRANSPORT_ONLY"
+    },
+    "additionalIndependent": {
+      "tests": 6,
+      "passed": 6,
+      "failed": 0,
+      "scope": "EXACT_SAVED_SANITIZER_AND_INDEPENDENT_FRAMES_NO_NATIVE"
+    },
+    "total": 45,
+    "failed": 0
+  },
+  "wholeHolderAndCanonicalAuthorityUnchanged": true,
+  "allCanonicalQueriesPreserved": true,
+  "preReviewStrictnessFindingsResolved": [
+    "EXACT_CEIL_PART_COUNT_EMPTY_EOF_REFUSAL",
+    "ILL_FORMED_UNICODE_REFUSAL_BEFORE_UTF8_HASH",
+    "BOUNDED_NATIVE_FRAME_GENERATION",
+    "ACTUAL_TRANSPORT_VERSION_SUMMARY"
+  ],
+  "priorNativeAttempt": "HOLD_TRUNCATED_SNAPSHOTS_NO_CANONICAL_RESTORATION_CREDIT",
+  "savedKierSource": "SOURCE_ONLY_NOT_DEPLOYMENT_BYTE_ATTESTATION",
+  "scope": "FINITE_SOURCE_TRANSPORT_REVIEW_ONLY_ROOT_SEPARATELY_OWNS_NATIVE_EXECUTION",
+  "rootEdits": 0,
+  "bankEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN",
+  "PartB": "NOT_APPROVED"
+}

@@ -1,0 +1,113 @@
+{
+  "version": "CONTACT_MCP_FRAME_FROZEN_INDEPENDENT_SOURCE_REVIEW_V1",
+  "reviewedCommit": "737b82cadea8d9e73b73421de1d4f36565e5b29e",
+  "sourceManifestSha256": "74740bd3045faf6c25258c17ca8de60c3bfbfbb8ad485e07bf4c8c54d2852b11",
+  "frozenFilesVerified": 14,
+  "oldCommit": "6f131e34e2b4ae93f801bc0cc9420f95b38b9398",
+  "wholeHolderRawEqual": true,
+  "completeReadStageOneTwoEditRawReverseEqual": true,
+  "readStageOneBeforeSha256": "1e805242b1723aee1022f70a4ab003de0001677f8f9ea42237cbf2b7216fc731",
+  "readStageOneAfterSha256": "de75445569261d03e86c3a57264ffd4559dec2dae33abfb8443ac3b59c0d1ade",
+  "stageOneEdits": [
+    [
+      "decodeFrame(statement(receipt.indices.beforeSnapshot),receipt.transport)",
+      "oneRow(statement(receipt.indices.beforeSnapshot))"
+    ],
+    [
+      "decodeFrame(verification.statements[1],receipt.transport)",
+      "oneRow(verification.statements[1])"
+    ]
+  ],
+  "wholeCanonicalLiveWriterQualifierAssertBlockRawEqual": true,
+  "canonicalAuthoritySha256": "1d2b660f874ad2b7f22087578455b3288c559229f65bd05cc6bf64cb971d6d13",
+  "sixCases": [
+    {
+      "id": "contact20-lock1",
+      "statements": 13,
+      "verificationStatements": 3,
+      "unchangedFinalLock": "lock table public.weekly_manager_recipient_generations in access exclusive mode nowait;",
+      "beforeAndFreshFullRawReverses": true,
+      "querySha256": "b2c400024170dea73a5c2441de8cd7210e2e7b8b0002acf9b2914986875b8656",
+      "wrappedQuerySha256": "00395e123bb5da938ec01b681225802fb4dcfb9f424393dc8e03ca2cced3347e",
+      "originalSqlSha256": "e21a1086a13632cc3e17d4c8343c804f9bb4866a69d0814d6e6d5377a3a43aaf",
+      "wrappedSqlSha256": "ab8420c47c4d5fe7d92183c96684a535ca6c8e8d975838a468ccd6bb347d6ab9",
+      "originalVerificationSha256": "20066fcb273d22516957e5d4e470e47e65550b916a784a6bc985d9cb88c1bb70",
+      "wrappedVerificationSha256": "864ccb912555a6f14754484835faefb5aa781e14651048142b4b73a0e57dbc1f"
+    },
+    {
+      "id": "contact20-lock2",
+      "statements": 15,
+      "verificationStatements": 3,
+      "unchangedFinalLock": "lock table public.weekly_message_dispatch_commands in access exclusive mode nowait;",
+      "beforeAndFreshFullRawReverses": true,
+      "querySha256": "b2c400024170dea73a5c2441de8cd7210e2e7b8b0002acf9b2914986875b8656",
+      "wrappedQuerySha256": "00395e123bb5da938ec01b681225802fb4dcfb9f424393dc8e03ca2cced3347e",
+      "originalSqlSha256": "3e8bd992cb8dc13af91ca7a83ca814aa3f3b23b9c77465b8d96d34ec9d1ee32d",
+      "wrappedSqlSha256": "1cd8b76ca7c18e548e57a80fcd850aac4221b62eb26b7ae738c5c7051dff7f56",
+      "originalVerificationSha256": "59c6d19d04bf484272b242e9bf90faf7fc1715d29c46f533ba4e0571a9f892a7",
+      "wrappedVerificationSha256": "6cfe069aaff148d1a1db2b440b60874e6c8d5953bdc3872ce5c95597a3f59383"
+    },
+    {
+      "id": "contact30-lock1",
+      "statements": 13,
+      "verificationStatements": 3,
+      "unchangedFinalLock": "lock table public.weekly_candidate_cohorts in share mode nowait;",
+      "beforeAndFreshFullRawReverses": true,
+      "querySha256": "b2c400024170dea73a5c2441de8cd7210e2e7b8b0002acf9b2914986875b8656",
+      "wrappedQuerySha256": "00395e123bb5da938ec01b681225802fb4dcfb9f424393dc8e03ca2cced3347e",
+      "originalSqlSha256": "d707d408335e2b5d2df6643cb4b3eb905efd82d68c10db2eb9addd9a14cf4dbe",
+      "wrappedSqlSha256": "c5ab60ff9c9b7653754adbd74eea0ab0f89016b1db6665ca78f09d8c9aadb42c",
+      "originalVerificationSha256": "2dc3e15d507698cfb3683c69186c26fce866cd56a328b784d5e7d7710ab535ab",
+      "wrappedVerificationSha256": "c828d6c85cf59849af9b63bafd6023b3bca025f980f741327d03e6108de0ebec"
+    },
+    {
+      "id": "contact30-lock2",
+      "statements": 15,
+      "verificationStatements": 3,
+      "unchangedFinalLock": "lock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;",
+      "beforeAndFreshFullRawReverses": true,
+      "querySha256": "b2c400024170dea73a5c2441de8cd7210e2e7b8b0002acf9b2914986875b8656",
+      "wrappedQuerySha256": "00395e123bb5da938ec01b681225802fb4dcfb9f424393dc8e03ca2cced3347e",
+      "originalSqlSha256": "a9a4d7f4789d7308c6b7abcefd6ae7e6bf2c89c6c08183dce662119868e2a611",
+      "wrappedSqlSha256": "dc769620d4075f72c0cc3f17ac155fa957c57465e3af76ed43a2cb342ac3a9a2",
+      "originalVerificationSha256": "0588f37708600608947c7e19156e4b168634591aca675d0b550639f4a0dea135",
+      "wrappedVerificationSha256": "257421820bdb538e1b584e7dda9085384a9c9c919ec9e38a3bee5972183f5c6a"
+    },
+    {
+      "id": "contact30-lock3",
+      "statements": 17,
+      "verificationStatements": 3,
+      "unchangedFinalLock": "lock table public.weekly_candidate_outreach_generations in share mode nowait;",
+      "beforeAndFreshFullRawReverses": true,
+      "querySha256": "b2c400024170dea73a5c2441de8cd7210e2e7b8b0002acf9b2914986875b8656",
+      "wrappedQuerySha256": "00395e123bb5da938ec01b681225802fb4dcfb9f424393dc8e03ca2cced3347e",
+      "originalSqlSha256": "133040874f6a15a6904b6d604b73141f7da293daee77078ce69ef8f478325365",
+      "wrappedSqlSha256": "913a9d7da2f3ec562b9c15e933988bbc25431cfbeb928bc30b09d84ee8a4fcc9",
+      "originalVerificationSha256": "9e6183642976cdb1ac1a100495dbd1372ccc8fae079790970cd0686fb033ccf4",
+      "wrappedVerificationSha256": "b44fe5d15a1e2599bc0e0b2cc2191cd84f169dd13f0526d9f267eeeb41564d48"
+    },
+    {
+      "id": "contact30-lock4",
+      "statements": 19,
+      "verificationStatements": 3,
+      "unchangedFinalLock": "lock table public.weekly_timesheet_submission_request_memberships in share mode nowait;",
+      "beforeAndFreshFullRawReverses": true,
+      "querySha256": "b2c400024170dea73a5c2441de8cd7210e2e7b8b0002acf9b2914986875b8656",
+      "wrappedQuerySha256": "00395e123bb5da938ec01b681225802fb4dcfb9f424393dc8e03ca2cced3347e",
+      "originalSqlSha256": "e2493f78fa855100f7108613b619b149ea77c233597d4d2ba9deafa953cedac0",
+      "wrappedSqlSha256": "f23482bb224247346a00b6ec1a79e06adb9d89c07a6ed4fc06a2968252754738",
+      "originalVerificationSha256": "68597912d9fbc795b5ad72263602f6eb88852d2fc76dfd74367bd82dfd1f9564",
+      "wrappedVerificationSha256": "072a6a9d9bcf7c230b36e9f1f2625e04787c15414cda3b753a0e1349662b72f4"
+    }
+  ],
+  "allSixInputAndVerificationRawReverses": true,
+  "allFinalLocksAndStatementIndicesUnchanged": true,
+  "fixtureWholeRawReverseEqual": true,
+  "actualVersion": "HR_CONTACT_CANONICAL_CHUNKS_V1",
+  "originalCanonicalSnapshotAndFixtureSqlPreserved": true,
+  "metadataDropOrFieldFilter": false,
+  "snapshotAuthorityChanged": false,
+  "rootEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}
