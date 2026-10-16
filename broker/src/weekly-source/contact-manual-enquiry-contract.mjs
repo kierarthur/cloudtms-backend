@@ -144,7 +144,8 @@ export function decodeContactManualEnquiryReceipt(value,request,review){
  envelope(value,request,'CONTACT_MANUAL_ENQUIRY_RECEIPT_V1',['ok','version','request_id','review_id','review_digest','audience','reason','accepted_at_utc','scope_results','groups','provider_submission_started']);
  requireThat(value.review_id===request.review_id&&uuid(value.review_id)&&value.review_digest===request.review_digest&&hash(value.review_digest)
   &&utc(value.accepted_at_utc)&&value.provider_submission_started===false);
- const {issues}=scopeResults(value.scope_results,request),seen=new Set(),keys=new Set(),logicalOwners=new Map();
+ const {issues,revisionsMatch}=scopeResults(value.scope_results,request),seen=new Set(),keys=new Set(),logicalOwners=new Map();
+ requireThat(revisionsMatch);
  for(const group of list(value.groups,1,500)){
   requireThat(closed(group,['group_key','message_intent_id','members'])&&hash(group.group_key)&&!keys.has(group.group_key)&&uuid(group.message_intent_id));keys.add(group.group_key);
   for(const member of list(group.members,1,500)){

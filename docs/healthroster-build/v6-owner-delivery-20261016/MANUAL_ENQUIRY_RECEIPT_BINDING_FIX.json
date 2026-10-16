@@ -1,0 +1,39 @@
+{
+  "version": "CONTACT_MANUAL_ENQUIRY_RECEIPT_BINDING_FIX_V1",
+  "status": "SOURCE_ONLY_COMPONENTS_NOT_MOUNTED_NATIVE_NOT_RUN",
+  "previousBackend": "eb0268df39d225095678c188370752e5d9263dc2",
+  "previousOffice": "fc4b8cb8d4bacb0caae53ed6fa0989ccfd009022",
+  "previousComponentRecord": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/MANUAL_ENQUIRY_COMPONENT_SOURCE.json",
+    "sha256": "cc6df271d2fdf3828a1ba823c5a4067e6d65058234584af12672c71fd9d27455"
+  },
+  "change": "Require every receipt scope/checking revision to equal the exact original request tuple, including the Worker decoder path without an accompanying preview. This does not compare the saved receipt with later database state or browser time.",
+  "backendFiles": [
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
+      "sha256": "f6c5f6f2335f3e2ea69f36bcdd4a2b3b19315d1d8a6f9831e9355db43e3ffe23"
+    },
+    {
+      "path": "tests/contact-manual-enquiry-contract.test.mjs",
+      "sha256": "fd3a60c28379be007120ce817c40272813ceddf1eff038de6496879b24a2f796"
+    }
+  ],
+  "officeFiles": [
+    {
+      "path": "js/weekly-source/contact-manual-enquiry-contract.mjs",
+      "sha256": "f6c5f6f2335f3e2ea69f36bcdd4a2b3b19315d1d8a6f9831e9355db43e3ffe23"
+    }
+  ],
+  "checks": {
+    "contractCases": 27,
+    "contractResult": "PASS",
+    "officeControllerCases": 8,
+    "officeControllerResult": "PASS",
+    "byteIdenticalDecoder": true,
+    "newBrowserRun": false,
+    "native": "NOT_RUN"
+  },
+  "mounted": false,
+  "databaseCalls": 0,
+  "deployments": 0
+}

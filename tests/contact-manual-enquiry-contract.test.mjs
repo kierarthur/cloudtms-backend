@@ -40,6 +40,14 @@ test('changed checking revision cannot produce an acceptable preview',()=>{
  const f=fixture();f.result.scope_results[0].checking_revision='8';refuses(()=>review(f.result,f.request));
  Object.assign(f.result,{can_accept:false,review_id:null,review_digest:null,expires_at_utc:null});assert.equal(review(f.result,f.request),f.result);
 });
+
+test('receipt without an accompanying review still binds the original request revision tuple',()=>{
+ const f=fixture();
+ assert.equal(receipt(f.saved,f.accept),f.saved);
+ f.saved.scope_results[0].checking_revision='8';refuses(()=>receipt(f.saved,f.accept));
+ f.saved.scope_results[0].checking_revision=f.accept.scopes[0].expected_checking_revision;
+ f.saved.scope_results[0].scope_revision='9007199254740994';refuses(()=>receipt(f.saved,f.accept));
+});
 for(const [name,mutate] of [
  ['foreign worker row',f=>{f.result.groups[0].preview.rows[0].candidateId=id(90);}],
  ['foreign client cutoff',f=>{f.result.scope_results[0].members[0].cutoff.client_id=id(90);}],
