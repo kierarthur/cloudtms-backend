@@ -6867,5 +6867,34 @@
     "apiRoleProof": "NOT_RUN",
     "fullRehearsalAndInstall2": "NOT_RUN",
     "original92ObjectsUnchanged": true
+  },
+  "daily_public_host_source_continuation_20261016": {
+    "root": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+    "physical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+    "closureSha256": "ac97e64d1878dd70fe116cc07998bc304e8606d087f0a77e318e8488b533480d",
+    "sourceCommit": "6ba4c06ed5843231fab10c16fb6273ea1f640908",
+    "manifestSha256": "7930fc6884d3571f45bf28b8ee67dbf7a54fb96776c6a0298cc334e75011e42f",
+    "definitions": 4,
+    "registryEntriesAdded": 4,
+    "sourceChecks": 22,
+    "parentRawReverse": true,
+    "existingPrivateNative15Unchanged": true,
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_SOURCE_INTEGRATION_20261016.json",
+    "status": "MOUNTED_PUBLIC_CALLERS_AND_HTTP; PRIVATE_FRESH_ECONOMICS_HELD",
+    "native": "NOT_RUN"
+  },
+  "office_b051_host_root_review_continuation_20261016": {
+    "sourceCommit": "9716a59e1ee4b3322db3c51c38128ab118c10d23",
+    "manifestSha256": "b6ef6d779d7ceb73934141658dcd18bece72da4bf3b8c23fe69af5ef3bd2683a",
+    "sourceFiles": 29,
+    "sourceTests": 35,
+    "parentReverse": true,
+    "screenshotsRootVisuallyInspected": 6,
+    "sourceVerdict": "NO_SOURCE_BLOCKER_FOR_REVIEWED_HOST_CONTINUATION",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_B051_HOST_ROOT_REVIEW_20261016.json",
+    "contractLaunch": "HELD_REAL_BANK_CM17_AND_HEALTH_CAPABILITY_PROJECTION",
+    "sourcePublicRead": "HELD_REAL_CURRENT_FINANCIAL_COMPOSITION",
+    "native": "NOT_RUN",
+    "officePromotion": "NOT_RUN"
   }
 }

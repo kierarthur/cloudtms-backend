@@ -1,0 +1,49 @@
+{
+  "version": "HEALTH_DAILY_PUBLIC_ROOT_INTEGRATION_V1",
+  "sourceCommit": "6ba4c06ed5843231fab10c16fb6273ea1f640908",
+  "manifestSha256": "7930fc6884d3571f45bf28b8ee67dbf7a54fb96776c6a0298cc334e75011e42f",
+  "reviewedManifestFiles": 20,
+  "focusedTests": 22,
+  "root": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+  "physical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+  "acl": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/99_acl.sqlinc",
+  "definitions": 4,
+  "existingModulesUnchanged": true,
+  "parent": {
+    "file": "broker/src/index.js",
+    "beforeSha256": "640645a70afa96e0d88bbb407666d854d8ddd8d5477e5919562b591cce727335",
+    "afterSha256": "5cf29eafd812da0401c671cf9eb8e3cfb5345ff25e6c6b4e93e7f9ceb4e81c4a",
+    "rawReverse": true,
+    "uniqueEdits": 2
+  },
+  "registry": {
+    "before": 1562,
+    "after": 1566,
+    "unrelatedEntriesUnchanged": true
+  },
+  "freshEconomicComposition": "DEPENDENCY_HELD",
+  "native": "NOT_RUN",
+  "durableInstallation": "NOT_RUN",
+  "managedClosure": {
+    "closureSha256": "ac97e64d1878dd70fe116cc07998bc304e8606d087f0a77e318e8488b533480d",
+    "files": 3,
+    "syntax": "OFFLINE_PG17_4_FULL_FUNCTIONS_11_ACL_PASS"
+  },
+  "sourceGates": {
+    "regressionTests": 14,
+    "pass": 14,
+    "fail": 0,
+    "actualFullF23": "PASS",
+    "gateSourceSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+    "finalDefiners": {
+      "signatures": 2964,
+      "registered": 1566,
+      "roots": 1086,
+      "pendingRoots": 316
+    },
+    "managedIntegrity": {
+      "migrations": 417,
+      "repeatables": 1086
+    }
+  }
+}

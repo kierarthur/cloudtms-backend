@@ -1,0 +1,35 @@
+{
+  "version": "HEALTH_OFFICE_B051_ROOT_SOURCE_REVIEW_V1",
+  "sourceCommit": "9716a59e1ee4b3322db3c51c38128ab118c10d23",
+  "sourceManifestSha256": "b6ef6d779d7ceb73934141658dcd18bece72da4bf3b8c23fe69af5ef3bd2683a",
+  "verifiedFiles": 29,
+  "parentReversals": [
+    {
+      "file": "js/main.js",
+      "edits": 8,
+      "reverse": true
+    },
+    {
+      "file": "index.html",
+      "edits": 2,
+      "reverse": true
+    }
+  ],
+  "focusedAdjacentTests": {
+    "pass": 35,
+    "fail": 0
+  },
+  "sourceStatus": "NO_SOURCE_BLOCKER_FOR_REVIEWED_HOST_CONTINUATION",
+  "visuallyInspectedScreenshots": 6,
+  "browserScope": "AUTHOR_ACTUAL_PARENT_ISOLATED_CONTROLLED_HYDRATION_AND_HTTP_NOT_NATIVE",
+  "gates": {
+    "contractLaunch": "HELD_REAL_CM17_AND_HEALTH_NATIVE_MOVE_CAPABILITY",
+    "sourcePublicRead": "HELD_REAL_CURRENT_FINANCIAL_COMPOSITION",
+    "dailyFreshEconomics": "HELD_REAL_PRIVATE_COMPOSERS_AND_BANK_PUBLISHER",
+    "installedAcceptance": "NOT_RUN",
+    "finalPartB": "NOT_RUN"
+  },
+  "sourcePreservation": "FULL_MAIN_INDEX_RAW_REVERSE_TO_045c; EXISTING_FINANCE_MANUAL_SOURCES_PRESERVED",
+  "native": "NOT_RUN",
+  "officePromotion": "NOT_RUN"
+}

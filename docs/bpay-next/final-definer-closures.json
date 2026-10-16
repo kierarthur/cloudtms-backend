@@ -26913,6 +26913,66 @@
       ],
       "healthV6ManualEnquiryParentReview": "docs/healthroster-build/proposals/v6-office-manual-enquiry-parent-20261016/README.md",
       "healthV6ManualEnquiryRootIntegration": "docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_MANUAL_ENQUIRY_NATIVE_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.daily_rate_correction_public_assert_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql"
+      ],
+      "owner": "Health Daily public service transport; private economics dependency held; native NOT_RUN",
+      "baselineSource": "ac2c1e7c0e8d9d69a672257bbca433d3a60ed437",
+      "healthV6DailyPublicRootIntegration": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_SOURCE_INTEGRATION_20261016.json"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_preview_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql"
+      ],
+      "owner": "Health Daily public service transport; private economics dependency held; native NOT_RUN",
+      "baselineSource": "ac2c1e7c0e8d9d69a672257bbca433d3a60ed437",
+      "healthV6DailyPublicRootIntegration": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_SOURCE_INTEGRATION_20261016.json"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_accept_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql"
+      ],
+      "owner": "Health Daily public service transport; private economics dependency held; native NOT_RUN",
+      "baselineSource": "ac2c1e7c0e8d9d69a672257bbca433d3a60ed437",
+      "healthV6DailyPublicRootIntegration": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_SOURCE_INTEGRATION_20261016.json"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_result_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql"
+      ],
+      "owner": "Health Daily public service transport; private economics dependency held; native NOT_RUN",
+      "baselineSource": "ac2c1e7c0e8d9d69a672257bbca433d3a60ed437",
+      "healthV6DailyPublicRootIntegration": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_SOURCE_INTEGRATION_20261016.json"
     }
   ],
   "editorChains": [
