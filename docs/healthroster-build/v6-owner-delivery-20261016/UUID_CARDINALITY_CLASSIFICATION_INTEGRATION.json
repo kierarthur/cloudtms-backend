@@ -1,0 +1,39 @@
+{
+  "version": "HEALTHROSTER_UUID_CARDINALITY_CLASSIFICATION_INTEGRATION_V1",
+  "status": "EXACT_SOURCE_CARDINALITY_REVIEWED_OTHER_GATES_PENDING",
+  "sourceParent": "c29b4a6b7cfaf60deb888a740c3015a77aedc3b0",
+  "classification": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/UUID_CARDINALITY_CLASSIFICATION.json",
+    "sha256": "4d7bd39d0d2669cb07a332e57f371b7d3b7e1ba4cbe9c189d8432b247f766aec",
+    "files": 19,
+    "statementKeys": 21,
+    "guardWitnesses": 46,
+    "originalProvedDiagnostics": 17,
+    "realDefectsCorrected": 2
+  },
+  "review": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json",
+    "sha256": "22f8ade4e2dd6bde62e559c6b75f363e71f04935540e012c3a05d2a44008c4da",
+    "rootReadComplete19ItemReview": true,
+    "rootCheckedAllSavedFileBodyStatementAndGuardPins": true
+  },
+  "meaning": "Only exact reviewed CASE/HAVING/pre-use count refusal and two separately corrected CURRENT presentation groups qualify. Zero/multiple behavior and nullable native types are preserved. No generic MIN(TEXT)::UUID or min(UUID) allowance.",
+  "retained": "Generic UUID_CARDINALITY refusals, all other hazards and frozen authority/write/numeric/ACL/effect gates remain unchanged.",
+  "verification": {
+    "focusedTupleContactCardinalityTests": 62,
+    "status": "PASS",
+    "allExactFilesMatched": 19,
+    "allExactKeysMatched": 21,
+    "native": "NOT_RUN",
+    "fullF23": "PENDING_REMAINING_DYNAMIC_AND_AGGREGATE_REVIEW"
+  },
+  "currentContractNote": "Review also pins current contract and both actual schema input migrations. A regenerated final contract intentionally requires fresh exact column/constraint comparison and refreshed proof pin; no automatic exemption.",
+  "install2": "NOT_INSTALLED",
+  "effects": {
+    "databaseMutation": false,
+    "heldSession": false,
+    "deployment": false,
+    "bankingMessage": false,
+    "secretsPrinted": false
+  }
+}

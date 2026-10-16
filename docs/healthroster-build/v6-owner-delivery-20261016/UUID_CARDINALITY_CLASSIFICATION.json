@@ -1,0 +1,551 @@
+{
+  "version": "HEALTHROSTER_EXACT_UUID_CARDINALITY_CLASSIFICATION_V1",
+  "status": "SOURCE_CARDINALITY_ONLY_NATIVE_NOT_RUN",
+  "sourceParent": "c29b4a6b7cfaf60deb888a740c3015a77aedc3b0",
+  "review": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json",
+    "sha256": "22f8ade4e2dd6bde62e559c6b75f363e71f04935540e012c3a05d2a44008c4da",
+    "originalSafeDiagnostics": 17,
+    "sourceDefectsCorrected": 2,
+    "correction": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_PRESENTATION_CARDINALITY_CORRECTION.json",
+    "correctionSha256": "b9f5a359c88618bfaa8e3ed93318c5a68984e3840a95b17add13302666e9e298"
+  },
+  "schemaInputs": [
+    {
+      "file": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    }
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sqlinc",
+      "sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "bodySha256": "0f4b3e94acf9dbe34ae45e63bd0f99badb7e33fce6161d58fbbe93346aca9d1a",
+      "rationale": "SINGLE_WINNING_NATIVE_REFERENCE",
+      "sourceReviewNumber": 1,
+      "guards": [
+        {
+          "text": "case when count(*)=1 then min(ranked.shift_id::text)::uuid end shift_id",
+          "sha256": "afb057c0d9eb8db5cb2f8d3edbcafad2604affab68235120a792cc7e829c00e2"
+        },
+        {
+          "text": "where ranked.match_priority=ranked.winning_priority",
+          "sha256": "46e098ea0309c6a20029c21a2f003f3378379c47f576d8d5bb57f600e7589f9d"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)>1\n                  then 'AMBIGUOUS'",
+          "sha256": "24a0443d19020a8a15a90db5d30621760bbeaed8c19920bfdde6e51fdd1579f3"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)=0\n                  then 'MISSING'",
+          "sha256": "f8a1885d63951066fe62faee941ce393c1b7b9edfef8a494eb4a07a83a9a8b33"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "d28217620175462340ab421775fab507a1148eac3c8b1ec7688bde6b223fa309",
+          "statementSha256": "dac0fc36c09498a8cd4fa9481f6903668ad5cad92b3d826e9639824fe38e187d",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "bodySha256": "2ae72818798f0d0dc40e5e4724a6418b449ce61de4cbb53432c38694f6b60f4b",
+      "rationale": "SINGLE_EXPENSE_COMPANION",
+      "sourceReviewNumber": 2,
+      "guards": [
+        {
+          "text": "case when v_is_expense then (\n        select pg_catalog.min(shift_line.id::text)::uuid\n        from public.weekly_source_invoice_presentation_lines shift_line\n        where shift_line.client_manifest_id=v_manifest.id\n          and shift_line.work_event_id=v_movement.work_event_id\n          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'\n          and shift_line.correction_role is not distinct from v_correction_role\n        having pg_catalog.count(*)=1\n      ) end",
+          "sha256": "aeaf15ea5ac499e498b8551e1b3ed108e9a484552830e07b617b44c4513e8d92"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "220fefb889842de4991fa3350e3b02b17d6465eb1c4f74b1ab7de10f1b7d1915",
+          "statementSha256": "4361ae3ffa098ec9508923b756eef87a423c84c59ccdef365c22bab5f506d4d7",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190",
+      "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+      "bodySha256": "c86da80cbef74fc6af27eee28934df5d5f5f1a666611b5e8a49610656d8b07ed",
+      "rationale": "EXACT_SOURCE_LADDER_HEAD",
+      "sourceReviewNumber": 3,
+      "guards": [
+        {
+          "text": "if v_source_head_count>1 then\n      raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_LADDER_HEAD'\n        using errcode='55000',\n        detail=pg_catalog.jsonb_build_object(\n          'family_id',v_family.id,'work_event_id',v_event_id,\n          'current_ladder_head_count',v_source_head_count)::text;\n    end if;",
+          "sha256": "0fe3dccf128eb0188883d5cd35258d4b32d0afc6577b061031cc506afa7f7546"
+        },
+        {
+          "text": "if v_source_head_count<>1 then\n        raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT' using errcode='55000';\n      end if;",
+          "sha256": "6da79d5f8efe6985d670f40b3bfef6144c754488b7f8bea33ef4172ff73e4672"
+        },
+        {
+          "text": "if v_ambiguous_event_count>0 then\n         \n         \n         \n         \n         \n        raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD'\n          using errcode='55000',\n          detail=pg_catalog.jsonb_build_object(\n            'family_id',v_family.id,'work_event_id',v_event_id,\n            'ambiguous_work_event_count',v_ambiguous_event_count)::text;\n      end if;",
+          "sha256": "101b42a402fccfcfc5f37be4b713eb6fa54e5c18cbbf1986747982ded17b7abd"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "3969a577e824051b13b1001e634abc5efc4f18e18515db51ecef87686def7e45",
+          "statementSha256": "3c1c23d6593b402f47c9243f965212ad72a1b2b07fa72d3a5001f9d064006394",
+          "count": 1
+        },
+        {
+          "keySha256": "d908b443780b1bd22f0fc020fb8357c23c436d3ddf54b0e840043e7fb4837d3e",
+          "statementSha256": "b450a304eb0dc2cc51d11be83e60c4198acec5cbd203797d099ae251624965e0",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b",
+      "signature": "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+      "bodySha256": "48b041b73c67627bb6fd2f83f7190f6f94cedf335a1a5518b1380c98043acba2",
+      "rationale": "EXACT_WAIT_EVENT",
+      "sourceReviewNumber": 4,
+      "guards": [
+        {
+          "text": "if v_count=0 then\n     \n     \n     \n     \n    if exists(select 1\n      from public.weekly_exceptional_pay_target_families family\n      join public.contracts contract on contract.id=family.contract_id and contract.client_id=v_work.client_id\n      join public.weekly_exceptional_pay_generations generation\n        on generation.id=family.current_generation_id and generation.family_id=family.id\n      where family.candidate_id=v_work.candidate_id\n        and v_work.work_date between family.week_start_date and family.week_ending_date\n        and generation.lifecycle_state='PUBLISHED'\n        and ((generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_TARGET_VECTOR_V1'\n          and exists(select 1 from jsonb_array_elements(case\n            when jsonb_typeof(generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}')='array'\n            then generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}' else '[]'::jsonb end) item\n            where item->>'work_event_id'=v_work.id::text and item->>'protected_target_state'='WAIT'))\n          or (generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_NEXT_TARGET_V1'\n          and exists(select 1 from jsonb_array_elements(case\n            when jsonb_typeof(generation.complete_next_vector_json->'components')='array'\n            then generation.complete_next_vector_json->'components' else '[]'::jsonb end) item\n            where item->>'kind'='WORK' and item->>'work_event_id'=v_work.id::text and item->'protected'='true'::jsonb)))\n    ) then raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;\n    return null;\n  end if;",
+          "sha256": "76b400015ea1caf30a62d9da6569ef91996f864ce4b44ccb067de151f09987a1"
+        },
+        {
+          "text": "if v_count<>1 then raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;",
+          "sha256": "8dcdea4de541a59dfdda62e28a92eb699a56fbdb8b0d373f9b6667e1d3797e2d"
+        },
+        {
+          "text": "select * into strict v_event from public.weekly_exceptional_pay_family_events where id=v_event_id;",
+          "sha256": "7e58e473f2e4d6fd5b5dae0b5c2f75941aca5d17712892c5c9e5263650bf87ca"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "fd681a301e17327a89c4044f1735400195eb38b0ece9a255c7410bf20600b072",
+          "statementSha256": "25fe7948b359818c738576969acb1b0b878e099ea4fc5079245c9e9ab0172866",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "bodySha256": "d09964194a205484a5696259e80bb03c9d7a288fa42d2de0235923a8abef2a85",
+      "rationale": "EXACT_STAGED_WAIT_EVENT",
+      "sourceReviewNumber": 5,
+      "guards": [
+        {
+          "text": "if v_count<>1 or (a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)\n    is distinct from ((v_claim#>>'{claim,work_date}')::date,(v_claim#>>'{claim,start_at_local}')::timestamp,\n      (v_claim#>>'{claim,end_at_local}')::timestamp,(v_claim#>>'{claim,break_minutes}')::integer) then\n    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;",
+          "sha256": "7b622f89559f7012beea106d79a248ea6c14e95c1ae2487877729a7a96f2abcd"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "d708aae85ef4f4fa23bbba159ad2c410e44537745bcced6f82c2ce87035e0e42",
+          "statementSha256": "40cfc3e00317f59cb11fc7c90ee95f2b68618ce00fa0c4a7b0b1d85f3a9e19cd",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "bodySha256": "79f25dddfc454ad92ed3ec969f9c4344d5b47492450b8aa4c06b61f2931b82e3",
+      "rationale": "SINGLE_EXPENSE_COMPANION",
+      "sourceReviewNumber": 6,
+      "guards": [
+        {
+          "text": "case when v_is_expense then (\n        select pg_catalog.min(shift_line.id::text)::uuid\n        from public.weekly_source_invoice_presentation_lines shift_line\n        where shift_line.client_manifest_id=v_manifest.id\n          and shift_line.work_event_id=v_movement.work_event_id\n          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'\n          and shift_line.correction_role is not distinct from v_correction_role\n        having pg_catalog.count(*)=1\n      ) end",
+          "sha256": "aeaf15ea5ac499e498b8551e1b3ed108e9a484552830e07b617b44c4513e8d92"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "3a0ce926d98f5930e3792f67f4bf38060e5d6fcc7907138c2f02b5ddb6774d0a",
+          "statementSha256": "c242ed2389d7dfd29a64dc3fc2be471fc2c2214200dcebefc0f13d0f0bf053dd",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "sha256": "304c56dcd2015e4dab934f2e20d3d9616a038c460d8145132a9e5cd18dd26063",
+      "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+      "bodySha256": "ba1f4bd87d11664054357ba4032937042649af7ce5a9b3680ab7307beb013878",
+      "rationale": "ROOT_REPAIRED_ONE_DISTINCT_LINE_PER_CURRENT_PRESENTATION",
+      "sourceReviewNumber": 7,
+      "guards": [
+        {
+          "text": "if exists(\n    select 1 from public.weekly_source_invoice_line_bindings binding\n    where binding.invoice_id=v_invoice.id and binding.state='CURRENT'\n    group by binding.presentation_line_id\n    having pg_catalog.count(distinct binding.invoice_line_id)<>1\n  ) then\n    raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_BINDING_AMBIGUOUS' using errcode='23514';\n  end if;",
+          "kind": "ROOT_CORRECTED_DISTINCT_LINE_REFUSAL"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "578fce4d7b6537d0300bc77a87d9fbc2d9718d3711176abd0b67dc99d6cc6c2d",
+          "statementSha256": "1302a11db9edad395f4c1a2e2f69d6365faabffc445164a6fedeb2df56a2ca69",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+      "bodySha256": "c86da80cbef74fc6af27eee28934df5d5f5f1a666611b5e8a49610656d8b07ed",
+      "rationale": "EXACT_SOURCE_LADDER_HEAD",
+      "sourceReviewNumber": 8,
+      "guards": [
+        {
+          "text": "if v_source_head_count>1 then\n      raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_LADDER_HEAD'\n        using errcode='55000',\n        detail=pg_catalog.jsonb_build_object(\n          'family_id',v_family.id,'work_event_id',v_event_id,\n          'current_ladder_head_count',v_source_head_count)::text;\n    end if;",
+          "sha256": "0fe3dccf128eb0188883d5cd35258d4b32d0afc6577b061031cc506afa7f7546"
+        },
+        {
+          "text": "if v_source_head_count<>1 then\n        raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT' using errcode='55000';\n      end if;",
+          "sha256": "6da79d5f8efe6985d670f40b3bfef6144c754488b7f8bea33ef4172ff73e4672"
+        },
+        {
+          "text": "if v_ambiguous_event_count>0 then\n         \n         \n         \n         \n         \n        raise exception 'WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD'\n          using errcode='55000',\n          detail=pg_catalog.jsonb_build_object(\n            'family_id',v_family.id,'work_event_id',v_event_id,\n            'ambiguous_work_event_count',v_ambiguous_event_count)::text;\n      end if;",
+          "sha256": "101b42a402fccfcfc5f37be4b713eb6fa54e5c18cbbf1986747982ded17b7abd"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "3969a577e824051b13b1001e634abc5efc4f18e18515db51ecef87686def7e45",
+          "statementSha256": "3c1c23d6593b402f47c9243f965212ad72a1b2b07fa72d3a5001f9d064006394",
+          "count": 1
+        },
+        {
+          "keySha256": "d908b443780b1bd22f0fc020fb8357c23c436d3ddf54b0e840043e7fb4837d3e",
+          "statementSha256": "b450a304eb0dc2cc51d11be83e60c4198acec5cbd203797d099ae251624965e0",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "bodySha256": "54efc10606f6bd702f0c00a26d6fc8c128c2cddc508b0d20c07a0373a8f16f23",
+      "rationale": "SINGLE_WINNING_NATIVE_REFERENCE",
+      "sourceReviewNumber": 9,
+      "guards": [
+        {
+          "text": "case when count(*)=1 then min(ranked.shift_id::text)::uuid end shift_id",
+          "sha256": "afb057c0d9eb8db5cb2f8d3edbcafad2604affab68235120a792cc7e829c00e2"
+        },
+        {
+          "text": "where ranked.match_priority=ranked.winning_priority",
+          "sha256": "46e098ea0309c6a20029c21a2f003f3378379c47f576d8d5bb57f600e7589f9d"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)>1\n                  then 'AMBIGUOUS'",
+          "sha256": "24a0443d19020a8a15a90db5d30621760bbeaed8c19920bfdde6e51fdd1579f3"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)=0\n                  then 'MISSING'",
+          "sha256": "f8a1885d63951066fe62faee941ce393c1b7b9edfef8a494eb4a07a83a9a8b33"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "aad84e78ab2321e0960f086f7a3c5ff84ff7ab5d39464e963302be60e9e0f777",
+          "statementSha256": "2b02f3745c8cbe9d278d33f8c4b3a584e958fc6f959731e370c773d7eb5c2173",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "sha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
+      "signature": "public.weekly_source_invoice_edit_context_v1(jsonb)",
+      "bodySha256": "b6391c912b629bd9ebbcab93542123da77534535fa7981a722cfe470ba768486",
+      "rationale": "ROOT_REPAIRED_ONE_DISTINCT_LINE_PER_CURRENT_PRESENTATION",
+      "sourceReviewNumber": 10,
+      "guards": [
+        {
+          "text": "if exists(\n    select 1 from public.weekly_source_invoice_line_bindings binding\n    where binding.invoice_id=v_invoice.id and binding.state='CURRENT'\n    group by binding.presentation_line_id\n    having pg_catalog.count(distinct binding.invoice_line_id)<>1\n  ) then\n    raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_BINDING_AMBIGUOUS' using errcode='23514';\n  end if;",
+          "kind": "ROOT_CORRECTED_DISTINCT_LINE_REFUSAL"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "c2476ab439c6631074427a3adb9b56cab1e8c04c0595ceecdf0f6338e7487705",
+          "statementSha256": "f9e61dca47294be32ba1b57de7dbe7ff025220894f506e952f946d0c4397969e",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "bodySha256": "cfcdb9404b10769c70af286027b94bb642c4f3878fa9fafd8e2ef8f3704e4581",
+      "rationale": "EXACT_SINGLE_CLIENT_FINALISATION",
+      "sourceReviewNumber": 11,
+      "guards": [
+        {
+          "text": "if (select pg_catalog.count(*)\n      from public.weekly_source_row_resolutions resolution\n      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n      where source_row.upload_id=v_upload.id and resolution.generation=v_generation)\n       <>v_upload.accepted_count\n     or exists(\n       select 1\n       from public.weekly_source_upload_rows source_row\n       left join public.weekly_source_row_resolutions resolution\n         on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n       where source_row.upload_id=v_upload.id\n         and (resolution.id is null or resolution.mapping_state<>'RESOLVED')\n     )\n     or (v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT' and exists(\n       select 1\n       from public.weekly_source_row_resolutions resolution\n       join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then\n    raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';\n  end if;",
+          "sha256": "04c847a2f4b05a031a39b0de270979c8863f12afcb04725db7d00863b7ee0d65"
+        },
+        {
+          "text": "if v_resolved_client_count>1 then\n      raise exception 'WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "6ab62e505c4246fdf70bcdfcc8f52a9da6ea40fd23a9968eebcc939c55b2f93e"
+        },
+        {
+          "text": "if v_client_id is null or not exists(\n      select 1\n      from public.weekly_source_group_clients group_client\n      where group_client.source_group_id=v_group.id\n        and group_client.client_id=v_client_id\n        and v_cycle.finalisation_week_ending between group_client.valid_from\n          and coalesce(group_client.valid_to,'infinity'::date)\n    ) then\n      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "d7b39e62eb2adb23c4bf302463fc9471ae73360289f65541fc60214b6febed9b"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "817578b429c92ea0a9626ea30f247d4fa6fdc20dd332f2ddfd18e316f00687ea",
+          "statementSha256": "d935b005b631243b0ec6c76836f8c7a285c66f407cb365fc2e32835f5343ab7d",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "bodySha256": "9141a94c6b671e6ccd9a83e26aef3334d7fba78caeb077395f93a9a7db90e6ca",
+      "rationale": "EXACT_RECEIPT_CONTRACT_IDENTITY",
+      "sourceReviewNumber": 12,
+      "guards": [
+        {
+          "text": "(select min(m.contract_id::text)::uuid\n        from pay_receipts receipt\n        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'\n          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit\n        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid\n          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id\n          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id\n          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n          and m.source_profile_kind<>'SELF_BILL_REPORT'\n          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        where receipt.published_timesheet_financial_id=financial.id\n        having count(distinct m.contract_id)=1) as contract_id",
+          "sha256": "1ae5ab0e74b67fece83cb13eb79b4f3c267610258dff8eeba0f537204b08e92c"
+        },
+        {
+          "text": "if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n    where receipt->>'published_timesheet_financial_id' is not null and (\n      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'\n      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end\n      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit\n        where not exists(select 1 from public.weekly_source_billing_movements m\n          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid\n            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid\n            and m.actual_client_id=(receipt->>'client_id')::uuid\n            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial\n              where financial->>'id'=receipt->>'published_timesheet_financial_id'\n                and financial->>'candidate_id'=m.candidate_id::text\n                and financial->>'contract_id'=m.contract_id::text)\n            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n            and m.source_profile_kind<>'SELF_BILL_REPORT'\n            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "5f885c9f0181422bc02338bc582b8ac120222e9c2c84210b285b1293d48e2d7c"
+        },
+        {
+          "text": "if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)\n    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n      where receipt->>'published_timesheet_financial_id' is not null and not exists(\n        select 1 from jsonb_array_elements(facts->'financial_identities') financial\n          where financial->>'id'=receipt->>'published_timesheet_financial_id'\n            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'\n            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root\n              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'\n              where root->>'timesheet_id'=financial->>'timesheet_id'\n                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'\n                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')\n                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "e67c0971424d578230f3ef95666cb40d643f916dc695a57a8aa3cd89589ca9d8"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "59deb5109e613e31199fb845da416d0c661f017343d2c2bde0efb5718a653cd8",
+          "statementSha256": "5f853cfc46b6700b525c19e4048c2cf6101c6fc370a15b46789ee87d3dcb6590",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+      "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "bodySha256": "8bb21fa6e57798308d8b0f70399e31891e122514f89f10a3d79063cfcf1dfde3",
+      "rationale": "EXACT_STAGED_WAIT_EVENT",
+      "sourceReviewNumber": 13,
+      "guards": [
+        {
+          "text": "if v_count<>1 or (a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)\n    is distinct from ((v_claim#>>'{claim,work_date}')::date,(v_claim#>>'{claim,start_at_local}')::timestamp,\n      (v_claim#>>'{claim,end_at_local}')::timestamp,(v_claim#>>'{claim,break_minutes}')::integer) then\n    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;",
+          "sha256": "7b622f89559f7012beea106d79a248ea6c14e95c1ae2487877729a7a96f2abcd"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "d708aae85ef4f4fa23bbba159ad2c410e44537745bcced6f82c2ce87035e0e42",
+          "statementSha256": "40cfc3e00317f59cb11fc7c90ee95f2b68618ce00fa0c4a7b0b1d85f3a9e19cd",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "bodySha256": "9141a94c6b671e6ccd9a83e26aef3334d7fba78caeb077395f93a9a7db90e6ca",
+      "rationale": "EXACT_RECEIPT_CONTRACT_IDENTITY",
+      "sourceReviewNumber": 14,
+      "guards": [
+        {
+          "text": "(select min(m.contract_id::text)::uuid\n        from pay_receipts receipt\n        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'\n          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit\n        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid\n          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id\n          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id\n          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n          and m.source_profile_kind<>'SELF_BILL_REPORT'\n          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        where receipt.published_timesheet_financial_id=financial.id\n        having count(distinct m.contract_id)=1) as contract_id",
+          "sha256": "1ae5ab0e74b67fece83cb13eb79b4f3c267610258dff8eeba0f537204b08e92c"
+        },
+        {
+          "text": "if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n    where receipt->>'published_timesheet_financial_id' is not null and (\n      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'\n      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end\n      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit\n        where not exists(select 1 from public.weekly_source_billing_movements m\n          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid\n            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid\n            and m.actual_client_id=(receipt->>'client_id')::uuid\n            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial\n              where financial->>'id'=receipt->>'published_timesheet_financial_id'\n                and financial->>'candidate_id'=m.candidate_id::text\n                and financial->>'contract_id'=m.contract_id::text)\n            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n            and m.source_profile_kind<>'SELF_BILL_REPORT'\n            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "5f885c9f0181422bc02338bc582b8ac120222e9c2c84210b285b1293d48e2d7c"
+        },
+        {
+          "text": "if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)\n    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n      where receipt->>'published_timesheet_financial_id' is not null and not exists(\n        select 1 from jsonb_array_elements(facts->'financial_identities') financial\n          where financial->>'id'=receipt->>'published_timesheet_financial_id'\n            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'\n            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root\n              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'\n              where root->>'timesheet_id'=financial->>'timesheet_id'\n                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'\n                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')\n                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "e67c0971424d578230f3ef95666cb40d643f916dc695a57a8aa3cd89589ca9d8"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "59deb5109e613e31199fb845da416d0c661f017343d2c2bde0efb5718a653cd8",
+          "statementSha256": "5f853cfc46b6700b525c19e4048c2cf6101c6fc370a15b46789ee87d3dcb6590",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "bodySha256": "fabf1bbc14f5e184945ae36add0b2b398cb72b79b9075b85d06ef3d4849519a8",
+      "rationale": "EXACT_RECEIPT_CONTRACT_IDENTITY",
+      "sourceReviewNumber": 15,
+      "guards": [
+        {
+          "text": "(select min(m.contract_id::text)::uuid\n        from pay_receipts receipt\n        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'\n          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit\n        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid\n          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id\n          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id\n          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n          and m.source_profile_kind<>'SELF_BILL_REPORT'\n          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n        where receipt.published_timesheet_financial_id=financial.id\n        having count(distinct m.contract_id)=1) as contract_id",
+          "sha256": "1ae5ab0e74b67fece83cb13eb79b4f3c267610258dff8eeba0f537204b08e92c"
+        },
+        {
+          "text": "if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n    where receipt->>'published_timesheet_financial_id' is not null and (\n      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'\n      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end\n      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'\n          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit\n        where not exists(select 1 from public.weekly_source_billing_movements m\n          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid\n            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid\n            and m.actual_client_id=(receipt->>'client_id')::uuid\n            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial\n              where financial->>'id'=receipt->>'published_timesheet_financial_id'\n                and financial->>'candidate_id'=m.candidate_id::text\n                and financial->>'contract_id'=m.contract_id::text)\n            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'\n            and m.source_profile_kind<>'SELF_BILL_REPORT'\n            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "5f885c9f0181422bc02338bc582b8ac120222e9c2c84210b285b1293d48e2d7c"
+        },
+        {
+          "text": "if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)\n    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt\n      where receipt->>'published_timesheet_financial_id' is not null and not exists(\n        select 1 from jsonb_array_elements(facts->'financial_identities') financial\n          where financial->>'id'=receipt->>'published_timesheet_financial_id'\n            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'\n            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root\n              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'\n              where root->>'timesheet_id'=financial->>'timesheet_id'\n                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'\n                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')\n                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then\n    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;",
+          "sha256": "e67c0971424d578230f3ef95666cb40d643f916dc695a57a8aa3cd89589ca9d8"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "23433039a28c2d46bdb1303e19adcc967ae891c4cfddb6c40e949ca3ffd95ac3",
+          "statementSha256": "7a03eeb5942af82b6b2d3e4b9b8ed307878ec16b4d5263f2517c03e983cbf83f",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "bodySha256": "e093741aaceabfbfd3717db3b3410cb3b873163106519cf835e9816cd8ae687e",
+      "rationale": "EXACT_SINGLE_CLIENT_FINALISATION",
+      "sourceReviewNumber": 16,
+      "guards": [
+        {
+          "text": "if (select pg_catalog.count(*)\n      from public.weekly_source_row_resolutions resolution\n      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n      where source_row.upload_id=v_upload.id and resolution.generation=v_generation)\n       <>v_upload.accepted_count\n     or exists(\n       select 1\n       from public.weekly_source_upload_rows source_row\n       left join public.weekly_source_row_resolutions resolution\n         on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n       where source_row.upload_id=v_upload.id\n         and (resolution.id is null or resolution.mapping_state<>'RESOLVED')\n     )\n     or (v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT' and exists(\n       select 1\n       from public.weekly_source_row_resolutions resolution\n       join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then\n    raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';\n  end if;",
+          "sha256": "04c847a2f4b05a031a39b0de270979c8863f12afcb04725db7d00863b7ee0d65"
+        },
+        {
+          "text": "if v_resolved_client_count>1 then\n      raise exception 'WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "6ab62e505c4246fdf70bcdfcc8f52a9da6ea40fd23a9968eebcc939c55b2f93e"
+        },
+        {
+          "text": "if v_client_id is null or not exists(\n      select 1\n      from public.weekly_source_group_clients group_client\n      where group_client.source_group_id=v_group.id\n        and group_client.client_id=v_client_id\n        and v_cycle.finalisation_week_ending between group_client.valid_from\n          and coalesce(group_client.valid_to,'infinity'::date)\n    ) then\n      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "d7b39e62eb2adb23c4bf302463fc9471ae73360289f65541fc60214b6febed9b"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "817578b429c92ea0a9626ea30f247d4fa6fdc20dd332f2ddfd18e316f00687ea",
+          "statementSha256": "d935b005b631243b0ec6c76836f8c7a285c66f407cb365fc2e32835f5343ab7d",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "bodySha256": "884dc8effdaa298428d8941c8a102ae8423df51c1ec589db1f51ff26d9a740a9",
+      "rationale": "SINGLE_EXPENSE_COMPANION",
+      "sourceReviewNumber": 17,
+      "guards": [
+        {
+          "text": "case when v_is_expense then (\n        select pg_catalog.min(shift_line.id::text)::uuid\n        from public.weekly_source_invoice_presentation_lines shift_line\n        where shift_line.client_manifest_id=v_manifest.id\n          and shift_line.work_event_id=v_movement.work_event_id\n          and shift_line.line_kind<>'SOURCE_FIXED_EXPENSE'\n          and shift_line.correction_role is not distinct from v_correction_role\n        having pg_catalog.count(*)=1\n      ) end",
+          "sha256": "aeaf15ea5ac499e498b8551e1b3ed108e9a484552830e07b617b44c4513e8d92"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "966de9f253b95a02722689251d76d53d357e8a6b6b093a5b8b9a3c0c8128adc2",
+          "statementSha256": "4df31231e0267063a169e6735ff2f5fe29b60248f35c435604a4855814857f2b",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "bodySha256": "87a9b1170e17fdd0603be8203ee8c153d99a1aeddf338674ca2e0d99560ae14e",
+      "rationale": "SINGLE_WINNING_NATIVE_REFERENCE",
+      "sourceReviewNumber": 18,
+      "guards": [
+        {
+          "text": "case when count(*)=1 then min(ranked.shift_id::text)::uuid end shift_id",
+          "sha256": "afb057c0d9eb8db5cb2f8d3edbcafad2604affab68235120a792cc7e829c00e2"
+        },
+        {
+          "text": "where ranked.match_priority=ranked.winning_priority",
+          "sha256": "46e098ea0309c6a20029c21a2f003f3378379c47f576d8d5bb57f600e7589f9d"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)>1\n                  then 'AMBIGUOUS'",
+          "sha256": "24a0443d19020a8a15a90db5d30621760bbeaed8c19920bfdde6e51fdd1579f3"
+        },
+        {
+          "text": "when coalesce(hr_match.reference_match_count,0)=0\n                  then 'MISSING'",
+          "sha256": "f8a1885d63951066fe62faee941ce393c1b7b9edfef8a494eb4a07a83a9a8b33"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "918c8765711e7eeeb5cbd45ec75fdaff46ac9a1eb8b686ca588fa53f4a060d6c",
+          "statementSha256": "f6922dbb3d6e6f707af9eb327f22959fb5a2c05e357b89668ec5f8e812e7b74f",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "bodySha256": "4aeef4bea21ff775ac889427ab78088695ca5c92090934c31adb30730bd143d2",
+      "rationale": "EXACT_SINGLE_CLIENT_FINALISATION",
+      "sourceReviewNumber": 19,
+      "guards": [
+        {
+          "text": "if (select pg_catalog.count(*)\n      from public.weekly_source_row_resolutions resolution\n      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n      where source_row.upload_id=v_upload.id and resolution.generation=v_generation)\n       <>v_upload.accepted_count\n     or exists(\n       select 1\n       from public.weekly_source_upload_rows source_row\n       left join public.weekly_source_row_resolutions resolution\n         on resolution.upload_row_id=source_row.id and resolution.generation=v_generation\n       where source_row.upload_id=v_upload.id\n         and (resolution.id is null or resolution.mapping_state<>'RESOLVED')\n     )\n     or (v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT' and exists(\n       select 1\n       from public.weekly_source_row_resolutions resolution\n       join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\n       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then\n    raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';\n  end if;",
+          "sha256": "04c847a2f4b05a031a39b0de270979c8863f12afcb04725db7d00863b7ee0d65"
+        },
+        {
+          "text": "if v_resolved_client_count>1 then\n      raise exception 'WEEKLY_SOURCE_SINGLE_CLIENT_RESOLUTION_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "6ab62e505c4246fdf70bcdfcc8f52a9da6ea40fd23a9968eebcc939c55b2f93e"
+        },
+        {
+          "text": "if v_client_id is null or not exists(\n      select 1\n      from public.weekly_source_group_clients group_client\n      where group_client.source_group_id=v_group.id\n        and group_client.client_id=v_client_id\n        and v_cycle.finalisation_week_ending between group_client.valid_from\n          and coalesce(group_client.valid_to,'infinity'::date)\n    ) then\n      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';\n    end if;",
+          "sha256": "d7b39e62eb2adb23c4bf302463fc9471ae73360289f65541fc60214b6febed9b"
+        }
+      ],
+      "points": [
+        {
+          "keySha256": "817578b429c92ea0a9626ea30f247d4fa6fdc20dd332f2ddfd18e316f00687ea",
+          "statementSha256": "d935b005b631243b0ec6c76836f8c7a285c66f407cb365fc2e32835f5343ab7d",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "limits": "Exact whole source/body/predicate/guard and statement-count pins. Only UUID_CARDINALITY hazard points; no native min(uuid), arbitrary row selection, dynamic/aggregate/effect/ACL/currentness or financial authorization granted.",
+  "native": "NOT_RUN",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "databaseMutation": false
+}
