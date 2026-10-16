@@ -1,0 +1,29 @@
+function normaliseCandidateWorkflowCreatePayload(value) {
+  const supplied = isObject(value) ? value : {};
+  const workflowKind = upper(supplied.workflow_kind);
+  if(Object.hasOwn(supplied,'input_snapshot')) {
+    if(upper(supplied.scope)!=='WEEKLY' || !['CONTRACT_HOURS','CONTRACT_COMBINED','CONTRACT_EXPENSE'].includes(workflowKind)) {
+      throw new CandidateHttpError(400,'CANDIDATE_WORKFLOW_PAYLOAD_INVALID');
+    }
+    validateCandidateWorkflowFactualSnapshot(supplied.input_snapshot);
+  }
+  const timesheetId = UUID_RE.test(text(supplied.timesheet_id))
+    ? text(supplied.timesheet_id) : null;
+  if (Object.hasOwn(supplied, 'daily_source')) {
+    const source = normalizeCandidateDailyBookedSource(supplied.daily_source);
+    if (!source || workflowKind !== 'DAILY' || supplied.scope !== 'DAILY'
+        || supplied.route !== 'PHONE' || supplied.submission_requested !== true
+        || ['timesheet_id', 'target_timesheet_id', 'contract_id', 'contract_week_id',
+          'anchor_timesheet_id', 'week_ending_date'].some((key) => Object.hasOwn(supplied, key))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_DAILY_IDENTITY_INVALID');
+    }
+    return { ...supplied, daily_source: source };
+  }
+  return {
+    ...supplied,
+    ...(timesheetId && workflowKind === 'DAILY' && !supplied.target_timesheet_id
+      ? { target_timesheet_id: timesheetId } : {}),
+    ...(timesheetId && workflowKind === 'CONTRACT_EXPENSE' && !supplied.anchor_timesheet_id
+      ? { anchor_timesheet_id: timesheetId } : {})
+  };
+}

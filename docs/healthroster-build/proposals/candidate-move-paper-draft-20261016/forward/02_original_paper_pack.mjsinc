@@ -1,0 +1,213 @@
+async function candidatePaperPackContext(request, env, deps, timesheetId) {
+  const access = await verifyCandidateAccess(request, env);
+  const requestedId = requireUuid(timesheetId, 'CANDIDATE_TIMESHEET_NOT_FOUND');
+  let id = requestedId;
+
+  // Reuse the Candidate-safe detail authority as the ownership/capability gate.
+  // The subsequent service reads resolve only the already-authorised current row;
+  // neither a raw R2 identity nor a database document identity is exposed.
+  const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+    p_timesheet_id: requestedId,
+    p_contract_week_id: null,
+    p_workflow_id: null
+  }));
+
+  const move = detail?.contract_move == null ? null : decodeCandidateContractMove(detail.contract_move);
+  if (move) {
+    if (![move.original_timesheet_id, move.current_timesheet_id].includes(requestedId) && move.is_history !== true) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    id = move.evidence_origin_timesheet_id;
+  }
+  // A moved original is an immutable source. The preceding native detail proof
+  // authorises this exact source ID; ordinary requests retain the current-only read.
+  const timesheet = await restOne(env, 'timesheets',
+    `timesheet_id=eq.${encodeURIComponent(id)}${move ? '' : '&is_current=eq.true'}`
+    + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
+    + 'document_revision,document_state,current_document_version_id,'
+    + 'active_document_operation_id,manual_pdf_r2_key');
+  const qrRoute = text(timesheet?.qr_token)
+    && ['PENDING', 'SENT', 'READY'].includes(upper(timesheet?.qr_status));
+  if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY') {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
+  const workflows = await activePaperWorkflowsForTimesheet(env, id);
+  if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+  if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+  const targetlessExpense = upper(workflows[0].workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflows[0].target_timesheet_id);
+  const inheritedOriginalPages=move?safePaperReturnPages(parseJson(workflows[0].paper_return_manifest_json,{})||{}):[];
+  const inheritedOriginalPaper=move && inheritedOriginalPages.length>0 && inheritedOriginalPages.every(page=>page.manifest_version===2);
+  if (!qrRoute && !targetlessExpense && !inheritedOriginalPaper) {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
+
+  let version = null;
+  if (targetlessExpense) {
+    const sourceAuthoritySha256 = text(workflows[0].immutable_submission_sha256)
+      .replace(/^\\x/i, '').toLowerCase();
+    if (!SHA256_RE.test(sourceAuthoritySha256)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+    version = {
+      id: null,
+      r2_key: null,
+      sha256: sourceAuthoritySha256,
+      status: 'READY',
+      source_kind: 'WORKFLOW_IMMUTABLE_SUBMISSION'
+    };
+  } else if (upper(timesheet.document_state) === 'READY'
+      && UUID_RE.test(text(timesheet.current_document_version_id))) {
+    version = await restOne(env, 'invoice_document_versions',
+      `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
+      + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
+      + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
+  }
+  let outbox = null;
+  let outboxError = null;
+  try {
+    outbox = await requireCandidatePaperOutbox(env, workflows[0], timesheet);
+  } catch (error) {
+    const code = knownErrorCode(error);
+    if (!['CANDIDATE_PAPER_OUTBOX_FAILED', 'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+      'CANDIDATE_PAPER_OUTBOX_NOT_READY'].includes(code)) throw error;
+    outboxError = code;
+  }
+  let complete = null;
+  // Once released, the immutable complete-pack receipt is the authority for
+  // this exact workflow generation and manifest. Expected QR delivery-state
+  // updates can invalidate the generic Timesheet document pointer; they must
+  // not make status polling manufacture a second pack for the same submission.
+  if (outbox) {
+    complete = await readyPaperPackReceiptFromOutbox(
+      env, workflows[0], timesheet, outbox
+    );
+  }
+  // An accepted original paper workflow's v2 pages already use the native
+  // immutable workflow renderer. No generic document/archived TS write is needed.
+  if (!complete && !version && move) {
+    const originalWorkflow=workflows[0];
+    const originalPages=safePaperReturnPages(parseJson(originalWorkflow.paper_return_manifest_json,{})||{});
+    const bodySha=text(originalWorkflow.immutable_submission_sha256).replace(/^\\x/i,'').toLowerCase();
+    if (!SHA256_RE.test(bodySha) || !originalPages.length || originalPages.some(page=>page.manifest_version!==2)
+        || text(originalWorkflow.target_timesheet_id||originalWorkflow.anchor_timesheet_id)!==id) {
+      throw new CandidateHttpError(409,'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+    const sourceDetail=await rpcCall(deps,'candidate_app_timesheet_detail_v1',candidateRpcArgs(access,env,{
+      p_timesheet_id:id,p_contract_week_id:null,p_workflow_id:originalWorkflow.id}));
+    const sourceMove=decodeCandidateContractMove(sourceDetail?.contract_move);
+    if (sourceMove.original_timesheet_id!==id || sourceMove.operation_id!==move.operation_id
+       || sourceMove.placement_revision!==move.placement_revision
+       || !(Array.isArray(sourceDetail.workflows)?sourceDetail.workflows:[]).some(w=>
+          w.workflow_id===originalWorkflow.id&&Number(w.generation)===Number(originalWorkflow.generation))) {
+      throw new CandidateHttpError(409,'CANDIDATE_CONTEXT_STALE');
+    }
+    version={id:null,r2_key:null,sha256:bodySha,status:'READY',source_kind:'WORKFLOW_IMMUTABLE_SUBMISSION'};
+  }
+  if (!complete && version?.sha256) {
+    const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
+    if (verifiedPack?.ready === true) complete = verifiedPack;
+  }
+  const execution = candidatePaperExecutionState(workflows[0], outbox, timesheet, complete);
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_CONFLICT') execution.state = 'STALE';
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_FAILED') execution.state = 'FAILED_TERMINAL';
+  const ready = execution.state === 'READY' && complete?.ready === true;
+  return {
+    id, workflow: workflows[0], timesheet, version, key: complete?.key || null, ready,
+    state: execution.state, execution, complete, outbox
+  };
+}
+
+async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const pages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
+  if (!pages.length || !workflow.paper_return_manifest_sha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const targetlessExpense = upper(workflow.workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflow.target_timesheet_id);
+  if (targetlessExpense
+      && pages.some((page) => upper(page.component_kind) === 'HOURS_TIMESHEET')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const immutableOriginalSource=version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION'
+    && SHA256_RE.test(text(version?.sha256)) && pages.every(page=>page.manifest_version===2);
+  if (!targetlessExpense && version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION' && !immutableOriginalSource) {
+    throw new CandidateHttpError(409,'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  let base = null;
+  if (!targetlessExpense && !immutableOriginalSource) {
+    try {
+      base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
+    } catch (error) {
+      if (error instanceof CandidateHttpError) throw error;
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+    }
+    if (base.media_type !== 'application/pdf') {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+    }
+  }
+  let components;
+  try {
+    components = await restRows(env, 'candidate_submission_components',
+      `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+      + '&state=eq.IMMUTABLE&select=*');
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  }
+  const combined = await PDFDocument.create({ updateMetadata: false });
+  for (let index = 0; index < pages.length; index += 1) {
+    const expected = pages[index];
+    const kind = upper(expected.component_kind);
+    const pageQrText = expected.manifest_version === 2
+      ? await candidatePaperPageQrText(env, workflow, timesheet, expected)
+      : null;
+    if (kind === 'HOURS_TIMESHEET') {
+      await appendPdfBytes(combined, pageQrText
+        ? await candidatePaperTimesheetPageBytes(
+          env, workflow, timesheet, components, pageQrText
+        )
+        : base?.bytes);
+      continue;
+    }
+    let component = null;
+    if (kind === 'EXPENSE_SUMMARY') {
+      component = components.find((entry) => upper(entry.component_kind) === 'EXPENSE_SUMMARY') || {
+        id: workflow.id, component_kind: 'EXPENSE_SUMMARY', document_role: 'EXPENSE_APPROVAL_SUMMARY',
+        expense_category: 'OTHER', review_ordinal: index + 1
+      };
+    } else {
+      component = candidatePaperPackComponentForPage(components, expected);
+    }
+    if (!component || upper(component.component_kind) !== kind) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
+    }
+    await appendPdfBytes(combined, await paperExpensePageBytes(
+      env, workflow, component, expected, index + 1, pageQrText, expected.display_name
+    ));
+  }
+  if (combined.getPageCount() !== pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
+  const bytes = new Uint8Array(await combined.save());
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  let receipt;
+  try {
+    receipt = await immutablePut(env, identity.key, bytes, 'application/pdf', {
+      purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+      workflow_generation: String(workflow.generation),
+      timesheet_id: timesheet.timesheet_id, manifest_sha256: identity.manifest_hash,
+      base_document_sha256: identity.base_hash,
+      branding_contract_sha256: identity.branding_hash,
+      renderer_contract_version: identity.renderer_contract_version,
+      page_count: String(combined.getPageCount())
+    });
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_R2_WRITE_TRANSIENT');
+  }
+  const complete = {
+    ...identity, bytes, sha256: receipt.sha256, byte_size: bytes.byteLength,
+    page_count: combined.getPageCount(), ready: true
+  };
+  return complete;
+}

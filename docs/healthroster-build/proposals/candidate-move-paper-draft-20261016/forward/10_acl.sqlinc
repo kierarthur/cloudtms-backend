@@ -1,0 +1,25 @@
+-- Exact existing service ABI and new owner-only helpers. Native ACL NOT_RUN.
+alter function private.candidate_workflow_factual_snapshot_assert_v1(jsonb) owner to postgres;
+revoke all on function private.candidate_workflow_factual_snapshot_assert_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;
+alter function private.candidate_contract_move_paper_source_lock_v1(text,uuid,uuid) owner to postgres;
+revoke all on function private.candidate_contract_move_paper_source_lock_v1(text,uuid,uuid) from public,anon,authenticated,service_role;
+alter function public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz) to service_role;
+alter function public.candidate_targetless_expense_paper_pack_enqueue_v1(text,uuid,integer,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_targetless_expense_paper_pack_enqueue_v1(text,uuid,integer,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_targetless_expense_paper_pack_enqueue_v1(text,uuid,integer,text,timestamptz) to service_role;
+alter function public.candidate_paper_manifest_v2_promote_v1(uuid,text,uuid,integer,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_paper_manifest_v2_promote_v1(uuid,text,uuid,integer,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_paper_manifest_v2_promote_v1(uuid,text,uuid,integer,text,timestamptz) to service_role;
+alter function public.candidate_paper_return_proof_validate_v2(uuid,text,uuid,integer,text,text,jsonb,timestamptz) owner to postgres;
+revoke all on function public.candidate_paper_return_proof_validate_v2(uuid,text,uuid,integer,text,text,jsonb,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_paper_return_proof_validate_v2(uuid,text,uuid,integer,text,text,jsonb,timestamptz) to service_role;
+alter function public.candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamptz) to service_role;
+alter function public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamptz) to service_role;

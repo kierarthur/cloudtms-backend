@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "nativeQualification": "NOT_RUN",
+  "publicRequestSchemaChange": true,
+  "create": {
+    "publicOperation": "createCandidateWorkflow",
+    "existingNativeFunction": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+    "action": "CREATE",
+    "field": "input_snapshot",
+    "mapping": "body.workflow.input_snapshot when nested workflow exists; otherwise body.input_snapshot -> same native p_payload.input_snapshot; no normalization or new version key",
+    "exactRequest": "App must save full original CREATE body, workflow UUID and idempotency key before first POST. Snapshot-free legacy retry stays identical.",
+    "nativeIdentity": "creation_identity_json.version=CANDIDATE_WORKFLOW_CREATION_IDENTITY_V1, request.version=CANDIDATE_WORKFLOW_CREATION_REQUEST_V1, request.input_snapshot exact JSONB, creation_request_sha256=_candidate_workflow_creation_request_sha256_v1(request), actual account/environment/Candidate identity",
+    "nativeReplay": "Existing account/key advisory lock and exact creation_request_sha256 replay before new-field/current checks. New nonempty HOURS/COMBINED factual snapshot is checked; new expense factual keys checked; genuine native legacy category metadata preserved."
+  },
+  "signature": {
+    "workflowCAS": "Caller already authenticated Candidate and locked exact original workflow; state WORKER_DRAFT and native generation",
+    "componentCAS": "Exact payload.candidate_signature_component_id, same workflow_id, workflow_generation=current generation, CANDIDATE_SIGNATURE kind/role, IMMUTABLE, direct source_component_id NULL, actual source_content_sha256 and immutable_at_utc",
+    "factBinding": "Strict saved native input_snapshot facts equal actual submission_request_identity.factual_submission after the separately proved native worked-facts projection; no current rates/policy signed as hours.",
+    "creationWitness": "Generation1 sealed CREATE request/body/hash plus real CANDIDATE_WORKFLOW_CREATED audit under workflow.idempotency_key. Later generation uses real AMEND audit after.input_snapshot_sha256 and semantic_request_sha256 joined to immutable AMEND receipt and actual generation.",
+    "uploadWitness": "Actual candidate_workflow_mutation_receipt PREPARE correlation=component.upload_idempotency_key and after component ID/current generation/kind/role; actual COMPLETE receipt same workflow/component/state IMMUTABLE; native request SHA and native epoch ordering.",
+    "preserved": "Original unchanged captured signature continuation and genuine pending expense update retain separate native authority. No caller timestamp/compatibility flag can certify later changed facts."
+  },
+  "paper": {
+    "source": "Exact original-A Timesheet from accepted strict native Candidate Move context and workflow membership; current B remains separate display/action context. Current native B paper stays ordinary current-row admission.",
+    "lockOrder": "Changed original-source owners authenticate first, obtain actual accepted family lock before Timesheet/workflow locks, and rederive strict placement context. Source concurrency qualification remains NOT_RUN.",
+    "CAS": [
+      "Native workflow/environment/Candidate ownership and p_expected_generation",
+      "Exact immutable submission SHA and original manifest SHA",
+      "Existing native expected v1 manifest SHA, held outbox exact-count/lease/attachment-state compare-and-set",
+      "V1 original QR-token hash; V2 original workflow/source/page ordinal/kind/category/occurrence/full manifest hash",
+      "Pack completion exact staged original component/page/proof receipts and existing immutable mutation replay",
+      "Release existing actual outbox lease/token/manifest/generation/storage key/body SHA/byte size/page count checks"
+    ],
+    "idempotency": "All original native workflow keys, upload keys, generation receipts, held outbox references, complete-pack immutable keys and source page IDs retained. No new endpoint, request protocol or arbitrary retry family.",
+    "worker": "Authorise requested current/history detail first. Preserve existing READY outbox receipt first. Missing generic v2 source may use existing WORKFLOW_IMMUTABLE_SUBMISSION source kind + real original immutable body SHA + second genuine native detail workflow/gen/placement proof. Existing official per-page renderer + immutablePut remain actual byte owners. No generic archived TS restart or provider call."
+  }
+}

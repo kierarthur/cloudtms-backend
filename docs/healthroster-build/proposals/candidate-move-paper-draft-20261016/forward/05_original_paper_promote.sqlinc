@@ -1,0 +1,233 @@
+create or replace function public.candidate_paper_manifest_v2_promote_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_workflow_id uuid,
+  p_expected_generation integer,
+  p_expected_v1_manifest_sha256_hex text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_session jsonb;
+  v_office_context jsonb;
+  v_office_actor_user_id uuid;
+  v_candidate_id uuid;
+  v_source_move jsonb;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_old_manifest_sha256_hex text;
+  v_new_pages jsonb;
+  v_new_manifest jsonb;
+  v_new_manifest_sha256 bytea;
+  v_new_manifest_sha256_hex text;
+  v_outbox_count integer;
+  v_response jsonb;
+begin
+  perform private._candidate_require_feature_v1(p_environment,'candidate_app_writes');
+  if p_expected_generation is null or p_expected_generation<1
+     or lower(coalesce(p_expected_v1_manifest_sha256_hex,'')) !~ '^[0-9a-f]{64}$' then
+    raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='22023';
+  end if;
+  if p_session_id is null then
+    begin
+      v_office_context:=nullif(current_setting(
+        'cloudtms.office_candidate_context',true
+      ),'')::jsonb;
+    exception when others then
+      v_office_context:=null;
+    end;
+    v_office_actor_user_id:=nullif(v_office_context->>'actor_user_id','')::uuid;
+    if not private._candidate_office_service_context_valid_v1(
+      p_environment,v_office_actor_user_id,'PAPER_MANIFEST_PROMOTE'
+    ) then
+      raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
+    end if;
+    select workflow.candidate_id into v_candidate_id
+    from public.candidate_submission_workflows workflow
+    where workflow.id=p_workflow_id
+      and workflow.environment=private._candidate_assert_environment(p_environment);
+  else
+    v_session:=private._candidate_session_context_v1(
+      p_session_id,p_environment,null,p_now_utc,true
+    );
+    v_candidate_id:=nullif(v_session->>'selected_candidate_id','')::uuid;
+  end if;
+  v_source_move:=private.candidate_contract_move_paper_source_lock_v1(
+    private._candidate_assert_environment(p_environment),v_candidate_id,p_workflow_id);
+  select * into v_workflow
+  from public.candidate_submission_workflows
+  where id=p_workflow_id and candidate_id=v_candidate_id
+  for update;
+  if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  if v_workflow.generation<>p_expected_generation
+     or v_workflow.scope<>'WEEKLY'
+     or v_workflow.route<>'PAPER'
+     or v_workflow.state<>'AWAITING_PAPER_RETURN'
+     or v_workflow.paper_return_manifest_sha256 is null
+     or private._candidate_sha256_jsonb_v1(v_workflow.paper_return_manifest_json)
+       is distinct from v_workflow.paper_return_manifest_sha256 then
+    raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
+  end if;
+
+  if coalesce((v_workflow.paper_return_manifest_json->>'manifest_version')::integer,1)=2 then
+    if coalesce(v_workflow.paper_return_manifest_json->>'qr_contract_version','')
+         <>'CANDIDATE_PAPER_PAGE_QR_V2'
+       or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+       or exists(
+         select 1
+         from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') page
+         where upper(coalesce(page->>'component_kind',''))='EXPENSE_SUMMARY'
+            or upper(coalesce(page->>'page_key',''))='EXPENSE_SUMMARY'
+       ) then
+      raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
+    end if;
+    return jsonb_build_object(
+      'ok',true,'idempotent_replay',true,'workflow_id',v_workflow.id,
+      'generation',v_workflow.generation,'manifest_version',2,
+      'qr_contract_version','CANDIDATE_PAPER_PAGE_QR_V2',
+      'paper_return_manifest_sha256',encode(v_workflow.paper_return_manifest_sha256,'hex'),
+      'paper_return_page_count',jsonb_array_length(v_workflow.paper_return_manifest_json->'pages')
+    );
+  end if;
+
+  v_old_manifest_sha256_hex:=encode(v_workflow.paper_return_manifest_sha256,'hex');
+  if v_old_manifest_sha256_hex<>lower(p_expected_v1_manifest_sha256_hex) then
+    raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
+  end if;
+  select * into v_timesheet
+  from public.timesheets
+  where timesheet_id=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+    and ((is_current=true and archived_at_utc is null) or
+      (v_source_move is not null and archived_reason_code='CONTRACT_MOVE' and not is_current and archived_at_utc is not null))
+  for share;
+  if not found then raise exception 'CANDIDATE_TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
+  if v_source_move is not null and private.candidate_contract_move_context_v1(
+    private._candidate_assert_environment(p_environment),v_candidate_id,v_timesheet.timesheet_id,v_workflow.id)
+      is distinct from v_source_move then
+    raise exception 'CANDIDATE_WORKFLOW_CONTEXT_CONFLICT' using errcode='40001';end if;
+
+  with manifest_pages as (
+    select page,ordinality::integer as ordinal,
+      count(*) over (
+        partition by coalesce(page->>'component_kind',''),coalesce(page->>'expense_category','')
+        order by ordinality rows between unbounded preceding and current row
+      )::integer as category_occurrence,
+      count(*) over (
+        partition by coalesce(page->>'component_kind',''),coalesce(page->>'expense_category','')
+      )::integer as category_count
+    from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages')
+      with ordinality source(page,ordinality)
+    where upper(coalesce(page->>'component_kind',''))<>'EXPENSE_SUMMARY'
+  )
+  select jsonb_agg(
+    page || jsonb_build_object(
+      'ordinal',ordinal,
+      'display_name',case page->>'component_kind'
+        when 'HOURS_TIMESHEET' then 'Timesheet'
+        when 'EXPENSE_SUMMARY' then 'Expense summary'
+        when 'MILEAGE_FORM' then 'Mileage form'||case
+          when category_count>1 then ' '||category_occurrence::text else '' end
+        when 'EXPENSE_EVIDENCE' then initcap(lower(page->>'expense_category'))||' '||category_occurrence
+        else 'Document '||ordinal end,
+      'expense_category',case
+        when page->>'component_kind'='EXPENSE_SUMMARY' then 'OTHER'
+        else page->>'expense_category' end,
+      'category_occurrence',category_occurrence,
+      'page_kind_code',case page->>'component_kind'
+        when 'HOURS_TIMESHEET' then 'T'
+        when 'EXPENSE_SUMMARY' then 'S'
+        when 'MILEAGE_FORM' then 'M'
+        else 'E' end,
+      'category_code',case coalesce(page->>'expense_category','')
+        when 'ACCOMMODATION' then 'A'
+        when 'MILEAGE' then 'M'
+        when 'OTHER' then 'O'
+        when 'TRAVEL' then 'T'
+        else '' end,
+      'page_key_sha256_16',substring(encode(
+        extensions.digest(page->>'page_key','sha256'),'hex'
+      ) from 1 for 16),
+      'qr_required',true
+    ) order by ordinal
+  ) into v_new_pages
+  from manifest_pages;
+  if jsonb_typeof(v_new_pages) is distinct from 'array'
+     or coalesce(jsonb_array_length(v_new_pages),0)<1 then
+    raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
+  end if;
+
+  v_new_manifest:=jsonb_build_object(
+    'manifest_version',2,
+    'qr_contract_version','CANDIDATE_PAPER_PAGE_QR_V2',
+    'workflow_id',v_workflow.id,
+    'workflow_generation',v_workflow.generation,
+    'timesheet_id',v_timesheet.timesheet_id,
+    'timesheet_document_revision',coalesce(v_timesheet.document_revision,0),
+    'immutable_submission_sha256',encode(v_workflow.immutable_submission_sha256,'hex'),
+    'pages',v_new_pages
+  );
+  v_new_manifest_sha256:=private._candidate_sha256_jsonb_v1(v_new_manifest);
+  v_new_manifest_sha256_hex:=encode(v_new_manifest_sha256,'hex');
+
+  select count(*)::integer into v_outbox_count
+  from public.mail_outbox candidate_mail
+  where candidate_mail.type='TIMESHEET_QR'
+    and candidate_mail.context_kind='timesheets'
+    and candidate_mail.context_id=v_timesheet.timesheet_id
+    and candidate_mail.status='QUEUED'
+    and candidate_mail.attempt_lease_token is null
+    and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+    and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+    and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+      =v_old_manifest_sha256_hex
+    and lower(coalesce(candidate_mail.payment_scope_json->>'candidate_paper_pack_ready','false'))
+      in ('false','f','0','no')
+    and jsonb_array_length(coalesce(candidate_mail.attachments,'[]'::jsonb))=0;
+  if v_outbox_count<>1 then
+    raise exception 'CANDIDATE_PAPER_OUTBOX_CONFLICT' using errcode='40001';
+  end if;
+
+  update public.mail_outbox candidate_mail set
+    payment_scope_json=jsonb_set(
+      jsonb_set(candidate_mail.payment_scope_json,
+        '{paper_return_manifest_sha256}',to_jsonb(v_new_manifest_sha256_hex),true),
+      '{candidate_paper_manifest_version}','2'::jsonb,true
+    )
+  where candidate_mail.type='TIMESHEET_QR'
+    and candidate_mail.context_kind='timesheets'
+    and candidate_mail.context_id=v_timesheet.timesheet_id
+    and candidate_mail.status='QUEUED'
+    and candidate_mail.attempt_lease_token is null
+    and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+    and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+    and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+      =v_old_manifest_sha256_hex;
+
+  v_response:=coalesce(v_workflow.last_mutation_response_json,'{}'::jsonb)
+    ||jsonb_build_object(
+      'paper_return_manifest_sha256',v_new_manifest_sha256_hex,
+      'paper_return_page_count',jsonb_array_length(v_new_pages),
+      'paper_return_manifest_version',2,
+      'paper_return_qr_contract_version','CANDIDATE_PAPER_PAGE_QR_V2'
+    );
+  update public.candidate_submission_workflows set
+    paper_return_manifest_json=v_new_manifest,
+    paper_return_manifest_sha256=v_new_manifest_sha256,
+    last_mutation_response_json=v_response,
+    updated_at_utc=p_now_utc
+  where id=v_workflow.id;
+
+  return jsonb_build_object(
+    'ok',true,'idempotent_replay',false,'workflow_id',v_workflow.id,
+    'generation',v_workflow.generation,'manifest_version',2,
+    'qr_contract_version','CANDIDATE_PAPER_PAGE_QR_V2',
+    'paper_return_manifest_sha256',v_new_manifest_sha256_hex,
+    'paper_return_page_count',jsonb_array_length(v_new_pages)
+  );
+end
+$function$;

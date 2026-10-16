@@ -1,0 +1,62 @@
+// Additive closed CREATE request field; no rate, policy or financial authority.
+function validateCandidateWorkflowFactualSnapshot(value) {
+  const fail=()=>{throw new CandidateHttpError(400,'CANDIDATE_WORKFLOW_PAYLOAD_INVALID');};
+  const object=(v,keys,required=[])=>{
+    if (!v || typeof v!=='object' || Array.isArray(v)
+        || Object.keys(v).some(k=>!keys.includes(k)) || required.some(k=>!Object.hasOwn(v,k))) fail();
+  };
+  const string=(v,max,nullable=false)=>{if (!(nullable&&v===null) && (typeof v!=='string'||v.length>max)) fail();};
+  const number=v=>{if (typeof v!=='number'||!Number.isFinite(v)||v<0||v>1000000) fail();};
+  const date=v=>{
+    if (typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v.startsWith('0000-')) fail();
+    const d=new Date(v+'T00:00:00Z');if (!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==v) fail();
+  };
+  const clock=v=>{if (typeof v!=='string'||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v)) fail();};
+  const stable=v=>Array.isArray(v)?'['+v.map(stable).join(',')+']':v&&typeof v==='object'
+    ?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}':JSON.stringify(v);
+  const unitMap=v=>{
+    if (!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).length>1000) fail();
+    for(const [k,n] of Object.entries(v)) {if(!/^[A-Z0-9_]{1,40}$/.test(k))fail();number(n);}
+  };
+  object(value,['actual_schedule_json','additional_units_week','additional_units_per_day','timesheet_patch_json','break_entry_context','expense_claim']);
+  const hours=Object.hasOwn(value,'actual_schedule_json');
+  if (!hours&&!Object.hasOwn(value,'expense_claim')) fail();
+  if (['additional_units_week','additional_units_per_day','timesheet_patch_json','break_entry_context'].some(k=>Object.hasOwn(value,k))&&!hours) fail();
+  if(hours) {
+    if(!['additional_units_week','additional_units_per_day','timesheet_patch_json'].every(k=>Object.hasOwn(value,k)))fail();
+    if(!Array.isArray(value.actual_schedule_json)||value.actual_schedule_json.length>112)fail();
+    for(const s of value.actual_schedule_json) {
+      object(s,['row_key','segment_id','date','work_date','start_time','end_time','ref_num','reference','booking_reference','band','break_entry'],['date','work_date','start_time','end_time']);
+      date(s.date);date(s.work_date);clock(s.start_time);clock(s.end_time);
+      for(const k of ['row_key','segment_id'])if(Object.hasOwn(s,k))string(s[k],200);
+      for(const k of ['ref_num','reference','booking_reference','band'])if(Object.hasOwn(s,k))string(s[k],200,true);
+      if(Object.hasOwn(s,'break_entry')) {
+        const e=s.break_entry;
+        if(e?.kind==='NO_BREAK') {object(e,['kind','no_break','break_minutes'],['kind','no_break','break_minutes']);if(e.no_break!==true||e.break_minutes!==0)fail();}
+        else if(e?.kind==='DURATION_MINUTES') {object(e,['kind','break_minutes'],['kind','break_minutes']);if(!Number.isInteger(e.break_minutes)||e.break_minutes<1||e.break_minutes>1440)fail();}
+        else if(e?.kind==='START_END_TIMES') {
+          object(e,['kind','break_start','break_end','calculated_break_minutes'],['kind','break_start','break_end','calculated_break_minutes']);clock(e.break_start);clock(e.break_end);
+          const minutes=t=>Number(t.slice(0,2))*60+Number(t.slice(3));const duration=(minutes(e.break_end)-minutes(e.break_start)+1440)%1440;
+          if(!duration||!Number.isInteger(e.calculated_break_minutes)||e.calculated_break_minutes!==duration)fail();
+        } else fail();
+      }
+    }
+    unitMap(value.additional_units_week);
+    const days=value.additional_units_per_day;if(!days||typeof days!=='object'||Array.isArray(days)||Object.keys(days).length>7)fail();
+    for(const [d,m] of Object.entries(days)){date(d);unitMap(m);}
+    object(value.timesheet_patch_json,['actual_schedule_json','additional_units_week','additional_units_per_day'],['actual_schedule_json','additional_units_week','additional_units_per_day']);
+    for(const k of ['actual_schedule_json','additional_units_week','additional_units_per_day'])if(stable(value[k])!==stable(value.timesheet_patch_json[k]))fail();
+    if(Object.hasOwn(value,'break_entry_context')) {
+      const c=value.break_entry_context;object(c,['context_version','context_token','mode'],['context_version','context_token','mode']);
+      if(c.context_version!=='CANDIDATE_BREAK_ENTRY_V1'||typeof c.context_token!=='string'||!/^([0-9a-f]{64})$/.test(c.context_token)
+          ||!['START_END_TIMES','DURATION_MINUTES'].includes(c.mode))fail();
+    }
+  }
+  if(Object.hasOwn(value,'expense_claim')) {
+    const e=value.expense_claim;object(e,['mileage_units','mileage_total_confirmed','travel_amount','accommodation_amount','other_amount','description']);
+    for(const k of ['mileage_units','travel_amount','accommodation_amount','other_amount'])if(Object.hasOwn(e,k))number(e[k]);
+    if(Object.hasOwn(e,'mileage_total_confirmed')&&typeof e.mileage_total_confirmed!=='boolean')fail();
+    if(Object.hasOwn(e,'description'))string(e.description,2000);
+  }
+  return value;
+}

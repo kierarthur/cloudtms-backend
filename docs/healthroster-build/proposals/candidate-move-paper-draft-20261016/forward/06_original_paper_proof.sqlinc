@@ -1,0 +1,128 @@
+create or replace function public.candidate_paper_return_proof_validate_v2(
+  p_session_id uuid,
+  p_environment text,
+  p_workflow_id uuid,
+  p_expected_generation integer,
+  p_manifest_sha256_hex text,
+  p_page_key text,
+  p_qr_payload jsonb,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_session jsonb;
+  v_candidate_id uuid;
+  v_source_move jsonb;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_page jsonb;
+  v_manifest_hex text;
+  v_proof_identity text;
+begin
+  perform private._candidate_require_feature_v1(p_environment,'candidate_app_writes');
+  if p_expected_generation is null or p_expected_generation<1
+     or lower(coalesce(p_manifest_sha256_hex,'')) !~ '^[0-9a-f]{64}$'
+     or nullif(btrim(coalesce(p_page_key,'')),'') is null
+     or jsonb_typeof(p_qr_payload)<>'object'
+     or (select array_agg(payload_key order by payload_key)
+         from jsonb_object_keys(p_qr_payload) as payload_keys(payload_key))
+       is distinct from array['c','g','k','m','n','o','p','t','v','w']::text[]
+     or coalesce(p_qr_payload->>'v','')!~'^[0-9]+$'
+     or coalesce(p_qr_payload->>'g','')!~'^[0-9]+$'
+     or coalesce(p_qr_payload->>'o','')!~'^[0-9]+$'
+     or coalesce(p_qr_payload->>'n','')!~'^[0-9]+$'
+     or lower(coalesce(p_qr_payload->>'m',''))!~'^[0-9a-f]{64}$'
+     or lower(coalesce(p_qr_payload->>'p',''))!~'^[0-9a-f]{16}$' then
+    raise exception 'CANDIDATE_PAPER_QR_PROOF_INVALID' using errcode='22023';
+  end if;
+  v_session:=private._candidate_session_context_v1(
+    p_session_id,p_environment,null,p_now_utc,true
+  );
+  v_candidate_id:=nullif(v_session->>'selected_candidate_id','')::uuid;
+  v_source_move:=private.candidate_contract_move_paper_source_lock_v1(
+    private._candidate_assert_environment(p_environment),v_candidate_id,p_workflow_id);
+  select * into v_workflow
+  from public.candidate_submission_workflows
+  where id=p_workflow_id and candidate_id=v_candidate_id
+  for update;
+  if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  if v_workflow.generation<>p_expected_generation
+     or v_workflow.route<>'PAPER'
+     or v_workflow.state<>'AWAITING_PAPER_RETURN'
+     or coalesce((v_workflow.paper_return_manifest_json->>'manifest_version')::integer,0)<>2
+     or coalesce(v_workflow.paper_return_manifest_json->>'qr_contract_version','')
+       <>'CANDIDATE_PAPER_PAGE_QR_V2'
+     or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+     or exists(
+       select 1
+       from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') manifest_page
+       where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+          or upper(coalesce(manifest_page->>'page_key',''))='EXPENSE_SUMMARY'
+     )
+     or v_workflow.paper_return_manifest_sha256 is null
+     or private._candidate_sha256_jsonb_v1(v_workflow.paper_return_manifest_json)
+       is distinct from v_workflow.paper_return_manifest_sha256 then
+    raise exception 'CANDIDATE_PAPER_QR_PROOF_STALE' using errcode='40001';
+  end if;
+  v_manifest_hex:=encode(v_workflow.paper_return_manifest_sha256,'hex');
+  if v_manifest_hex<>lower(p_manifest_sha256_hex) then
+    raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
+  end if;
+  select page into v_page
+  from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') page
+  where page->>'page_key'=p_page_key;
+  if v_page is null
+     or upper(coalesce(v_page->>'component_kind',''))='EXPENSE_SUMMARY'
+     or upper(coalesce(v_page->>'page_key',''))='EXPENSE_SUMMARY' then
+    raise exception 'CANDIDATE_PAPER_RETURN_PAGE_NOT_EXPECTED' using errcode='22023';
+  end if;
+  select * into v_timesheet
+  from public.timesheets
+  where timesheet_id=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+    and ((is_current=true and archived_at_utc is null) or
+      (v_source_move is not null and archived_reason_code='CONTRACT_MOVE' and not is_current and archived_at_utc is not null));
+  if not found then raise exception 'CANDIDATE_TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
+  if v_source_move is not null and private.candidate_contract_move_context_v1(
+    private._candidate_assert_environment(p_environment),v_candidate_id,v_timesheet.timesheet_id,v_workflow.id)
+      is distinct from v_source_move then
+    raise exception 'CANDIDATE_WORKFLOW_CONTEXT_CONFLICT' using errcode='40001';end if;
+
+  if (p_qr_payload->>'v')::integer=2
+     and lower(p_qr_payload->>'w')=v_workflow.id::text
+     and lower(p_qr_payload->>'t')=v_timesheet.timesheet_id::text
+     and (p_qr_payload->>'g')::integer=v_workflow.generation
+     and lower(p_qr_payload->>'m')=v_manifest_hex
+     and (p_qr_payload->>'o')::integer=(v_page->>'ordinal')::integer
+     and lower(p_qr_payload->>'p')=lower(v_page->>'page_key_sha256_16')
+     and p_qr_payload->>'k'=v_page->>'page_kind_code'
+     and coalesce(p_qr_payload->>'c','')=coalesce(v_page->>'category_code','')
+     and (p_qr_payload->>'n')::integer=(v_page->>'category_occurrence')::integer then
+    null;
+  else
+    raise exception 'CANDIDATE_PAPER_QR_PROOF_MISMATCH' using errcode='28000';
+  end if;
+  v_proof_identity:=concat_ws('|',
+    'CANDIDATE_PAPER_RETURN_PROOF_V2',v_workflow.id,v_workflow.generation,
+    v_manifest_hex,p_page_key,p_qr_payload::text
+  );
+  return jsonb_build_object(
+    'ok',true,
+    'proof_contract_version','CANDIDATE_PAPER_RETURN_PROOF_V2',
+    'workflow_id',v_workflow.id,
+    'workflow_generation',v_workflow.generation,
+    'timesheet_id',v_timesheet.timesheet_id,
+    'paper_return_manifest_sha256',v_manifest_hex,
+    'paper_return_page_key',p_page_key,
+    'page_component_kind',v_page->>'component_kind',
+    'qr_identity_kind','PACK_PAGE',
+    'qr_required',true,
+    'qr_payload_sha256',encode(extensions.digest(p_qr_payload::text,'sha256'),'hex'),
+    'proof_receipt_sha256',encode(extensions.digest(v_proof_identity,'sha256'),'hex')
+  );
+end
+$function$;

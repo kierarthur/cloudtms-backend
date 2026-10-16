@@ -1,0 +1,133 @@
+async function restartCandidatePaperSourceDocumentFromStatus(env, deps, context, ctx) {
+  if (context?.version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION') {
+    return {ok:true,skipped:true,reason:'WORKFLOW_SOURCE_READY'};
+  }
+  const documentState = upper(context?.timesheet?.document_state);
+  const activeOperationId = text(context?.timesheet?.active_document_operation_id);
+  if (context?.state !== 'PREPARING' || documentState !== 'STALE'
+      || UUID_RE.test(activeOperationId) || !context?.outbox
+      || typeof deps?.enqueueQrPack !== 'function') {
+    return { ok: true, skipped: true, reason: 'SOURCE_REQUEUE_NOT_REQUIRED' };
+  }
+
+  const generation = requireInteger(
+    context.workflow?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+  );
+  const documentRevision = requireInteger(
+    context.timesheet?.document_revision, 'CANDIDATE_PAPER_DOCUMENT_REVISION_INVALID', 1
+  );
+  const pack = await deps.enqueueQrPack({
+    timesheetId: context.id,
+    expectedTimesheetId: context.id,
+    idempotencyKey: `candidate-paper-status:${context.workflow.id}:g${generation}:r${documentRevision}`,
+    ctx
+  });
+  const operationId = text(pack?.document_operation_id);
+  if (!UUID_RE.test(operationId)
+      || text(pack?.current_timesheet_id || pack?.timesheet_id) !== context.id) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_REQUEUE_INVALID');
+  }
+  return { ok: true, document_operation_id: operationId };
+}
+
+async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null) {
+  const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  const documentOperationId = text(context.timesheet.active_document_operation_id);
+  if (context.version?.source_kind !== 'WORKFLOW_IMMUTABLE_SUBMISSION' && context.state === 'PREPARING'
+      && upper(context.timesheet.document_state) === 'STALE'
+      && !UUID_RE.test(documentOperationId)) {
+    const work = restartCandidatePaperSourceDocumentFromStatus(
+      env, deps, context, ctx
+    ).then((result) => {
+      console.log('[candidate-app] exact Paper source document continuation', {
+        workflow_id: context.workflow.id,
+        generation: Number(context.workflow.generation),
+        timesheet_id: context.id,
+        ok: result?.ok === true,
+        skipped: result?.skipped === true,
+        reason: result?.reason || null,
+        document_operation_id: result?.document_operation_id || null
+      });
+      return result;
+    });
+    const deferred = deferBackground(ctx, work, 'paper-source-status-requeue', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  if (context.version?.source_kind !== 'WORKFLOW_IMMUTABLE_SUBMISSION' && context.state === 'PREPARING' && UUID_RE.test(documentOperationId) && deps.nudgeQrPack) {
+    const work = deps.nudgeQrPack({
+      pack: {
+        document_operation_id: documentOperationId,
+        current_timesheet_id: context.id
+      },
+      timesheetId: context.id,
+      ctx
+    });
+    const deferred = deferBackground(ctx, work, 'paper-pack-status-nudge', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  const sourceReady = !!context.version?.r2_key
+    || (context.version?.source_kind === 'WORKFLOW_IMMUTABLE_SUBMISSION'
+      && SHA256_RE.test(text(context.version?.sha256)));
+  if (context.state === 'PREPARING' && sourceReady && context.outbox) {
+    const work = resumeCandidatePaperPackFromStatus(env, deps, context).then((result) => {
+      console.log('[candidate-app] exact Paper pack continuation', {
+        workflow_id: context.workflow.id,
+        generation: Number(context.workflow.generation),
+        timesheet_id: context.id,
+        ok: result?.ok === true,
+        skipped: result?.skipped === true,
+        reason: result?.reason || null,
+        error_code: result?.error_code || null
+      });
+      return result;
+    });
+    const deferred = deferBackground(ctx, work, 'paper-pack-status-assembly', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  const paperReturnPages = safePaperReturnPages(
+    parseJson(context.workflow.paper_return_manifest_json, {})
+  );
+  const manifestSha256 = text(context.workflow.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!paperReturnPages.length || !SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const paperDelivery = (await candidatePaperEmailDeliveryByWorkflow(
+    env, [context.workflow]
+  )).get(context.workflow.id) || {
+    paper_pack_obtained: false,
+    paper_pack_delivery_methods: [],
+    paper_pack_obtained_at_utc: null
+  };
+  return jsonResponse(200, {
+    ok: true,
+    workflow_id: context.workflow.id,
+    generation: Number(context.workflow.generation),
+    timesheet_id: context.id,
+    timesheet_version: Number(context.timesheet.version || 1),
+    paper_return_manifest_sha256: manifestSha256,
+    paper_return_pages: paperReturnPages,
+    paper_pack_state: context.state,
+    failure_scope: context.execution.failure_scope,
+    failure_code: context.execution.failure_code,
+    retryable: context.execution.retryable,
+    attempt_count: context.execution.attempt_count,
+    next_retry_at_utc: context.execution.next_retry_at_utc,
+    retry_in_progress: context.execution.retry_in_progress,
+    download_available: context.ready,
+    page_count: paperReturnPages.length,
+    ...paperDelivery
+  });
+}

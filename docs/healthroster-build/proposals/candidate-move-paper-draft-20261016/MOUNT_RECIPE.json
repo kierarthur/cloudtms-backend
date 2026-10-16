@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "predecessor": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+  "immutableProjection": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+  "sourceInputs": {
+    "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+    "observedHead": "c9bc020ed81352290b6be05bc170788dc946f859",
+    "files": [
+      {
+        "path": "broker/src/candidate-app-backend.js",
+        "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+      },
+      {
+        "path": "supabase/release/current-contract.json",
+        "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+      },
+      {
+        "path": "supabase/repeatable/06092026_0540_candidate_targetless_expense_paper_pack_v1.sql",
+        "sha256": "64bf02f3967218cf22c7db9d62dca650f6e40491609d5a593bcafb8256680563"
+      },
+      {
+        "path": "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+        "sha256": "74f500aa959bc28141815c71760c1426d68e93c1c61152ca904b1524e4520005"
+      },
+      {
+        "path": "supabase/repeatable/30082026_1414_candidate_paper_return_pack_complete_v2.sql",
+        "sha256": "932c7c119d024b176420c47fe6eaf8c6a21a44fb254999580dc47d5f75089e9a"
+      },
+      {
+        "path": "supabase/repeatable/30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql",
+        "sha256": "8346543ff78cf50aa6d464da79e2cb4cd617fb3a6ef581857d52fbec03f405db"
+      },
+      {
+        "path": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+      },
+      {
+        "path": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+        "sha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c"
+      },
+      {
+        "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+      },
+      {
+        "path": "supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql",
+        "sha256": "c840d1462ff0c31bbe8b9cb56841bd6d8c0e732aeacf81e65d9d7879e610707b"
+      },
+      {
+        "path": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "sha256": "535d02bd281c0c79ced43576ff66d8a14a4d07338ddf0384e4a22da641b68174"
+      }
+    ]
+  },
+  "mount": {
+    "after": "Exact complete c475 lifecycle and 96c5 projection + genuine physical/Invoice prerequisite owners; no stale whole parent transplant. Root decides reviewed new final owner and registers all existing predecessor/companion roots.",
+    "orderedSqlPayloads": [
+      "forward/08_factual_snapshot.sqlinc",
+      "forward/00_draft_signature_authority.sqlinc",
+      "forward/00a_original_paper_source_lock.sqlinc",
+      "forward/03_original_paper_mail_constructor.sqlinc",
+      "forward/01_native_draft_and_paper_release.sqlinc",
+      "forward/05_original_paper_promote.sqlinc",
+      "forward/06_original_paper_proof.sqlinc",
+      "forward/06a_original_paper_proof_v1.sqlinc",
+      "forward/07_original_paper_complete.sqlinc",
+      "forward/10_acl.sqlinc"
+    ],
+    "brokerModule": "broker/src/candidate-app-backend.js",
+    "brokerCompleteFunctions": [
+      {
+        "payload": "forward/02_original_paper_pack.mjsinc",
+        "names": [
+          "candidatePaperPackContext",
+          "assembleCandidatePaperPack"
+        ]
+      },
+      {
+        "payload": "forward/04_original_paper_status.mjsinc",
+        "names": [
+          "restartCandidatePaperSourceDocumentFromStatus",
+          "handlePaperPackStatus"
+        ]
+      },
+      {
+        "payload": "forward/08_factual_snapshot.mjsinc",
+        "names": [
+          "validateCandidateWorkflowFactualSnapshot"
+        ],
+        "new": true
+      },
+      {
+        "payload": "forward/09_create_payload.mjsinc",
+        "names": [
+          "normaliseCandidateWorkflowCreatePayload"
+        ]
+      }
+    ],
+    "preserve": "Existing handleWorkflowCreate authentication, P0 correction enrichment/identity, original CREATE idempotency key/body and all outer manager correction wrappers. Existing helper declaration hoisting allows pure validator near CREATE normalizer; no new import or route.",
+    "existingSharedMoveDecoder": "96c5 exact shared17-key decodeCandidateContractMove 172e9f0e1c513751c9713c7581fa869c4055f6342195fcd8e523b0308d7ef6b3",
+    "functionReplacementAnchors": "Replace complete exact same-name native SQL CREATE OR REPLACE definitions with each listed payload, preserving full existing signatures. Final 10_acl after all nine definitions. Replace six complete same-name Worker functions; add pure validator as a declaration adjacent to existing CREATE normalizer. No caller/route changes beyond the normalizer forwarding the already-existing native field."
+  },
+  "functions": [
+    {
+      "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+      "exposure": "owner-only",
+      "payload": "forward/08_factual_snapshot.sqlinc",
+      "classification": "PURE_JSON_IMMUTABLE_NO_BUSINESS_ROWS",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid)",
+      "exposure": "owner-only",
+      "payload": "forward/00_draft_signature_authority.sqlinc",
+      "classification": "STABLE_NATIVE_WORKFLOW_COMPONENT_CREATION_AUDIT_MUTATION_RECEIPT_ASSERT",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "private.candidate_contract_move_paper_source_lock_v1(text,uuid,uuid)",
+      "exposure": "owner-only",
+      "payload": "forward/00a_original_paper_source_lock.sqlinc",
+      "classification": "VOLATILE_NATIVE_CANDIDATE_CONTEXT_FAMILY_LOCK_NO_BUSINESS_WRITE",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "public.candidate_targetless_expense_paper_pack_enqueue_v1(text,uuid,integer,text,timestamptz)",
+      "exposure": "service_role",
+      "payload": "forward/03_original_paper_mail_constructor.sqlinc",
+      "classification": "VOLATILE_EXISTING_HELD_MAIL_CONSTRUCTOR_NO_SEND",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+      "exposure": "service_role",
+      "payload": "forward/01_native_draft_and_paper_release.sqlinc",
+      "classification": "VOLATILE_EXISTING_AUTHENTICATED_NATIVE_WORKFLOW_OWNER_FULL_BODY",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "public.candidate_paper_manifest_v2_promote_v1(uuid,text,uuid,integer,text,timestamptz)",
+      "exposure": "service_role",
+      "payload": "forward/05_original_paper_promote.sqlinc",
+      "classification": "VOLATILE_EXISTING_AUTH_MANIFEST_AND_HELD_OUTBOX_PROMOTION",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "public.candidate_paper_return_proof_validate_v2(uuid,text,uuid,integer,text,text,jsonb,timestamptz)",
+      "exposure": "service_role",
+      "payload": "forward/06_original_paper_proof.sqlinc",
+      "classification": "VOLATILE_EXISTING_AUTH_EXACT_PAGE_QR_PROOF",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "public.candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamptz)",
+      "exposure": "service_role",
+      "payload": "forward/06a_original_paper_proof_v1.sqlinc",
+      "classification": "VOLATILE_EXISTING_AUTH_ORIGINAL_QR_PROOF",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    },
+    {
+      "signature": "public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamptz)",
+      "exposure": "service_role",
+      "payload": "forward/07_original_paper_complete.sqlinc",
+      "classification": "VOLATILE_EXISTING_AUTH_ATOMIC_RETURN_OWNER",
+      "security": "SECURITY DEFINER, explicit finite search_path, audited logical owner postgres, browser/PUBLIC execute revoked"
+    }
+  ],
+  "payloads": [
+    {
+      "path": "forward/00_draft_signature_authority.sqlinc",
+      "sha256": "278f2480478636958c933ef76cfd3eff963a1f5256b50705c647ef48bbf9fc20",
+      "bytes": 4749
+    },
+    {
+      "path": "forward/00a_original_paper_source_lock.sqlinc",
+      "sha256": "803f58f7cf4f58514e617d84268afaf4c830aa37b12bbe97a2cc1bf262875749",
+      "bytes": 1999
+    },
+    {
+      "path": "forward/01_native_draft_and_paper_release.sqlinc",
+      "sha256": "c133918e58a185ee0b0a9fbc789e01350b0e68bc84d8449908b25a0a7aabb5af",
+      "bytes": 256286
+    },
+    {
+      "path": "forward/02_original_paper_pack.mjsinc",
+      "sha256": "834ffd592a011ed86a24dea36ab1aad303fe5c889116767c60d713970ec3572c",
+      "bytes": 11121
+    },
+    {
+      "path": "forward/03_original_paper_mail_constructor.sqlinc",
+      "sha256": "1b9a9956eed59cb91308d2167690a41b8c47355a6219647cc4edae883bcc1f7c",
+      "bytes": 12416
+    },
+    {
+      "path": "forward/04_original_paper_status.mjsinc",
+      "sha256": "c7c558deb3245774b5d7c8d8ce3104f277cc9dfc07d4a84bb6a8325c738b0ddd",
+      "bytes": 5768
+    },
+    {
+      "path": "forward/05_original_paper_promote.sqlinc",
+      "sha256": "43f408456a69b4975dacb938a1e0dc6fe21fd86ede58c0516e5ca66871737da1",
+      "bytes": 10720
+    },
+    {
+      "path": "forward/06_original_paper_proof.sqlinc",
+      "sha256": "d38389b2b6d91187ab8c2bfdfb3226a96428387faea134f626b1bea0d7a51696",
+      "bytes": 6155
+    },
+    {
+      "path": "forward/06a_original_paper_proof_v1.sqlinc",
+      "sha256": "c19634b2737a5a074f2f96f74fcdad1638693537a32d91a88554c84eca33ee20",
+      "bytes": 4688
+    },
+    {
+      "path": "forward/07_original_paper_complete.sqlinc",
+      "sha256": "7fe7ce844920bbef3061fad78886598e0ebdb23cfa435bef61067703ff03980c",
+      "bytes": 6011
+    },
+    {
+      "path": "forward/08_factual_snapshot.mjsinc",
+      "sha256": "e10f4b08e6305402decf2eac73d7ea0344cb231d26400a6f9aee4a4472e7c30d",
+      "bytes": 5046
+    },
+    {
+      "path": "forward/08_factual_snapshot.sqlinc",
+      "sha256": "eba79a9c7bbdd943ac36faa065417835a5ef63ad294a4a960279698c26ddeb50",
+      "bytes": 9870
+    },
+    {
+      "path": "forward/09_create_payload.mjsinc",
+      "sha256": "97e334c4f024159d2a833778f63e566c7f4528c39903bc8c4d8e9b466e2f2553",
+      "bytes": 1519
+    },
+    {
+      "path": "forward/10_acl.sqlinc",
+      "sha256": "1e6453ead1f6e1a58fa1061291a00070c16f446b4e5bde5e5996a7f1d220c865",
+      "bytes": 3398
+    }
+  ],
+  "publicContract": {
+    "requestSchemaChange": true,
+    "change": "Add optional closed CandidateWorkflowFactualSnapshot as existing createCandidateWorkflow input_snapshot (top-level/nested payload). No new method/path/operation/security or Move17 field.",
+    "appOwner": "v6_invoice MyTMS generated schema/client/app companion; saved ABI agreed, companion source pin required before integration acceptance.",
+    "snapshotAbsentLegacy": "Unchanged; lost old CREATE replays exact original snapshot-free body, new attestation requires genuine supersede/create.",
+    "daily": "No new public snapshot field admission for DAILY; native existing Daily branch remains unchanged.",
+    "nativeLegacyExpense": "Preserves genuine native expense_category_resubmission CREATE snapshot from 06092026_2355. New public closed snapshot does not admit that internal marker.",
+    "newFieldBounds": {
+      "schedule": 112,
+      "identityOrReferenceChars": 200,
+      "unitCodes": 1000,
+      "unitCodePattern": "^[A-Z0-9_]{1,40}$",
+      "unitDays": 7,
+      "nonnegativeFactMaximum": 1000000,
+      "descriptionChars": 2000
+    },
+    "boundsQualification": "Explicit bounds of the additive snapshot field, not a claim that all old native inputs had these limits."
+  },
+  "schema7d": {
+    "path": "../checklist-v6-contract-correction-20261016/forward/sql/physical-schema.sqlinc",
+    "sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115"
+  },
+  "pureNativeProof": {
+    "rootCommit": "14b1c856",
+    "status": "PASS_PURE_JSON_SCALAR_ONLY",
+    "sourceCommit": "118a28ca5c702f629f977d2ac0dead4325c5fdb2",
+    "assertions": 25,
+    "sourceSqlSha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+    "evidenceFolder": "docs/healthroster-build/v6-owner-delivery-20261016/native-pure-facts-118a28ca",
+    "files": [
+      {
+        "path": "BASELINE_AND_FRESH.sql",
+        "sha256": "60a6ef0441289f8e4d68f97c176bf576598e68544b1e0d0d8131f44449f34c60"
+      },
+      {
+        "path": "MAPPED_TRIAL.sql",
+        "sha256": "d557fa993c842626935490fe7ea4f37e82bb4c9f416d31a9e4bae7aa83709d0d"
+      },
+      {
+        "path": "NATIVE_RECEIPT.json",
+        "sha256": "466db5b7bf6985af412c470a4e69b4d368ad488bee686728b3d441815406dea4"
+      },
+      {
+        "path": "SOURCE_RECIPE.json",
+        "sha256": "a3770e2a490c83a8897fe029245ed78370df249c897baf937b63aaa6d9dcdcbd"
+      },
+      {
+        "path": "SUBMITTED_TRIAL.sql",
+        "sha256": "61c1d4f8b906e4a641a3d49939ef65ea7d6ca7f4510f2eceb7e3bacd75bf9632"
+      }
+    ]
+  },
+  "verification": {
+    "nodeSourceCases": 55,
+    "offlineGrammar": "PASS_10_SQL_LEAVES_35_NATIVE_ROWVARS_AND_DATAFREE_VECTORS",
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "databaseCalls": 0,
+    "externalEffects": 0,
+    "combinedRegressionCases": 73
+  },
+  "remainingHealth": [
+    "Current-B native reset/rotation + accepted placement continuation (same genuine user lifecycle and full paid/invoice/Source protection); not implemented by this checkpoint.",
+    "Distinct moved expense-only new submission/claim admission remains c475 controlled refusal pending actual native integration.",
+    "Paper workflow first created/signed on an intermediate B then later moved to C needs exact per-workflow historical-source resolver; this checkpoint implements original-A source branch and current native B path.",
+    "Missing v1 source bytes without an existing READY receipt are refused; this checkpoint never upgrades issued original QR/manifest merely to fabricate bytes.",
+    "Command-set lock ordering source gate is present for changed paper owners, but genuine concurrent native workflow/claim/Move fixtures remain NOT_RUN."
+  ],
+  "externalBank": [
+    "Actual current-B canonical financial publisher/finalizer remains absent/unqualified; no Bank owner implemented."
+  ]
+}
