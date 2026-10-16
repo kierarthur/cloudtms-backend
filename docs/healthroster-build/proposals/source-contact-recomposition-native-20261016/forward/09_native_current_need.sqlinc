@@ -1,0 +1,128 @@
+create or replace function private.weekly_contact_source_membership_v1(
+ p_target_id uuid,p_agency uuid,p_environment text
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_target public.weekly_message_dispatch_targets%rowtype;
+ v_command public.weekly_message_dispatch_commands%rowtype;
+ v_intent public.weekly_message_intents%rowtype;
+ v_render public.weekly_message_renders%rowtype;
+ v_generation public.weekly_candidate_outreach_generations%rowtype;
+ v_batch public.weekly_manager_review_batches%rowtype;
+ v_pairs jsonb;v_current boolean;v_push jsonb;v_audience text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict v_target from public.weekly_message_dispatch_targets where id=p_target_id;
+ select * into strict v_command from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id;
+ select * into strict v_intent from public.weekly_message_intents where id=v_command.message_intent_id;
+ select * into strict v_render from public.weekly_message_renders where id=v_command.message_render_id;
+ if v_command.agency_id is distinct from p_agency or v_command.environment is distinct from p_environment
+  or v_intent.agency_id is distinct from p_agency or v_intent.environment is distinct from p_environment
+  or v_command.source_cycle_id is distinct from v_intent.source_cycle_id
+  or v_render.message_intent_id is distinct from v_intent.id
+  or v_render.rendered_content_hash is distinct from v_command.rendered_content_hash
+  or v_target.rendered_content_hash is distinct from v_command.rendered_content_hash
+  or v_render.membership_hash is distinct from v_command.membership_hash
+  or v_command.tranche_kind is distinct from v_intent.tranche_kind
+  or v_command.tranche_sequence is distinct from v_intent.tranche_sequence then
+  raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ v_current:=v_target.state='LEASED' and v_intent.state='RENDERED' and v_render.state='CURRENT';
+ if v_intent.audience_kind='CANDIDATE' and v_target.channel='PUSH' then
+  v_audience:='WORKER';
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+   where id=v_command.candidate_generation_id;
+  if v_intent.candidate_generation_id is distinct from v_generation.id
+   or v_intent.candidate_cohort_id is distinct from v_generation.candidate_cohort_id
+   or v_generation.source_cycle_id is distinct from v_command.source_cycle_id
+   or v_generation.membership_hash is distinct from v_command.membership_hash then
+   raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+  v_push:=private.weekly_contact_push_dispatch_context_v1(v_target.id,v_command.id,v_target.provider,
+   v_target.target_snapshot_hash,p_agency,p_environment);
+  v_current:=v_current and v_push->'current'='true'::jsonb;
+  if v_generation.request_kind='CHECK_HOURS' then
+   -- Retain every member of the captured generation, including a subsequently
+   -- answered/retired member. Never derive a smaller pause vector while still
+   -- sending the original frozen body. Such a body is obsolete and must be
+   -- recomposed by the original generation/render owners before another START.
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',x.candidate_id,'client_id',x.client_id)
+    order by x.candidate_id,x.client_id),'[]'::jsonb) into v_pairs from(
+    select distinct i.candidate_id,i.client_id from public.weekly_candidate_outreach_memberships m
+     join public.weekly_discrepancy_incidents i on i.id=m.incident_id
+     where m.candidate_generation_id=v_generation.id
+   )x;
+   v_current:=v_current and not exists(
+    select 1 from public.weekly_candidate_outreach_memberships m
+    join public.weekly_discrepancy_incidents i on i.id=m.incident_id
+    where m.candidate_generation_id=v_generation.id and(
+     i.candidate_id is distinct from v_generation.candidate_id
+     or i.client_id is distinct from v_generation.client_id
+     or i.source_cycle_id is distinct from v_command.source_cycle_id
+     or m.state<>'ACTIONABLE' or i.state<>'OPEN'
+     or i.candidate_action_state in('RESPONDED','NOT_REQUIRED')
+     or m.comparison_revision_id is distinct from i.current_comparison_revision_id));
+  elsif v_generation.request_kind='SUBMIT_TIMESHEET' then
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',x.candidate_id,'client_id',x.client_id)
+    order by x.candidate_id,x.client_id),'[]'::jsonb) into v_pairs from(
+    select distinct r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r
+    join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
+    where r.candidate_cohort_id=v_generation.candidate_cohort_id and r.candidate_id=v_generation.candidate_id
+     and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash
+     and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+   )x;
+   v_current:=v_current and not exists(
+    select 1 from public.weekly_timesheet_submission_requests r
+    join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
+    where r.candidate_cohort_id=v_generation.candidate_cohort_id and r.candidate_id=v_generation.candidate_id
+     and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash
+     and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and m.state<>'WAITING');
+  else raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ elsif v_intent.audience_kind='MANAGER' and v_target.channel='EMAIL' then
+  v_audience:='MANAGER';
+  if v_command.tranche_kind not in('MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER',
+   'MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND') or v_target.target_kind<>'MANAGER_ADDRESS'
+   or v_target.provider<>'POWER_AUTOMATE' or v_command.recipient_route_id is distinct from v_intent.recipient_route_id then
+   raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+  select * into strict v_batch from public.weekly_manager_review_batches where message_render_id=v_render.id;
+  if v_batch.recipient_generation_id is distinct from v_intent.recipient_generation_id
+   or v_batch.original_membership_hash is distinct from v_command.membership_hash
+   or v_batch.sent_content_hash is distinct from v_render.rendered_content_hash then
+   raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+  -- Exact immutable batch items, never only the currently eligible subset.
+  select coalesce(jsonb_agg(jsonb_build_object('candidate_id',x.candidate_id,'client_id',x.client_id)
+   order by x.candidate_id,x.client_id),'[]'::jsonb) into v_pairs from(
+   select distinct i.candidate_id,i.client_id from public.weekly_manager_review_items m
+   join public.weekly_discrepancy_incidents i on i.id=m.incident_id where m.review_batch_id=v_batch.id
+  )x;
+  v_current:=v_current and v_batch.state='ACTIVE' and v_batch.expires_at_utc>clock_timestamp()
+   and exists(select 1 from public.weekly_manager_recipient_generations g
+    join public.weekly_manager_recipient_routes r on r.id=g.recipient_route_id
+    where g.id=v_intent.recipient_generation_id and g.state='ACTIVE'
+     and r.current_generation_id=g.id and r.id=v_intent.recipient_route_id)
+   and not exists(select 1 from public.weekly_manager_review_items m
+    join public.weekly_discrepancy_incidents i on i.id=m.incident_id
+    join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
+    where m.review_batch_id=v_batch.id and(
+     m.response_state<>'UNANSWERED' or i.state<>'OPEN' or i.manager_action_state='RESPONDED'
+     or not private.weekly_contact_source_manager_current_need_v1(i.id,v_intent.recipient_route_id,clock_timestamp())
+     or i.source_cycle_id is distinct from v_command.source_cycle_id
+     or m.incident_episode is distinct from i.episode_number
+     or m.sent_comparison_revision_id is distinct from i.current_comparison_revision_id
+     or m.sent_comparison_fingerprint is distinct from c.material_comparison_fingerprint));
+ else
+  -- No unregistered future producer inherits checking or QT authority.
+  raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';
+ end if;
+ if jsonb_array_length(v_pairs)>500 then raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ if v_current then
+  begin perform private.weekly_source_query_current_publication_v1(v_command.source_cycle_id,v_command.projection_publication_id);
+  exception when sqlstate '55000' or no_data_found then v_current:=false;end;
+ end if;
+ return jsonb_build_object('dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id,
+  'channel',v_target.channel,'audience',v_audience,'scope_pairs',v_pairs,
+  'content_hash',encode(v_target.rendered_content_hash,'hex'),
+  'recipient_hash',encode(v_target.keyed_target_fingerprint,'hex'),
+  'current',coalesce(v_current and jsonb_array_length(v_pairs)>0,false));
+end;
+$function$;
+

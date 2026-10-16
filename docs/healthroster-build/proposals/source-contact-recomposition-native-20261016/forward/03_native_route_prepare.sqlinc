@@ -1,0 +1,158 @@
+create or replace function public.weekly_source_manager_route_prepare_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_intent_id uuid;
+  v_publication_id uuid;
+  v_intent public.weekly_message_intents%rowtype;
+  v_generation public.weekly_manager_recipient_generations%rowtype;
+  v_route public.weekly_manager_recipient_routes%rowtype;
+  v_input jsonb;
+  v_membership_hash bytea;
+  v_preparation public.weekly_manager_route_preparations%rowtype;
+  v_sequence integer;
+  v_credential_generation integer;
+  v_issued_at timestamptz;
+  v_secure_link_lifetime interval;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('message_intent_id','projection_publication_id')) then
+    raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_intent_id:=(p_request->>'message_intent_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARE_REQUEST_INVALID' using errcode='22023';
+  end;
+
+  -- Service-owned discovery, then shared pause locks BEFORE the native row locks.
+  perform private.weekly_contact_source_cycle_lock_v1((select source_cycle_id
+    from public.weekly_message_intents where id=v_intent_id));
+  select * into strict v_intent from public.weekly_message_intents
+  where id=v_intent_id for update;
+  if v_intent.audience_kind<>'MANAGER' then
+    raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARE_AUDIENCE_INVALID' using errcode='22023';
+  end if;
+  if v_intent.state='RENDERED' then
+    select * into strict v_preparation
+    from public.weekly_manager_route_preparations
+    where message_intent_id=v_intent.id and state='BOUND';
+    if v_preparation.projection_publication_id<>v_publication_id then
+      raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARE_REPLAY_CONFLICT' using errcode='23505';
+    end if;
+    select * into strict v_route from public.weekly_manager_recipient_routes
+    where id=v_intent.recipient_route_id;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'replay',true,'state',v_preparation.state,
+      'manager_route_preparation_id',v_preparation.id,
+      'review_batch_id',v_preparation.review_batch_id,
+      'recipient_generation_id',v_preparation.recipient_generation_id,
+      'credential_generation',v_preparation.credential_generation,
+      'membership_hash',pg_catalog.encode(v_preparation.original_membership_hash,'hex'),
+      'issued_at_utc',v_preparation.issued_at_utc,'expires_at_utc',v_preparation.expires_at_utc,
+      'environment',v_route.environment,'agency_id',v_route.agency_id,
+      'manager_address',v_route.protected_recipient_address
+    );
+  end if;
+  if v_intent.state<>'DUE' then
+    raise exception 'WEEKLY_SOURCE_MESSAGE_INTENT_STALE' using errcode='40001';
+  end if;
+  perform private.weekly_source_query_current_publication_v1(v_intent.source_cycle_id,v_publication_id);
+  select * into strict v_generation from public.weekly_manager_recipient_generations
+  where id=v_intent.recipient_generation_id for update;
+  select * into strict v_route from public.weekly_manager_recipient_routes
+  where id=v_intent.recipient_route_id for update;
+  if v_generation.state<>'ACTIVE' or v_route.current_generation_id<>v_generation.id
+     or v_generation.recipient_route_id<>v_route.id then
+    raise exception 'WEEKLY_SOURCE_MANAGER_MESSAGE_STALE' using errcode='40001';
+  end if;
+
+  v_input:=public.weekly_source_message_render_input_v1(pg_catalog.jsonb_build_object(
+    'message_intent_id',v_intent.id,'projection_publication_id',v_publication_id
+  ));
+  v_membership_hash:=private.weekly_source_query_hex32_v1(
+    v_input->>'membership_hash','WEEKLY_SOURCE_RENDER_MEMBERSHIP_HASH_INVALID'
+  );
+
+  select * into v_preparation
+  from public.weekly_manager_route_preparations
+  where message_intent_id=v_intent.id and state in ('PREPARED','BOUND')
+  for update;
+  if found and v_preparation.state='PREPARED'
+     and (v_preparation.projection_publication_id<>v_publication_id
+       or v_preparation.original_membership_hash<>v_membership_hash
+       or v_preparation.expires_at_utc<=clock_timestamp()) then
+    update public.weekly_manager_route_preparations set state='RETIRED',retired_at_utc=clock_timestamp()
+     where id=v_preparation.id;
+    v_preparation.id:=null;
+  end if;
+  if v_preparation.id is not null then
+    if v_preparation.state<>'PREPARED'
+       or v_preparation.projection_publication_id<>v_publication_id
+       or v_preparation.recipient_generation_id<>v_generation.id
+       or v_preparation.original_membership_hash<>v_membership_hash then
+      raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARE_REPLAY_CONFLICT' using errcode='23505';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'replay',true,'state',v_preparation.state,
+      'manager_route_preparation_id',v_preparation.id,
+      'review_batch_id',v_preparation.review_batch_id,
+      'recipient_generation_id',v_preparation.recipient_generation_id,
+      'credential_generation',v_preparation.credential_generation,
+      'membership_hash',pg_catalog.encode(v_preparation.original_membership_hash,'hex'),
+      'issued_at_utc',v_preparation.issued_at_utc,'expires_at_utc',v_preparation.expires_at_utc,
+      'environment',v_route.environment,'agency_id',v_route.agency_id,
+      'manager_address',v_route.protected_recipient_address
+    );
+  end if;
+
+  select coalesce(pg_catalog.max(preparation_sequence),0)+1 into v_sequence
+  from public.weekly_manager_route_preparations where message_intent_id=v_intent.id;
+  select coalesce(pg_catalog.max(number),0)+1 into v_credential_generation
+  from (
+    select batch.credential_generation as number
+    from public.weekly_manager_review_batches batch
+    where batch.recipient_generation_id=v_generation.id
+    union all
+    select preparation.credential_generation
+    from public.weekly_manager_route_preparations preparation
+    where preparation.recipient_generation_id=v_generation.id
+  ) generations;
+  v_issued_at:=pg_catalog.transaction_timestamp();
+  select settings.manager_secure_link_lifetime
+  into strict v_secure_link_lifetime
+  from public.weekly_source_global_settings settings
+  where settings.singleton;
+  insert into public.weekly_manager_route_preparations(
+    message_intent_id,projection_publication_id,recipient_generation_id,
+    preparation_sequence,review_batch_id,credential_generation,
+    original_membership_hash,issued_at_utc,expires_at_utc,state
+  ) values (
+    v_intent.id,v_publication_id,v_generation.id,v_sequence,
+    pg_catalog.gen_random_uuid(),v_credential_generation,v_membership_hash,
+    v_issued_at,v_issued_at+v_secure_link_lifetime,'PREPARED'
+  ) returning * into v_preparation;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'replay',false,'state',v_preparation.state,
+    'manager_route_preparation_id',v_preparation.id,
+    'review_batch_id',v_preparation.review_batch_id,
+    'recipient_generation_id',v_preparation.recipient_generation_id,
+    'credential_generation',v_preparation.credential_generation,
+    'membership_hash',pg_catalog.encode(v_preparation.original_membership_hash,'hex'),
+    'issued_at_utc',v_preparation.issued_at_utc,'expires_at_utc',v_preparation.expires_at_utc,
+    'environment',v_route.environment,'agency_id',v_route.agency_id,
+    'manager_address',v_route.protected_recipient_address
+  );
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARE_STALE' using errcode='40001';
+end;
+$function$;
+

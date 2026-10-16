@@ -1,0 +1,216 @@
+create or replace function private.weekly_source_query_candidate_generation_v1(
+  p_source_cycle_id uuid,
+  p_candidate_id uuid,
+  p_client_id uuid,
+  p_projection_publication_id uuid,
+  p_trigger_kind text,
+  p_actor_user_id uuid,
+  p_started_at_utc timestamptz
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_contact_guard jsonb;
+  v_first record;
+  v_cohort_context jsonb;
+  v_cohort public.weekly_candidate_cohorts%rowtype;
+  v_activation public.weekly_route_activations%rowtype;
+  v_old public.weekly_candidate_outreach_generations%rowtype;
+  v_new public.weekly_candidate_outreach_generations%rowtype;
+  v_settings public.weekly_source_global_settings%rowtype;
+  v_membership jsonb;
+  v_hash bytea;
+  v_generation_number integer;
+  v_ordinal integer:=0;
+  v_row record;
+  v_intent_id uuid;
+begin
+  if p_trigger_kind not in ('OFFICE_ASK','NEW_INCIDENT','REOPENED_INCIDENT') then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_TRIGGER_INVALID' using errcode='22023';
+  end if;
+  perform private.weekly_contact_source_cycle_lock_v1(p_source_cycle_id);
+  select incident.id,comparison.contract_id,work_event.work_date
+  into v_first
+  from public.weekly_discrepancy_incidents incident
+  join public.weekly_issue_comparison_revisions comparison
+    on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
+    and incident.client_id=p_client_id and incident.state='OPEN'
+    and not private.weekly_source_covered_hours_incident_v1(incident.id)
+    and (
+      not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
+        p_client_id,comparison.contract_id,work_event.work_date)
+    ) and (
+      (p_trigger_kind in ('NEW_INCIDENT','REOPENED_INCIDENT')
+       and incident.candidate_action_state<>'NOT_REQUIRED')
+      or incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED')
+    )
+  order by work_event.work_date,incident.id
+  limit 1;
+  if not found then
+    return pg_catalog.jsonb_build_object('ok',true,'status','NO_ACTIONABLE_INCIDENTS');
+  end if;
+
+  v_contact_guard:=private.weekly_contact_scope_guard_v1(p_candidate_id,p_client_id,'WORKER',clock_timestamp());
+  if v_contact_guard->'allow' is distinct from 'true'::jsonb then
+    return jsonb_build_object('ok',true,'status','CONTACT_PAUSED','candidate_id',p_candidate_id,'client_id',p_client_id,
+      'next_allowed_utc',v_contact_guard->'next_allowed_utc');
+  end if;
+  v_cohort_context:=private.weekly_source_query_cohort_ensure_v1(
+    p_source_cycle_id,p_candidate_id,p_client_id,v_first.contract_id,v_first.work_date
+  );
+  if coalesce((v_cohort_context->>'candidate_queries_enabled')::boolean,false) is not true then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_QUERIES_DISABLED' using errcode='55000';
+  end if;
+  select * into strict v_cohort
+  from public.weekly_candidate_cohorts where id=(v_cohort_context->>'cohort_id')::uuid
+  for update;
+  insert into public.weekly_route_activations(
+    source_cycle_id,candidate_id,client_id,audience_route,route_mode,
+    activated_by_user_id,activated_at_utc,updated_at_utc
+  ) values (
+    p_source_cycle_id,p_candidate_id,p_client_id,'CANDIDATE','CANDIDATE_FIRST',
+    p_actor_user_id,p_started_at_utc,p_started_at_utc
+  ) on conflict (source_cycle_id,candidate_id,client_id,audience_route)
+  do update set
+    route_mode='CANDIDATE_FIRST',
+    activated_by_user_id=coalesce(public.weekly_route_activations.activated_by_user_id,excluded.activated_by_user_id),
+    activated_at_utc=coalesce(public.weekly_route_activations.activated_at_utc,excluded.activated_at_utc),
+    updated_at_utc=excluded.updated_at_utc
+  returning * into v_activation;
+  select * into v_old
+  from public.weekly_candidate_outreach_generations
+  where candidate_cohort_id=v_cohort.id and state='ACTIVE' and request_kind='CHECK_HOURS'
+  for update;
+  v_membership:=coalesce((
+    select pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'incident_id',incident.id,
+        'comparison_revision_id',incident.current_comparison_revision_id
+      ) order by work_event.work_date,comparison.candidate_start_at_local,incident.id
+    )
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
+      and incident.client_id=p_client_id and incident.state='OPEN'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and (
+        not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
+          p_client_id,comparison.contract_id,work_event.work_date)
+      ) and (
+        (p_trigger_kind in ('NEW_INCIDENT','REOPENED_INCIDENT')
+         and incident.candidate_action_state<>'NOT_REQUIRED')
+        or incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED')
+      )
+  ),'[]'::jsonb);
+  if pg_catalog.jsonb_array_length(v_membership)=0 then
+    return pg_catalog.jsonb_build_object('ok',true,'status','NO_ACTIONABLE_INCIDENTS');
+  end if;
+  v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CANDIDATE_MEMBERSHIP_V1',v_membership);
+  if v_old.id is not null and v_old.membership_hash=v_hash then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status','UNCHANGED','candidate_generation_id',v_old.id,
+      'candidate_cohort_id',v_cohort.id
+    );
+  end if;
+  if v_old.id is not null then
+    update public.weekly_candidate_cohorts set current_generation_id=null where id=v_cohort.id;
+    update public.weekly_candidate_outreach_generations
+    set state='SUPERSEDED',superseded_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_old.id;
+    update public.weekly_candidate_outreach_memberships
+    set state='SUPERSEDED' where candidate_generation_id=v_old.id and state='ACTIONABLE';
+    update public.weekly_message_intents
+    set state='RETIRED'
+    where candidate_generation_id=v_old.id and state in ('DUE','RENDERED');
+    update public.weekly_message_dispatch_commands
+    set state='RETIRED'
+    where candidate_generation_id=v_old.id and state in ('READY','LEASED');
+    update public.weekly_message_renders render
+    set state='STALE'
+    from public.weekly_message_intents intent
+    where render.message_intent_id=intent.id and intent.candidate_generation_id=v_old.id
+      and render.state='CURRENT';
+  end if;
+  select * into strict v_settings from public.weekly_source_global_settings where singleton;
+  select coalesce(pg_catalog.max(generation_number),0)+1 into v_generation_number
+  from public.weekly_candidate_outreach_generations where candidate_cohort_id=v_cohort.id;
+  insert into public.weekly_candidate_outreach_generations(
+    source_cycle_id,candidate_cohort_id,candidate_id,client_id,generation_number,
+    activation_id,trigger_kind,request_kind,route_mode,started_at_utc,
+    reminder_due_at_utc,deadline_at_utc,manual_reminder_available_at_utc,
+    state,membership_hash
+  ) values (
+    p_source_cycle_id,v_cohort.id,p_candidate_id,p_client_id,v_generation_number,
+    v_activation.id,p_trigger_kind,'CHECK_HOURS','CANDIDATE_FIRST',p_started_at_utc,
+    p_started_at_utc+v_settings.candidate_reminder_after,
+    p_started_at_utc+v_settings.candidate_response_deadline_after,
+    p_started_at_utc+v_settings.candidate_manual_reminder_cooldown,
+    'ACTIVE',v_hash
+  ) returning * into v_new;
+  for v_row in
+    select incident.id as incident_id,incident.current_comparison_revision_id
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
+      and incident.client_id=p_client_id and incident.state='OPEN'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and (
+        not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
+          p_client_id,comparison.contract_id,work_event.work_date)
+      ) and (
+        (p_trigger_kind in ('NEW_INCIDENT','REOPENED_INCIDENT')
+         and incident.candidate_action_state<>'NOT_REQUIRED')
+        or incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED')
+      )
+    order by work_event.work_date,comparison.candidate_start_at_local,incident.id
+  loop
+    v_ordinal:=v_ordinal+1;
+    insert into public.weekly_candidate_outreach_memberships(
+      candidate_generation_id,incident_id,comparison_revision_id,ordinal,state
+    ) values (v_new.id,v_row.incident_id,v_row.current_comparison_revision_id,v_ordinal,'ACTIONABLE');
+    update public.weekly_discrepancy_incidents
+    set candidate_action_state='ASKED'
+    where id=v_row.incident_id
+      and candidate_action_state in ('NOT_ASKED','RESPONDED');
+    insert into public.weekly_discrepancy_events(
+      incident_id,issue_episode,projection_publication_id,
+      expected_comparison_fingerprint,event_kind,actor_kind,actor_user_id,
+      bounded_payload_json,idempotency_key,occurred_at_utc
+    )
+    select incident.id,incident.episode_number,p_projection_publication_id,
+      comparison.material_comparison_fingerprint,'REQUESTED',
+      case when p_actor_user_id is null then 'SYSTEM' else 'OFFICE' end,p_actor_user_id,
+      pg_catalog.jsonb_build_object(
+        'route','CANDIDATE_FIRST','candidate_generation_id',v_new.id
+      ),
+      'CANDIDATE_REQUESTED:'||v_new.id::text||':'||incident.id::text,p_started_at_utc
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    where incident.id=v_row.incident_id
+    on conflict (event_kind,idempotency_key) do nothing;
+  end loop;
+  update public.weekly_candidate_cohorts set current_generation_id=v_new.id where id=v_cohort.id;
+  v_intent_id:=private.weekly_source_query_candidate_intent_v1(
+    v_new.id,'CANDIDATE_INITIAL',1,p_started_at_utc
+  );
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','CREATED','candidate_generation_id',v_new.id,
+    'candidate_cohort_id',v_cohort.id,'message_intent_id',v_intent_id,
+    'started_at_utc',v_new.started_at_utc,
+    'reminder_due_at_utc',v_new.reminder_due_at_utc,
+    'deadline_at_utc',v_new.deadline_at_utc,
+    'membership_hash',pg_catalog.encode(v_new.membership_hash,'hex')
+  );
+end;
+$function$;
+

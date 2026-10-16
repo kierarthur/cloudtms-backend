@@ -1,0 +1,105 @@
+create or replace function private.weekly_contact_source_render_attempted_v1(p_render_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from public.weekly_message_dispatch_commands c where c.message_render_id=p_render_id
+  and(c.attempt_count>0 or c.provider_accepted_at_utc is not null or c.state in('SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+   or exists(select 1 from public.weekly_message_provider_attempts a where a.dispatch_command_id=c.id)
+   or exists(select 1 from public.weekly_message_dispatch_targets t where t.dispatch_command_id=c.id
+    and(t.attempt_count>0 or t.state in('SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+     or exists(select 1 from public.weekly_message_target_attempts a where a.dispatch_target_id=t.id)))))
+ or exists(select 1 from public.weekly_message_renders r where r.id=p_render_id
+  and r.state in('SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS'))
+$function$;
+
+-- A wholly unsubmitted body can be retired. This never deletes/rewrites an
+-- attempt, membership, accepted/unknown receipt, answer, clock or logical key.
+create or replace function private.weekly_contact_source_retire_unsubmitted_v1(p_intent_id uuid)
+returns boolean language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.weekly_message_intents%rowtype;
+begin
+ select * into strict i from public.weekly_message_intents where id=p_intent_id;
+ perform private.weekly_contact_source_cycle_lock_v1(i.source_cycle_id);
+ perform t.id from public.weekly_message_dispatch_targets t join public.weekly_message_dispatch_commands c on c.id=t.dispatch_command_id
+  where c.message_intent_id=i.id order by t.id for update of t;
+ perform id from public.weekly_message_dispatch_commands where message_intent_id=i.id order by id for update;
+ select * into strict i from public.weekly_message_intents where id=i.id for update;
+ if i.state not in('DUE','RENDERED','RETIRED') or exists(select 1 from public.weekly_message_renders r
+  where r.message_intent_id=i.id and private.weekly_contact_source_render_attempted_v1(r.id)) then return false;end if;
+ update public.weekly_message_dispatch_targets t set state='RETIRED',terminal_at_utc=clock_timestamp(),
+  terminal_reason='OBSOLETE',next_attempt_at_utc=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null
+  from public.weekly_message_dispatch_commands c where c.message_intent_id=i.id and t.dispatch_command_id=c.id and t.state<>'RETIRED';
+ update public.weekly_message_dispatch_commands set state='RETIRED',lease_owner=null,lease_token=null,lease_expires_at_utc=null
+  where message_intent_id=i.id and state<>'RETIRED';
+ update public.weekly_message_renders set state='STALE' where message_intent_id=i.id and state<>'STALE';
+ update public.weekly_manager_review_batches b set state='REVOKED' from public.weekly_message_renders r
+  where r.message_intent_id=i.id and b.message_render_id=r.id and b.state='ACTIVE';
+ update public.weekly_manager_route_receipts receipt set state='REVOKED',revoked_at_utc=clock_timestamp()
+  from public.weekly_manager_review_batches b join public.weekly_message_renders r on r.id=b.message_render_id
+  where r.message_intent_id=i.id and receipt.review_batch_id=b.id and receipt.state='ACTIVE';
+ update public.weekly_manager_review_items item set response_state='OBSOLETE'
+  from public.weekly_manager_review_batches b join public.weekly_message_renders r on r.id=b.message_render_id
+  where r.message_intent_id=i.id and item.review_batch_id=b.id and item.response_state='UNANSWERED';
+ update public.weekly_manager_route_preparations set state='RETIRED',bound_at_utc=null,retired_at_utc=clock_timestamp()
+  where message_intent_id=i.id and state in('PREPARED','BOUND');
+ update public.weekly_message_intents set state='RETIRED' where id=i.id;
+ return true;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_manager_recompose_v1(p_route_id uuid)
+returns integer language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare r public.weekly_manager_recipient_routes%rowtype;i public.weekly_message_intents%rowtype;
+ render public.weekly_message_renders%rowtype;b public.weekly_manager_review_batches%rowtype;
+ members jsonb;hash bytea;n integer:=0;publication uuid;
+begin
+ select * into strict r from public.weekly_manager_recipient_routes where id=p_route_id;
+ perform private.weekly_contact_source_cycle_lock_v1(r.source_cycle_id);
+ for i in select x.* from public.weekly_message_intents x where x.recipient_route_id=r.id
+  and x.recipient_generation_id=r.current_generation_id and x.state='RENDERED' order by x.id
+ loop
+  -- Sorted targets/commands precede native intent mutation; START uses the same deployment lock.
+  perform t.id from public.weekly_message_dispatch_targets t join public.weekly_message_dispatch_commands c on c.id=t.dispatch_command_id
+   where c.message_intent_id=i.id order by t.id for update of t;
+  perform id from public.weekly_message_dispatch_commands where message_intent_id=i.id order by id for update;
+  select * into strict render from public.weekly_message_renders where message_intent_id=i.id order by render_sequence desc limit 1;
+  if private.weekly_contact_source_render_attempted_v1(render.id) then continue;end if;
+  select * into strict b from public.weekly_manager_review_batches where message_render_id=render.id;
+  members:=private.weekly_contact_source_manager_members_v1(i.id);
+  hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',members);
+  select current_projection_publication_id into strict publication from public.weekly_source_cycles where id=i.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(i.source_cycle_id,publication);
+  if render.state='CURRENT' and render.membership_hash=hash and render.projection_publication_id=publication
+   and b.state='ACTIVE' and b.expires_at_utc>clock_timestamp() then continue;end if;
+  if private.weekly_contact_source_retire_unsubmitted_v1(i.id) then
+   -- Same original intent/tranche/sequence/due events/due instant. The next real
+   -- renderer authors a new revision/hash/link from the then-current subset.
+   update public.weekly_message_intents set state='DUE' where id=i.id and state='RETIRED';n:=n+1;
+  end if;
+ end loop;
+ return n;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_candidate_due_collapse_v1(p_at timestamptz,p_limit integer)
+returns integer language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare i record;n integer:=0;
+begin
+ -- The genuine question's original +6/+12 clock keeps running. Once a later
+ -- routine step is due, retire only earlier unsubmitted routine bodies. A
+ -- resume cannot issue initial+reminder in a burst or reset the native clock.
+ for i in select earlier.id from public.weekly_message_intents earlier
+  where earlier.audience_kind='CANDIDATE' and earlier.state in('DUE','RENDERED')
+   and earlier.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and earlier.due_at_utc<=p_at
+   and exists(select 1 from public.weekly_message_intents later where later.candidate_generation_id=earlier.candidate_generation_id
+    and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H') and later.due_at_utc<=p_at
+    and later.state in('DUE','RENDERED','DISPATCHED'))
+  order by earlier.id limit p_limit
+ loop
+  if private.weekly_contact_source_retire_unsubmitted_v1(i.id) then n:=n+1;end if;
+ end loop;
+ return n;
+end;
+$function$;

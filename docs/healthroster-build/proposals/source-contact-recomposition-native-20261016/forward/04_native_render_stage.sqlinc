@@ -1,0 +1,340 @@
+create or replace function public.weekly_source_message_render_stage_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_intent_id uuid;
+  v_publication_id uuid;
+  v_intent public.weekly_message_intents%rowtype;
+  v_subject text;
+  v_html text;
+  v_plain text;
+  v_policy_version text;
+  v_renderer_version text;
+  v_structure_version text;
+  v_membership jsonb;
+  v_membership_hash bytea;
+  v_expected_hash bytea;
+  v_content_hash bytea;
+  v_trigger_hash bytea;
+  v_render public.weekly_message_renders%rowtype;
+  v_command public.weekly_message_dispatch_commands%rowtype;
+  v_render_sequence integer;
+  v_generation public.weekly_manager_recipient_generations%rowtype;
+  v_candidate_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_route public.weekly_manager_recipient_routes%rowtype;
+  v_batch public.weekly_manager_review_batches%rowtype;
+  v_receipt public.weekly_manager_route_receipts%rowtype;
+  v_preparation public.weekly_manager_route_preparations%rowtype;
+  v_item jsonb;
+  v_credential_hash bytea;
+  v_credential_generation integer;
+  v_control_ticket uuid;
+  v_agency_receipt uuid;
+  v_data_plane_identity text;
+  v_route_version text;
+  v_credential_version text;
+  v_client_count integer;
+  v_candidate_count integer;
+  v_shift_count integer;
+  v_provider_key text;
+  v_command_key bytea;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in (
+                 'message_intent_id','projection_publication_id','membership_hash',
+                 'policy_version','renderer_version','structure_version',
+                 'subject_text','html_body','plain_body','expected_rendered_content_hash',
+                 'credential_hash','control_plane_ticket_id','agency_receipt_id',
+                 'data_plane_identity','route_version','credential_version',
+                 'manager_route_preparation_id'
+               )) then
+    raise exception 'WEEKLY_SOURCE_MESSAGE_RENDER_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_intent_id:=(p_request->>'message_intent_id')::uuid;
+    v_publication_id:=nullif(p_request->>'projection_publication_id','')::uuid;
+    v_subject:=nullif(p_request->>'subject_text','');
+    v_html:=nullif(p_request->>'html_body','');
+    v_plain:=p_request->>'plain_body';
+    v_policy_version:=p_request->>'policy_version';
+    v_renderer_version:=p_request->>'renderer_version';
+    v_structure_version:=nullif(p_request->>'structure_version','');
+    v_expected_hash:=case when nullif(p_request->>'expected_rendered_content_hash','') is null
+      then null else private.weekly_source_query_hex32_v1(
+        p_request->>'expected_rendered_content_hash','WEEKLY_SOURCE_RENDER_HASH_INVALID'
+      ) end;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_MESSAGE_RENDER_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_plain is null or v_policy_version is null or v_renderer_version is null
+     or pg_catalog.length(v_plain)>200000 or pg_catalog.length(coalesce(v_html,''))>1000000
+     or pg_catalog.length(coalesce(v_subject,''))>300
+     or (coalesce(v_subject,'')||' '||coalesce(v_html,'')||' '||v_plain)
+        ~* '(^|[^[:alnum:]_])(pay|charge|rate|vat|invoice|banking|import|source|fingerprint|generation|incident|projection)([^[:alnum:]_]|$)' then
+    raise exception 'WEEKLY_SOURCE_MESSAGE_CONTENT_INVALID' using errcode='22023';
+  end if;
+  -- Service-owned discovery, then shared pause locks BEFORE the native row locks.
+  perform private.weekly_contact_source_cycle_lock_v1((select source_cycle_id
+    from public.weekly_message_intents where id=v_intent_id));
+  select * into strict v_intent from public.weekly_message_intents
+  where id=v_intent_id for update;
+  if v_intent.state='RENDERED' then
+    select render.* into strict v_render from public.weekly_message_renders render
+    where render.message_intent_id=v_intent.id and render.state='CURRENT';
+    select command.* into strict v_command from public.weekly_message_dispatch_commands command
+    where command.message_render_id=v_render.id and command.state<>'RETIRED';
+    if v_render.projection_publication_id is distinct from v_publication_id
+       or v_render.membership_hash<>private.weekly_source_query_hex32_v1(
+         p_request->>'membership_hash','WEEKLY_SOURCE_RENDER_MEMBERSHIP_HASH_INVALID'
+       )
+       or v_render.policy_version<>v_policy_version
+       or v_render.renderer_version<>v_renderer_version
+       or v_render.subject_text is distinct from v_subject
+       or v_render.html_body is distinct from v_html
+       or v_render.plain_body is distinct from v_plain
+       or (v_expected_hash is not null and v_render.rendered_content_hash<>v_expected_hash) then
+      raise exception 'WEEKLY_SOURCE_MESSAGE_RENDER_REPLAY_CONFLICT' using errcode='23505';
+    end if;
+    if v_intent.audience_kind='MANAGER' then
+      begin
+        select * into strict v_preparation
+        from public.weekly_manager_route_preparations
+        where id=(p_request->>'manager_route_preparation_id')::uuid
+          and message_intent_id=v_intent.id and state='BOUND';
+        v_credential_hash:=private.weekly_source_query_hex32_v1(
+          p_request->>'credential_hash','WEEKLY_SOURCE_MANAGER_CREDENTIAL_HASH_INVALID'
+        );
+        v_control_ticket:=(p_request->>'control_plane_ticket_id')::uuid;
+        v_agency_receipt:=(p_request->>'agency_receipt_id')::uuid;
+        v_data_plane_identity:=p_request->>'data_plane_identity';
+        v_route_version:=p_request->>'route_version';
+        v_credential_version:=p_request->>'credential_version';
+      exception when others then
+        raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_AUTHORITY_INVALID' using errcode='22023';
+      end;
+      select * into strict v_batch from public.weekly_manager_review_batches
+      where message_render_id=v_render.id;
+      select * into strict v_receipt from public.weekly_manager_route_receipts
+      where review_batch_id=v_batch.id;
+      if v_batch.policy_version<>v_policy_version
+         or v_batch.renderer_version<>v_renderer_version
+         or v_batch.structure_version is distinct from v_structure_version
+         or v_batch.control_plane_ticket_id<>v_control_ticket
+         or v_batch.agency_receipt_id<>v_agency_receipt
+         or v_batch.opaque_credential_hash<>v_credential_hash
+         or v_batch.id<>v_preparation.review_batch_id
+         or v_batch.credential_generation<>v_preparation.credential_generation
+         or v_batch.original_membership_hash<>v_preparation.original_membership_hash
+         or v_receipt.data_plane_identity<>v_data_plane_identity
+         or v_receipt.route_version<>v_route_version
+         or v_receipt.credential_version<>v_credential_version then
+        raise exception 'WEEKLY_SOURCE_MESSAGE_RENDER_REPLAY_CONFLICT' using errcode='23505';
+      end if;
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'replay',true,'message_render_id',v_render.id,
+      'dispatch_command_id',v_command.id,
+      'review_batch_id',(select batch.id from public.weekly_manager_review_batches batch
+                         where batch.message_render_id=v_render.id)
+    );
+  end if;
+  if v_intent.state<>'DUE' then
+    raise exception 'WEEKLY_SOURCE_MESSAGE_INTENT_STALE' using errcode='40001';
+  end if;
+  perform private.weekly_source_query_current_publication_v1(v_intent.source_cycle_id,v_publication_id);
+
+  if v_intent.audience_kind='CANDIDATE' then
+    select * into strict v_candidate_generation
+    from public.weekly_candidate_outreach_generations
+    where id=v_intent.candidate_generation_id;
+    if v_candidate_generation.state<>'ACTIVE'
+       or not exists(select 1 from public.weekly_candidate_cohorts cohort
+                     where cohort.id=v_candidate_generation.candidate_cohort_id
+                       and private.weekly_source_candidate_generation_current_v1(v_candidate_generation.id)) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_MESSAGE_STALE' using errcode='40001';
+    end if;
+    perform private.weekly_contact_source_candidate_render_assert_v1(v_candidate_generation.id);
+    v_membership_hash:=v_candidate_generation.membership_hash;
+    if v_subject is not null or v_html is not null then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_PUSH_CONTENT_INVALID' using errcode='22023';
+    end if;
+  elsif v_intent.audience_kind='MANAGER' then
+    select * into strict v_generation from public.weekly_manager_recipient_generations
+    where id=v_intent.recipient_generation_id;
+    select * into strict v_route from public.weekly_manager_recipient_routes
+    where id=v_intent.recipient_route_id for update;
+    if v_generation.state<>'ACTIVE' or v_route.current_generation_id<>v_generation.id then
+      raise exception 'WEEKLY_SOURCE_MANAGER_MESSAGE_STALE' using errcode='40001';
+    end if;
+    if v_policy_version<>'1.8.0' or v_renderer_version<>'1.4.0'
+       or v_structure_version<>'1.0.0' or v_subject is null or v_html is null then
+      raise exception 'WEEKLY_SOURCE_MANAGER_RENDER_POLICY_INVALID' using errcode='22023';
+    end if;
+    v_membership:=private.weekly_contact_source_manager_members_v1(v_intent.id);
+    v_shift_count:=pg_catalog.jsonb_array_length(v_membership);
+    if v_shift_count=0 then
+      raise exception 'WEEKLY_SOURCE_MANAGER_RENDER_EMPTY' using errcode='55000';
+    end if;
+    select pg_catalog.count(distinct incident.client_id),
+           pg_catalog.count(distinct incident.candidate_id)
+    into v_client_count,v_candidate_count
+    from pg_catalog.jsonb_array_elements(v_membership) member
+    join public.weekly_discrepancy_incidents incident on incident.id=(member->>'incident_id')::uuid;
+    if v_client_count>100 or v_candidate_count>100 or v_shift_count>500 then
+      raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED' using errcode='54000';
+    end if;
+    if v_subject<>pg_catalog.format(
+      'Timesheet queries requiring your review - %s %s',v_shift_count,
+      case when v_shift_count=1 then 'shift' else 'shifts' end
+    ) then
+      raise exception 'WEEKLY_SOURCE_MANAGER_SUBJECT_INVALID' using errcode='22023';
+    end if;
+    v_membership_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',v_membership
+    );
+    begin
+      select * into strict v_preparation
+      from public.weekly_manager_route_preparations
+      where id=(p_request->>'manager_route_preparation_id')::uuid
+        and message_intent_id=v_intent.id and state='PREPARED'
+      for update;
+      v_credential_hash:=private.weekly_source_query_hex32_v1(
+        p_request->>'credential_hash','WEEKLY_SOURCE_MANAGER_CREDENTIAL_HASH_INVALID'
+      );
+      v_control_ticket:=(p_request->>'control_plane_ticket_id')::uuid;
+      v_agency_receipt:=(p_request->>'agency_receipt_id')::uuid;
+      v_data_plane_identity:=p_request->>'data_plane_identity';
+      v_route_version:=p_request->>'route_version';
+      v_credential_version:=p_request->>'credential_version';
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_AUTHORITY_INVALID' using errcode='22023';
+    end;
+    if nullif(v_data_plane_identity,'') is null or nullif(v_route_version,'') is null
+       or nullif(v_credential_version,'') is null then
+      raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_AUTHORITY_INVALID' using errcode='22023';
+    end if;
+    if v_preparation.projection_publication_id<>v_publication_id
+       or v_preparation.recipient_generation_id<>v_generation.id
+       or v_preparation.original_membership_hash<>v_membership_hash
+       or v_preparation.expires_at_utc<=pg_catalog.transaction_timestamp() then
+      raise exception 'WEEKLY_SOURCE_MANAGER_ROUTE_PREPARATION_STALE' using errcode='40001';
+    end if;
+  else
+    raise exception 'WEEKLY_SOURCE_MESSAGE_AUDIENCE_UNSUPPORTED' using errcode='55000';
+  end if;
+  if v_membership_hash<>private.weekly_source_query_hex32_v1(
+    p_request->>'membership_hash','WEEKLY_SOURCE_RENDER_MEMBERSHIP_HASH_INVALID'
+  ) then
+    raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';
+  end if;
+  v_content_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_MESSAGE_RENDER_V1',pg_catalog.jsonb_build_object(
+      'message_intent_id',v_intent.id,'projection_publication_id',v_publication_id,
+      'membership_hash',pg_catalog.encode(v_membership_hash,'hex'),
+      'policy_version',v_policy_version,'renderer_version',v_renderer_version,
+      'structure_version',v_structure_version,'subject_text',v_subject,
+      'html_body',v_html,'plain_body',v_plain
+    )
+  );
+  if v_expected_hash is not null and v_expected_hash<>v_content_hash then
+    raise exception 'WEEKLY_SOURCE_RENDER_HASH_MISMATCH' using errcode='40001';
+  end if;
+  select coalesce(pg_catalog.max(render_sequence),0)+1 into v_render_sequence
+  from public.weekly_message_renders where message_intent_id=v_intent.id;
+  v_provider_key:='weekly-source/'||pg_catalog.encode(v_content_hash,'hex');
+  insert into public.weekly_message_renders(
+    message_intent_id,render_sequence,projection_publication_id,membership_hash,
+    policy_version,renderer_version,subject_text,html_body,plain_body,
+    rendered_content_hash,provider_idempotency_key,state
+  ) values (
+    v_intent.id,v_render_sequence,v_publication_id,v_membership_hash,
+    v_policy_version,v_renderer_version,v_subject,v_html,v_plain,
+    v_content_hash,v_provider_key,'CURRENT'
+  ) returning * into v_render;
+
+  if v_intent.audience_kind='MANAGER' then
+    v_credential_generation:=v_preparation.credential_generation;
+    insert into public.weekly_manager_review_batches(
+      id,recipient_generation_id,message_render_id,policy_version,renderer_version,
+      structure_version,sent_content_hash,original_membership_hash,
+      control_plane_ticket_id,agency_receipt_id,credential_generation,
+      opaque_credential_hash,issued_at_utc,expires_at_utc,state,send_sequence
+    ) values (
+      v_preparation.review_batch_id,v_generation.id,v_render.id,v_policy_version,v_renderer_version,
+      v_structure_version,v_content_hash,v_membership_hash,
+      v_control_ticket,v_agency_receipt,v_credential_generation,v_credential_hash,
+      v_preparation.issued_at_utc,v_preparation.expires_at_utc,
+      'ACTIVE',v_intent.tranche_sequence
+    ) returning * into v_batch;
+    for v_item in select value from pg_catalog.jsonb_array_elements(v_membership)
+    loop
+      insert into public.weekly_manager_review_items(
+        review_batch_id,incident_id,incident_episode,sent_comparison_revision_id,
+        sent_comparison_fingerprint,client_order,candidate_order,shift_order,response_state
+      ) values (
+        v_batch.id,(v_item->>'incident_id')::uuid,(v_item->>'incident_episode')::integer,
+        (v_item->>'comparison_revision_id')::uuid,
+        pg_catalog.decode(v_item->>'comparison_fingerprint','hex'),
+        (v_item->>'client_order')::integer,(v_item->>'candidate_order')::integer,
+        (v_item->>'shift_order')::integer,'UNANSWERED'
+      );
+    end loop;
+    insert into public.weekly_manager_route_receipts(
+      review_batch_id,recipient_generation_id,control_plane_ticket_id,environment,
+      agency_id,data_plane_identity,route_version,credential_version,
+      original_membership_hash,credential_generation,credential_hash,
+      issued_at_utc,expires_at_utc,semantic_hash,state
+    ) values (
+      v_batch.id,v_generation.id,v_control_ticket,v_route.environment,v_route.agency_id,
+      v_data_plane_identity,v_route_version,v_credential_version,v_membership_hash,
+      v_credential_generation,v_credential_hash,v_batch.issued_at_utc,v_batch.expires_at_utc,
+      private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_ROUTE_RECEIPT_V1',
+        pg_catalog.jsonb_build_object(
+          'review_batch_id',v_batch.id,'recipient_generation_id',v_generation.id,
+          'control_plane_ticket_id',v_control_ticket,'agency_receipt_id',v_agency_receipt,
+          'membership_hash',pg_catalog.encode(v_membership_hash,'hex'),
+          'credential_generation',v_credential_generation
+        )),'ACTIVE'
+    ) returning * into v_receipt;
+    update public.weekly_manager_route_preparations
+    set state='BOUND',bound_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_preparation.id;
+  end if;
+  v_trigger_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_MESSAGE_TRIGGER_EVENTS_V1',pg_catalog.to_jsonb(v_intent.sorted_due_event_ids)
+  );
+  v_command_key:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_MESSAGE_DISPATCH_COMMAND_V1',pg_catalog.jsonb_build_object(
+      'message_intent_id',v_intent.id,'message_render_id',v_render.id,
+      'rendered_content_hash',pg_catalog.encode(v_content_hash,'hex')
+    )
+  );
+  insert into public.weekly_message_dispatch_commands(
+    message_intent_id,message_render_id,environment,agency_id,source_cycle_id,
+    recipient_route_id,candidate_generation_id,tranche_kind,tranche_sequence,
+    sorted_trigger_event_hash,membership_hash,policy_version,logical_key,state,
+    next_attempt_at_utc,projection_publication_id,rendered_content_hash
+  ) values (
+    v_intent.id,v_render.id,v_intent.environment,v_intent.agency_id,v_intent.source_cycle_id,
+    v_intent.recipient_route_id,v_intent.candidate_generation_id,v_intent.tranche_kind,
+    v_intent.tranche_sequence,v_trigger_hash,v_membership_hash,v_policy_version,
+    v_command_key,'READY',pg_catalog.transaction_timestamp(),v_publication_id,v_content_hash
+  ) returning * into v_command;
+  update public.weekly_message_intents set state='RENDERED' where id=v_intent.id;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'replay',false,'message_render_id',v_render.id,
+    'rendered_content_hash',pg_catalog.encode(v_content_hash,'hex'),
+    'dispatch_command_id',v_command.id,'review_batch_id',v_batch.id,
+    'manager_route_receipt_id',v_receipt.id,
+    'manager_route_preparation_id',v_preparation.id
+  );
+end;
+$function$;
+

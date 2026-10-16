@@ -135,7 +135,7 @@ const manifest = {
     'Acceptance independently derives the complete active required member set and rejects missing/extra/duplicate or consumed NOT_PREPARED references',
   ] },
   database_actions: 'NONE',
-  shared_action_decoder: { owner: 'Physical', source_commit: '00f25571ac7fb65f443a51a52beced0710211138e',
+  shared_action_decoder: { owner: 'Physical', source_commit: '00f25571ac7fb65f44351a52beced0710211138e',
     source: 'docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/contracts/contract-correction-v3.mjs',
     mount: 'broker/src/contract-correction-v3.mjs', sha256: '57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087',
     used_export: 'validateAction', state: 'EXACT_PUBLISHED_DEPENDENCY_COPY_NO_COMPETING_BODY' },

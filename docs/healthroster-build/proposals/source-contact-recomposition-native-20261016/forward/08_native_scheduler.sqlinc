@@ -1,0 +1,195 @@
+create or replace function public.weekly_source_query_scheduler_tick_v1(
+  p_request jsonb default '{}'::jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_now timestamptz;
+  v_limit integer;
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_tranche text;
+  v_intent_id uuid;
+  v_candidate_count integer:=0;
+  v_overdue_count integer:=0;
+  v_manager_count integer:=0;
+  v_route record;
+  v_event_ids uuid[];
+  v_due_kind text;
+  v_manager_tranche text;
+  v_actionable integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('now_utc','limit')) then
+    raise exception 'WEEKLY_SOURCE_SCHEDULER_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_now:=coalesce(nullif(p_request->>'now_utc','')::timestamptz,pg_catalog.transaction_timestamp());
+    v_limit:=coalesce(nullif(p_request->>'limit','')::integer,250);
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_SCHEDULER_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_now:=clock_timestamp();
+  if v_limit<1 or v_limit>1000 then
+    raise exception 'WEEKLY_SOURCE_SCHEDULER_LIMIT_INVALID' using errcode='22023';
+  end if;
+
+  for v_generation in
+    select generation.*
+    from public.weekly_candidate_outreach_generations generation
+    where generation.state='ACTIVE' and generation.reminder_due_at_utc<=v_now
+      and exists(
+        select 1 from public.weekly_message_intents intent
+        where intent.candidate_generation_id=generation.id
+          and intent.tranche_kind in ('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL')
+      )
+      and not exists(
+        select 1 from public.weekly_message_intents intent
+        where intent.candidate_generation_id=generation.id
+          and intent.tranche_kind in ('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H')
+      )
+      and (
+        (generation.request_kind='CHECK_HOURS' and exists(
+          select 1 from public.weekly_candidate_outreach_memberships membership
+          join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+          where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE'
+            and incident.state='OPEN'
+            and not private.weekly_source_covered_hours_incident_v1(incident.id)
+        ))
+        or
+        (generation.request_kind='SUBMIT_TIMESHEET' and exists(
+          select 1 from public.weekly_timesheet_submission_requests submission
+          where submission.candidate_cohort_id=generation.candidate_cohort_id
+            and submission.state in ('ACTIVE','PARTLY_SUBMITTED')
+        ))
+      )
+    order by generation.reminder_due_at_utc,generation.id
+    limit v_limit
+    for update skip locked
+  loop
+    v_tranche:=case when v_generation.request_kind='SUBMIT_TIMESHEET'
+      then 'TIMESHEET_SUBMISSION_REMINDER_6H' else 'CANDIDATE_REMINDER_6H' end;
+    v_intent_id:=private.weekly_source_query_candidate_intent_v1(
+      v_generation.id,v_tranche,1,v_generation.reminder_due_at_utc
+    );
+    if v_generation.request_kind='CHECK_HOURS' then
+      insert into public.weekly_discrepancy_events(
+        incident_id,issue_episode,projection_publication_id,
+        expected_comparison_fingerprint,event_kind,actor_kind,bounded_payload_json,
+        idempotency_key,occurred_at_utc
+      )
+      select incident.id,incident.episode_number,comparison.projection_publication_id,
+        comparison.material_comparison_fingerprint,'REMINDER_DUE','SYSTEM',
+        pg_catalog.jsonb_build_object('candidate_generation_id',v_generation.id),
+        'CANDIDATE_REMINDER_DUE:'||v_generation.id::text||':'||incident.id::text,
+        v_generation.reminder_due_at_utc
+      from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+      join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
+        and incident.state='OPEN'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      on conflict (event_kind,idempotency_key) do nothing;
+    end if;
+    v_candidate_count:=v_candidate_count+1;
+  end loop;
+
+  update public.weekly_timesheet_submission_requests submission
+  set state='OVERDUE',updated_at_utc=v_now
+  where submission.state in ('ACTIVE','PARTLY_SUBMITTED') and submission.deadline_at_utc<=v_now;
+  get diagnostics v_overdue_count=row_count;
+
+  for v_route in
+    select route.id as route_id,generation.id as generation_id,event.event_kind,
+           pg_catalog.min(event.due_at_utc) as first_due
+    from public.weekly_manager_recipient_routes route
+    join public.weekly_manager_recipient_generations generation
+      on generation.id=route.current_generation_id and generation.state='ACTIVE'
+    join public.weekly_manager_cohort_due_events event
+      on event.recipient_generation_id=generation.id
+     and event.state='PENDING' and event.due_at_utc<=v_now
+    group by route.id,generation.id,event.event_kind
+    order by pg_catalog.min(event.due_at_utc),route.id,event.event_kind
+    limit v_limit
+  loop
+    -- Only the actual native due-route batch selected above, with its existing
+    -- ordering/limit. No global sweep, new queue or unrelated-route capacity gate.
+    perform private.weekly_source_query_manager_generation_v1(v_route.route_id,'NEW_INCIDENT',clock_timestamp(),false);
+    perform private.weekly_contact_source_manager_recompose_v1(v_route.route_id);
+    if exists(
+      select 1 from public.weekly_message_intents intent
+      where intent.recipient_generation_id=v_route.generation_id
+        and intent.state in ('DUE','RENDERED')
+    ) then
+      continue;
+    end if;
+    v_due_kind:=v_route.event_kind;
+    select pg_catalog.array_agg(locked_event.id order by locked_event.due_at_utc,locked_event.id)
+    into v_event_ids
+    from (
+      select event.id,event.due_at_utc
+      from public.weekly_manager_cohort_due_events event
+      where event.recipient_generation_id=v_route.generation_id
+        and event.event_kind=v_due_kind and event.state='PENDING' and event.due_at_utc<=v_now
+      order by event.due_at_utc,event.id
+      for update
+    ) locked_event;
+    if coalesce(pg_catalog.array_length(v_event_ids,1),0)=0 then continue; end if;
+    select pg_catalog.count(*) into v_actionable
+    from public.weekly_manager_recipient_memberships membership
+    join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+    where membership.recipient_generation_id=v_route.generation_id
+      and membership.candidate_cohort_id=any(
+        select event.candidate_cohort_id
+        from public.weekly_manager_cohort_due_events event where event.id=any(v_event_ids)
+          and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)
+      )
+      and incident.state='OPEN' and incident.manager_action_state<>'RESPONDED'
+      and (
+        v_due_kind<>'T6_RESPONDED'
+        or incident.candidate_action_state='RESPONDED'
+      )
+      and not private.weekly_source_query_manager_row_owned_v1(
+        v_route.route_id,incident.id,incident.episode_number
+      );
+    if v_actionable>0 then
+      v_manager_tranche:=case v_due_kind
+        when 'EARLY_ALL' then 'MANAGER_EARLY_ALL'
+        when 'T6_RESPONDED' then 'MANAGER_T6_RESPONDED'
+        else 'MANAGER_T12_REMAINDER' end;
+      v_intent_id:=private.weekly_source_query_manager_intent_v1(
+        v_route.route_id,v_route.generation_id,v_event_ids,v_manager_tranche,1,v_route.first_due
+      );
+      -- 04A section 6.1 makes only an "unanswered and unsent" row due.  A row an
+      -- accepted batch still owns is neither, so it keeps its SENT state and the
+      -- Office screen keeps saying `Manager informed`.
+      update public.weekly_discrepancy_incidents incident set manager_action_state='DUE'
+      from public.weekly_manager_recipient_memberships membership
+      where membership.recipient_generation_id=v_route.generation_id
+        and membership.incident_id=incident.id
+        and membership.candidate_cohort_id=any(
+          select event.candidate_cohort_id from public.weekly_manager_cohort_due_events event
+          where event.id=any(v_event_ids)
+            and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)
+        ) and incident.manager_action_state in ('NOT_SENT','SENT')
+        and not private.weekly_source_query_manager_row_owned_v1(
+          v_route.route_id,incident.id,incident.episode_number
+        );
+      v_manager_count:=v_manager_count+1;
+    end if;
+    update public.weekly_manager_cohort_due_events set state='CONSUMED'
+    where id=any(v_event_ids);
+  end loop;
+  perform private.weekly_contact_source_candidate_due_collapse_v1(v_now,v_limit);
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'now_utc',v_now,'candidate_reminder_intents',v_candidate_count,
+    'timesheet_requests_marked_overdue',v_overdue_count,
+    'manager_digest_intents',v_manager_count
+  );
+end;
+$function$;
+

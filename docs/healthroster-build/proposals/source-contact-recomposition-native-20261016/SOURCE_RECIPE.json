@@ -1,0 +1,145 @@
+{
+  "version": "SOURCE_CONTACT_NATIVE_RECOMPOSITION_V1",
+  "base_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+  "input_hashes_normalized_lf": true,
+  "inputs": [
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+    },
+    {
+      "path": "broker/src/weekly-source/delivery-runtime.mjs",
+      "sha256": "cda0983c5292f6f86c6c812cccd176057ce8dc34059753e3009d25bcf398ea75"
+    },
+    {
+      "path": "docs/healthroster-build/v5-amendment-20261015/authority/CONTACT_PAUSE_SPEC.md",
+      "sha256": "567997d46732cd5ab441a776a7f15c542a6a64f18dd5b9ef11f68be0f8da1052"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "sha256": "3b44a121db9bffd51351e579c251556c631ce19985d7a3b79b3c09c0f525c88f"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+      "sha256": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+      "sha256": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/030_native_enrol_assert.sqlinc",
+      "sha256": "eed10421aa5248b6fe923456211b95189f0924c39de2eb158ebeb9d8e9d515ec"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/040_native_accept.sqlinc",
+      "sha256": "cab29973854389e28cbd22b3ac9a85c9dd5dcc6063156d499667c9c57367b914"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+      "sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc",
+      "sha256": "a1f60c220121776af5fc05d7220c6ad22aafa0b326275de9f0ee15243d71aef8"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+      "sha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b"
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "forward/01_current_native_members.sqlinc",
+      "sha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd"
+    },
+    {
+      "path": "forward/02_native_render_input.sqlinc",
+      "sha256": "54f33893567814de068d8dd045314c5a0d5e511d0453a9bad22999ec52d7874a"
+    },
+    {
+      "path": "forward/03_native_route_prepare.sqlinc",
+      "sha256": "f45a023c20107bec723720e0e4651778e5e7782c57fa159f06da138ff8cc52ff"
+    },
+    {
+      "path": "forward/04_native_render_stage.sqlinc",
+      "sha256": "684d4c7f81ccc16942f1598f0c9cdd8abc22b5324d71f6451cf9627357d2ff7d"
+    },
+    {
+      "path": "forward/05_native_manager_generation.sqlinc",
+      "sha256": "791cfd405e851c02fbffabcc5c3c84e15f4876885d53a43e783f4b8111b23271"
+    },
+    {
+      "path": "forward/06_native_candidate_activation.sqlinc",
+      "sha256": "2f1f36e3782536f237abe0d94d4daedbd8a8f1902202a9c4131f9e3cefb4e64b"
+    },
+    {
+      "path": "forward/07_native_unsubmitted_recomposition.sqlinc",
+      "sha256": "98e721a035422ae94af1c3e7cf21dcb26130ae70e4e510472d8bcf847f077238"
+    },
+    {
+      "path": "forward/08_native_scheduler.sqlinc",
+      "sha256": "72cc98cd728b6bc774ec9b51acd53c934a739b8b89ddc5d9206b78bd4588c7ec"
+    },
+    {
+      "path": "forward/09_native_current_need.sqlinc",
+      "sha256": "452fed97eac2e73bd159d83f2f67092df384362642d3c6f001aee2912bc7285b"
+    },
+    {
+      "path": "forward/99_acl.sqlinc",
+      "sha256": "75bc5d2f258d1a10183ac10cae111073a9dbbcab8652ffe632216f5ea009d18a"
+    }
+  ],
+  "runtime": {
+    "path": "runtime/delivery-runtime.mjs",
+    "mount": "broker/src/weekly-source/delivery-runtime.mjs",
+    "sha256": "faa67119bfbae47a1c4b348f6ada2fc3d4f3ae68aec36750765f9785aadc8ce9"
+  },
+  "sql_statements": 55,
+  "packaging": "scanManagedSql + exactAtomicBody only; PL/pgSQL opaque, not PostgreSQL/native proof",
+  "builder_sha256": "6a51b38a77f4a83ed4228fddf1be8fbb2d045f02fd71d7ebcb43babaf42414c0",
+  "tests": {
+    "path": "tests/current-native-contact.test.mjs",
+    "sha256": "0eb91adf374283dbff4e44d075920994b5d773d446fb83b4502559f17c3d4525",
+    "actual_renderer": {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    "qualification": "Actual complete published renderer + Worker orchestration unit tests, supplied RPC facts; no PostgreSQL/native fixture proof"
+  },
+  "native_status": "REQUIRED_NOT_RUN",
+  "runtime_status": "SOURCE_TESTS_ONLY",
+  "prerequisites": [
+    "Current 0214 Source admission / 0226 START / 0403 logical memberships and timing/native schema",
+    "Current 13_manager_generation and 12_manager_owned_facts at pinned source; exact complete successors only"
+  ],
+  "gaps": [
+    "Client-specific contact cutoff/prohibition is not the Source-group report cutoff; actual native contact read/START qualification remains open",
+    "Health-owned AUTOMATIC follow-up and explicit manual preview/accept ordinal producers remain implementation work; no ordinal fabricated",
+    "Health-owned expiry/resume recheck task consumer remains implementation work; this finite scheduler amendment only consumes its real selected due-route batch",
+    "Multi-client SUBMIT_TIMESHEET frozen request recomposition and pre-activation pause remains open",
+    "CHECK_HOURS answered-member subset generation with original +6/+12 clock preservation remains open",
+    "Full same-TX native qualification, concurrency, ACL and provider-free rollback proof remains Root work"
+  ]
+}

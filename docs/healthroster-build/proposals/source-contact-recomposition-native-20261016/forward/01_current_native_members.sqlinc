@@ -1,0 +1,191 @@
+-- Bounded current native Source composition. No provider, QT or financial call.
+create or replace function private.weekly_contact_source_cycle_lock_v1(p_cycle_id uuid)
+returns void language plpgsql volatile security definer
+set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare g public.weekly_source_groups%rowtype;pair record;n integer;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select source_group.* into strict g from public.weekly_source_cycles cycle
+ join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id where cycle.id=p_cycle_id;
+ perform private.weekly_contact_deployment_lock_v1(g.agency_id,g.environment);
+ perform private.weekly_contact_context_v1(g.agency_id,g.environment);
+ select count(*) into n from(
+  select candidate_id,client_id from public.weekly_candidate_cohorts where source_cycle_id=p_cycle_id
+  union select candidate_id,client_id from public.weekly_discrepancy_incidents where source_cycle_id=p_cycle_id
+  union select r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r
+   join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id where r.source_cycle_id=p_cycle_id
+ )x;
+ if n>1000 then raise exception 'CONTACT_SOURCE_SCOPE_CAPACITY_EXCEEDED' using errcode='54000';end if;
+ for pair in
+  select candidate_id,client_id from public.weekly_candidate_cohorts where source_cycle_id=p_cycle_id
+  union select candidate_id,client_id from public.weekly_discrepancy_incidents where source_cycle_id=p_cycle_id
+  union select r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r
+   join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id where r.source_cycle_id=p_cycle_id
+  order by candidate_id,client_id
+ loop
+  perform private.weekly_contact_scope_lock_v1(g.agency_id,g.environment,pair.candidate_id,pair.client_id);
+ end loop;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_candidate_render_assert_v1(p_generation_id uuid)
+returns void language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare g public.weekly_candidate_outreach_generations%rowtype;x record;guard jsonb;n integer:=0;
+ publication uuid;
+begin
+ select * into strict g from public.weekly_candidate_outreach_generations where id=p_generation_id;
+ if not private.weekly_source_candidate_generation_current_v1(g.id) or g.state<>'ACTIVE' then
+  raise exception 'WEEKLY_SOURCE_CANDIDATE_MESSAGE_STALE' using errcode='40001';end if;
+ select current_projection_publication_id into strict publication from public.weekly_source_cycles where id=g.source_cycle_id;
+ perform private.weekly_source_query_current_publication_v1(g.source_cycle_id,publication);
+ if g.request_kind='CHECK_HOURS' then
+  for x in select i.*,m.state membership_state,m.comparison_revision_id,
+    c.contract_id,w.work_date from public.weekly_candidate_outreach_memberships m
+   join public.weekly_discrepancy_incidents i on i.id=m.incident_id
+   join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
+   join public.weekly_work_events w on w.id=i.work_event_id where m.candidate_generation_id=g.id order by i.id
+  loop
+   n:=n+1;
+   if x.candidate_id<>g.candidate_id or x.client_id<>g.client_id or x.source_cycle_id<>g.source_cycle_id
+    or x.membership_state<>'ACTIONABLE' or x.state<>'OPEN' or x.candidate_action_state in('RESPONDED','NOT_REQUIRED')
+    or x.comparison_revision_id<>x.current_comparison_revision_id or private.weekly_source_covered_hours_incident_v1(x.id)
+    or (private._weekly_source_effective_policy_v1(x.client_id,x.contract_id,x.work_date))->'candidate_queries_enabled'
+     is distinct from 'true'::jsonb then
+     raise exception 'WEEKLY_SOURCE_CANDIDATE_MESSAGE_STALE' using errcode='40001';end if;
+  end loop;
+  guard:=private.weekly_contact_scope_guard_v1(g.candidate_id,g.client_id,'WORKER',clock_timestamp());
+  if guard->'allow' is distinct from 'true'::jsonb then raise exception 'CONTACT_SOURCE_RENDER_PAUSED' using errcode='55000';end if;
+ elsif g.request_kind='SUBMIT_TIMESHEET' then
+  for x in select r.candidate_id,r.current_projection_publication_id,m.*
+   from public.weekly_timesheet_submission_requests r
+   join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
+   where r.candidate_cohort_id=g.candidate_cohort_id and r.request_generation=g.generation_number
+    and r.candidate_id=g.candidate_id and r.source_cycle_id=g.source_cycle_id and r.membership_hash=g.membership_hash
+    and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') order by m.client_id,m.contract_id,m.week_ending,m.id
+  loop
+   n:=n+1;
+   if x.state<>'WAITING' or not private.weekly_source_missing_scope_unchanged_v1(x.current_projection_publication_id,
+     publication,g.candidate_id,x.client_id,x.contract_id,x.week_ending)
+    or exists(select 1 from public.timesheets t where t.contract_id=x.contract_id and t.week_ending_date=x.week_ending
+      and t.is_current and t.revoked_at is null and t.archived_at_utc is null and t.sheet_scope='WEEKLY' and t.line_type='HOURS'
+      and t.r2_nurse_key is not null and t.img_sha256_nurse is not null)
+    or (private._weekly_source_effective_policy_v1(x.client_id,x.contract_id,x.week_ending))->'candidate_queries_enabled'
+     is distinct from 'true'::jsonb then
+     raise exception 'WEEKLY_SOURCE_CANDIDATE_MESSAGE_STALE' using errcode='40001';end if;
+   guard:=private.weekly_contact_scope_guard_v1(g.candidate_id,x.client_id,'WORKER',clock_timestamp());
+   if guard->'allow' is distinct from 'true'::jsonb then raise exception 'CONTACT_SOURCE_RENDER_PAUSED' using errcode='55000';end if;
+  end loop;
+ else raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ if n not between 1 and 500 then raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+end;
+$function$;
+
+-- Initial budget ownership follows actual original native attempts even before
+-- bridge installation. A publication, render, lease or new generation is not a send.
+create or replace function private.weekly_contact_source_manager_initial_owned_v1(p_incident_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from public.weekly_discrepancy_incidents i
+  join public.weekly_source_groups g on g.id=i.source_group_id
+  join public.weekly_contact_delivery_memberships m on m.incident_id=i.id and m.incident_episode=i.episode_number
+  join public.weekly_message_dispatch_commands c on c.id=m.delivery_id and c.environment=g.environment and c.agency_id=g.agency_id
+  where i.id=p_incident_id and m.audience='MANAGER' and m.purpose='CHECK_HOURS' and m.send_ordinal=1)
+ or exists(select 1 from public.weekly_discrepancy_incidents i
+  join public.weekly_source_groups g on g.id=i.source_group_id
+  join public.weekly_manager_review_items m on m.incident_id=i.id and m.incident_episode=i.episode_number
+  join public.weekly_manager_review_batches b on b.id=m.review_batch_id
+  join public.weekly_message_dispatch_commands c on c.message_render_id=b.message_render_id
+   and c.environment=g.environment and c.agency_id=g.agency_id
+  where i.id=p_incident_id and c.tranche_sequence=1
+   and c.tranche_kind in('MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED')
+   and(exists(select 1 from public.weekly_message_provider_attempts a where a.dispatch_command_id=c.id)
+    or exists(select 1 from public.weekly_message_dispatch_targets t join public.weekly_message_target_attempts a
+     on a.dispatch_target_id=t.id where t.dispatch_command_id=c.id)))
+$function$;
+
+create or replace function private.weekly_contact_source_manager_current_need_v1(p_incident_id uuid,p_route_id uuid,p_at timestamptz)
+returns boolean language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
+ w public.weekly_work_events%rowtype;r public.weekly_manager_recipient_routes%rowtype;
+ s public.weekly_source_global_settings%rowtype;policy jsonb;local_today date;last_sunday date;
+begin
+ if p_at is null or not isfinite(p_at) then raise exception 'CONTACT_SOURCE_TIME_INVALID' using errcode='22023';end if;
+ select * into strict i from public.weekly_discrepancy_incidents where id=p_incident_id;
+ select * into strict c from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
+ select * into strict w from public.weekly_work_events where id=i.work_event_id;
+ select * into strict r from public.weekly_manager_recipient_routes where id=p_route_id;
+ if i.source_cycle_id<>r.source_cycle_id or i.state<>'OPEN' or i.manager_action_state='RESPONDED'
+  or i.manager_potential_state<>'AVAILABLE' or private.weekly_source_covered_hours_incident_v1(i.id) then return false;end if;
+ policy:=private._weekly_source_effective_policy_v1(i.client_id,c.contract_id,w.work_date);
+ if policy->>'source_group_id' is distinct from i.source_group_id::text
+  or policy->>'authority_mode' is distinct from 'SOURCE_AUTHORITY' or policy->>'document_mode' is distinct from 'CHECK_ONLY'
+  or policy->'manager_queries_enabled' is distinct from 'true'::jsonb
+  or private.weekly_source_query_normalise_recipient_v1(policy->>'manager_query_recipient')
+   is distinct from private.weekly_source_query_normalise_recipient_v1(r.protected_recipient_address)
+  or not exists(select 1 from public.contracts contract where contract.id=c.contract_id
+   and contract.candidate_id=i.candidate_id and contract.client_id=i.client_id) then return false;end if;
+ select * into strict s from public.weekly_source_global_settings where singleton;
+ local_today:=(p_at at time zone 'Europe/London')::date;last_sunday:=local_today-extract(isodow from local_today)::integer;
+ return w.work_date<=last_sunday and w.work_date>last_sunday-7*s.manager_recent_completed_weeks
+  and w.work_date>=local_today-s.manager_max_work_age_days;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_manager_member_eligible_v1(p_incident_id uuid,p_route_id uuid,p_at timestamptz)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select private.weekly_contact_source_manager_current_need_v1(p_incident_id,p_route_id,p_at)
+  and(select (private.weekly_contact_scope_guard_v1(i.candidate_id,i.client_id,'MANAGER',p_at))->'allow'='true'::jsonb
+    from public.weekly_discrepancy_incidents i where i.id=p_incident_id)
+  and not private.weekly_contact_source_manager_initial_owned_v1(p_incident_id)
+  and not private.weekly_source_query_manager_row_owned_v1(p_route_id,p_incident_id,
+    (select episode_number from public.weekly_discrepancy_incidents where id=p_incident_id))
+$function$;
+
+-- All render/route/stage readers consume this single native membership projection.
+-- The caller takes the shared deployment/sorted pause locks before native locks.
+create or replace function private.weekly_contact_source_manager_members_v1(p_intent_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare v_intent public.weekly_message_intents%rowtype;v_generation public.weekly_manager_recipient_generations%rowtype;
+ v_at timestamptz:=clock_timestamp();result jsonb;
+begin
+ select * into strict v_intent from public.weekly_message_intents where id=p_intent_id;
+ select generation.* into strict v_generation from public.weekly_manager_recipient_generations generation
+ join public.weekly_manager_recipient_routes route on route.id=generation.recipient_route_id
+ where generation.id=v_intent.recipient_generation_id and generation.state='ACTIVE' and route.current_generation_id=generation.id
+  and route.id=v_intent.recipient_route_id and route.environment=v_intent.environment and route.agency_id=v_intent.agency_id;
+ if v_intent.audience_kind<>'MANAGER' or v_intent.tranche_sequence<>1 or v_intent.tranche_kind not in
+  ('MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED') then
+  raise exception 'CONTACT_SOURCE_NATIVE_ORDINAL_UNPROVIDED' using errcode='55000';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('incident_id',x.incident_id,'incident_episode',x.episode_number,
+  'comparison_revision_id',x.comparison_revision_id,'comparison_fingerprint',encode(x.comparison_fingerprint,'hex'),
+  'client_order',x.client_order,'candidate_order',x.candidate_order,'shift_order',x.shift_order)
+  order by x.client_order,x.candidate_order,x.shift_order),'[]'::jsonb) into result from(
+  select incident.id incident_id,incident.episode_number,comparison.id comparison_revision_id,
+   comparison.material_comparison_fingerprint comparison_fingerprint,
+   dense_rank() over(order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",client.id)::integer client_order,
+   dense_rank() over(partition by client.id order by private.weekly_source_query_ascii_fold_v1(coalesce(nullif(candidate.display_name,''),
+    concat_ws(' ',candidate.first_name,candidate.last_name))) collate "C",candidate.id)::integer candidate_order,
+   row_number() over(partition by client.id,candidate.id order by work_event.work_date,
+    coalesce(comparison.system_start_at_local,comparison.candidate_start_at_local),incident.id)::integer shift_order
+  from public.weekly_manager_recipient_memberships membership
+  join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  join public.clients client on client.id=incident.client_id join public.candidates candidate on candidate.id=incident.candidate_id
+  where membership.recipient_generation_id=v_generation.id and membership.comparison_revision_id=incident.current_comparison_revision_id
+   and private.weekly_contact_source_manager_member_eligible_v1(incident.id,v_generation.recipient_route_id,v_at)
+   and(coalesce(array_length(v_intent.sorted_due_event_ids,1),0)=0 or exists(
+    select 1 from public.weekly_manager_cohort_due_events event where event.id=any(v_intent.sorted_due_event_ids)
+     and event.recipient_generation_id=v_generation.id and event.candidate_cohort_id=membership.candidate_cohort_id
+     and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)))
+   and(v_intent.tranche_kind<>'MANAGER_T6_RESPONDED' or incident.candidate_action_state='RESPONDED')
+ )x;
+ if jsonb_array_length(result)>500 then raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED' using errcode='54000';end if;
+ return result;
+end;
+$function$;

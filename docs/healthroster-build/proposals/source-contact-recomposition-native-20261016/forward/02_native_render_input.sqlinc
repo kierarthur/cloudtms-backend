@@ -1,0 +1,107 @@
+create or replace function public.weekly_source_message_render_input_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_intent_id uuid;
+  v_publication_id uuid;
+  v_intent public.weekly_message_intents%rowtype;
+  v_generation public.weekly_manager_recipient_generations%rowtype;
+  v_candidate_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_membership jsonb;
+  v_membership_hash bytea;
+  v_rows jsonb;
+  v_shift_count integer;
+  v_client_count integer;
+  v_candidate_count integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('message_intent_id','projection_publication_id')) then
+    raise exception 'WEEKLY_SOURCE_RENDER_INPUT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_intent_id:=(p_request->>'message_intent_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_RENDER_INPUT_REQUEST_INVALID' using errcode='22023';
+  end;
+  -- Service-owned discovery, then shared pause locks BEFORE the native row locks.
+  perform private.weekly_contact_source_cycle_lock_v1((select source_cycle_id
+    from public.weekly_message_intents where id=v_intent_id));
+  select * into strict v_intent from public.weekly_message_intents
+  where id=v_intent_id and state='DUE';
+  perform private.weekly_source_query_current_publication_v1(v_intent.source_cycle_id,v_publication_id);
+  if v_intent.audience_kind='CANDIDATE' then
+    select * into strict v_candidate_generation from public.weekly_candidate_outreach_generations
+    where id=v_intent.candidate_generation_id and state='ACTIVE';
+    perform private.weekly_contact_source_candidate_render_assert_v1(v_candidate_generation.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'audience_kind','CANDIDATE','tranche_kind',v_intent.tranche_kind,
+      'candidate_id',v_candidate_generation.candidate_id,
+      'request_kind',v_candidate_generation.request_kind,
+      'membership_hash',pg_catalog.encode(v_candidate_generation.membership_hash,'hex')
+    );
+  end if;
+  if v_intent.audience_kind<>'MANAGER' then
+    raise exception 'WEEKLY_SOURCE_RENDER_INPUT_AUDIENCE_UNSUPPORTED' using errcode='55000';
+  end if;
+  select * into strict v_generation from public.weekly_manager_recipient_generations
+  where id=v_intent.recipient_generation_id and state='ACTIVE';
+  v_membership:=private.weekly_contact_source_manager_members_v1(v_intent.id);
+  v_shift_count:=pg_catalog.jsonb_array_length(v_membership);
+  if v_shift_count=0 then raise exception 'WEEKLY_SOURCE_MANAGER_RENDER_EMPTY' using errcode='55000'; end if;
+  v_membership_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',v_membership
+  );
+  select pg_catalog.count(distinct incident.client_id),pg_catalog.count(distinct incident.candidate_id)
+  into v_client_count,v_candidate_count
+  from pg_catalog.jsonb_array_elements(v_membership) member
+  join public.weekly_discrepancy_incidents incident on incident.id=(member->>'incident_id')::uuid;
+  if v_client_count>100 or v_candidate_count>100 or v_shift_count>500 then
+    raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED' using errcode='54000';
+  end if;
+  select coalesce(pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'clientId',incident.client_id,'clientName',client.name,
+      'candidateId',incident.candidate_id,
+      'displayName',coalesce(nullif(candidate.display_name,''),pg_catalog.concat_ws(' ',candidate.first_name,candidate.last_name)),
+      'issueId',incident.id,'workDate',work_event.work_date,
+      'sourceStartInstant',coalesce(comparison.system_start_at_local,comparison.candidate_start_at_local),
+      'start',to_char(comparison.candidate_start_at_local,'HH24:MI'),
+      'end',to_char(comparison.candidate_end_at_local,'HH24:MI'),
+      'breakMinutes',comparison.candidate_break_minutes,
+      'systemStart',case when comparison.source_presence='PRESENT' then to_char(comparison.system_start_at_local,'HH24:MI') end,
+      'systemEnd',case when comparison.source_presence='PRESENT' then to_char(comparison.system_end_at_local,'HH24:MI') end,
+      'systemBreakMinutes',case when comparison.source_presence='PRESENT' then comparison.system_break_minutes end,
+      'systemAbsent',comparison.source_presence<>'PRESENT',
+      'issueFamily',case
+        when comparison.issue_family='SOURCE_HOURS_DIFFER' then 'HOURS_DIFFER'
+        when comparison.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' and source_group.source_family='NHSP' then 'NHSP_ABSENT'
+        when comparison.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' then 'SOURCE_ABSENT'
+        else 'HEALTHROSTER_NOT_FINALISED' end,
+      'candidateRequested',incident.candidate_action_state='RESPONDED'
+    ) order by (member->>'client_order')::integer,(member->>'candidate_order')::integer,(member->>'shift_order')::integer
+  ),'[]'::jsonb) into v_rows
+  from pg_catalog.jsonb_array_elements(v_membership) member
+  join public.weekly_discrepancy_incidents incident on incident.id=(member->>'incident_id')::uuid
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  join public.clients client on client.id=incident.client_id
+  join public.candidates candidate on candidate.id=incident.candidate_id
+  join public.weekly_source_groups source_group on source_group.id=incident.source_group_id;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'audience_kind','MANAGER','tranche_kind',v_intent.tranche_kind,
+    'policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
+    'membership_hash',pg_catalog.encode(v_membership_hash,'hex'),
+    'shift_count',v_shift_count,'client_count',v_client_count,
+    'candidate_count',v_candidate_count,'rows',v_rows
+  );
+end;
+$function$;
+

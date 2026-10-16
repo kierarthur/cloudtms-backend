@@ -769,7 +769,7 @@
   "database_actions": "NONE",
   "shared_action_decoder": {
     "owner": "Physical",
-    "source_commit": "00f25571ac7fb65f443a51a52beced0710211138e",
+    "source_commit": "00f25571ac7fb65f44351a52beced0710211138e",
     "source": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/contracts/contract-correction-v3.mjs",
     "mount": "broker/src/contract-correction-v3.mjs",
     "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
