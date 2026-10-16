@@ -137,8 +137,8 @@
   "assembly_supplement": {
     "markdown": "SOURCE_ASSEMBLY_REVIEW.md",
     "json": "SOURCE_ASSEMBLY_REVIEW.json",
-    "json_sha256": "76d9c6eccae0882d509baab2db619f6c50f258b7102c42dbc8c565751e94982d",
-    "markdown_sha256": "52cee66a324a05a3e2d5e47b8cc2fad64343527c2e5fda2f7d7ce8e8c8f08dbc",
+    "json_sha256": "030f14063c6c7123dcd6ab7cfc08ac55b3e98b40dcc52b7659161f3689fbeea0",
+    "markdown_sha256": "e3376b234418f454abdca9dc8b8cb50bfd359adb087298d208773d81282ec34e",
     "frozen_inputs_verified": 115,
     "contact_recipe_stale_hashes": 1,
     "banking_body_excluded": "private.bpay_next_protected_owner_route_v1(uuid) in d863 forward18 and private.bpay_next_source_receipt_publish_v1()/owner/ACL/trigger suffix of forward19",
@@ -156,5 +156,24 @@
     "unintended_function_name_intersections": 0,
     "intentional_pending_successors": 2,
     "native_compile_execution_acl_concurrency_api": "NOT_RUN"
+  },
+  "public_composer_prerequisites": {
+    "markdown": "PUBLIC_COMPOSER_PREREQUISITES.md",
+    "json": "PUBLIC_COMPOSER_PREREQUISITES.json",
+    "markdown_sha256": "5076547d59ebbf5193e4d110dd22bddfe795ae54f3dab2f60c31ab1783423907",
+    "json_sha256": "52c1b18475b20b1600ce5147bdd55e02774cf1b018ef69aedcb1edffd372f791",
+    "committed_health_heads_checked": 12,
+    "frozen_primitive_inputs_verified": 10,
+    "existing_complete_public_accept_reused": true,
+    "other_target_public_or_read_definitions_found": 0,
+    "product_source_edits": 0,
+    "native": "NOT_RUN"
+  },
+  "contact_later_source_review_returns": {
+    "ordinal_owner_missing_existing_capture_kind": "MANUAL_SELECTION_RECOMPOSITION",
+    "runtime_leaf_metadata_stale": true,
+    "actual_runtime_leaf_sha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff",
+    "root_successors_required": true,
+    "original_e466_preserved": true
   }
 }

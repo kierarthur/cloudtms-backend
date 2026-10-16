@@ -4138,5 +4138,25 @@
     "state": "PROPOSED_REVIEWED_ONE_FIELD_CORRECTION_ONLY_NOT_APPLIED_BY_THIS_AUDIT"
   },
   "declaration_count_note": "Of115 frozen input records,114 carry Health selections and forward18 is wholly excluded. Contact has107 CREATE declarations/106 unique signatures: creation-time immutable trigger helper is byte-identically repeated in forward01. Source76 + Contact107 + pending6 gives189 selected CREATE declarations/188 per-package unique signatures; pending2 deliberately supersede Source2, leaving186 effective unique signatures.",
-  "selected_counts_metric": "Unique qualified function names in Health selection; forward18 and forward19 Bank bodies excluded. Exact signature/header/body hashes are per-file selected declarations. Mounted Invoice has94 declarations/93 qualified names because of an overload."
+  "selected_counts_metric": "Unique qualified function names in Health selection; forward18 and forward19 Bank bodies excluded. Exact signature/header/body hashes are per-file selected declarations. Mounted Invoice has94 declarations/93 qualified names because of an overload.",
+  "later_contact_review_returns": {
+    "qualification": "INDEPENDENT_SOURCE_REVIEW_ROOT_SUCCESSORS_REQUIRED_NOT_APPLIED_HERE",
+    "runtime_leaf": {
+      "frozen_commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "metadata_path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/RUNTIME_CONTRIBUTION.json",
+      "json_pointer": "/leaf/sha256",
+      "recorded_sha256": "0a7f1d0dc0a23b7593b4551df5ddf7089475cdb5ba20c80a211ad16b4672f60f",
+      "actual_frozen_leaf_sha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff",
+      "proposed_one_field_metadata_successor_sha256": "5ec424eca893b004a114d7988941cb4b443695afb3bf21ab6be1a43f0e1f6454",
+      "recipe_cascade": "If RUNTIME_CONTRIBUTION metadata is revised, canonical_runtime.finite_contribution.sha256 must pin its new exact bytes in the reviewed recipe successor"
+    },
+    "ordinal_owner_guard": {
+      "definition": "private.weekly_contact_source_ordinal_owner_guard_v1()",
+      "source": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/01_checking_revision_and_history.sqlinc",
+      "line": 211,
+      "defect": "Guard transfer-kind allow set omits MANUAL_SELECTION_RECOMPOSITION, which forward13 emits and forward08 transfers",
+      "root_correction": "Complete current root guard successor adds only the missing existing capture kind; all original ownership/current revision/intent/admission checks remain",
+      "native_concurrency": "NOT_RUN"
+    }
+  }
 }
