@@ -1,0 +1,237 @@
+{
+  "version": "CONTACT_START_NATIVE_FIXTURE_SOURCE_V1",
+  "root_contact_commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+  "root_global_timing_context_commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+  "reviewed_final_pack_sha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "contact_spec_sha256": "c49bfb3539f381c263c69e8f12e098760d366b1528eaa38435ba88186310c12b",
+  "source_inputs": [
+    {
+      "path": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/migrations/16102026_0135_weekly_contact_native_attempt_permit_unique.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "24fcf9601266f3600c37cbc30aa4a3e87dbd7fbcd3e78f9ad2acfeaa508dfde1",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "01536a32084a07702fa7ed02ba61a75d7921e3b0d3ee5646b974841e18c34ac5",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "3d7f6788885a23a95f02c7c108ae345e9dd289b8a74c9adb91dd59585f42d091",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "tests/weekly-source/push-timing-admin-native.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "cde7bef4dd986e396c1820d531e0c45690240deab1cdc2c14454142536de9809",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "tests/weekly-source/push-timing-calendar-native.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "ad08ae079e41f050a610f29b941f78fe6037f20faf5a0d846e5dee7c8d786cef",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "tests/weekly-source/contact-pause-native.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "git_blob_sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf",
+      "unchanged_at_timing_context": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+      "git_blob_sha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+      "git_blob_sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+      "git_blob_sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+      "git_blob_sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+      "git_blob_sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+    }
+  ],
+  "payloads": [
+    {
+      "path": "00_service-boundaries.sql",
+      "sha256": "9ba085414f26e4687969318b49e98ad1b940a254a5a697f4dbf9bdaa06b38da4"
+    },
+    {
+      "path": "01_fixture-input.sql",
+      "sha256": "d4df308febc10097af38238dcb0553282bee1a407759c8ead6cd461cdff48c23"
+    },
+    {
+      "path": "02_construct-native-targets.sql",
+      "sha256": "d293f369d4aef60a24318636ed3a7df03ce1715fb678ea55b0c621fbd78ef4b8"
+    },
+    {
+      "path": "03_assertion-helpers.sql",
+      "sha256": "5e13a922ba6839a15af283591025085b2dfbd1426813a475526b4bbe46b411ae"
+    },
+    {
+      "path": "04_native-cases.sql",
+      "sha256": "e03eeaf317df27acdd5d742b09ab4e44291a89560202f857123f142caa9d4d1d"
+    },
+    {
+      "path": "05_fixture-qt-bootstrap.sql",
+      "sha256": "6eb97b2a4a48c12c7c34aa12de628c673032abd7556b0454b3366699a9fde77c"
+    },
+    {
+      "path": "06_run-native-cases.sql",
+      "sha256": "2bea4ce96ad78e70831aa4f46471a9cb9651c538254357d21e23a62e6e74502c"
+    },
+    {
+      "path": "07_capture-absence-set.sql",
+      "sha256": "c9fccbaf20f3a94d5189b5713c56ee588f5f4ea0158cf926e80e0d7ed43ee22d"
+    },
+    {
+      "path": "08_before-and-fresh-absence.sql",
+      "sha256": "c46d15751898f676b62b6680f86696307905eea17a05bb61b4dc4d3c504b7845"
+    },
+    {
+      "path": "check-source.py",
+      "sha256": "4ba3cba8ac7fb9b14cf1bc5ed27a8c55a0fc262af67a1596d74dac752c9a545a"
+    },
+    {
+      "path": "CONCURRENCY.md",
+      "sha256": "958977e0c27ee04b2c0dec07b094676cdadb8d46d31adab07b5d11ac6c4c3023"
+    },
+    {
+      "path": "emit-fresh-verification.py",
+      "sha256": "601314cfb79757a60b93fefc3da7f7d80b3c5abe3aaaa09d24573c7e3d9382ea"
+    },
+    {
+      "path": "RUNBOOK.md",
+      "sha256": "c12b26e868c4ae1829b83f145fdc8f33f2255a6714b987181702b75d7fd09417"
+    }
+  ],
+  "mount": {
+    "kind": "ROOT_ROLLBACK_VERIFICATION_ONLY_NO_INSTALL",
+    "before_and_fresh": "08_before-and-fresh-absence.sql",
+    "independent": [
+      "00_service-boundaries.sql"
+    ],
+    "native_order": [
+      "01_fixture-input.sql",
+      "ROOT_GENUINE_NATIVE_SOURCE_PREFIX_REQUIRED_NOT_SUPPLIED",
+      "02_construct-native-targets.sql",
+      "03_assertion-helpers.sql",
+      "04_native-cases.sql",
+      "05_fixture-qt-bootstrap.sql",
+      "06_run-native-cases.sql",
+      "07_capture-absence-set.sql"
+    ],
+    "fresh_dynamic_probe": "emit-fresh-verification.py with actual root-captured ID receipt"
+  },
+  "qualification": {
+    "offline_pg17_grammar": "PASS",
+    "declared_row_variables": 7,
+    "emitter_units": 7,
+    "native_case_count": 25,
+    "native_assertions": "NOT_RUN",
+    "native_prefix": "DEPENDENCY_HELD_SOURCE_REPORT_BUILD_OWNER_AND_ROOT",
+    "installed_acl": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "provider_calls": 0,
+    "database_calls_by_this_lane": 0
+  },
+  "preserved": {
+    "daily_source_commit": "00f25571ac7fb65f44351a52beced0710211138e",
+    "contract_schema_checkpoint": "7d1be386431f5a88b7206d24c9af37b504c36f4e",
+    "physical_schema_sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115"
+  }
+}
