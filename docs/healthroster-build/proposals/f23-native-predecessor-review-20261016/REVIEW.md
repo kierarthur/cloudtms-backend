@@ -1,0 +1,54 @@
+# Finite F23 predecessor review — source only
+
+The two immutable `13102026_1430` CHECK-drop loops have a source-derived closed predecessor set: **11** CHECKs on `public.weekly_source_charge_checks` and **12** on `public.weekly_source_billing_movements`. Their complete names, exact native contract expressions and metadata are in `REVIEW.json`. A third, narrower selector has one exact predecessor enum CHECK on `public.weekly_source_invoice_presentation_lines`. The assignment-capability selector has two exact source expressions, but its native generated-name/deparse receipt is absent from the baseline contract; that caveat remains open.
+
+This is an independent review of the predecessor gap reported by Money, not a final Part B review of the 95-point dynamic census. No compiler, harness, product, migration, frozen Candidate payload, Bank worktree, database or deployment was changed. Root remains the integrator. No SQL in this proposal was executed.
+
+## Evidence and scope
+
+- Reviewed root commit: `3b2f6f385052b51df4004be6b68766ad62c6c17e`, with saved source checked read-only in `healthroster-install2-14102026`.
+- Physical review parent: `0716b661530c6147e778231db8663a8abefb56f3` in the registered `healthroster-checklist-native-14102026` worktree.
+- Money dynamic JSON SHA-256: `ec6085b5746ef5542c38c1cb4624b04e86040ba66aef3a82e45f82b0d2de631a`; Markdown: `3cd43dfd2e3fd95d84c233f1849af3f23aedf51f329f6075a566408a4ace2822`. Its census contains 95 actual EXECUTEs, 35 file/signature groups and 41 enclosing producers. This review does not promote that complete census to native qualification.
+- Frozen Candidate joined final `f5668bf45854ca36b47e713c0e8f3dd3ae4b852b` and MOUNT `e4ae5b059060aca1a9318e0c447c5530a1f6100eef79af6f1094a0beef0a9c44` are untouched; neither supplies predecessor approval for these bodies.
+- All 407 locked migration blobs match their immutable hashes and the saved reviewed root, including the two uppercase `.SQL` paths. The full migration list uses the release engine's `sqlDateKey` ordering, rather than filename lexicographic order.
+- The complete constructor is `15092026_1534_weekly_source_plan6_schema.sql`, SHA-256 `1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d`. The immutable 1430 migration is `931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c`.
+- The native schema evidence is the pinned, data-free `current-contract.json`, SHA-256 `da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a`. It is repository evidence, not a fresh database census.
+
+Between the original constructor and 1430, the only other migrations mentioning the affected pre-existing relations are `04102026_0470` (foreign keys from new Bank relations) and `04102026_0500` (an index). They do not rewrite any target CHECK. `13102026_1133` creates the separate assignment relation. The later `13102026_1680` alters invoice-window columns/indexes only, and occurs after 1430. The ordered file/statement pins are retained in the JSON.
+
+All 117 repeatable files mentioning the four relations were scanned as complete top-level SQL programs: none contains an explicit top-level `CREATE/ALTER/DROP TABLE` for these targets. The managed release applies every pending migration before its repeatable phase; the rehearsal uses the same ordering. This bounded source inventory does not prove arbitrary dynamic/transitive DDL absent from every conceivable installed routine. The proposed native set assertion is deliberately required at execution time and rejects such predecessor drift.
+
+## Exact 1430 boundary
+
+The first two relevant statement hashes are `de65c105cb2c826faf50b02c53b2b5a4299219a8e6e605a7d4309bfe82d81d96` and `0a76cc05e5b41b81096a60989ee5b7769a971fe1db767acbcf0222a3c2ef9575`. The complete enclosing DO hashes from Money are respectively `e39700fba8f01d791f4bb99a8204c2d875d43a447d29fa2c67ec8c56dc565bb2` and `0d59b85eff3da4213aabd73adde09f55dc3645c227edf78c5ba773f45a12cc58`.
+
+For charge checks, the allowed set is the three profile/result/sign enum CHECKs plus `weekly_source_charge_checks_check2` through `check9`. For billing movements it is `weekly_source_billing_movements_check` through `check7`, plus the four enum CHECKs for movement role, source profile, source line and price result. Both tables retain 11 independent CHECKs apiece, enumerated separately in the JSON. The preserved arithmetic, ranges, JSON shape, fingerprints, placement constraints and every FK/unique are outside the original selectors. The replacement clauses deliberately extend the supported invoice profiles and origin/role contract; this review does not claim the entire replacement is semantically identical to its predecessor or independently qualify financial behavior.
+
+The complete proposal `16102026_0943_money_prebody_assertion_proposal.sqlinc` has SHA-256 `96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50`. It locks only the exact three relations in ACCESS EXCLUSIVE mode and compares the actual matching set to literal reviewed names, expressions, validated/deferrable/deferred flags. FULL JOIN equality makes missing, extra, renamed, changed and unvalidated matching CHECKs fail before the original body begins. No catalogue text becomes executable SQL and no newly encountered row can extend the allowed set.
+
+The original selectors use `pg_get_constraintdef(oid)` with default `pretty=false`. The contract exporter uses `pg_get_constraintdef(oid,true)` under `search_path=pg_catalog,public`. Therefore the proposal retains the **original default-false predicate** for the actual candidate census, but uses **true-to-true equality** against the contract expressions under that pinned path. Treating the two renderings as equal strings would be an integration defect.
+
+Root must install the companion **before** the unchanged migration body, in the same existing atomic unit: BEGIN, writer/identity admission, fixed table locks and predecessor assertion, immutable body, writer assertion, ledger, COMMIT. The rehearsal must emit exactly the same companion before that body in its rollback transaction. Locks cannot be released or committed between assertion and DROP. The 0339 contact companion is an implementation reference for exact compiler/harness/closure binding only; its approval cannot admit this different prebody program. The 1430 migration must not be edited, relocked or replaced by a later chronological assertion that runs after its DROP.
+
+## Two narrower caveats
+
+The price selector's statement hash is `a5d195541446398e49ef0bf39c0c14fab07384bbb817f30fdd2e39e0b9a11462`, enclosing DO `a3a31a5654c8038289d92f6b70ee07422632515ffd6fa592225c598044d1d1f1`. Its native predecessor name is exactly `weekly_source_invoice_presentation_lin_price_check_result_check`; its exact five-value enum expression is in the JSON/proposal. The original single-column `conkey` and `SELECT INTO STRICT` protect cardinality but do not protect expression identity. The proposal adds the exact identity/expression/metadata check and independently retains the original candidate-selector count of one.
+
+The capability statement hash is `ab5bdf121ab1e57c4ae894025cd8e7b176fb5f43d1ed6b7c6110103b44e0331a`, full DO `20127141ea6162fcf351b396a6c1fc1003746b7480f1b528cbb8616493c32427`. Its source constructor is the locked `13102026_1133` migration (`8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf`), and its immutable replacement is `14102026_0400` (`5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16`). The two exact source expressions are:
+
+```sql
+feature_purpose in ('RULE_SET','SIGNED_CHECK_ONLY')
+feature_purpose is null or ((rule_set_version_id is null)=(feature_purpose='SIGNED_CHECK_ONLY'))
+```
+
+The separate feature-enabled metadata CHECK mentions `feature_purpose`, but lacks `SIGNED_CHECK_ONLY` and is therefore retained. The original loop's role counts are one purpose and one version, and any later exception rolls back its earlier DROP statements. Those facts do not prove expression equality. The baseline contract contains no assignment relation because the 1133 constructor is pending. I have not invented its PostgreSQL-generated constraint names or deparse strings. To close this case, Root needs a data-free native PG17 prebody census after the exact pending prefix and before 0400, with those two roles/names/full expressions and flags, then a separately reviewed exact prebody assertion bound to that immutable unit. No generic substring/drop waiver follows from this review.
+
+## Verification and handoff
+
+`node docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/review.mjs` passes: all input pins, 407 immutable source hashes, ordered relevant DDL, 11/12/1 predecessor derivations, no explicit target-table repeatable DDL, and 14 finite set-equality source-model cases. It emits only data-free evidence and the unexecuted proposal. The source model covers an exact set, missing/extra rows, expression changes, renaming, unvalidated flags and swapped name/expression bindings for both broad loops. It is not a PostgreSQL execution test. The repository SQL packaging lexer sees exactly LOCK and DO.
+
+`python docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/check_grammar.py C:/tmp/healthroster-v6-physical-parser` also passes using the already available pglast v7.20 / PostgreSQL 17.7 parser: both complete top-level statements and the entire DO body parse offline. `GRAMMAR.json` pins the exact proposal hash. The default interpreter initially lacked an import path; the existing parser directory was obtained from Root's data-free grammar input. No dependency was installed. Offline grammar is not native object resolution, execution or semantic proof.
+
+Before admitting the eventual implementation, Root should test the exact compiled packet and each drift/refusal case on the approved TEST rollback route with its shared turn, full predecessor prefix and fresh restoration proof. Refusal must occur before any 1430 body effect or ledger checkpoint. An exact predecessor must admit the unchanged body; the resulting independent checks must still match their baseline pins. Compiler/harness tests must refuse changed migration/closure/body/companion bytes, wrong kind/path, appended statement, changed expected name/expression/count, omitted prebody, postbody-only placement and detached transaction. A two-session test should prove the fixed table lock prevents a concurrent new matching CHECK between census and DROP. None of those native tests was run in this lane.
+
+Native: **NOT_RUN**. Database calls: **0**. Deployments: **0**. Secret values printed: **no**. Destructive SQL/RPC/actions executed: **no**. Policy X behavior changed: **no**. The old untracked `checklist-v5-physical-identity-capability-foundation-20261015` directory is preserved and excluded from this review's commit.
