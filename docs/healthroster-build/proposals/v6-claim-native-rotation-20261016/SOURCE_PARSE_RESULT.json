@@ -1,0 +1,28 @@
+{
+  "qualification": "OFFLINE_GRAMMAR_ONLY",
+  "native": "NOT_RUN",
+  "pglast": "v7.20",
+  "checks": [
+    {
+      "path": "fixtures/native-claim-rotation.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 22,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/025_claim_placement.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 9,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/028_claim_lock.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 23,
+      "rowtype_parser_alias_only": true
+    }
+  ]
+}

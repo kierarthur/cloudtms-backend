@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "source_commit": null,
+  "remote_verified_tip": null,
+  "base_report_commit": "d49de3d59e7ba0d1bde8233a3bc42f957f631797",
+  "predecessor_invoice_source": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+  "physical": {
+    "source": "c03c010dfabe8280fcbb36779fa210e7e5242a02",
+    "mount_sha256": "1328ce41078d6d631e27c7a1d1342232292ee25ea244b39d34c3613dbe76c462",
+    "required": [
+      "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "private.timesheet_contract_current_placement_v1(uuid)",
+      "private.timesheet_contract_move_family_lock_v1(uuid)"
+    ]
+  },
+  "root_mount": "Replace only corresponding complete functions in new final invoice definition closure, after actual Physical c03 complete closure and original c86 invoice stores/definitions; no applied parent rewrite/schema/public grant",
+  "targets": [
+    {
+      "signature": "private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid)",
+      "source": "forward/025_claim_placement.sqlinc",
+      "original_complete_payload": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/025_claim_placement.sqlinc",
+      "original_sha256_raw": "a23f2a30eae352a9903449adbfbd5d1761db96ceac61f883aa4ecbbe72f6ce78",
+      "original_sha256_lf": "a23f2a30eae352a9903449adbfbd5d1761db96ceac61f883aa4ecbbe72f6ce78",
+      "successor_sha256": "4be37b2eec2dc788b396f36ba6e5127d6cc4a6f92a67905c5efe6a5c471efccf"
+    },
+    {
+      "signature": "private._candidate_expense_owner_context_lock_v1(uuid)",
+      "source": "forward/028_claim_lock.sqlinc",
+      "original_complete_payload": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/028_claim_lock.sqlinc",
+      "original_sha256_raw": "de2a58a673e9ca657a203874635f7916b9833ef1a15904636d325344c141b268",
+      "original_sha256_lf": "de2a58a673e9ca657a203874635f7916b9833ef1a15904636d325344c141b268",
+      "successor_sha256": "5181a193cd89c5364372c8e6df77756a3724293c4576ba7e585c1245465b5b9d"
+    }
+  ],
+  "payloads": [
+    {
+      "path": "fixtures/native-claim-rotation.sqlinc",
+      "sha256": "505e1c933ec29ef02ec81875f23af3bf539c295cddd77fc4ffe613c55f3a8a03",
+      "bytes": 5955
+    },
+    {
+      "path": "forward/025_claim_placement.sqlinc",
+      "sha256": "4be37b2eec2dc788b396f36ba6e5127d6cc4a6f92a67905c5efe6a5c471efccf",
+      "bytes": 3857
+    },
+    {
+      "path": "forward/028_claim_lock.sqlinc",
+      "sha256": "5181a193cd89c5364372c8e6df77756a3724293c4576ba7e585c1245465b5b9d",
+      "bytes": 3649
+    }
+  ],
+  "source_checks": {
+    "cases": 4,
+    "offline_grammar": "PASS",
+    "native": "NOT_RUN",
+    "database_calls": 0
+  },
+  "remaining": [
+    "Genuine native Move/rotation/component inputs for executable rollback assertions",
+    "Native lock/race/component refresh proof",
+    "Pending/null withdrawal requires its separate genuine Physical authority/schema successor",
+    "Installed API/currentness/financial acceptance"
+  ],
+  "artifacts": [
+    {
+      "path": "INTEGRATION.md",
+      "sha256": "56512d81038992943acff6980d88c40cf15b289ba72d4530ebb1d688fb27179d"
+    },
+    {
+      "path": "parse-source.py",
+      "sha256": "08fd1ddbffeedd9199087ebf801b1644e66cc88362f198d0c190fc9ac7e774a7"
+    },
+    {
+      "path": "source.test.mjs",
+      "sha256": "c2d20df7ff9fc80e138d32d55fcbe2f690ec80587ec31747b5776fce48c5e9e5"
+    },
+    {
+      "path": "SOURCE_PARSE_RESULT.json",
+      "sha256": "20934ef010a3345fba4bef61f324afdc1abebb9acfb4a52f8ee0ab00151c14b8"
+    }
+  ]
+}

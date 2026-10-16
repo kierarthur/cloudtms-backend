@@ -1,0 +1,73 @@
+-- REQUIRED_NOT_RUN. Root must compose the real physical native reject/rotate
+-- owner and actual reviewed Move/component construction before these checks.
+-- No fake audit, approval, finance, provider result, or permanent row is made.
+-- Input: pg_temp.healthroster_claim_rotation_cases populated ONLY from those
+-- genuine constructor outputs inside the same server-owned rollback trial:
+-- (case_name text,workflow_id uuid,stored_timesheet_id uuid,
+--  expense_component_id uuid,expected_timesheet_id uuid,expected_sqlstate text).
+-- Required rows: ACCEPTED_INITIAL, ORIGINAL_AFTER_ROTATION,
+-- INTERMEDIATE_AFTER_ROTATION, COMPONENT_AFTER_ROTATION, FOREIGN_WORKFLOW,
+-- FOREIGN_COMPONENT. The two foreign rows name actual unrelated native IDs,
+-- an archived reviewed original, expected_timesheet_id=NULL/sqlstate='55000'.
+do $proof$
+declare c record;actual_id uuid;before_rows jsonb;after_rows jsonb;placement jsonb;
+begin
+ if to_regclass('pg_temp.healthroster_claim_rotation_cases') is null then
+  raise exception 'GENUINE_NATIVE_CLAIM_ROTATION_INPUTS_REQUIRED';end if;
+ if exists(select required.name from unnest(array['ACCEPTED_INITIAL','ORIGINAL_AFTER_ROTATION',
+   'INTERMEDIATE_AFTER_ROTATION','COMPONENT_AFTER_ROTATION','FOREIGN_WORKFLOW','FOREIGN_COMPONENT']) required(name)
+   where not exists(select 1 from pg_temp.healthroster_claim_rotation_cases supplied where supplied.case_name=required.name)) then
+  raise exception 'GENUINE_NATIVE_CLAIM_ROTATION_CASES_INCOMPLETE';end if;
+ for c in select supplied.* from pg_temp.healthroster_claim_rotation_cases supplied order by supplied.case_name loop
+  if c.expected_sqlstate is not null then
+   begin
+    perform private.timesheet_contract_claim_placement_v1(c.workflow_id,c.stored_timesheet_id,c.expense_component_id);
+   exception when others then
+    if sqlstate=c.expected_sqlstate then continue;end if;raise;
+   end;
+   raise exception 'NATIVE_CLAIM_ROTATION_EXPECTED_REFUSAL:%',c.case_name;
+  end if;
+  actual_id:=private.timesheet_contract_claim_placement_v1(c.workflow_id,c.stored_timesheet_id,c.expense_component_id);
+  if actual_id is distinct from c.expected_timesheet_id or actual_id is null then
+   raise exception 'NATIVE_CLAIM_ROTATION_WRONG_TARGET:%',c.case_name;end if;
+  placement:=private.timesheet_contract_current_placement_v1(actual_id);
+  if placement->>'current_timesheet_id' is distinct from actual_id::text or placement->>'legacy_origin'<>'false' then
+   raise exception 'NATIVE_CLAIM_ROTATION_H103_REQUIRED';end if;
+  if c.case_name in('ORIGINAL_AFTER_ROTATION','INTERMEDIATE_AFTER_ROTATION','COMPONENT_AFTER_ROTATION') then
+   select to_jsonb(p) into strict placement from private.timesheet_contract_current_placements p
+    where p.current_timesheet_id=actual_id;
+   if not private.timesheet_contract_native_rotation_binding_v1(placement,false)
+    or private.timesheet_contract_native_rotation_binding_v1(placement||jsonb_build_object('placement_receipt_id',null),false)
+    or private.timesheet_contract_native_rotation_binding_v1(placement||jsonb_build_object('placement_revision','0'),false)
+    or not exists(select 1 from private.timesheet_contract_move_members m
+      where m.operation_id=(placement->>'operation_id')::uuid and m.member_key=placement->>'member_key'
+       and m.to_timesheet_id is distinct from actual_id) then
+    raise exception 'NATIVE_CLAIM_ROTATION_ACTUAL_AUDIT_REQUIRED';end if;
+  end if;
+  if c.case_name='COMPONENT_AFTER_ROTATION' then
+   if c.expense_component_id is null then raise exception 'GENUINE_NATIVE_COMPONENT_REQUIRED';end if;
+   -- Entire actual family rows, original finance/evidence/workflows and claims
+   -- must be identical after the lock-only owner. No synthetic acceptance.
+   with aliases as(select a.timesheet_id from private.timesheet_contract_family_aliases a
+     where a.family_root_id=(private.timesheet_contract_current_placement_v1(actual_id)->>'family_root_id')::uuid)
+   select jsonb_build_object(
+    'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t join aliases a on a.timesheet_id=t.timesheet_id),
+    'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f join aliases a on a.timesheet_id=f.timesheet_id),
+    'evidence',(select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e join aliases a on a.timesheet_id=e.timesheet_id),
+    'workflow',(select to_jsonb(w) from public.candidate_submission_workflows w where w.id=c.workflow_id),
+    'component',(select to_jsonb(e) from public.candidate_expense_components e where e.expense_component_id=c.expense_component_id)) into before_rows;
+   actual_id:=private._candidate_expense_owner_context_lock_v1(c.expense_component_id);
+   if actual_id is distinct from c.expected_timesheet_id then raise exception 'NATIVE_CLAIM_ROTATION_LOCK_WRONG_TARGET';end if;
+   with aliases as(select a.timesheet_id from private.timesheet_contract_family_aliases a
+     where a.family_root_id=(private.timesheet_contract_current_placement_v1(actual_id)->>'family_root_id')::uuid)
+   select jsonb_build_object(
+    'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t join aliases a on a.timesheet_id=t.timesheet_id),
+    'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f join aliases a on a.timesheet_id=f.timesheet_id),
+    'evidence',(select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e join aliases a on a.timesheet_id=e.timesheet_id),
+    'workflow',(select to_jsonb(w) from public.candidate_submission_workflows w where w.id=c.workflow_id),
+    'component',(select to_jsonb(e) from public.candidate_expense_components e where e.expense_component_id=c.expense_component_id)) into after_rows;
+   if before_rows is distinct from after_rows then raise exception 'NATIVE_CLAIM_ROTATION_LOCK_CHANGED_BUSINESS_ROWS';end if;
+  end if;
+ end loop;
+end;
+$proof$;
