@@ -1,0 +1,42 @@
+{
+  "version": "CONTACT_MANUAL_RUNTIME_CONTRACT_RECEIPT_V1",
+  "status": "SOURCE_ONLY_UNMOUNTED_NATIVE_REQUIRED_NOT_RUN",
+  "authority": "Final CONTACT_PAUSE_SPEC commissioned manual preview/accept; Root reviewed the closed response contract and owns the sole Worker/Office mount",
+  "request_commands": {
+    "CONTACT_MANUAL_ENQUIRY_PREVIEW": "public.weekly_source_contact_manual_enquiry_preview_v1(jsonb)",
+    "CONTACT_MANUAL_ENQUIRY_ACCEPT": "public.weekly_source_contact_manual_enquiry_accept_v1(jsonb)"
+  },
+  "files": [
+    {
+      "path": "runtime/contact-manual-enquiry.mjs",
+      "sha256": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51"
+    },
+    {
+      "path": "runtime/contact-manual-enquiry.d.ts",
+      "sha256": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e"
+    }
+  ],
+  "refusal_http_status": {
+    "CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID": 400,
+    "WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED": 403,
+    "CONTACT_SCOPE_NOT_FOUND": 403,
+    "CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT": 409,
+    "CONTACT_MANUAL_ENQUIRY_REVISION_CONFLICT": 409,
+    "CONTACT_MANUAL_ENQUIRY_REVIEW_STALE": 409,
+    "CONTACT_MANUAL_ENQUIRY_REVIEW_EXPIRED": 409,
+    "CONTACT_MANUAL_ENQUIRY_NOT_ELIGIBLE": 409,
+    "CONTACT_SOURCE_ORDINAL_EXHAUSTED": 409,
+    "CONTACT_CHECKING_REVISION_EXHAUSTED": 409,
+    "CONTACT_DEPLOYMENT_UNAVAILABLE": 503,
+    "CONTACT_MANUAL_ENQUIRY_DEPENDENCY_UNAVAILABLE": 503
+  },
+  "public_error_rules": [
+    "Unknown native failures map to CONTACT_MANUAL_ENQUIRY_DEPENDENCY_UNAVAILABLE without exposing SQL detail, native row JSON or credentials.",
+    "Native unique_violation defensively maps to CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT; the genuine exclusive deployment transaction mutex serializes same-deployment requests before scope locks.",
+    "Preview member exclusions are typed review results; they do not acknowledge a provider send.",
+    "Unknown ACCEPT transport outcome retains the identical original request_id/review_id/review_digest and body for retry. No replacement request or fresh ordinal is inferred."
+  ],
+  "native_sql": "UNCOMMITTED_CONTINUATION_WIP_NOT_A_REVIEWED_NATIVE_PACKAGE",
+  "database_actions": "NONE",
+  "activation": "Root shared command route, combined read and Office parent mount remain held pending complete native/schema/ACL package review."
+}
