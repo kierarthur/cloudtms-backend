@@ -1,0 +1,53 @@
+{
+  "version": "HEALTH_SOURCE_PAY_HTTP_ROOT_INTEGRATION_V1",
+  "sourceCommit": "aa51acc6cb5f0d831099fb676b55ce9da5c69878",
+  "sourceManifestSha256": "6658244da35bb8ea3683e8b3b0148294ec97e9270069a0e0a1ba14f74898881f",
+  "verifiedSourceFiles": 23,
+  "tests": {
+    "pass": 41,
+    "fail": 0,
+    "native": "NOT_RUN"
+  },
+  "parents": [
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "currentBeforeSha256": "34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121",
+      "afterSha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471",
+      "uniqueEdits": 4,
+      "wholeCurrentReverse": true,
+      "dailyPriorContributionPreserved": false,
+      "allEarlierUnrelatedBytesPreserved": true
+    },
+    {
+      "file": "broker/src/index.js",
+      "currentBeforeSha256": "5cf29eafd812da0401c671cf9eb8e3cfb5345ff25e6c6b4e93e7f9ceb4e81c4a",
+      "afterSha256": "31e294b12da5c4cffe3b44bc42d8eb2ff0b6777b85defed2c246bc51a30e6334",
+      "uniqueEdits": 2,
+      "wholeCurrentReverse": true,
+      "dailyPriorContributionPreserved": true,
+      "allEarlierUnrelatedBytesPreserved": true
+    }
+  ],
+  "module": {
+    "source": "runtime/source-pay-decision-http.mjs",
+    "target": "broker/src/weekly-source/source-pay-decision-http.mjs",
+    "sha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d",
+    "bytes": 7885
+  },
+  "sourceRequestByteCap": 262144,
+  "streamedUtf8": "FATAL_BOUNDED_BEFORE_RETAINING_OVERFLOW",
+  "failedBodyReaderCancelled": true,
+  "currentAuthentication": "EXISTING_OFFICE_AUTH_AND_WP_PP_NO_NEW_ADMIN_GATE",
+  "readResult": "GENUINE_INTERNAL_READ_REPROVED_THEN_PUBLIC_PROJECTION_DEPENDENCY_503",
+  "sqlChanges": 0,
+  "bankBodiesChanged": 0,
+  "durableInstall": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "combinedFullSourceGate": {
+    "actualF23": "PASS",
+    "tests": 14,
+    "pass": 14,
+    "fail": 0,
+    "gateSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578"
+  }
+}

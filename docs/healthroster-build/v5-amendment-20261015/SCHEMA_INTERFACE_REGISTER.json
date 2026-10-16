@@ -6896,5 +6896,57 @@
     "sourcePublicRead": "HELD_REAL_CURRENT_FINANCIAL_COMPOSITION",
     "native": "NOT_RUN",
     "officePromotion": "NOT_RUN"
+  },
+  "source_pay_http_parent_continuation_20261016": {
+    "sourceCommit": "aa51acc6cb5f0d831099fb676b55ce9da5c69878",
+    "manifestSha256": "6658244da35bb8ea3683e8b3b0148294ec97e9270069a0e0a1ba14f74898881f",
+    "parents": [
+      {
+        "file": "broker/src/weekly-source/routes.js",
+        "currentBeforeSha256": "34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121",
+        "afterSha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471",
+        "uniqueEdits": 4,
+        "wholeCurrentReverse": true,
+        "dailyPriorContributionPreserved": false,
+        "allEarlierUnrelatedBytesPreserved": true
+      },
+      {
+        "file": "broker/src/index.js",
+        "currentBeforeSha256": "5cf29eafd812da0401c671cf9eb8e3cfb5345ff25e6c6b4e93e7f9ceb4e81c4a",
+        "afterSha256": "31e294b12da5c4cffe3b44bc42d8eb2ff0b6777b85defed2c246bc51a30e6334",
+        "uniqueEdits": 2,
+        "wholeCurrentReverse": true,
+        "dailyPriorContributionPreserved": true,
+        "allEarlierUnrelatedBytesPreserved": true
+      }
+    ],
+    "module": "broker/src/weekly-source/source-pay-decision-http.mjs",
+    "sourceChecks": 41,
+    "requestByteCap": 262144,
+    "streamedFatalUtf8": true,
+    "readResult": "GENUINE_INTERNAL_REPROOF_CLOSED_UNFINISHED_PUBLIC_PROJECTION",
+    "native": "NOT_RUN",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_HTTP_PARENT_INTEGRATION_20261016.json"
+  },
+  "daily_public_independent_peer_continuation_20261016": {
+    "version": "HEALTH_DAILY_PUBLIC_ROOT_PEER_ADOPTION_V1",
+    "peerCommit": "8a2e35d9d8cf49084cce947d8bcf705e3112e9b0",
+    "peerManifestSha256": "03a946ce57d7a00f3a4029fbb3e2f94b27489bf70974f84c2b0ca149da72280f",
+    "peerReviewSha256": "5fbd046b4ced4761546accd3781ca65f38c4a1d1cad56b6f44cf75bd916e58f7",
+    "verifiedPeerFiles": 32,
+    "sourceVerdict": "NO_NEW_SOURCE_BLOCKER_IN_EXACT_FOUR_CALLER_PARTIAL_PROPOSAL",
+    "sourceBlockers": [],
+    "sourceTests": 29,
+    "fullFunctions": 4,
+    "currentRoleRawSavedReceiptLeak": false,
+    "requiredHolds": [
+      "Real private Daily review/atomic accept/current-role-safe result composers",
+      "Genuine approved Daily paid/frozen/history/current Summary preflight and exact delegate ABI",
+      "Real Banking Daily publisher plus exact same-TX once-only publication/Invoice preparation/completion and immutable old evidence",
+      "Actual role/redaction/currentness/concurrency/native/API/installed acceptance; to_regprocedure existence is not release qualification"
+    ],
+    "native": "NOT_RUN",
+    "finalPartB": "NOT_RUN",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PUBLIC_INDEPENDENT_PEER_ADOPTION_20261016.json"
   }
 }

@@ -68,6 +68,7 @@ import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';
+import { previewSourcePayDecision,confirmSourcePayDecision,readSourcePayDecisionSource } from './weekly-source/source-pay-decision-worker.mjs';
 import {dispatchDailyRateCorrectionRequest,createDailyRateCorrectionRpc} from './daily-rate-correction.js';
 
 import { createPushTimingOfficeHandler } from './weekly-source/push-timing-office.mjs';
@@ -199243,6 +199244,17 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
         },
         bpayNextOwnerStatusRpc: (runtimeEnv) => bpayNextOwnerStatusRpc(runtimeEnv)(),
         rpc: weeklySourceOffRpc,
+        previewSourcePayDecision: ({ request, actorUserId }) => previewSourcePayDecision({
+          request, actorUserId, dataRpc: weeklySourceOffRecordingRpc,
+          calculateWeeklySnapshot: (input) => calculateWeeklyProtectedSnapshot(env, input)
+        }),
+        confirmSourcePayDecision: ({ request, actorUserId }) => confirmSourcePayDecision({
+          request, actorUserId, dataRpc: weeklySourceOffRecordingRpc,
+          calculateWeeklySnapshot: (input) => calculateWeeklyProtectedSnapshot(env, input)
+        }),
+        readSourcePayDecisionSource: ({ request, actorUserId }) => readSourcePayDecisionSource({
+          request, actorUserId, dataRpc: weeklySourceOffRecordingRpc
+        }),
         previewUpload: weeklySourceUploadOwner.previewUpload,
         recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,
         acceptUpload: weeklySourceUploadOwner.acceptUpload,

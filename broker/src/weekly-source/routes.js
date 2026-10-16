@@ -13,6 +13,7 @@ import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './che
 import {CONTACT_PAUSE_RPC_COMMANDS,isContactPauseCommand,parseContactPauseCommandBody,handleContactPauseOfficeCommand} from './contact-pause-office.mjs';
 import { contactReminderRefusal } from './contact-reminder-refusal.mjs';
 import {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';
+import {matchSourcePayDecisionRoute,handleSourcePayDecisionHttp,SOURCE_PAY_DECISION_HTTP_ROUTES} from './source-pay-decision-http.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -1274,10 +1275,17 @@ export async function dispatchWeeklySourceRequest(req, env, ctx, dependencies = 
   const url = new URL(req.url);
   const path = url.pathname;
   const officePrefix = '/api/weekly-source/v1';
-  if (!path.startsWith(`${officePrefix}/`) && path !== officePrefix) return null;
+  const payDecisionRoute = matchSourcePayDecisionRoute(path);
+  if (!path.startsWith(`${officePrefix}/`) && path !== officePrefix && !payDecisionRoute) return null;
 
   try {
     const user = await requireOfficeUser(req, env, dependencies);
+    if (payDecisionRoute) return await handleSourcePayDecisionHttp({
+      req, url, user, route: payDecisionRoute,
+      preview: dependencies.previewSourcePayDecision,
+      confirm: dependencies.confirmSourcePayDecision,
+      readSource: dependencies.readSourcePayDecisionSource,
+    });
     if (user.payView && !(
       (req.method === 'GET' && [ `${officePrefix}/workspace`, `${officePrefix}/notifications`, `${officePrefix}/checklist` ].includes(path))
       || (req.method === 'POST' && path === `${officePrefix}/commands`)
@@ -1376,6 +1384,7 @@ export const WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT = Object.freeze({
   directRpcCommands: DIRECT_RPC_COMMANDS,
   contactPauseRpcCommands: CONTACT_PAUSE_RPC_COMMANDS,
   contactManualEnquiryRpcCommands: CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,
+  sourcePayDecisionRoutes: SOURCE_PAY_DECISION_HTTP_ROUTES,
   // WP-23.  The commands whose owners do not take the Weekly Source
   // jsonb-request shape, kept separate so a reader can see at a glance which
   // owner signature each one is bound to.

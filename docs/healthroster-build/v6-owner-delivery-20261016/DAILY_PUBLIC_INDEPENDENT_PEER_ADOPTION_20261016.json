@@ -1,0 +1,20 @@
+{
+  "version": "HEALTH_DAILY_PUBLIC_ROOT_PEER_ADOPTION_V1",
+  "peerCommit": "8a2e35d9d8cf49084cce947d8bcf705e3112e9b0",
+  "peerManifestSha256": "03a946ce57d7a00f3a4029fbb3e2f94b27489bf70974f84c2b0ca149da72280f",
+  "peerReviewSha256": "5fbd046b4ced4761546accd3781ca65f38c4a1d1cad56b6f44cf75bd916e58f7",
+  "verifiedPeerFiles": 32,
+  "sourceVerdict": "NO_NEW_SOURCE_BLOCKER_IN_EXACT_FOUR_CALLER_PARTIAL_PROPOSAL",
+  "sourceBlockers": [],
+  "sourceTests": 29,
+  "fullFunctions": 4,
+  "currentRoleRawSavedReceiptLeak": false,
+  "requiredHolds": [
+    "Real private Daily review/atomic accept/current-role-safe result composers",
+    "Genuine approved Daily paid/frozen/history/current Summary preflight and exact delegate ABI",
+    "Real Banking Daily publisher plus exact same-TX once-only publication/Invoice preparation/completion and immutable old evidence",
+    "Actual role/redaction/currentness/concurrency/native/API/installed acceptance; to_regprocedure existence is not release qualification"
+  ],
+  "native": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}
