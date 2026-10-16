@@ -1,0 +1,28 @@
+{
+  "status": "PREPARED_NATIVE_NOT_RUN",
+  "sourceCommit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+  "sourceRecipe": {
+    "path": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/MOUNT_RECIPE.json",
+    "sha256": "acaa5e6d097828f93b9e6757fe88f590a4af7ffc26a2a8d7f377663be9155135"
+  },
+  "inputs": [
+    {
+      "path": "forward/08_factual_snapshot.sqlinc",
+      "sha256": "eba79a9c7bbdd943ac36faa065417835a5ef63ad294a4a960279698c26ddeb50"
+    },
+    {
+      "path": "tests/factual-snapshot-native.sql",
+      "sha256": "d391a8d6fe4980353115d9c030bfb64ab81f8a29daa49a065e3f5b612cd2bc76"
+    }
+  ],
+  "fullBodiesAndVectorsRetained": true,
+  "statementCount": 5,
+  "vectorCount": 28,
+  "ownerMapping": "Actual mapExecutableSqlSource; CLOUDTMS_LOGICAL_POSTGRES_OWNER=CURRENT_USER; only audited logical postgres mapped",
+  "sourceSha256": "d9b666e5260760605b518209b715dca8d1d17ae8f3c55c3dfedcb04d2ef3dfde",
+  "mappedSha256": "5cbfa61442ff3613b83474a86b8c78b3440f1dace08759a2c8036be22e1f9d3a",
+  "submittedSha256": "62f9b0370fae2bce82188fecb728b554077674b4b65d0f7b38b05ad5c13b188a",
+  "bytes": 13738,
+  "scope": "One pure closed JSON validator plus all28original vectors. No business table, CREATE workflow, signature, Move, paper, API, financial or full-rehearsal proof.",
+  "native": "NOT_RUN"
+}
