@@ -17,6 +17,48 @@ as $function$
  coalesce((select array_agg(distinct x order by x) from unnest(p_ids) x where x is not null),'{}'::uuid[]);
 $function$;
 
+-- SQL-only same-transaction actual placement. The deferred guard forbids a
+-- REVIEWED placement from committing. Consumed native authority survives context
+-- cleanup and proves this backend/xid; a receipt/GUC alone is never authority.
+create or replace function private.timesheet_contract_move_accepting_v1(p_operation_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from private.timesheet_contract_move_operations o
+  join private.timesheet_contract_move_reviews r on r.operation_id=o.id and r.id=o.accepted_review_id
+  where o.id=p_operation_id and o.purpose='CONTRACT_CORRECTION' and o.state='REVIEWED'
+   and o.accept_request_id is null and o.receipt_json is null and o.completed_at_utc is null
+   and o.accepted_review_digest=r.review_digest and o.to_timesheet_id is not null and o.billing_revision>0
+   and o.expected_scope_hash=r.scope_hash and o.before_pay_cut_hash=r.pay_cut_hash and o.before_invoice_hash=r.invoice_hash
+   and o.placement_receipt_json->>'version'='CONTRACT_MOVE_PLACEMENT_RECEIPT_V1'
+   and o.placement_receipt_json->>'operation_id'=o.id::text
+   and o.placement_receipt_json->>'review_id'=r.id::text
+   and o.placement_receipt_json->>'current_timesheet_id'=o.to_timesheet_id::text
+   and o.unchanged_work_sha256=private.timesheet_contract_move_row_hash_v1(r.manifest_json#>'{physical,members}')
+   and (select count(*) from private.timesheet_contract_move_members m where m.operation_id=o.id)
+      =jsonb_array_length(r.manifest_json#>'{physical,members}')
+   and exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=o.id)
+   and not exists(select 1 from private.timesheet_contract_move_members m
+    left join public.timesheets old_t on old_t.timesheet_id=m.from_timesheet_id
+    left join public.timesheets new_t on new_t.timesheet_id=m.to_timesheet_id
+    left join private.timesheet_contract_current_placements p on p.operation_id=m.operation_id and p.member_key=m.member_key
+    where m.operation_id=o.id and (old_t.timesheet_id is null or new_t.timesheet_id is null
+     or m.member_hash is distinct from private.timesheet_contract_move_row_hash_v1(
+      (select value from jsonb_array_elements(r.manifest_json#>'{physical,members}') value where value->>'member_key'=m.member_key))
+     or old_t.is_current or old_t.archived_at_utc is null or old_t.archived_reason_code is distinct from 'CONTRACT_MOVE'
+     or not new_t.is_current or new_t.archived_at_utc is not null or new_t.contract_id is distinct from o.to_contract_id
+     or new_t.version is distinct from m.to_version or m.to_financial_id is null
+     or p.current_timesheet_id is distinct from new_t.timesheet_id or p.family_root_id is distinct from m.family_root_id
+     or p.placement_receipt_id::text is distinct from o.placement_receipt_json->>'receipt_id'
+     or not exists(select 1 from private.timesheet_contract_move_capability_consumptions k
+      where k.operation_id=o.id and k.member_key=m.member_key and k.phase='ACCEPT_PLACEMENT'
+       and k.backend_pid=pg_backend_pid() and k.transaction_id=pg_current_xact_id_if_assigned()
+       and k.billing_revision=o.billing_revision and k.guard_name='public.timesheet_archive_row_guard_v1'
+       and k.relation_oid='public.timesheets'::regclass and k.row_operation='UPDATE'
+       and k.authority_receipt_id::text=o.placement_receipt_json->>'receipt_id'
+       and k.row_sha256=private.timesheet_contract_move_row_hash_v1(to_jsonb(old_t)))))
+ )
+$function$;
+
 -- No monetary/source history scan. Every physical alias resolves directly to one family member.
 create or replace function private.timesheet_contract_current_placement_v1(p_timesheet_id uuid)
 returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
@@ -33,15 +75,17 @@ begin
   select v.* into t from public.timesheets v where v.timesheet_id=p.current_timesheet_id;
   if p.current_timesheet_id is null or t.timesheet_id is null or not t.is_current or t.archived_at_utc is not null
    or t.contract_id is distinct from p.current_contract_id or a.member_role<>p.role
-   or o.id is null or o.state<>'COMPLETE' or o.placement_receipt_json->>'receipt_id' is distinct from p.placement_receipt_id::text
+   or o.id is null or not ((o.state='COMPLETE' and o.receipt_json is not null) or private.timesheet_contract_move_accepting_v1(o.id))
+   or o.placement_receipt_json->>'receipt_id' is distinct from p.placement_receipt_id::text
    or o.placement_receipt_json->>'operation_id' is distinct from o.id::text
-   or o.accepted_review_id is null or o.receipt_json is null
+   or o.accepted_review_id is null
    or not exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=o.id
      and m.member_key=p.member_key and m.to_timesheet_id=t.timesheet_id and m.to_version=t.version
      and m.family_root_id=p.family_root_id and m.role=p.role)
    or not exists(select 1 from private.timesheet_contract_move_members m
      join private.timesheet_contract_move_operations accepted on accepted.id=m.operation_id
-     where m.operation_id=a.accepted_operation_id and accepted.state in('COMPLETE','SUPERSEDED')
+     where m.operation_id=a.accepted_operation_id
+      and (accepted.state in('COMPLETE','SUPERSEDED') or (accepted.id=o.id and private.timesheet_contract_move_accepting_v1(accepted.id)))
       and m.member_key=a.member_key and m.family_root_id=a.family_root_id and m.role=a.member_role
       and a.timesheet_id in(m.from_timesheet_id,m.to_timesheet_id)) then
    raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';

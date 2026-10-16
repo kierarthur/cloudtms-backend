@@ -4,6 +4,7 @@ declare signature text;
 begin
  foreach signature in array array[
   'private.timesheet_contract_current_placement_v1(uuid)',
+  'private.timesheet_contract_move_accepting_v1(uuid)',
   'private.timesheet_contract_move_assert_v1(uuid,uuid)',
   'private.timesheet_contract_move_booking_part_v1(text)',
   'private.timesheet_contract_move_booking_v1(uuid,uuid,date,integer)',

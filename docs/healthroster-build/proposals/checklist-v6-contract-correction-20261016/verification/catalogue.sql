@@ -3,6 +3,7 @@ with expected(signature) as (values
  ('private.timesheet_contract_move_row_hash_v1(jsonb)'),
  ('private.timesheet_contract_move_changed_columns_v1(jsonb,jsonb)'),
  ('private.timesheet_contract_move_uuid_array_v1(uuid[])'),
+ ('private.timesheet_contract_move_accepting_v1(uuid)'),
  ('private.timesheet_contract_current_placement_v1(uuid)'),
  ('private.timesheet_contract_move_family_lock_v1(uuid)'),
  ('private.timesheet_contract_move_immutable_v1()'),
@@ -44,7 +45,7 @@ select e.signature,p.oid is not null as installed,n.nspname,p.prosecdef,p.procon
  case when p.oid is null then null else has_function_privilege('authenticated',p.oid,'EXECUTE') end as browser_execute,
  case when p.oid is null then null else has_function_privilege('service_role',p.oid,'EXECUTE') end as service_execute,
  exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0 and a.privilege_type='EXECUTE') as public_execute
-from expected e left join pg_proc p on p.oid=to_regprocedure(e.signature) left join pg_namespace n on n.oid=p.pronamespace order by e.signature limit 38;
+from expected e left join pg_proc p on p.oid=to_regprocedure(e.signature) left join pg_namespace n on n.oid=p.pronamespace order by e.signature limit 39;
 
 select c.relname,c.relrowsecurity,c.relforcerowsecurity,
  has_table_privilege('service_role',c.oid,'SELECT,INSERT,UPDATE,DELETE') as service_table_access,

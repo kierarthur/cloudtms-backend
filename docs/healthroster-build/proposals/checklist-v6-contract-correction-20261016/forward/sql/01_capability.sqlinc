@@ -303,10 +303,10 @@ begin
  perform private.timesheet_contract_move_capability_assert_v1(p_capability_id,p_guard_name,p_relation_oid,p_row_operation,p_old_row,p_new_row);
  c:=private.timesheet_contract_move_context_v1();delete from private.timesheet_contract_move_capabilities where id=p_capability_id returning * into k;
  if not found then raise exception 'CONTRACT_MOVE_CAPABILITY_ALREADY_CONSUMED' using errcode='23505'; end if;
- insert into private.timesheet_contract_move_capability_consumptions(execution_context_id,manifest_sha256,expected_events_json,
+ insert into private.timesheet_contract_move_capability_consumptions(execution_context_id,backend_pid,transaction_id,manifest_sha256,expected_events_json,
   operation_id,member_key,phase,billing_revision,event_no,authority_receipt_id,guard_name,relation_oid,row_operation,scope_receipt_id,
   row_sha256,capability_id,consumed_at_utc)
- values(c.id,k.manifest_sha256,c.native_manifest_json->'events',k.operation_id,k.member_key,k.phase,k.billing_revision,k.event_no,
+ values(c.id,pg_backend_pid(),pg_current_xact_id(),k.manifest_sha256,c.native_manifest_json->'events',k.operation_id,k.member_key,k.phase,k.billing_revision,k.event_no,
   k.authority_receipt_id,k.guard_name,k.relation_oid,k.row_operation,k.scope_receipt_id,k.expected_new_sha256,k.id,clock_timestamp());
 end;
 $function$;

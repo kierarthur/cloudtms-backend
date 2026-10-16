@@ -199,6 +199,8 @@ create table private.timesheet_contract_move_capabilities (
 
 create table private.timesheet_contract_move_capability_consumptions (
   execution_context_id uuid not null,
+  backend_pid integer not null check(backend_pid>0),
+  transaction_id xid8 not null,
   manifest_sha256 bytea not null check(octet_length(manifest_sha256)=32),
   expected_events_json jsonb not null check(jsonb_typeof(expected_events_json)='array'),
   operation_id uuid not null references private.timesheet_contract_move_operations(id),

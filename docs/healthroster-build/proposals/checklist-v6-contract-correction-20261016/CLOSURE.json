@@ -6,13 +6,13 @@
   "files": [
     {
       "file": "forward/sql/00_identity.sqlinc",
-      "sha256": "6b85435a8e0f96b58e0297ba9fe27de0adb4092a5b8cd65bca6cb6a5a81f0450",
-      "bytes": 16887
+      "sha256": "d418a0bd9652848e6602601a8af29b544e8e93d4da01f59aebd082d127210057",
+      "bytes": 20603
     },
     {
       "file": "forward/sql/01_capability.sqlinc",
-      "sha256": "1463373e5727d894902779cebdcaec15614f4aed97307d804a70fe1aea6d9659",
-      "bytes": 23868
+      "sha256": "76d40ddbda79456fc5fab1962e4db27f676bb3326e06de51c7f0384b264db8ac",
+      "bytes": 23933
     },
     {
       "file": "forward/sql/02_physical_apply.sqlinc",
@@ -36,13 +36,13 @@
     },
     {
       "file": "forward/sql/physical-schema.sqlinc",
-      "sha256": "93bee5508d19a0297a9773cfd1d63bcb0b02bef7cdc2364fdc1b9a3eafdfb9e8",
-      "bytes": 15466
+      "sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115",
+      "bytes": 15551
     },
     {
       "file": "forward/sql/05_acl.sqlinc",
-      "sha256": "46343794ce53cfa37f226a3fced412af9f490d709610d567ca7b3c0543d85bce",
-      "bytes": 2781
+      "sha256": "3a0cbb5050da97df99e6b3a39763a5581950c930ca9cae226ff116db44941869",
+      "bytes": 2837
     },
     {
       "file": "forward/contracts/contract-correction-v3.mjs",
@@ -66,8 +66,8 @@
     },
     {
       "file": "verification/catalogue.sql",
-      "sha256": "60862cdea419118678fcdc653628ee63741d0b046bb4f917f56dc4593440b1cd",
-      "bytes": 4486
+      "sha256": "9fc457830456b42ae1397a8ddd3bcc6b3059566025a4517d4b3e6aebc90ef5e9",
+      "bytes": 4543
     },
     {
       "file": "build-native-guards.py",
@@ -112,6 +112,15 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "5be3f6fce9e9a3063f33d03349c6518c16bbcdcb820af4228daf37f1a0d5a9ce"
+    },
+    {
+      "signature": "private.timesheet_contract_move_accepting_v1(uuid)",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "298f3343e6ba40bc9aee32b31e718d34f779553582b319c43fe2b08fe2d3d7bb"
     },
     {
       "signature": "private.timesheet_contract_current_placement_v1(uuid)",
