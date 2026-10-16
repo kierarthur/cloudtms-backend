@@ -26,8 +26,8 @@ function validateInput(input,controls){
  const manifest=input.fixture_manifest;
  exact(manifest,['group_code','client_ids','contract_ids','candidate_ids','client_refs','candidate_refs'],'OFF_RULE_SETUP_FIXTURE_INVALID');
  if(!/^WSQ_TEST_[A-Z0-9_]+$/.test(manifest.group_code)||!['client_ids','contract_ids','candidate_ids'].every(k=>sortedIds(manifest[k])))fail('OFF_RULE_SETUP_FIXTURE_INVALID');
- for(const [field,idKey,refKey,idList,pattern]of [['client_refs','client_id','cli_ref','client_ids',/^CLI-913013[0-9]{2}$/],
-  ['candidate_refs','candidate_id','tms_ref','candidate_ids',/^CCR-913013[0-9]{2}$/]]){
+ for(const [field,idKey,refKey,idList,pattern]of [['client_refs','client_id','cli_ref','client_ids',/^CLI-[0-9]+$/],
+  ['candidate_refs','candidate_id','tms_ref','candidate_ids',/^CCR-[0-9]+$/]]){
   const rows=manifest[field];if(!Array.isArray(rows)||rows.length!==manifest[idList].length)fail('OFF_RULE_SETUP_FIXTURE_INVALID');
   for(const row of rows){exact(row,[idKey,refKey],'OFF_RULE_SETUP_FIXTURE_INVALID');if(!uuid.test(row[idKey])||!pattern.test(row[refKey]))fail('OFF_RULE_SETUP_FIXTURE_INVALID');}
   if(JSON.stringify(rows.map(row=>row[idKey]))!==JSON.stringify(manifest[idList])||new Set(rows.map(row=>row[refKey])).size!==rows.length)fail('OFF_RULE_SETUP_FIXTURE_INVALID');

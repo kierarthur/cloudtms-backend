@@ -1,0 +1,200 @@
+-- NEW protected past-open-week fixture METADATA owner. No upload, publication,
+-- approval, finalisation, financial row, feature allowance or false clock.
+create or replace function private.weekly_source_native_fixture_source_shape_v1(p_auth jsonb,p_execution jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare m jsonb:=p_auth->'metadata'; ref jsonb; key text; ids jsonb;
+begin
+  if not private.weekly_source_qualification_closed_object_v1(p_auth,array['schema_version','authorization_id','purpose','setup_actor_user_id',
+    'expires_at_utc','metadata','reason','release_id','source_commit','contract_sha256','authorization_sha256'])
+    or p_auth->>'schema_version' is distinct from 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_V1'
+    or p_auth->>'purpose' is distinct from 'NATIVE_FIXTURE_SOURCE_METADATA'
+    or p_execution is distinct from private.weekly_source_protected_qualification_release_v1()
+    or p_auth->>'release_id' is distinct from p_execution->>'release_id'
+    or p_auth->>'source_commit' is distinct from p_execution->>'source_commit'
+    or p_auth->>'contract_sha256' is distinct from p_execution->>'contract_sha256'
+    or p_auth->>'authorization_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_V1',p_auth-'authorization_sha256'),'hex')
+    or exists(select 1 from unnest(array['authorization_id','setup_actor_user_id']) k where coalesce(p_auth->>k,'')
+      !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or char_length(coalesce(p_auth->>'reason','')) not between 1 and 1000
+    or coalesce(p_auth->>'expires_at_utc','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+    or not private.weekly_source_qualification_closed_object_v1(m,array['agency_id','source_group_id','source_cycle_id','membership_id','policy_id',
+      'client_id','group_code','display_name','week_ending','cutoff_weekday','cutoff_local_time','contract_refs'])
+    or exists(select 1 from unnest(array['agency_id','source_group_id','source_cycle_id','membership_id','policy_id','client_id']) k
+      where coalesce(m->>k,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or (select count(distinct m->>k) from unnest(array['source_group_id','source_cycle_id','membership_id','policy_id']) k)<>4
+    or coalesce(m->>'group_code','') !~ '^WSQ_TEST_[A-Z0-9_]{1,71}$'
+    or jsonb_typeof(m->'display_name') is distinct from 'string' or char_length(m->>'display_name') not between 1 and 160
+    or coalesce(m->>'week_ending','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    or (m->>'week_ending')::date::text is distinct from m->>'week_ending' or extract(dow from (m->>'week_ending')::date)<>0
+    or jsonb_typeof(m->'cutoff_weekday') is distinct from 'string' or coalesce(m->>'cutoff_weekday','') !~ '^[0-6]$'
+    or coalesce(m->>'cutoff_local_time','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+    or jsonb_typeof(m->'contract_refs') is distinct from 'array' or jsonb_array_length(m->'contract_refs') not between 1 and 16 then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_INVALID' using errcode='22023'; end if;
+  for ref in select value from jsonb_array_elements(m->'contract_refs') value loop
+    if not private.weekly_source_qualification_closed_object_v1(ref,array['contract_id','row_sha256'])
+      or coalesce(ref->>'contract_id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      or jsonb_typeof(ref->'row_sha256') is distinct from 'string' or coalesce(ref->>'row_sha256','') !~ '^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_INVALID' using errcode='22023'; end if;
+  end loop;
+  select jsonb_agg(id order by id) into ids from(select distinct value->'contract_id' id from jsonb_array_elements(m->'contract_refs') value) d;
+  if ids is distinct from (select jsonb_agg(value->'contract_id' order by ord) from jsonb_array_elements(m->'contract_refs') with ordinality r(value,ord)) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_INVALID' using errcode='22023'; end if;
+  perform (p_auth->>'expires_at_utc')::timestamptz;
+  perform private._weekly_source_settings_deployment_v1((m->>'agency_id')::uuid,'TEST');
+exception when invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_INVALID' using errcode='22023';
+end;
+$function$;
+
+create or replace function private.weekly_source_native_fixture_source_artifact_assert_v1(p_auth jsonb,p_execution jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare m jsonb:=p_auth->'metadata'; client public.clients%rowtype; ref jsonb; k public.contracts%rowtype; actual jsonb; receipt jsonb; n integer;
+begin
+  perform private.weekly_source_native_fixture_source_shape_v1(p_auth,p_execution);
+  perform private._weekly_source_settings_require_admin_v1((p_auth->>'setup_actor_user_id')::uuid);
+  select * into strict client from public.clients where id=(m->>'client_id')::uuid;
+  if not private.weekly_source_test_fixture_reference_v1('CLIENT',client.id,client.cli_ref) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_CLIENT_REFUSED' using errcode='42501'; end if;
+  select count(*),jsonb_agg(a.after_json)->0 into n,receipt from public.audit_events a
+    where a.object_type='weekly_source_native_fixture_source_metadata' and a.object_id_text=p_auth->>'authorization_id'
+      and a.action='WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_CREATED' and a.event_sequence_is_authoritative;
+  if n>0 then
+    if n<>1 or receipt->>'schema_version' is distinct from 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_RECEIPT_V1'
+      or receipt->'execution' is distinct from p_execution or receipt->>'authorization_sha256' is distinct from p_auth->>'authorization_sha256'
+      or receipt->>'actor_user_id' is distinct from p_auth->>'setup_actor_user_id'
+      or receipt#>>'{admission,actor_user_id}' is distinct from p_auth->>'setup_actor_user_id'
+      or receipt#>'{admission,metadata}' is distinct from m or receipt#>'{admission,before_vacant}' is distinct from 'true'::jsonb
+      or (receipt->>'completed_at_utc')::timestamptz>(p_auth->>'expires_at_utc')::timestamptz
+      or receipt->>'receipt_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_RECEIPT_V1',receipt-'receipt_sha256'),'hex')
+      or not exists(select 1 from public.audit_events completed join public.audit_events admitted
+        on admitted.object_type=completed.object_type and admitted.object_id_text=completed.object_id_text
+          and admitted.action='WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_ADMITTED' and admitted.event_sequence_is_authoritative
+          and admitted.event_sequence<completed.event_sequence and admitted.actor_user_id=completed.actor_user_id
+          and admitted.after_json=receipt->'admission'
+        where completed.object_type='weekly_source_native_fixture_source_metadata' and completed.object_id_text=p_auth->>'authorization_id'
+          and completed.action='WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_CREATED' and completed.event_sequence_is_authoritative
+          and completed.actor_user_id::text=p_auth->>'setup_actor_user_id' and completed.after_json=receipt)
+      or not exists(select 1 from public.weekly_source_groups g join public.weekly_source_cycles c on c.source_group_id=g.id
+        join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=client.id
+        join public.weekly_source_client_policies policy on policy.source_group_id=g.id and policy.client_id=client.id
+        where g.id=(m->>'source_group_id')::uuid and g.agency_id=(m->>'agency_id')::uuid and g.environment='TEST'
+          and g.source_family='ROSTER' and g.code=m->>'group_code' and g.timezone='Europe/London' and g.active
+          and g.cutoff_weekday=(m->>'cutoff_weekday')::smallint and g.cutoff_local_time=(m->>'cutoff_local_time')::time
+          and c.id=(m->>'source_cycle_id')::uuid and c.scope_client_id=client.id and c.finalisation_week_ending=(m->>'week_ending')::date
+          and to_jsonb(c.cutoff_at_utc)=receipt#>'{native_rows,cycle,cutoff_at_utc}'
+          and member.id=(m->>'membership_id')::uuid and member.valid_from=c.finalisation_week_ending-6 and member.valid_to=c.finalisation_week_ending
+          and policy.id=(m->>'policy_id')::uuid and to_jsonb(policy)=receipt#>'{native_rows,policy}') then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_REPLAY_CHANGED' using errcode='40001'; end if;
+    return; -- Immutable native metadata result; never update current Source facts.
+  end if;
+  if (p_auth->>'expires_at_utc')::timestamptz<=clock_timestamp()
+    or (p_auth->>'expires_at_utc')::timestamptz>clock_timestamp()+interval '1 hour'
+    or (m->>'week_ending')::date>=(clock_timestamp() at time zone 'Europe/London')::date
+    or (((m->>'week_ending')::date+(m->>'cutoff_weekday')::integer)+(m->>'cutoff_local_time')::time) at time zone 'Europe/London'>=clock_timestamp()
+    or exists(select 1 from public.weekly_source_groups where id=(m->>'source_group_id')::uuid
+      or (agency_id=(m->>'agency_id')::uuid and environment='TEST' and code=m->>'group_code'))
+    or exists(select 1 from public.weekly_source_cycles where id=(m->>'source_cycle_id')::uuid)
+    or exists(select 1 from public.weekly_source_group_clients where id=(m->>'membership_id')::uuid or client_id=client.id)
+    or exists(select 1 from public.weekly_source_client_policies where id=(m->>'policy_id')::uuid or client_id=client.id)
+    or exists(select 1 from public.timesheets where client_id=client.id)
+    or exists(select 1 from public.audit_events where object_type='weekly_source_native_fixture_source_metadata'
+      and object_id_text=p_auth->>'authorization_id' and event_sequence_is_authoritative) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_NOT_VACANT' using errcode='55000'; end if;
+  select coalesce(jsonb_agg(k.id order by k.id),'[]'::jsonb) into actual from public.contracts k where k.client_id=client.id
+    and daterange(k.start_date,k.end_date,'[]')&&daterange((m->>'week_ending')::date-6,(m->>'week_ending')::date,'[]');
+  if actual is distinct from (select jsonb_agg(value->'contract_id' order by value->'contract_id') from jsonb_array_elements(m->'contract_refs') value) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_CONTRACT_CHANGED' using errcode='40001'; end if;
+  for ref in select value from jsonb_array_elements(m->'contract_refs') value loop
+    select * into strict k from public.contracts where id=(ref->>'contract_id')::uuid;
+    if encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_NATIVE_FIXTURE_CONTRACT_V1',to_jsonb(k)),'hex') is distinct from ref->>'row_sha256'
+      or k.client_id is distinct from client.id or k.weekly_timesheet_source::text is distinct from 'HEALTHROSTER'
+      or k.no_timesheet_required is distinct from true or k.self_bill is distinct from true
+      or k.candidate_id is null or not exists(select 1 from public.candidates p where p.id=k.candidate_id
+        and private.weekly_source_test_fixture_reference_v1('CANDIDATE',p.id,p.tms_ref)) then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_CONTRACT_CHANGED' using errcode='40001'; end if;
+  end loop;
+end;
+$function$;
+
+create or replace function private.weekly_source_native_fixture_source_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare execution jsonb; auth jsonb; m jsonb; receipt jsonb; admitted jsonb; n integer;
+  r private.cloudtms_database_releases%rowtype; g public.weekly_source_groups%rowtype; c public.weekly_source_cycles%rowtype;
+  member public.weekly_source_group_clients%rowtype; policy public.weekly_source_client_policies%rowtype;
+  mutex bigint:=hashtextextended('cloudtms_database_release_admission_v1',0);
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  perform private._weekly_source_settings_require_admin_v1(p_actor_user_id);
+  if p_authorization_id is null or p_turn_backend_pid is null or not exists(select 1 from pg_locks l where l.locktype='advisory' and l.granted
+    and l.mode='ExclusiveLock' and l.pid=pg_backend_pid() and l.database=(select oid from pg_database where datname=current_database())
+    and l.objsubid=1 and l.classid=((mutex>>32)&4294967295)::oid and l.objid=(mutex&4294967295)::oid)
+    or not exists(select 1 from pg_locks l where l.locktype='advisory' and l.granted and l.mode='ExclusiveLock'
+      and l.database=(select oid from pg_database where datname=current_database()) and l.pid=p_turn_backend_pid and l.pid<>pg_backend_pid()
+      and l.classid=20261013::oid and l.objid=1::oid and l.objsubid=2) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_OWNED_MUTEX_REQUIRED' using errcode='55000'; end if;
+  execution:=private.weekly_source_protected_qualification_release_v1();
+  select * into strict r from private.cloudtms_database_releases where release_id=execution->>'release_id' for update;
+  select value into strict auth from jsonb_array_elements(r.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+    where value->>'schema_version'='WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_V1' and value->>'authorization_id'=p_authorization_id::text;
+  perform private.weekly_source_native_fixture_source_shape_v1(auth,execution);m:=auth->'metadata';
+  if auth->>'setup_actor_user_id' is distinct from p_actor_user_id::text or not exists(select 1 from public.audit_events a
+    where a.object_type='weekly_source_post_verified_evidence' and a.object_id_text=r.release_id
+      and a.action='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORDED' and a.actor_user_id=p_actor_user_id and a.event_sequence_is_authoritative
+      and a.after_json->'execution'=execution and a.after_json->>'artifact_slot'='weekly_source_protected_test_setup_authorizations'
+      and a.after_json->'artifacts' @> jsonb_build_array(auth)) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REGISTERED_ADMISSION_REQUIRED' using errcode='42501'; end if;
+  select count(*),jsonb_agg(a.after_json)->0 into n,receipt from public.audit_events a
+    where a.object_type='weekly_source_native_fixture_source_metadata' and a.object_id_text=p_authorization_id::text
+      and a.action='WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_CREATED' and a.event_sequence_is_authoritative;
+  if n>0 then perform private.weekly_source_native_fixture_source_artifact_assert_v1(auth,execution);return receipt;end if;
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-settings-nhsp-group:'||(m->>'agency_id')||':TEST',0));
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-settings-client:'||(m->>'client_id'),0));
+  perform 1 from public.candidates p where p.id in(select k.candidate_id from public.contracts k
+    where k.id in(select (value->>'contract_id')::uuid from jsonb_array_elements(m->'contract_refs') value)) order by p.id for update;
+  perform 1 from public.clients where id=(m->>'client_id')::uuid for update;
+  perform 1 from public.contracts k where k.id in(select (value->>'contract_id')::uuid from jsonb_array_elements(m->'contract_refs') value) order by k.id for update;
+  perform private.weekly_source_native_fixture_source_artifact_assert_v1(auth,execution);
+  admitted:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_ADMISSION_V1','execution',execution,
+    'authorization_sha256',auth->>'authorization_sha256','metadata',m,'before_vacant',true,'actor_user_id',p_actor_user_id,
+    'backend_pid',pg_backend_pid(),'transaction_id',pg_current_xact_id()::text,'turn_backend_pid',p_turn_backend_pid,'admitted_at_utc',clock_timestamp());
+  perform public._audit_insert('weekly_source_native_fixture_source_metadata',p_authorization_id::text,
+    'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_ADMITTED',null,admitted,auth->>'reason',p_actor_user_id);
+  insert into public.weekly_source_groups(id,environment,agency_id,code,display_name,source_family,timezone,cutoff_weekday,cutoff_local_time,active,updated_by_user_id)
+    values((m->>'source_group_id')::uuid,'TEST',(m->>'agency_id')::uuid,m->>'group_code',m->>'display_name','ROSTER','Europe/London',
+      (m->>'cutoff_weekday')::smallint,(m->>'cutoff_local_time')::time,true,p_actor_user_id) returning * into g;
+  insert into public.weekly_source_group_clients(id,source_group_id,client_id,valid_from,valid_to,created_by_user_id)
+    values((m->>'membership_id')::uuid,g.id,(m->>'client_id')::uuid,(m->>'week_ending')::date-6,(m->>'week_ending')::date,p_actor_user_id) returning * into member;
+  insert into public.weekly_source_client_policies(id,client_id,source_group_id,effective_from,effective_to,created_by_user_id,
+    authority_mode,document_mode,self_bill_enabled,self_bill_correction_presentation,
+    source_fixed_expenses_enabled,source_expense_vat_enabled,candidate_queries_enabled,manager_queries_enabled,completed_pack_copy_enabled)
+    values((m->>'policy_id')::uuid,(m->>'client_id')::uuid,g.id,(m->>'week_ending')::date-6,(m->>'week_ending')::date,p_actor_user_id,
+      'SOURCE_AUTHORITY','CHECK_ONLY',true,'FULL_REVERSAL_REPLACEMENT',false,false,false,false,false) returning * into policy;
+  -- Exact native ensure-open-cycle cutoff formula; only the week is explicitly
+  -- admitted as a new older OPEN fixture. created_at stays the real default.
+  insert into public.weekly_source_cycles(id,source_group_id,scope_client_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state)
+    values((m->>'source_cycle_id')::uuid,g.id,(m->>'client_id')::uuid,(m->>'week_ending')::date,
+      (((m->>'week_ending')::date+g.cutoff_weekday)+g.cutoff_local_time) at time zone g.timezone,'OPEN',0,'NONE') returning * into c;
+  receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_RECEIPT_V1','execution',execution,
+    'authorization_id',p_authorization_id,'authorization_sha256',auth->>'authorization_sha256','actor_user_id',p_actor_user_id,'admission',admitted,
+    'native_rows',jsonb_build_object('group',to_jsonb(g),'membership',to_jsonb(member),'policy',to_jsonb(policy),'cycle',to_jsonb(c)),
+    'completed_at_utc',clock_timestamp(),'operational_features_changed',false,'source_business_rows_created',false);
+  if (receipt->>'completed_at_utc')::timestamptz>(auth->>'expires_at_utc')::timestamptz then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_ADMISSION_EXPIRED' using errcode='55000'; end if;
+  receipt:=receipt||jsonb_build_object('receipt_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_RECEIPT_V1',receipt),'hex'));
+  perform public._audit_insert('weekly_source_native_fixture_source_metadata',p_authorization_id::text,
+    'WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_CREATED',null,receipt,auth->>'reason',p_actor_user_id);
+  return receipt;
+end;
+$function$;
+
+alter function private.weekly_source_native_fixture_source_shape_v1(jsonb,jsonb) owner to postgres;
+alter function private.weekly_source_native_fixture_source_artifact_assert_v1(jsonb,jsonb) owner to postgres;
+alter function private.weekly_source_native_fixture_source_create_v1(uuid,uuid,integer) owner to postgres;
+revoke all on function private.weekly_source_native_fixture_source_shape_v1(jsonb,jsonb),
+  private.weekly_source_native_fixture_source_artifact_assert_v1(jsonb,jsonb),
+  private.weekly_source_native_fixture_source_create_v1(uuid,uuid,integer) from public,anon,authenticated,service_role;

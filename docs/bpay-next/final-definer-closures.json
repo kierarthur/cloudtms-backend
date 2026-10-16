@@ -21958,6 +21958,172 @@
       ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
       "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.weekly_source_native_fixture_participants_shape_v1(jsonb,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_native_fixture_participants_artifact_assert_v1(jsonb,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_native_fixture_participants_create_v1(uuid,uuid,integer)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_test_fixture_reference_v1(text,uuid,text)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_native_fixture_source_shape_v1(jsonb,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_native_fixture_source_artifact_assert_v1(jsonb,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_native_fixture_source_create_v1(uuid,uuid,integer)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/010_off_rule_scope.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/010_off_rule_scope.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/020_historical_assignment.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/020_historical_assignment.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/040_post_verified_record.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/27_POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/040_post_verified_record.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql"
+      ],
+      "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
+      "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
     }
   ],
   "editorChains": [

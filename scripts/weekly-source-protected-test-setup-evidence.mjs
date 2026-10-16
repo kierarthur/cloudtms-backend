@@ -51,6 +51,8 @@ export function buildTestSetupAuthorization(context,input,qualifications){
 }
 export function loadTestSetupInputs(root,release,context){
  const bundle=loadCommittedBundle(root,release,context,'weeklySourceProtectedTestSetup');if(bundle===null)return [];
+ if(bundle.authorizations?.some(row=>['WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_V1','WEEKLY_SOURCE_NATIVE_FIXTURE_SOURCE_METADATA_V1'].includes(row?.schema_version)))
+  fail('NATIVE_FIXTURE_POST_VERIFIED_PHASE_REQUIRED');
  exact(bundle,['schema_version','authorizations'],'TEST_SETUP_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_TEST_SETUP_INPUT_BUNDLE_V1'||!Array.isArray(bundle.authorizations)
   ||!bundle.authorizations.length||bundle.authorizations.length>10)fail('TEST_SETUP_BUNDLE_INVALID');

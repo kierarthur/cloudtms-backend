@@ -6470,5 +6470,18 @@
     "bankingOwnerBranchesPreserved": true,
     "fullF23": "FAILED_CLOSED_OTHER_CLASSIFICATIONS_PENDING",
     "native": "NOT_RUN"
+  },
+  "f5_native_fixture_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NATIVE_NOT_RUN",
+    "sourceCommit": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/F5_NATIVE_FIXTURE_SOURCE_INTEGRATION.json",
+    "recordSha256": "dcb758b3e8683444d0b9e7448b80a341df17aeb4a8ad6321b63a34d1c5c7a5ed",
+    "root": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+    "newPrivateSignatures": 7,
+    "existingSameSignatureSuccessors": 4,
+    "newRelations": 0,
+    "newPublicOperations": 0,
+    "native": "NOT_RUN",
+    "original92ObjectsUnchanged": true
   }
 }

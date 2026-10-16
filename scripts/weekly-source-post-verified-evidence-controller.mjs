@@ -1,4 +1,5 @@
 import {execFileSync} from 'node:child_process';
+import {buildNativeFixtureParticipants,nativeParticipantSchema,buildNativeFixtureSourceMetadata,nativeSourceSchema} from './weekly-source-native-fixture-participants.mjs';
 import {exact,domainHash,sha256} from './weekly-source-protected-release-qualification.mjs';
 import {sourceInventory,proveCommittedSources} from './weekly-source-protected-execution-tree.mjs';
 import {buildOffRuleTestAuthorization,assertManagedOffRuleTestEvidence} from './weekly-source-off-rule-setup-evidence.mjs';
@@ -105,6 +106,8 @@ export function preparePostVerifiedRequest({root,execution,actorUserId,expectedE
    ||!['banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls'].every(k=>rows[0][k]===true))fail('POST_VERIFIED_CONTROLS_INVALID');
  }else if(artifactSlot==='weekly_source_protected_test_setup_authorizations'){
   artifacts=rows.map(row=>{
+   if(row.schema_version===nativeParticipantSchema)return buildNativeFixtureParticipants(context,row);
+   if(row.schema_version===nativeSourceSchema)return buildNativeFixtureSourceMetadata(context,row);
    if(Object.hasOwn(row,'purpose')){
     if(!Array.isArray(bundle.controls)||bundle.controls.length!==1)fail('POST_VERIFIED_CONTROLS_INVALID');
     return buildOffRuleTestAuthorization(context,row,bundle.controls[0]);

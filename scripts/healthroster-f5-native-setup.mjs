@@ -19,7 +19,7 @@ export function f5NativeSetupDiscoverySql({actorUserId,sourceGroupId,sourceCycle
  and c.finalisation_week_ending<(clock_timestamp() at time zone 'Europe/London')::date
  and c.cutoff_at_utc<clock_timestamp() and c.current_complete_upload_id is null and c.current_projection_publication_id is null
  and c.current_final_revision_id is null and c.state not in('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
- and cl.cli_ref ~ '^CLI-913013[0-9]{2}$'
+ and private.weekly_source_test_fixture_reference_v1('CLIENT',cl.id,cl.cli_ref)
  and not exists(select 1 from public.weekly_source_uploads u where u.source_cycle_id=c.id)
  and (select count(*) from public.weekly_source_group_clients m where m.source_group_id=g.id
   and c.finalisation_week_ending between m.valid_from and coalesce(m.valid_to,'infinity'::date))=1
@@ -55,7 +55,8 @@ select jsonb_build_object('execution',private.weekly_source_protected_qualificat
   'candidate_ids',(select jsonb_agg(candidate_id order by candidate_id) from (select distinct candidate_id from contract_scope) p),
   'client_refs',jsonb_build_array(jsonb_build_object('client_id',n.scope_client_id,'cli_ref',n.cli_ref)),
   'candidate_refs',(select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'tms_ref',tms_ref) order by candidate_id)
-   from(select distinct candidate_id,tms_ref from contract_scope) p)))::text from native n;`;
+   from(select distinct candidate_id,tms_ref from contract_scope) p)))::text from native n where not exists(select 1 from contract_scope k
+ where not private.weekly_source_test_fixture_reference_v1('CANDIDATE',k.candidate_id,k.tms_ref));`;
 }
 export async function prepareF5NativeSetup({session,actorUserId,sourceGroupId,sourceCycleId,buildAuthorization,turnBackendPid}){
  if(typeof session?.execute!=='function'||typeof buildAuthorization!=='function')fail('F5_EXISTING_PROTECTED_OWNER_REQUIRED');
@@ -68,7 +69,7 @@ export async function prepareF5NativeSetup({session,actorUserId,sourceGroupId,so
   const state=JSON.parse(raw);
   if(state.execution?.environment!=='TEST'||state.execution?.database!=='cloudtms_test_clone'
    ||!state.fixture_manifest?.contract_ids?.length||!state.fixture_manifest?.candidate_ids?.length
-   ||state.fixture_manifest.candidate_refs.some(row=>!/^CCR-913013[0-9]{2}$/.test(row.tms_ref))
+   ||state.fixture_manifest.candidate_refs.some(row=>!/^CCR-[0-9]+$/.test(row.tms_ref))
    ||state.assignment_count>1||state.future_assignment_count>1||!/^\d{4}-\d{2}-\d{2}$/.test(state.week_ending))fail('F5_GENUINE_FIXTURE_PARTICIPANTS_REQUIRED');
   return state;
  };

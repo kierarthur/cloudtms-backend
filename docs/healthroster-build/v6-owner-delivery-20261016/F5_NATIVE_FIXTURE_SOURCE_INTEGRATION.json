@@ -1,0 +1,250 @@
+{
+  "version": "HEALTHROSTER_F5_NATIVE_FIXTURE_SOURCE_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_NATIVE_NOT_RUN",
+  "sourceParent": "d5cbb4bf52ba2d457e80258e56c9cb22fa35a9fa",
+  "frozenSourceCommit": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074",
+  "frozenProposalDirectory": "docs/healthroster-build/proposals/v6-f5-native-participants-20261016",
+  "recipeSha256": "86eb865f21e3c505ee454f181456a59e721362d0cf94109e87895f00942ad1e4",
+  "frozenPayloadsVerified": 32,
+  "finitePredecessorChanges": [
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "forward": "forward/010_off_rule_scope.sqlinc",
+      "finiteEdits": 2,
+      "checked": true
+    },
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "forward": "forward/020_historical_assignment.sqlinc",
+      "finiteEdits": 2,
+      "checked": true
+    },
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "forward": "forward/030_off_rule_shape.sqlinc",
+      "finiteEdits": 2,
+      "checked": true
+    },
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/27_POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "forward": "forward/040_post_verified_record.sqlinc",
+      "finiteEdits": 1,
+      "checked": true
+    },
+    {
+      "target": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "forward": "forward/weekly-source-post-verified-evidence-controller.mjs",
+      "finiteEdits": 2,
+      "checked": true
+    },
+    {
+      "target": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "forward": "forward/weekly-source-off-rule-setup-evidence.mjs",
+      "finiteEdits": 2,
+      "checked": true
+    },
+    {
+      "target": "scripts/healthroster-f5-native-setup.mjs",
+      "forward": "forward/healthroster-f5-native-setup.mjs",
+      "finiteEdits": 3,
+      "checked": true
+    },
+    {
+      "target": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "forward": "forward/weekly-source-protected-test-setup-evidence.mjs",
+      "finiteEdits": 1,
+      "checked": true
+    }
+  ],
+  "root": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+  "closureSha256": "1fcab7b6cd2e462ebcf7a651caabd779c8f320a6ca5c5899a4dc0dc125e47417",
+  "files": [
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants_v1.sql",
+      "sha256": "de629dca7ac9f524708d705177970170f7ee4857bcec80192570181312d07910"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc",
+      "sha256": "fda4c0c38a9f7517e154bf363283fd90cc841d20cd38354ac0c283971b13e561",
+      "signatures": [
+        "private.weekly_source_native_fixture_participants_shape_v1(jsonb,jsonb)",
+        "private.weekly_source_native_fixture_participants_artifact_assert_v1(jsonb,jsonb)",
+        "private.weekly_source_native_fixture_participants_create_v1(uuid,uuid,integer)",
+        "private.weekly_source_test_fixture_reference_v1(text,uuid,text)"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc",
+      "sha256": "2e993b4b3107a55c19d4c8f34847a3c7ce7760be42c50ff09275c5a2313f3151",
+      "signatures": [
+        "private.weekly_source_native_fixture_source_shape_v1(jsonb,jsonb)",
+        "private.weekly_source_native_fixture_source_artifact_assert_v1(jsonb,jsonb)",
+        "private.weekly_source_native_fixture_source_create_v1(uuid,uuid,integer)"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/010_off_rule_scope.sqlinc",
+      "sha256": "da3ebc0afa128d52f2de4727fb1af82ec5dec46bdec56a1731807d65094da04f",
+      "signatures": [
+        "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/020_historical_assignment.sqlinc",
+      "sha256": "8b443f96b919c98c91fb92600e562a0a154f0b2a989abce46df106e1c060e847",
+      "signatures": [
+        "private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+      "sha256": "15dbe990cfe6792c01d0775c956cf41c2fa88e44b16ccda58400c0e5a9d2d79a",
+      "signatures": [
+        "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/040_post_verified_record.sqlinc",
+      "sha256": "82ee9757152e49507b047d0ba96f9665dec8912e20f7e74fbb31a56e52a5888a",
+      "signatures": [
+        "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)"
+      ]
+    },
+    {
+      "path": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "7c0342fe85df257a28b19f19158f98123bb03d4bb574f913d341fdaac80fd853"
+    },
+    {
+      "path": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "5b0392bcd30c0b9b55692c3793a444bb7591aa89a77d22cea3fbb5c0128eb5e8"
+    },
+    {
+      "path": "scripts/healthroster-f5-native-setup.mjs",
+      "sha256": "741dba7f4228ab7d7baf2972722eb53a1edf9f5c39fe4fefa0dc67127c88d909"
+    },
+    {
+      "path": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "12a4988d8d7626edc8748092b4780cdc881482be288e496f3f464533e959e610"
+    },
+    {
+      "path": "scripts/weekly-source-native-fixture-participants.mjs",
+      "sha256": "8a9dec4e027a1967ca07b6aa69ded0156f25a9aca126bff3c7f4bac8ee94d696"
+    }
+  ],
+  "registry": {
+    "newEntries": 11,
+    "newSignatures": 7,
+    "sameSignatureSuccessors": 4,
+    "preExistingEntriesUnchanged": true,
+    "signatures": 2718,
+    "registered": 1273,
+    "roots": 1076,
+    "status": "PASS"
+  },
+  "originalPlanObjects": {
+    "count": 92,
+    "sha256": "dd9547b6ddde9ed0316030f84b9ec6d24275c4914bd7651a0a1366e97c0baac3",
+    "unchanged": true
+  },
+  "behavior": [
+    "Genuine current committed VERIFIED/catalogue/registered-source/actor/CAS/owned writer plus distinct held SEND7 backend remain required. New plans refused by original pre-VERIFIED transport.",
+    "New Client uses actual client_create_with_settings_v1; Candidate uses actual enabled native insert/default/ref/hooks with no optional contacts/bank/alias/job title. Real creation and new provenance only; no fake historical native event.",
+    "Generated namespace references require exact registered plan, actual admission/completion and native creation identity; original reserved namespace branch retained.",
+    "Past OPEN metadata requires genuine earlier Sunday, native London cutoff, measured complete actual HealthRoster Contract rows, admitted new participant identities and empty actual business scope. Query/copy flags OFF; no upload/final/finance/feature/assignment manufactured.",
+    "Existing original OFF-rule authorization and mandatory F5 positive rollback journey remain separate and mandatory after actual structural VERIFIED, before Workers/Office publication. Receipt-only recovery uses existing canonical AUTO VERIFIED_UNCHANGED route."
+  ],
+  "verification": {
+    "frozenProposalTests": 41,
+    "rootManagedRehearsalPublicationTests": 82,
+    "mountedScriptSyntaxChecks": 5,
+    "offlinePg17": {
+      "qualification": "OFFLINE_PG17_GRAMMAR_ONLY",
+      "native": "NOT_RUN",
+      "pglast": "v7.20",
+      "checks": [
+        {
+          "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/001_native_participants.sqlinc",
+          "statements": 9,
+          "bodies": 4,
+          "innerExpressions": 110,
+          "rowtypeParserAliasOnly": true
+        },
+        {
+          "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/002_source_metadata.sqlinc",
+          "statements": 7,
+          "bodies": 3,
+          "innerExpressions": 65,
+          "rowtypeParserAliasOnly": true
+        },
+        {
+          "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/010_off_rule_scope.sqlinc",
+          "statements": 1,
+          "bodies": 1,
+          "innerExpressions": 53,
+          "rowtypeParserAliasOnly": true
+        },
+        {
+          "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/020_historical_assignment.sqlinc",
+          "statements": 1,
+          "bodies": 1,
+          "innerExpressions": 27,
+          "rowtypeParserAliasOnly": true
+        },
+        {
+          "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+          "statements": 1,
+          "bodies": 1,
+          "innerExpressions": 22,
+          "rowtypeParserAliasOnly": false
+        },
+        {
+          "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/040_post_verified_record.sqlinc",
+          "statements": 1,
+          "bodies": 1,
+          "innerExpressions": 37,
+          "rowtypeParserAliasOnly": false
+        },
+        {
+          "path": "proposal-fixtures/native-constructor-assertions.sqlinc",
+          "statements": 2,
+          "bodies": 2,
+          "innerExpressions": 26,
+          "rowtypeParserAliasOnly": false
+        }
+      ]
+    },
+    "sourceIntegrity": {
+      "migrations": 407,
+      "repeatables": 1076,
+      "status": "PASS"
+    },
+    "native": "NOT_RUN",
+    "fixtureConstruction": "NOT_RUN",
+    "restoration": "NOT_RUN",
+    "fullF5": "NOT_RUN",
+    "currentContract": "PENDING_FINAL_COMPOSITION"
+  },
+  "preserved": [
+    "Root CASE corrections at e277 and JSON operand grouping at d5cbb; only exact standalone scope successor mounted.",
+    "All original four existing SQL predecessor leaves unchanged; final successors are separately registered.",
+    "Original16 full-rehearsal safety exclusions and all mandatory F5 assertions unchanged.",
+    "No new relation/public operation/table policy/table grant or Banking component."
+  ],
+  "remaining": [
+    "Complete remaining Health source integrations and exact type/effect classifications.",
+    "Generate and review current complete contract and verifier census; full release rehearsal under shared lock.",
+    "Actual current VERIFIED installation, active actor, committed participant plan and real registration.",
+    "Native participant rollback qualification then authorised setup; actual native Contract creation and measured row hashes.",
+    "Committed metadata admission, native rollback/fresh proof and setup; real original OFF-rule controls/authorization.",
+    "Mandatory original F5 positives/fresh restoration; protected publication; later actual acceptance/device gates."
+  ],
+  "install1": "COMPLETE_FEATURES_OFF",
+  "install2": "NOT_INSTALLED",
+  "effects": {
+    "databaseMutation": false,
+    "heldSession": false,
+    "deployment": false,
+    "bankingMessage": false,
+    "secretsPrinted": false
+  }
+}
