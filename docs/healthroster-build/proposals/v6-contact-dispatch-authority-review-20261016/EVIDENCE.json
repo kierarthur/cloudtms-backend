@@ -1,0 +1,230 @@
+{
+  "version": "CONTACT_DISPATCH_AUTHORITY_INDEPENDENT_CROSSREVIEW_V1",
+  "status": "SOURCE_ONLY_P1_CONFIRMED_COMPLETE_NATIVE_CLOSED_SUCCESSOR_APPROVED",
+  "frozenProducer": "e4661d28219b85c66b854d99c6522b55aae33139",
+  "historicalProposal": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+  "rootCheckpoint": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "oldOpenStart": {
+    "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+    "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/38_native_submission_readers.sqlinc",
+    "start": 20300,
+    "end": 34777,
+    "sha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce",
+    "providerAttemptAllocator": true,
+    "commonPermitAdmission": false,
+    "perTargetAttempt": false,
+    "serviceExecutableByFinal99": true
+  },
+  "actualNativeClosedStart": {
+    "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+    "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+    "start": 11358,
+    "end": 11771,
+    "sha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+    "nativeChain": {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    "roleContract": {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_message_dispatch_submission_start_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a51ed2eba8c8dd869ea5a00c026488e06acf5aac59ed0413c69ab8dfaf18eeb7"
+    }
+  },
+  "selectedProtectedOwnerIntersections": [
+    {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "selectedDefinitions": [
+        {
+          "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+          "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/38_native_submission_readers.sqlinc",
+          "start": 20300,
+          "end": 34777,
+          "sha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce"
+        }
+      ]
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_target_result_atomic_v1(jsonb)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "public.weekly_contact_submission_start_v1(jsonb)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "public.weekly_contact_submission_consume_v1(jsonb)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "private.weekly_contact_source_result_v1(uuid,text,text,jsonb,jsonb)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "private.weekly_contact_source_memberships_v1(uuid,boolean)",
+      "selectedDefinitions": []
+    },
+    {
+      "signature": "private.weekly_contact_source_membership_accept_v1(uuid)",
+      "selectedDefinitions": []
+    }
+  ],
+  "providerAttemptWriters": [
+    {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/38_native_submission_readers.sqlinc",
+      "start": 20300,
+      "end": 34777,
+      "sha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce"
+    }
+  ],
+  "prerequisiteFunctions": [
+    {
+      "signature": "private.weekly_contact_source_render_attempted_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/payload/supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "start": 0,
+      "end": 1003,
+      "sha256": "deba2fa62884eaf3bc0cacb3a5c0e5f9b2d06cae362eca82a2d6cfa3cb257075",
+      "readOnly": true,
+      "legacyStartCalls": false
+    },
+    {
+      "signature": "private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/payload/supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "start": 1005,
+      "end": 5034,
+      "sha256": "c7d54bbd048a52f1d8c7c48d86da753ba44412083654a23072ee1f672d782bb3",
+      "readOnly": true,
+      "legacyStartCalls": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/payload/supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "start": 5036,
+      "end": 6669,
+      "sha256": "6ecf46eb3c847a7850b611e91ae293134d349f680a3a81849e1956955eb66a65",
+      "readOnly": true,
+      "legacyStartCalls": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/payload/supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "start": 6671,
+      "end": 9072,
+      "sha256": "4ff854c06eb693c390bc2ede6ca7e91ed94192943b30f8d89fa4e27666d46c43",
+      "readOnly": true,
+      "legacyStartCalls": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/payload/supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "start": 9074,
+      "end": 9890,
+      "sha256": "897e57ce9196358c591251b07197cfd9b9135b30ef21225cadb09389aa3c2efc",
+      "readOnly": true,
+      "legacyStartCalls": false
+    }
+  ],
+  "activeOwners": [
+    {
+      "signature": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "start": 303,
+      "end": 16040,
+      "sha256": "dcb6bbcf13aa17cff9677c79ca2b7ddffd044eaa3d761cd801694df2ceab94b2"
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_target_result_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "start": 1710,
+      "end": 11139,
+      "sha256": "6e265536d45a92b1822c468647e98b7d46ed6300b30b4228db7b0e3fb7ada5b8"
+    },
+    {
+      "signature": "public.weekly_contact_submission_start_v1(jsonb)",
+      "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "start": 17017,
+      "end": 17770,
+      "sha256": "a504905cc74936020cf6888b62a150d046d01d9f4a8f3dfe33e9d0b4f2cb636d"
+    },
+    {
+      "signature": "private.weekly_contact_source_admission_v1(jsonb)",
+      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "start": 9412,
+      "end": 18240,
+      "sha256": "e268fcd05eb2bc9ac5fe81ad50a5ffb04a9c6f7c9c34a744fd027f5208443714"
+    }
+  ],
+  "actualAdmissionBeforeTargetAttempt": true,
+  "actualBoundPermitReturned": true,
+  "actualOriginalAttemptReplayRetained": true,
+  "actualResultUsesSourceResultBeforeAttemptCompletion": true,
+  "actualResultAggregatesSiblingTargets": true,
+  "runtimeUsesOnlyPerTargetStartResult": true,
+  "completeRepair": {
+    "sourceCommit": "230c3bd58049406ea6ba87662160823dc43e2e52",
+    "path": "docs/healthroster-build/proposals/v6-contact-assembly-review-20261016/forward/01_complete_current_closed_command_start.sqlinc",
+    "savedSha256": "524fd763e1f0822b64cf3f471b99b22461083516df3a3be2daa07085bf037628",
+    "bytes": 414,
+    "completeStatementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+    "repairReceiptPath": "docs/healthroster-build/proposals/v6-contact-assembly-review-20261016/BLOCKER_REPAIR_INPUT.json",
+    "repairReceiptSha256": "45e0f555d76f884b34fc2ba4b0cf20e7d1a4ee170db3fb8a0ade75ef027c2197",
+    "frozenRepairEqualsSaved": true,
+    "completeStatementEqualsActualNativeClosedOwner": true,
+    "authority": "Exact committed native closed function from rootCheckpoint; saved Source repair has identical complete body.",
+    "noNewGrantOrAbi": true,
+    "proposedOrder": "Complete frozen base through51, complete closed owner successor, guard650, exact final99; root reconciles finalPhysical to closed successor."
+  },
+  "neededNative": [
+    "Legacy command START and RESULT both still raise exact55000 through actual service role and allocate no attempts/permits.",
+    "Actual per-target first-ever/mixed-scope PAUSE/START, QT PUSH/EMAIL behavior, permit/content/member/target/currentness validation, unchanged original-attempt replay.",
+    "Actual target ACCEPTED/AMBIGUOUS/rejected/transient result and sibling aggregation, permit consumption/native memberships once, conflicting replay refusal.",
+    "Final owner/role/PostgREST/registry closure after exact full Contact assembly; no fake provider receipt."
+  ],
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "providerCalls": 0,
+  "rootEdits": false,
+  "bankingEdits": false
+}

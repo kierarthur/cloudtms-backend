@@ -1,0 +1,31 @@
+{
+  "version": "CONTACT_DISPATCH_AUTHORITY_CROSSREVIEW_SOURCE_PINS_V1",
+  "status": "P1_CONFIRMED_EXACT_NATIVE_CLOSED_SUCCESSOR_APPROVED_SOURCE_ONLY",
+  "frozenProducer": "e4661d28219b85c66b854d99c6522b55aae33139",
+  "repairCommit": "230c3bd58049406ea6ba87662160823dc43e2e52",
+  "rootCheckpoint": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "sha256": "d062beaf4e262c6cf5f53021182fc704095e8968ba2ac67114574f27787330a1",
+      "bytes": 8030
+    },
+    {
+      "path": "audit.mjs",
+      "sha256": "ba485e74784b57af42abb42f6d4d283d12fae17f10bc23d64650e09f486d416f",
+      "bytes": 12229
+    },
+    {
+      "path": "EVIDENCE.json",
+      "sha256": "5c0b14c492c86c4082659e5d0b0e6c459f6c50627ff017353254ebe670cabfd8",
+      "bytes": 10746
+    }
+  ],
+  "excludesSelf": true,
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "providerCalls": 0,
+  "rootEdits": false,
+  "bankingEdits": false,
+  "priorReviewsAndProposals": "PRESERVED"
+}
