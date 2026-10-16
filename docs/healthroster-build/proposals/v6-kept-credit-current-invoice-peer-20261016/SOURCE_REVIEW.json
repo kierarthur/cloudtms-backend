@@ -1,0 +1,78 @@
+{
+  "source_only": true,
+  "native_status": "NOT_RUN",
+  "old_feature_commit": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+  "parser": {
+    "commit": "a6739abd",
+    "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+    "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+  },
+  "old_selected_base": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "old_owner_receipt_sha256": "e2ed162fe92311f0728d4a70d38a10f73af1c593e271b4c14173c37cdbf8c4a3",
+  "current_i2_observed_commit": "b311265cd7b975bf4b8da837296e6cdaeff3cfda",
+  "current_registry_sha256": "60c5f3a12439948dc945422c3d5efb663d5bfa4b142e8a5ba26cf18f7f5b169a",
+  "owners": [
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "current_file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "current_file_sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "current_complete_definition_sha256": "b42a727a94d8adf5336f4b865ec9c332fe528be66611d08682de8a00ef334b41",
+      "current_definition_lines": 3407,
+      "frozen_before_file": "before/09_complete_invoice_apply_edits.sqlinc",
+      "frozen_before_sha256": "6ab4e16d569e3dddfa48de9b3b09a94328d6f4a9571039cf56edc014bfc5a204",
+      "frozen_after_file": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "frozen_after_sha256": "e74ed7ae0769bbad783c7fb1b8b3d28fc18d6c6c0a8f0f9dfdd6668cce89100c",
+      "old_hunk_count": 1,
+      "old_hunks_uniquely_reversible_on_current": true,
+      "mechanical_only_not_a_successor_or_semantic_approval": true
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "current_file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "current_file_sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "current_complete_definition_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "current_definition_lines": 76,
+      "frozen_before_file": "before/10_complete_adjustments_apply.sqlinc",
+      "frozen_before_sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86",
+      "frozen_after_file": "forward/10_complete_adjustments_apply.sqlinc",
+      "frozen_after_sha256": "25b4b20c1741afe1b542d4551ce26ea6c0c21ea26fae189aad3531ac01e6a2a0",
+      "old_hunk_count": 5,
+      "old_hunks_uniquely_reversible_on_current": true,
+      "mechanical_only_not_a_successor_or_semantic_approval": true
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "current_file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "current_file_sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "current_complete_definition_sha256": "5a4142c7f9e26861401dab3570a08cd88f31564353c29165dc89d2dfc93baa03",
+      "current_definition_lines": 34,
+      "frozen_before_file": "before/11_complete_adjustment_line_valid.sqlinc",
+      "frozen_before_sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140",
+      "frozen_after_file": "forward/11_complete_adjustment_line_valid.sqlinc",
+      "frozen_after_sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc",
+      "old_hunk_count": 3,
+      "old_hunks_uniquely_reversible_on_current": true,
+      "mechanical_only_not_a_successor_or_semantic_approval": true
+    }
+  ],
+  "old_credit_admit_sha256": "e6e725b0b51b45abb8ee836fac0086924ac134910b2a8c37565a767e04dc7a47",
+  "managed_old_context_facts_declarations": 0,
+  "checks_passed": 15,
+  "checks": [
+    "Registered public final owner is the complete 0955 owner",
+    "One complete current declaration: public.invoice_apply_edits(uuid,jsonb,uuid)",
+    "Frozen old whole-leaf pins: public.invoice_apply_edits(uuid,jsonb,uuid)",
+    "Exact current/predecessor relation: public.invoice_apply_edits(uuid,jsonb,uuid)",
+    "All old hunks have unique whole-current reverse: public.invoice_apply_edits(uuid,jsonb,uuid)",
+    "One complete current declaration: private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "Frozen old whole-leaf pins: private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "Exact current/predecessor relation: private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "All old hunks have unique whole-current reverse: private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "One complete current declaration: private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "Frozen old whole-leaf pins: private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "Exact current/predecessor relation: private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "All old hunks have unique whole-current reverse: private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "Old context/facts helpers have no managed SQL declaration at this source observation",
+    "Historical context depends on its new decision table; no implicit new-store admission"
+  ]
+}
