@@ -120,7 +120,7 @@
     },
     {
       "file": "fixtures/native-contact-assertions.sqlinc",
-      "sha256": "df000a2e74ec60e5f5f5e34a47180cb0aa8884c0e979c20fff22ef6272886f3d"
+      "sha256": "a7573497f632a9f78ad536ecd7554353702c4a473ef7116c5282f2d0d14ead67"
     }
   ],
   "backend_targets": [

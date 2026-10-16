@@ -65,7 +65,7 @@ begin
   and private.weekly_source_manager_due_event_covers_v1(e.id,p_candidate_first_incident);
  select g.started_at_utc+s.manager_partial_digest_after into strict expected_candidate_due
  from public.weekly_manager_recipient_memberships m
- join public.weekly_candidate_outreach_generations g on g.id=m.candidate_generation_id
+ join public.weekly_candidate_outreach_generations g on g.id=m.candidate_outreach_generation_id
  where m.recipient_generation_id=p_generation and m.incident_id=p_candidate_first_incident;
  if direct_due is distinct from private.weekly_source_manager_interval_due_v1(client,p_eligible_start,s.manager_first_delay_value,s.manager_first_delay_unit)
   or candidate_due is distinct from expected_candidate_due then raise exception 'DIRECT_OR_CANDIDATE_FIRST_CLOCK_CHANGED';end if;
