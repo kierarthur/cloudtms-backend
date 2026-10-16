@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { repoRoot, inventory } from './cloudtms-db-release-lib.mjs';
 import { scanManagedSql, readManagedClosure } from './cloudtms-managed-release-sql.mjs';
 import { changedSourcePaths, routineDefinitions, definerInventory, verifyFinalDefiners } from './bpay-next-final-definers.mjs';
-import { assertContactClaimBoundary,CONTACT_CLAIM_CORE_PATH,CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_ROOT,CONTACT_CLAIM_CORE_SIGNATURE,CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor } from './healthroster-contact-claim-boundary.mjs';
+import { assertContactClaimBoundary,isContactClaimNativeAcl,CONTACT_CLAIM_CORE_PATH,CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_ROOT,CONTACT_CLAIM_CORE_SIGNATURE,CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor } from './healthroster-contact-claim-boundary.mjs';
 
 export const FROZEN_BASE='a6f7423eb71e6e7cd173e705c2290e5408a1d077';
 const FOUNDATION_RECONCILED='3c91e5e6ce35b5833a5c218b77b741261eeebafa';
@@ -2282,6 +2282,7 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     if((file===DAILY_FROZEN_GUARD||file===TREATMENT_REVISION_GUARD)&&(
       /^revoke\s+all\s+on\s+function\s+private\.bpay_next_revision_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
       ||/^alter\s+function\s+private\.bpay_next_revision_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
+    if(isContactClaimNativeAcl(original,file))competing=false;
     if(competing&&!baseline.includes(statement))throw Error(`BPAY_NEXT_FROZEN_COMPETING_AUTHORITY: ${file}`);
   }
 }

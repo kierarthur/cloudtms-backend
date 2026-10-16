@@ -4,12 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import { assertContactClaimBoundary,CONTACT_CLAIM_CORE_PATH,CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_MIGRATION,
+import { assertContactClaimBoundary,isContactClaimNativeAcl,CONTACT_CLAIM_CORE_PATH,CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_MIGRATION,
   contactClaimMigrationCompanionFor,contactClaimMigrationSql } from '../scripts/healthroster-contact-claim-boundary.mjs';
 import {compileManagedUnit,unitCheckpointSql,managedReleaseContext,managedAdmissionSql,OWNER_RLS_ENVELOPE,IMMUTABLE_GUARD_DEPENDENCY} from '../scripts/cloudtms-managed-release.mjs';
 import {canonical,digest,readManagedClosure,scanManagedSql,managedManifestHash} from '../scripts/cloudtms-managed-release-sql.mjs';
 import {BOOTSTRAP_PIN,BASELINE_MIGRATION_PREFIX,MANAGED_EXCEPTIONS} from '../scripts/cloudtms-managed-execution-policy.mjs';
 import {mapExecutableSqlSource,logicalPostgresExecutablePolicy,inventory} from '../scripts/cloudtms-db-release-lib.mjs';
+import {assertFrozenAuthority} from '../scripts/bpay-next-source-gates.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const read=file=>fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
 const input={parent:read('supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql'),
@@ -106,4 +107,30 @@ test('managed manifest and admission bind the atomic correction, so an older pac
   assert.ok(admission.includes(CONTACT_CLAIM_MIGRATION.version));
   assert.ok(admission.includes(actual.manifestHash));
   assert.ok(!admission.includes(previous));
+});
+
+test('finite contact ACL classification preserves original service-only entry and refuses any broadening',()=>{
+  const file='supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc';
+  const signature='public.email_outbox_claim_ready_batch(integer,text,integer)';
+  const statements=[`alter function ${signature} owner to postgres;`,
+    `revoke all on function ${signature} from public,anon,authenticated,service_role;`,
+    `grant execute on function ${signature} to service_role;`];
+  const policy={triggers:new Map(),tables:new Set(),callbacks:new Set(),routines:new Set(['public.email_outbox_claim_ready_batch'])};
+  for(const path of ['supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc',file])
+    assert.doesNotThrow(()=>assertFrozenAuthority(read(path),path,policy));
+  for(const statement of statements){
+    assert.equal(isContactClaimNativeAcl(statement,file),true);
+    assert.equal(isContactClaimNativeAcl(statement,'unreviewed.sql'),false);
+    assert.equal(isContactClaimNativeAcl(statement.replace('public.email_outbox_claim_ready_batch','private.other'),file),false);
+  }
+  for(const statement of [`grant execute on function ${signature} to anon;`,
+    `grant execute on function ${signature} to service_role with grant option;`,
+    `grant execute on function ${signature} to service_role,authenticated;`,
+    `alter function ${signature} owner to service_role;`,
+    `alter function ${signature} security definer;`,
+    `drop function ${signature};`,statements[2]+'select 1;'])assert.equal(isContactClaimNativeAcl(statement,file),false);
+  for(const statement of [`grant execute on function ${signature} to anon;`,
+    `grant execute on function ${signature} to service_role with grant option;`,
+    `alter function ${signature} security definer;`,`drop function ${signature};`])
+    assert.throws(()=>assertFrozenAuthority(statement,file,policy),/FROZEN_COMPETING_AUTHORITY/);
 });

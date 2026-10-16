@@ -40,11 +40,11 @@
   "files": [
     {
       "file": "scripts/healthroster-contact-claim-boundary.mjs",
-      "sha256": "923242cfe09e81fc705a9f3d47e2b3d4c0b5f684f39ac4874d7b52be1844f6c8"
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d"
     },
     {
       "file": "scripts/bpay-next-source-gates.mjs",
-      "sha256": "e3b7eef147b56f0b349f8f0ae20a4cf87891d0f62a3c964c0c96f0c6bf58d12a"
+      "sha256": "4ec4e93a477a3db324b9ba391d9e04ef44d6a994b98d61cee0339b250150648c"
     },
     {
       "file": "scripts/cloudtms-managed-release.mjs",
@@ -60,7 +60,7 @@
     },
     {
       "file": "tests/healthroster-contact-claim-boundary.test.mjs",
-      "sha256": "7c5b24b2fdf9cc1adcc4b892907825841a9fc050626a607c4e7ba84e065b6c81"
+      "sha256": "f7d8425178fe1e393aa409ff412d9223223937c0659e73f05d42469d06808bf0"
     },
     {
       "file": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
@@ -84,5 +84,32 @@
     "deploy": false,
     "bankingChatMessage": false,
     "secretsPrinted": false
+  },
+  "followup": {
+    "sourceParent": "3b9f5ab8cf5ed3bc93f3075f1f0b92483be3ad9c",
+    "nativeEntryAcl": "Finite exact logical-owner/revoke4/service-only grant classification for original public claim in original090/091 and pinned bootstrap only; no other routine, browser role, grant-option or security change.",
+    "focusedTestContinuation": "16contact cases PASS; prior88focused cases retained, one added ACL case =>89 checked cases in scope.",
+    "currentF23": {
+      "status": "FAILED_CLOSED_REVIEW_REQUIRED",
+      "diagnosticSha256": "b41e99f03a2040b1efe071051e3716cd0539ea3ee63fc2d8e713c082090dbdb9",
+      "count": 907,
+      "files": 182,
+      "byCode": {
+        "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED": 95,
+        "BPAY_NEXT_SQL_ROWTYPE_SELECT": 716,
+        "BPAY_NEXT_SQL_AGGREGATE_TYPE_UNCLASSIFIED": 69,
+        "BPAY_NEXT_SQL_JSON_CONCAT": 8,
+        "BPAY_NEXT_SQL_UUID_CARDINALITY_UNCLASSIFIED": 19
+      },
+      "all182FilesDifferFromInstall1": true,
+      "noInstalledBaselineWaiver": true,
+      "classificationApproval": false,
+      "temporaryCensus": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\f23-current-source-review-20261016\\CENSUS.json"
+    },
+    "newTemporaryFiles": [
+      "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\run-f23-current-review-20261016.mjs",
+      "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\f23-current-source-review-20261016\\CENSUS.json"
+    ],
+    "temporaryScriptInitialFailure": "Relative module import had one excess parent; fixed before any check ran. No database action."
   }
 }

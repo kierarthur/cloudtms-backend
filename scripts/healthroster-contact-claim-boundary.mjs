@@ -95,3 +95,15 @@ export function contactClaimMigrationSql(unit,mapSource=value=>value){
     throw Error('HEALTHROSTER_CONTACT_CLAIM_ATOMIC_COMPANION_CHANGED');
   return expected.sql;
 }
+
+export function isContactClaimNativeAcl(statement,file){
+  if(![CONTACT_CLAIM_MIGRATION.path,
+    'supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc',
+    'supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc'].includes(file))return false;
+  // Preserve the original logical owner and service-only INVOKER entry. This
+  // accepts no browser EXECUTE, grant option, security change or other routine.
+  const head='public\\.email_outbox_claim_ready_batch\\s*\\(\\s*integer\\s*,\\s*text\\s*,\\s*integer\\s*\\)';
+  return new RegExp('^(?:alter\\s+function\\s+'+head+'\\s+owner\\s+to\\s+postgres'
+    +'|revoke\\s+all\\s+on\\s+function\\s+'+head+'\\s+from\\s+public\\s*,\\s*anon\\s*,\\s*authenticated\\s*,\\s*service_role'
+    +'|grant\\s+execute\\s+on\\s+function\\s+'+head+'\\s+to\\s+service_role)\\s*;\\s*$','i').test(statement);
+}
