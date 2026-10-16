@@ -25,9 +25,29 @@ if (release.split(anchor).length !== 2) throw new Error('Current pending release
 const changedRelease = release.replace(anchor, anchor.replace('  return new;', addition + '  return new;'));
 const statusStart = statusFile.indexOf('create or replace function ');
 const status = statusFile.slice(statusStart, statusFile.indexOf('\nalter function ', statusStart));
-const changedStatus = status.replace('private.weekly_source_local_saved_status_v1(', 'private.weekly_source_local_saved_status_native_v1(');
+let changedStatus = status;const statusEdits = [];
+function statusChange(before, after) {
+  if (changedStatus.split(before).length !== 2) throw new Error(`Native saved placement seam changed: ${before.slice(0, 100)}`);
+  changedStatus = changedStatus.replace(before, after);statusEdits.push({ before, after });
+}
+statusChange('private.weekly_source_local_saved_status_v1(', 'private.weekly_source_local_saved_status_native_v1(');
+statusChange('  p_generation_id uuid;', '  p_generation_id uuid;v_placement jsonb;');
+statusChange('  select count(*) into v_count from public.weekly_exceptional_payment_approvals a',
+  `  v_placement:=private.weekly_source_protected_saved_placement_v1(v_local.generation_id,v_local.root_timesheet_id,v_request.contract_id);
+  select count(*) into v_count from public.weekly_exceptional_payment_approvals a`);
+statusChange("      'contract_id',a.contract_id,'week_ending_date',to_char(a.week_ending,'YYYY-MM-DD'),",
+  "      'contract_id',coalesce((v_placement->>'current_contract_id')::uuid,a.contract_id),'week_ending_date',to_char(a.week_ending,'YYYY-MM-DD'),");
+statusChange("     or v_approval.contract_id::text is distinct from v_scope->>'contract_id'",
+  "     or (v_placement is null and v_approval.contract_id::text is distinct from v_scope->>'contract_id')");
+for (const column of ['v_publication_root.contract_id','v_request.contract_id','v_head.contract_id']) {
+  statusChange(`${column} is distinct from v_approval.contract_id`,
+    `${column} is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)`);
+}
+statusChange("v_qualification#>>'{scope,contract_id}' is distinct from v_approval.contract_id::text",
+  "v_qualification#>>'{scope,contract_id}' is distinct from coalesce(v_placement->>'current_contract_id',v_approval.contract_id::text)");
+let reversedStatus = changedStatus;for (const edit of statusEdits.toReversed()) reversedStatus = reversedStatus.replace(edit.after, edit.before);
 if (changedStatus === status || changedRelease.replace(addition, '') !== release
-    || changedStatus.replace('private.weekly_source_local_saved_status_native_v1(', 'private.weekly_source_local_saved_status_v1(') !== status) {
+    || reversedStatus !== status) {
   throw new Error('Full native release/status reverse failed');
 }
 const wrapper = `
@@ -57,7 +77,7 @@ writeFileSync(path.join(base, output), sql);
 writeFileSync(path.join(base, 'NATIVE_LOCAL_RELEASE_RECEIPT.json'), JSON.stringify({ input_commit: commit,
   inputs: [{ path: inputRelease, sha256: sha(releaseFile), selected_native_body_sha256: sha(release) },
     { path: inputStatus, sha256: sha(statusFile), selected_native_body_sha256: sha(status) }],
-  output, output_sha256: sha(sql), complete_reverse_equals_input: true, ordinary_body_changes: 0,
+  output, output_sha256: sha(sql), complete_reverse_equals_input: true, ordinary_body_changes: 0,status_edits: statusEdits,
   source_effect: 'Read-only exact original pending step / actual RELEASED row / full reconstructed original Local row proof; no automatic Source acceptance or Banking mapping.',
   qualification: 'SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN' }, null, 2) + '\n');
 process.stdout.write('Generated actual Local release/saved-status composition; complete native body reverse passes.\n');

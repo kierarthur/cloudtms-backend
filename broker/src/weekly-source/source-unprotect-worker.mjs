@@ -1,6 +1,7 @@
 import { composeWeeklyProtectedTargetSchedule } from './protected-target-schedule.js';
 import { buildWeeklyProtectedNativePayload } from './protected-action-orchestrator.mjs';
 import { prepareSourcePayDecisionConfirmation } from './source-pay-decision-preparation.mjs';
+import { loadWeeklyProtectedCurrentFinancialSource } from './source-current-financial.mjs';
 import { decodeSourceUnprotectReviewContext, normalizeSourceNativeCalculationContext,
   decodeSourceUnprotectPreparationResult, decodeSourcePreviewQuoteContext, decodeSourceUnprotectQuoteContext } from './source-native-contract.mjs';
 import { sourceProtectedCalculationContext, buildSourceUnprotectEconomicTarget,
@@ -87,9 +88,11 @@ export async function prepareSourcePayDecisionServiceRequest({ request, actorUse
       quantityPartition: quote.quantity_partition, priorCommitmentCutSha256: quote.prior_commitment_cut_sha256,
       sourceObservationSha256: quote.source_observation_sha256 });
     if (economics.economic_target_sha256 !== quote.economic_target_sha256) fail('SOURCE_PAY_DECISION_REVIEW_CHANGED');
+    const currentFinancialSource = member.route === 'NEXT' ? null : await loadWeeklyProtectedCurrentFinancialSource({ context,
+      actorUserId, dataRpc: owner.dataRpc });
     const key = await childKey(batch.decision_id, member.member_key, batch.request_id);
     const authored = await buildWeeklyProtectedNativePayload({ context: { ...context, orchestration_run_id: prepared.orchestration_run_id },
-      target, calculation, nextRoute: member.route === 'NEXT', actorUserId, reason: batch.confirmation_reason, idempotencyKey: key });
+      target, calculation, nextRoute: member.route === 'NEXT', currentFinancialSource, actorUserId, reason: batch.confirmation_reason, idempotencyKey: key });
     const payload = { route: member.route, prepare_request: {
       schema_version: 'WEEKLY_PROTECTED_ACTION_PREPARE_V1', actor_user_id: actorUserId, family_id: prepared.family_id,
       source_cycle_id: prepared.source_cycle_id, work_event_id: prepared.work_event_id, action: 'WITHDRAW',

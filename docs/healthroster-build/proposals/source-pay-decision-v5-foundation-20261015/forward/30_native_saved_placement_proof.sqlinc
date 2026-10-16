@@ -1,0 +1,45 @@
+-- Validate the genuine placement sealed by the actual native stage. A later
+-- B-to-C move does not rewrite an already accepted Local B receipt to C.
+create or replace function private.weekly_source_protected_saved_placement_v1(p_generation_id uuid,p_root_timesheet_id uuid,p_contract_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare generation public.weekly_exceptional_pay_generations%rowtype;family public.weekly_exceptional_pay_target_families%rowtype;
+ request public.weekly_exceptional_c1_publication_requests%rowtype;placement jsonb;physical public.timesheets%rowtype;
+ alias private.timesheet_contract_family_aliases%rowtype;member private.timesheet_contract_move_members%rowtype;
+ operation private.timesheet_contract_move_operations%rowtype;
+begin
+ select g.* into strict generation from public.weekly_exceptional_pay_generations g where g.id=p_generation_id;
+ select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=generation.family_id;
+ select r.* into strict request from public.weekly_exceptional_c1_publication_requests r where r.generation_id=generation.id and r.family_id=family.id;
+ if family.root_timesheet_id=p_root_timesheet_id and family.contract_id=p_contract_id then return null;end if;
+ placement:=generation.complete_next_vector_json->'accepted_current_placement';
+ select t.* into strict physical from public.timesheets t where t.timesheet_id=p_root_timesheet_id;
+ select a.* into strict alias from private.timesheet_contract_family_aliases a where a.timesheet_id=family.root_timesheet_id;
+ select o.* into strict operation from private.timesheet_contract_move_operations o where o.id=(placement->>'move_operation_id')::uuid;
+ select m.* into strict member from private.timesheet_contract_move_members m where m.operation_id=operation.id and m.member_key=alias.member_key;
+ if placement->>'version' is distinct from 'PROTECTED_CURRENT_PLACEMENT_V1' or placement->'moved' is distinct from 'true'::jsonb
+  or placement->>'family_id' is distinct from family.id::text or placement->>'original_root_timesheet_id' is distinct from family.root_timesheet_id::text
+  or placement->>'original_contract_id' is distinct from family.contract_id::text or placement->>'current_timesheet_id' is distinct from physical.timesheet_id::text
+  or placement->>'current_contract_id' is distinct from p_contract_id::text or physical.contract_id is distinct from p_contract_id
+  or placement->>'family_root_id' is distinct from alias.family_root_id::text or placement->>'member_key' is distinct from alias.member_key
+  or physical.week_ending_date is distinct from family.week_ending_date or request.root_timesheet_id is distinct from physical.timesheet_id
+  or request.contract_id is distinct from physical.contract_id or request.candidate_id is distinct from family.candidate_id
+  or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',generation.complete_next_vector_json) is distinct from generation.complete_next_vector_hash
+  or alias.original_timesheet_id is distinct from family.root_timesheet_id or operation.state not in('COMPLETE','SUPERSEDED')
+  or operation.purpose<>'CONTRACT_CORRECTION' or operation.family_root_id is distinct from alias.family_root_id
+  or operation.candidate_id is distinct from family.candidate_id or operation.accepted_review_id is null
+  or operation.placement_receipt_json->>'version' is distinct from 'CONTRACT_MOVE_PLACEMENT_RECEIPT_V1'
+  or operation.placement_receipt_json->>'operation_id' is distinct from operation.id::text
+  or member.to_timesheet_id is distinct from physical.timesheet_id or member.to_contract_id is distinct from physical.contract_id
+  or member.to_version::text is distinct from placement->>'current_timesheet_version'
+  or member.immutable_evidence_hash is distinct from private.weekly_exceptional_hex_sha256_v1(placement->>'immutable_original_evidence_sha256')
+  or member.immutable_evidence_hash is distinct from private.timesheet_contract_move_row_hash_v1(
+    private.timesheet_contract_move_evidence_v1(family.root_timesheet_id))
+  or exists(select 1 from private.weekly_source_pay_decision_unprotect_preparations p where p.orchestration_run_id=request.orchestration_run_id
+    and p.placement_certificate_sha256 is distinct from private.weekly_exceptional_hex_sha256_v1(placement->>'placement_certificate_sha256')) then
+  raise exception 'PROTECTED_SAVED_PLACEMENT_UNBOUND' using errcode='23514';end if;
+ return placement;
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'PROTECTED_SAVED_PLACEMENT_UNBOUND' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

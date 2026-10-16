@@ -13,6 +13,7 @@ import {
 } from './protected-target-schedule.js';
 import { buildWeeklyProtectedNextTarget } from './protected-next-preview.mjs';
 import { sourceProtectedCalculationContext } from './source-native-economic.mjs';
+import { loadWeeklyProtectedCurrentFinancialSource } from './source-current-financial.mjs';
 import { sourceNativeContinuationFromRpcError, sourcePayDecisionReadAction } from './source-native-contract.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -630,7 +631,9 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
     zeroRoot: false,
     ...(nextRoute ? { retainNextPreviewFacts: true } : {}),
   });
-  const nativePayload = await buildWeeklyProtectedNativePayload({ context, target, calculation, nextRoute,
+  const currentFinancialSource = nextRoute ? null : await loadWeeklyProtectedCurrentFinancialSource({ context,
+    actorUserId: normalized.actorUserId, dataRpc: dependencies.dataRpc });
+  const nativePayload = await buildWeeklyProtectedNativePayload({ context, target, calculation, nextRoute, currentFinancialSource,
     actorUserId: normalized.actorUserId, reason: normalized.reason, idempotencyKey: normalized.idempotencyKey });
   if (nativePayload.route === 'NEXT') {
     const result = await rpc(dependencies, 'weekly_exceptional_pay_publish_next_v1', nativePayload.publish_request);
@@ -646,7 +649,8 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
 
 // Pure authoring shared by ordinary actions and Source confirmation. It performs
 // no RPC, ensure, run creation, staging or financial publication.
-export async function buildWeeklyProtectedNativePayload({ context, target, calculation, nextRoute, actorUserId, reason, idempotencyKey }) {
+export async function buildWeeklyProtectedNativePayload({ context, target, calculation, nextRoute, actorUserId, reason, idempotencyKey,
+  currentFinancialSource = null }) {
   const normalized = { actorUserId, reason, idempotencyKey };
   const calculationContext = context.protected_current_placement ? sourceProtectedCalculationContext(context) : context;
   const financialSnapshot = stageSnapshot(calculation, calculationContext);
@@ -684,6 +688,10 @@ export async function buildWeeklyProtectedNativePayload({ context, target, calcu
     'Current Weekly financial record',
   );
   const currentFinancialId = uuid(currentFinancial.id, 'Current Weekly financial record');
+  if (context.protected_current_placement?.moved === true && (currentFinancialSource?.financial_row_id !== currentFinancialId
+      || currentFinancialSource?.root_version !== calculationContext.timesheet.version)) {
+    fail('SOURCE_CURRENT_FINANCIAL_SOURCE_REQUIRED', 'The current financial source must be reviewed again.');
+  }
   const componentInput = {
     root_timesheet_id: calculationContext.root_timesheet_id,
     financial_snapshot: financialSnapshot,
@@ -712,7 +720,7 @@ export async function buildWeeklyProtectedNativePayload({ context, target, calcu
     source_mode: context.source_mode,
     client_sources: context.client_sources,
     candidate_submission: context.candidate_submission,
-    root_financial: context.root_financial,
+    root_financial: currentFinancialSource ?? context.root_financial,
     provider: context.provider,
     components,
   });

@@ -1,0 +1,22 @@
+-- Pure projection of already certified native facts for the existing native
+-- component manifest. Original context is retained by its caller unchanged.
+create or replace function private.weekly_source_protected_entitlement_projection_v1(p_context jsonb)
+returns jsonb language plpgsql immutable set search_path=pg_catalog as $function$
+declare placement jsonb:=p_context->'protected_current_placement';current_facts jsonb:=p_context->'current_entitlement';
+begin
+ if jsonb_typeof(placement) is distinct from 'object' or placement->>'version' is distinct from 'PROTECTED_CURRENT_PLACEMENT_V1'
+  or placement->>'family_id' is distinct from p_context->>'family_id'
+  or placement->>'original_root_timesheet_id' is distinct from p_context->>'root_timesheet_id'
+  or placement->>'current_timesheet_id' is distinct from current_facts#>>'{timesheet,timesheet_id}'
+  or placement->>'current_contract_id' is distinct from current_facts#>>'{contract_record,id}'
+  or current_facts#>>'{timesheet,contract_id}' is distinct from placement->>'current_contract_id'
+  or current_facts#>>'{timesheet,version}' is distinct from placement->>'current_timesheet_version'
+  or current_facts#>>'{current_financial,id}' is distinct from placement->>'current_financial_id'
+  or current_facts#>>'{contract_record,candidate_id}' is distinct from p_context->>'candidate_id'
+  or current_facts#>>'{contract_record,client_id}' is distinct from p_context->>'client_id' then
+  raise exception 'PROTECTED_CURRENT_ENTITLEMENT_UNBOUND' using errcode='23514';end if;
+ return p_context||jsonb_build_object('root_timesheet_id',placement->'current_timesheet_id','contract_id',placement->'current_contract_id',
+  'timesheet',current_facts->'timesheet','contract_record',current_facts->'contract_record','current_financial',current_facts->'current_financial');
+end;
+$function$;
+revoke all on function private.weekly_source_protected_entitlement_projection_v1(jsonb) from public,anon,authenticated,service_role;

@@ -1,0 +1,42 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "inputs": [
+    {
+      "input": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "name": "private.weekly_source_local_preauthorisation_write_allowed_v1",
+      "input_sha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+      "selected_native_body_sha256": "b5bfd4b7b1cab591098cd5a44b16a898690464ed880ae8a9bf82e6fbbc293aab",
+      "edits": [
+        {
+          "before": "    and family.root_timesheet_id=root.timesheet_id",
+          "after": "    and (family.root_timesheet_id=root.timesheet_id or (\n      private.timesheet_contract_current_placement_v1(family.root_timesheet_id)->>'current_timesheet_id'=root.timesheet_id::text\n      and private.timesheet_contract_current_placement_v1(family.root_timesheet_id)->>'current_contract_id'=root.contract_id::text\n      and exists(select 1 from public.contracts c where c.id=root.contract_id and c.candidate_id=family.candidate_id)\n      and root.week_ending_date=family.week_ending_date))"
+        }
+      ]
+    },
+    {
+      "input": "supabase/repeatable/05102026_0212_weekly_source_local_publication_context_v2.sql",
+      "name": "private.weekly_source_local_publication_context_v2",
+      "input_sha256": "209a157af5d7ec1e67568905b5cb828638aab09a11a1d8c4a8ebd59bca8c1d36",
+      "selected_native_body_sha256": "b667c2a67be8a481081aa6d48a61e133158da164f5e6cf72e2c079dd49e5e049",
+      "edits": [
+        {
+          "before": "  v_stage_hash bytea;",
+          "after": "  v_stage_hash bytea;v_placement jsonb;"
+        },
+        {
+          "before": "  if not found or v_family.root_timesheet_id is distinct from p_root_timesheet_id\n     or v_family.root_family_booking_id is distinct from v_scope->>'family_booking_id'\n     or v_family.candidate_id is distinct from v_request.candidate_id\n     or v_family.contract_id is distinct from v_request.contract_id",
+          "after": "  if found and v_family.root_timesheet_id is distinct from p_root_timesheet_id then\n    v_placement:=private.weekly_source_protected_current_placement_v1(v_family.id,\n      (select a.work_event_id from public.weekly_exceptional_payment_approvals a\n       where a.creation_orchestration_run_id=v_run.id and a.pay_target_family_id=v_family.id),false);\n    if v_placement->'moved' is distinct from 'true'::jsonb\n      or v_placement->>'current_timesheet_id' is distinct from p_root_timesheet_id::text\n      or v_placement->>'current_contract_id' is distinct from v_request.contract_id::text then return null;end if;\n  end if;\n  if v_family.id is null or (v_placement is null and (\n       v_family.root_timesheet_id is distinct from p_root_timesheet_id\n       or v_family.root_family_booking_id is distinct from v_scope->>'family_booking_id'\n       or v_family.contract_id is distinct from v_request.contract_id))\n     or v_family.candidate_id is distinct from v_request.candidate_id"
+        },
+        {
+          "before": "or s.contract_id is distinct from v_family.contract_id)) then return null; end if;",
+          "after": "or s.contract_id is distinct from v_request.contract_id)) then return null; end if;"
+        }
+      ]
+    }
+  ],
+  "output": "forward/29_current_local_native_context.sqlinc",
+  "output_sha256": "f88cd41e70a143526f476bf8ca9ae8ba53682f4f6ae6b4934fee2ce609f1c771",
+  "complete_reverse_equals_input": true,
+  "ordinary_body_changes": 0,
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

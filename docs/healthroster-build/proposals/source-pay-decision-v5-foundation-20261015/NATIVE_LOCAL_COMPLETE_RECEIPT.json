@@ -2,7 +2,7 @@
   "input": "native-entry/weekly_exceptional_pay_complete_local_v1.sqlinc",
   "input_sha256": "168feb1143ae9893b759c70b60fe83aee9fe42bffe51e1e474bcaebd466bec8e",
   "output": "forward/21_native_local_complete_implementation.sqlinc",
-  "output_sha256": "fd3215a5bb196ed061c4fde41422a751f7926eb26c3cd4cd81a95911983b90dd",
+  "output_sha256": "fe61457f17574137b5cc3207dfc43987baba5ef94a40f1dc0002713841a8b7f5",
   "complete_reverse_equals_input": true,
   "ordinary_body_changes": 0,
   "source_effect": "Real native TSFIN/common head/pending result and original completion step; exact control/adoption after actual completion, before selected contact/query retirement.",
@@ -14,11 +14,27 @@
     },
     {
       "before": "  v_source_gate jsonb;",
-      "after": "  v_source_gate jsonb;v_source_application_id uuid;v_source_control jsonb;v_source_entitlement jsonb;\n  v_source_head public.weekly_source_entitlement_heads%rowtype;\n  v_source_receipt private.weekly_source_entitlement_publication_receipts%rowtype;\n  v_source_pending public.weekly_source_pending_entitlement_bundles%rowtype;"
+      "after": "  v_source_gate jsonb;v_source_application_id uuid;v_source_control jsonb;v_source_entitlement jsonb;\n  v_placement jsonb;v_checked_placement jsonb;\n  v_source_head public.weekly_source_entitlement_heads%rowtype;\n  v_source_receipt private.weekly_source_entitlement_publication_receipts%rowtype;\n  v_source_pending public.weekly_source_pending_entitlement_bundles%rowtype;"
     },
     {
       "before": "  v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(\n    v_request.family_id,v_request.orchestration_run_id,v_actor,'COMPLETE_LOCAL');\n  if v_source_gate is not null then return v_source_gate; end if;",
       "after": "  if p_source_decision_preparation_id is null then\n    v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(\n      v_request.family_id,v_request.orchestration_run_id,v_actor,'COMPLETE_LOCAL');\n    if v_source_gate is not null then return v_source_gate; end if;\n  else\n    v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(\n      p_source_decision_preparation_id,p_request,'COMPLETE_LOCAL',true);\n  end if;"
+    },
+    {
+      "before": "  v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,\n    array[v_request.root_timesheet_id],'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',\n    v_request.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');",
+      "after": "  v_placement:=private.weekly_source_protected_current_placement_v1(v_request.family_id,\n    (select a.work_event_id from public.weekly_exceptional_payment_approvals a\n     where a.creation_orchestration_run_id=v_request.orchestration_run_id and a.pay_target_family_id=v_request.family_id),false);\n  if v_placement->'moved'='true'::jsonb then\n    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);\n    v_locks:=jsonb_build_object('ok',true);\n  else\n    v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,\n      array[v_request.root_timesheet_id],'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',\n      v_request.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');\n  end if;\n  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_request.family_id,\n    (select a.work_event_id from public.weekly_exceptional_payment_approvals a\n     where a.creation_orchestration_run_id=v_request.orchestration_run_id and a.pay_target_family_id=v_request.family_id),false);\n  if v_checked_placement is distinct from v_placement then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;"
+    },
+    {
+      "before": "  select * into strict v_root from public.timesheets where timesheet_id=v_family.root_timesheet_id for update;",
+      "after": "  select * into strict v_root from public.timesheets where timesheet_id=(v_placement->>'current_timesheet_id')::uuid for update;"
+    },
+    {
+      "before": "     or v_root.contract_id is distinct from v_family.contract_id",
+      "after": "     or v_root.contract_id::text is distinct from v_placement->>'current_contract_id'\n     or v_request.root_timesheet_id is distinct from v_root.timesheet_id or v_request.contract_id is distinct from v_root.contract_id"
+    },
+    {
+      "before": "          is distinct from v_family.contract_id::text",
+      "after": "          is distinct from v_root.contract_id::text"
     },
     {
       "before": "  -- Finish the actual completion evidence before any query resolution or",

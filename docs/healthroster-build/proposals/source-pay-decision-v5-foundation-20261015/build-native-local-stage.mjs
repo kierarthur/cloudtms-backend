@@ -13,7 +13,7 @@ function change(before, after) {
 }
 change('public.weekly_exceptional_pay_stage_c1_request_v1(\n  p_request jsonb\n)',
   'private.weekly_source_protected_local_stage_engine_v1(\n  p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean\n)');
-change('  v_source_gate jsonb;', '  v_source_gate jsonb;v_source_application_id uuid;');
+change('  v_source_gate jsonb;', '  v_source_gate jsonb;v_source_application_id uuid;v_placement jsonb;v_checked_placement jsonb;');
 const begin = sql.indexOf('\nbegin\n');
 if (begin < 0) throw new Error('Missing actual stage body');
 const before = sql.slice(begin, begin + '\nbegin\n'.length);
@@ -39,6 +39,45 @@ change('  -- SP-12: existing admission only; no producer/version evidence.', `  
     perform private.weekly_source_pay_decision_native_normal_gate_v1(v_family_id,v_run_id,v_actor_user_id,'STAGE_LOCAL');
   end if;
   -- SP-12: existing admission only; no producer/version evidence.`);
+change('  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);', `  v_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_work_event_id,false);
+  if v_placement->'moved'='true'::jsonb then
+    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);
+    select jsonb_build_object('root_timesheet_id',f.root_timesheet_id,'candidate_id',f.candidate_id,
+      'contract_id',f.contract_id,'week_ending_date',f.week_ending_date) into strict v_lock_family
+      from public.weekly_exceptional_pay_target_families f where f.id=v_family_id;
+  else v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);end if;
+  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_work_event_id,false);
+  if v_checked_placement is distinct from v_placement then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;`);
+change('  where timesheet.timesheet_id=v_family.root_timesheet_id\n  for share;',
+  "  where timesheet.timesheet_id=(v_placement->>'current_timesheet_id')::uuid\n  for share;");
+change('  if v_root.contract_id is distinct from v_family.contract_id',
+  "  if v_root.contract_id::text is distinct from v_placement->>'current_contract_id'");
+for (const prefix of ["(v_start->>'contract_id')::uuid", "(v_source_entry->>'contract_id')::uuid", "(v_source_document->>'contract_id')::uuid"]) {
+  change(`${prefix} is distinct from v_family.contract_id`, `${prefix} is distinct from v_root.contract_id`);
+}
+change('      and evidence.is_current and evidence.revoked_at is null\n      and evidence.archived_at_utc is null;',
+  "      and (evidence.is_current or v_placement->'moved'='true'::jsonb) and evidence.revoked_at is null\n      and (evidence.archived_at_utc is null or v_placement->'moved'='true'::jsonb);");
+change('    v_signed_evidence:=private.weekly_exceptional_candidate_signed_evidence_v1(\n      v_evidence_timesheet_id\n    );',
+  '    v_signed_evidence:=private.weekly_source_protected_signed_evidence_v1(v_evidence_timesheet_id,v_family.id,v_event.id);');
+change("    elsif v_source_kind='ROOT_FINANCIAL'\n       and (v_source_document->>'financial_row_id')::uuid is distinct from v_fin.id then",
+  `    elsif v_source_kind='ROOT_FINANCIAL' and (
+       (v_source_document->>'financial_row_id')::uuid is distinct from v_fin.id
+       or (v_placement->'moved'='true'::jsonb and (
+        v_source_document->>'financial_revision_digest' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_PROTECTED_ROOT_FINANCIAL_V1',to_jsonb(v_fin)),'hex')
+        or v_source_entry->>'source_document_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_PROTECTED_ROOT_FINANCIAL_V1',to_jsonb(v_fin)),'hex')
+        or v_source_document->>'root_version' is distinct from v_root.version::text
+        or v_source_document->>'financial_timesheet_version' is distinct from v_fin.timesheet_version::text))) then`);
+change("  if v_component_identity_context->>'root_timesheet_id' is distinct from v_root.timesheet_id::text",
+  "  v_component_identity_context:=private.weekly_source_protected_entitlement_projection_v1(v_component_identity_context);\n  if v_component_identity_context->>'root_timesheet_id' is distinct from v_root.timesheet_id::text");
+change("  v_next_vector:=v_next_vector||jsonb_build_object(\n    'protected_component_identity_basis',v_component_identity_basis);",
+  "  v_next_vector:=v_next_vector||jsonb_build_object(\n    'protected_component_identity_basis',v_component_identity_basis);\n  if v_placement->'moved'='true'::jsonb then\n    v_next_vector:=v_next_vector||jsonb_build_object('accepted_current_placement',v_placement);end if;");
+change('    v_family.candidate_id,v_family.contract_id,v_root.timesheet_id,',
+  '    v_family.candidate_id,v_root.contract_id,v_root.timesheet_id,');
+change('      v_family.candidate_id,v_family.contract_id,\n      private.weekly_exceptional_hex_sha256_v1',
+  '      v_family.candidate_id,v_root.contract_id,\n      private.weekly_exceptional_hex_sha256_v1');
 change('  insert into public.weekly_exceptional_payment_approvals(\n', `  if p_validate_only then
     return jsonb_build_object('version','SOURCE_NATIVE_VALIDATED_REQUEST_V1','route','SOURCE_LOCAL',
       'family_id',v_family.id,'orchestration_run_id',v_run.id,

@@ -21,6 +21,7 @@ declare
   v_family public.weekly_exceptional_pay_target_families%rowtype;
   v_lock_family jsonb; v_lock_group uuid;
   v_placement jsonb;v_checked_placement jsonb;v_current_entitlement jsonb;
+  v_ent_root public.timesheets%rowtype;v_ent_fin public.timesheets_financials%rowtype;
   v_cycle public.weekly_source_cycles%rowtype;
   v_group public.weekly_source_groups%rowtype;
   v_contract public.contracts%rowtype;
@@ -114,6 +115,8 @@ begin
   v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);
   if v_checked_placement is distinct from v_placement then
     raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;
+  select t.* into strict v_ent_root from public.timesheets t where t.timesheet_id=(v_placement->>'current_timesheet_id')::uuid;
+  select f.* into v_ent_fin from public.timesheets_financials f where f.id=(v_placement->>'current_financial_id')::uuid;
   select family.* into strict v_family
   from public.weekly_exceptional_pay_target_families family
   where family.id=v_family_id for share;
@@ -365,20 +368,20 @@ begin
   -- An already authorised root requires its genuine complete current I1 basis;
   -- an actual unauthorised first Save must not invent that approved basis.
   if v_family.target_domain_version='C1_V1' then
-    if v_root.authorised_at_server is not null then
-      v_component_identity_inventory:=private.weekly_source_effective_inventory_v1(v_root.timesheet_id);
+    if v_ent_root.authorised_at_server is not null then
+      v_component_identity_inventory:=private.weekly_source_effective_inventory_v1(v_ent_root.timesheet_id);
       if v_component_identity_inventory->>'ok' is distinct from 'true'
          or v_component_identity_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'
          or v_component_identity_inventory#>>'{approval_basis,scope,root_timesheet_id}'
-              is distinct from v_root.timesheet_id::text
+              is distinct from v_ent_root.timesheet_id::text
          or jsonb_typeof(v_component_identity_inventory->'components') is distinct from 'array' then
         raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;
       v_component_identity_components:=v_component_identity_inventory->'components';
     else
       if exists(select 1 from public.weekly_source_root_authorisations a
-          where a.family_booking_id=v_root.booking_id)
+          where a.family_booking_id=v_ent_root.booking_id)
          or exists(select 1 from public.weekly_source_entitlement_heads h
-          where h.root_family_booking_id=v_root.booking_id and h.state='COMMITTED_CURRENT') then
+          where h.root_family_booking_id=v_ent_root.booking_id and h.state='COMMITTED_CURRENT') then
         raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;
       v_component_identity_components:='[]'::jsonb;
     end if;
@@ -406,7 +409,7 @@ begin
     'contract_record',pg_catalog.to_jsonb(v_contract),
     'current_financial',case when v_fin.id is null then null else pg_catalog.to_jsonb(v_fin) end,
     'approved_component_identity_components',v_component_identity_components,
-    'requires_zero_financial',v_fin.id is null,
+    'requires_zero_financial',v_ent_fin.id is null,
     'protected_schedule',v_schedule,'source_segments',v_source_segments,
     'protected_decisions',v_decisions,'source_proposal',pg_catalog.jsonb_build_object(
       'selected_work_event_id',v_event.id,'source_present',v_selected_source_present,
@@ -417,13 +420,7 @@ begin
     'candidate_submission',v_candidate_submission,
     'current_comparison_revision_id',v_comparison,
     'current_final_revision_id',v_current_final,
-    'root_financial',case when v_fin.id is null then null else pg_catalog.jsonb_build_object(
-      'source_system','CLOUDTMS_TIMESHEET_FINANCIAL','external_identity',v_fin.id::text,
-      'external_revision',v_fin.timesheet_version::text,'document_sha256',v_fin_hash,
-      'financial_row_id',v_fin.id,'root_version',v_root.version,
-      'financial_timesheet_version',v_fin.timesheet_version,
-      'financial_revision_digest',v_fin_hash
-    ) end,
+    'root_financial',case when v_fin.id is null then null else private.weekly_source_protected_root_financial_fact_v1(to_jsonb(v_fin),v_root.version) end,
     'provider',pg_catalog.jsonb_build_object(
       'source_system','CLOUDTMS_CONTRACT_PROVIDER','external_identity',v_contract.id::text,
       'external_revision',v_root.version::text,'document_sha256',v_provider_hash,

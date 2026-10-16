@@ -59,7 +59,11 @@ test('Real release and saved-status native bodies retain every original check an
   for (const item of receipt.inputs) assert.equal(sha(git(receipt.input_commit, item.path)), item.sha256);
   const statusFile = git(receipt.input_commit, receipt.inputs[1].path);const start = statusFile.indexOf('create or replace function ');
   const status = statusFile.slice(start, statusFile.indexOf('\nalter function ', start));
-  assert.ok(output.includes(status.replace('private.weekly_source_local_saved_status_v1(', 'private.weekly_source_local_saved_status_native_v1(')));
+  let currentStatus = status;
+  for (const edit of receipt.status_edits) {
+    assert.equal(currentStatus.split(edit.before).length, 2);currentStatus = currentStatus.replace(edit.before, edit.after);
+  }
+  assert.ok(output.includes(currentStatus));
   const releaseFile = git(receipt.input_commit, receipt.inputs[0].path);
   const releaseStart = releaseFile.indexOf('create or replace function private.weekly_source_local_protected_pending_released_v1()');
   const original = releaseFile.slice(releaseStart, releaseFile.indexOf('\nalter function ', releaseStart));
@@ -68,4 +72,31 @@ test('Real release and saved-status native bodies retain every original check an
   assert.ok(additionStart > 0 && additionEnd > additionStart);
   const changed = output.slice(0, output.indexOf('\ncreate or replace function private.weekly_source_local_saved_status_native_v1('));
   assert.equal(changed.replace(output.slice(additionStart, additionEnd), '').trimEnd(), original.trimEnd());
+});
+
+for (const name of ['NATIVE_CURRENT_SCOPE_RECEIPT.json','NATIVE_LOCAL_CURRENT_CONTEXT_RECEIPT.json']) {
+  test(`Current physical B consumers preserve every original native clause: ${name}`, () => {
+    const receipt = JSON.parse(read(name));const output = read(receipt.output);assert.equal(sha(output), receipt.output_sha256);
+    for (const input of receipt.inputs) {
+      const source = git(receipt.input_commit, input.input);assert.equal(sha(source), input.input_sha256);
+      const start = source.indexOf(`create or replace function ${input.name}(`);
+      const end = source.indexOf('$function$;', source.indexOf('as $function$', start));
+      const original = source.slice(start, end + '$function$;'.length);assert.equal(sha(original), input.selected_native_body_sha256);
+      let generated = original;
+      for (const edit of input.edits) { assert.equal(generated.split(edit.before).length, 2);generated = generated.replace(edit.before, edit.after); }
+      assert.ok(output.includes(generated));
+      for (const edit of input.edits.toReversed()) generated = generated.replace(edit.after, edit.before);
+      assert.equal(generated, original);
+    }
+  });
+}
+test('Run-free current-placement native context is the complete pinned native body with exact explicit transformations', () => {
+  const receipt = JSON.parse(read('NATIVE_CONTEXT_RECEIPT.json'));const output = read(receipt.output);
+  let generated = git(receipt.input_commit, receipt.input);assert.equal(sha(generated), receipt.input_sha256);
+  for (const edit of receipt.edits) {
+    assert.equal(generated.split(edit.before).length - 1, edit.occurrences ?? 1);
+    generated = edit.occurrences ? generated.replaceAll(edit.before, edit.after) : generated.replace(edit.before, edit.after);
+  }
+  assert.equal(sha(output), receipt.output_sha256);assert.ok(output.startsWith(generated));
+  assert.doesNotMatch(generated, /weekly_exceptional_orchestration_runs|orchestration_run_id/);
 });

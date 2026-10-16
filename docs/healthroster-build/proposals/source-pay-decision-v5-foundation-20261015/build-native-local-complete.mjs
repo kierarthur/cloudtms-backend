@@ -14,6 +14,7 @@ function change(before, after) {
 change('public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)',
   'private.weekly_exceptional_pay_complete_local_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)');
 change('  v_source_gate jsonb;', `  v_source_gate jsonb;v_source_application_id uuid;v_source_control jsonb;v_source_entitlement jsonb;
+  v_placement jsonb;v_checked_placement jsonb;
   v_source_head public.weekly_source_entitlement_heads%rowtype;
   v_source_receipt private.weekly_source_entitlement_publication_receipts%rowtype;
   v_source_pending public.weekly_source_pending_entitlement_bundles%rowtype;`);
@@ -28,6 +29,30 @@ change(`  v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v
     v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(
       p_source_decision_preparation_id,p_request,'COMPLETE_LOCAL',true);
   end if;`);
+change(`  v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,
+    array[v_request.root_timesheet_id],'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+    v_request.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');`,
+`  v_placement:=private.weekly_source_protected_current_placement_v1(v_request.family_id,
+    (select a.work_event_id from public.weekly_exceptional_payment_approvals a
+     where a.creation_orchestration_run_id=v_request.orchestration_run_id and a.pay_target_family_id=v_request.family_id),false);
+  if v_placement->'moved'='true'::jsonb then
+    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);
+    v_locks:=jsonb_build_object('ok',true);
+  else
+    v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,
+      array[v_request.root_timesheet_id],'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+      v_request.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  end if;
+  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_request.family_id,
+    (select a.work_event_id from public.weekly_exceptional_payment_approvals a
+     where a.creation_orchestration_run_id=v_request.orchestration_run_id and a.pay_target_family_id=v_request.family_id),false);
+  if v_checked_placement is distinct from v_placement then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;`);
+change('  select * into strict v_root from public.timesheets where timesheet_id=v_family.root_timesheet_id for update;',
+  "  select * into strict v_root from public.timesheets where timesheet_id=(v_placement->>'current_timesheet_id')::uuid for update;");
+change('     or v_root.contract_id is distinct from v_family.contract_id',
+  "     or v_root.contract_id::text is distinct from v_placement->>'current_contract_id'\n     or v_request.root_timesheet_id is distinct from v_root.timesheet_id or v_request.contract_id is distinct from v_root.contract_id");
+change("          is distinct from v_family.contract_id::text", "          is distinct from v_root.contract_id::text");
 const anchor = '  -- Finish the actual completion evidence before any query resolution or';
 change(anchor, `  if p_source_decision_preparation_id is not null then
     -- Actual native result/step are complete. Source's selected contact/query

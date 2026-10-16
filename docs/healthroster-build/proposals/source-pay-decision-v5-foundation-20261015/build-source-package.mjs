@@ -49,7 +49,12 @@ const stages = [
     'forward/23_same_transaction_native_dispatch.sqlinc',
     'forward/24_genuine_local_deferred_release_proof.sqlinc',
     'forward/25_actual_local_release_and_saved_status.sqlinc',
-    'forward/26_confirmed_quote_operands.sqlinc'] },
+    'forward/26_confirmed_quote_operands.sqlinc',
+    'forward/27_certified_current_native_scope.sqlinc',
+    'forward/28_current_native_entitlement_projection.sqlinc',
+    'forward/29_current_local_native_context.sqlinc',
+    'forward/30_native_saved_placement_proof.sqlinc',
+    'forward/31_current_financial_native_source.sqlinc'] },
   { id: 'CURRENT_NATIVE_ENTRY_FENCES', requires: [
     'private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)',
     'Complete current native bodies pinned by NATIVE_ENTRY_RECEIPT.json; root final owner composition'], files: [
@@ -68,15 +73,14 @@ const manifest = {
   open_health_owners: [
     'Public preview begin/quote/ready/seal/abandon and accept/read/resume implementation',
     'Actual preexisting immutable native receipt adoption and whitelisted native dependency rollback composition',
-    'Current-B native stage/complete/qualified NEXT producer integration',
-    'Current placement certificate integration into actual native archived-evidence/context/current-B financial writer owners',
-    'Moved-B native Local source qualification/current financial identity integration in retained full owners',
+    'Current-B NEXT wrapper/producer integration beyond actual current Local writer/context consumers',
+    'Full current-B Source Local native writer/qualification effects and historical read qualification remain REQUIRED_NOT_RUN',
     'Full binding/selected contact orchestration and final canonical Source receipt integration',
   ],
   external_dependencies: [
     { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_cut_v1(uuid,uuid,uuid,boolean)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
-    { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
-    { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,uuid,uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
+    { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,bytea)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
+    { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,bytea,uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
     { owner: 'Banking', abi: 'private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
     { owner: 'Banking existing protected producer', abi: 'private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)',
       source: 'supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql',
@@ -84,10 +88,19 @@ const manifest = {
       state: 'MOVED_B_NEXT_REQUIRES_EXISTING_PRODUCER_QUALIFICATION_RECEIPT_NO_BANK_BODY_EDIT' },
     { owner: 'Invoice', abi: 'private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
     { owner: 'Invoice', abi: 'private.invoice_contract_move_source_certificate_v1(uuid,boolean)',
-      source_commit: 'd9b5b978d3909a42d22dcc0a437831aeb49d3001', state: 'SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN' },
+      source_commit: '330a4770a208f0c6a927fd3a7ebee366dbc96340', state: 'SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN' },
     { owner: 'Physical', abi: 'private.timesheet_contract_current_placement_v1(uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
   ],
   native_tests: 'REQUIRED_NOT_RUN',
+  native_NP13: { state: 'REQUIRED_NOT_RUN', current_financial_source_first_use_negatives: [
+    'Unmoved family cannot claim moved B source; missing real B financial is a genuine prerequisite refusal',
+    'Wrong/inactive actor/client/family/event/source cycle/cutoff or mismatched expected placement digest refuses',
+    'Wrong B Timesheet/Contract/current row/version/native row hash/source revision or extra service DTO keys refuses',
+    'Original context timesheet/contract_record/root_financial/candidate_submission A retained unchanged',
+    'Actual B stream source is sealed in full native payload; stage rehashes current actual B row/version before write',
+    'Own native Local stage/complete uses B while original family/approval/source invoice/evidence A remains immutable',
+    'Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof',
+  ] },
   database_actions: 'NONE',
 };
 const declarations = new Set();
@@ -116,6 +129,7 @@ for (const relative of [
   'broker/src/weekly-source/source-pay-decision-preparation.mjs',
   'broker/src/weekly-source/source-native-economic.mjs',
   'broker/src/weekly-source/source-unprotect-worker.mjs',
+  'broker/src/weekly-source/source-current-financial.mjs',
   'broker/src/banking-pay/weekly-source-c1-components.mjs',
   'tests/weekly-source/protected-action-orchestrator.test.mjs',
   'tests/weekly-source/source-native-contract.test.mjs',
@@ -126,6 +140,7 @@ for (const relative of [
   'tests/weekly-source/source-native-economic.test.mjs',
   'tests/weekly-source/source-unprotect-worker.test.mjs',
   'tests/weekly-source/source-native-generators.test.mjs',
+  'tests/weekly-source/source-current-financial.test.mjs',
 ]) {
   const text = readFileSync(path.join(root, relative), 'utf8');
   manifest.runtime.push({ path: relative, sha256: sha(text), bytes: Buffer.byteLength(text) });

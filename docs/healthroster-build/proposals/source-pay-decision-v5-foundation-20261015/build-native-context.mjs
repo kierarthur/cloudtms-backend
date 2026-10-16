@@ -20,7 +20,7 @@ change('public.weekly_exceptional_pay_action_context_v1(\n  p_request jsonb\n)',
 change("    'schema_version','actor_user_id','family_id','orchestration_run_id',", "    'schema_version','actor_user_id','family_id',");
 change('  v_run_id uuid;\n', '');
 change('  v_run public.weekly_exceptional_orchestration_runs%rowtype;\n',
-  '  v_placement jsonb;v_checked_placement jsonb;v_current_entitlement jsonb;\n');
+  '  v_placement jsonb;v_checked_placement jsonb;v_current_entitlement jsonb;\n  v_ent_root public.timesheets%rowtype;v_ent_fin public.timesheets_financials%rowtype;\n');
 change("p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_CONTEXT_V1'", "p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_FACTS_V1'");
 change("    v_run_id:=(p_request->>'orchestration_run_id')::uuid;\n", '');
 change('  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);',
@@ -35,13 +35,20 @@ change('  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family
   end if;
   v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);
   if v_checked_placement is distinct from v_placement then
-    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;`);
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;
+  select t.* into strict v_ent_root from public.timesheets t where t.timesheet_id=(v_placement->>'current_timesheet_id')::uuid;
+  select f.* into v_ent_fin from public.timesheets_financials f where f.id=(v_placement->>'current_financial_id')::uuid;`);
 change('  select run.* into strict v_run\n  from public.weekly_exceptional_orchestration_runs run\n  where run.id=v_run_id and run.family_id=v_family.id for share;\n', '');
 change("  if v_run.requested_by_user_id is distinct from v_actor\n     or v_run.state not in ('RUNNING','COMPLETE')\n     or v_run.request_kind not in", '  if p_request_kind not in');
 change('     or not v_root.is_current or v_root.is_adjustment\n     or v_root.revoked_at is not null or v_root.archived_at_utc is not null',
   "     or (not v_root.is_current and v_placement->'moved'<>'true'::jsonb) or v_root.is_adjustment\n     or v_root.revoked_at is not null or (v_root.archived_at_utc is not null and v_placement->'moved'<>'true'::jsonb)");
 change('    v_signed:=private.weekly_exceptional_candidate_signed_evidence_v1(v_evidence_id);',
   '    v_signed:=private.weekly_source_protected_signed_evidence_v1(v_evidence_id,v_family.id,v_event.id);');
+const inventoryStart = text.indexOf('  -- Local/common identity admission is independent of Banking work completion.');
+const inventoryEnd = text.indexOf('  return pg_catalog.jsonb_build_object(', inventoryStart);
+if (inventoryStart < 0 || inventoryEnd < inventoryStart) throw new Error('Native component inventory seam changed');
+const originalInventory = text.slice(inventoryStart, inventoryEnd);
+change(originalInventory, originalInventory.replaceAll('v_root.', 'v_ent_root.'));
 change("  return pg_catalog.jsonb_build_object(\n    'ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',", `  select jsonb_build_object('timesheet',to_jsonb(t),'contract_record',to_jsonb(c),
     'current_financial',(select to_jsonb(f) from public.timesheets_financials f
       where f.id=(v_placement->>'current_financial_id')::uuid),
@@ -53,6 +60,12 @@ change("    'orchestration_run_id',v_run.id,'family_bound_version',v_family.boun
   "    'family_bound_version',v_family.bound_version::text,");
 change("      'target_pay_method',v_contract.pay_method_snapshot,\n      'target_umbrella_id',nullif(pg_catalog.to_jsonb(v_contract)->>'umbrella_id','')::uuid,",
   "      'target_pay_method',v_current_entitlement#>>'{contract_record,pay_method_snapshot}',\n      'target_umbrella_id',nullif(v_current_entitlement#>>'{contract_record,umbrella_id}','')::uuid,");
+change("    'requires_zero_financial',v_fin.id is null,", "    'requires_zero_financial',v_ent_fin.id is null,");
+const rootFinancialStart = text.indexOf("    'root_financial',case when v_fin.id is null then null else");
+const rootFinancialEnd = text.indexOf("    'provider',", rootFinancialStart);
+if (rootFinancialStart < 0 || rootFinancialEnd < rootFinancialStart) throw new Error('Native original financial projection seam changed');
+change(text.slice(rootFinancialStart, rootFinancialEnd),
+  "    'root_financial',case when v_fin.id is null then null else private.weekly_source_protected_root_financial_fact_v1(to_jsonb(v_fin),v_root.version) end,\n");
 change("    'zero_rate_source_refs',v_rate_refs\n  )||case when v_final_source ? 'next_source_segments'\n    then pg_catalog.jsonb_build_object('next_source_segments',v_final_source->'next_source_segments',\n      'family_bound_version',v_family.bound_version::text) else '{}'::jsonb end;",
   "    'zero_rate_source_refs',v_rate_refs,'next_source_segments',v_final_source->'next_source_segments',\n    'protected_current_placement',v_placement,'current_entitlement',v_current_entitlement\n  );");
 // Every remaining occurrence is a decision-state use, not a run lookup/row.

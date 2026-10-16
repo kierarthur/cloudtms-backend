@@ -141,6 +141,21 @@ export function decodeSourceUnprotectQuoteContext(value, expected = {}) {
   sourceCutQuantityPartition(value.quantity_partition, expected);
   return value;
 }
+export function decodeSourceCurrentFinancialSource(value, expected = {}) {
+  const keys = ['version','family_id','work_event_id','source_cycle_id','placement_certificate_sha256','current_timesheet_id','current_contract_id','root_financial'];
+  const fact = value?.root_financial;
+  if (!sourceNativeClosed(value, keys) || value.version !== 'SOURCE_CURRENT_FINANCIAL_SOURCE_RESULT_V1'
+      || !identities(value, ['family_id','work_event_id','source_cycle_id','current_timesheet_id','current_contract_id'])
+      || !isHash(value.placement_certificate_sha256) || !equalExpected(value, expected, keys.slice(1, 7))
+      || !sourceNativeClosed(fact, ['source_system','external_identity','external_revision','document_sha256','financial_row_id',
+        'root_version','financial_timesheet_version','financial_revision_digest']) || fact.source_system !== 'CLOUDTMS_TIMESHEET_FINANCIAL'
+      || !identities(fact, ['external_identity','financial_row_id']) || fact.external_identity !== fact.financial_row_id
+      || !isHash(fact.document_sha256) || fact.document_sha256 !== fact.financial_revision_digest
+      || !Number.isSafeInteger(fact.root_version) || fact.root_version < 1 || fact.root_version > 2147483647
+      || fact.financial_timesheet_version !== fact.root_version || fact.external_revision !== String(fact.financial_timesheet_version)
+      || !equalExpected(fact, expected, ['financial_row_id','root_version'])) invalid('current financial source');
+  return value;
+}
 
 export function decodeSourceNativePrepared(value, expected = {}) {
   const keys = ['ok', 'outcome', 'family_id', 'orchestration_run_id', 'source_cycle_id', 'source_group_id',

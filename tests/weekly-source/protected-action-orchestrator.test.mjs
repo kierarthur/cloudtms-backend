@@ -286,6 +286,30 @@ test('Actual pure Local native bundle retains every reviewed component after rem
   assert.equal(native.complete_request.publication_request_id, native.stage_request.c1_request.request_id);
   assert.equal(native.complete_request.expected_request_sha256, native.stage_request.c1_request.request_sha256);
 });
+test('Moved Local bundle uses actual B stream/financial while its immutable family/evidence A context remains intact', async () => {
+  const facts = context('WITHDRAW');const currentRoot = '91000000-0000-4000-8000-000000000021';
+  const currentContract = '91000000-0000-4000-8000-000000000022';const currentFinancial = '91000000-0000-4000-8000-000000000023';
+  facts.protected_current_placement = { version: 'PROTECTED_CURRENT_PLACEMENT_V1', moved: true, family_id: ID.family, family_root_id: ID.root,
+    member_key: ID.root, original_root_timesheet_id: ID.root, original_contract_id: ID.contract, current_timesheet_id: currentRoot,
+    current_contract_id: currentContract, current_financial_id: currentFinancial, current_timesheet_version: 2, current_approval_work_id: null,
+    original_canonical_work_id: null, move_operation_id: '91000000-0000-4000-8000-000000000024', placement_revision: '1',
+    immutable_original_evidence_sha256: HASH, source_invoice_certificate_sha256: HASH, placement_certificate_sha256: HASH };
+  facts.current_entitlement = { timesheet: { ...facts.timesheet, timesheet_id: currentRoot, contract_id: currentContract, version: 2,
+    is_current: true, archived_at_utc: null, settings_authority_json: { values: facts.policy } },
+  contract_record: { ...facts.contract_record, id: currentContract }, current_financial: { id: currentFinancial }, current_approval_work_id: null };
+  const currentFinancialSource = { ...facts.root_financial, external_identity: currentFinancial, external_revision: '2', financial_row_id: currentFinancial,
+    root_version: 2, financial_timesheet_version: 2 };
+  const before = structuredClone(facts);const target = composeWeeklyProtectedTargetSchedule({ sourceSegments: facts.source_segments,
+    decisions: facts.protected_decisions });const snapshot = { ...financialSnapshot(target.segments), timesheet_id: currentRoot, timesheet_version: 2 };
+  const native = await buildWeeklyProtectedNativePayload({ context: facts, target, calculation: { ok: true, snapshot }, nextRoute: false,currentFinancialSource,
+    actorUserId: ID.actor, reason: 'Reviewed current physical placement', idempotencyKey: 'source-pay-moved-local-immutable' });
+  assert.equal(native.stage_request.family_id, ID.family);assert.equal(native.stage_request.work_event_id, ID.event);
+  assert.equal(native.stage_request.c1_request.root_timesheet_id, currentRoot);assert.equal(native.stage_request.c1_request.contract_id, currentContract);
+  assert.equal(native.stage_request.c1_request.financial_row_id, currentFinancial);
+  assert.ok(native.stage_request.c1_sources.every(row => row.root_timesheet_id === currentRoot && row.contract_id === currentContract));
+  assert.deepEqual(facts, before);assert.equal(facts.root_timesheet_id, ID.root);assert.equal(facts.contract_id, ID.contract);
+  assert.equal(facts.root_financial.financial_row_id, ID.financial);
+});
 
 function dependenciesFor(kind, options = {}) {
   const calls = [];

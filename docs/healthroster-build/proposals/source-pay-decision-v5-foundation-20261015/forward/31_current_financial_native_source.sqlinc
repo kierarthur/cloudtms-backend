@@ -1,0 +1,63 @@
+-- Root-authorized narrow INTERNAL read. Original context root_financial stays
+-- original A. Only the real B stream consumes this native financial source.
+-- One exact native fact projection is reused for original A and actual B.
+create or replace function private.weekly_source_protected_root_financial_fact_v1(p_financial jsonb,p_root_version integer)
+returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public as $function$
+declare row_hash bytea;
+begin
+ if p_financial is null or p_financial='null'::jsonb then return null;end if;
+ if jsonb_typeof(p_financial) is distinct from 'object' or (p_financial->>'id')::uuid is null
+  or p_root_version is null or p_root_version<1 or (p_financial->>'timesheet_version')::integer<1 then
+  raise exception 'SOURCE_ROOT_FINANCIAL_FACT_INVALID' using errcode='23514';end if;
+ row_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_ROOT_FINANCIAL_V1',p_financial);
+ return jsonb_build_object('source_system','CLOUDTMS_TIMESHEET_FINANCIAL','external_identity',p_financial->>'id',
+  'external_revision',p_financial->>'timesheet_version','document_sha256',encode(row_hash,'hex'),'financial_row_id',p_financial->'id',
+  'root_version',p_root_version,'financial_timesheet_version',p_financial->'timesheet_version','financial_revision_digest',encode(row_hash,'hex'));
+end;
+$function$;
+revoke all on function private.weekly_source_protected_root_financial_fact_v1(jsonb,integer) from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_protected_current_financial_source_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare actor uuid;family public.weekly_exceptional_pay_target_families%rowtype;
+ event public.weekly_work_events%rowtype;cycle public.weekly_source_cycles%rowtype;
+ physical public.timesheets%rowtype;financial public.timesheets_financials%rowtype;
+ certificate jsonb;source_fact jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','actor_user_id','family_id','work_event_id','source_cycle_id','expected_placement_certificate_sha256'])
+  or not(p_request ?& array['version','actor_user_id','family_id','work_event_id','source_cycle_id','expected_placement_certificate_sha256'])
+  or p_request->>'version' is distinct from 'SOURCE_CURRENT_FINANCIAL_SOURCE_REQUEST_V1' then
+  raise exception 'SOURCE_CURRENT_FINANCIAL_SOURCE_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;
+ if actor is null or not private.weekly_source_pay_actor_allowed_v1(actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=(p_request->>'family_id')::uuid;
+ select e.* into strict event from public.weekly_work_events e where e.id=(p_request->>'work_event_id')::uuid and e.candidate_id=family.candidate_id;
+ select c.* into strict cycle from public.weekly_source_cycles c where c.id=(p_request->>'source_cycle_id')::uuid;
+ if not exists(select 1 from public.weekly_source_groups g where g.id=cycle.source_group_id and g.agency_id=family.agency_id and g.active) then
+  raise exception 'SOURCE_CURRENT_FINANCIAL_SOURCE_INVALID' using errcode='23514';end if;
+ perform private.weekly_source_office_authority_v1(actor,'APPROVE_PROTECTED_PAY',cycle.source_group_id,event.client_id,cycle.finalisation_week_ending);
+ certificate:=private.weekly_source_protected_current_placement_v1(family.id,event.id,false);
+ if certificate->'moved' is distinct from 'true'::jsonb or certificate->>'placement_certificate_sha256'
+   is distinct from p_request->>'expected_placement_certificate_sha256' then
+  raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ select t.* into strict physical from public.timesheets t where t.timesheet_id=(certificate->>'current_timesheet_id')::uuid;
+ select f.* into strict financial from public.timesheets_financials f where f.id=(certificate->>'current_financial_id')::uuid;
+ if not financial.is_current or financial.is_stale or financial.timesheet_id is distinct from physical.timesheet_id
+  or financial.timesheet_version is distinct from physical.version or financial.candidate_id is distinct from family.candidate_id
+  or financial.client_id is distinct from event.client_id then
+  raise exception 'SOURCE_CURRENT_FINANCIAL_SOURCE_INVALID' using errcode='23514';end if;
+ -- Exact same native owner/domain/projection as the retained original A fact.
+ source_fact:=private.weekly_source_protected_root_financial_fact_v1(to_jsonb(financial),physical.version);
+ return jsonb_build_object('version','SOURCE_CURRENT_FINANCIAL_SOURCE_RESULT_V1','family_id',family.id,'work_event_id',event.id,
+  'source_cycle_id',cycle.id,'placement_certificate_sha256',certificate->'placement_certificate_sha256',
+  'current_timesheet_id',physical.timesheet_id,'current_contract_id',physical.contract_id,'root_financial',source_fact);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_CURRENT_FINANCIAL_SOURCE_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function public.weekly_source_protected_current_financial_source_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_protected_current_financial_source_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

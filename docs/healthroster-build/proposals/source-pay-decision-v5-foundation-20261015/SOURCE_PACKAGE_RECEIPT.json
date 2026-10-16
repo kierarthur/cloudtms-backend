@@ -159,8 +159,8 @@
         },
         {
           "path": "forward/10_shared_native_context.sqlinc",
-          "sha256": "3524ea8538226474375ca8927a411185e343e238e9ae01cdaa0ba9d35f082902",
-          "bytes": 29554,
+          "sha256": "d01b7b7ffcf7ecedc4c32ac2068bd120f32722c903f4fe62d333d40f8226770a",
+          "bytes": 29618,
           "packaging_statements": 6,
           "functions": [
             "private.weekly_source_protected_action_facts_v1(p_request jsonb,p_request_kind text)",
@@ -254,8 +254,8 @@
         },
         {
           "path": "forward/20_native_local_stage_implementation.sqlinc",
-          "sha256": "0955265c4ef20813917e23defa83bbea04340b9c0701236522dfe1830aea4890",
-          "bytes": 59840,
+          "sha256": "bdb1a75d72157932be8aa6b6211477af6d81cd87a47b8e36c603101f125a4ef7",
+          "bytes": 61716,
           "packaging_statements": 10,
           "functions": [
             "private.weekly_source_protected_local_stage_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)",
@@ -266,8 +266,8 @@
         },
         {
           "path": "forward/21_native_local_complete_implementation.sqlinc",
-          "sha256": "fd3215a5bb196ed061c4fde41422a751f7926eb26c3cd4cd81a95911983b90dd",
-          "bytes": 35668,
+          "sha256": "fe61457f17574137b5cc3207dfc43987baba5ef94a40f1dc0002713841a8b7f5",
+          "bytes": 36868,
           "packaging_statements": 6,
           "functions": [
             "private.weekly_exceptional_pay_complete_local_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)",
@@ -303,8 +303,8 @@
         },
         {
           "path": "forward/25_actual_local_release_and_saved_status.sqlinc",
-          "sha256": "94bd0e4fb004925970a080b419dce7239e1d7de698c7630fb80405bfd2719977",
-          "bytes": 46515,
+          "sha256": "7cfc927e2a5d9621d25e8150a32531e29e2598235b3e13acc2ff44d0bd834ba8",
+          "bytes": 46959,
           "packaging_statements": 6,
           "functions": [
             "private.weekly_source_local_protected_pending_released_v1()",
@@ -319,6 +319,54 @@
           "packaging_statements": 4,
           "functions": [
             "public.weekly_source_pay_decision_unprotect_quote_context_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/27_certified_current_native_scope.sqlinc",
+          "sha256": "56bc22447a069c21e9bb518cbe9f5b0744e2b2873b26d3320104def19b0e3b3b",
+          "bytes": 9803,
+          "packaging_statements": 4,
+          "functions": [
+            "private.weekly_source_target_family_for_root_v1(p_root_timesheet_id uuid)",
+            "private.weekly_source_pay_query_scope_v1(p_root_timesheet_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/28_current_native_entitlement_projection.sqlinc",
+          "sha256": "494e7007fcd1ae7b7a964939ba6c2f8f9f247a3e42fc2a35a283a36faa86bec1",
+          "bytes": 1972,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_protected_entitlement_projection_v1(p_context jsonb)"
+          ]
+        },
+        {
+          "path": "forward/29_current_local_native_context.sqlinc",
+          "sha256": "f88cd41e70a143526f476bf8ca9ae8ba53682f4f6ae6b4934fee2ce609f1c771",
+          "bytes": 20041,
+          "packaging_statements": 5,
+          "functions": [
+            "private.weekly_source_local_preauthorisation_write_allowed_v1(p_root_timesheet_id uuid, p_snapshot jsonb)",
+            "private.weekly_source_local_publication_context_v2(p_publication_request_id uuid,p_generation_id uuid,p_root_timesheet_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/30_native_saved_placement_proof.sqlinc",
+          "sha256": "17d99435dd4dedcc46b9978694c20154204a28922359076fc81c150092962125",
+          "bytes": 4880,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_protected_saved_placement_v1(p_generation_id uuid,p_root_timesheet_id uuid,p_contract_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/31_current_financial_native_source.sqlinc",
+          "sha256": "69d721c22648c5634c4a953bc8a78c0cde802bb393e356a6c6ccb7abf9ca0af7",
+          "bytes": 5753,
+          "packaging_statements": 6,
+          "functions": [
+            "private.weekly_source_protected_root_financial_fact_v1(p_financial jsonb,p_root_version integer)",
+            "public.weekly_source_protected_current_financial_source_v1(p_request jsonb)"
           ]
         }
       ]
@@ -352,8 +400,8 @@
   "runtime": [
     {
       "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
-      "sha256": "f6061e1f84293549e552ce057e51e78eeea7b9a3ae2eab7ac33b3c789e30bb41",
-      "bytes": 38066
+      "sha256": "b9580b3998760399d7dcf9d79cf4f4e3bba3bbd70173f3527c1bb465ac942737",
+      "bytes": 38758
     },
     {
       "path": "broker/src/weekly-source/protected-next-preview.mjs",
@@ -362,8 +410,8 @@
     },
     {
       "path": "broker/src/weekly-source/source-native-contract.mjs",
-      "sha256": "aeb3078dd7a9d5a6473a59e908be079c214cff875c27b9267e95722d71d9ec0d",
-      "bytes": 21457
+      "sha256": "4761ec7b559b17a8d0ab96bb876e14b30181e938f0c3b80e03e1807512a5a840",
+      "bytes": 22935
     },
     {
       "path": "broker/src/weekly-source/source-pay-decision-request.mjs",
@@ -382,8 +430,13 @@
     },
     {
       "path": "broker/src/weekly-source/source-unprotect-worker.mjs",
-      "sha256": "26cb00fa7ecb4e7c4eeb45191d6794d54dcff2cb2c44e38a383887fcd9debceb",
-      "bytes": 9388
+      "sha256": "c3afd0b6b95de5055ad11ce83cfcb0d616a4485659e0c1300ad3415c1c963cdc",
+      "bytes": 9677
+    },
+    {
+      "path": "broker/src/weekly-source/source-current-financial.mjs",
+      "sha256": "67f2003a4cfcf5cde3f6f34511ade0c0cda8c51443ff8ad312ea7548dc4c8339",
+      "bytes": 1723
     },
     {
       "path": "broker/src/banking-pay/weekly-source-c1-components.mjs",
@@ -392,8 +445,8 @@
     },
     {
       "path": "tests/weekly-source/protected-action-orchestrator.test.mjs",
-      "sha256": "6f6104eb88553c082983a508db3805c0617e92233fca3e1c56b6f21903b72eff",
-      "bytes": 26233
+      "sha256": "99a6eac706a63b9c9555a98e097d150956a3a934d91b0ab520bd04cb3a1e0700",
+      "bytes": 29121
     },
     {
       "path": "tests/weekly-source/source-native-contract.test.mjs",
@@ -417,8 +470,8 @@
     },
     {
       "path": "tests/weekly-source/source-native-package.test.mjs",
-      "sha256": "db24f6aef31143f247ed47d0daf57092adf67d08eca3ce4c2982394bbc24c3c3",
-      "bytes": 4875
+      "sha256": "efa69667acea05eeff06a71be5ce72692194408a85db468daede971dacc713a7",
+      "bytes": 5114
     },
     {
       "path": "tests/weekly-source/source-native-economic.test.mjs",
@@ -432,16 +485,20 @@
     },
     {
       "path": "tests/weekly-source/source-native-generators.test.mjs",
-      "sha256": "ff100b2060d01d8a50f62c84dad5a22c9f85379fbece1588349260541602be53",
-      "bytes": 5457
+      "sha256": "d32bf8ccf13b115e0769ebb9585fa958bf085dcebdd490db80e44f9fafb7d077",
+      "bytes": 7515
+    },
+    {
+      "path": "tests/weekly-source/source-current-financial.test.mjs",
+      "sha256": "47a1959d6bfa0491cef78f02a294b7c5d5f9154f22181309bee32dca75445cf5",
+      "bytes": 4088
     }
   ],
   "open_health_owners": [
     "Public preview begin/quote/ready/seal/abandon and accept/read/resume implementation",
     "Actual preexisting immutable native receipt adoption and whitelisted native dependency rollback composition",
-    "Current-B native stage/complete/qualified NEXT producer integration",
-    "Current placement certificate integration into actual native archived-evidence/context/current-B financial writer owners",
-    "Moved-B native Local source qualification/current financial identity integration in retained full owners",
+    "Current-B NEXT wrapper/producer integration beyond actual current Local writer/context consumers",
+    "Full current-B Source Local native writer/qualification effects and historical read qualification remain REQUIRED_NOT_RUN",
     "Full binding/selected contact orchestration and final canonical Source receipt integration"
   ],
   "external_dependencies": [
@@ -452,12 +509,12 @@
     },
     {
       "owner": "Banking",
-      "abi": "private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,uuid)",
+      "abi": "private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,bytea)",
       "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
     },
     {
       "owner": "Banking",
-      "abi": "private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,uuid,uuid)",
+      "abi": "private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,bytea,uuid)",
       "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
     },
     {
@@ -480,7 +537,7 @@
     {
       "owner": "Invoice",
       "abi": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
-      "source_commit": "d9b5b978d3909a42d22dcc0a437831aeb49d3001",
+      "source_commit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
       "state": "SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN"
     },
     {
@@ -490,5 +547,17 @@
     }
   ],
   "native_tests": "REQUIRED_NOT_RUN",
+  "native_NP13": {
+    "state": "REQUIRED_NOT_RUN",
+    "current_financial_source_first_use_negatives": [
+      "Unmoved family cannot claim moved B source; missing real B financial is a genuine prerequisite refusal",
+      "Wrong/inactive actor/client/family/event/source cycle/cutoff or mismatched expected placement digest refuses",
+      "Wrong B Timesheet/Contract/current row/version/native row hash/source revision or extra service DTO keys refuses",
+      "Original context timesheet/contract_record/root_financial/candidate_submission A retained unchanged",
+      "Actual B stream source is sealed in full native payload; stage rehashes current actual B row/version before write",
+      "Own native Local stage/complete uses B while original family/approval/source invoice/evidence A remains immutable",
+      "Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof"
+    ]
+  },
   "database_actions": "NONE"
 }

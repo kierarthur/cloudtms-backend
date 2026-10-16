@@ -72,6 +72,8 @@ test('Every new service RPC has a closed service ACL and private helpers revoke 
     const escaped = name.replaceAll('.', '\\.');
     assert.match(sql, new RegExp(`revoke all on function ${escaped}\\([^;]*?from public,anon,authenticated${name.startsWith('private.') ? ',service_role' : ''};`, 's'));
     if (name.startsWith('public.')) assert.match(sql, new RegExp(`grant execute on function ${escaped}\\(jsonb\\) to service_role;`));
-    else assert.doesNotMatch(sql, new RegExp(`grant execute on function ${escaped}\\(`));
+    else if (name === 'private.weekly_source_local_preauthorisation_write_allowed_v1') {
+      assert.match(sql, /grant execute on function private\.weekly_source_local_preauthorisation_write_allowed_v1\(uuid,jsonb\) to service_role;/);
+    } else assert.doesNotMatch(sql, new RegExp(`grant execute on function ${escaped}\\(`));
   }
 });

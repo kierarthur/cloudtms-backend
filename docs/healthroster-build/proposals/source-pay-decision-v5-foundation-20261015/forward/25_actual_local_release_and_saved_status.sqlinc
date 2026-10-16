@@ -135,7 +135,7 @@ declare
   v_cycle public.weekly_source_cycles%rowtype;
   v_step public.weekly_exceptional_orchestration_steps%rowtype;
   p_approval_id uuid;
-  p_generation_id uuid;
+  p_generation_id uuid;v_placement jsonb;
 begin
   if p_family_id is null or p_orchestration_run_id is null or p_actor_user_id is null then
     raise exception 'WEEKLY_SOURCE_LOCAL_SAVED_STATUS_IDENTITY_REQUIRED' using errcode='22023';
@@ -168,6 +168,7 @@ begin
      or v_request.orchestration_run_id is distinct from p_orchestration_run_id then
     raise exception 'WEEKLY_SOURCE_LOCAL_SAVED_STATUS_CONTRADICTION' using errcode='55000';
   end if;
+  v_placement:=private.weekly_source_protected_saved_placement_v1(v_local.generation_id,v_local.root_timesheet_id,v_request.contract_id);
   select count(*) into v_count from public.weekly_exceptional_payment_approvals a
     where a.creation_orchestration_run_id=p_orchestration_run_id and a.pay_target_family_id=p_family_id;
   if v_count<>1 then raise exception 'WEEKLY_SOURCE_LOCAL_SAVED_STATUS_CONTRADICTION' using errcode='55000'; end if;
@@ -177,7 +178,7 @@ begin
   select jsonb_build_object('root_timesheet_id',t.timesheet_id,'root_version',
       v_local.approved_snapshot_json->'timesheet_version','family_booking_id',t.booking_id,
       'target_family_id',p_family_id,'candidate_id',a.candidate_id,'client_id',a.client_id,
-      'contract_id',a.contract_id,'week_ending_date',to_char(a.week_ending,'YYYY-MM-DD'),
+      'contract_id',coalesce((v_placement->>'current_contract_id')::uuid,a.contract_id),'week_ending_date',to_char(a.week_ending,'YYYY-MM-DD'),
       'family_bound_version',v_local.result_json->'family_bound_version')
     into strict v_scope
     from public.timesheets t
@@ -194,7 +195,7 @@ begin
   if not found or v_approval.pay_target_family_id::text is distinct from v_scope->>'target_family_id'
      or v_approval.candidate_id::text is distinct from v_scope->>'candidate_id'
      or v_approval.client_id::text is distinct from v_scope->>'client_id'
-     or v_approval.contract_id::text is distinct from v_scope->>'contract_id'
+     or (v_placement is null and v_approval.contract_id::text is distinct from v_scope->>'contract_id')
      or to_char(v_approval.week_ending,'YYYY-MM-DD') is distinct from v_scope->>'week_ending_date'
      or v_approval.protected_work_date not between
         (v_scope->>'week_ending_date')::date-6 and (v_scope->>'week_ending_date')::date then raise exception 'WEEKLY_SOURCE_LOCAL_SAVED_STATUS_CONTRADICTION' using errcode='55000'; end if;
@@ -227,7 +228,7 @@ begin
   select t.* into v_publication_root from public.timesheets t
     where t.timesheet_id=v_local.root_timesheet_id;
   if not found or v_publication_root.booking_id is distinct from v_scope->>'family_booking_id'
-     or v_publication_root.contract_id is distinct from v_approval.contract_id
+     or v_publication_root.contract_id is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)
      or v_publication_root.week_ending_date is distinct from v_approval.week_ending
      or v_publication_root.sheet_scope is distinct from 'WEEKLY'
      or v_publication_root.line_type is distinct from 'HOURS'
@@ -246,7 +247,7 @@ begin
      or v_request.orchestration_run_id is distinct from v_approval.creation_orchestration_run_id
      or v_request.root_timesheet_id is distinct from v_local.root_timesheet_id
      or v_request.candidate_id is distinct from v_approval.candidate_id
-     or v_request.contract_id is distinct from v_approval.contract_id
+     or v_request.contract_id is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)
      or v_request.week_ending_date is distinct from v_approval.week_ending
      or v_request.request_sha256 is distinct from v_local.request_sha256
      or v_request.typed_result_json is distinct from v_local.result_json
@@ -390,7 +391,7 @@ begin
         where h.id=v_publication.head_ids[v_member];
       if v_head.authority_kind is distinct from 'PROTECTED'
          or v_head.candidate_id is distinct from v_approval.candidate_id
-         or v_head.contract_id is distinct from v_approval.contract_id
+         or v_head.contract_id is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)
          or v_head.week_ending_date is distinct from v_approval.week_ending then raise exception 'WEEKLY_SOURCE_LOCAL_SAVED_STATUS_CONTRADICTION' using errcode='55000'; end if;
       select coalesce(jsonb_agg(private.weekly_source_publication_component_canonical_v1(
         (to_jsonb(c)-array['id','head_id','decision_bundle_id','bundle_revision','component_sha256','created_at_utc'])
@@ -472,7 +473,7 @@ begin
        or v_qualification#>>'{scope,target_family_id}' is distinct from v_local.family_id::text
        or v_qualification#>>'{scope,candidate_id}' is distinct from v_approval.candidate_id::text
        or v_qualification#>>'{scope,client_id}' is distinct from v_approval.client_id::text
-       or v_qualification#>>'{scope,contract_id}' is distinct from v_approval.contract_id::text
+       or v_qualification#>>'{scope,contract_id}' is distinct from coalesce(v_placement->>'current_contract_id',v_approval.contract_id::text)
        or v_qualification#>>'{scope,week_ending_date}' is distinct from to_char(v_approval.week_ending,'YYYY-MM-DD')
        or coalesce(v_qualification->>'family_event_sequence','') !~ '^[1-9][0-9]*$'
        or (v_qualification->>'family_event_sequence')::numeric>9223372036854775807

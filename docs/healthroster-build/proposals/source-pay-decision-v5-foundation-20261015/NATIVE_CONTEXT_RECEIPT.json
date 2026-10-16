@@ -3,7 +3,7 @@
   "input": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
   "input_sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
   "output": "forward/10_shared_native_context.sqlinc",
-  "output_sha256": "3524ea8538226474375ca8927a411185e343e238e9ae01cdaa0ba9d35f082902",
+  "output_sha256": "d01b7b7ffcf7ecedc4c32ac2068bd120f32722c903f4fe62d333d40f8226770a",
   "edits": [
     {
       "before": "public.weekly_exceptional_pay_action_context_v1(\n  p_request jsonb\n)",
@@ -19,7 +19,7 @@
     },
     {
       "before": "  v_run public.weekly_exceptional_orchestration_runs%rowtype;\n",
-      "after": "  v_placement jsonb;v_checked_placement jsonb;v_current_entitlement jsonb;\n"
+      "after": "  v_placement jsonb;v_checked_placement jsonb;v_current_entitlement jsonb;\n  v_ent_root public.timesheets%rowtype;v_ent_fin public.timesheets_financials%rowtype;\n"
     },
     {
       "before": "p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_CONTEXT_V1'",
@@ -31,7 +31,7 @@
     },
     {
       "before": "  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);",
-      "after": "  v_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_placement->'moved'='true'::jsonb then\n    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);\n    select jsonb_build_object('root_timesheet_id',f.root_timesheet_id,'candidate_id',f.candidate_id,\n      'contract_id',f.contract_id,'week_ending_date',f.week_ending_date) into strict v_lock_family\n      from public.weekly_exceptional_pay_target_families f where f.id=v_family_id;\n  else\n    v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);\n  end if;\n  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_checked_placement is distinct from v_placement then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;"
+      "after": "  v_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_placement->'moved'='true'::jsonb then\n    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);\n    select jsonb_build_object('root_timesheet_id',f.root_timesheet_id,'candidate_id',f.candidate_id,\n      'contract_id',f.contract_id,'week_ending_date',f.week_ending_date) into strict v_lock_family\n      from public.weekly_exceptional_pay_target_families f where f.id=v_family_id;\n  else\n    v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);\n  end if;\n  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_checked_placement is distinct from v_placement then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;\n  select t.* into strict v_ent_root from public.timesheets t where t.timesheet_id=(v_placement->>'current_timesheet_id')::uuid;\n  select f.* into v_ent_fin from public.timesheets_financials f where f.id=(v_placement->>'current_financial_id')::uuid;"
     },
     {
       "before": "  select run.* into strict v_run\n  from public.weekly_exceptional_orchestration_runs run\n  where run.id=v_run_id and run.family_id=v_family.id for share;\n",
@@ -50,6 +50,10 @@
       "after": "    v_signed:=private.weekly_source_protected_signed_evidence_v1(v_evidence_id,v_family.id,v_event.id);"
     },
     {
+      "before": "  -- Local/common identity admission is independent of Banking work completion.\n  -- An already authorised root requires its genuine complete current I1 basis;\n  -- an actual unauthorised first Save must not invent that approved basis.\n  if v_family.target_domain_version='C1_V1' then\n    if v_root.authorised_at_server is not null then\n      v_component_identity_inventory:=private.weekly_source_effective_inventory_v1(v_root.timesheet_id);\n      if v_component_identity_inventory->>'ok' is distinct from 'true'\n         or v_component_identity_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'\n         or v_component_identity_inventory#>>'{approval_basis,scope,root_timesheet_id}'\n              is distinct from v_root.timesheet_id::text\n         or jsonb_typeof(v_component_identity_inventory->'components') is distinct from 'array' then\n        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;\n      v_component_identity_components:=v_component_identity_inventory->'components';\n    else\n      if exists(select 1 from public.weekly_source_root_authorisations a\n          where a.family_booking_id=v_root.booking_id)\n         or exists(select 1 from public.weekly_source_entitlement_heads h\n          where h.root_family_booking_id=v_root.booking_id and h.state='COMMITTED_CURRENT') then\n        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;\n      v_component_identity_components:='[]'::jsonb;\n    end if;\n  end if;\n\n",
+      "after": "  -- Local/common identity admission is independent of Banking work completion.\n  -- An already authorised root requires its genuine complete current I1 basis;\n  -- an actual unauthorised first Save must not invent that approved basis.\n  if v_family.target_domain_version='C1_V1' then\n    if v_ent_root.authorised_at_server is not null then\n      v_component_identity_inventory:=private.weekly_source_effective_inventory_v1(v_ent_root.timesheet_id);\n      if v_component_identity_inventory->>'ok' is distinct from 'true'\n         or v_component_identity_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'\n         or v_component_identity_inventory#>>'{approval_basis,scope,root_timesheet_id}'\n              is distinct from v_ent_root.timesheet_id::text\n         or jsonb_typeof(v_component_identity_inventory->'components') is distinct from 'array' then\n        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;\n      v_component_identity_components:=v_component_identity_inventory->'components';\n    else\n      if exists(select 1 from public.weekly_source_root_authorisations a\n          where a.family_booking_id=v_ent_root.booking_id)\n         or exists(select 1 from public.weekly_source_entitlement_heads h\n          where h.root_family_booking_id=v_ent_root.booking_id and h.state='COMMITTED_CURRENT') then\n        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;\n      v_component_identity_components:='[]'::jsonb;\n    end if;\n  end if;\n\n"
+    },
+    {
       "before": "  return pg_catalog.jsonb_build_object(\n    'ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',",
       "after": "  select jsonb_build_object('timesheet',to_jsonb(t),'contract_record',to_jsonb(c),\n    'current_financial',(select to_jsonb(f) from public.timesheets_financials f\n      where f.id=(v_placement->>'current_financial_id')::uuid),\n    'current_approval_work_id',v_placement->'current_approval_work_id') into strict v_current_entitlement\n    from public.timesheets t join public.contracts c on c.id=t.contract_id\n    where t.timesheet_id=(v_placement->>'current_timesheet_id')::uuid;\n  return pg_catalog.jsonb_build_object("
     },
@@ -60,6 +64,14 @@
     {
       "before": "      'target_pay_method',v_contract.pay_method_snapshot,\n      'target_umbrella_id',nullif(pg_catalog.to_jsonb(v_contract)->>'umbrella_id','')::uuid,",
       "after": "      'target_pay_method',v_current_entitlement#>>'{contract_record,pay_method_snapshot}',\n      'target_umbrella_id',nullif(v_current_entitlement#>>'{contract_record,umbrella_id}','')::uuid,"
+    },
+    {
+      "before": "    'requires_zero_financial',v_fin.id is null,",
+      "after": "    'requires_zero_financial',v_ent_fin.id is null,"
+    },
+    {
+      "before": "    'root_financial',case when v_fin.id is null then null else pg_catalog.jsonb_build_object(\n      'source_system','CLOUDTMS_TIMESHEET_FINANCIAL','external_identity',v_fin.id::text,\n      'external_revision',v_fin.timesheet_version::text,'document_sha256',v_fin_hash,\n      'financial_row_id',v_fin.id,'root_version',v_root.version,\n      'financial_timesheet_version',v_fin.timesheet_version,\n      'financial_revision_digest',v_fin_hash\n    ) end,\n",
+      "after": "    'root_financial',case when v_fin.id is null then null else private.weekly_source_protected_root_financial_fact_v1(to_jsonb(v_fin),v_root.version) end,\n"
     },
     {
       "before": "    'zero_rate_source_refs',v_rate_refs\n  )||case when v_final_source ? 'next_source_segments'\n    then pg_catalog.jsonb_build_object('next_source_segments',v_final_source->'next_source_segments',\n      'family_bound_version',v_family.bound_version::text) else '{}'::jsonb end;",

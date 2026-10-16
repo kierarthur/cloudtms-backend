@@ -7,6 +7,7 @@ set statement_timeout to '30s'
 as $function$
 declare
   v_source_gate jsonb;v_source_application_id uuid;v_source_control jsonb;v_source_entitlement jsonb;
+  v_placement jsonb;v_checked_placement jsonb;
   v_source_head public.weekly_source_entitlement_heads%rowtype;
   v_source_receipt private.weekly_source_entitlement_publication_receipts%rowtype;
   v_source_pending public.weekly_source_pending_entitlement_bundles%rowtype;
@@ -97,9 +98,22 @@ begin
   perform private.weekly_source_pay_query_admit_v2();
   select * into strict v_request from public.weekly_exceptional_c1_publication_requests where id=v_request_id;
   -- I-1: Candidate serial gate, then all canonical family members, then rows.
-  v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,
-    array[v_request.root_timesheet_id],'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
-    v_request.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  v_placement:=private.weekly_source_protected_current_placement_v1(v_request.family_id,
+    (select a.work_event_id from public.weekly_exceptional_payment_approvals a
+     where a.creation_orchestration_run_id=v_request.orchestration_run_id and a.pay_target_family_id=v_request.family_id),false);
+  if v_placement->'moved'='true'::jsonb then
+    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);
+    v_locks:=jsonb_build_object('ok',true);
+  else
+    v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,
+      array[v_request.root_timesheet_id],'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+      v_request.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  end if;
+  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_request.family_id,
+    (select a.work_event_id from public.weekly_exceptional_payment_approvals a
+     where a.creation_orchestration_run_id=v_request.orchestration_run_id and a.pay_target_family_id=v_request.family_id),false);
+  if v_checked_placement is distinct from v_placement then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;
   if coalesce((v_locks->>'ok')::boolean,false) is not true then
     return v_locks||jsonb_build_object('ok',false);
   end if;
@@ -122,7 +136,7 @@ begin
     where id=v_request.orchestration_run_id and family_id=v_family.id for update;
   select * into strict v_approval from public.weekly_exceptional_payment_approvals
     where creation_orchestration_run_id=v_run.id and pay_target_family_id=v_family.id for share;
-  select * into strict v_root from public.timesheets where timesheet_id=v_family.root_timesheet_id for update;
+  select * into strict v_root from public.timesheets where timesheet_id=(v_placement->>'current_timesheet_id')::uuid for update;
   select * into strict v_fin from public.timesheets_financials
     where timesheet_id=v_root.timesheet_id and is_current for update;
   if v_hash is distinct from v_request.request_sha256 or v_run.requested_by_user_id is distinct from v_actor
@@ -136,7 +150,8 @@ begin
      or v_family.current_generation_number+1 is distinct from v_generation.generation_number
      or v_fin.id is distinct from v_request.financial_row_id
      or not v_root.is_current or v_root.revoked_at is not null or v_root.archived_at_utc is not null
-     or v_root.contract_id is distinct from v_family.contract_id
+     or v_root.contract_id::text is distinct from v_placement->>'current_contract_id'
+     or v_request.root_timesheet_id is distinct from v_root.timesheet_id or v_request.contract_id is distinct from v_root.contract_id
      or v_root.week_ending_date is distinct from v_family.week_ending_date
      or v_root.version is distinct from (v_generation.complete_next_vector_json#>>'{target_snapshot,tsfin_snapshot_json,timesheet_version}')::integer
      or v_approval.withdrawn_at_utc is not null
@@ -184,7 +199,7 @@ begin
        or v_generation.complete_next_vector_json#>>'{protected_component_identity_basis,root_timesheet_id}'
           is distinct from v_root.timesheet_id::text
        or v_generation.complete_next_vector_json#>>'{protected_component_identity_basis,contract_id}'
-          is distinct from v_family.contract_id::text
+          is distinct from v_root.contract_id::text
        or v_generation.complete_next_vector_json#>>'{protected_component_identity_basis,candidate_id}'
           is distinct from v_family.candidate_id::text
        or v_generation.complete_next_vector_json#>>'{protected_component_identity_basis,accepted_schedule_sha256}'

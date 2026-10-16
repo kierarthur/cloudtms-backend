@@ -13,9 +13,47 @@
     }
   ],
   "output": "forward/25_actual_local_release_and_saved_status.sqlinc",
-  "output_sha256": "94bd0e4fb004925970a080b419dce7239e1d7de698c7630fb80405bfd2719977",
+  "output_sha256": "7cfc927e2a5d9621d25e8150a32531e29e2598235b3e13acc2ff44d0bd834ba8",
   "complete_reverse_equals_input": true,
   "ordinary_body_changes": 0,
+  "status_edits": [
+    {
+      "before": "private.weekly_source_local_saved_status_v1(",
+      "after": "private.weekly_source_local_saved_status_native_v1("
+    },
+    {
+      "before": "  p_generation_id uuid;",
+      "after": "  p_generation_id uuid;v_placement jsonb;"
+    },
+    {
+      "before": "  select count(*) into v_count from public.weekly_exceptional_payment_approvals a",
+      "after": "  v_placement:=private.weekly_source_protected_saved_placement_v1(v_local.generation_id,v_local.root_timesheet_id,v_request.contract_id);\n  select count(*) into v_count from public.weekly_exceptional_payment_approvals a"
+    },
+    {
+      "before": "      'contract_id',a.contract_id,'week_ending_date',to_char(a.week_ending,'YYYY-MM-DD'),",
+      "after": "      'contract_id',coalesce((v_placement->>'current_contract_id')::uuid,a.contract_id),'week_ending_date',to_char(a.week_ending,'YYYY-MM-DD'),"
+    },
+    {
+      "before": "     or v_approval.contract_id::text is distinct from v_scope->>'contract_id'",
+      "after": "     or (v_placement is null and v_approval.contract_id::text is distinct from v_scope->>'contract_id')"
+    },
+    {
+      "before": "v_publication_root.contract_id is distinct from v_approval.contract_id",
+      "after": "v_publication_root.contract_id is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)"
+    },
+    {
+      "before": "v_request.contract_id is distinct from v_approval.contract_id",
+      "after": "v_request.contract_id is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)"
+    },
+    {
+      "before": "v_head.contract_id is distinct from v_approval.contract_id",
+      "after": "v_head.contract_id is distinct from coalesce((v_placement->>'current_contract_id')::uuid,v_approval.contract_id)"
+    },
+    {
+      "before": "v_qualification#>>'{scope,contract_id}' is distinct from v_approval.contract_id::text",
+      "after": "v_qualification#>>'{scope,contract_id}' is distinct from coalesce(v_placement->>'current_contract_id',v_approval.contract_id::text)"
+    }
+  ],
   "source_effect": "Read-only exact original pending step / actual RELEASED row / full reconstructed original Local row proof; no automatic Source acceptance or Banking mapping.",
   "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
 }
