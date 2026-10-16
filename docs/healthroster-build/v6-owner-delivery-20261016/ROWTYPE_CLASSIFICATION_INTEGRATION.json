@@ -1,0 +1,39 @@
+{
+  "version": "HEALTHROSTER_ROWTYPE_CLASSIFICATION_INTEGRATION_V1",
+  "status": "FINITE_TUPLE_TYPES_REVIEWED_OTHER_GATES_PENDING",
+  "sourceParent": "742a3b4c6190537c9e87086bd0f20765344e8798",
+  "review": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+    "sha256": "85a1035ea1232c9f1346e15e6bedad351b15820368f5805502dfc381aeceb7bc",
+    "files": 151,
+    "points": 1204,
+    "uniqueStatementKeys": 1178,
+    "independentPg17AstPass": 1204,
+    "independentRuntimeTokenProofPass": 1204
+  },
+  "gateDelta": "One Health-owned helper import and one exact hash-pinned per-file classification wrapper. Generic assertSpecialConstructs, all existing Frozen/Banking/writer/ACL/numeric/dynamic/cardinality/executable/RPC checks unchanged.",
+  "proof": "Every complete A_Star selects one direct schema-qualified native relation exactly matching declared percent-rowtype. Optional alias/strict/where/order/rowlock retained. No SQL body changed or blanket SELECT-star exception.",
+  "validation": {
+    "focusedSuiteTests": 52,
+    "passed": 51,
+    "failed": 1,
+    "failure": "Actual whole F23 still correctly fails closed on remaining dynamic SQL, aggregate type and UUID cardinality classification. All focused tuple refusal/path/source/declaration/count tests and contact boundary tests pass.",
+    "offlinePg17": "1204/1204 complete SQL AST tuple proofs PASS; not execution/catalogue/effect proof"
+  },
+  "remaining": [
+    "Review remaining exact dynamic/aggregate/cardinality statements; two Invoice UUID points are real cardinality defects requiring source correction.",
+    "Add newly composed final source only after equivalent exact review; existing pins refuse changed predicates/source/comments/paths/counts.",
+    "Complete final schema/contract, verifier effects, native/security/concurrency/full rehearsal/Install2 gates."
+  ],
+  "genericRefusalsRetained": true,
+  "originalExecutableSqlUnchanged": true,
+  "bankingBodiesUnchanged": true,
+  "native": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "effects": {
+    "databaseMutation": false,
+    "heldSession": false,
+    "deployment": false,
+    "bankingMessage": false
+  }
+}

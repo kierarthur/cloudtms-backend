@@ -1,3 +1,4 @@
+import {reviewedHealthRowtypeHazards} from './healthroster-rowtype-type-review.mjs';
 import {createHash} from 'node:crypto';
 // F-23 source-only release checks. No database, fixture or runtime execution.
 import fs from 'node:fs';
@@ -2510,7 +2511,7 @@ export function verifyBpayNextSourceGates(){
           const isReadyReader=routineDefinitions(text,file).includes(readyReaderSignature);
           assertSpecialConstructs(text,file,baselineHazards,isReadyReader?readyPrefixColumns:new Map());
         }
-      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,baselineHazards)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
+      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,baselineHazards)),specialConstructViolations(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
     }
   }
