@@ -75,5 +75,21 @@
   "partBCriticSignoff": false,
   "earlierApprovalsPreserved": true,
   "databaseCalls": 0,
-  "deployments": 0
+  "deployments": 0,
+  "currentMainReconciliation": {
+    "fetchedMain": "ed9270088f8ca555d6b2e7258aed86dff58b90b8",
+    "featureHead": "b2fed43f6805a309783dd87d1ccf408f833935c8",
+    "freshAncestorCheck": "11 feature-only commits, 0 main-only commits",
+    "nonForcedMergeResult": "Already up to date",
+    "candidateTypecheck": "PASS",
+    "candidateJest": {
+      "suites": 81,
+      "tests": 719,
+      "result": "PASS",
+      "seconds": 35.928
+    },
+    "mainPushed": false,
+    "testFlight": "NOT_BUILT",
+    "requireFreshRecheckBeforeFutureBuild": true
+  }
 }

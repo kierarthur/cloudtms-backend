@@ -1,0 +1,236 @@
+{
+  "version": "HEALTHROSTER_CANDIDATE_LIFECYCLE_C475_REVIEW_V1",
+  "sourceCommit": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+  "manifestPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\candidate-contract-move-lifecycle-20261016\\MOUNT_RECIPE.json",
+  "manifestSha256": "3e7c94d66ded27e96b339ad0659040c02c5c84002f7cc187e3d3b406ee603695",
+  "status": "SOURCE_REVIEW_CONTINUING_SUCCESSOR_REQUIRED",
+  "sourcePins": [
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "sha256": "9f47ab97b5e520074576c77bcfeee8867211663a4d7be0c8667aff9f7c73845a"
+    },
+    {
+      "path": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+      "sha256": "4d9ea15952fab2e3b653b8ea1a2fa0bfafad13c910fedf19710c2885ca716db5"
+    },
+    {
+      "path": "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql",
+      "sha256": "a30b469a8fa271ab37a40d93fc1725c83e9b0708653cbc174a6263e4345cc6d9"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "sha256": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908"
+    },
+    {
+      "path": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+      "sha256": "535d02bd281c0c79ced43576ff66d8a14a4d07338ddf0384e4a22da641b68174"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    }
+  ],
+  "payloadPins": [
+    {
+      "path": "BROKER_CALLER.json",
+      "sha256": "8a72374fd2ae7eabdca8104f1406944f138de275bf967e81325c615cd216f672",
+      "bytes": 536
+    },
+    {
+      "path": "build.mjs",
+      "sha256": "7857a2fd7fee36dd6815187f47ccd587693a93898cfa4a27e430adfacb85604d",
+      "bytes": 20760
+    },
+    {
+      "path": "forward/00_break_entry_current_placement.sqlinc",
+      "sha256": "c0d9b1933b37ab1453701416fc632f85b86624f8e2f60eda975b114574d40d4b",
+      "bytes": 2175
+    },
+    {
+      "path": "forward/00a_break_token_row_binding.sqlinc",
+      "sha256": "b8017cb253a0fb258f7d859c2b1caa67ca7c0a248acc7a1089562a7a8209d14d",
+      "bytes": 6269
+    },
+    {
+      "path": "forward/01_acl.sqlinc",
+      "sha256": "c859c45d28482b921935f8c465626ccdfdb0bfe0f6619d23eddd4ac2dcbd52cf",
+      "bytes": 361
+    },
+    {
+      "path": "forward/02_native_expense_number.sqlinc",
+      "sha256": "988a604cd3b618a6963a3aad29c7a3c7d9131560bf226e4f5efbefd3fb3f145d",
+      "bytes": 752
+    },
+    {
+      "path": "forward/02_weekly_current_calculation.mjsinc",
+      "sha256": "74f0514364465e36134df50dbd40f2d511a2b06c9f826ae8321ca0cd8dda67b5",
+      "bytes": 11984
+    },
+    {
+      "path": "forward/02a_signature_facts.sqlinc",
+      "sha256": "9c92b44753fde319dfcc9759a91d8171c645a0f0d476581274c0e28ec5a83b54",
+      "bytes": 6089
+    },
+    {
+      "path": "forward/02b_worked_facts.sqlinc",
+      "sha256": "ac2e65b546ef6c3b33c85eebafe67cea626fbc607597737e502d18b0a92dba15",
+      "bytes": 1884
+    },
+    {
+      "path": "forward/03_worker_submit_current_placement.sqlinc",
+      "sha256": "6d9631548eb5f588c21c3baa011e63f150d4ac6a289908db0e6c91bd0f6d2c12",
+      "bytes": 253398
+    },
+    {
+      "path": "forward/04_accepted_body_witness.sqlinc",
+      "sha256": "b6f6cd8dfbc422c63e73fa717433c37783a879b5d84e427a96b90f75243c0ab1",
+      "bytes": 6054
+    },
+    {
+      "path": "forward/05_worked_fact_projection.sqlinc",
+      "sha256": "8771c474ae4adf1c2b79ef1bab9aa13f1c7240a756622ad3805135236470ff46",
+      "bytes": 9598
+    },
+    {
+      "path": "forward/06_summary_identity_invalidation.sqlinc",
+      "sha256": "ed133bdda529f1d61ba5ad9248d434e1580804a452f3c32ebf7b69bd9b65b8ae",
+      "bytes": 2850
+    },
+    {
+      "path": "forward/07_acl.sqlinc",
+      "sha256": "99839073f24f6469d5477f8344413863e66adeddbc1f73a3e3f9a82062b4f49e",
+      "bytes": 2233
+    },
+    {
+      "path": "NATIVE_ACCEPTANCE.md",
+      "sha256": "20311d6ee474c89d80462cb5ffac3cf94191e180f0c8a2a2ad750a25b163465e",
+      "bytes": 3620
+    },
+    {
+      "path": "prepared/pure-facts.sql",
+      "sha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+      "bytes": 17012
+    },
+    {
+      "path": "PURE_FACTS.md",
+      "sha256": "522c4fe8455786ee238848e22d2480386890905a881104816ee6d8f3ae258762",
+      "bytes": 2933
+    },
+    {
+      "path": "PURE_FACTS_RECIPE.json",
+      "sha256": "a3770e2a490c83a8897fe029245ed78370df249c897baf937b63aaa6d9dcdcbd",
+      "bytes": 2584
+    },
+    {
+      "path": "README.md",
+      "sha256": "9c92e7c7c43ff7213bbff341b2b07ba1c06211ada7d4779210df0d46b584a211",
+      "bytes": 4102
+    },
+    {
+      "path": "seal-lifecycle.py",
+      "sha256": "32144a3ad86c2311885e6475424d5e92932dedc444ee3031d791eeb88c4b5a77",
+      "bytes": 2066
+    },
+    {
+      "path": "seal-pure-facts.py",
+      "sha256": "8e80402d03627d208f525c3dddce8cdc8f3ad66e217e58f08bbb61cf5d768a57",
+      "bytes": 1500
+    },
+    {
+      "path": "SOURCE_TRACE.json",
+      "sha256": "07edefa7d21a394fd772bb4b677f0639d99a351900df9cd56dce4985311d7613",
+      "bytes": 3453
+    },
+    {
+      "path": "tests/current-submit.test.mjs",
+      "sha256": "806dfec2ff46ccc4aad9e60e9bd4313c1d1935a4cfc1a14d953763b2377eb3f9",
+      "bytes": 8569
+    },
+    {
+      "path": "tests/lifecycle-provenance.test.mjs",
+      "sha256": "4acef173a366c649cac4e36bd478cdd28ee6488e80630371a1122dc4ee7cc506",
+      "bytes": 4005
+    },
+    {
+      "path": "tests/pure-facts-baseline-and-fresh.sql",
+      "sha256": "60a6ef0441289f8e4d68f97c176bf576598e68544b1e0d0d8131f44449f34c60",
+      "bytes": 620
+    },
+    {
+      "path": "tests/pure-facts-native.sql",
+      "sha256": "b7fa7b3440b7743a3b8d04fa1d53d5843f6829e1a3c84b36e4a9a204837576a0",
+      "bytes": 8205
+    },
+    {
+      "path": "tests/pure-facts-provenance.test.mjs",
+      "sha256": "4b3fb60ee41f69b9ad7ecb8c393ad8030f0176ae3baf47fa56d3f5c4c6d03cbb",
+      "bytes": 1888
+    }
+  ],
+  "readBodies": [
+    "Complete accepted-body witness, worked context, break-token core, authenticated break-entry context, cache invalidation and final finite ACL.",
+    "Complete pure factual helpers already proved separately as118a pure25.",
+    "Both complete existing Worker function successors and exact single caller anchor.",
+    "Full15,501-byte workflow transition delta against actual96c5 complete predecessor, not original early0708 definition. Actual signature selection/copy/body update and WORKER_SUBMIT validation contexts additionally read."
+  ],
+  "predecessor": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\candidate-contract-move-native-20261016\\forward\\09_manager_start_successor.sqlinc",
+    "sha256": "8dfc7344ed5940f49e16b350eb6c7831cd372d0b592ea7b6fadc853d7e92f6f1"
+  },
+  "independentSourceChecks": "All published payload and root input pins match current saved bytes; no root mount performed.",
+  "findings": [
+    {
+      "id": "CM-LIFECYCLE-PAPER-SIGNATURE-SCOPE",
+      "status": "AUTHOR_CONFIRMED_SUCCESSOR_IN_PROGRESS",
+      "issue": "Fresh electronic Candidate-signature probe currently also reaches genuine paper submit; paper needs its original printed/returned signature path."
+    },
+    {
+      "id": "CM-LIFECYCLE-CURRENT-POLICY-EQUIVALENCE",
+      "status": "RETURNED_FOR_EXACT_PRODUCER_TRACE",
+      "issue": "Worker transient policy uses detail.capabilities.policy; native new guard uses _expense_approval_policy_v1 currentB JSON. Exact actual producer equivalence must be established or corrected."
+    },
+    {
+      "id": "CM-LIFECYCLE-LATEST-FACT-SIGNATURE",
+      "status": "RETURNED_FOR_NATIVE_DRAFT_OWNER_TRACE",
+      "issue": "Move timestamp alone does not prevent reuse of a signature uploaded after Move but before a later changed editable draft. Existing native signature source selector has no same-generation condition and permits unlinked source created after worker_submitted. Require genuine latest native factual/draft binding."
+    }
+  ],
+  "unqualified": [
+    "Weekly finalizer must preserve original workflow identity and use genuine current B valuation/approval/write target via the actual current native producer; existing frozen-A canonical payload cannot be retargeted.",
+    "Moved expense-only new submit is explicitly refused pending its distinct current approved-hours/claim-owner integration; no claim receipt or financial owner is fabricated.",
+    "Native withdrawal/reset currently retires Timesheet and clears ContractWeek pointer; accepted Move requires a real current placement. Exact native rotation/placement successor integration remains Health-owned and unqualified.",
+    "Original paper PREPARING task producer continuation remains unqualified; original READY asset reader was delivered in projection96c5.",
+    "Native command-set family/session/workflow/claim lock order must be checked against genuine other native writers, including current native claim callbacks; source-only new submit ordering is not a native concurrency proof."
+  ],
+  "externalDependencies": [
+    "Bank actual current-B staged financial revision, native approved/not-approved calculation/registration receipt and finalizer publication ABI not supplied. No Banking cut/stage/publisher/dialog body authored."
+  ],
+  "publicProtocolChanged": false,
+  "earlierApprovalsPreserved": true,
+  "mounted": false,
+  "native": "NOT_RUN_EXCEPT_PURE_118A_25",
+  "api": "NOT_RUN",
+  "testFlight": "NOT_BUILT",
+  "install2": "NOT_INSTALLED",
+  "partBCriticSignoff": false
+}
