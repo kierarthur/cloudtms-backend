@@ -1,0 +1,91 @@
+{
+  "version": "CONTACT_NATIVE_HARNESS_PG17_OUTER_SQL_GRAMMAR_V1",
+  "pglast": "v7.20",
+  "postgresqlParser": [
+    17,
+    7
+  ],
+  "passed": 11,
+  "failed": 0,
+  "rows": [
+    {
+      "path": "harness/actor-role-authority.sqlinc",
+      "sha256": "20ddfea48c6e6f5fa6deff792fd71c3e19f6f6483884bdeee3a6ed3e9b64892c",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/catalog-before-and-fresh-after.sql",
+      "sha256": "d50b1e9730c82102abb182e6fd021dd66945cb274cb58c962741c6f8f6ded9c6",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/catalog-functions.sql",
+      "sha256": "194db291dac471d7445bce34d1cc9367d51866cea46115a019570e27c20efa1b",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/closed-command-guards.sqlinc",
+      "sha256": "30db8baa6a8000216dde8d23bc814f955d82649e35a31ce7b4213914fd06e419",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/discover.sql",
+      "sha256": "a8a4efa4c1673a71d4610437cb5c22e774f5a6cb7f564334f4855b5347bd2fa9",
+      "statements": 4,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/frozen/contact-producer-native-assertions.sqlinc",
+      "sha256": "8f0f91b8dc50b13003942250a0174e4e027e6ad4af595ab74d0f2e3fa5c4dd80",
+      "statements": 3,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/frozen/grouped-followup-native-assertions.sqlinc",
+      "sha256": "294fd9f16fe73c5ab34f474af928b784c9e089d4e5343262ea6c32adef1764fe",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/frozen/mixed-manager-native-assertions.sqlinc",
+      "sha256": "38589084a473cf7995cc24c03fae05f912c9b0013ca7d4987974d47d0a57a795",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/ordinary-branch-guard.sqlinc",
+      "sha256": "98aeb232b34595b2e2b756231a3c754f65c95eb64e62384dfb8fa7935772b40a",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/original-replay.sqlinc",
+      "sha256": "acd8b2857928c8b65fe1c8c25e883e45d18a64f4f8e7618ebe457fe99dd6baef",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "path": "harness/source-cut-before-and-fresh-after.sql",
+      "sha256": "a81d4d8c7e912d8bbb408beac7c1ee607ef0c0efca7b368477bdbb1415e627cc",
+      "statements": 1,
+      "outerSQLGrammar": "PASS",
+      "native": "NOT_RUN"
+    }
+  ],
+  "limit": "Outer PostgreSQL grammar only. No installed catalog, PL/pgSQL rowtype binding, first use, behavior, effect or native qualification.",
+  "native": "NOT_RUN"
+}

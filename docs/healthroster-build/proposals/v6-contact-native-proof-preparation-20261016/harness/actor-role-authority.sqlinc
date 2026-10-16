@@ -1,0 +1,33 @@
+-- PREPARED_NOT_RUN. Genuine actor admission branch only, not Preview/API proof.
+create or replace function pg_temp.contact_actor_role_authority_assert_v1(p_admin uuid,p_nonadmin uuid,p_inactive uuid)
+returns jsonb language plpgsql as $function$
+declare reply jsonb;message text;before_rows jsonb;after_rows jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_admin is null or p_nonadmin is null or p_inactive is null
+  or cardinality(array(select distinct id from unnest(array[p_admin,p_nonadmin,p_inactive])id))<>3 then
+  raise exception 'GENUINE_DISTINCT_CONTACT_ACTOR_FIXTURES_REQUIRED';end if;
+ if not exists(select 1 from public.tms_users where id=p_admin and is_active and lower(btrim(coalesce(role,'')))='admin')
+  or not exists(select 1 from public.tms_users where id=p_nonadmin and is_active and lower(btrim(coalesce(role,'')))<>'admin')
+  or not exists(select 1 from public.tms_users where id=p_inactive and is_active is false) then
+  raise exception 'GENUINE_CURRENT_CONTACT_ACTOR_FIXTURES_REQUIRED';end if;
+ select jsonb_agg(to_jsonb(a)order by a.id)into before_rows from public.tms_users a where id=any(array[p_admin,p_nonadmin,p_inactive]);
+ reply:=private.weekly_source_office_authority_v1(p_admin,'ASK_CANDIDATES',null,null,null);
+ if reply->'allowed'is distinct from'true'::jsonb then raise exception 'CURRENT_MANUAL_ACTOR_ADMISSION_FAILED';end if;
+ begin
+  perform private.weekly_source_office_authority_v1(p_nonadmin,'ASK_CANDIDATES',null,null,null);
+  raise exception 'NONADMIN_MANUAL_ACTOR_WAS_ADMITTED';
+ exception when insufficient_privilege then
+  get stacked diagnostics message=message_text;if message<>'WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED'then raise;end if;
+ end;
+ begin
+  perform private.weekly_source_office_authority_v1(p_inactive,'ASK_CANDIDATES',null,null,null);
+  raise exception 'INACTIVE_MANUAL_ACTOR_WAS_ADMITTED';
+ exception when insufficient_privilege then
+  get stacked diagnostics message=message_text;if message<>'WEEKLY_SOURCE_OFFICE_ACTOR_INACTIVE'then raise;end if;
+ end;
+ select jsonb_agg(to_jsonb(a)order by a.id)into after_rows from public.tms_users a where id=any(array[p_admin,p_nonadmin,p_inactive]);
+ if before_rows is distinct from after_rows then raise exception 'ACTOR_AUTHORITY_CHANGED_NATIVE_ROWS';end if;
+ return jsonb_build_object('admin_actor_id',p_admin,'nonadmin_actor_id',p_nonadmin,'inactive_actor_id',p_inactive,
+  'actor_branch_proved',true,'scope','CURRENT_ASK_CANDIDATES_NATIVE_AUTHORITY_ONLY');
+end;
+$function$;

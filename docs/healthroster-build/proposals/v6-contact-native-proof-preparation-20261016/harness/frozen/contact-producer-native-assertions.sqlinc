@@ -1,0 +1,119 @@
+-- REQUIRED_NOT_RUN. Only Root's server-owned agency TEST rollback may invoke.
+-- IDs must come from the separately reviewed CURRENT nonfinancial native
+-- parser/publication/declaration/issue constructor. No old NFX date gate is
+-- removed, no financial rule/approval is fabricated, and no provider is called.
+create or replace function pg_temp.contact_manual_native_accept_replay_assert_v1(p_actor uuid,p_agency uuid,
+ p_candidate uuid,p_client uuid,p_issues uuid[],p_audience text)
+returns jsonb language plpgsql as $function$
+declare row_json jsonb;request jsonb;preview jsonb;receipt jsonb;replay jsonb;changed jsonb;intent uuid;
+ before_questions jsonb;after_questions jsonb;native_groups jsonb;zone text;message text;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_audience not in('WORKER','MANAGER') or cardinality(p_issues) not between 1 and 500 then
+  raise exception 'GENUINE_CURRENT_TEST_CONTACT_CASE_REQUIRED';end if;
+ if exists(select 1 from unnest(p_issues)id where not exists(select 1 from public.weekly_discrepancy_incidents incident
+  join public.weekly_source_groups source_group on source_group.id=incident.source_group_id
+  join public.weekly_source_cycles cycle on cycle.id=incident.source_cycle_id
+  join public.weekly_source_projection_publications publication on publication.id=cycle.current_projection_publication_id and publication.state='CURRENT'
+  where incident.id=id and incident.candidate_id=p_candidate and incident.client_id=p_client and incident.state='OPEN'
+   and source_group.agency_id=p_agency and source_group.environment='TEST')) then
+  raise exception 'GENUINE_CURRENT_NATIVE_ISSUE_PUBLICATION_REQUIRED';end if;
+ row_json:=private.weekly_contact_manual_enquiry_read_v1(p_agency,'TEST',p_candidate,p_client);
+ request:=jsonb_build_object('version','CONTACT_MANUAL_ENQUIRY_V1','request_id',gen_random_uuid(),'actor_user_id',p_actor,
+  'agency_id',p_agency,'environment','TEST','audience',p_audience,'reason','Current provider-free native contact qualification',
+  'scopes',jsonb_build_array(jsonb_build_object('candidate_id',p_candidate,'client_id',p_client,'selected_issue_ids',to_jsonb(p_issues),
+   'expected_scope_revision',row_json->'scope_revision','expected_checking_revision',row_json->'checking_revision')));
+ select coalesce(jsonb_agg(to_jsonb(generation) order by generation.id),'[]') into before_questions
+  from public.weekly_candidate_outreach_generations generation where generation.candidate_id=p_candidate and generation.client_id=p_client;
+ zone:=current_setting('TimeZone');perform set_config('TimeZone','Europe/London',true);
+ preview:=public.weekly_source_contact_manual_enquiry_preview_v1(request);
+ if preview->'can_accept' is distinct from 'true'::jsonb or preview->>'review_id' is null or jsonb_array_length(preview->'groups')<1 then
+  raise exception 'GENUINE_CURRENT_ELIGIBLE_NATIVE_REVIEW_REQUIRED';end if;
+ if(select count(*) from public.weekly_contact_source_intent_captures where manual_request_id=(request->>'request_id')::uuid)<>0 then
+  raise exception 'PREVIEW_CREATED_NATIVE_SEND_OWNER';end if;
+ select coalesce(jsonb_agg(to_jsonb(generation) order by generation.id),'[]') into after_questions
+  from public.weekly_candidate_outreach_generations generation where generation.candidate_id=p_candidate and generation.client_id=p_client;
+ if before_questions is distinct from after_questions then raise exception 'PREVIEW_CREATED_OR_RESET_QUESTION_CLOCK';end if;
+ request:=request||jsonb_build_object('review_id',preview->'review_id','review_digest',preview->'review_digest');
+ -- A legitimate session timezone change cannot alter the sealed UTC expiry.
+ perform set_config('TimeZone','Pacific/Auckland',true);
+ receipt:=public.weekly_source_contact_manual_enquiry_accept_v1(request);
+ perform set_config('TimeZone','UTC',true);
+ replay:=public.weekly_source_contact_manual_enquiry_accept_v1(request);
+ if receipt is distinct from replay or receipt->'provider_submission_started' is distinct from 'false'::jsonb
+  or receipt->'scope_results' is distinct from preview->'scope_results' then raise exception 'NATIVE_MANUAL_RECEIPT_REPLAY_CHANGED';end if;
+ for native_groups in select value from jsonb_array_elements(receipt->'groups') loop
+  intent:=(native_groups->>'message_intent_id')::uuid;
+  perform private.weekly_contact_source_capture_assert_v1(intent);
+  if exists(select 1 from public.weekly_message_dispatch_commands where message_intent_id=intent)
+   or not exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=intent
+    and capture_kind='EXPLICIT_MANUAL' and accepted_actor_user_id=p_actor and manual_request_id=(request->>'request_id')::uuid)
+   or exists(select 1 from jsonb_array_elements(native_groups->'members')member where not exists(
+    select 1 from public.weekly_contact_source_intent_capture_members captured where captured.message_intent_id=intent
+     and captured.logical_contact_key=decode(member->>'logical_contact_key','hex') and captured.send_ordinal=(member->>'send_ordinal')::integer
+     and(member->>'issue_id')::uuid=any(captured.selected_issue_ids))) then raise exception 'NATIVE_MANUAL_ALIAS_OR_UNSUBMITTED_OWNER_INVALID';end if;
+ end loop;
+ if exists(select 1 from public.weekly_contact_source_intent_capture_members captured join public.weekly_contact_source_intent_captures capture
+  on capture.message_intent_id=captured.message_intent_id where capture.manual_request_id=(request->>'request_id')::uuid
+   and(captured.routine_step is not null or captured.basis_accepted_membership_id is not null)) then
+  raise exception 'EXPLICIT_MANUAL_CONSUMED_ROUTINE_VECTOR';end if;
+ changed:=jsonb_set(request,'{reason}','"Altered body under the original request"'::jsonb);
+ begin
+  perform public.weekly_source_contact_manual_enquiry_accept_v1(changed);
+  raise exception 'ALTERED_ORIGINAL_REQUEST_WAS_ACCEPTED';
+ exception when serialization_failure then
+  get stacked diagnostics message=message_text;
+  if message<>'CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT' then raise;end if;
+ end;
+ perform set_config('TimeZone',zone,true);
+ return jsonb_build_object('request_id',receipt->'request_id','review_id',receipt->'review_id','groups',jsonb_array_length(receipt->'groups'),
+  'immutable_replay',true,'provider_submission_started',false);
+end;
+$function$;
+
+create or replace function pg_temp.contact_native_distinct_accepted_ordinal_assert_v1(p_first uuid,p_second uuid,p_logical bytea)
+returns void language plpgsql as $function$
+declare first_command public.weekly_message_dispatch_commands%rowtype;second_command public.weekly_message_dispatch_commands%rowtype;
+ first_member jsonb;second_member jsonb;before_commands jsonb;after_commands jsonb;message text;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_first=p_second then raise exception 'GENUINE_DISTINCT_TEST_COMMANDS_REQUIRED';end if;
+ select * into strict first_command from public.weekly_message_dispatch_commands where id=p_first and provider_accepted_at_utc is not null;
+ select * into strict second_command from public.weekly_message_dispatch_commands where id=p_second and provider_accepted_at_utc is not null;
+ select value into strict first_member from jsonb_array_elements(private.weekly_contact_source_logical_members_v1(p_first)->'members')
+  where value->>'logical_contact_key'=encode(p_logical,'hex');
+ select value into strict second_member from jsonb_array_elements(private.weekly_contact_source_logical_members_v1(p_second)->'members')
+  where value->>'logical_contact_key'=encode(p_logical,'hex');
+ if first_member->'send_ordinal' is distinct from second_member->'send_ordinal'
+  or(first_command.agency_id,first_command.environment) is distinct from(second_command.agency_id,second_command.environment) then
+  raise exception 'GENUINE_TWO_ACCEPTED_ORIGINALS_UNDER_SAME_LOGICAL_ORDINAL_REQUIRED';end if;
+ select jsonb_agg(to_jsonb(command) order by id) into before_commands from public.weekly_message_dispatch_commands command where id in(p_first,p_second);
+ begin
+  perform private.weekly_contact_source_logical_history_v1(first_command.agency_id,first_command.environment,
+   (first_member->>'candidate_id')::uuid,(first_member->>'client_id')::uuid,p_logical);
+  raise exception 'TWO_DISTINCT_ACCEPTED_CONTACTS_WERE_COLLAPSED';
+ exception when object_not_in_prerequisite_state then
+  get stacked diagnostics message=message_text;
+  if message<>'CONTACT_SOURCE_NATIVE_ACCEPTED_HISTORY_UNRESOLVED' then raise;end if;
+ end;
+ select jsonb_agg(to_jsonb(command) order by id) into after_commands from public.weekly_message_dispatch_commands command where id in(p_first,p_second);
+ if before_commands is distinct from after_commands then raise exception 'ACCEPTED_HISTORY_WAS_REWRITTEN';end if;
+end;
+$function$;
+
+create or replace function pg_temp.contact_native_unknown_other_owner_assert_v1(p_unknown uuid,p_accepted uuid,p_logical bytea)
+returns void language plpgsql as $function$
+declare command public.weekly_message_dispatch_commands%rowtype;unknown_member jsonb;accepted_member jsonb;history jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_unknown=p_accepted then raise exception 'GENUINE_DISTINCT_TEST_COMMANDS_REQUIRED';end if;
+ select * into strict command from public.weekly_message_dispatch_commands where id=p_unknown and state='AMBIGUOUS' and provider_accepted_at_utc is null;
+ if not exists(select 1 from public.weekly_message_dispatch_commands where id=p_accepted and provider_accepted_at_utc is not null
+  and agency_id=command.agency_id and environment=command.environment) then raise exception 'GENUINE_OTHER_ACCEPTED_COMMAND_REQUIRED';end if;
+ select value into strict unknown_member from jsonb_array_elements(private.weekly_contact_source_logical_members_v1(p_unknown)->'members')
+  where value->>'logical_contact_key'=encode(p_logical,'hex');
+ select value into strict accepted_member from jsonb_array_elements(private.weekly_contact_source_logical_members_v1(p_accepted)->'members')
+  where value->>'logical_contact_key'=encode(p_logical,'hex');
+ if unknown_member->'send_ordinal' is distinct from accepted_member->'send_ordinal' then raise exception 'GENUINE_SAME_NATIVE_ORDINAL_REQUIRED';end if;
+ history:=private.weekly_contact_source_logical_history_v1(command.agency_id,command.environment,
+  (unknown_member->>'candidate_id')::uuid,(unknown_member->>'client_id')::uuid,p_logical);
+ if history->'unknown_original' is distinct from 'true'::jsonb then raise exception 'OTHER_ACCEPTANCE_FREED_UNKNOWN_ORIGINAL';end if;
+end;
+$function$;

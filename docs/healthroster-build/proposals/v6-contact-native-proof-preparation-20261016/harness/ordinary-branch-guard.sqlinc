@@ -1,0 +1,22 @@
+-- PREPARED_NOT_RUN. A strict sufficient guard, deliberately narrower than all
+-- legitimate ordinary cases. No Source function body or financial owner changes.
+create or replace function pg_temp.contact_assert_no_covered_family_branch_v1()
+returns void language plpgsql as $function$
+begin
+ if current_database()<>'cloudtms_test_clone' or not exists(
+  select 1 from private.cloudtms_database_identity where singleton and environment='TEST')then
+  raise exception 'GENUINE_CONTACT_TEST_REQUIRED';end if;
+ if exists(
+  select 1 from public.weekly_discrepancy_incidents incident
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work on work.id=incident.work_event_id
+  join public.weekly_exceptional_pay_target_families family
+    on family.candidate_id=incident.candidate_id and family.contract_id=comparison.contract_id
+    and work.work_date between family.week_start_date and family.week_ending_date
+  join public.contracts contract on contract.id=family.contract_id and contract.client_id=incident.client_id
+  where incident.state='OPEN' and exists(
+   select 1 from public.weekly_exceptional_pay_family_events event
+   where event.family_id=family.id and event.durable_work_event_id=work.id)
+ )then raise exception 'CONTACT_ORDINARY_COMPONENT_HAS_GENUINE_COVERED_FAMILY_BRANCH';end if;
+end;
+$function$;

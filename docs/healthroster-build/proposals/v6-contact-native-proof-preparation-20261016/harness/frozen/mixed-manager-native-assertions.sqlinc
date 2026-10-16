@@ -1,0 +1,55 @@
+-- NOT_RUN. Requires real current signed initial work AND genuine existing
+-- accepted manager history with a configured due MANUAL step. No fabricated
+-- acceptance, policy, question clock, fixture UUID or provider call is made.
+create or replace function pg_temp.contact_assert_mixed_manager_selection_v1(p_actor uuid,p_cycle uuid,p_publication uuid,p_incidents uuid[])
+returns void language plpgsql as $function$
+declare issue uuid;fact jsonb;followup jsonb;initial_count integer:=0;followup_count integer:=0;
+ reply jsonb;intent uuid;members integer;actual_initial integer;actual_followup integer;before_captures integer;after_captures integer;
+ accepted_hash bytea;after_accepted_hash bytea;worker_owners jsonb;after_worker_owners jsonb;cooldown timestamptz;
+begin
+ if p_incidents is null or cardinality(p_incidents)not between 2 and 500 then raise exception 'GENUINE_MIXED_NATIVE_FIXTURE_REQUIRED';end if;
+ for issue in select id from unnest(p_incidents)id order by id loop
+  fact:=private.weekly_contact_manual_member_facts_v1(issue,'MANAGER',clock_timestamp());
+  if fact->>'source_cycle_id'<>p_cycle::text or fact->'eligible'is distinct from 'true'::jsonb
+   or fact->'cutoff'->'routine'->'in_scope'is distinct from 'true'::jsonb then raise exception 'GENUINE_CURRENT_ELIGIBLE_MIXED_FIXTURE_REQUIRED';end if;
+  if fact->'last_accepted_send'='null'::jsonb then initial_count:=initial_count+1;
+  else
+   followup:=private.weekly_contact_source_manager_followup_state_v1(issue,clock_timestamp());
+   if followup->>'reason'<>'SCHEDULED'or followup->>'mode'<>'MANUAL'or(followup->>'due_at_utc')::timestamptz>clock_timestamp()then
+    raise exception 'GENUINE_ACCEPTED_DUE_MANUAL_HISTORY_REQUIRED';end if;followup_count:=followup_count+1;
+  end if;
+ end loop;
+ if initial_count=0 or followup_count=0 then raise exception 'BOTH_REAL_INITIAL_AND_DUE_MANUAL_REQUIRED';end if;
+ select count(*)into before_captures from public.weekly_contact_source_intent_captures where capture_kind='ROUTINE_MANUAL_SELECTION';
+ select private.weekly_source_sha256_jsonb_v1('FIXTURE_ACTUAL_ACCEPTED_HISTORY',coalesce(jsonb_agg(to_jsonb(member)order by member.id),'[]'))into accepted_hash
+  from public.weekly_contact_delivery_memberships member where member.incident_id=any(p_incidents)and member.accepted_at_utc is not null;
+ select coalesce(jsonb_agg(jsonb_build_object('generation',to_jsonb(generation),'current_pointer',cohort.current_generation_id)order by generation.id),'[]')into worker_owners
+  from public.weekly_candidate_outreach_generations generation join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
+  where generation.source_cycle_id=p_cycle and generation.request_kind='CHECK_HOURS'and generation.state='ACTIVE'
+   and exists(select 1 from public.weekly_candidate_outreach_memberships membership where membership.candidate_generation_id=generation.id
+    and membership.incident_id=any(p_incidents))and exists(select 1 from public.weekly_message_intents original
+     join public.weekly_message_renders render on render.message_intent_id=original.id
+     where original.candidate_generation_id=generation.id and private.weekly_contact_source_render_attempted_v1(render.id));
+ reply:=public.weekly_source_query_send_manager_now_atomic_v1(jsonb_build_object('actor_user_id',p_actor,'source_cycle_id',p_cycle,
+  'projection_publication_id',p_publication,'incident_ids',to_jsonb(p_incidents)));
+ if reply-array['ok','message_intent_id','recipient_route_id','recipient_generation_id','send_available_at_utc']<>'{}'::jsonb
+  or not(reply?&array['ok','message_intent_id','recipient_route_id','recipient_generation_id','send_available_at_utc'])or reply->'ok'<>'true'::jsonb then
+  raise exception 'ORIGINAL_NATIVE_SUCCESS_ABI_CHANGED';end if;
+ intent:=(reply->>'message_intent_id')::uuid;
+ select count(*),count(*)filter(where routine_step is null),count(*)filter(where routine_step>0)
+  into members,actual_initial,actual_followup from public.weekly_contact_source_intent_capture_members where message_intent_id=intent;
+ select count(*)into after_captures from public.weekly_contact_source_intent_captures where capture_kind='ROUTINE_MANUAL_SELECTION';
+ if members<>cardinality(p_incidents)or actual_initial<>initial_count or actual_followup<>followup_count
+  or after_captures<>before_captures+1 or not private.weekly_contact_source_capture_current_v1(intent,clock_timestamp(),true)then
+  raise exception 'ONE_ACTUAL_MIXED_CAPTURE_WITH_EXACT_PROVENANCE_REQUIRED';end if;
+ select manager_send_available_at_utc into strict cooldown from public.weekly_manager_recipient_routes where id=(reply->>'recipient_route_id')::uuid;
+ if cooldown is distinct from(reply->>'send_available_at_utc')::timestamptz then raise exception 'NATIVE_COOLDOWN_RECEIPT_NOT_ACTUAL_WRITE';end if;
+ select private.weekly_source_sha256_jsonb_v1('FIXTURE_ACTUAL_ACCEPTED_HISTORY',coalesce(jsonb_agg(to_jsonb(member)order by member.id),'[]'))into after_accepted_hash
+  from public.weekly_contact_delivery_memberships member where member.incident_id=any(p_incidents)and member.accepted_at_utc is not null;
+ if after_accepted_hash is distinct from accepted_hash then raise exception 'MIXED_SELECTION_CHANGED_ACCEPTED_HISTORY';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('generation',to_jsonb(generation),'current_pointer',cohort.current_generation_id)order by generation.id),'[]')into after_worker_owners
+  from public.weekly_candidate_outreach_generations generation join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
+  where generation.id in(select(value->'generation'->>'id')::uuid from jsonb_array_elements(worker_owners));
+ if after_worker_owners is distinct from worker_owners then raise exception 'MIXED_SELECTION_CHANGED_ATTEMPTED_WORKER_QUESTION';end if;
+end;
+$function$;

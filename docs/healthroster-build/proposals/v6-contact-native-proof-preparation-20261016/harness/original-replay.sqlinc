@@ -1,0 +1,62 @@
+-- PREPARED_NOT_RUN. Load only after genuine native declarations/catalog closure.
+-- Root owns the server rollback transaction and locks. This invokes no provider.
+create or replace function pg_temp.contact_original_replay_assert_v1(p_attempt_id uuid,p_start boolean)
+returns jsonb language plpgsql as $function$
+declare
+ attempt public.weekly_message_target_attempts%rowtype;
+ target public.weekly_message_dispatch_targets%rowtype;
+ command public.weekly_message_dispatch_commands%rowtype;
+ request jsonb;reply jsonb;before_rows jsonb;after_rows jsonb;
+ before_permits text;after_permits text;expected_result bytea;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_attempt_id is null or p_start is null
+  or not exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST') then
+  raise exception 'GENUINE_CONTACT_TEST_REPLAY_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict attempt from public.weekly_message_target_attempts where id=p_attempt_id;
+ select * into strict target from public.weekly_message_dispatch_targets where id=attempt.dispatch_target_id;
+ select * into strict command from public.weekly_message_dispatch_commands where id=target.dispatch_command_id and environment='TEST';
+ if attempt.lease_token is null or nullif(attempt.lease_owner,'') is null then
+  raise exception 'GENUINE_ORIGINAL_ATTEMPT_LEASE_REQUIRED';end if;
+ select jsonb_build_object('attempt',to_jsonb(attempt),'target',to_jsonb(target),'command',to_jsonb(command),
+  'target_attempts',(select coalesce(jsonb_agg(to_jsonb(a)order by a.id),'[]')from public.weekly_message_target_attempts a where a.dispatch_target_id=target.id))into before_rows;
+ if to_regclass('public.weekly_contact_submission_permits')is not null then
+  execute 'select md5(coalesce(jsonb_agg(to_jsonb(p)order by p.id),''[]''::jsonb)::text) from public.weekly_contact_submission_permits p where p.dispatch_target_id=$1'
+   into before_permits using target.id;
+ end if;
+ if p_start then
+  request:=jsonb_build_object('dispatch_target_id',target.id,'lease_token',attempt.lease_token,'worker_id',attempt.lease_owner,
+   'agency_id',command.agency_id,'environment','TEST');
+  reply:=public.weekly_source_message_dispatch_target_start_atomic_v1(request);
+  if reply->'ok'is distinct from'true'::jsonb or reply->'replay'is distinct from'true'::jsonb
+   or reply->'call_once'is distinct from'false'::jsonb or reply->>'provider_attempt_id'is distinct from attempt.id::text
+   or reply->>'reason'is distinct from'CHECK_ORIGINAL_ATTEMPT' then raise exception 'ORIGINAL_START_RECOVERY_CHANGED';end if;
+ else
+  if attempt.completed_at_utc is null or attempt.result_hash is null then
+   raise exception 'GENUINE_COMPLETED_ORIGINAL_ATTEMPT_REQUIRED';end if;
+  request:=jsonb_build_object('provider_attempt_id',attempt.id,'outcome',attempt.outcome,
+   'provider_message_id',attempt.provider_message_id,'bounded_provider_receipt',attempt.bounded_provider_receipt_json,
+   'bounded_error',attempt.bounded_error_json);
+  expected_result:=extensions.digest(convert_to(jsonb_build_object('provider_attempt_id',attempt.id,
+   'outcome',upper(btrim(attempt.outcome)),'provider_message_id',nullif(btrim(attempt.provider_message_id),''),
+   'bounded_provider_receipt',coalesce(attempt.bounded_provider_receipt_json,'{}'::jsonb),
+   'bounded_error',coalesce(attempt.bounded_error_json,'{}'::jsonb))::text,'UTF8'),'sha256');
+  if expected_result is distinct from attempt.result_hash then raise exception 'GENUINE_STORED_RESULT_HASH_REQUIRED';end if;
+  reply:=public.weekly_source_message_dispatch_target_result_atomic_v1(request);
+  if reply->'ok'is distinct from'true'::jsonb or reply->'replay'is distinct from'true'::jsonb
+   or reply->>'dispatch_target_id'is distinct from target.id::text then raise exception 'ORIGINAL_RESULT_REPLAY_CHANGED';end if;
+ end if;
+ select jsonb_build_object('attempt',to_jsonb(a),'target',to_jsonb(t),'command',to_jsonb(c),
+  'target_attempts',(select coalesce(jsonb_agg(to_jsonb(s)order by s.id),'[]')from public.weekly_message_target_attempts s where s.dispatch_target_id=t.id))
+ into after_rows from public.weekly_message_target_attempts a join public.weekly_message_dispatch_targets t on t.id=a.dispatch_target_id
+ join public.weekly_message_dispatch_commands c on c.id=t.dispatch_command_id where a.id=attempt.id;
+ if to_regclass('public.weekly_contact_submission_permits')is not null then
+  execute 'select md5(coalesce(jsonb_agg(to_jsonb(p)order by p.id),''[]''::jsonb)::text) from public.weekly_contact_submission_permits p where p.dispatch_target_id=$1'
+   into after_permits using target.id;
+ end if;
+ if before_rows is distinct from after_rows or before_permits is distinct from after_permits then
+  raise exception 'ORIGINAL_REPLAY_WROTE_NATIVE_ROWS';end if;
+ return jsonb_build_object('attempt_id',attempt.id,'target_id',target.id,'replay',true,'unchanged_rows',true,
+  'provider_called',false,'proof_scope',case when p_start then'ORIGINAL_START_RECOVERY_ONLY'else'ORIGINAL_COMPLETED_RESULT_REPLAY_ONLY'end);
+end;
+$function$;

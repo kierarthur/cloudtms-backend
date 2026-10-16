@@ -1,0 +1,136 @@
+{
+  "version": "CONTACT_NATIVE_PREPARATION_SOURCE_MANIFEST_V1",
+  "rootCommit": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "contactOriginalCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "counts": {
+    "cases": 16,
+    "distinctCompleteHealthFunctionCandidates": 162,
+    "correctedSchemaFiles": 3,
+    "newContactRelations": 9,
+    "directExistingHealthSchemaRelations": 19,
+    "sourceChecks": 19,
+    "outerSqlGrammarFiles": 11
+  },
+  "qualification": "PREPARED_SOURCE_ONLY_NO_REAL_FIXTURE_DISCOVERY_OR_NATIVE_CALL",
+  "files": [
+    {
+      "path": "analyze.mjs",
+      "bytes": 15344,
+      "sha256": "cf842bfcf037e17f5bfca87dc85da832698e3b8c4f72c37485cd0cab3d700dd9"
+    },
+    {
+      "path": "build-plan.mjs",
+      "bytes": 11258,
+      "sha256": "962c2e0c128394bcbce45e39bbbc6ac8017ebda4709a3c2748955c0e3a29095c"
+    },
+    {
+      "path": "DEPENDENCY_GRAPH.json",
+      "bytes": 747179,
+      "sha256": "190d8efe11ec55da8e7110be79f7056070a3d3e06cf75450ab0cae82aacfcf42"
+    },
+    {
+      "path": "grammar.py",
+      "bytes": 1578,
+      "sha256": "e6a8fb50c6a5e219f9f013cb9d0454fa6380ddc4b3c3d8c245d5d0f80173bee1"
+    },
+    {
+      "path": "HARNESS_GRAMMAR.json",
+      "bytes": 2953,
+      "sha256": "affc799df3795ae0e8f627d4989aa400b9ece87c5b21b1017f595b7b1adc2d01"
+    },
+    {
+      "path": "harness/actor-role-authority.sqlinc",
+      "bytes": 2493,
+      "sha256": "20ddfea48c6e6f5fa6deff792fd71c3e19f6f6483884bdeee3a6ed3e9b64892c"
+    },
+    {
+      "path": "harness/catalog-before-and-fresh-after.sql",
+      "bytes": 18547,
+      "sha256": "d50b1e9730c82102abb182e6fd021dd66945cb274cb58c962741c6f8f6ded9c6"
+    },
+    {
+      "path": "harness/catalog-functions.sql",
+      "bytes": 17373,
+      "sha256": "194db291dac471d7445bce34d1cc9367d51866cea46115a019570e27c20efa1b"
+    },
+    {
+      "path": "harness/closed-command-guards.sqlinc",
+      "bytes": 2044,
+      "sha256": "30db8baa6a8000216dde8d23bc814f955d82649e35a31ce7b4213914fd06e419"
+    },
+    {
+      "path": "harness/discover.sql",
+      "bytes": 1930,
+      "sha256": "a8a4efa4c1673a71d4610437cb5c22e774f5a6cb7f564334f4855b5347bd2fa9"
+    },
+    {
+      "path": "harness/frozen/contact-producer-native-assertions.sqlinc",
+      "bytes": 10510,
+      "sha256": "8f0f91b8dc50b13003942250a0174e4e027e6ad4af595ab74d0f2e3fa5c4dd80"
+    },
+    {
+      "path": "harness/frozen/grouped-followup-native-assertions.sqlinc",
+      "bytes": 3895,
+      "sha256": "294fd9f16fe73c5ab34f474af928b784c9e089d4e5343262ea6c32adef1764fe"
+    },
+    {
+      "path": "harness/frozen/mixed-manager-native-assertions.sqlinc",
+      "bytes": 5824,
+      "sha256": "38589084a473cf7995cc24c03fae05f912c9b0013ca7d4987974d47d0a57a795"
+    },
+    {
+      "path": "harness/ordinary-branch-guard.sqlinc",
+      "bytes": 1408,
+      "sha256": "98aeb232b34595b2e2b756231a3c754f65c95eb64e62384dfb8fa7935772b40a"
+    },
+    {
+      "path": "harness/original-replay.sqlinc",
+      "bytes": 5092,
+      "sha256": "acd8b2857928c8b65fe1c8c25e883e45d18a64f4f8e7618ebe457fe99dd6baef"
+    },
+    {
+      "path": "harness/source-cut-before-and-fresh-after.sql",
+      "bytes": 1441,
+      "sha256": "a81d4d8c7e912d8bbb408beac7c1ee607ef0c0efca7b368477bdbb1415e627cc"
+    },
+    {
+      "path": "NATIVE_PLAN.json",
+      "bytes": 150312,
+      "sha256": "53225a55c8435f743ff873b58b7b64b868a7e763dce5e6cb66633a31e8b123b1"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11140,
+      "sha256": "8a7325d91975641c0843886e22c8a6449a7cb4e8c30b18045e30dec77f371eaf"
+    },
+    {
+      "path": "SCHEMA_PREREQUISITES.json",
+      "bytes": 9013,
+      "sha256": "aecea32865044f2fc5e9e74304b178f6b687704c355a4a8537b04ddd20bfd173"
+    },
+    {
+      "path": "seal.mjs",
+      "bytes": 2346,
+      "sha256": "b308b033dbe6c135ec4ea715a9c5e6407875a28238a174e7fe6e76baacacaeff"
+    },
+    {
+      "path": "SOURCE_BODY_INDEX.json",
+      "bytes": 47635,
+      "sha256": "232d0640d3b515e476632131fd03b4929b37b6eabbef30d602de9b1a027d922d"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 1184,
+      "sha256": "bfa51895dde54078a1607b7ac21c159d96a37113e2815ba35ac9580ee9dca2e7"
+    }
+  ],
+  "excludesSelf": true,
+  "rootEdits": 0,
+  "sqlInstalled": 0,
+  "bankingEdits": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN",
+  "fullCanonicalRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}

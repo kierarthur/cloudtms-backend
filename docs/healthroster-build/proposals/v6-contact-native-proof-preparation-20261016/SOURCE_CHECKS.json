@@ -1,0 +1,27 @@
+{
+  "version": "CONTACT_NATIVE_PREPARATION_SOURCE_CHECKS_V1",
+  "passed": 19,
+  "failed": 0,
+  "checks": [
+    "complete-source-closure:ROLE_CLOSED_START",
+    "complete-source-closure:ROLE_CLOSED_RESULT",
+    "complete-source-closure:OFFICE_MANUAL_ROLE_AUTHORITY",
+    "complete-source-closure:MANUAL_PREVIEW",
+    "complete-source-closure:MANUAL_ACCEPT_REPLAY",
+    "complete-source-closure:RECOMPOSE_EXISTING",
+    "complete-source-closure:TARGET_START",
+    "complete-source-closure:TARGET_RESULT_ORIGINAL_REPLAY",
+    "complete-source-closure:MIXED_MANAGER_SELECTION",
+    "complete-source-closure:MANUAL_PREVIEW_ORDINARY_ONLY",
+    "complete-source-closure:MANUAL_ACCEPT_REPLAY_ORDINARY_ONLY",
+    "complete-source-closure:RECOMPOSE_EXISTING_ORDINARY_ONLY",
+    "complete-source-closure:TARGET_START_ORDINARY_ONLY",
+    "complete-source-closure:MIXED_MANAGER_SELECTION_ORDINARY_ONLY",
+    "complete-source-closure:TARGET_START_ORIGINAL_RECOVERY",
+    "complete-source-closure:TARGET_RESULT_COMPLETED_REPLAY",
+    "actual-schema-lock-successors-pinned",
+    "no-Bank-schema-in-selected-Contact-schema",
+    "all-prepared-cases-NOT_RUN-no-fixture-ID"
+  ],
+  "native": "NOT_RUN"
+}

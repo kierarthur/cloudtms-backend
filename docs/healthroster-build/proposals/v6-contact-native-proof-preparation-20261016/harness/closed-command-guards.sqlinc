@@ -1,0 +1,36 @@
+-- PREPARED_NOT_RUN. Root selects the genuine rollback session's native claim
+-- context; this helper changes no role/GUC. It is not PostgREST role proof.
+create or replace function pg_temp.contact_closed_command_guards_assert_v1(p_service_context boolean)
+returns jsonb language plpgsql as $function$
+declare message text;actual_role text;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_service_context is null then
+  raise exception 'GENUINE_CONTACT_TEST_ROLE_CONTEXT_REQUIRED';end if;
+ actual_role:=coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','');
+ if (actual_role='service_role')is distinct from p_service_context then raise exception 'CONTACT_ROLE_CONTEXT_MISMATCH';end if;
+ begin
+  perform public.weekly_source_message_dispatch_submission_start_atomic_v1('{}'::jsonb);
+  raise exception 'LEGACY_COMMAND_START_REOPENED';
+ exception
+  when insufficient_privilege then
+   get stacked diagnostics message=message_text;
+   if p_service_context or message<>'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED'then raise;end if;
+  when object_not_in_prerequisite_state then
+   get stacked diagnostics message=message_text;
+   if not p_service_context or message<>'WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED'then raise;end if;
+ end;
+ begin
+  perform public.weekly_source_message_dispatch_result_atomic_v1('{}'::jsonb);
+  raise exception 'LEGACY_COMMAND_RESULT_REOPENED';
+ exception
+  when insufficient_privilege then
+   get stacked diagnostics message=message_text;
+   if p_service_context or message<>'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED'then raise;end if;
+  when object_not_in_prerequisite_state then
+   get stacked diagnostics message=message_text;
+   if not p_service_context or message<>'WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED'then raise;end if;
+ end;
+ return jsonb_build_object('closed_start',true,'closed_result',true,'service_claim_context',p_service_context,
+  'proof_scope','NATIVE_CLOSED_COMMAND_BRANCHES_ONLY','provider_called',false);
+end;
+$function$;
