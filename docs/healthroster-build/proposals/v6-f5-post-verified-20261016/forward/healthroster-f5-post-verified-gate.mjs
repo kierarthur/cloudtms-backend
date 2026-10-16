@@ -41,7 +41,10 @@ export function assertF5AuthorityCompatibility(root,databaseCommit,publicationCo
     const proof=proveCommittedSources(root,databaseCommit,r.receipt_input_commit);
     assertExecutionTreeProof(proof,databaseCommit,r.receipt_input_commit);
     const manifest=JSON.parse(git(['show',r.receipt_input_commit+':'+sourceInventory.manifest]));
-    if(manifest.releaseId!==execution.release_id)continue;
+    const installedManifest=JSON.parse(git(['cat-file','blob',databaseCommit+':'+sourceInventory.manifest]));
+    // The native CLI record is BASE-mode-installedCommitPrefix, not BASE.
+    if(manifest.releaseId!==installedManifest.releaseId||!['NEW','UPGRADE'].some(mode=>
+     execution.release_id===`${installedManifest.releaseId}-${mode.toLowerCase()}-${databaseCommit.slice(0,12)}`))continue;
     assertPostVerifiedReceipt(r,{expected_execution:execution,receipt_input_commit:r.receipt_input_commit,
      receipt_tree_proof:proof,artifact_slot:r.artifact_slot,artifacts:record.artifacts,
      expected_evidence_sha256:r.prior_evidence_sha256},r.actor_user_id);

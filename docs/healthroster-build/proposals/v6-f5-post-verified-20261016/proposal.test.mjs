@@ -238,11 +238,12 @@ test('real Git evidence-registration commits use ONLY the existing complete prot
   const bundle=JSON.stringify({schema_version:'WEEKLY_SOURCE_PROTECTED_TEST_SETUP_INPUT_BUNDLE_V1',authorizations:[],controls:[]});
   write(bundlePath,bundle);write(sourceInventory.manifest,JSON.stringify({...manifest,weeklySourceProtectedTestSetup:{path:bundlePath,sha256:sha256(bundle)}}));
   const registrationCommit=commit(),proof=proveCommittedSources(temporary,installed,registrationCommit);
-  const execution={release_id:manifest.releaseId,source_commit:installed,contract_sha256:contract,installation_id:id(90),environment:'TEST',
+  const nativeReleaseId=manifest.releaseId+'-upgrade-'+installed.slice(0,12);
+  const execution={release_id:nativeReleaseId,source_commit:installed,contract_sha256:contract,installation_id:id(90),environment:'TEST',
    database:'cloudtms_test_clone',managed_manifest_sha256:'9'.repeat(64),installed_catalogue_jsonb_sha256:'8'.repeat(64)};
-  const artifacts=[{...buildOffRuleTestAuthorization({environment:'TEST',expectedDatabase:'cloudtms_test_clone',mode:'UPGRADE',releaseId:manifest.releaseId,
+  const artifacts=[{...buildOffRuleTestAuthorization({environment:'TEST',expectedDatabase:'cloudtms_test_clone',mode:'UPGRADE',releaseId:nativeReleaseId,
    gitCommit:installed,expectedHash:contract},{...(awaitlessSetupInput()),authorization_id:id(91)},
-   {...controls,source_commit:installed})}];
+   {...controls,source_commit:installed,release_id:nativeReleaseId})}];
   function awaitlessSetupInput(){return {authorization_id:id(91),scope_id:id(92),agency_id:id(4),source_group_id:id(2),source_cycle_id:id(3),
    setup_actor_user_id:id(1),journey_actor_user_id:id(1),purpose:'SOURCE_FIXTURE_SETUP',week_ending:'2026-11-01',expires_at_utc:'2026-10-16T12:00:00Z',
    fixture_namespace:'WSQ_TEST_',fixture_manifest:observed.fixture_manifest,assignment_id:id(7),assignment_version:'1',assignment_sha256:'a'.repeat(64),
@@ -257,6 +258,11 @@ test('real Git evidence-registration commits use ONLY the existing complete prot
   const actual=assertF5AuthorityCompatibility(temporary,installed,registrationCommit,[record],execution);
   assert.deepEqual(actual.registration,record);assert.match(actual.sha256,/^[0-9a-f]{64}$/);
   assert.throws(()=>assertF5AuthorityCompatibility(temporary,installed,registrationCommit,[],execution));
+  for(const release_id of [manifest.releaseId,manifest.releaseId+'-upgrade-'+'f'.repeat(12),manifest.releaseId+'-adopt-'+installed.slice(0,12)]){
+   const changedExecution={...execution,release_id},changedBody={...body,execution:changedExecution};
+   const changedRecord={artifacts,receipt:{...changedBody,receipt_sha256:domainHash(body.schema_version,changedBody)}};
+   assert.throws(()=>assertF5AuthorityCompatibility(temporary,installed,registrationCommit,[changedRecord],changedExecution));
+  }
   assert.throws(()=>assertF5AuthorityCompatibility(temporary,installed,registrationCommit,[{...record,receipt:{...record.receipt,receipt_tree_sha256:'f'.repeat(64)}}],execution));
   for(const file of [...authorities,'supabase/release/current-contract.json','.github/workflows/database-release.yml',sourceInventory.manifest]){
    const original=fs.readFileSync(path.join(temporary,file));write(file,Buffer.concat([original,Buffer.from('\nALTERED_AUTHORITY')]));const changed=commit();

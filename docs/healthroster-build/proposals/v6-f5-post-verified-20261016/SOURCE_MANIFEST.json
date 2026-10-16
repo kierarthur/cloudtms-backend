@@ -58,8 +58,8 @@
     },
     {
       "path": "forward/healthroster-f5-post-verified-gate.mjs",
-      "bytes": 8087,
-      "sha256": "9a9afb25ba2741154bf61d41ab2a84bfd069247fbb19e3d0dc5a95155300968a"
+      "bytes": 8425,
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3"
     },
     {
       "path": "forward/healthroster-f5-prepublication.mjs",
@@ -77,14 +77,19 @@
       "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
     },
     {
+      "path": "forward/weekly-source-post-verified-evidence-controller.mjs",
+      "bytes": 15594,
+      "sha256": "8fe0a27903933b01f372c55636bf3e3142314dfeda039d26c71c12ec0d2efdf9"
+    },
+    {
       "path": "INTEGRATION.md",
-      "bytes": 14764,
-      "sha256": "9ee787597678918cd1eee47114a43605317c43d5b50fea0b81b6df8eb34ff155"
+      "bytes": 15163,
+      "sha256": "f24f9c0c87b5732aa08ea67923b9309ae31b64dc8595e81ed1cbb61046ed1f7e"
     },
     {
       "path": "MOUNT_RECIPE.json",
-      "bytes": 6854,
-      "sha256": "aafeef79125b3cbd8454eb9c3150093cea50b174cc3d1a72d6111e851180423c"
+      "bytes": 7215,
+      "sha256": "e48ff614bd0fb3b91ac3f29b0aa2211f82f4df012f70ad98802b34655cdc19d6"
     },
     {
       "path": "parse-source.py",
@@ -93,13 +98,13 @@
     },
     {
       "path": "prepare-proposal.mjs",
-      "bytes": 9768,
-      "sha256": "9905de5d5a68a6312e8405f7faa02c4b085a16aab6b647a6ac84554611d64d3f"
+      "bytes": 10585,
+      "sha256": "eb567f0ae8270b51879aed100670e795501feb9f4868c603f515c698e015fe9f"
     },
     {
       "path": "proposal.test.mjs",
-      "bytes": 26974,
-      "sha256": "27390bb992c3f7e91446fcd81d52f942ff93878f3622eef494c2face3e293029"
+      "bytes": 27572,
+      "sha256": "7e6803ffa2b1cec8b1d8bc625d07b2787cfe3304be963af894c87dc62655ece4"
     },
     {
       "path": "QUALIFICATION.json",
@@ -118,11 +123,11 @@
     },
     {
       "path": "write-review.mjs",
-      "bytes": 9374,
-      "sha256": "3a94dcb8598f54410da79875ca5fdc5c147ea94c52287973364e9406b2f0e88e"
+      "bytes": 9502,
+      "sha256": "7f3f02a88840a62db5095f188586cf72ad81a88854dd6d8c36e977404b9204cf"
     }
   ],
-  "closure_sha256": "094514a143f48dd9971b1e205f5af3445d1864aed4c705bab74b2d5703498402",
+  "closure_sha256": "7ac03cdf62f9176baebf1fb9f3abb0bc651c1985f55ab525efa39ec1989c3a17",
   "native": "NOT_RUN",
   "database_calls": false
 }

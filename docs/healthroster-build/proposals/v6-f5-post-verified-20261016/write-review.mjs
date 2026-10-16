@@ -13,7 +13,8 @@ const base='supabase/repeatable/14102026_0430_healthroster_money_native_interfac
 const replace=[['forward/06_OFF_RULE_COMMAND.sqlinc',base+'06_OFF_RULE_COMMAND.sqlinc'],
  ['forward/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc',base+'21_SETUP_STATIC_SHAPE_ASSERT.sqlinc'],
  ['forward/off-rule-native-proxy.mjs','broker/src/weekly-source/off-rule-native-proxy.mjs'],
- ['fixtures/f5-post-verified.sql','supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql']];
+ ['fixtures/f5-post-verified.sql','supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql'],
+ ['forward/weekly-source-post-verified-evidence-controller.mjs','scripts/weekly-source-post-verified-evidence-controller.mjs']];
 const add=['healthroster-f5-native-setup.mjs','healthroster-f5-post-verified-gate.mjs','healthroster-f5-prepublication.mjs','healthroster-f5-synthetic-fixture.mjs']
  .map(n=>['forward/'+n,'scripts/'+n]);add.push(['forward/f5-restoration.sqlinc','scripts/healthroster-f5-restoration.sql']);
 write('MOUNT_RECIPE.json',{schema_version:'F5_POST_VERIFIED_SOURCE_MOUNT_V1',source_pin:input.integrator_commit,native:'NOT_RUN',root_only_integration:true,

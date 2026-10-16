@@ -71,6 +71,12 @@ journey=journey.replaceAll("date '2026-11-01'",future)
  .replace('-- Fixed future week 2026-11-01: regenerate/review if no longer future before rehearsal.','-- Fresh synthetic Source file comes from the actual past open cycle/window; all native clocks remain genuine.');
 write('fixtures/f5-post-verified.sql',journey);
 const head=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+let evidenceController=fs.readFileSync(path.join(root,'scripts/weekly-source-post-verified-evidence-controller.mjs'),'utf8');
+evidenceController=once(evidenceController," if(manifest.releaseId!==execution.release_id)fail('POST_VERIFIED_RELEASE_ID_RELABELLED');",` const {value:installedManifest}=committedJson(root,execution.source_commit,sourceInventory.manifest);
+ // Same base manifest and real native CLI release identity, not BASE==fullID.
+ if(manifest.releaseId!==installedManifest.releaseId||!['NEW','UPGRADE','ADOPT','LEGACY_UPGRADE'].some(mode=>
+  execution.release_id===\`\${installedManifest.releaseId}-\${mode.toLowerCase()}-\${execution.source_commit.slice(0,12)}\`))fail('POST_VERIFIED_RELEASE_ID_RELABELLED');`);
+write('forward/weekly-source-post-verified-evidence-controller.mjs',evidenceController);
 // Pin the real parser/adapter's complete current relative dependency graph.
 const visited=new Set();function dependencies(p){if(visited.has(p))return;visited.add(p);
  const source=inputs.some(i=>i.path===p)?fs.readFileSync(path.join(root,p),'utf8'):read(p);

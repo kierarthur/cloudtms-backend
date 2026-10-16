@@ -27,6 +27,12 @@
       "payload": "fixtures/f5-post-verified.sql",
       "expected_before_sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531",
       "after_sha256": "f59d1d21587dfa604d95a97b2bb2f2d7af2642feb55c267686ab1bb9b948c3b1"
+    },
+    {
+      "target": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "payload": "forward/weekly-source-post-verified-evidence-controller.mjs",
+      "expected_before_sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "after_sha256": "8fe0a27903933b01f372c55636bf3e3142314dfeda039d26c71c12ec0d2efdf9"
     }
   ],
   "additions": [
@@ -38,7 +44,7 @@
     {
       "target": "scripts/healthroster-f5-post-verified-gate.mjs",
       "payload": "forward/healthroster-f5-post-verified-gate.mjs",
-      "sha256": "9a9afb25ba2741154bf61d41ab2a84bfd069247fbb19e3d0dc5a95155300968a"
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3"
     },
     {
       "target": "scripts/healthroster-f5-prepublication.mjs",
